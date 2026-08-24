@@ -210,6 +210,32 @@ impl RbacService {
             .map_err(rbac_error)
     }
 
+    /// 返回当前已稳定加载的授权策略版本。
+    ///
+    /// # 返回
+    /// 返回与本地 Enforcer 一致的 MongoDB policy revision。
+    ///
+    /// # 错误
+    /// 策略缓存无法刷新或数据库版本读取失败时返回错误。
+    pub async fn current_policy_revision(&self) -> Result<u64> {
+        self.fresh_enforcer().await?;
+        Ok(self.loaded_policy_revision.load(Ordering::Acquire))
+    }
+
+    /// 在指定执行器快照中读取授权策略版本。
+    ///
+    /// # 参数
+    /// * `executor` - 数据库执行器，可为销售形式化事务会话
+    ///
+    /// # 返回
+    /// 返回执行器所见的 policy revision。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    pub(crate) async fn policy_revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
+        Ok(self.policy_store.policy_revision(executor).await?)
+    }
+
     /// 创建角色并写入 Casbin 权限策略。
     ///
     /// # 参数

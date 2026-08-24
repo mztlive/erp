@@ -176,6 +176,7 @@ pub(super) fn build_change_revision(
                         sku_id: goods.sku_id,
                         sku_revision_id: goods.sku_revision_id,
                         welfare_scenario: goods.welfare_scenario,
+                        service_region: goods.service_region,
                         fulfillment_mode: goods.fulfillment_mode,
                         fulfillment_due_at: goods.fulfillment_due_at,
                         quantity: goods.quantity,

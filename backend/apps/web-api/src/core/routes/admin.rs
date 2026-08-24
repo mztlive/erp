@@ -31,6 +31,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(account_routes(&rbac_service))
         .merge(role_routes(&rbac_service))
         .merge(audit_log_routes(&rbac_service))
+        .merge(procurement_responsibility_routes(&rbac_service))
         .merge(access_control::routes(&rbac_service))
         .merge(approval_instance::routes(&rbac_service))
         .merge(bulk_job::routes(&rbac_service))
@@ -188,4 +189,47 @@ fn audit_log_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
             admin::audit_log::list_audit_logs_permission_key(),
         ),
     )
+}
+
+/// 采购责任规则维护与解析预览路由。
+///
+/// # 参数
+/// * `rbac_service` - 授权引擎
+///
+/// # 返回
+/// 返回规则查询、创建、更新和逐行解析路由集合。
+fn procurement_responsibility_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/procurement-responsibility-rules",
+            with_permission(
+                get(admin::procurement_responsibility::list_rules),
+                rbac_service,
+                admin::procurement_responsibility::list_rules_permission_key(),
+            ),
+        )
+        .route(
+            "/procurement-responsibility-rules",
+            with_permission(
+                post(admin::procurement_responsibility::create_rule),
+                rbac_service,
+                admin::procurement_responsibility::create_rule_permission_key(),
+            ),
+        )
+        .route(
+            "/procurement-responsibility-rules/{id}",
+            with_permission(
+                put(admin::procurement_responsibility::update_rule),
+                rbac_service,
+                admin::procurement_responsibility::update_rule_permission_key(),
+            ),
+        )
+        .route(
+            "/procurement-responsibility/resolve",
+            with_permission(
+                post(admin::procurement_responsibility::resolve),
+                rbac_service,
+                admin::procurement_responsibility::resolve_permission_key(),
+            ),
+        )
 }

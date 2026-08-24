@@ -583,6 +583,8 @@ pub struct SalesOrderWorkingCopyLineView {
     pub sku_revision_id: Option<entities::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
+    /// 采购责任解析使用的服务区域。
+    pub service_region: Option<String>,
     /// 销售提交承诺的履约方式。
     pub fulfillment_mode: Option<FulfillmentMode>,
     /// 销售提交承诺的履约期限（秒级时间戳）。

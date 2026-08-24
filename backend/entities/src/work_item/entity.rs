@@ -27,6 +27,8 @@ const CLOSE_REASON_MAX_LEN: usize = 512;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkItemType {
+    /// 销售单生效后的采购建单。
+    ProcurementOrderCreation,
     /// 采购单财务审核。
     PurchaseOrderReview,
     /// 销售变更履约影响复核。
@@ -64,6 +66,7 @@ impl WorkItemType {
     /// 返回稳定中文展示名。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::ProcurementOrderCreation => "采购建单",
             Self::PurchaseOrderReview => "采购单财务审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
             Self::SalesChangeFinanceReview => "销售变更财务影响复核",
@@ -87,6 +90,7 @@ impl WorkItemType {
     /// 返回 `SCREAMING_SNAKE_CASE` 稳定代码。
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
             Self::PurchaseOrderReview => "PURCHASE_ORDER_REVIEW",
             Self::SalesChangeImpactReview => "SALES_CHANGE_IMPACT_REVIEW",
             Self::SalesChangeFinanceReview => "SALES_CHANGE_FINANCE_REVIEW",

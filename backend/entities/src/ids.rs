@@ -327,6 +327,9 @@ id_type!(SalesChangeOrderId);
 id_type!(SalesChangeSubmissionId);
 id_type!(SalesChangeSubmissionLineId);
 
+// procurement responsibility
+id_type!(ProcurementResponsibilityRuleId);
+
 // D15 purchase_order
 id_type!(PurchaseOrderId);
 id_type!(PurchaseOrderSubmissionId);

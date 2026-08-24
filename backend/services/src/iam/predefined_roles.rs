@@ -84,6 +84,7 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
 
 /// 销售推荐权限。
 const SALES_PERMISSIONS: &[&str] = &[
+    "procurement_responsibility:list",
     "work_item:list",
     "work_item:detail",
     "approval_instance:read",
@@ -177,6 +178,7 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
 
 /// 采购推荐权限。
 const PROCUREMENT_PERMISSIONS: &[&str] = &[
+    "procurement_responsibility:list",
     "work_item:list",
     "work_item:detail",
     "approval_instance:read",
@@ -463,6 +465,8 @@ const FINANCE_PERMISSIONS: &[&str] = &[
 
 /// 管理层业务只读与待办责任管理推荐权限。
 const MANAGEMENT_PERMISSIONS: &[&str] = &[
+    "procurement_responsibility:list",
+    "procurement_responsibility:manage",
     "work_item:list",
     "work_item:detail",
     "work_item:manage",
@@ -520,6 +524,8 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
 
 /// 系统管理员（技术运维，非超级管理员）推荐权限。
 const SYSADMIN_PERMISSIONS: &[&str] = &[
+    "procurement_responsibility:list",
+    "procurement_responsibility:manage",
     "work_item:list",
     "work_item:detail",
     "work_item:manage",
@@ -1457,6 +1463,9 @@ mod tests {
         assert!(permissions
             .iter()
             .any(|p| p.covers(&Permission::parse("sellable_sku:list").unwrap())));
+        assert!(permissions
+            .iter()
+            .any(|p| p.covers(&Permission::parse("procurement_responsibility:list").unwrap())));
         for forbidden in [
             "product:list",
             "product_revision:list",

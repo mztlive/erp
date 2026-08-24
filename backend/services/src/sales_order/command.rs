@@ -608,6 +608,8 @@ impl SalesOrderService {
             .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
             .await?;
         self.ensure_sellable_working_copy_lines(&copy_lines).await?;
+        self.ensure_procurement_responsibility_before_submit(&order, &copy_lines)
+            .await?;
         let existing_submissions = self
             .db
             .sales_order_submissions()

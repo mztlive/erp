@@ -367,6 +367,8 @@ pub struct SalesOrderGoodsServiceLineRevisionData {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
+    /// 采购责任解析使用的服务区域。
+    pub service_region: Option<String>,
     /// 履约方式。
     pub fulfillment_mode: FulfillmentMode,
     /// 本明细履约期限。
@@ -392,6 +394,8 @@ pub struct SalesOrderGoodsServiceLineRevision {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
+    /// 采购责任解析使用的服务区域。
+    pub service_region: Option<String>,
     /// 履约方式。
     pub fulfillment_mode: FulfillmentMode,
     /// 本明细履约期限。
@@ -434,6 +438,7 @@ impl SalesOrderGoodsServiceLineRevision {
             sku_id: data.sku_id,
             sku_revision_id: data.sku_revision_id,
             welfare_scenario: data.welfare_scenario,
+            service_region: data.service_region,
             fulfillment_mode: data.fulfillment_mode,
             fulfillment_due_at: data.fulfillment_due_at,
             quantity: data.quantity,
@@ -698,6 +703,7 @@ mod tests {
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
+                service_region: Some("EAST".to_string()),
                 fulfillment_mode: FulfillmentMode::SupplierDirect,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("3.000000").unwrap(),
@@ -728,6 +734,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
+            service_region: None,
             fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str("3.000000").unwrap(),

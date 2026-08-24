@@ -24,6 +24,7 @@ mod mall_order;
 mod mall_sync;
 mod party;
 mod payable;
+mod procurement_responsibility;
 mod projection;
 mod publication;
 mod purchase_order;
@@ -70,6 +71,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> crate::Result<()> {
     party::ensure(db).await?;
     payable::ensure(db).await?;
     projection::ensure(db).await?;
+    procurement_responsibility::ensure(db).await?;
     publication::ensure(db).await?;
     purchase_order::ensure(db).await?;
     receivable::ensure(db).await?;

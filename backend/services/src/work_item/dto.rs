@@ -12,8 +12,9 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 14] = [
+const WORK_ITEM_TYPES: [WorkItemType; 15] = [
     WorkItemType::DocumentApproval,
+    WorkItemType::ProcurementOrderCreation,
     WorkItemType::PurchaseOrderReview,
     WorkItemType::SalesChangeImpactReview,
     WorkItemType::SalesChangeFinanceReview,
@@ -59,6 +60,8 @@ impl WorkItemScope {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkItemFamily {
+    /// 采购执行。
+    Procurement,
     /// 审批与确认。
     Approval,
     /// 财务处理。
@@ -770,6 +773,10 @@ fn handler_route(
         (WorkItemType::IntegrationResultUnknown, "reconciliation_difference") => {
             ("integration_unknown", "W29")
         }
+        (WorkItemType::ProcurementOrderCreation, "sales_order") => ("procurement_order_creation", "W08"),
+        (WorkItemType::ProcurementOrderCreation, _) => {
+            return Err(Error::ValidationError("采购建单任务业务对象未注册".to_string()));
+        }
         (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
         (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
         (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
@@ -820,6 +827,7 @@ fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Opt
 
 fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
+        WorkItemType::ProcurementOrderCreation => WorkItemFamily::Procurement,
         WorkItemType::DocumentApproval | WorkItemType::OwnershipMigrationSalesConfirmation => {
             WorkItemFamily::Approval
         }
@@ -1086,6 +1094,30 @@ mod tests {
         )
         .unwrap();
         assert!(unknown.route_context.is_none());
+    }
+
+    #[test]
+    fn procurement_creation_maps_to_purchase_workspace_and_family() {
+        let route = handler_route(
+            WorkItemType::ProcurementOrderCreation,
+            "sales_order",
+            "role-procurement",
+        )
+        .unwrap();
+        assert_eq!(route.handler_key, "procurement_order_creation");
+        assert_eq!(route.destination_workspace_id, "W08");
+        assert!(route.route_context.is_none());
+        assert_eq!(
+            family_of(WorkItemType::ProcurementOrderCreation),
+            WorkItemFamily::Procurement
+        );
+        assert!(WORK_ITEM_TYPES.contains(&WorkItemType::ProcurementOrderCreation));
+        assert!(handler_route(
+            WorkItemType::ProcurementOrderCreation,
+            "purchase_order",
+            "role-procurement"
+        )
+        .is_err());
     }
 
     #[test]

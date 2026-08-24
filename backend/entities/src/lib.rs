@@ -26,6 +26,7 @@ pub mod mall_sync;
 pub mod money;
 pub mod party;
 pub mod payable;
+pub mod procurement_responsibility;
 pub mod projection;
 pub mod publication;
 pub mod purchase_order;

@@ -485,6 +485,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
+            service_region: Some("EAST".into()),
             fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str("2").expect("数量合法"),

@@ -79,6 +79,9 @@ fn duplicate_key_conflict_message(error: &database::Error) -> String {
         | Some("uk_procurement_confirmation_lines_active_confirmation_line") => {
             "该采购确认已有相同分行序号，请刷新后重试".to_string()
         }
+        Some("uk_procurement_responsibility_active_selector") => {
+            "同一采购责任选择器只能有一条启用规则".to_string()
+        }
         _ => "数据已存在，请勿重复提交".to_string(),
     }
 }

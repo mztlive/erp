@@ -81,6 +81,8 @@ pub struct SalesOrderWorkingCopyLine {
     pub sku_revision_id: Option<crate::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
+    /// 采购责任解析使用的服务区域。
+    pub service_region: Option<String>,
     /// 履约方式。
     pub fulfillment_mode: Option<FulfillmentMode>,
     /// 本明细履约期限。
@@ -158,6 +160,7 @@ impl SalesOrderWorkingCopyLine {
             sku_id: built.goods.as_ref().map(|g| g.sku_id.clone()),
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
+            service_region: built.goods.as_ref().and_then(|g| g.service_region.clone()),
             fulfillment_mode: built.goods.as_ref().map(|g| g.fulfillment_mode),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),

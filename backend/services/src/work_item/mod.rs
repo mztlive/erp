@@ -1174,7 +1174,21 @@ impl WorkItemService {
             .map_err(|_| Error::Forbidden("当前账号无权处理该业务对象".to_string()))
     }
 
-    /// 在调用方事务快照中重验目标账号资格、对象参与权与审批岗位分离。
+    /// 在调用方事务快照中重验目标账号资格、对象访问权与岗位分离。
+    ///
+    /// # 参数
+    /// * `user_id` - 待接收任务的具体账号 ID
+    /// * `expected_kind` - 事务外授权快照冻结的账号类型
+    /// * `item` - 待转交任务
+    /// * `authorization` - 事务外形成的稳定授权快照
+    /// * `allow_current_owner` - 是否允许目标账号保持为当前负责人
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 目标账号仍有效、具备任务所需权限且满足岗位分离时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 账号失效、权限撤销、对象版本变化或岗位分离不满足时返回错误。
     async fn ensure_assignment_candidate(
         &self,
         user_id: &str,
@@ -1200,7 +1214,7 @@ impl WorkItemService {
                 executor,
             )
             .await?;
-        self.ensure_item_access_with_executor(item, &access, executor)
+        self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
             .map_err(|_| Error::Forbidden("目标账号不具备该业务对象的参与权或读取权".to_string()))?;
         self.ensure_assignment_separation(user_id, item, allow_current_owner, executor)
@@ -1658,6 +1672,37 @@ impl WorkItemService {
         let keys = HashSet::from([(policy.kind, item.business_object_id.clone())]);
         let facts = self.load_object_facts(&keys, executor).await?;
         if authorized_item_fields(item.clone(), access, &facts).is_none() {
+            return Err(Error::Forbidden("业务对象不可访问".to_string()));
+        }
+        Ok(())
+    }
+
+    /// 使用调用方 executor 重验转交目标的对象访问条件。
+    ///
+    /// # 参数
+    /// * `item` - 待转交任务
+    /// * `access` - 由当前角色与权限形成的目标账号访问快照
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 对象存在、版本匹配且目标账号满足任务类型的访问条件时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 对象未注册、不存在、版本变化或目标账号访问条件不足时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 采购建单任务按具体账号和 `purchase_order:create` 授权，不额外引入团队池或固定角色约束。
+    async fn ensure_assignment_candidate_access_with_executor(
+        &self,
+        item: &WorkItem,
+        access: &ActorAccess,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let policy = object_policy(item.work_item_type, &item.business_object_type)
+            .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
+        let keys = HashSet::from([(policy.kind, item.business_object_id.clone())]);
+        let facts = self.load_object_facts(&keys, executor).await?;
+        if !has_assignment_candidate_access(item, access, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
         Ok(())
@@ -2496,7 +2541,13 @@ type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
-const OBJECT_POLICIES: [ObjectPolicy; 32] = [
+const OBJECT_POLICIES: [ObjectPolicy; 33] = [
+    ObjectPolicy {
+        kind: ObjectKind::SalesOrder,
+        work_item_type: WorkItemType::ProcurementOrderCreation,
+        business_object_type: "sales_order",
+        read_permission: "purchase_order:create",
+    },
     ObjectPolicy {
         kind: ObjectKind::SalesOrder,
         work_item_type: WorkItemType::ImportBusinessConfirmation,
@@ -2697,9 +2748,20 @@ fn object_policy(work_item_type: WorkItemType, business_object_type: &str) -> Op
     })
 }
 
+/// 返回工作项类型对应的岗位分离策略。
+///
+/// # 参数
+/// * `work_item_type` - 工作项类型
+///
+/// # 返回
+/// 返回审批历史、领域参与人、角色参与或失败关闭策略。
+///
+/// # 错误
+/// 无。
 fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSeparationPolicy {
     match work_item_type {
         WorkItemType::DocumentApproval => AssignmentSeparationPolicy::ApprovalHistory,
+        WorkItemType::ProcurementOrderCreation => AssignmentSeparationPolicy::RoleAndParticipation,
         WorkItemType::ImportBusinessConfirmation
         | WorkItemType::PurchaseOrderReview
         | WorkItemType::SalesChangeImpactReview
@@ -2812,6 +2874,18 @@ fn has_permission(access: &ActorAccess, permission: &str) -> bool {
         .any(|permission| permission.covers(&required))
 }
 
+/// 按对象权限、参与关系与权威版本过滤工作项列表投影。
+///
+/// # 参数
+/// * `rows` - 仓储返回的候选工作项行
+/// * `access` - 当前账号访问事实
+/// * `facts` - 已批量加载的业务对象事实
+///
+/// # 返回
+/// 返回当前账号可见且已补齐对象展示字段的工作项。
+///
+/// # 错误
+/// 无；未注册或无法证明访问权的候选项会失败关闭并被过滤。
 fn authorized_fields(
     rows: Vec<database::WorkItemRow>,
     access: &ActorAccess,
@@ -2822,7 +2896,14 @@ fn authorized_fields(
             let policy = object_policy(row.work_item_type, &row.business_object_type)?;
             let fact = facts.get(&(policy.kind, row.business_object_id.clone()))?;
             if !has_permission(access, policy.read_permission)
-                || !has_object_participation(access, &row.owner_role, &row.owner_organization_id, fact)
+                || !has_item_participation(
+                    row.work_item_type,
+                    row.owner_user_id.as_deref(),
+                    &row.owner_role,
+                    &row.owner_organization_id,
+                    access,
+                    fact,
+                )
                 || !subject_version_matches(fact, &row.subject_version)
             {
                 return None;
@@ -2834,6 +2915,18 @@ fn authorized_fields(
         .collect()
 }
 
+/// 按对象权限、参与关系与权威版本形成单个工作项投影。
+///
+/// # 参数
+/// * `item` - 待授权工作项实体
+/// * `access` - 当前账号访问事实
+/// * `facts` - 已加载的业务对象事实
+///
+/// # 返回
+/// 授权通过时返回补齐对象展示字段的投影，否则返回 `None`。
+///
+/// # 错误
+/// 无；未注册或无法证明访问权时失败关闭。
 fn authorized_item_fields(
     item: WorkItem,
     access: &ActorAccess,
@@ -2842,7 +2935,14 @@ fn authorized_item_fields(
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
     let fact = facts.get(&(policy.kind, item.business_object_id.clone()))?;
     if !has_permission(access, policy.read_permission)
-        || !has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact)
+        || !has_item_participation(
+            item.work_item_type,
+            item.owner_user_id.as_deref(),
+            &item.owner_role,
+            &item.owner_organization_id,
+            access,
+            fact,
+        )
         || !subject_version_matches(fact, &item.subject_version)
     {
         return None;
@@ -2850,6 +2950,31 @@ fn authorized_item_fields(
     let mut fields = dto::WorkItemFields::from(item);
     apply_object_display(&mut fields, fact);
     Some(fields)
+}
+
+/// 判断转交目标是否满足任务类型要求的权限、参与关系和对象版本。
+///
+/// # 参数
+/// * `item` - 待转交任务
+/// * `access` - 目标账号访问事实
+/// * `facts` - 已加载的业务对象事实
+///
+/// # 返回
+/// 目标账号可接收任务时返回 `true`。
+///
+/// # 错误
+/// 无；对象未注册或事实缺失时返回 `false`。
+fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts: &ObjectFactMap) -> bool {
+    let Some(policy) = object_policy(item.work_item_type, &item.business_object_type) else {
+        return false;
+    };
+    let Some(fact) = facts.get(&(policy.kind, item.business_object_id.clone())) else {
+        return false;
+    };
+    has_permission(access, policy.read_permission)
+        && (item.work_item_type == WorkItemType::ProcurementOrderCreation
+            || has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact))
+        && subject_version_matches(fact, &item.subject_version)
 }
 
 /// 把对象事实中的标题、往来方和影响写回任务投影字段。
@@ -2903,6 +3028,34 @@ fn apply_subject_display(
 
 fn subject_version_matches(fact: &ObjectFact, actual: &str) -> bool {
     fact.subject_versions.is_empty() || fact.subject_versions.iter().any(|expected| expected == actual)
+}
+
+/// 判断账号是否满足工作项的参与条件。
+///
+/// # 参数
+/// * `work_item_type` - 工作项类型
+/// * `owner_user_id` - 当前具体负责人
+/// * `owner_role` - 责任角色标识
+/// * `owner_organization_id` - 责任组织 ID
+/// * `access` - 当前账号访问事实
+/// * `fact` - 业务对象事实
+///
+/// # 返回
+/// 具备对象参与关系，或是采购建单任务的具体负责人时返回 `true`。
+///
+/// # 错误
+/// 无；调用方必须另行验证对象权限。
+fn has_item_participation(
+    work_item_type: WorkItemType,
+    owner_user_id: Option<&str>,
+    owner_role: &str,
+    owner_organization_id: &str,
+    access: &ActorAccess,
+    fact: &ObjectFact,
+) -> bool {
+    let is_procurement_owner = work_item_type == WorkItemType::ProcurementOrderCreation
+        && owner_user_id == Some(access.actor_id.as_str());
+    is_procurement_owner || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
 fn has_object_participation(
@@ -2965,6 +3118,19 @@ fn counts_as_processable_stat(scope: WorkItemScope, access: &ViewAccess) -> bool
     }
 }
 
+/// 计算当前账号在指定队列范围内可执行的工作项动作。
+///
+/// # 参数
+/// * `item` - 已完成对象授权的工作项投影
+/// * `scope` - 当前队列范围
+/// * `actor_id` - 当前账号 ID
+/// * `access` - 当前账号访问事实
+///
+/// # 返回
+/// 返回查看、处理、审批或管理动作集合。
+///
+/// # 错误
+/// 无；未满足责任或管理条件的动作不会出现在结果中。
 fn allowed_actions(
     item: &dto::WorkItemFields,
     scope: WorkItemScope,
@@ -2972,8 +3138,11 @@ fn allowed_actions(
     access: &ActorAccess,
 ) -> Vec<WorkItemAllowedAction> {
     let mut actions = vec![WorkItemAllowedAction::View];
+    let is_procurement_owner = item.work_item_type == WorkItemType::ProcurementOrderCreation
+        && item.owner_user_id.as_deref() == Some(actor_id);
     if item.owner_user_id.as_deref() == Some(actor_id)
-        && (covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
+        && (is_procurement_owner
+            || covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
             || item.status != WorkItemStatus::Open)
     {
         actions.push(WorkItemAllowedAction::Process);
@@ -3408,13 +3577,13 @@ fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        approval_assignment_separated, assignment_separation_policy, audit_command_fingerprint,
-        audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
-        command_audit_message, counts_as_processable_stat, detail_scope, expected_task_version, is_w29_shape,
-        non_empty_assignment_actors, object_access_shapes, object_policy, stable_digest, w29_close_reason,
-        w29_domain_evidence_reference, ActorAccess, AssignmentSeparationPolicy, AuthorizedPage,
-        AuthorizedPageCollector, Error, ObjectFact, ObjectFactMap, ObjectKind, ViewAccess,
-        AUTHORIZED_SCAN_BATCH_SIZE,
+        allowed_actions, approval_assignment_separated, assignment_separation_policy,
+        audit_command_fingerprint, audited_fact_operator_actors, authorized_fields, authorized_item_fields,
+        business_day_bounds_at, command_audit_message, counts_as_processable_stat, detail_scope,
+        expected_task_version, has_assignment_candidate_access, is_w29_shape, non_empty_assignment_actors,
+        object_access_shapes, object_policy, stable_digest, w29_close_reason, w29_domain_evidence_reference,
+        ActorAccess, AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
+        ObjectFactMap, ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use entities::{
@@ -3515,6 +3684,46 @@ mod tests {
                 impact_summary: Some("同步差额待复核".to_string()),
             },
             Instant::from_unix_secs(100),
+        )
+        .unwrap()
+    }
+
+    fn procurement_access(actor_id: &str) -> ActorAccess {
+        ActorAccess {
+            actor_id: actor_id.to_string(),
+            permissions: vec![Permission::parse("purchase_order:create").unwrap()],
+            participant_document_ids: HashSet::new(),
+            organization_ids: Vec::new(),
+            responsibility_scopes: Vec::new(),
+            can_manage: false,
+        }
+    }
+
+    fn procurement_facts() -> ObjectFactMap {
+        HashMap::from([(
+            (ObjectKind::SalesOrder, "sales-order-1".to_string()),
+            ObjectFact::new("sales-order-1", "销售单 SO-1", "sales-user"),
+        )])
+    }
+
+    fn procurement_item(owner_user_id: &str) -> WorkItem {
+        WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-procurement"),
+            WorkItemData {
+                work_item_type: WorkItemType::ProcurementOrderCreation,
+                business_object_type: "sales_order".to_string(),
+                business_object_id: "sales-order-1".to_string(),
+                subject_version: "submission-1".to_string(),
+                owner_role: "role-procurement".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: owner_user_id.to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: Some("SALES_ORDER_EFFECTIVE".to_string()),
+                impact_summary: Some("1 行待创建采购单".to_string()),
+            },
+            "sales-lines:digest".to_string(),
         )
         .unwrap()
     }
@@ -3623,6 +3832,49 @@ mod tests {
 
         assert_eq!(item.owner_user_id.as_deref(), Some("finance-user"));
         assert!(authorized_item_fields(item, &access, &w13_facts()).is_none());
+    }
+
+    #[test]
+    fn procurement_owner_and_reassign_candidate_use_concrete_permission() {
+        let owner_access = procurement_access("buyer-1");
+        let facts = procurement_facts();
+        let item = procurement_item("buyer-1");
+        let policy = object_policy(WorkItemType::ProcurementOrderCreation, "sales_order").unwrap();
+
+        assert_eq!(policy.kind, ObjectKind::SalesOrder);
+        assert_eq!(policy.read_permission, "purchase_order:create");
+        assert_eq!(
+            assignment_separation_policy(WorkItemType::ProcurementOrderCreation),
+            AssignmentSeparationPolicy::RoleAndParticipation
+        );
+        let fields = authorized_item_fields(item.clone(), &owner_access, &facts).unwrap();
+        assert!(
+            allowed_actions(&fields, WorkItemScope::Mine, "buyer-1", &owner_access)
+                .contains(&WorkItemAllowedAction::Process)
+        );
+
+        let candidate_access = procurement_access("buyer-2");
+        assert!(has_assignment_candidate_access(&item, &candidate_access, &facts));
+    }
+
+    #[test]
+    fn procurement_direct_assignment_still_requires_create_permission() {
+        let item = procurement_item("buyer-1");
+        let access = ActorAccess {
+            actor_id: "buyer-1".to_string(),
+            permissions: Vec::new(),
+            participant_document_ids: HashSet::new(),
+            organization_ids: Vec::new(),
+            responsibility_scopes: Vec::new(),
+            can_manage: false,
+        };
+
+        assert!(authorized_item_fields(item.clone(), &access, &procurement_facts()).is_none());
+        assert!(!has_assignment_candidate_access(
+            &item,
+            &access,
+            &procurement_facts()
+        ));
     }
 
     #[test]

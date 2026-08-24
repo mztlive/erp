@@ -31,6 +31,7 @@ mod dto;
 mod formalize;
 mod mapper;
 mod pricing;
+mod procurement;
 mod progress;
 mod query;
 mod start_approval;

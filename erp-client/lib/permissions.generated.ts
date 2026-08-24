@@ -146,6 +146,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "采购责任管理",
+        description: "维护采购责任规则并预览逐行负责人",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-responsibility-rules",
+                description: "查询采购责任规则",
+                permission: {
+                    resource: "procurement_responsibility",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-responsibility-rules",
+                description: "创建采购责任规则",
+                permission: {
+                    resource: "procurement_responsibility",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/procurement-responsibility-rules/{id}",
+                description: "更新采购责任规则",
+                permission: {
+                    resource: "procurement_responsibility",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-responsibility/resolve",
+                description: "预览采购责任解析",
+                permission: {
+                    resource: "procurement_responsibility",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
         name: "来源注册",
         description: "来源系统与外部身份映射管理",
         permissions: [

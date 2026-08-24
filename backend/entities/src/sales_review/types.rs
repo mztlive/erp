@@ -20,6 +20,8 @@ use crate::validation::normalize_required_text;
 
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
+/// 服务区域最大长度。
+const SERVICE_REGION_MAX_LEN: usize = 128;
 
 /// 业务性质（数据模型 §6.4：`VOUCHER` 或 `GOODS_SERVICE`，创建后永久不变）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -220,6 +222,8 @@ pub struct GoodsLineFields {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
+    /// 采购责任解析使用的服务区域。
+    pub service_region: Option<String>,
     /// 履约方式。
     pub fulfillment_mode: FulfillmentMode,
     /// 本明细履约期限。
@@ -353,6 +357,12 @@ pub(crate) fn build_line_groups(
                 BASE_UNIT_CODE_MAX_LEN,
                 "基础单位过长",
             )?;
+            fields.service_region = crate::validation::normalize_optional_text(
+                fields.service_region,
+                "服务区域",
+                SERVICE_REGION_MAX_LEN,
+            )?
+            .map(|region| region.to_ascii_uppercase());
             Some(fields)
         }
         None => None,
@@ -724,6 +734,7 @@ mod tests {
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
+                service_region: None,
                 fulfillment_mode: FulfillmentMode::CompanyWarehouse,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: qty("3.000000"),
@@ -748,6 +759,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
+            service_region: None,
             fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("1.000000"),

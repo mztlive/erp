@@ -1,16 +1,19 @@
 //! 销售单最终通过：包装既有 `formalize_submission` 仓储端口。
 
+use std::collections::BTreeMap;
 use std::str::FromStr;
+
+use sha2::{Digest, Sha256};
 
 use database::{
     AccessControlExt, DocumentRegistryExt, NoTransaction, ProjectionExt, ReceivableExt, SalesOrderExt,
-    Transactional,
+    Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
     ReceivableAccountId, ReceivableEntryId, SalesOrderId, SalesOrderProjectionDeliveryId,
     SalesOrderProjectionId, SalesOrderProjectionRevisionId, SalesOrderRevisionId, SalesOrderRevisionLineId,
-    SalesOrderSubmissionId, SalesOrderVoucherLineRevisionId,
+    SalesOrderSubmissionId, SalesOrderVoucherLineRevisionId, WorkItemId,
 };
 use entities::money::Amount;
 use entities::projection::{
@@ -23,20 +26,29 @@ use entities::receivable::{
     ReceivableEntryData, ReceivableEntryType,
 };
 use entities::sales_order::{
-    BusinessType, CardForm, GoodsLineFields, LineType, RevisionSource, SalesOrder,
-    SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
+    BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineType, ReviewStatus, RevisionSource,
+    SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
     SalesOrderGoodsServiceLineRevisionId, SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine,
     SalesOrderRevisionLineData, SalesOrderSubmission, SalesOrderSubmissionLine,
     SalesOrderVoucherLineRevision, SalesOrderVoucherLineRevisionData, VoucherLineDraft,
 };
+use entities::work_item::{
+    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
 use id_generator::next_id;
 use mongodb::Database;
 
-use super::adapter::{ensure_final_approve_formalize, is_voucher_sales_order};
+use super::adapter::{
+    ensure_final_approve_formalize, is_voucher_sales_order, sales_order_responsible_org_id,
+};
 use super::dto::SalesOrderDetailView;
+use super::procurement::submission_procurement_inputs;
 use super::SalesOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::procurement_responsibility::{
+    AuthorizedResolutionPlan, ProcurementResponsibilityService, ResolutionInput,
+};
 use crate::projection::projection_content_hash;
 
 /// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
@@ -45,6 +57,12 @@ struct RevisionAggregate {
     lines: Vec<SalesOrderRevisionLine>,
     goods_lines: Vec<SalesOrderGoodsServiceLineRevision>,
     voucher_lines: Vec<SalesOrderVoucherLineRevision>,
+}
+
+/// 事务外授权并在销售形式化事务内重验的采购责任计划。
+struct ProcurementFormalizationPlan {
+    inputs: Vec<ResolutionInput>,
+    resolution: AuthorizedResolutionPlan,
 }
 
 impl SalesOrderService {
@@ -74,11 +92,64 @@ impl SalesOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        if is_already_formalized(&order) {
+            return self.sales_order_detail(id, None).await;
+        }
         ensure_final_approve_formalize(&order)?;
         let (submission, lines) = load_latest_submission(&self.db, id).await?;
-        persist_formalized_submission(&self.db, &mut order, submission, lines, actor).await?;
+        let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
+        persist_formalized_submission(
+            &self.db,
+            self.require_rbac()?.clone(),
+            &mut order,
+            submission,
+            lines,
+            procurement,
+            actor,
+        )
+        .await?;
         self.sales_order_detail(id, None).await
     }
+
+    /// 为实物及服务销售单构造事务外授权的采购责任计划。
+    ///
+    /// # 参数
+    /// * `order` - 待最终生效销售单
+    /// * `lines` - 最新冻结提交行
+    ///
+    /// # 返回
+    /// 卡券销售单返回 `None`；实物服务单返回逐行具体负责人计划。
+    ///
+    /// # 错误
+    /// 任一行责任无法确定或负责人不合格时失败关闭。
+    async fn build_procurement_formalization_plan(
+        &self,
+        order: &SalesOrder,
+        lines: &[SalesOrderSubmissionLine],
+    ) -> Result<Option<ProcurementFormalizationPlan>> {
+        if order.business_type != BusinessType::GoodsService {
+            return Ok(None);
+        }
+        let inputs = submission_procurement_inputs(lines)?;
+        let resolution = ProcurementResponsibilityService::new(self.db.clone(), self.require_rbac()?.clone())
+            .resolve_strict(&inputs)
+            .await?;
+        Ok(Some(ProcurementFormalizationPlan { inputs, resolution }))
+    }
+}
+
+/// 判断销售单已由最终通过动作完整形式化。
+///
+/// # 参数
+/// * `order` - 当前销售单
+///
+/// # 返回
+/// 商务状态已生效且审核状态已通过时返回 `true`。
+///
+/// # 错误
+/// 无。
+fn is_already_formalized(order: &SalesOrder) -> bool {
+    order.commercial_status == CommercialStatus::Effective && order.review_status == ReviewStatus::Approved
 }
 
 /// 读取该销售单最新提交及其明细。
@@ -114,9 +185,11 @@ async fn load_latest_submission(
 /// 状态不允许、行字段缺失或写入失败时返回错误。
 async fn persist_formalized_submission(
     db: &Database,
+    rbac: crate::iam::SharedRbacService,
     order: &mut SalesOrder,
     mut submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,
+    procurement: Option<ProcurementFormalizationPlan>,
     actor: &AuditActor,
 ) -> Result<()> {
     let now = Instant::now();
@@ -131,6 +204,11 @@ async fn persist_formalized_submission(
     } else {
         None
     };
+    let procurement_items = procurement
+        .as_ref()
+        .map(|plan| build_procurement_work_items(order, &submission, plan))
+        .transpose()?
+        .unwrap_or_default();
     order.approve(now, actor.id())?;
     order.attach_revision(aggregate.revision.base.id.clone(), actor.id());
     submission.approve(actor.id())?;
@@ -144,6 +222,12 @@ async fn persist_formalized_submission(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                if let Some(plan) = procurement.as_ref() {
+                    ProcurementResponsibilityService::new(db.clone(), rbac.clone())
+                        .revalidate_plan(&plan.inputs, &plan.resolution, session)
+                        .await?;
+                    persist_procurement_work_items(&db, &procurement_items, session).await?;
+                }
                 if let Some(mut document) = db.business_documents().find_by_id(&order_id, session).await? {
                     document.formalize(now);
                     db.business_documents().update(&mut document, session).await?;
@@ -173,6 +257,132 @@ async fn persist_formalized_submission(
         })
         .await?;
     let _ = SalesOrderId::new(order.base.id.clone());
+    Ok(())
+}
+
+/// 按负责人分组构造采购建单任务。
+///
+/// # 参数
+/// * `order` - 待生效销售单
+/// * `submission` - 冻结提交
+/// * `plan` - 已授权逐行责任计划
+///
+/// # 返回
+/// 返回每位具体负责人一条任务，责任键冻结稳定销售行集合。
+///
+/// # 错误
+/// 责任组织缺失、行集合为空或任务字段非法时返回错误。
+fn build_procurement_work_items(
+    order: &SalesOrder,
+    submission: &SalesOrderSubmission,
+    plan: &ProcurementFormalizationPlan,
+) -> Result<Vec<WorkItem>> {
+    let mut groups = BTreeMap::<String, Vec<String>>::new();
+    for line in &plan.resolution.lines {
+        groups
+            .entry(line.owner_user_id.clone())
+            .or_default()
+            .push(line.line_key.clone());
+    }
+    let organization_id = sales_order_responsible_org_id(order)?;
+    groups
+        .into_iter()
+        .map(|(owner_user_id, mut line_ids)| {
+            line_ids.sort();
+            line_ids.dedup();
+            let responsibility_key = procurement_responsibility_key(&line_ids)?;
+            let line_count = line_ids.len();
+            WorkItem::new_with_responsibility_key(
+                WorkItemId::new(next_id()),
+                WorkItemData {
+                    work_item_type: WorkItemType::ProcurementOrderCreation,
+                    business_object_type: "sales_order".to_string(),
+                    business_object_id: order.base.id.clone(),
+                    subject_version: submission.base.id.clone(),
+                    owner_role: "role-procurement".to_string(),
+                    owner_organization_id: organization_id.clone(),
+                    owner_user_id,
+                    assignment_source: AssignmentSource::SystemRule,
+                    priority: WorkItemPriority::Normal,
+                    due_at: None,
+                    reason_code: Some("SALES_ORDER_EFFECTIVE".to_string()),
+                    impact_summary: Some(format!(
+                        "销售单 {} 的 {line_count} 行待创建采购单",
+                        order.order_no
+                    )),
+                },
+                responsibility_key,
+            )
+            .map_err(Error::Logic)
+        })
+        .collect()
+}
+
+/// 为稳定销售行集合构造不含责任人的幂等责任键。
+///
+/// # 参数
+/// * `line_ids` - 已排序去重的稳定销售行 ID
+///
+/// # 返回
+/// 返回 `sales-lines:<sha256>` 责任键。
+///
+/// # 错误
+/// 行集合为空时返回校验错误。
+fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
+    if line_ids.is_empty() {
+        return Err(Error::ValidationError("采购建单任务责任行不能为空".to_string()));
+    }
+    let mut digest = Sha256::new();
+    for line_id in line_ids {
+        digest.update((line_id.len() as u64).to_be_bytes());
+        digest.update(line_id.as_bytes());
+    }
+    Ok(format!("sales-lines:{:x}", digest.finalize()))
+}
+
+/// 幂等写入同一销售生效事务中的采购建单任务。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `items` - 按负责人分组后的完整任务集合
+/// * `session` - 销售形式化事务会话
+///
+/// # 返回
+/// 全部任务已存在或全部创建成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 同一责任键存在多条开放任务或任一写入失败时返回错误并回滚事务。
+async fn persist_procurement_work_items(
+    db: &Database,
+    items: &[WorkItem],
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    for item in items {
+        let responsibility_key = item
+            .responsibility_key()
+            .ok_or_else(|| Error::Internal("采购建单任务缺少责任键".to_string()))?;
+        let existing = db
+            .work_items()
+            .find_many(
+                mongodb::bson::doc! {
+                    "business_object_type": item.business_object_type.as_str(),
+                    "business_object_id": item.business_object_id.as_str(),
+                    "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
+                    "responsibility_key": responsibility_key,
+                    "status": WorkItemStatus::Open.as_str(),
+                },
+                session,
+            )
+            .await?;
+        if existing.len() > 1 {
+            return Err(Error::ConflictError(
+                "同一销售责任行集合存在多条开放采购建单任务".to_string(),
+            ));
+        }
+        if existing.is_empty() {
+            db.work_items().create(item, session).await?;
+        }
+    }
     Ok(())
 }
 
@@ -343,6 +553,7 @@ fn build_goods_service_revision(
                 sku_id: goods.sku_id,
                 sku_revision_id: goods.sku_revision_id,
                 welfare_scenario: goods.welfare_scenario,
+                service_region: goods.service_region,
                 fulfillment_mode: goods.fulfillment_mode,
                 fulfillment_due_at: goods.fulfillment_due_at,
                 quantity: goods.quantity,
@@ -392,6 +603,7 @@ fn submission_line_goods(line: &SalesOrderSubmissionLine) -> Result<GoodsLineFie
         sku_id,
         sku_revision_id,
         welfare_scenario: line.welfare_scenario,
+        service_region: line.service_region.clone(),
         fulfillment_mode,
         fulfillment_due_at,
         quantity,
@@ -661,7 +873,7 @@ async fn persist_voucher_projection(
 /// 证明本模块只包装仓储 `formalize_submission`。
 #[cfg(test)]
 mod tests {
-    use super::ensure_final_approve_formalize;
+    use super::{ensure_final_approve_formalize, is_already_formalized, procurement_responsibility_key};
     use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData};
 
@@ -700,7 +912,23 @@ mod tests {
         assert!(ensure_final_approve_formalize(&order).is_ok());
         order.commercial_status = CommercialStatus::Effective;
         order.review_status = ReviewStatus::Approved;
+        assert!(is_already_formalized(&order));
         assert!(ensure_final_approve_formalize(&order).is_err());
+    }
+
+    #[test]
+    fn procurement_responsibility_key_is_stable_and_boundary_safe() {
+        let first = procurement_responsibility_key(&["line-1".to_string(), "line-23".to_string()])
+            .expect("稳定行集合合法");
+        let repeated = procurement_responsibility_key(&["line-1".to_string(), "line-23".to_string()])
+            .expect("重复计算合法");
+        let different = procurement_responsibility_key(&["line-12".to_string(), "line-3".to_string()])
+            .expect("不同边界集合合法");
+
+        assert_eq!(first, repeated);
+        assert_ne!(first, different);
+        assert!(first.starts_with("sales-lines:"));
+        assert!(procurement_responsibility_key(&[]).is_err());
     }
 
     /// 卡券最终通过同样只接受审批中，并与投影写入同事务。

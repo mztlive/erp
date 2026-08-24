@@ -1131,7 +1131,7 @@ async fn finalize_approved_document(
 ) -> Result<()> {
     match document_type {
         DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => {
-            crate::sales_order::SalesOrderService::new(db.clone())
+            crate::sales_order::SalesOrderService::with_rbac(db.clone(), rbac.clone())
                 .formalize_approved_submission(business_object_id, actor)
                 .await?;
         }

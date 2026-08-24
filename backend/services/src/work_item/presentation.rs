@@ -70,6 +70,7 @@ pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkIt
 /// 无。
 pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
+        WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
         }
@@ -154,6 +155,7 @@ fn normalize_reason_code(value: &str) -> String {
 
 fn mapped_reason_label(code: &str) -> Option<&'static str> {
     Some(match code {
+        "sales_order_effective" => "销售单已生效，需要为冻结销售行创建采购单",
         "procurement_confirmation_dispatched" => "销售已提交，需要采购确认能否供货",
         "low_margin_approved_procurement_confirmation" => "低毛利已获上级通过，需要采购重新确认供货",
         "procurement_confirmation_resubmitted" => "销售已按驳回意见重提，需要采购重新确认",
@@ -174,6 +176,7 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
 
 fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
+        WorkItemType::ProcurementOrderCreation => "销售单已生效，需要创建采购单",
         WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
         WorkItemType::SalesChangeImpactReview => "销售变更待核对履约影响",
         WorkItemType::SalesChangeFinanceReview => "销售变更待核对财务影响",
@@ -193,6 +196,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
 
 fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
+        WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",

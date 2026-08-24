@@ -24,6 +24,7 @@ mod mall_order;
 mod mall_sync;
 mod party;
 mod payable;
+mod procurement_responsibility;
 mod projection;
 mod publication;
 mod purchase_order;
@@ -61,6 +62,7 @@ pub use mall_order::MallOrderExt;
 pub use mall_sync::MallSyncExt;
 pub use party::PartyExt;
 pub use payable::PayableExt;
+pub use procurement_responsibility::ProcurementResponsibilityExt;
 pub use projection::ProjectionExt;
 pub use publication::PublicationExt;
 pub use purchase_order::PurchaseOrderExt;
@@ -104,6 +106,7 @@ pub trait DatabaseExt:
     + PartyExt
     + PayableExt
     + ProjectionExt
+    + ProcurementResponsibilityExt
     + PublicationExt
     + PurchaseOrderExt
     + ReceivableExt
@@ -144,6 +147,7 @@ impl<
             + PartyExt
             + PayableExt
             + ProjectionExt
+            + ProcurementResponsibilityExt
             + PublicationExt
             + PurchaseOrderExt
             + ReceivableExt
