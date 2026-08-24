@@ -13,19 +13,7 @@ export function isApiError(error: unknown): error is ApiError {
 }
 
 export function apiErrorMessage(error: unknown): string {
-    if (!isApiError(error)) {
-        return getErrorMessage(error, "请求失败")
-    }
-    const data = error.responseData as { errorMessage?: string } | undefined
-    if (
-        data &&
-        typeof data.errorMessage === "string" &&
-        data.errorMessage &&
-        data.errorMessage !== "OK"
-    ) {
-        return data.errorMessage
-    }
-    return error.message
+    return getErrorMessage(error, "请求未完成，请稍后重试。")
 }
 
 export function apiErrorCode(error: unknown): string {

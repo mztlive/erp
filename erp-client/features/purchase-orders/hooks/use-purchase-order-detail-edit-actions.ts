@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
+import { getErrorMessage } from "@/lib/api/errors"
 import { responsibilityText } from "@/lib/ui-text"
 import {
     PAYMENT_TERM_OPTIONS,
@@ -84,11 +85,14 @@ export function usePurchaseOrderDetailEditActions({
             .then((res) => {
                 setDraftEditToken(res.draftEditToken)
             })
-            .catch((error: Error) => {
+            .catch((error: unknown) => {
                 setResult({
                     status: "blocked",
                     title: responsibilityText.cannotEdit,
-                    description: error.message,
+                    description: getErrorMessage(
+                        error,
+                        "暂时无法编辑采购单，请刷新后重试。",
+                    ),
                 })
             })
         // init line edits

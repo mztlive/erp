@@ -81,6 +81,17 @@ const nonEmptyString = (value: unknown): string | undefined =>
         ? value.trim()
         : undefined
 
+const TECHNICAL_MESSAGE_PATTERN =
+    /(?:\[object Object\]|(?:Type|Reference|Syntax|Network)Error|\bat\s+\S+\s*\(|https?:\/\/|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b[A-Z][A-Z0-9_]{2,}\b|work_item|idempotency|lockVersion|stack trace|数据库|服务端|客户端|堆栈|唯一索引|内部错误|JSON|SQL|Mongo)/i
+
+/** 判断原始原因能否直接给业务用户阅读，拦截英文和实现细节。 */
+const userReadableMessage = (value: unknown): string | undefined => {
+    const message = nonEmptyString(value)
+    if (!message || !/[\u3400-\u9fff]/u.test(message)) return undefined
+    if (TECHNICAL_MESSAGE_PATTERN.test(message)) return undefined
+    return message
+}
+
 const envelopeDetails = (responseData: unknown) => {
     const envelope = asEnvelope(responseData)
     return {
@@ -111,14 +122,14 @@ export const fromHttpResponse = (
     responseData?: unknown,
 ): ApiError => {
     const { backendMessage, code, requestId } = envelopeDetails(responseData)
-    const permissionMessage =
-        !backendMessage || backendMessage.toLowerCase() === "permission denied"
-            ? "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。"
-            : backendMessage
+    const readableBackendMessage = userReadableMessage(backendMessage)
+    const permissionMessage = !readableBackendMessage
+        ? "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。"
+        : readableBackendMessage
     const message =
         status === 403
             ? permissionMessage
-            : backendMessage ||
+            : readableBackendMessage ||
               (status === 400 || status === 422
                   ? "请求未通过业务校验，请检查填写内容。"
                   : status === 404
@@ -127,7 +138,9 @@ export const fromHttpResponse = (
                       ? "数据已被其他操作更新，请刷新后重试。"
                       : status === 429
                         ? "请求过于频繁，请稍后重试。"
-                        : `请求失败（HTTP ${status}）`)
+                        : status >= 500
+                          ? "系统暂时无法完成请求，请稍后重试；如仍失败，请联系支持人员。"
+                          : "请求未完成，请稍后重试。")
 
     return createApiError({
         kind: status === 400 || status === 422 ? "Validation" : "Http",
@@ -195,7 +208,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         return {
             kind: "permission",
             title: "权限不足",
-            description: error.message,
+            description:
+                userReadableMessage(error.message) ??
+                "当前账号没有执行此操作的权限，请联系管理员或有权限的同事。",
             code: error.code,
             requestId: error.requestId,
             retryable: false,
@@ -205,7 +220,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         return {
             kind: "conflict",
             title: "数据已发生变化",
-            description: error.message,
+            description:
+                userReadableMessage(error.message) ??
+                "数据已被其他操作更新，请刷新后重试。",
             code: error.code,
             requestId: error.requestId,
             retryable: true,
@@ -215,7 +232,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         return {
             kind: "validation",
             title: "提交内容未通过检查",
-            description: error.message,
+            description:
+                userReadableMessage(error.message) ??
+                "请检查填写内容，修正后重新提交。",
             code: error.code,
             requestId: error.requestId,
             retryable: false,
@@ -225,7 +244,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         return {
             kind: "business",
             title: "资料不可用",
-            description: error.message,
+            description:
+                userReadableMessage(error.message) ??
+                "请求的资料不存在或已被移除，请返回上一页重新选择。",
             code: error.code,
             requestId: error.requestId,
             retryable: false,
@@ -235,7 +256,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         return {
             kind: "system",
             title: "操作过于频繁",
-            description: error.message,
+            description:
+                userReadableMessage(error.message) ??
+                "请求次数过多，请稍后重试。",
             code: error.code,
             requestId: error.requestId,
             retryable: true,
@@ -245,7 +268,9 @@ const presentationFromApiError = (error: ApiError): ErrorPresentation => {
         kind: "system",
         title:
             error.kind === "Network" ? "网络连接失败" : "系统暂时无法完成操作",
-        description: error.message,
+        description:
+            userReadableMessage(error.message) ??
+            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员。",
         code: error.code,
         requestId: error.requestId,
         retryable: true,
@@ -258,19 +283,29 @@ export const getErrorPresentation = (
     fallback = "操作未完成，请稍后重试。",
 ): ErrorPresentation => {
     if (isApiError(error)) return presentationFromApiError(error)
-    if (error instanceof Error && error.message.trim().length > 0) {
+    if (error instanceof Error) {
+        const description = userReadableMessage(error.message)
+        if (!description) {
+            return {
+                kind: "system",
+                title: "系统暂时无法完成操作",
+                description: fallback,
+                retryable: true,
+            }
+        }
         return {
             kind: "business",
             title: "操作未完成",
-            description: error.message,
+            description,
             retryable: false,
         }
     }
-    if (typeof error === "string" && error.trim().length > 0) {
+    const description = userReadableMessage(error)
+    if (description) {
         return {
             kind: "business",
             title: "操作未完成",
-            description: error.trim(),
+            description,
             retryable: false,
         }
     }

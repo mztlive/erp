@@ -56,3 +56,33 @@ test("network failures provide a retryable next step", () => {
     assert.equal(presentation.title, "网络连接失败")
     assert.equal(presentation.retryable, true)
 })
+
+test("technical backend messages are replaced with an actionable explanation", () => {
+    const error = fromHttpResponse(500, {
+        errorMessage: "MongoServerError: E11000 duplicate key",
+        requestId: "req-technical",
+    })
+    const presentation = getErrorPresentation(error)
+
+    assert.equal(presentation.title, "系统暂时无法完成操作")
+    assert.equal(
+        presentation.description,
+        "系统暂时无法完成请求，请稍后重试；如仍失败，请联系支持人员。",
+    )
+    assert.equal(presentation.requestId, "req-technical")
+    assert.equal(presentation.retryable, true)
+})
+
+test("unknown English errors never leak directly to users", () => {
+    const presentation = getErrorPresentation(
+        new Error("Failed to fetch dashboard"),
+        "工作台加载失败，请刷新后重试。",
+    )
+
+    assert.deepEqual(presentation, {
+        kind: "system",
+        title: "系统暂时无法完成操作",
+        description: "工作台加载失败，请刷新后重试。",
+        retryable: true,
+    })
+})
