@@ -12,6 +12,7 @@ import {
 } from "@/components/business"
 import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
+import { toast } from "@/components/ui/toast"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
@@ -30,6 +31,7 @@ import { useSalesOrderCreateCommandLedger } from "@/features/sales-orders/hooks/
 import { useSalesOrderCreateDefaults } from "@/features/sales-orders/hooks/use-sales-order-create-defaults"
 import { useSalesOrderCreateUnloadGuard } from "@/features/sales-orders/hooks/use-sales-order-create-unload-guard"
 import { useSalesOrderCreateSubmission } from "@/features/sales-orders/hooks/use-sales-order-create-submission"
+import { useSalesLineProcurementResponsibilities } from "@/features/sales-orders/hooks/use-sales-line-procurement-responsibilities"
 import { SalesOrderCreateAlerts } from "@/features/sales-orders/components/sales-order-create-alerts"
 import { SalesOrderCreateContractSection } from "@/features/sales-orders/components/sales-order-create-contract-section"
 import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components/sales-order-create-header-fields"
@@ -110,6 +112,25 @@ export function SalesOrderCreateForm({
     const natureLocked = purpose !== "create"
     const [pendingNature, setPendingNature] =
         React.useState<SalesOrderNature | null>(null)
+    const procurementResponsibilityRef = React.useRef({ allResolved: false })
+    const blocksSalesOrderSubmit = React.useCallback(
+        (value: { nature: SalesOrderNature }) => {
+            if (
+                value.nature !== "physical_service" ||
+                procurementResponsibilityRef.current.allResolved
+            ) {
+                return false
+            }
+            toast.add({
+                title: "暂不能提交销售单",
+                description: "暂未确定采购负责人，请联系管理员维护采购责任规则",
+                type: "warning",
+                timeout: 5000,
+            })
+            return true
+        },
+        [],
+    )
 
     const form = useAppForm({
         defaultValues,
@@ -126,6 +147,7 @@ export function SalesOrderCreateForm({
         },
         onSubmit: async ({ value }) => {
             if (submission.submitIntentRef.current === "SUBMIT") {
+                if (blocksSalesOrderSubmit(value)) return
                 submission.setSubmitConfirmOpen(true)
                 return
             }
@@ -135,6 +157,12 @@ export function SalesOrderCreateForm({
 
     const dirty = useSelector(form.store, (state) => state.isDirty)
     const nature = useSelector(form.store, (state) => state.values.nature)
+    const lineItems = useSelector(form.store, (state) => state.values.lineItems)
+    const procurementResponsibilityQuery =
+        useSalesLineProcurementResponsibilities({ nature, lines: lineItems })
+    procurementResponsibilityRef.current = {
+        allResolved: procurementResponsibilityQuery.allResolved,
+    }
     useSalesOrderCreateUnloadGuard(dirty)
 
     React.useEffect(() => {
@@ -300,7 +328,12 @@ export function SalesOrderCreateForm({
                             </div>
                         </section>
 
-                        <SalesOrderCreateLineItemsSection form={form} />
+                        <SalesOrderCreateLineItemsSection
+                            form={form}
+                            procurementOwners={
+                                procurementResponsibilityQuery.byRowKey
+                            }
+                        />
 
                         <SalesOrderCreateTotalBar
                             form={form}
@@ -362,6 +395,7 @@ export function SalesOrderCreateForm({
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
                     onConfirm={() => {
+                        if (blocksSalesOrderSubmit(form.state.values)) return
                         submission.setSubmitConfirmOpen(false)
                         void submission.handleSubmit(form.state.values, form)
                     }}
@@ -374,6 +408,7 @@ export function SalesOrderCreateForm({
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
                     onConfirm={() => {
+                        if (blocksSalesOrderSubmit(form.state.values)) return
                         submission.setSubmitConfirmOpen(false)
                         void submission.handleSubmit(form.state.values, form)
                     }}

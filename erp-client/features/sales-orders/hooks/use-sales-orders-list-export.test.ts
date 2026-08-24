@@ -61,6 +61,14 @@ function makeSalesOrderListItem(
         lineItems: [],
         related: {
             purchaseOrders: 0,
+            procurementProgress: {
+                salesQuantity: "0",
+                coveredQuantity: "0",
+                remainingQuantity: "0",
+                status: "pending",
+                label: "待采购",
+                tone: "neutral",
+            },
             fulfillments: 0,
             receipts: 0,
             invoices: 0,

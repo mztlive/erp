@@ -335,18 +335,22 @@ describe("fetchCreationBases", () => {
                 customer_name: "客户甲",
                 contract_no: "HT-2026-001",
                 sales_owner_name: "张三",
-                submission_id: "sub_1",
+                sales_order_revision_id: "sales-revision-1",
                 supplier_id: "sup_1",
                 supplier_name: "供应商A",
                 payment_term_code: "POSTPAY_NET30",
                 lines: [
                     {
-                        procurement_confirmation_line_id: "sales-line-1",
-                        sales_order_submission_line_id:
-                            "internal-submission-line-id",
+                        procurement_confirmation_line_id: "confirmation-line-1",
+                        sales_order_line_id: "sales-line-1",
+                        sales_order_revision_line_id: "sales-revision-line-1",
                         sales_line_no: 1,
                         supplier_id: "sup_1",
-                        confirmed_quantity: "2",
+                        confirmed_quantity: "10",
+                        sales_quantity: "10",
+                        covered_quantity: "4",
+                        remaining_quantity: "6",
+                        max_create_quantity: "5",
                         latest_cost_gross: "40",
                         input_tax_rate: "0.13",
                         expected_delivery_date: "2026-08-25",
@@ -360,10 +364,17 @@ describe("fetchCreationBases", () => {
             },
         ])
 
-        const result = await fetchCreationBases()
+        const result = await fetchCreationBases({
+            salesOrderId: "so_1",
+            workItemId: "wi_1",
+        })
         expect(mockedApiGet).toHaveBeenCalledTimes(1)
         expect(mockedApiGet).toHaveBeenCalledWith(
             "/admin/purchase-creation-bases",
+            {
+                sales_order_id: "so_1",
+                work_item_id: "wi_1",
+            },
         )
         expect(result).toHaveLength(1)
         expect(result[0]?.basisId).toBe("bas_1")
@@ -374,14 +385,19 @@ describe("fetchCreationBases", () => {
             salesOwnerName: "张三",
         })
         expect(result[0]?.lines[0]).toMatchObject({
+            salesOrderLineId: "sales-line-1",
+            salesOrderRevisionLineId: "sales-revision-line-1",
             itemName: "测试商品",
             itemSku: "标准规格",
-            quantity: "2",
+            salesQuantity: "10",
+            coveredQuantity: "4",
+            remainingQuantity: "6",
+            maxCreateQuantity: "5",
             unit: "件",
             salesAllocationLabel: "销售明细 1",
         })
         expect(result[0]?.lines[0]?.salesAllocationLabel).not.toContain(
-            "internal-submission-line-id",
+            "sales-revision-line-1",
         )
     })
 })

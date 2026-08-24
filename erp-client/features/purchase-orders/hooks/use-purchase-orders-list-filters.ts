@@ -40,6 +40,7 @@ export function usePurchaseOrdersListFilters(
         metricKey,
         basisFromUrl,
         salesOrderFromUrl,
+        workItemFromUrl,
         createFromSales,
     } = usePurchaseOrdersListUrl()
 
@@ -143,6 +144,7 @@ export function usePurchaseOrdersListFilters(
         listQueryInput,
         basisFromUrl,
         salesOrderFromUrl,
+        workItemFromUrl,
         createFromSales,
         // 草稿与 UI 态
         searchDraft,

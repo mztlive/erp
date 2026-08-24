@@ -83,7 +83,7 @@ describe("mapWorkingCopyLines", () => {
 })
 
 describe("mapListItemFromBackend", () => {
-    it("maps the authoritative purchase-order count into the related lane", () => {
+    it("maps procurement progress and allows another purchase while quantity remains", () => {
         const order = mapListItemFromBackend(
             {
                 id: "so-1",
@@ -107,6 +107,12 @@ describe("mapListItemFromBackend", () => {
                     label: "已生效",
                     tone: "success",
                 },
+                procurement_progress: {
+                    sales_quantity: "10",
+                    covered_quantity: "7",
+                    remaining_quantity: "3",
+                    status: "partial",
+                },
             },
             { purchaseOrderCount: 2 },
         )
@@ -114,23 +120,34 @@ describe("mapListItemFromBackend", () => {
         expect(order.ownerUserId).toBe("u-sales")
         expect(order.ownerName).toBe("张三")
         expect(order.related.purchaseOrders).toBe(2)
-        expect(canCreatePurchaseFromSalesOrder(order)).toBe(false)
+        expect(order.related.procurementProgress).toMatchObject({
+            salesQuantity: "10",
+            coveredQuantity: "7",
+            remainingQuantity: "3",
+            status: "partial",
+            label: "部分采购",
+        })
+        expect(canCreatePurchaseFromSalesOrder(order)).toBe(true)
         expect(purchaseOrdersWorkspaceHref(order, "/sales/orders/so-1")).toBe(
-            "/procurement/orders?salesOrderId=so-1&from=W05&returnTo=%2Fsales%2Forders%2Fso-1",
+            "/procurement/orders?salesOrderId=so-1&action=create&from=W05&returnTo=%2Fsales%2Forders%2Fso-1",
         )
 
-        const orderWithoutPurchase = {
+        const coveredOrder = {
             ...order,
-            related: { ...order.related, purchaseOrders: 0 },
+            related: {
+                ...order.related,
+                procurementProgress: {
+                    ...order.related.procurementProgress,
+                    remainingQuantity: "0",
+                    status: "covered" as const,
+                },
+            },
         }
-        expect(canCreatePurchaseFromSalesOrder(orderWithoutPurchase)).toBe(true)
+        expect(canCreatePurchaseFromSalesOrder(coveredOrder)).toBe(false)
         expect(
-            purchaseOrdersWorkspaceHref(
-                orderWithoutPurchase,
-                "/sales/orders/so-1",
-            ),
+            purchaseOrdersWorkspaceHref(coveredOrder, "/sales/orders/so-1"),
         ).toBe(
-            "/procurement/orders?salesOrderId=so-1&action=create&from=W05&returnTo=%2Fsales%2Forders%2Fso-1",
+            "/procurement/orders?salesOrderId=so-1&from=W05&returnTo=%2Fsales%2Forders%2Fso-1",
         )
     })
 

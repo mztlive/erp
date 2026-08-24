@@ -195,6 +195,7 @@ export function mapDetailToListItem(
             created_at: detail.created_at,
             updated_at: detail.created_at,
             stage: detail.stage,
+            procurement_progress: detail.procurement_progress,
         },
         {
             customerName:

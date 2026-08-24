@@ -87,12 +87,17 @@ export function displayOwnerName(displayName?: string | null): string {
 
 export function displayNextActionHint(input: {
     nextActionHint?: string | null
+    workItemType?: string | null
     workItemTypeLabel?: string | null
 }): string {
     if (isUserFacingCopy(input.nextActionHint) && input.nextActionHint) {
         return input.nextActionHint
     }
-    return nextActionHintForWorkItemType(input.workItemTypeLabel)
+    return nextActionHintForWorkItemType(
+        input.workItemType === "PROCUREMENT_ORDER_CREATION"
+            ? "待采购建单"
+            : input.workItemTypeLabel,
+    )
 }
 
 export function queueResponsibilityLabel(input: {

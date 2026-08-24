@@ -131,10 +131,15 @@ export type BackendCenter = {
 
 export type BackendBasisLine = {
     procurement_confirmation_line_id: string
-    sales_order_submission_line_id: string
+    sales_order_line_id: string
+    sales_order_revision_line_id: string
     sales_line_no: number
     supplier_id: string
     confirmed_quantity: string
+    sales_quantity?: string | null
+    covered_quantity?: string | null
+    remaining_quantity?: string | null
+    max_create_quantity?: string | null
     latest_cost_gross: string
     input_tax_rate: string
     expected_delivery_date: string
@@ -151,7 +156,7 @@ export type BackendBasis = {
     customer_name: string
     contract_no?: string | null
     sales_owner_name?: string | null
-    submission_id: string
+    sales_order_revision_id: string
     supplier_id: string
     supplier_name: string
     purchase_type?: string | null

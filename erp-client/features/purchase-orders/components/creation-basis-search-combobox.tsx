@@ -30,7 +30,7 @@ export function CreationBasisSearchCombobox({
     emptyLabel,
     ...props
 }: CreationBasisSearchComboboxProps) {
-    const query = useCreationBasesQuery({ enabled: items == null })
+    const query = useCreationBasesQuery({}, { enabled: items == null })
     const rows = React.useMemo(
         () => (items ?? query.data ?? []).filter((basis) => !basis.consumed),
         [items, query.data],

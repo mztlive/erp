@@ -31,6 +31,10 @@ export const TYPE_META: Record<
         label: "采购二次确认",
         family: "fulfillment",
     },
+    PROCUREMENT_ORDER_CREATION: {
+        label: "待采购建单",
+        family: "fulfillment",
+    },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
         family: "approval",

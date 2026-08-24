@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
 
+import { WorkspaceTaskCard } from "./workspace-task-card"
 import { WorkspaceTaskDetail } from "./workspace-task-detail"
 
 vi.mock("@/features/approval-workflow/components/approval-action-bar", () => ({
@@ -42,6 +43,7 @@ function salesApprovalItem(
         ownerUserLabel: "采购1",
         reasonLabel: "",
         impactSummary: "不审批则销售单不能生效、不能履约",
+        nextActionHint: "进入对应页面后提交处理结论。",
         allowedActions: ["APPROVE", "REJECT"],
         actionBlockers: [],
         destinationWorkspaceId: "W05",
@@ -126,5 +128,41 @@ describe("WorkspaceTaskDetail", () => {
 
         expect(screen.getByText("明细 · 3 行")).toBeTruthy()
         expect(screen.getByText(/另有 2 行/)).toBeTruthy()
+    })
+
+    it("opens procurement creation with stable task selectors and next-step copy", () => {
+        const item = salesApprovalItem({
+            workItemId: "wi-procurement-1",
+            workItemType: "PROCUREMENT_ORDER_CREATION",
+            workItemTypeLabel: "待采购建单",
+            businessObjectId: "so-1",
+            stableNumber: "销售单 XS202608240001",
+            objectTitle: "销售单 XS202608240001",
+            destinationWorkspaceId: "W08",
+            handlerKey: "procurement_order_creation",
+            allowedActions: ["PROCESS"],
+            approvalProcessInstanceId: undefined,
+            approvalNodeExecutionId: undefined,
+            nextActionHint:
+                "打开采购单页，按销售明细剩余数量选择本次采购数量并创建草稿。",
+        })
+        const { rerender } = render(
+            <WorkspaceTaskCard item={item} selected onSelect={vi.fn()} />,
+        )
+        expect(
+            screen.getByTestId(
+                "work-item-procurement-order-creation-wi-procurement-1",
+            ),
+        ).toBeTruthy()
+
+        rerender(<WorkspaceTaskDetail item={item} />)
+        const link = screen.getByTestId(
+            "work-item-open-document-wi-procurement-1",
+        )
+        expect(link.textContent?.includes("打开单据")).toBe(true)
+        expect(link.getAttribute("href")).toBe(
+            "/procurement/orders?action=create&salesOrderId=so-1&workItemId=wi-procurement-1",
+        )
+        expect(screen.getByText(/按销售明细剩余数量/)).toBeTruthy()
     })
 })

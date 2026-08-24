@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
     displayImpactSummary,
+    displayNextActionHint,
     displayOwnerName,
     displayReasonLabel,
     queueResponsibilityLabel,
@@ -55,6 +56,17 @@ describe("displayImpactSummary", () => {
                 reasonLabel: "purchase order review dispatched",
             }),
         ).toBe("采购已提交，需要核对成本、进项税和付款条件")
+    })
+})
+
+describe("displayNextActionHint", () => {
+    it("maps procurement creation to business next-step copy", () => {
+        expect(
+            displayNextActionHint({
+                workItemType: "PROCUREMENT_ORDER_CREATION",
+                nextActionHint: "open purchase order",
+            }),
+        ).toBe("打开采购单页，按销售明细剩余数量选择本次采购数量并创建草稿。")
     })
 })
 

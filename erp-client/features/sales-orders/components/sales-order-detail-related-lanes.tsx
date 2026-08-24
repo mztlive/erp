@@ -44,6 +44,9 @@ function RelatedLane({
     actionLabel,
     enabled,
     disabledReason,
+    progressDetail,
+    progressTestId,
+    actionTestId,
 }: {
     lane: keyof typeof RELATED_LANE_COPY
     count: number
@@ -52,11 +55,14 @@ function RelatedLane({
     actionLabel?: string
     enabled: boolean
     disabledReason?: string
+    progressDetail?: string
+    progressTestId?: string
+    actionTestId?: string
 }) {
     const copy = RELATED_LANE_COPY[lane]
     return (
         <li className="flex items-center justify-between gap-3 py-2.5">
-            <div className="min-w-0">
+            <div className="min-w-0" data-testid={progressTestId}>
                 <div className="text-sm font-medium">
                     {copy.label}
                     <span className="num ml-1.5 font-normal text-muted-foreground">
@@ -66,12 +72,18 @@ function RelatedLane({
                 <div className="text-xs text-muted-foreground">
                     {copy.hint} · {status}
                 </div>
+                {progressDetail ? (
+                    <div className="num text-xs text-muted-foreground">
+                        {progressDetail}
+                    </div>
+                ) : null}
             </div>
             {enabled ? (
                 <Button
                     type="button"
                     size="sm"
                     variant="secondary"
+                    data-testid={actionTestId}
                     render={<Link href={href} />}
                 >
                     {actionLabel ?? copy.actionLabel}
@@ -81,6 +93,7 @@ function RelatedLane({
                     type="button"
                     size="sm"
                     variant="secondary"
+                    data-testid={actionTestId}
                     disabled
                     title={disabledReason}
                 >
@@ -106,19 +119,28 @@ export function RelatedLanes({
     if (lanes.includes("purchase")) {
         const createPurchase = canCreatePurchaseFromSalesOrder(order)
         const gate = createPurchase
-            ? permissions.createPurchase(
-                  true,
-                  "当前不能从本单创建采购单",
-              )
+            ? permissions.createPurchase(true, "当前不能从本单创建采购单")
             : permissions.openPurchase
+        const progress = order.related.procurementProgress
         items.push(
             <RelatedLane
                 key="purchase"
                 lane="purchase"
                 count={order.related.purchaseOrders}
-                status={order.fulfillment.label}
+                status={progress.label}
+                progressDetail={`销售总数量 ${progress.salesQuantity} · 已覆盖 ${progress.coveredQuantity} · 剩余 ${progress.remainingQuantity}`}
+                progressTestId="sales-order-procurement-progress"
                 href={purchaseOrdersWorkspaceHref(order, selfReturn)}
-                actionLabel={createPurchase ? "去建单" : undefined}
+                actionLabel={
+                    createPurchase
+                        ? order.related.purchaseOrders > 0
+                            ? "继续建单"
+                            : "去建单"
+                        : undefined
+                }
+                actionTestId={
+                    createPurchase ? "sales-order-continue-purchase" : undefined
+                }
                 enabled={gate.enabled}
                 disabledReason={gate.reason}
             />,

@@ -201,8 +201,7 @@ export function resolveFocusTask(
     if (
         order.nature === "physical_service" &&
         order.approval &&
-        (order.approval.instance ||
-            REVIEW_CODES.has(order.primaryStatus.code))
+        (order.approval.instance || REVIEW_CODES.has(order.primaryStatus.code))
     ) {
         return {
             id: "approval",
@@ -215,8 +214,7 @@ export function resolveFocusTask(
     if (
         order.nature === "card_voucher" &&
         order.approval &&
-        (order.approval.instance ||
-            REVIEW_CODES.has(order.primaryStatus.code))
+        (order.approval.instance || REVIEW_CODES.has(order.primaryStatus.code))
     ) {
         return {
             id: "approval",
@@ -366,21 +364,10 @@ export function fulfillmentWorkspaceHref(
 export function canCreatePurchaseFromSalesOrder(
     order: SalesOrderListItem,
 ): boolean {
-    if (order.nature !== "physical_service") return false
-    if (order.related.purchaseOrders > 0) return false
-    if (
-        order.primaryStatus.code === "draft" ||
-        order.primaryStatus.code === "voided"
-    ) {
-        return false
-    }
-    if (
-        isPendingReviewStage(order.primaryStatus.code) ||
-        order.primaryStatus.code === "in_approval"
-    ) {
-        return false
-    }
-    return true
+    return (
+        order.nature === "physical_service" &&
+        Number(order.related.procurementProgress.remainingQuantity) > 0
+    )
 }
 
 export function purchaseOrdersWorkspaceHref(

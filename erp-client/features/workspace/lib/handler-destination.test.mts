@@ -87,6 +87,23 @@ test("sales change review opens its root sales order instead of the review id", 
     )
 })
 
+test("procurement creation opens W08 with sales order and work item context", () => {
+    const url = parsedHref(
+        buildHandlerHref({
+            businessObjectId: "sales-order / 7",
+            workItemId: "wi-42",
+            handlerKey: "procurement_order_creation",
+            destinationWorkspaceId: "W08",
+        }),
+    )
+
+    assert.equal(url.pathname, "/procurement/orders")
+    assert.equal(url.searchParams.get("action"), "create")
+    assert.equal(url.searchParams.get("salesOrderId"), "sales-order / 7")
+    assert.equal(url.searchParams.get("workItemId"), "wi-42")
+    assert.equal(url.searchParams.has("queueContextId"), false)
+})
+
 test("purchase order review opens the exact W08 review mode", () => {
     const url = parsedHref(
         buildHandlerHref({

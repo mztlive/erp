@@ -101,15 +101,30 @@ function makeBasis(
         salesOrderId: "so_1",
         salesOrderNo: "SO-1",
         customerName: "客户甲",
-        salesSubmissionId: "sub_1",
-        salesSubmissionNo: 0,
+        salesOrderRevisionId: "sales-revision-1",
         supplierId: "sup_1",
         supplierName: "供应商A",
         purchaseType: "PHYSICAL",
         fulfillmentResponsibility: "WAREHOUSE",
         paymentTermCode: "POSTPAY_NET30",
         paymentTermLabel: "货到 30 天",
-        lines: [],
+        lines: [
+            {
+                procurementConfirmationLineId: "pc-line-1",
+                salesOrderLineId: "sales-line-1",
+                salesOrderRevisionLineId: "sales-revision-line-1",
+                itemName: "测试商品",
+                salesQuantity: "10",
+                coveredQuantity: "4",
+                remainingQuantity: "6",
+                maxCreateQuantity: "6",
+                unit: "件",
+                unitCostGross: "10",
+                inputTaxRate: "0.13",
+                expectedDeliveryDate: "2026-09-01",
+                salesAllocationLabel: "销售明细 1",
+            },
+        ],
         estimatedGross: "100",
         consumed: false,
         ...overrides,
@@ -332,7 +347,7 @@ describe("usePurchaseOrdersListController", () => {
         expect(mockedFetchBases).not.toHaveBeenCalled()
     })
 
-    it("建单成功：调用 API、关闭弹框并跳转编辑页", async () => {
+    it("建单成功后刷新依据，有剩余时保留弹框继续建单", async () => {
         mockedFetchBases.mockResolvedValue([makeBasis()])
         mockedCreate.mockResolvedValue({
             status: "succeeded",
@@ -352,24 +367,27 @@ describe("usePurchaseOrdersListController", () => {
         act(() => {
             result.current.setSelectedBasisId("bas_1")
         })
+        const lines = [{ salesOrderLineId: "sales-line-1", quantity: "6" }]
         await act(async () => {
-            await result.current.handleCreate()
+            await result.current.handleCreate(lines)
         })
         expect(mockedCreate).toHaveBeenCalledTimes(1)
-        expect(mockedCreate.mock.calls[0][0].basisId).toBe("bas_1")
-        expect(mockedCreate.mock.calls[0][0].idempotencyKey).toMatch(
-            /^create-basis-bas_1-\d+$/,
+        expect(mockedCreate).toHaveBeenCalledWith(
+            {
+                basisId: "bas_1",
+                purchaseType: "PHYSICAL",
+                paymentTermCode: "POSTPAY_NET30",
+                lines,
+                idempotencyKey: expect.any(String),
+            },
+            expect.anything(),
         )
-        expect(mockRouter.push).toHaveBeenCalledWith(
-            "/procurement/orders/po_new?mode=edit",
-        )
-        expect(result.current.createOpen).toBe(false)
+        expect(mockedFetchBases).toHaveBeenCalledTimes(2)
+        expect(mockRouter.push).not.toHaveBeenCalled()
+        expect(result.current.createOpen).toBe(true)
         expect(result.current.actionResult?.title).toBe("已创建采购草稿")
         expect(result.current.actionResult?.description).toContain(
-            "草稿 · PO-NEW",
-        )
-        expect(result.current.actionResult?.description).toContain(
-            "已绑定审批流程，尚未形成待办",
+            "仍有待采购数量，可继续建单",
         )
     })
 
@@ -390,9 +408,15 @@ describe("usePurchaseOrdersListController", () => {
             result.current.setSelectedBasisId("bas_1")
         })
         expect(result.current.createOpen).toBe(true)
+        const lines = [{ salesOrderLineId: "sales-line-1", quantity: "6" }]
         await act(async () => {
-            await result.current.handleCreate()
+            await result.current.handleCreate(lines)
+            await result.current.handleCreate(lines)
         })
+        expect(mockedCreate).toHaveBeenCalledTimes(2)
+        expect(mockedCreate.mock.calls[0]?.[0].idempotencyKey).toBe(
+            mockedCreate.mock.calls[1]?.[0].idempotencyKey,
+        )
         expect(mockRouter.push).not.toHaveBeenCalled()
         expect(result.current.createOpen).toBe(true)
         expect(result.current.actionResult).toEqual({

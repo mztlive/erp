@@ -13,6 +13,7 @@ export type PurchaseOrdersUrlState = {
     sort?: string
     basisId?: string
     salesOrderId?: string
+    workItemId?: string
     action?: string
 }
 
@@ -44,6 +45,7 @@ const codec = createUrlStateCodec<PurchaseOrdersUrlState>([
     { key: "sort", type: "string" },
     { key: "basisId", type: "string" },
     { key: "salesOrderId", type: "string" },
+    { key: "workItemId", type: "string" },
     { key: "action", type: "string" },
 ])
 

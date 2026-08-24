@@ -644,6 +644,16 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W14",
+                    href: "/master-data/procurement-responsibilities",
+                    label: "采购责任规则",
+                    icon: UsersIcon,
+                    requiredPermissions: [
+                        "procurement_responsibility:list",
+                        "procurement_responsibility:manage",
+                    ],
+                },
+                {
+                    routeId: "W14",
                     href: "/master-data/warehouses",
                     label: "仓库",
                     icon: WarehouseIcon,

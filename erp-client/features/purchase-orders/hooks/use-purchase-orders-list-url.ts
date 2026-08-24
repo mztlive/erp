@@ -86,6 +86,7 @@ export function usePurchaseOrdersListUrl() {
         metricKey: url.metric,
         basisFromUrl: url.basisId ?? null,
         salesOrderFromUrl: url.salesOrderId ?? null,
+        workItemFromUrl: url.workItemId ?? null,
         createFromSales: url.action === "create",
     }
 }

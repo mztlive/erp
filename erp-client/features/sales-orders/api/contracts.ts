@@ -86,6 +86,14 @@ export type BackendStageSummary = {
     due_at?: number | null
 }
 
+/** 销售单关联采购覆盖进度；wire 字段集中在本层，便于后端契约落地时适配。 */
+export type BackendProcurementProgress = {
+    sales_quantity: string
+    covered_quantity: string
+    remaining_quantity: string
+    status: "pending" | "partial" | "covered" | string
+}
+
 /** 服务端权威计算的结案资格。 */
 export type BackendCloseEligibility = {
     fulfillment_complete: boolean
@@ -117,6 +125,7 @@ export type BackendSalesOrderView = {
     owner_user_id?: string
     owner_user_name?: string | null
     stage: BackendStageSummary
+    procurement_progress?: BackendProcurementProgress | null
 }
 
 export type BackendWorkingCopyLine = {
@@ -269,6 +278,7 @@ export type BackendSalesOrderDetail = {
     owner_user_id: string
     owner_user_name?: string | null
     purchase_order_count: number
+    procurement_progress?: BackendProcurementProgress | null
     settled_total: string
     invoiced_total: string
     lines: Array<{ id: string; line_no: number; line_status: string }>

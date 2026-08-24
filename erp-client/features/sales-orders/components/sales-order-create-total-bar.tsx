@@ -112,9 +112,7 @@ export function SalesOrderCreateTotalBar({
                                 },
                             ]}
                             note={
-                                <>
-                                    税率 {values.taxRatePercent || "0"}% 预估。
-                                </>
+                                <>税率 {values.taxRatePercent || "0"}% 预估。</>
                             }
                             actions={
                                 <form.AppForm>
@@ -125,6 +123,7 @@ export function SalesOrderCreateTotalBar({
                                         onClick={onSaveDraftClick}
                                     />
                                     <form.SubmitButton
+                                        data-testid="sales-order-submit"
                                         label={
                                             purpose === "resubmit"
                                                 ? "再报给采购"

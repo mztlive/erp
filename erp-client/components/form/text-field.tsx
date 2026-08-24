@@ -21,6 +21,7 @@ type TextFieldProps = {
     className?: string
     inputClassName?: string
     autoComplete?: string
+    testId?: string
 }
 
 /**
@@ -37,6 +38,7 @@ export function TextField({
     className,
     inputClassName,
     autoComplete,
+    testId,
 }: TextFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -58,6 +60,7 @@ export function TextField({
                 placeholder={placeholder}
                 disabled={disabled}
                 autoComplete={autoComplete}
+                data-testid={testId}
                 aria-invalid={isInvalid || undefined}
                 className={inputClassName}
                 onBlur={field.handleBlur}

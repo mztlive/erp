@@ -33,6 +33,7 @@ function itemFixture(
         ownerUserLabel: "张三",
         reasonLabel: "",
         impactSummary: "",
+        nextActionHint: "进入对应页面后提交处理结论。",
         allowedActions: ["PROCESS", "VIEW"],
         actionBlockers: [],
         destinationWorkspaceId: "W01",

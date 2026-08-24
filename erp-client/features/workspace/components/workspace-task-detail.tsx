@@ -105,6 +105,7 @@ export function WorkspaceTaskDetail({
     ) : documentHref ? (
         <Button
             type="button"
+            data-testid={`work-item-open-document-${item.workItemId}`}
             render={<a href={documentHref} aria-label="打开单据" />}
         >
             打开单据
@@ -220,6 +221,12 @@ export function WorkspaceTaskDetail({
                                 />
                             </CollapsibleContent>
                         </Collapsible>
+                    ) : null}
+
+                    {item.nextActionHint ? (
+                        <p className="text-sm text-muted-foreground">
+                            下一步：{item.nextActionHint}
+                        </p>
                     ) : null}
 
                     {item.actionBlockers.length > 0 ? (

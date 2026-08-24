@@ -274,8 +274,7 @@ export type PurchaseCreationBasis = Readonly<{
     customerName: string
     contractNumber?: string
     salesOwnerName?: string
-    salesSubmissionId: string
-    salesSubmissionNo: number
+    salesOrderRevisionId: string
     supplierId: string
     supplierName: string
     purchaseType: PurchaseType
@@ -285,9 +284,14 @@ export type PurchaseCreationBasis = Readonly<{
     /** 可拆入本单的已确认分行 */
     lines: readonly {
         procurementConfirmationLineId: string
+        salesOrderLineId: string
+        salesOrderRevisionLineId: string
         itemName: string
         itemSku?: string
-        quantity: string
+        salesQuantity: string
+        coveredQuantity: string
+        remainingQuantity: string
+        maxCreateQuantity: string
         unit: string
         unitCostGross: string
         inputTaxRate: string
@@ -352,6 +356,12 @@ export type ReviewPurchaseOrderInput = {
 
 export type CreatePurchaseOrderFromBasisInput = {
     basisId: string
+    purchaseType: PurchaseType
+    paymentTermCode: string
+    lines: Array<{
+        salesOrderLineId: string
+        quantity: string
+    }>
     idempotencyKey: string
 }
 

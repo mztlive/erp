@@ -15,6 +15,33 @@ import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sale
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 import { validateSalesOrderForm } from "@/features/sales-orders/lib/sales-order-create-validation"
 
+const procurementMock = vi.hoisted(() => ({ resolved: true }))
+const salesMutationMock = vi.hoisted(() => ({
+    saveDraft: vi.fn(async () => ({ version: 2 })),
+    create: vi.fn(),
+    submit: vi.fn(),
+    resubmit: vi.fn(),
+}))
+
+vi.mock("@/features/sales-orders/hooks/queries", () => ({
+    useCreateSalesOrderMutation: () => ({
+        mutateAsync: salesMutationMock.create,
+        isPending: false,
+    }),
+    useSaveSalesOrderDraftMutation: () => ({
+        mutateAsync: salesMutationMock.saveDraft,
+        isPending: false,
+    }),
+    useSubmitSalesOrderMutation: () => ({
+        mutateAsync: salesMutationMock.submit,
+        isPending: false,
+    }),
+    useResolveProcurementRejectionMutation: () => ({
+        mutateAsync: salesMutationMock.resubmit,
+        isPending: false,
+    }),
+}))
+
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }))
@@ -22,6 +49,34 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/features/contracts/contract-upload-dialog", () => ({
     ContractUploadDialog: () => null,
 }))
+
+vi.mock(
+    "@/features/sales-orders/hooks/use-sales-line-procurement-responsibilities",
+    () => ({
+        useSalesLineProcurementResponsibilities: ({
+            lines,
+        }: {
+            lines: Array<{ rowKey: string }>
+        }) => ({
+            byRowKey: new Map(
+                procurementMock.resolved
+                    ? lines.map((line) => [
+                          line.rowKey,
+                          {
+                              rowKey: line.rowKey,
+                              resolved: true,
+                              ownerUserId: "buyer-1",
+                              ownerName: "采购李四",
+                          },
+                      ])
+                    : [],
+            ),
+            allResolved: procurementMock.resolved,
+            isFetching: false,
+            isError: false,
+        }),
+    }),
+)
 
 vi.mock("@/features/entity-selectors", () => ({
     entitySelectorKeys: { all: ["entity-selectors"] as const },
@@ -132,7 +187,7 @@ const incompleteLine = {
 }
 
 function makeDraft(
-    line: typeof filledLine | typeof incompleteLine,
+    line: SalesOrderDraftResumeData["lineItems"][number],
 ): SalesOrderDraftResumeData {
     return {
         salesOrderId: "so-1",
@@ -191,6 +246,8 @@ function renderCreateForm(draft: SalesOrderDraftResumeData) {
 afterEach(() => {
     cleanup()
     queryClient?.clear()
+    procurementMock.resolved = true
+    vi.clearAllMocks()
 })
 
 describe("SalesOrderCreateForm submit recovery", () => {
@@ -198,6 +255,54 @@ describe("SalesOrderCreateForm submit recovery", () => {
         renderCreateForm(makeDraft(filledLine))
 
         expect(screen.getByLabelText("履约方式")).toBeTruthy()
+        expect(
+            screen
+                .getByTestId("sales-line-procurement-owner-l1")
+                .textContent?.includes("采购李四"),
+        ).toBe(true)
+    })
+
+    it("blocks submit synchronously when a physical line has no unique procurement owner", async () => {
+        procurementMock.resolved = false
+        renderCreateForm(
+            makeDraft({
+                ...filledLine,
+                unitPriceGross: "100.00",
+                dueDate: "2026-09-01",
+            }),
+        )
+
+        expect(
+            screen
+                .getByTestId("sales-line-procurement-owner-l1")
+                .textContent?.includes(
+                    "暂未确定采购负责人，请联系管理员维护采购责任规则",
+                ),
+        ).toBe(true)
+        fireEvent.click(screen.getByTestId("sales-order-submit"))
+
+        await waitFor(() => {
+            expect(
+                screen.queryByRole("button", { name: "确认提交" }),
+            ).toBeNull()
+        })
+    })
+
+    it("allows saving a draft when procurement responsibility is unresolved", async () => {
+        procurementMock.resolved = false
+        renderCreateForm(
+            makeDraft({
+                ...filledLine,
+                unitPriceGross: "100.00",
+                dueDate: "2026-09-01",
+            }),
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "保存草稿" }))
+
+        await waitFor(() => {
+            expect(salesMutationMock.saveDraft).toHaveBeenCalledTimes(1)
+        })
     })
 
     it("re-enables submit after fixing unit price and due date", async () => {

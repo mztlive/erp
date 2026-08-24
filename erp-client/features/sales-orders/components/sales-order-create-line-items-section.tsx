@@ -3,13 +3,16 @@
 import { Badge } from "@/components/ui/badge"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
+import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
+    procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
 }
 
 export function SalesOrderCreateLineItemsSection({
     form,
+    procurementOwners,
 }: SalesOrderCreateLineItemsSectionProps) {
     return (
         <section
@@ -29,7 +32,10 @@ export function SalesOrderCreateLineItemsSection({
                 </form.Subscribe>
             </div>
 
-            <SalesOrderCreateLineItemTable form={form} />
+            <SalesOrderCreateLineItemTable
+                form={form}
+                procurementOwners={procurementOwners}
+            />
 
             <div className="mt-5">
                 <form.AppField name="remark">

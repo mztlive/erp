@@ -295,8 +295,7 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         customerName: basis.customer_name,
         contractNumber: basis.contract_no ?? undefined,
         salesOwnerName: basis.sales_owner_name ?? undefined,
-        salesSubmissionId: basis.submission_id,
-        salesSubmissionNo: 0,
+        salesOrderRevisionId: basis.sales_order_revision_id,
         supplierId: basis.supplier_id,
         supplierName: basis.supplier_name,
         purchaseType: mapPurchaseType(basis.purchase_type ?? "PHYSICAL"),
@@ -307,18 +306,34 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         paymentTermLabel: paymentTermLabel(
             basis.payment_term_code || "POSTPAY_NET30",
         ),
-        lines: (basis.lines ?? []).map((line) => ({
-            procurementConfirmationLineId:
-                line.procurement_confirmation_line_id,
-            itemName: line.product_name ?? "确认分行",
-            itemSku: line.specification ?? undefined,
-            quantity: String(line.confirmed_quantity ?? "0"),
-            unit: line.unit ?? "",
-            unitCostGross: String(line.latest_cost_gross ?? "0"),
-            inputTaxRate: String(line.input_tax_rate ?? "0"),
-            expectedDeliveryDate: line.expected_delivery_date ?? "",
-            salesAllocationLabel: `销售明细 ${line.sales_line_no}`,
-        })),
+        lines: (basis.lines ?? []).map((line) => {
+            const salesQuantity = String(
+                line.sales_quantity ?? line.confirmed_quantity ?? "0",
+            )
+            const coveredQuantity = String(line.covered_quantity ?? "0")
+            const remainingQuantity = String(
+                line.remaining_quantity ?? line.confirmed_quantity ?? "0",
+            )
+            return {
+                procurementConfirmationLineId:
+                    line.procurement_confirmation_line_id,
+                salesOrderLineId: line.sales_order_line_id,
+                salesOrderRevisionLineId: line.sales_order_revision_line_id,
+                itemName: line.product_name ?? "确认分行",
+                itemSku: line.specification ?? undefined,
+                salesQuantity,
+                coveredQuantity,
+                remainingQuantity,
+                maxCreateQuantity: String(
+                    line.max_create_quantity ?? remainingQuantity,
+                ),
+                unit: line.unit ?? "",
+                unitCostGross: String(line.latest_cost_gross ?? "0"),
+                inputTaxRate: String(line.input_tax_rate ?? "0"),
+                expectedDeliveryDate: line.expected_delivery_date ?? "",
+                salesAllocationLabel: `销售明细 ${line.sales_line_no}`,
+            }
+        }),
         estimatedGross: basis.estimated_gross ?? "0",
         consumed: false,
     }

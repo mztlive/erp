@@ -216,10 +216,21 @@ export async function fetchPurchaseOrderCenter(
     }
 }
 
-export async function fetchCreationBases(): Promise<
-    readonly PurchaseCreationBasis[]
-> {
-    const items = await apiGet<BackendBasis[]>("/admin/purchase-creation-bases")
+export type CreationBasesQuery = {
+    salesOrderId?: string
+    workItemId?: string
+}
+
+export async function fetchCreationBases(
+    query: CreationBasesQuery = {},
+): Promise<readonly PurchaseCreationBasis[]> {
+    const items = await apiGet<BackendBasis[]>(
+        "/admin/purchase-creation-bases",
+        {
+            sales_order_id: query.salesOrderId,
+            work_item_id: query.workItemId,
+        },
+    )
     return (items ?? []).map(mapBasis)
 }
 

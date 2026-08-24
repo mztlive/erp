@@ -8,13 +8,48 @@ import {
 } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import type { SalesOrderDraftLineInput } from "@/features/sales-orders/types"
+import type {
+    SalesLineProcurementResponsibility,
+    SalesOrderDraftLineInput,
+} from "@/features/sales-orders/types"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
+
+export const PROCUREMENT_OWNER_UNRESOLVED_MESSAGE =
+    "暂未确定采购负责人，请联系管理员维护采购责任规则"
+
+function ProcurementOwnerPreview({
+    line,
+    responsibility,
+}: {
+    line: SalesOrderDraftLineInput
+    responsibility?: SalesLineProcurementResponsibility
+}) {
+    return (
+        <div
+            className="min-w-44 text-sm"
+            data-testid={`sales-line-procurement-owner-${line.rowKey}`}
+        >
+            {responsibility?.resolved && responsibility.ownerName ? (
+                <span className="font-medium text-foreground">
+                    {responsibility.ownerName}
+                </span>
+            ) : (
+                <span className="text-muted-foreground">
+                    {PROCUREMENT_OWNER_UNRESOLVED_MESSAGE}
+                </span>
+            )}
+        </div>
+    )
+}
 
 /** 按当前业务性质与表单值组装明细编辑列。 */
 export function buildSalesOrderCreateLineItemColumns(
     values: CreateSalesOrderFormValues,
     form: SalesOrderCreateFormApi,
+    procurementOwners: ReadonlyMap<
+        string,
+        SalesLineProcurementResponsibility
+    > = new Map(),
 ): EditableLineItemColumn<SalesOrderDraftLineInput>[] {
     const nature = values.nature
     return [
@@ -31,6 +66,30 @@ export function buildSalesOrderCreateLineItemColumns(
                 />
             ),
         },
+        ...(nature === "physical_service"
+            ? ([
+                  {
+                      id: "procurementOwner",
+                      header: "采购负责人",
+                      renderValue: ({ item }) => (
+                          <ProcurementOwnerPreview
+                              line={item}
+                              responsibility={procurementOwners.get(
+                                  item.rowKey,
+                              )}
+                          />
+                      ),
+                      renderEditor: ({ item }) => (
+                          <ProcurementOwnerPreview
+                              line={item}
+                              responsibility={procurementOwners.get(
+                                  item.rowKey,
+                              )}
+                          />
+                      ),
+                  },
+              ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
+            : []),
         {
             id: "quantity",
             header: "数量 / 单位",

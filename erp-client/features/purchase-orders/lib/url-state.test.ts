@@ -25,7 +25,7 @@ describe("parsePurchaseOrdersSearchParams", () => {
 
     it("解析全部合法参数", () => {
         const params = new URLSearchParams(
-            "q=abc&status=DRAFT&metric=review&page=3&pageSize=50&sort=amount:desc&basisId=bas_1",
+            "q=abc&status=DRAFT&metric=review&page=3&pageSize=50&sort=amount:desc&basisId=bas_1&salesOrderId=so_1&workItemId=wi_1&action=create",
         )
         expect(parsePurchaseOrdersSearchParams(params)).toEqual({
             q: "abc",
@@ -35,6 +35,9 @@ describe("parsePurchaseOrdersSearchParams", () => {
             pageSize: 50,
             sort: "amount:desc",
             basisId: "bas_1",
+            salesOrderId: "so_1",
+            workItemId: "wi_1",
+            action: "create",
         })
     })
 
@@ -47,8 +50,7 @@ describe("parsePurchaseOrdersSearchParams", () => {
 
     it("页码非法值回退默认", () => {
         expect(
-            parsePurchaseOrdersSearchParams(new URLSearchParams("page=0"))
-                .page,
+            parsePurchaseOrdersSearchParams(new URLSearchParams("page=0")).page,
         ).toBe(1)
         expect(
             parsePurchaseOrdersSearchParams(new URLSearchParams("page=abc"))
@@ -62,9 +64,8 @@ describe("parsePurchaseOrdersSearchParams", () => {
 
     it("pageSize 超上限截断到 100", () => {
         expect(
-            parsePurchaseOrdersSearchParams(
-                new URLSearchParams("pageSize=500"),
-            ).pageSize,
+            parsePurchaseOrdersSearchParams(new URLSearchParams("pageSize=500"))
+                .pageSize,
         ).toBe(100)
     })
 
@@ -127,8 +128,8 @@ describe("buildPurchaseOrdersSearchParams", () => {
             basisId: "bas_9",
         }
         const built = buildPurchaseOrdersSearchParams(state)
-        expect(parsePurchaseOrdersSearchParams(new URLSearchParams(built))).toEqual(
-            state,
-        )
+        expect(
+            parsePurchaseOrdersSearchParams(new URLSearchParams(built)),
+        ).toEqual(state)
     })
 })

@@ -6,14 +6,17 @@ import { EditableLineItemTable, ValidationSummary } from "@/components/business"
 import { toFieldErrors } from "@/components/form"
 import { createEmptyLine } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/components/sales-order-create-line-item-columns"
 
 export type SalesOrderCreateLineItemTableProps = {
     form: SalesOrderCreateFormApi
+    procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
 }
 
 export function SalesOrderCreateLineItemTable({
     form,
+    procurementOwners,
 }: SalesOrderCreateLineItemTableProps) {
     /** 明细表根路径校验错误（如卡券仅一条）在明细区汇总展示。 */
     const lineItemIssues = useSelector(form.store, (state) => {
@@ -33,6 +36,7 @@ export function SalesOrderCreateLineItemTable({
                 const columns = buildSalesOrderCreateLineItemColumns(
                     values,
                     form,
+                    procurementOwners,
                 )
                 return (
                     <>

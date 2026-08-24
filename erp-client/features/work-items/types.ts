@@ -230,6 +230,7 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         }),
         nextActionHint: displayNextActionHint({
             nextActionHint: dto.next_action_hint,
+            workItemType: dto.work_item_type,
         }),
         summarySections: dto.summary_sections ?? [],
         briefLines: (dto.brief_lines ?? []).map((line) => ({

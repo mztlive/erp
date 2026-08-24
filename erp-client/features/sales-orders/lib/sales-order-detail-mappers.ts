@@ -2,6 +2,7 @@ import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     BackendCloseEligibility,
+    BackendProcurementProgress,
     BackendRevision,
     BackendSalesOrderView,
     BackendWorkingCopyLine,
@@ -12,6 +13,7 @@ import type {
     FormalAllowedAction,
     ProcurementRejectionResolution,
     ProgressTrack,
+    SalesOrderProcurementProgress,
     SalesChangeOrderSummary,
     SalesOrderLineItem,
     SalesOrderListItem,
@@ -105,6 +107,53 @@ function mapInvoicing(code: string): ProgressTrack {
             return { label: "已开齐", tone: "success" }
         default:
             return { label: "未开", tone: "neutral" }
+    }
+}
+
+export function mapProcurementProgress(
+    progress?: BackendProcurementProgress | null,
+): SalesOrderProcurementProgress {
+    const salesQuantity = progress?.sales_quantity ?? "0"
+    const coveredQuantity = progress?.covered_quantity ?? "0"
+    const remainingQuantity = progress?.remaining_quantity ?? "0"
+    const status =
+        progress?.status === "covered" ||
+        progress?.status === "partial" ||
+        progress?.status === "pending"
+            ? progress.status
+            : Number(remainingQuantity) <= 0 && Number(salesQuantity) > 0
+              ? "covered"
+              : Number(coveredQuantity) > 0
+                ? "partial"
+                : "pending"
+
+    if (status === "covered") {
+        return {
+            salesQuantity,
+            coveredQuantity,
+            remainingQuantity,
+            status,
+            label: "采购已覆盖",
+            tone: "success",
+        }
+    }
+    if (status === "partial") {
+        return {
+            salesQuantity,
+            coveredQuantity,
+            remainingQuantity,
+            status,
+            label: "部分采购",
+            tone: "warning",
+        }
+    }
+    return {
+        salesQuantity,
+        coveredQuantity,
+        remainingQuantity,
+        status,
+        label: "待采购",
+        tone: "neutral",
     }
 }
 
@@ -383,6 +432,9 @@ export function mapListItemFromBackend(
         lineItems: extras?.lineItems ?? [],
         related: {
             purchaseOrders: extras?.purchaseOrderCount ?? 0,
+            procurementProgress: mapProcurementProgress(
+                row.procurement_progress,
+            ),
             fulfillments: 0,
             receipts: 0,
             invoices: 0,

@@ -242,7 +242,7 @@ export function PurchaseOrdersListPage() {
                 selectedBasisId={ctrl.selectedBasisId}
                 onSelectedBasisIdChange={ctrl.setSelectedBasisId}
                 createPending={ctrl.createMutation.isPending}
-                onCreate={() => void ctrl.handleCreate()}
+                onCreate={ctrl.handleCreate}
             />
         </PageScaffold>
     )

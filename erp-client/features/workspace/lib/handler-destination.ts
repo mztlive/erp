@@ -34,6 +34,12 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W07",
         baseHref: "/procurement/confirm",
     },
+    procurement_order_creation: {
+        workItemTypeLabel: "待采购建单",
+        family: "fulfillment",
+        destinationWorkspaceId: "W08",
+        baseHref: "/procurement/orders",
+    },
     low_margin_manager: {
         workItemTypeLabel: "低毛利销售审批",
         family: "approval",
@@ -259,8 +265,21 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
 
     const businessObjectId = requiredValue(item.businessObjectId)
     const workItemId = requiredValue(item.workItemId)
+    if (!businessObjectId || !workItemId) return null
+
+    if (item.handlerKey === "procurement_order_creation") {
+        return withParams(
+            registration.baseHref,
+            new URLSearchParams({
+                action: "create",
+                salesOrderId: businessObjectId,
+                workItemId,
+            }),
+        )
+    }
+
     const queueContextId = requiredValue(item.queueContextId)
-    if (!businessObjectId || !workItemId || !queueContextId) return null
+    if (!queueContextId) return null
 
     const params = new URLSearchParams({
         from: "workspace",

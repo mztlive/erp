@@ -42,6 +42,7 @@ export function usePurchaseOrdersListController() {
         metricKey,
         basisFromUrl,
         salesOrderFromUrl,
+        workItemFromUrl,
         createFromSales,
     } = filters
 
@@ -49,9 +50,15 @@ export function usePurchaseOrdersListController() {
 
     const listQuery = usePurchaseOrdersQuery(listQueryInput)
     const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
-    const basesQuery = useCreationBasesQuery({
-        enabled: createOpen || Boolean(basisFromUrl) || createFromSales,
-    })
+    const basesQuery = useCreationBasesQuery(
+        {
+            salesOrderId: salesOrderFromUrl ?? undefined,
+            workItemId: workItemFromUrl ?? undefined,
+        },
+        {
+            enabled: createOpen || Boolean(basisFromUrl) || createFromSales,
+        },
+    )
     const createMutation = useCreateFromBasisMutation()
 
     const pageRows = React.useMemo(
@@ -64,6 +71,10 @@ export function usePurchaseOrdersListController() {
     const [selectedBasisId, setSelectedBasisId] = React.useState<string>("")
     const [actionResult, setActionResult] =
         React.useState<PurchaseOrdersActionResult | null>(null)
+    const createIntentRef = React.useRef<{
+        fingerprint: string
+        idempotencyKey: string
+    } | null>(null)
 
     const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
@@ -158,24 +169,48 @@ export function usePurchaseOrdersListController() {
         setSelectedBasisId(first ?? "")
     }, [basisFromUrl, createOpen, openBases, selectedBasisId])
 
-    const handleCreate = async () => {
+    const handleCreate = async (
+        lines: Array<{
+            salesOrderLineId: string
+            quantity: string
+        }>,
+    ) => {
         const basis = openBases.find((b) => b.basisId === selectedBasisId)
         if (!basis) return
+        const fingerprint = JSON.stringify({ basisId: basis.basisId, lines })
+        if (createIntentRef.current?.fingerprint !== fingerprint) {
+            createIntentRef.current = {
+                fingerprint,
+                idempotencyKey: `create-basis:${basis.basisId}:${crypto.randomUUID()}`,
+            }
+        }
         const result = await createMutation.mutateAsync({
             basisId: basis.basisId,
-            idempotencyKey: `create-basis-${basis.basisId}-${Date.now()}`,
+            purchaseType: basis.purchaseType,
+            paymentTermCode: basis.paymentTermCode,
+            lines,
+            idempotencyKey: createIntentRef.current.idempotencyKey,
         })
         if (result.status === "succeeded") {
-            setCreateOpen(false)
+            createIntentRef.current = null
+            const refreshed = await basesQuery.refetch()
+            const remainingBases = (refreshed.data ?? []).filter(
+                (candidate) =>
+                    !candidate.consumed &&
+                    (!salesOrderFromUrl ||
+                        candidate.salesOrderId === salesOrderFromUrl),
+            )
+            setSelectedBasisId(remainingBases[0]?.basisId ?? "")
+            setCreateOpen(remainingBases.length > 0)
             setActionResult({
                 status: "succeeded",
                 title: "已创建采购草稿",
-                description: `${result.data.draftLabel} · 已绑定审批流程，尚未形成待办。已按采购创建依据带入销售单 ${basis?.salesOrderNo ?? "—"} 与供应商 ${basis?.supplierName ?? "—"}。`,
+                description:
+                    remainingBases.length > 0
+                        ? `${result.data.draftLabel} 已创建。该销售单仍有待采购数量，可继续建单。`
+                        : `${result.data.draftLabel} 已创建。当前销售单的可采购数量已覆盖。`,
                 reference: result.reference,
             })
-            router.push(
-                `/procurement/orders/${result.data.purchaseOrderId}?mode=edit`,
-            )
         } else if (result.status === "failed") {
             setActionResult({
                 status: "failed",
@@ -226,6 +261,7 @@ export function usePurchaseOrdersListController() {
         effectiveMetric,
         basisFromUrl,
         salesOrderFromUrl,
+        workItemFromUrl,
         // 交互状态
         focusedIndex,
         setFocusedIndex,

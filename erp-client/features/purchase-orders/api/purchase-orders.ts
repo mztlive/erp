@@ -7,6 +7,7 @@ export type {
     PurchaseOrderListQuery,
     PurchaseOrderListResult,
 } from "./purchase-orders-contract"
+export type { CreationBasesQuery } from "./purchase-order-queries-api"
 
 export {
     acquireDraftEditToken,

@@ -7,7 +7,7 @@ import type {
     SavePurchaseOrderDraftInput,
     SubmitPurchaseOrderInput,
 } from "@/features/purchase-orders/types"
-import { formalActionFailure } from "./purchase-order-errors"
+import { formalActionFailure, isApiError } from "./purchase-order-errors"
 import type {
     BackendCenter,
     BackendChangeStartResult,
@@ -17,10 +17,7 @@ import type {
     BackendSaveResult,
     BackendSubmitResult,
 } from "./purchase-order-wire-types"
-import {
-    fetchCreationBases,
-    fetchPurchaseChangeOrderDetail,
-} from "./purchase-order-queries-api"
+import { fetchPurchaseChangeOrderDetail } from "./purchase-order-queries-api"
 
 export async function savePurchaseOrderDraft(
     input: SavePurchaseOrderDraftInput & { paymentTermLabel: string },
@@ -242,7 +239,9 @@ export async function startPurchaseChange(input: {
 const mapCenterLinesForChangeSubmit = (center: BackendCenter) =>
     (center.lines ?? []).map((line) => {
         const lineType =
-            line.line_type === "LOGISTICS_FEE" ? "LOGISTICS_FEE" : "ITEM_SERVICE"
+            line.line_type === "LOGISTICS_FEE"
+                ? "LOGISTICS_FEE"
+                : "ITEM_SERVICE"
         return {
             line_type: lineType,
             procurement_confirmation_line_id:
@@ -294,7 +293,8 @@ export async function submitPurchaseChange(input: {
         return {
             status: "succeeded",
             data: detail,
-            reference: submitted.reference || `CHANGE-SUB-${submitted.submission_no}`,
+            reference:
+                submitted.reference || `CHANGE-SUB-${submitted.submission_no}`,
         }
     } catch (error) {
         return formalActionFailure(error, input.idempotencyKey)
@@ -311,19 +311,16 @@ export async function createPurchaseOrderFromBasis(
     }>
 > {
     try {
-        const bases = await fetchCreationBases()
-        const basis = bases.find((b) => b.basisId === input.basisId)
-
         const data = await apiPost<BackendCreateResult>(
             "/admin/purchase-orders",
             {
                 basis_id: input.basisId,
-                // 缺口：前端 Create 输入无 purchase_type；依据也未返回，默认 PHYSICAL
-                purchase_type: basis?.purchaseType ?? "PHYSICAL",
-                payment_term_code:
-                    basis?.paymentTermCode && basis.paymentTermCode.length > 0
-                        ? basis.paymentTermCode
-                        : "NET-30",
+                purchase_type: input.purchaseType,
+                payment_term_code: input.paymentTermCode,
+                lines: input.lines.map((line) => ({
+                    sales_order_line_id: line.salesOrderLineId,
+                    quantity: line.quantity,
+                })),
                 idempotency_key: input.idempotencyKey,
             },
         )
@@ -340,6 +337,13 @@ export async function createPurchaseOrderFromBasis(
             reference: data.reference || data.purchase_no,
         }
     } catch (error) {
+        if (isApiError(error) && error.status === 409) {
+            return {
+                status: "failed",
+                message: "可采购数量已更新，请刷新后重试",
+                code: "CONFLICT",
+            }
+        }
         return formalActionFailure(error, input.idempotencyKey)
     }
 }

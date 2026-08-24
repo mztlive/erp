@@ -35,6 +35,11 @@ export function WorkspaceTaskCard({
         <button
             type="button"
             id={`work-item-${item.stableNumber}`}
+            data-testid={
+                item.workItemType === "PROCUREMENT_ORDER_CREATION"
+                    ? `work-item-procurement-order-creation-${item.workItemId}`
+                    : undefined
+            }
             aria-label={`${item.workItemTypeLabel} ${item.stableNumber}`}
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}

@@ -6,6 +6,14 @@ export type SalesOrderOrigin = "erp" | "mall"
 
 export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
 
+export type SalesLineProcurementResponsibility = {
+    rowKey: string
+    resolved: boolean
+    ownerUserId?: string
+    ownerName?: string
+    matchedRuleType?: string
+}
+
 export type SalesOrderDraftLineInput = {
     rowKey: string
     name: string
@@ -92,8 +100,20 @@ export type SalesOrderLineItem = {
     dueDate?: string
 }
 
+export type ProcurementProgressStatus = "pending" | "partial" | "covered"
+
+export type SalesOrderProcurementProgress = {
+    salesQuantity: string
+    coveredQuantity: string
+    remainingQuantity: string
+    status: ProcurementProgressStatus
+    label: string
+    tone: StatusTone
+}
+
 type SalesOrderRelatedSummary = {
     purchaseOrders: number
+    procurementProgress: SalesOrderProcurementProgress
     fulfillments: number
     receipts: number
     invoices: number

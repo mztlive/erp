@@ -131,8 +131,7 @@ function makeBasis(): PurchaseCreationBasis {
         salesOrderId: "so_1",
         salesOrderNo: "SO-1",
         customerName: "客户甲",
-        salesSubmissionId: "sub_1",
-        salesSubmissionNo: 0,
+        salesOrderRevisionId: "sales-revision-1",
         supplierId: "sup_1",
         supplierName: "供应商A",
         purchaseType: "PHYSICAL",
@@ -240,6 +239,7 @@ describe("purchaseOrderKeys", () => {
         expect(purchaseOrderKeys.bases()).toEqual([
             "purchase-orders",
             "creation-bases",
+            {},
         ])
         expect(purchaseOrderKeys.exportData(LIST_QUERY)).toEqual([
             "purchase-orders",
@@ -359,15 +359,18 @@ describe("useCreationBasesQuery", () => {
         const bases = [makeBasis()]
         mockedFetchBases.mockResolvedValue(bases)
         const { result } = renderHookWithProviders(() =>
-            useCreationBasesQuery(),
+            useCreationBasesQuery({ salesOrderId: "so_1", workItemId: "wi_1" }),
         )
         await waitFor(() => expect(result.current.data).toEqual(bases))
-        expect(mockedFetchBases).toHaveBeenCalledTimes(1)
+        expect(mockedFetchBases).toHaveBeenCalledWith({
+            salesOrderId: "so_1",
+            workItemId: "wi_1",
+        })
     })
 
     it("enabled=false 时不请求", () => {
         const { result } = renderHookWithProviders(() =>
-            useCreationBasesQuery({ enabled: false }),
+            useCreationBasesQuery({}, { enabled: false }),
         )
         expect(result.current.fetchStatus).toBe("idle")
         expect(mockedFetchBases).not.toHaveBeenCalled()
@@ -626,7 +629,18 @@ describe("useStartPurchaseChangeMutation", () => {
 })
 
 describe("useCreateFromBasisMutation", () => {
-    const input = { basisId: "bas_1", idempotencyKey: "create-1" }
+    const input = {
+        basisId: "bas_1",
+        purchaseType: "PHYSICAL" as const,
+        paymentTermCode: "POSTPAY_NET30",
+        lines: [
+            {
+                salesOrderLineId: "sales-line-1",
+                quantity: "6",
+            },
+        ],
+        idempotencyKey: "create-1",
+    }
 
     it("成功时失效采购单与销售单关联计数缓存", async () => {
         mockedCreate.mockResolvedValue({
@@ -649,7 +663,7 @@ describe("useCreateFromBasisMutation", () => {
         expect(mockedCreate).toHaveBeenCalledWith(input, expect.anything())
         await waitFor(() => expect(invalidate).toHaveBeenCalled())
         expect(invalidate).toHaveBeenCalledWith({
-            queryKey: purchaseOrderKeys.all,
+            queryKey: purchaseOrderKeys.lists(),
         })
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: salesOrderKeys.all,

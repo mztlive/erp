@@ -62,6 +62,7 @@ function workItemFixture(
         ownerUserLabel: "由你处理",
         reasonLabel: "",
         impactSummary: "",
+        nextActionHint: "进入对应页面后提交处理结论。",
         allowedActions: ["APPROVE", "REJECT"],
         actionBlockers: [],
         destinationWorkspaceId: "W05",

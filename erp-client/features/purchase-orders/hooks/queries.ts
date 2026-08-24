@@ -17,18 +17,23 @@ import {
     submitPurchaseChange,
     submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api/purchase-orders"
-import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
+import type {
+    CreationBasesQuery,
+    PurchaseOrderListQuery,
+} from "@/features/purchase-orders/api/purchase-orders"
 import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 
 export const purchaseOrderKeys = {
     all: ["purchase-orders"] as const,
+    lists: () => [...purchaseOrderKeys.all, "list"] as const,
     list: (query: PurchaseOrderListQuery) =>
-        [...purchaseOrderKeys.all, "list", query] as const,
+        [...purchaseOrderKeys.lists(), query] as const,
     detail: (id: string) => [...purchaseOrderKeys.all, "detail", id] as const,
     changeOrder: (id: string) =>
         [...purchaseOrderKeys.all, "change-order", id] as const,
-    bases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
+    bases: (query: CreationBasesQuery = {}) =>
+        [...purchaseOrderKeys.all, "creation-bases", query] as const,
     exportData: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.all, "export", query] as const,
 }
@@ -103,10 +108,13 @@ export function usePurchaseChangeOrderQuery(
     })
 }
 
-export function useCreationBasesQuery(options?: { enabled?: boolean }) {
+export function useCreationBasesQuery(
+    query: CreationBasesQuery = {},
+    options?: { enabled?: boolean },
+) {
     return useQuery({
-        queryKey: purchaseOrderKeys.bases(),
-        queryFn: fetchCreationBases,
+        queryKey: purchaseOrderKeys.bases(query),
+        queryFn: () => fetchCreationBases(query),
         enabled: options?.enabled ?? true,
     })
 }
@@ -197,7 +205,11 @@ export function useCreateFromBasisMutation() {
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
             await Promise.all([
-                invalidatePurchaseOrderApprovalCaches(queryClient),
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.lists(),
+                }),
+                queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
                 queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
             ])
         },

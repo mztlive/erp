@@ -52,6 +52,7 @@ export type WorkspaceWorkItem = Readonly<{
     ownerUserLabel: string
     reasonLabel: string
     impactSummary: string
+    nextActionHint: string
     allowedActions: readonly WorkspaceActionCode[]
     actionBlockers: readonly {
         action: string
