@@ -365,6 +365,7 @@ export function SalesOrderDetailPage({
 
                 <SalesOrderDetailTabs
                     order={order}
+                    selfReturn={`/sales/orders/${encodeURIComponent(salesOrderId)}`}
                     section={section}
                     navSection={derived.navSection}
                     visibleNav={derived.visibleNav}

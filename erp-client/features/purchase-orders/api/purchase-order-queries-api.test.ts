@@ -330,6 +330,7 @@ describe("fetchCreationBases", () => {
         mockedApiGet.mockResolvedValue([
             {
                 basis_id: "bas_1",
+                work_item_id: "wi_basis_1",
                 sales_order_id: "so_1",
                 sales_order_no: "XS202608230001",
                 customer_name: "客户甲",
@@ -341,7 +342,6 @@ describe("fetchCreationBases", () => {
                 payment_term_code: "POSTPAY_NET30",
                 lines: [
                     {
-                        procurement_confirmation_line_id: "confirmation-line-1",
                         sales_order_line_id: "sales-line-1",
                         sales_order_revision_line_id: "sales-revision-line-1",
                         sales_line_no: 1,
@@ -379,6 +379,7 @@ describe("fetchCreationBases", () => {
         expect(result).toHaveLength(1)
         expect(result[0]?.basisId).toBe("bas_1")
         expect(result[0]).toMatchObject({
+            workItemId: "wi_basis_1",
             salesOrderNo: "XS202608230001",
             customerName: "客户甲",
             contractNumber: "HT-2026-001",

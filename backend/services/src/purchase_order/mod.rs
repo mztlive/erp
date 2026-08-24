@@ -23,37 +23,42 @@ use mongodb::Database;
 
 mod adapter;
 mod allocation_maintenance;
+mod authorization;
 mod cancel_approval;
 mod change;
 mod change_adapter;
 mod change_cancel;
 mod change_start;
+mod command_receipt;
 pub(crate) mod coverage;
 mod creation_basis;
 mod draft_edit;
 mod dto;
 mod formalization;
+mod procurement_task_sync;
 mod query;
 mod review;
 mod shared;
 mod start_approval;
 mod submission;
 mod view_mapping;
+mod void_order;
 
 pub use self::adapter::purchase_order_object_readable;
 pub use self::change_adapter::purchase_change_order_object_readable;
 pub use self::dto::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
-    CreationBasisLineView, CreationBasisView, DocumentApprovalView, EffectPurchaseChangeRequest, PageView,
-    PurchaseActionBlockerView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
-    PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView, PurchaseOrderLineView,
-    PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderReviewDecisionCommand,
-    PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction, PurchaseReviewResult,
-    PurchaseReviewWorkItemView, PurchaseSalesAllocationView, ReviewPurchaseOrderCommand,
-    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
-    StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
-    SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
+    CreationBasisLineView, CreationBasisListParams, CreationBasisView, DocumentApprovalView,
+    EffectPurchaseChangeRequest, PageView, PurchaseActionBlockerView, PurchaseChangeEffectResult,
+    PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
+    PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView, PurchaseOrderListParams,
+    PurchaseOrderReviewDecisionCommand, PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction,
+    PurchaseReviewResult, PurchaseReviewWorkItemView, PurchaseSalesAllocationView,
+    ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
+    SavePurchaseOrderLine, StartPurchaseChangeRequest, StartPurchaseChangeResult,
+    SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
+    VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 
 use crate::errors::{Error, Result};
@@ -91,13 +96,13 @@ impl PurchaseOrderService {
         Self { db, rbac: Some(rbac) }
     }
 
-    /// 读取创建绑定所需的授权源。
+    /// 读取采购单写命令所需的共享授权源。
     ///
     /// # 错误
     /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
     pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
         self.rbac
             .as_ref()
-            .ok_or_else(|| Error::Internal("采购单审批绑定需要授权源".to_string()))
+            .ok_or_else(|| Error::Internal("采购单写命令需要授权源".to_string()))
     }
 }

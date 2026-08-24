@@ -3,7 +3,8 @@
 - 对应 PRD：`docs/prd/changes/2026-08-24-procurement-responsibility-and-multi-purchase-orders.md`
 - PRD 状态：`approved`
 - 测试范围：采购责任规则、销售单责任预览与提交门禁、销售单生效后的采购任务、按剩余数量建立多张采购单、采购进度与任务恢复、权限与审计。
-- 测试环境：真实 Rust 后端、MongoDB 测试库、Next.js 前端、Playwright 浏览器与仓库正式测试账号。
+- 实际测试环境：真实 Rust 后端、经安全门重置的远程开发 MongoDB、Next.js 前端、Playwright/Chrome 浏览器与仓库正式测试账号。
+- 执行结论：核心主流程、目标单元测试、生产构建及桌面/移动浏览器验证通过；真实 MongoDB 服务/API 集成、性能专项和部分异常/审计验收仍未完成，详见执行报告。
 
 ## 文档索引
 
@@ -16,7 +17,26 @@
 | `testability-contract.md` | 开发与测试共同遵守的稳定入口、数据、选择器和可观察结果 |
 | `automation-matrix.md` | 每条用例的集成层与浏览器端到端落点 |
 | `automation-plan.md` | 实现、数据准备、执行顺序与质量门禁 |
-| `automation-execution-report-2026-08-24.md` | 实际执行证据；完成实现和验证后生成 |
+| `automation-execution-report-2026-08-24.md` | 2026-08-24 实际执行命令、结果、浏览器证据和未完成项 |
+
+## 本轮实际执行入口
+
+```bash
+cd backend && cargo fmt --all -- --check \
+  && cargo check --workspace \
+  && cargo clippy --workspace --all-targets --all-features \
+  && cargo test --workspace
+cd backend && cargo build -p web-api
+
+cd erp-client && npx tsc --noEmit
+cd erp-client && npm run build
+
+cd e2e && E2E_ALLOW_REMOTE_RESET=1 \
+  bash scripts/run-flow.sh \
+  tests/flow-procurement-responsibility-multi-po.spec.ts
+```
+
+前端目标测试、修改文件 `oxfmt`/`oxlint` 的精确资产和全量 Vitest 的无关失败记录见 [`automation-execution-report-2026-08-24.md`](automation-execution-report-2026-08-24.md)。
 
 ## 测试策略
 

@@ -46,9 +46,7 @@ describe("buildPurchaseOrderDetailNavItems", () => {
             "audit",
         ])
         expect(items[0].href).toBe("/procurement/orders/po-1")
-        expect(items[1].href).toBe(
-            "/procurement/orders/po-1?section=lines",
-        )
+        expect(items[1].href).toBe("/procurement/orders/po-1?section=lines")
         expect(items[5].href).toBe("/procurement/orders/po-1?section=audit")
     })
 

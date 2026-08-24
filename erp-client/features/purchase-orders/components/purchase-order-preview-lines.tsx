@@ -1,6 +1,10 @@
 "use client"
 
-import { DocumentTotals, MoneyValue, QuantityValue } from "@/components/business"
+import {
+    DocumentTotals,
+    MoneyValue,
+    QuantityValue,
+} from "@/components/business"
 import {
     Table,
     TableBody,

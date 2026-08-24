@@ -20,6 +20,8 @@ export type SalesOrderDraftLineInput = {
     sku: string
     /** 公司商品池返回并由销售单锁定的精确 SKU 修订 ID。 */
     skuRevisionId: string
+    /** 采购责任解析使用的服务区域；空值表示不按区域限定。 */
+    serviceRegion?: string
     quantity: string
     unit: string
     unitPriceGross: string
@@ -96,6 +98,8 @@ export type SalesOrderLineItem = {
     cardForm?: string
     /** 实物服务：履约方式 */
     fulfillmentMode?: string
+    /** 采购责任解析使用的服务区域。 */
+    serviceRegion?: string
     /** 明细履约期限（实物） */
     dueDate?: string
 }
@@ -114,6 +118,11 @@ export type SalesOrderProcurementProgress = {
 type SalesOrderRelatedSummary = {
     purchaseOrders: number
     procurementProgress: SalesOrderProcurementProgress
+    purchaseCreationAccess?: {
+        allowed: boolean
+        taskCount: number
+        blocker?: string
+    }
     fulfillments: number
     receipts: number
     invoices: number

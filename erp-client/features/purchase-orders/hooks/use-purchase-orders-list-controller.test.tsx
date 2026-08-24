@@ -98,6 +98,7 @@ function makeBasis(
 ): PurchaseCreationBasis {
     return {
         basisId: "bas_1",
+        workItemId: "wi_basis_1",
         salesOrderId: "so_1",
         salesOrderNo: "SO-1",
         customerName: "客户甲",
@@ -110,7 +111,6 @@ function makeBasis(
         paymentTermLabel: "货到 30 天",
         lines: [
             {
-                procurementConfirmationLineId: "pc-line-1",
                 salesOrderLineId: "sales-line-1",
                 salesOrderRevisionLineId: "sales-revision-line-1",
                 itemName: "测试商品",
@@ -375,6 +375,7 @@ describe("usePurchaseOrdersListController", () => {
         expect(mockedCreate).toHaveBeenCalledWith(
             {
                 basisId: "bas_1",
+                workItemId: "wi_basis_1",
                 purchaseType: "PHYSICAL",
                 paymentTermCode: "POSTPAY_NET30",
                 lines,
@@ -414,7 +415,7 @@ describe("usePurchaseOrdersListController", () => {
             await result.current.handleCreate(lines)
         })
         expect(mockedCreate).toHaveBeenCalledTimes(2)
-        expect(mockedCreate.mock.calls[0]?.[0].idempotencyKey).toBe(
+        expect(mockedCreate.mock.calls[0]?.[0].idempotencyKey).not.toBe(
             mockedCreate.mock.calls[1]?.[0].idempotencyKey,
         )
         expect(mockRouter.push).not.toHaveBeenCalled()
@@ -422,8 +423,61 @@ describe("usePurchaseOrdersListController", () => {
         expect(result.current.actionResult).toEqual({
             status: "failed",
             title: "建单失败",
-            description: "依据已不可用",
+            description: "依据已不可用 创建依据已刷新，请核对后重试。",
         })
+    })
+
+    it("建单结果未知时复用原幂等键重试", async () => {
+        mockedFetchBases.mockResolvedValue([makeBasis()])
+        mockedCreate.mockResolvedValue({
+            status: "unknown",
+            message: "请求超时，结果未知",
+            idempotencyKey: "create-unknown-1",
+        })
+        const { result } = renderController()
+        act(() => {
+            result.current.openCreateDialog()
+        })
+        await waitFor(() => expect(result.current.openBases).toHaveLength(1))
+        act(() => {
+            result.current.setSelectedBasisId("bas_1")
+        })
+
+        const lines = [{ salesOrderLineId: "sales-line-1", quantity: "6" }]
+        await act(async () => {
+            await result.current.handleCreate(lines)
+            await result.current.handleCreate(lines)
+        })
+
+        expect(mockedCreate).toHaveBeenCalledTimes(2)
+        expect(mockedCreate.mock.calls[0]?.[0].idempotencyKey).toBe(
+            mockedCreate.mock.calls[1]?.[0].idempotencyKey,
+        )
+        expect(result.current.actionResult).toEqual({
+            status: "unknown",
+            title: "建单结果待确认",
+            description:
+                "请求超时，结果未知 请保留当前弹窗并使用同一操作重试，系统会复用本次幂等键。",
+        })
+    })
+
+    it("创建依据刷新失败时隐藏旧依据并阻止继续提交", async () => {
+        mockedFetchBases.mockResolvedValue([makeBasis()])
+        const { result } = renderController()
+        act(() => {
+            result.current.openCreateDialog()
+        })
+        await waitFor(() => expect(result.current.openBases).toHaveLength(1))
+
+        mockedFetchBases.mockRejectedValueOnce(new Error("network failed"))
+        await act(async () => {
+            await result.current.basesQuery.refetch()
+        })
+
+        await waitFor(() =>
+            expect(result.current.basesQuery.isRefetchError).toBe(true),
+        )
+        expect(result.current.openBases).toEqual([])
     })
 
     it("URL 携带 basisId 时自动打开建单弹框并选中依据", async () => {

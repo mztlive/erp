@@ -8,9 +8,7 @@ import {
     isPurchaseChangeOrderWorkItem,
     PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE,
 } from "./purchase-change-order-approval"
-import {
-    PURCHASE_ORDER_DOCUMENT_TYPE,
-} from "./purchase-order-approval"
+import { PURCHASE_ORDER_DOCUMENT_TYPE } from "./purchase-order-approval"
 import {
     isPurchaseReturnExecutionStatus,
     isPurchaseReturnOrderWorkItem,
@@ -188,9 +186,9 @@ describe("purchaseReturnActionsExcludeApproval", () => {
                 "EXECUTE",
             ]),
         ).toBe(true)
-        expect(purchaseReturnActionsExcludeApproval(["APPROVE", "REJECT"])).toBe(
-            false,
-        )
+        expect(
+            purchaseReturnActionsExcludeApproval(["APPROVE", "REJECT"]),
+        ).toBe(false)
         expect(purchaseReturnActionsExcludeApproval(["CANCEL"])).toBe(false)
         expect(purchaseReturnActionsExcludeApproval(["UPGRADE_BINDING"])).toBe(
             false,

@@ -129,14 +129,22 @@ pub struct ProcurementResponsibilityRuleView {
     pub priority: u8,
     /// SKU 选择器。
     pub sku_id: Option<SkuId>,
+    /// SKU 业务编号展示。
+    pub sku_no: Option<String>,
+    /// SKU 当前修订名称展示。
+    pub sku_name: Option<String>,
     /// 分类选择器。
     pub category_id: Option<ProductCategoryId>,
+    /// 分类名称展示。
+    pub category_name: Option<String>,
     /// 规范化服务区域。
     pub service_region: Option<String>,
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
     /// 具体负责人账号 ID。
     pub owner_user_id: String,
+    /// 具体负责人展示姓名。
+    pub owner_name: Option<String>,
     /// 启停状态。
     pub status: EnableStatus,
     /// 乐观锁版本。
@@ -161,10 +169,14 @@ impl From<ProcurementResponsibilityRule> for ProcurementResponsibilityRuleView {
             rule_type: rule.rule_type,
             priority: rule.rule_type.priority(),
             sku_id: rule.sku_id,
+            sku_no: None,
+            sku_name: None,
             category_id: rule.category_id,
+            category_name: None,
             service_region: rule.service_region,
             product_kind: rule.product_kind,
             owner_user_id: rule.owner_user_id,
+            owner_name: None,
             status: rule.status,
             version: rule.base.version,
             created_at: rule.base.created_at,

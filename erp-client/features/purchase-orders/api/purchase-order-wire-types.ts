@@ -61,6 +61,8 @@ export type BackendLine = {
     net_amount: string
     tax_amount: string
     expected_delivery_date?: string | null
+    sales_order_line_id?: string | null
+    sales_order_revision_line_id?: string | null
     sales_order_submission_line_id?: string | null
     allocated_quantity?: string | null
 }
@@ -130,7 +132,6 @@ export type BackendCenter = {
 }
 
 export type BackendBasisLine = {
-    procurement_confirmation_line_id: string
     sales_order_line_id: string
     sales_order_revision_line_id: string
     sales_line_no: number
@@ -151,6 +152,7 @@ export type BackendBasisLine = {
 
 export type BackendBasis = {
     basis_id: string
+    work_item_id: string
     sales_order_id: string
     sales_order_no: string
     customer_name: string
@@ -177,6 +179,14 @@ export type BackendCreateResult = {
 export type BackendSaveResult = {
     lock_version: number
     totals: { gross: string; net: string; tax: string }
+    reference: string
+}
+
+export type BackendVoidResult = {
+    purchase_order_id: string
+    status: "VOIDED"
+    lock_version: number
+    replayed: boolean
     reference: string
 }
 

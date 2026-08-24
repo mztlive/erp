@@ -24,9 +24,7 @@ export function PurchaseOrderDetailTotals({
                     value: costMasked ? (
                         "•••"
                     ) : (
-                        <MoneyValue
-                            value={order.currentContent.totals.gross}
-                        />
+                        <MoneyValue value={order.currentContent.totals.gross} />
                     ),
                     basis: "含税",
                 },

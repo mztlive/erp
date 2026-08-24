@@ -305,6 +305,70 @@ impl<'a> Repository<'a, WorkItem> {
         .await
     }
 
+    /// 查询具体账号拥有的开放采购建单任务。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 当前已认证采购账号
+    /// * `sales_order_id` - 可选来源销售单筛选
+    /// * `work_item_id` - 可选任务 ID 筛选
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的开放采购建单任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_open_procurement_owned_by(
+        &self,
+        owner_user_id: &str,
+        sales_order_id: Option<&str>,
+        work_item_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        let mut filter = doc! {
+            "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
+            "business_object_type": "sales_order",
+            "status": WorkItemStatus::Open.as_str(),
+            "owner_user_id": owner_user_id,
+        };
+        if let Some(sales_order_id) = sales_order_id {
+            filter.insert("business_object_id", sales_order_id);
+        }
+        if let Some(work_item_id) = work_item_id {
+            filter.insert("id", work_item_id);
+        }
+        self.find_many_sorted(filter, doc! { "created_at": 1 }, executor)
+            .await
+    }
+
+    /// 查询销售单全部采购建单任务并把最新任务排在前面。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单稳定身份
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按更新时间、创建时间倒序排列的全部生命周期任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_procurement_by_sales_order_newest_first(
+        &self,
+        sales_order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "business_object_type": "sales_order",
+                "business_object_id": sales_order_id,
+                "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
+            },
+            doc! { "updated_at": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
     async fn persist_open_approval_task(
         &self,
         item: &WorkItem,

@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import { FilterChip, ListToolbar } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -82,7 +78,6 @@ export function SalesOrdersListFilterBar(props: {
                             placeholder="销售单号、客户、合同号"
                             aria-label="搜索销售单"
                         />
-                        
                     </InputGroup>
                 }
                 filters={

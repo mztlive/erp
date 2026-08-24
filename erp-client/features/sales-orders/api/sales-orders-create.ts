@@ -113,6 +113,7 @@ function buildDraftPayload(
             base.goods = {
                 sku_id: skuId,
                 sku_revision_id: skuRevisionId,
+                service_region: line.serviceRegion?.trim() || null,
                 welfare_scenario: mapWelfareScenarioCode(input.welfareScene),
                 fulfillment_mode: mapFulfillmentMode(
                     line.fulfillmentMode || "公司仓发",
@@ -313,6 +314,7 @@ function mapDraftLines(
             name: line.item_name_snapshot,
             sku: isVoucher ? (voucherCategorySkuId ?? "") : (line.sku_id ?? ""),
             skuRevisionId: isVoucher ? "" : (line.sku_revision_id ?? ""),
+            serviceRegion: isVoucher ? "" : (line.service_region ?? ""),
             quantity: isVoucher
                 ? String(line.card_count ?? 1)
                 : (line.quantity ?? "1"),

@@ -10,6 +10,7 @@
 #   bash scripts/run-flow.sh tests/flow-01-sales-warehouse.spec.ts
 #   bash scripts/run-flow.sh all          # 依序运行全部 spec
 #   E2E_RESET=0 bash scripts/run-flow.sh tests/xxx.spec.ts   # 跳过 reset（调试用）
+#   E2E_ALLOW_REMOTE_RESET=1 bash scripts/run-flow.sh tests/xxx.spec.ts  # 远程开发库需显式放行
 #   E2E_HEADED=1 bash scripts/run-flow.sh tests/xxx.spec.ts  # 有界面观察浏览器操作
 #   E2E_HEADED=1 E2E_SLOW_MO=500 bash scripts/run-flow.sh tests/xxx.spec.ts  # 有界面 + 慢动作
 set -euo pipefail
@@ -43,7 +44,7 @@ run_one() {
         echo "-- 停止 web-api（停写） --"
         bash "${SCRIPT_DIR}/stop-backend.sh"
         echo "-- 数据库 reset --"
-        bash "${SCRIPT_DIR}/reset-db.sh"
+        E2E_RESET=1 bash "${SCRIPT_DIR}/reset-db.sh"
         echo "-- 重启 web-api --"
         bash "${SCRIPT_DIR}/restart-backend.sh"
         echo "-- 发布审批定义 --"

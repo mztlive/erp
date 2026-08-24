@@ -73,6 +73,17 @@ describe("salesOrderDocumentFacts", () => {
             created_at: 1,
             owner_user_id: "u1",
             purchase_order_count: 0,
+            purchase_coverage: {
+                total_quantity: "0",
+                covered_quantity: "0",
+                remaining_quantity: "0",
+                progress: "0",
+            },
+            purchase_creation_access: {
+                allowed: false,
+                task_count: 0,
+                blocker: "销售单最终生效后才能创建采购单",
+            },
             settled_total: "0",
             invoiced_total: "0",
             lines: [],

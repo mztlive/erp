@@ -17,9 +17,28 @@ const RULES_PATH = "/admin/procurement-responsibility-rules"
 export async function fetchProcurementResponsibilityRules(): Promise<
     readonly ProcurementResponsibilityRule[]
 > {
-    const response =
-        await apiGet<BackendProcurementResponsibilityRuleList>(RULES_PATH)
-    const rows = Array.isArray(response) ? response : response.items
+    const pageSize = 200
+    const fetchPage = (page: number) =>
+        apiGet<BackendProcurementResponsibilityRuleList>(
+            `${RULES_PATH}?page=${page}&page_size=${pageSize}`,
+        )
+    const first = await fetchPage(1)
+    if (Array.isArray(first)) {
+        return first.map(mapProcurementResponsibilityRule)
+    }
+    const pageCount = Math.ceil(first.total / first.page_size)
+    const rest =
+        pageCount > 1
+            ? await Promise.all(
+                  Array.from({ length: pageCount - 1 }, (_, index) =>
+                      fetchPage(index + 2),
+                  ),
+              )
+            : []
+    const rows = [
+        ...first.items,
+        ...rest.flatMap((page) => (Array.isArray(page) ? page : page.items)),
+    ]
     return rows.map(mapProcurementResponsibilityRule)
 }
 

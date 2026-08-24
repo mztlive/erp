@@ -1,9 +1,6 @@
 "use client"
 
-import {
-    DocumentSection,
-    surfaceInsetClassName,
-} from "@/components/business"
+import { DocumentSection, surfaceInsetClassName } from "@/components/business"
 import { cn } from "@/lib/utils"
 
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"

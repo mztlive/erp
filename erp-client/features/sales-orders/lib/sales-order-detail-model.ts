@@ -364,10 +364,10 @@ export function fulfillmentWorkspaceHref(
 export function canCreatePurchaseFromSalesOrder(
     order: SalesOrderListItem,
 ): boolean {
-    return (
-        order.nature === "physical_service" &&
-        Number(order.related.procurementProgress.remainingQuantity) > 0
-    )
+    if (order.related.purchaseCreationAccess) {
+        return order.related.purchaseCreationAccess.allowed
+    }
+    return false
 }
 
 export function purchaseOrdersWorkspaceHref(

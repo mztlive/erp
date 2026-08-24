@@ -547,6 +547,15 @@ pub struct TotalsView {
     pub tax: String,
 }
 
+/// 采购创建依据查询参数。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CreationBasisListParams {
+    /// 可选来源销售单；从销售详情或工作台进入时用于收窄范围。
+    pub sales_order_id: Option<String>,
+    /// 可选采购建单任务；提供时必须是当前账号拥有的开放任务。
+    pub work_item_id: Option<String>,
+}
+
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
@@ -587,7 +596,9 @@ pub struct CreationBasisLineView {
 /// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
-    /// 精确创建依据（销售当前版本、供应商、采购类型、付款条件、履约责任及剩余量指纹）。
+    /// 当前账号拥有且冻结本依据销售行范围的开放采购建单任务。
+    pub work_item_id: String,
+    /// 精确创建依据（任务、销售当前版本、供应商、采购类型、付款条件、履约责任及剩余量指纹）。
     pub basis_id: String,
     /// 被确认的销售单。
     pub sales_order_id: String,
@@ -633,7 +644,10 @@ pub struct CreatePurchaseOrderLineRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePurchaseOrderFromBasisRequest {
-    /// 采购创建依据（已通过的采购确认）。
+    /// 冻结本次销售行责任范围的开放采购建单任务。
+    #[validate(custom(function = "non_blank", message = "采购建单任务不能为空"))]
+    pub work_item_id: String,
+    /// 采购创建依据（当前任务范围内的精确供应商拆分）。
     #[validate(custom(function = "non_blank", message = "创建依据不能为空"))]
     pub basis_id: String,
     /// 采购类型。
@@ -676,6 +690,7 @@ pub struct SavePurchaseOrderDraftRequest {
     pub lines: Vec<SavePurchaseOrderLine>,
     /// 幂等键（同内容重复保存返回同一结果）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键过长"))]
     pub idempotency_key: String,
 }
 
@@ -723,6 +738,38 @@ pub struct SavePurchaseOrderDraftResult {
     pub lock_version: u64,
     /// 表头金额汇总（逐行舍入后汇总）。
     pub totals: TotalsView,
+    /// 业务引用。
+    pub reference: String,
+}
+
+/// 作废采购草稿请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct VoidPurchaseOrderRequest {
+    /// 期望的采购单乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_lock_version: u64,
+    /// 作废原因。
+    #[validate(custom(function = "non_blank", message = "作废原因不能为空"))]
+    #[validate(length(max = 512, message = "作废原因过长"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    #[validate(length(max = 128, message = "幂等键过长"))]
+    pub idempotency_key: String,
+}
+
+/// 作废采购草稿结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct VoidPurchaseOrderResult {
+    /// 采购单主键。
+    pub purchase_order_id: String,
+    /// 作废后的稳定状态。
+    pub status: String,
+    /// 作废后的乐观锁版本。
+    pub lock_version: u64,
+    /// 是否命中已经完成的作废结果。
+    pub replayed: bool,
     /// 业务引用。
     pub reference: String,
 }
@@ -1055,6 +1102,7 @@ mod tests {
     #[test]
     fn create_request_rejects_blank_basis_and_keys() {
         let request: super::CreatePurchaseOrderFromBasisRequest = serde_json::from_value(json!({
+            "work_item_id": "wi-1",
             "basis_id": "   ",
             "purchase_type": "PHYSICAL",
             "payment_term_code": "NET-30",

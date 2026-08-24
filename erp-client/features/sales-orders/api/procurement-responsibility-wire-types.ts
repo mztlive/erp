@@ -1,9 +1,7 @@
 export type ResolveProcurementResponsibilityLineWire = {
     line_key: string
     sku_id: string
-    sku_revision_id?: string
     service_region?: string
-    fulfillment_mode?: string
 }
 
 export type ResolveProcurementResponsibilityRequestWire = {

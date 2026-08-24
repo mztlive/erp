@@ -97,6 +97,7 @@ export function createEmptyLine(
         name: "",
         sku: "",
         skuRevisionId: "",
+        serviceRegion: "",
         quantity: "1",
         /** 非卡券单位随 SKU 基础单位带出；卡券固定为张。建单页不可改。 */
         unit: nature === "card_voucher" ? "张" : "",

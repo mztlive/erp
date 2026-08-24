@@ -6,12 +6,19 @@ const state = vi.hoisted(() => ({
         "procurement_responsibility:list",
         "procurement_responsibility:manage",
     ],
+    profileError: false,
+    dependencyError: false,
 }))
 
 vi.mock("@/features/auth/queries", () => ({
     useAccountProfileQuery: () => ({
-        data: { permissions: state.permissions },
+        data: state.profileError
+            ? undefined
+            : { permissions: state.permissions },
         isPending: false,
+        isError: state.profileError,
+        error: state.profileError ? new Error("profile failed") : null,
+        refetch: vi.fn(),
     }),
 }))
 vi.mock("@/features/procurement-responsibilities/queries", () => ({
@@ -36,10 +43,22 @@ vi.mock("@/features/procurement-responsibilities/queries", () => ({
     }),
 }))
 vi.mock("@/features/admin/hooks/queries", () => ({
-    useAdminsQuery: () => ({ data: [] }),
+    useAdminsQuery: () => ({
+        data: state.dependencyError ? undefined : [],
+        isPending: false,
+        isError: state.dependencyError,
+        error: state.dependencyError ? new Error("admins failed") : null,
+        refetch: vi.fn(),
+    }),
 }))
 vi.mock("@/features/master-data/hooks/queries", () => ({
-    useMasterDataListQuery: () => ({ data: { rows: [] } }),
+    useMasterDataListQuery: () => ({
+        data: state.dependencyError ? undefined : { rows: [] },
+        isPending: false,
+        isError: state.dependencyError,
+        error: state.dependencyError ? new Error("categories failed") : null,
+        refetch: vi.fn(),
+    }),
 }))
 
 import { ProcurementResponsibilityRulesPage } from "@/features/procurement-responsibilities/components/procurement-responsibility-rules-page"
@@ -50,6 +69,8 @@ afterEach(() => {
         "procurement_responsibility:list",
         "procurement_responsibility:manage",
     ]
+    state.profileError = false
+    state.dependencyError = false
 })
 
 describe("ProcurementResponsibilityRulesPage", () => {
@@ -79,5 +100,27 @@ describe("ProcurementResponsibilityRulesPage", () => {
             screen.queryByTestId("procurement-responsibility-create"),
         ).toBeNull()
         expect(screen.queryByRole("button", { name: "编辑" })).toBeNull()
+    })
+
+    it("reports profile loading failures instead of showing permission denied", () => {
+        state.profileError = true
+        render(<ProcurementResponsibilityRulesPage />)
+
+        expect(screen.getByText("权限信息加载失败")).toBeTruthy()
+        expect(screen.queryByText("权限不足")).toBeNull()
+    })
+
+    it("keeps rule editing disabled when owner or category dependencies fail", () => {
+        state.dependencyError = true
+        render(<ProcurementResponsibilityRulesPage />)
+
+        expect(screen.getByText("规则编辑依赖加载失败")).toBeTruthy()
+        expect(
+            (
+                screen.getByTestId(
+                    "procurement-responsibility-create",
+                ) as HTMLButtonElement
+            ).disabled,
+        ).toBe(true)
     })
 })

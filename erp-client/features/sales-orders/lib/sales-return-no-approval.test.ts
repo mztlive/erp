@@ -31,7 +31,10 @@ import { SALES_ORDER_DOCUMENT_TYPE } from "./sales-order-approval"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const featureRoot = join(here, "..")
-const listPagePath = join(here, "../../../app/(workspace)/sales/orders/page.tsx")
+const listPagePath = join(
+    here,
+    "../../../app/(workspace)/sales/orders/page.tsx",
+)
 const detailPagePath = join(
     here,
     "../../../app/(workspace)/sales/orders/[salesOrderId]/page.tsx",
@@ -190,9 +193,9 @@ describe("salesReturnCaseActionsExcludeApproval", () => {
         expect(salesReturnCaseActionsExcludeApproval(["VIEW_DETAIL"])).toBe(
             true,
         )
-        expect(salesReturnCaseActionsExcludeApproval(["APPROVE", "REJECT"])).toBe(
-            false,
-        )
+        expect(
+            salesReturnCaseActionsExcludeApproval(["APPROVE", "REJECT"]),
+        ).toBe(false)
         expect(salesReturnCaseActionsExcludeApproval(["CANCEL"])).toBe(false)
         expect(salesReturnCaseActionsExcludeApproval(["UPGRADE_BINDING"])).toBe(
             false,
@@ -222,9 +225,9 @@ describe("mapSalesReturnCase", () => {
         } as BackendSalesReturnCase & { approval: unknown })
         expect("approval" in row).toBe(false)
         expect(row.statusLabel).toBe("待财务处理")
-        expect(salesReturnCaseStatusLabelIsApprovalReview(row.statusLabel)).toBe(
-            false,
-        )
+        expect(
+            salesReturnCaseStatusLabelIsApprovalReview(row.statusLabel),
+        ).toBe(false)
     })
 })
 
@@ -262,7 +265,9 @@ describe("sales return source paths omit the approval zone", () => {
         expect(detailSource).toContain("SalesReturnCase 为 NO_APPROVAL")
         expect(detailSource).not.toContain("SalesReturnCaseApprovalArea")
         expect(detailSource).not.toContain("mapSalesReturnCaseApproval")
-        const factsSource = readFeature("components/sales-return-case-facts.tsx")
+        const factsSource = readFeature(
+            "components/sales-return-case-facts.tsx",
+        )
         expect(factsSource).toContain("SalesReturnCase 为 NO_APPROVAL")
         expect(sourceMentionsApprovalZone(factsSource)).toBe(false)
     })

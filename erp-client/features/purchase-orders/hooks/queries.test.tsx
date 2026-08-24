@@ -128,6 +128,7 @@ function makeListResult() {
 function makeBasis(): PurchaseCreationBasis {
     return {
         basisId: "bas_1",
+        workItemId: "wi_basis_1",
         salesOrderId: "so_1",
         salesOrderNo: "SO-1",
         customerName: "客户甲",
@@ -235,6 +236,10 @@ describe("purchaseOrderKeys", () => {
             "purchase-orders",
             "change-order",
             "pco_1",
+        ])
+        expect(purchaseOrderKeys.creationBases()).toEqual([
+            "purchase-orders",
+            "creation-bases",
         ])
         expect(purchaseOrderKeys.bases()).toEqual([
             "purchase-orders",
@@ -631,6 +636,7 @@ describe("useStartPurchaseChangeMutation", () => {
 describe("useCreateFromBasisMutation", () => {
     const input = {
         basisId: "bas_1",
+        workItemId: "wi_basis_1",
         purchaseType: "PHYSICAL" as const,
         paymentTermCode: "POSTPAY_NET30",
         lines: [
@@ -664,6 +670,10 @@ describe("useCreateFromBasisMutation", () => {
         await waitFor(() => expect(invalidate).toHaveBeenCalled())
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: purchaseOrderKeys.lists(),
+        })
+        expect(invalidate).toHaveBeenCalledWith({
+            queryKey: purchaseOrderKeys.creationBases(),
+            refetchType: "none",
         })
         expect(invalidate).toHaveBeenCalledWith({
             queryKey: salesOrderKeys.all,

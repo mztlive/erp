@@ -6,6 +6,7 @@ import type {
     ReviewPurchaseOrderInput,
     SavePurchaseOrderDraftInput,
     SubmitPurchaseOrderInput,
+    VoidPurchaseOrderInput,
 } from "@/features/purchase-orders/types"
 import { formalActionFailure, isApiError } from "./purchase-order-errors"
 import type {
@@ -16,6 +17,7 @@ import type {
     BackendReviewResult,
     BackendSaveResult,
     BackendSubmitResult,
+    BackendVoidResult,
 } from "./purchase-order-wire-types"
 import { fetchPurchaseChangeOrderDetail } from "./purchase-order-queries-api"
 
@@ -57,9 +59,18 @@ export async function savePurchaseOrderDraft(
                     patch?.inputTaxRate ?? line.input_tax_rate ?? "0",
                 expected_delivery_date:
                     line.expected_delivery_date ?? undefined,
+                sales_order_line_id: line.sales_order_line_id ?? undefined,
+                sales_order_revision_line_id:
+                    line.sales_order_revision_line_id ?? undefined,
                 sales_order_submission_line_id:
                     line.sales_order_submission_line_id ?? undefined,
-                allocated_quantity: line.allocated_quantity ?? undefined,
+                allocated_quantity:
+                    lineType === "ITEM_SERVICE"
+                        ? (patch?.quantity ??
+                          line.allocated_quantity ??
+                          line.quantity ??
+                          undefined)
+                        : undefined,
                 gross_amount:
                     lineType === "LOGISTICS_FEE"
                         ? (patch?.unitCostGross ?? line.gross_amount)
@@ -86,6 +97,38 @@ export async function savePurchaseOrderDraft(
                 totals: data.totals,
             },
             reference: data.reference || `SAVED-V${data.lock_version}`,
+        }
+    } catch (error) {
+        return formalActionFailure(error, input.idempotencyKey)
+    }
+}
+
+export async function voidPurchaseOrderDraft(
+    input: VoidPurchaseOrderInput,
+): Promise<
+    FormalActionResponse<{
+        purchaseOrderId: string
+        status: "VOIDED"
+        lockVersion: number
+    }>
+> {
+    try {
+        const data = await apiPost<BackendVoidResult>(
+            `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/void`,
+            {
+                expected_lock_version: input.expectedLockVersion,
+                reason: input.reason,
+                idempotency_key: input.idempotencyKey,
+            },
+        )
+        return {
+            status: "succeeded",
+            data: {
+                purchaseOrderId: data.purchase_order_id,
+                status: data.status,
+                lockVersion: data.lock_version,
+            },
+            reference: data.reference,
         }
     } catch (error) {
         return formalActionFailure(error, input.idempotencyKey)
@@ -315,6 +358,7 @@ export async function createPurchaseOrderFromBasis(
             "/admin/purchase-orders",
             {
                 basis_id: input.basisId,
+                work_item_id: input.workItemId,
                 purchase_type: input.purchaseType,
                 payment_term_code: input.paymentTermCode,
                 lines: input.lines.map((line) => ({

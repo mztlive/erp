@@ -32,6 +32,17 @@ const detail: BackendSalesOrderDetail = {
     owner_user_id: "sales-1",
     owner_user_name: "销售甲",
     purchase_order_count: 0,
+    purchase_coverage: {
+        total_quantity: "0",
+        covered_quantity: "0",
+        remaining_quantity: "0",
+        progress: "0",
+    },
+    purchase_creation_access: {
+        allowed: false,
+        task_count: 0,
+        blocker: "非实物及服务销售单无需创建采购单",
+    },
     settled_total: "0.00",
     invoiced_total: "0.00",
     lines: [{ id: "sol-1", line_no: 1, line_status: "ACTIVE" }],

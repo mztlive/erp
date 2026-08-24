@@ -290,6 +290,7 @@ export function mapPurchaseChangeOrder(
 export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
     return {
         basisId: basis.basis_id,
+        workItemId: basis.work_item_id,
         salesOrderId: basis.sales_order_id,
         salesOrderNo: basis.sales_order_no,
         customerName: basis.customer_name,
@@ -315,8 +316,6 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                 line.remaining_quantity ?? line.confirmed_quantity ?? "0",
             )
             return {
-                procurementConfirmationLineId:
-                    line.procurement_confirmation_line_id,
                 salesOrderLineId: line.sales_order_line_id,
                 salesOrderRevisionLineId: line.sales_order_revision_line_id,
                 itemName: line.product_name ?? "确认分行",

@@ -1,41 +1,44 @@
 # 自动化矩阵
 
-> 初始状态为 `planned`。实现和执行后必须按真实资产与断言更新为 `covered`、`partial`、`blocked` 或 `manual_only`，不得仅因测试文件存在而标记覆盖。
+> 状态依据 2026-08-24 的实际代码与执行结果更新。`covered` 表示存在精确自动化断言且本轮已执行通过；`partial` 表示仅覆盖部分分支或只有较低层测试；`blocked` 表示完成门禁要求的测试层尚未落地；`manual_only` 表示本轮仅做人工浏览器验证；`planned` 表示专项资产尚未实现。
+>
+> 本表“集成测试”列统称非浏览器自动化层，具体层级以“集成测试层级”列为准。真实 MongoDB 服务/API 集成测试缺失时，即使已有单元测试，也不会标记对应事务场景为完全覆盖。
 
 | 用例编号 | 所属模块 | 优先级 | 测试类型 | 集成测试层级 | 集成测试状态 | 集成测试资产 | 集成测试函数/断言摘要 | E2E 可达性 | E2E 状态 | E2E 资产 | E2E 测试名/断言摘要 | 执行命令 | 环境依赖 | 豁免/剩余人工验证 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TC-RESP-001 | 责任规则 | P0 | 功能 | unit/service_it | planned | `backend/services/src/procurement_responsibility/*` | SKU 优先并返回唯一 A | reachable | planned | `e2e/tests/flow-procurement-responsibility-multi-po.spec.ts` | 销售行只读显示采购 A | Rust + Playwright | 无 | 双轨 |
-| TC-RESP-002 | 责任规则 | P1 | 边界 | unit | planned | 同上 | 分类区域和父分类回退 | not_worth_it | planned | 可并入主 E2E fixture | 可选断言负责人 | Rust | 分类树 fixture | 浏览器仅抽样 |  |
-| TC-RESP-003 | 责任规则 | P0 | 异常 | service_it | planned | 后端集成测试 | 同层冲突阻止提交且无副作用 | partial | planned | 主 E2E 或 API 数据准备 | 页面显示逐行错误 | Rust + Playwright | 冲突数据通常需集成层注入 | 双轨部分 |
-| TC-RESP-004 | 销售预览 | P0 | 异常 | service_it/frontend_unit | planned | 销售提交测试、前端表单测试 | 草稿保存、提交被阻止 | reachable | planned | 主 E2E | 无规则错误与状态不变 | Rust + frontend + Playwright | 无 | 双轨 |
-| TC-RESP-005 | 责任规则 | P0 | 权限 | service_it/api_it | planned | 责任规则资格测试 | 停用/无权限账号均拒绝 | partial | planned | 规则管理 E2E | 管理员保存失败提示 | Rust + Playwright | 权限撤销分支由集成层覆盖 | 双轨部分 |
-| TC-TASK-001 | 采购任务 | P0 | 状态 | service_it | planned | 销售生效任务集成测试 | 非末级通过无任务、最终生效有任务 | reachable | planned | 主 E2E | 完整审批时序与任务出现 | Rust + Playwright | 无 | 双轨 |
-| TC-TASK-002 | 采购任务 | P0 | 权限 | service_it | planned | 任务分组测试 | A/B 任务和行范围不重叠 | reachable | planned | 主 E2E 扩展 | A/B 各自可见 | Rust + Playwright | 可用两个浏览器上下文 | 双轨 |
-| TC-TASK-003 | 采购任务 | P0 | 幂等 | service_it | planned | 任务派发并发测试 | 重试仅一条有效任务 | not_reachable | planned | 无 | 无稳定浏览器入口触发生效重放 | Rust | 数据库事务/唯一索引 | 浏览器豁免，集成层必须覆盖 |  |
-| TC-TASK-004 | 采购任务 | P0 | 回滚 | service_it | planned | 销售生效失败测试 | 解析失败无部分任务 | not_reachable | planned | 无 | 浏览器难稳定在审批间撤权并注入失败 | Rust | 隔离数据库 | 浏览器豁免，集成层必须覆盖 |  |
-| TC-PO-001 | 采购创建 | P0 | 功能 | service_it/frontend_unit | planned | 剩余数量服务测试、数量表单测试 | 4+6 生成两张单且剩余 0 | reachable | planned | 主 E2E | 分两次真实建单并完成任务 | Rust + frontend + Playwright | 合格供给 fixture | 双轨 |
-| TC-PO-002 | 采购拆单 | P1 | 功能 | service_it | planned | 创建依据拆单测试 | 供应商/责任独立采购单 | partial | planned | 可选 E2E | 抽样两个供应商 | Rust | 多供给 fixture | 浏览器抽样 |  |
-| TC-PO-003 | 采购数量 | P0 | 边界 | unit/service_it/frontend_unit | planned | 数量校验测试 | 0/超量拒绝，等于剩余成功 | reachable | planned | 主 E2E | 输入超量错误、6 成功 | Rust + frontend + Playwright | 无 | 双轨 |
-| TC-PO-004 | 采购创建 | P0 | 并发 | service_it | planned | 并发创建集成测试 | 两个 6 最多一个成功 | not_reachable | planned | 无 | 浏览器时序不稳定 | Rust | 并发屏障、MongoDB 事务 | 浏览器豁免，集成层必须覆盖 |  |
-| TC-PO-005 | 剩余数量 | P0 | 数据一致性 | unit/service_it | planned | 覆盖状态矩阵测试 | 五种状态占用、作废释放 | not_reachable | planned | 无 | 浏览器逐状态成本过高且不稳定 | Rust | 全状态 fixture | 浏览器豁免，主 E2E 覆盖草稿 |  |
-| TC-PO-006 | 任务恢复 | P0 | 状态 | service_it | planned | 作废/减量重开测试 | 剩余 4 且任务恢复 | partial | planned | E2E 可覆盖作废分支 | 作废后“继续建单”重现 | Rust + Playwright | 采购作废入口 | 若当前 UI 无作废入口则集成层覆盖 |  |
-| TC-PO-007 | 采购选源 | P0 | 异常 | service_it/frontend_unit | planned | 无供给测试、空态测试 | 任务保留且提示维护供给 | reachable | planned | E2E 异常场景 | 打开任务看准确空态 | Rust + frontend + Playwright | 无供给 fixture | 双轨 |
-| TC-PROGRESS-001 | 采购进度 | P0 | 数据一致性 | service_it/frontend_unit | planned | 进度 DTO 和视图模型测试 | 三处均剩余 6 | reachable | planned | 主 E2E | 销售详情/任务/依据一致 | Rust + frontend + Playwright | 无 | 双轨 |
-| TC-TASK-005 | 任务转交 | P1 | 权限 | service_it/api_it | planned | 工作任务转交测试 | B 接手，旧采购单不变 | partial | planned | 管理员转交 E2E | A/B 刷新可见性 | Rust + Playwright | 管理员入口 | 可后续独立流覆盖 |  |
-| TC-UI-001 | Web 界面 | P0 | 可用性 | frontend_unit | planned | 响应式组件测试 | 关键按钮和信息模型 | reachable | planned | 主 E2E | 桌面完整动作，移动端真实导航/操作 | frontend + Playwright | 两种 viewport | 双轨 |
-| TC-SEC-001 | 认证 | P0 | 安全 | api_it | planned | HTTP 合同测试 | 新接口均拒绝未登录 | reachable | planned | 登录跳转 E2E | 未登录访问管理页进入登录 | Rust + Playwright | 真实认证 | 浏览器抽样，API 全量 |  |
-| TC-SEC-002 | 规则权限 | P0 | 安全 | api_it | planned | HTTP 权限测试 | 无 manage 写请求拒绝 | reachable | planned | 规则管理 E2E | 无权限无按钮且直达不可用 | Rust + Playwright | 角色权限 fixture | 双轨 |
-| TC-SEC-003 | 责任范围 | P0 | 越权 | service_it/api_it | planned | 创建依据越权测试 | A 不能读/写 B 范围 | reachable | planned | 双账号 E2E | A 看不到 B 行 | Rust + Playwright | 双账号 | 直接伪造请求由 API 测试覆盖 | 双轨 |
-| TC-SEC-004 | 输入安全 | P1 | 安全 | api_it | planned | DTO 校验测试 | 操作符和非法枚举拒绝 | not_reachable | planned | 无 | 浏览器表单无法构造对象注入 | Rust | HTTP 测试客户端 | 浏览器豁免 |  |
-| TC-SEC-005 | 文案 | P1 | 安全/可用性 | frontend_unit | planned | UI 文案测试/扫描 | 内部禁用词不出现 | reachable | planned | 主 E2E | 错误提示使用业务文案 | frontend + Playwright | 错误 fixture | 代码扫描为辅助，不替代浏览器断言 |  |
-| TC-SEC-006 | 审计 | P0 | 审计 | service_it | planned | 审计副作用测试 | 关键动作写正确审计 | partial | planned | 管理员/采购 E2E | 完成动作，审计详情由集成层断言 | Rust + Playwright | 审计仓储 | 浏览器不验证数据库字段 | 双轨部分 |
-| TC-PERF-001 | 责任解析 | P1 | 性能 | perf | planned | 后端基准/集成脚本 | 200 行/1,000 规则 P95 与查询数 | not_reachable | planned | 无 | 性能不由浏览器 E2E 承担 | 专项命令 | 大数据 fixture | 独立性能环境 |  |
-| TC-PERF-002 | 创建依据 | P1 | 性能 | perf | planned | 数据库性能脚本 | 1,000×20 行分页和索引 | not_reachable | planned | 无 | 性能不由浏览器 E2E 承担 | 专项命令 | 大数据 fixture | 独立性能环境 |  |
-| TC-PERF-003 | 并发创建 | P0 | 性能 | service_it/perf | planned | 并发集成测试 | 20 请求总覆盖≤100且无孤立数据 | not_reachable | planned | 无 | 浏览器并发不可控 | Rust/专项命令 | 隔离数据库 | 集成层为完成门禁 |  |
-| TC-PERF-004 | 进度读取 | P2 | 稳定性 | service_it/perf | planned | 读取稳定性测试 | 500 次读取无状态变化 | not_worth_it | planned | 无 | 无需浏览器重复 500 次 | 专项命令 | 隔离数据库 | 集成层覆盖 |  |
+| TC-RESP-001 | 责任规则 | P0 | 功能 | Rust unit + frontend unit | covered | `backend/entities/src/procurement_responsibility/resolution.rs`；`erp-client/features/sales-orders/api/procurement-responsibility.test.ts` | `resolver_obeys_priority_and_parent_fallback`；预览请求只发送受支持字段 | reachable | covered | `e2e/tests/flow-procurement-responsibility-multi-po.spec.ts` | 配置精确 SKU 规则，销售行只读显示采购负责人且无人员选择框 | `cargo test --workspace`；focused Vitest；Playwright flow | 真实账号、目录和规则 | 无 | SKU 主路径双轨覆盖 |
+| TC-RESP-002 | 责任规则 | P1 | 边界 | Rust unit | covered | `backend/entities/src/procurement_responsibility/resolution.rs` | 分类+区域仅匹配当前分类；分类规则按父链回退 | not_worth_it | manual_only | Chrome 桌面规则管理回归 | 实际编辑、停用、恢复并保存规则；未逐层构造分类回退 | Rust + browser manual | 分类树 fixture | 浏览器未验证每个回退层 | 纯解析规则由单元测试承担 |
+| TC-RESP-003 | 责任规则 | P0 | 异常 | Rust unit / Mongo service_it | partial | `backend/entities/src/procurement_responsibility/resolution.rs` | `resolver_fails_closed_for_conflicts_invalid_chain_and_missing_default` 保守拒绝同层冲突 | partial | blocked | 无专用 E2E | 未通过真实数据库注入同层重复规则并验证销售提交无副作用 | Rust | 需要绕过唯一索引的隔离数据库 fixture | 缺真实 MongoDB 提交回滚测试 | 单元层已覆盖保守失败，事务副作用未覆盖 |
+| TC-RESP-004 | 销售预览 | P0 | 异常 | frontend unit / Mongo service_it | partial | `erp-client/features/sales-orders/components/sales-order-create-form.test.tsx` | 无唯一负责人时允许保存草稿、同步阻止提交 | reachable | blocked | 无专用 E2E | 主 E2E 仅覆盖已解析成功路径，未覆盖无规则提交失败与状态不变 | focused Vitest | 无规则 fixture | 缺真实浏览器异常路径和后端事务断言 | 前端门禁已覆盖，跨层路径未覆盖 |
+| TC-RESP-005 | 责任规则 | P0 | 权限 | Rust source guard + frontend unit / API IT | partial | `backend/services/src/procurement_responsibility/service.rs`；`erp-client/features/procurement-responsibilities/components/procurement-responsibility-rules-page.test.tsx` | 写入绑定授权提交栅栏；无 manage 权限页面只读 | partial | partial | 主 E2E + Chrome 桌面回归 | 管理员真实保存规则；未验证停用账号或撤权账号保存失败 | Rust + focused Vitest + browser manual | 角色和账号 fixture | 缺失效账号/撤权并发 API 集成测试 | 管理员正向路径通过 |
+| TC-TASK-001 | 采购任务 | P0 | 状态 | Rust unit / Mongo service_it | partial | `backend/services/src/sales_order/formalize.rs`；`backend/entities/src/work_item/entity.rs` | 生效写入位于事务路径；采购任务必须冻结责任范围 | reachable | covered | 主 E2E | 采购确认作为非末级节点通过后无任务；最终销售领导审批后任务出现 | Rust + Playwright flow | 两级审批定义 | 无 | 真实跨层时序已覆盖，缺独立 Mongo 集成测试 |
+| TC-TASK-002 | 采购任务 | P0 | 权限 | Rust unit / Mongo service_it | partial | `backend/entities/src/work_item/entity.rs`；`backend/services/src/purchase_order/procurement_task_sync.rs` | 冻结行范围规范化；跨销售单和非 owner 任务隐藏 | reachable | blocked | 无双采购账号 E2E | 主 E2E 只有一名采购负责人，未验证 A/B 分组与行范围不重叠 | Rust | 双采购账号与双规则 fixture | 缺两负责人真实流程 | 单负责人范围已由主 E2E 验证 |
+| TC-TASK-003 | 采购任务 | P0 | 幂等 | Rust unit / Mongo service_it | partial | `backend/entities/src/work_item/entity.rs`；`backend/database/src/indexes/work_item.rs` | 责任键/范围稳定；开放任务唯一索引已实现 | not_reachable | manual_only | 无 | 浏览器不稳定触发销售生效重放 | Rust | 隔离 MongoDB 与并发屏障 | 缺重复生效真实 MongoDB 集成测试 | P0 数据库门禁未完成 |
+| TC-TASK-004 | 采购任务 | P0 | 回滚 | Mongo service_it | blocked | 无目标域真实 MongoDB 集成测试 | 生产代码使用事务，但未自动化证明解析失败时无部分任务 | not_reachable | manual_only | 无 | 浏览器难稳定在最终审批事务中注入解析失败 | 无 | 隔离 MongoDB、失败注入 | 缺任务/修订/应收整体回滚断言 | P0 数据库门禁未完成 |
+| TC-PO-001 | 采购创建 | P0 | 功能 | Rust unit + frontend unit / Mongo service_it | partial | `backend/services/src/purchase_order/coverage.rs`；`erp-client/features/purchase-orders/pages/purchase-orders-list-create-dialog.test.tsx` | 剩余量模型与默认最大数量、选中行提交 | reachable | covered | 主 E2E | 同一销售数量 10 先建 4、再建 6，两张采购草稿且剩余归零 | Rust + focused Vitest + Playwright flow | 合格供给 fixture | 无 | 用户主路径已真实覆盖，缺 Mongo 服务层独立测试 |
+| TC-PO-002 | 采购拆单 | P1 | 功能 | Rust unit / Mongo service_it | partial | `backend/services/src/purchase_order/creation_basis.rs`；创建弹框前端测试 | `basis_scope_key_contains_exact_split_dimensions`；多行依据可只提交选中行 | partial | partial | 主 E2E | 覆盖同一供应商分批数量，未覆盖两个供应商/两种履约责任 | Rust + focused Vitest + Playwright flow | 多供给 fixture | 供应商和履约维度仍需专项自动化 | 数量拆分已覆盖 |
+| TC-PO-003 | 采购数量 | P0 | 边界 | Rust unit + frontend unit | covered | `backend/services/src/purchase_order/creation_basis.rs`；`backend/services/src/purchase_order/draft_edit.rs`；创建弹框测试 | 可供量取 `min`；数量必须为正；超过最大值前端拒绝 | reachable | partial | 主 E2E | 验证 4 和最后 6 成功；未在浏览器输入 0 或超量 | Rust + focused Vitest + Playwright flow | 无 | 浏览器异常输入仍未覆盖 | 边界校验由非浏览器层覆盖 |
+| TC-PO-004 | 采购创建 | P0 | 并发 | Rust guard unit / Mongo service_it | partial | `backend/entities/src/sales_order/entity.rs`；创建事务实现 | `procurement_guard_advances_monotonically`；事务内 guard CAS 后重算剩余量 | partial | covered | 主 E2E | 对同一 successor 依据并发发送两次创建：一成功、一 HTTP 409，最终覆盖仍为 10 | Rust + Playwright flow | 真实 MongoDB 事务 | 无 | 浏览器测试通过 APIRequestContext 稳定制造并发 |
+| TC-PO-005 | 剩余数量 | P0 | 数据一致性 | Rust unit / Mongo service_it | partial | `backend/services/src/purchase_order/coverage.rs` | `coverage_pointer_selection_uses_current_status_pointer_only` 覆盖草稿、审批中、生效、部分执行、完成、作废指针选择；超采返回一致性错误 | not_reachable | partial | 主 E2E | 真实覆盖草稿占用与作废释放，未逐状态走完审批/执行/完成 | Rust + Playwright flow | 全状态 fixture | 缺真实 MongoDB 指针与 allocation 集成断言 | 状态矩阵纯函数已覆盖 |
+| TC-PO-006 | 任务恢复 | P0 | 状态 | Rust unit / Mongo service_it | partial | `backend/entities/src/work_item/entity.rs`；`backend/services/src/purchase_order/procurement_task_sync.rs` | 终态任务创建 successor；当前 owner 已完成任务返回数量变化 409 | partial | covered | 主 E2E | 作废数量 4 的草稿后剩余 4，原任务保持终态，新任务出现并可补建 | Rust + Playwright flow | 采购作废入口 | 无 | 作废恢复主路径已真实覆盖 |
+| TC-PO-007 | 采购选源 | P0 | 异常 | production logic + frontend unit | partial | `backend/services/src/purchase_order/creation_basis.rs`；创建弹框测试 | 只保留 ACTIVE、当前有效且 AVAILABLE 的供给；查询失败时不渲染陈旧依据 | reachable | partial | 主 E2E + browser manual | 已覆盖全部数量后无依据的合并空态；未单独构造“无合格供给” | focused Vitest + Playwright flow | 无供给 fixture | 当前 UI 合并提示，不区分独立原因 | 与当前产品基线一致，专项异常仍缺 |
+| TC-PROGRESS-001 | 采购进度 | P0 | 数据一致性 | Rust unit + frontend unit | covered | `backend/services/src/purchase_order/coverage.rs`；销售详情映射与采购查询测试；工作台详情测试 | 统一 total/covered/remaining 映射；工作台入口和下一步文案 | reachable | covered | 主 E2E | 建 4 后销售详情、创建依据、工作台均显示剩余 6；建满后显示 10/10/0 和 2 笔 | Rust + focused Vitest + Playwright flow | 无 | 无 | 三处用户可见口径真实一致 |
+| TC-TASK-005 | 任务转交 | P1 | 权限 | Rust unit / Mongo API IT | partial | `backend/services/src/work_item/mod.rs` | 管理 DataScope 计算；采购候选只需具体 `purchase_order:create`；无权限候选拒绝 | partial | blocked | 无管理员转交 E2E | 本轮未通过页面/API 实际转交采购任务 | Rust | 管理范围、双采购账号 | 缺真实事务、审计与新旧 owner 可见性验证 | 规则级资格已覆盖 |
+| TC-UI-001 | Web 界面 | P0 | 可用性 | frontend unit | covered | 责任规则页、销售创建、销售详情、采购创建、工作台详情等测试 | 关键按钮、只读负责人、响应数据、移动入口和业务文案 | reachable | covered | 主 E2E + Chrome 手工回归 | 桌面完整流程；`390×844` 实际打开列表/详情/作废/销售进度/工作台并操作 | focused Vitest + Playwright flow + browser manual | 两种 viewport | 无 | 已做桌面与移动行为验证，不仅截图 |
+| TC-SEC-001 | 认证 | P0 | 安全 | API IT | blocked | 无目标域新接口未登录合同测试 | 未逐接口断言 401/登录跳转 | reachable | blocked | 无专用 E2E | 本轮均使用已认证账号，未执行未登录直达 | 无 | 真实认证 | 缺新接口认证回归 | 依赖通用认证中间件但未计为覆盖 |
+| TC-SEC-002 | 规则权限 | P0 | 安全 | frontend unit / API IT | partial | 责任规则页测试；预定义角色与权限 | 无 manage 权限时列表只读；管理层不再获得 manage | reachable | partial | Chrome 管理员回归 | 管理员可编辑；未使用无权限账号验证直达页面和伪造写请求 | focused Vitest + browser manual | 多角色账号 | 缺 API 403 与无按钮双轨断言 | 前端只读分支已覆盖 |
+| TC-SEC-003 | 责任范围 | P0 | 越权 | Rust unit + E2E API | covered | `backend/services/src/purchase_order/procurement_task_sync.rs`；`backend/services/src/work_item/mod.rs` | 非 owner、旧 owner、其他销售单任务隐藏；采购处理要求具体 owner 和权限 | reachable | covered | 主 E2E | 管理员跨 owner 查询无 basis；伪造任务创建返回 HTTP 404 | Rust + Playwright flow | 双账号 | 未覆盖两采购负责人行拆分，见 TC-TASK-002 | 越权隐藏语义已真实验证 |
+| TC-SEC-004 | 输入安全 | P1 | 安全 | Rust DTO/unit / API IT | partial | `backend/services/src/procurement_responsibility/dto.rs`；采购创建/保存请求校验 | 重复行键、空值、非法数量、超长幂等键等输入失败 | not_reachable | manual_only | 无 | 浏览器表单无法构造 NoSQL 对象注入或非法枚举 | Rust | HTTP 测试客户端 | 缺专用 API 注入测试 | 类型化 DTO 降低风险但不替代合同测试 |
+| TC-SEC-005 | 文案 | P1 | 安全/可用性 | frontend unit | covered | `erp-client/features/purchase-orders/api/purchase-order-commands.test.ts`；工作台详情测试 | HTTP 409 映射为“可采购数量已更新，请刷新后重试”；不展示原始 ID | reachable | partial | 主 E2E | 并发请求断言 HTTP 409；未在页面上触发并确认该错误文案 | focused Vitest + Playwright flow | 并发 fixture | 浏览器业务文案仍需专项动作 | 非浏览器层已覆盖稳定文案 |
+| TC-SEC-006 | 审计 | P0 | 审计 | Rust source/unit / Mongo service_it | partial | 责任规则服务、采购创建幂等收据、工作项转交审计实现 | 关键成功命令生成稳定审计/收据且原始幂等键不落盘 | partial | partial | 主 E2E | 完成规则保存、采购创建和作废动作，但未读取数据库审计字段 | Rust + Playwright flow | 审计仓储 | 未发现并发拒绝失败审计持久化证据；缺真实 Mongo 审计断言 | 不满足 PRD“并发拒绝留痕”的完整验收 |
+| TC-PERF-001 | 责任解析 | P1 | 性能 | perf | planned | 无 | 200 行/1,000 规则 P95 与查询数脚本未实现 | not_reachable | manual_only | 无 | 性能不由浏览器 E2E 承担 | 未执行 | 大数据 fixture | 独立性能环境 | 未形成性能结论 |
+| TC-PERF-002 | 创建依据 | P1 | 性能 | perf | planned | 无 | 1,000×20 行分页和索引脚本未实现 | not_reachable | manual_only | 无 | 性能不由浏览器 E2E 承担 | 未执行 | 大数据 fixture | 独立性能环境 | 未形成性能结论 |
+| TC-PERF-003 | 并发创建 | P0 | 性能 | service_it/perf | planned | 无 20 并发专项资产 | 主 E2E 仅验证 2 请求并发，不替代 20 请求压力与孤立数据检查 | not_reachable | partial | 主 E2E | 两请求一成功一 409，覆盖不超量 | Playwright flow；专项未执行 | 隔离数据库 | 缺 20 请求和孤立数据检查 | 功能并发正确性已覆盖，性能门禁未完成 |
+| TC-PERF-004 | 进度读取 | P2 | 稳定性 | service_it/perf | planned | 无 | 500 次读取稳定性脚本未实现 | not_worth_it | manual_only | 无 | 无需浏览器重复 500 次 | 未执行 | 隔离数据库 | 集成层覆盖 | 未形成稳定性结论 |
 
-## P0 完成门禁
+## P0 完成门禁结论
 
-- `reachable` 或 `partial` 的 P0 用例必须有真实 Playwright 业务断言；无法完成时必须在执行报告中标记阻塞并说明不可替代原因。
-- `not_reachable` 的 P0 并发、回滚和状态矩阵用例必须有真实 MongoDB 服务层/API 集成测试。
-- 当前所有条目仍为规划状态，不能视为自动化已覆盖或已通过。
+- **真实 Playwright 主路径已通过**：非末级采购审批不派任务、最终生效派任务、任务 owner/scope、4+6 两次建单、进度一致、作废释放、successor、越权隐藏、并发一成功一 409、移动端操作。
+- **非浏览器自动化已通过**：Rust workspace 测试与本功能 focused Vitest；前端类型、格式、lint 和生产构建通过。
+- **仍未满足的测试门禁**：目标域真实 MongoDB 服务/API 集成测试、未登录与规则写权限 API 测试、双采购负责人分组、管理员转交、解析失败事务回滚、并发拒绝审计、4 项性能专项。
+- 增量 PRD 因上述自动化缺口以及尚未实现的管理员业务异常记录、并发拒绝审计和四类独立空态，继续保持 `approved`，不标记为 `merged`。

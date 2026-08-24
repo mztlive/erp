@@ -195,7 +195,7 @@ export function mapDetailToListItem(
             created_at: detail.created_at,
             updated_at: detail.created_at,
             stage: detail.stage,
-            procurement_progress: detail.procurement_progress,
+            purchase_coverage: detail.purchase_coverage,
         },
         {
             customerName:
@@ -244,6 +244,11 @@ export function mapDetailToListItem(
             },
             currentRevisionNo,
             purchaseOrderCount: detail.purchase_order_count,
+            purchaseCreationAccess: {
+                allowed: detail.purchase_creation_access.allowed,
+                taskCount: detail.purchase_creation_access.task_count,
+                blocker: detail.purchase_creation_access.blocker ?? undefined,
+            },
         },
     )
 }

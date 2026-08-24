@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
     mapFulfillmentModeFromBackend,
     mapListItemFromBackend,
+    mapProcurementProgress,
     mapWorkingCopyLines,
 } from "@/features/sales-orders/lib/sales-order-detail-mappers"
 import {
@@ -44,6 +45,7 @@ describe("mapWorkingCopyLines", () => {
                 quantity: "1",
                 base_unit_code: "件",
                 unit_price_gross: "100.00",
+                service_region: "EAST",
                 fulfillment_mode: "SUPPLIER_DIRECT",
                 fulfillment_due_at: 1_800_000_000,
             },
@@ -51,6 +53,7 @@ describe("mapWorkingCopyLines", () => {
 
         expect(lines).toHaveLength(1)
         expect(lines[0]?.fulfillmentMode).toBe("供应商直发")
+        expect(lines[0]?.serviceRegion).toBe("EAST")
         expect(lines[0]?.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}/)
     })
 
@@ -82,6 +85,35 @@ describe("mapWorkingCopyLines", () => {
     })
 })
 
+describe("mapProcurementProgress", () => {
+    it("derives pending, partial and covered from backend purchase coverage", () => {
+        expect(
+            mapProcurementProgress({
+                total_quantity: "10",
+                covered_quantity: "0",
+                remaining_quantity: "10",
+                progress: "0",
+            }).status,
+        ).toBe("pending")
+        expect(
+            mapProcurementProgress({
+                total_quantity: "10",
+                covered_quantity: "4",
+                remaining_quantity: "6",
+                progress: "0.4",
+            }).status,
+        ).toBe("partial")
+        expect(
+            mapProcurementProgress({
+                total_quantity: "10",
+                covered_quantity: "10",
+                remaining_quantity: "0",
+                progress: "1",
+            }).status,
+        ).toBe("covered")
+    })
+})
+
 describe("mapListItemFromBackend", () => {
     it("maps procurement progress and allows another purchase while quantity remains", () => {
         const order = mapListItemFromBackend(
@@ -107,14 +139,20 @@ describe("mapListItemFromBackend", () => {
                     label: "已生效",
                     tone: "success",
                 },
-                procurement_progress: {
-                    sales_quantity: "10",
+                purchase_coverage: {
+                    total_quantity: "10",
                     covered_quantity: "7",
                     remaining_quantity: "3",
-                    status: "partial",
+                    progress: "0.7",
                 },
             },
-            { purchaseOrderCount: 2 },
+            {
+                purchaseOrderCount: 2,
+                purchaseCreationAccess: {
+                    allowed: true,
+                    taskCount: 1,
+                },
+            },
         )
 
         expect(order.ownerUserId).toBe("u-sales")
@@ -140,6 +178,11 @@ describe("mapListItemFromBackend", () => {
                     ...order.related.procurementProgress,
                     remainingQuantity: "0",
                     status: "covered" as const,
+                },
+                purchaseCreationAccess: {
+                    allowed: false,
+                    taskCount: 0,
+                    blocker: "当前销售单待采购数量已全部覆盖",
                 },
             },
         }

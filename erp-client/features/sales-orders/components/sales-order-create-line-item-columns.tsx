@@ -69,6 +69,26 @@ export function buildSalesOrderCreateLineItemColumns(
         ...(nature === "physical_service"
             ? ([
                   {
+                      id: "serviceRegion",
+                      header: "服务区域",
+                      renderValue: ({ item }) => item.serviceRegion || "—",
+                      renderEditor: ({ rowIndex }) => (
+                          <div className="min-w-32">
+                              <form.AppField
+                                  name={`lineItems[${rowIndex}].serviceRegion`}
+                              >
+                                  {(field) => (
+                                      <field.TextField
+                                          label="服务区域"
+                                          hideLabel
+                                          placeholder="选填"
+                                      />
+                                  )}
+                              </form.AppField>
+                          </div>
+                      ),
+                  },
+                  {
                       id: "procurementOwner",
                       header: "采购负责人",
                       renderValue: ({ item }) => (

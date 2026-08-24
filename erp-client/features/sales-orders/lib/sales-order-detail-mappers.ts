@@ -2,7 +2,7 @@ import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     BackendCloseEligibility,
-    BackendProcurementProgress,
+    BackendPurchaseCoverage,
     BackendRevision,
     BackendSalesOrderView,
     BackendWorkingCopyLine,
@@ -111,21 +111,19 @@ function mapInvoicing(code: string): ProgressTrack {
 }
 
 export function mapProcurementProgress(
-    progress?: BackendProcurementProgress | null,
+    coverage?: BackendPurchaseCoverage | null,
 ): SalesOrderProcurementProgress {
-    const salesQuantity = progress?.sales_quantity ?? "0"
-    const coveredQuantity = progress?.covered_quantity ?? "0"
-    const remainingQuantity = progress?.remaining_quantity ?? "0"
+    const salesQuantity = coverage?.total_quantity ?? "0"
+    const coveredQuantity = coverage?.covered_quantity ?? "0"
+    const remainingQuantity = coverage?.remaining_quantity ?? "0"
+    const progress = Number(coverage?.progress ?? "0")
     const status =
-        progress?.status === "covered" ||
-        progress?.status === "partial" ||
-        progress?.status === "pending"
-            ? progress.status
-            : Number(remainingQuantity) <= 0 && Number(salesQuantity) > 0
-              ? "covered"
-              : Number(coveredQuantity) > 0
-                ? "partial"
-                : "pending"
+        Number(salesQuantity) > 0 &&
+        (Number(remainingQuantity) <= 0 || progress >= 1)
+            ? "covered"
+            : Number(coveredQuantity) > 0 || progress > 0
+              ? "partial"
+              : "pending"
 
     if (status === "covered") {
         return {
@@ -249,6 +247,8 @@ export function mapWorkingCopyLines(
                 line.fulfillment_mode,
             )
             if (fulfillmentMode) item.fulfillmentMode = fulfillmentMode
+            const serviceRegion = line.service_region?.trim()
+            if (serviceRegion) item.serviceRegion = serviceRegion
             const dueDate = formatEpochDate(line.fulfillment_due_at)
             if (dueDate) item.dueDate = dueDate
         }
@@ -355,6 +355,11 @@ export function mapListItemFromBackend(
         startSalesChange?: { allowed: boolean; blocker?: string | null }
         currentRevisionNo?: number | null
         purchaseOrderCount?: number
+        purchaseCreationAccess?: {
+            allowed: boolean
+            taskCount: number
+            blocker?: string
+        }
     },
 ): SalesOrderListItem {
     const nature = mapNature(row.business_type)
@@ -432,9 +437,8 @@ export function mapListItemFromBackend(
         lineItems: extras?.lineItems ?? [],
         related: {
             purchaseOrders: extras?.purchaseOrderCount ?? 0,
-            procurementProgress: mapProcurementProgress(
-                row.procurement_progress,
-            ),
+            procurementProgress: mapProcurementProgress(row.purchase_coverage),
+            purchaseCreationAccess: extras?.purchaseCreationAccess,
             fulfillments: 0,
             receipts: 0,
             invoices: 0,

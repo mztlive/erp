@@ -8,6 +8,7 @@ import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 export type PurchaseOrderDetailPermissions = {
     canEdit: boolean
     canSubmit: boolean
+    canVoid: boolean
     canOpenReview: boolean
     canApprove: boolean
     canReject: boolean
@@ -37,6 +38,7 @@ export function usePurchaseOrderDetailPermissions(
         return {
             canEdit: order?.allowedActions.includes("EDIT") ?? false,
             canSubmit: order?.allowedActions.includes("SUBMIT") ?? false,
+            canVoid: order?.allowedActions.includes("VOID") ?? false,
             canOpenReview: Boolean(reviewWorkItem),
             canApprove: Boolean(
                 reviewWorkItem?.processingState === "READY" &&

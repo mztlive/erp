@@ -212,9 +212,9 @@ describe("useSubmitPurchaseOrderMutation", () => {
         await act(async () => {
             await result.current.mutateAsync(input)
         })
-        expect(apiMocks.submitPurchaseOrderForReview.mock.calls[0]?.[0]).toEqual(
-            input,
-        )
+        expect(
+            apiMocks.submitPurchaseOrderForReview.mock.calls[0]?.[0],
+        ).toEqual(input)
         expect(invalidateSpy).toHaveBeenCalledWith({
             queryKey: purchaseOrderKeys.all,
         })
@@ -291,7 +291,9 @@ describe("query key identity", () => {
         })
         const client = createFreshQueryClient()
         const wrapper = ({ children }: { children: React.ReactNode }) => (
-            <QueryClientProvider client={client}>{children}</QueryClientProvider>
+            <QueryClientProvider client={client}>
+                {children}
+            </QueryClientProvider>
         )
         const { result, rerender } = renderHook(
             ({ id }: { id: string }) => usePurchaseOrderCenterQuery(id),

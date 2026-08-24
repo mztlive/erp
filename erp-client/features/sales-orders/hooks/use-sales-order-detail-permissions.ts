@@ -19,7 +19,9 @@ export function useSalesOrderDetailPermissions() {
     const profileReady =
         !accountQuery.isPending && !accountQuery.isError && Boolean(granted)
 
-    const profileGate = (fallbackKind: SalesOrderDetailPermissionKind): PermissionGate => {
+    const profileGate = (
+        fallbackKind: SalesOrderDetailPermissionKind,
+    ): PermissionGate => {
         if (accountQuery.isPending) {
             return { enabled: false, reason: "正在核对权限，请稍候。" }
         }

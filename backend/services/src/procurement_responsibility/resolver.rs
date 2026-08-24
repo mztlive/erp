@@ -14,6 +14,9 @@ use mongodb::bson::doc;
 use super::dto::{ProcurementResponsibilityResolutionView, ProcurementResponsibilityResolveLineRequest};
 use super::ProcurementResponsibilityService;
 use crate::errors::{Error, Result};
+use crate::iam::subject;
+
+const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
 /// 内部批量解析输入。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,26 +123,29 @@ impl ProcurementResponsibilityService {
         Ok(())
     }
 
-    /// 校验指定账号可作为具体采购负责人。
+    /// 稳定校验指定账号可作为具体采购负责人。
     ///
     /// # 参数
     /// * `owner_user_id` - 负责人账号 ID
     ///
     /// # 返回
-    /// 账号可登录、为后台管理员且拥有 `purchase_order:create` 时返回账号。
+    /// 账号可登录、为后台管理员且拥有 `purchase_order:create` 时返回稳定策略版本。
     ///
     /// # 错误
-    /// 账号不存在、状态/类型不符或缺少权限时返回校验错误。
-    pub(crate) async fn ensure_owner_eligible(&self, owner_user_id: &str) -> Result<AccountCore> {
-        let account = self
-            .db
-            .accounts()
-            .find_by_id(owner_user_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::ValidationError("采购负责人账号不存在".to_string()))?;
-        ensure_account_ready(&account)?;
-        ensure_purchase_create_permission(&self.rbac, &account).await?;
-        Ok(account)
+    /// 账号不存在、状态/类型不符、缺少权限或策略持续变化时返回校验错误。
+    pub(crate) async fn authorize_owner_eligibility(&self, owner_user_id: &str) -> Result<u64> {
+        for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
+            let before = self.rbac.current_policy_revision().await?;
+            let account = load_owner_account(&self.db, owner_user_id, &mut NoTransaction).await?;
+            ensure_purchase_create_permission(&self.rbac, &account).await?;
+            let after = self.rbac.current_policy_revision().await?;
+            if before == after {
+                return Ok(before);
+            }
+        }
+        Err(Error::Rbac(
+            "采购负责人授权策略持续变化，无法形成稳定快照".to_string(),
+        ))
     }
 
     /// 批量加载目录、规则和账号事实并形成候选责任。
@@ -208,7 +214,10 @@ impl ProcurementResponsibilityService {
                 let permission = purchase_create_permission()?;
                 if !self
                     .rbac
-                    .enforce(candidate.owner_user_id.as_str(), &permission)
+                    .enforce(
+                        &subject(AccountKind::Admin, candidate.owner_user_id.as_str()),
+                        &permission,
+                    )
                     .await?
                 {
                     return Err(Error::ValidationError(format!(
@@ -431,11 +440,11 @@ fn category_chain(
 }
 
 /// 批量加载并校验候选负责人的账号状态。
-async fn attach_owner_accounts<'a>(
+async fn attach_owner_accounts(
     db: &mongodb::Database,
     selected: Vec<(
         String,
-        &'a entities::procurement_responsibility::ProcurementResponsibilityRule,
+        &entities::procurement_responsibility::ProcurementResponsibilityRule,
     )>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<CandidateResolution>> {
@@ -464,6 +473,32 @@ async fn attach_owner_accounts<'a>(
         .collect()
 }
 
+/// 加载并校验单个采购负责人账号仍可登录。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `owner_user_id` - 采购负责人账号 ID
+/// * `executor` - 数据库执行器，可为规则写事务会话
+///
+/// # 返回
+/// 返回存在、为后台管理员且可登录的负责人账号。
+///
+/// # 错误
+/// 账号不存在、类型或状态不合格，以及仓储查询失败时返回错误。
+pub(super) async fn load_owner_account(
+    db: &mongodb::Database,
+    owner_user_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<AccountCore> {
+    let account = db
+        .accounts()
+        .find_by_id(owner_user_id, executor)
+        .await?
+        .ok_or_else(|| Error::ValidationError("采购负责人账号不存在".to_string()))?;
+    ensure_account_ready(&account)?;
+    Ok(account)
+}
+
 /// 校验账号为可登录的后台管理员。
 fn ensure_account_ready(account: &AccountCore) -> Result<()> {
     if account.can_login() && account.is_kind(AccountKind::Admin) {
@@ -476,12 +511,25 @@ fn ensure_account_ready(account: &AccountCore) -> Result<()> {
 }
 
 /// 校验单个账号拥有采购建单权限。
+///
+/// # 参数
+/// * `rbac` - 当前应用共享的 RBAC 服务
+/// * `account` - 已通过后台账号状态校验的采购负责人
+///
+/// # 返回
+/// 账号拥有 `purchase_order:create` 时返回 `Ok(())`。
+///
+/// # 错误
+/// 权限解析、Casbin 判定失败或账号缺少权限时返回错误。
 async fn ensure_purchase_create_permission(
     rbac: &crate::iam::SharedRbacService,
     account: &AccountCore,
 ) -> Result<()> {
     let permission = purchase_create_permission()?;
-    if rbac.enforce(account.base.id.as_str(), &permission).await? {
+    if rbac
+        .enforce(&subject(account.kind, account.base.id.as_str()), &permission)
+        .await?
+    {
         return Ok(());
     }
     Err(Error::ValidationError(format!(

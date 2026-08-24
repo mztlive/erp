@@ -17,7 +17,10 @@ vi.mock(
     }),
 )
 
-function makeOrder(purchaseOrders: number): SalesOrderDetailView {
+function makeOrder(
+    purchaseOrders: number,
+    purchaseCreationAllowed = true,
+): SalesOrderDetailView {
     return mapListItemFromBackend(
         {
             id: "so-1",
@@ -35,14 +38,23 @@ function makeOrder(purchaseOrders: number): SalesOrderDetailView {
             created_at: 1,
             updated_at: 1,
             stage: { code: "effective", label: "已生效", tone: "success" },
-            procurement_progress: {
-                sales_quantity: "10",
+            purchase_coverage: {
+                total_quantity: "10",
                 covered_quantity: purchaseOrders > 0 ? "4" : "0",
                 remaining_quantity: purchaseOrders > 0 ? "6" : "10",
-                status: purchaseOrders > 0 ? "partial" : "pending",
+                progress: purchaseOrders > 0 ? "0.4" : "0",
             },
         },
-        { purchaseOrderCount: purchaseOrders },
+        {
+            purchaseOrderCount: purchaseOrders,
+            purchaseCreationAccess: {
+                allowed: purchaseCreationAllowed,
+                taskCount: purchaseCreationAllowed ? 1 : 0,
+                blocker: purchaseCreationAllowed
+                    ? undefined
+                    : "当前账号不是该销售单待采购任务负责人",
+            },
+        },
     ) as SalesOrderDetailView
 }
 
@@ -84,5 +96,18 @@ describe("RelatedLanes procurement progress", () => {
                 .getByTestId("sales-order-continue-purchase")
                 .textContent?.includes("继续建单"),
         ).toBe(true)
+    })
+
+    it("does not show the create action to a procurement user who does not own the task", () => {
+        render(
+            <RelatedLanes
+                order={makeOrder(0, false)}
+                selfReturn="/sales/orders/so-1"
+                lanes={["purchase"]}
+            />,
+        )
+
+        expect(screen.queryByTestId("sales-order-continue-purchase")).toBeNull()
+        expect(screen.getByRole("button", { name: "打开采购" })).not.toBeNull()
     })
 })

@@ -65,6 +65,25 @@ struct ProcurementFormalizationPlan {
     resolution: AuthorizedResolutionPlan,
 }
 
+/// 销售形式化事务需要一次性消费的完整写入上下文。
+struct FormalizedSubmissionWrite {
+    db: Database,
+    rbac: crate::iam::SharedRbacService,
+    order_id: String,
+    order: SalesOrder,
+    submission: SalesOrderSubmission,
+    aggregate: RevisionAggregate,
+    procurement: Option<ProcurementFormalizationPlan>,
+    procurement_items: Vec<WorkItem>,
+    projection: Option<(
+        SalesOrderProjection,
+        SalesOrderProjectionRevision,
+        SalesOrderProjectionDelivery,
+    )>,
+    audit: entities::AuditLog,
+    now: Instant,
+}
+
 impl SalesOrderService {
     /// 最终通过并形式化已批准提交。
     ///
@@ -179,10 +198,22 @@ async fn load_latest_submission(
     Ok((submission, lines))
 }
 
-/// 在同一事务内推进状态并调用既有 `formalize_submission`。
+/// 在同一提交边界内推进状态并调用既有 `formalize_submission`。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享授权服务
+/// * `order` - 待生效销售单
+/// * `submission` - 最新冻结提交
+/// * `lines` - 最新冻结提交行
+/// * `procurement` - 可选采购责任授权计划
+/// * `actor` - 已认证审计操作人
+///
+/// # 返回
+/// 销售形式化与全部副作用原子提交后返回 `Ok(())`。
 ///
 /// # 错误
-/// 状态不允许、行字段缺失或写入失败时返回错误。
+/// 状态不允许、采购授权版本变化、行字段缺失或写入失败时返回错误。
 async fn persist_formalized_submission(
     db: &Database,
     rbac: crate::iam::SharedRbacService,
@@ -215,48 +246,93 @@ async fn persist_formalized_submission(
     let audit = actor
         .clone()
         .resource_log("sales_order.formalize", "sales_order", order.base.id.clone())?;
-    let order_id = order.base.id.clone();
-    let db = db.clone();
-    let mut order_for_tx = order.clone();
+    let policy_revision = procurement.as_ref().map(|plan| plan.resolution.policy_revision);
     let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move {
-                if let Some(plan) = procurement.as_ref() {
-                    ProcurementResponsibilityService::new(db.clone(), rbac.clone())
-                        .revalidate_plan(&plan.inputs, &plan.resolution, session)
-                        .await?;
-                    persist_procurement_work_items(&db, &procurement_items, session).await?;
-                }
-                if let Some(mut document) = db.business_documents().find_by_id(&order_id, session).await? {
-                    document.formalize(now);
-                    db.business_documents().update(&mut document, session).await?;
-                }
-                db.sales_order()
-                    .formalize_submission(
-                        &mut order_for_tx,
-                        &aggregate.revision,
-                        &aggregate.lines,
-                        &aggregate.goods_lines,
-                        &aggregate.voucher_lines,
-                        session,
-                    )
-                    .await?;
-                db.sales_order_submissions()
-                    .update(&mut submission, session)
-                    .await?;
-                if let Some((proj, revision, delivery)) = projection {
-                    persist_voucher_projection(&db, &proj, &revision, &delivery, session).await?;
-                }
-                // 销售单生效即形成原始应收（§6.8/§8.1.1）：子账 + 原始应收分录原子写入。
-                // 后续销售变更差额由 sales_review 生效路径另行入账，本路径只写首次生效。
-                create_original_receivable(&db, &order_for_tx, &aggregate, now, session).await?;
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<(), crate::errors::Error>(())
-            })
+    let write = FormalizedSubmissionWrite {
+        db: db.clone(),
+        rbac: rbac.clone(),
+        order_id: order.base.id.clone(),
+        order: order.clone(),
+        submission,
+        aggregate,
+        procurement,
+        procurement_items,
+        projection,
+        audit,
+        now,
+    };
+    if let Some(policy_revision) = policy_revision {
+        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
+            Box::pin(persist_formalized_submission_write(write, session))
         })
         .await?;
+    } else {
+        client
+            .with_transaction(move |session| Box::pin(persist_formalized_submission_write(write, session)))
+            .await?;
+    }
     let _ = SalesOrderId::new(order.base.id.clone());
+    Ok(())
+}
+
+/// 在调用方选定的事务边界内写入销售形式化的全部业务事实。
+///
+/// # 参数
+/// * `write` - 已完成领域计算的销售形式化写入上下文
+/// * `session` - MongoDB 事务会话
+///
+/// # 返回
+/// 全部业务事实与审计写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 采购责任重验、正式版本、投影、应收或审计任一写入失败时返回错误。
+async fn persist_formalized_submission_write(
+    mut write: FormalizedSubmissionWrite,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    if let Some(plan) = write.procurement.as_ref() {
+        ProcurementResponsibilityService::new(write.db.clone(), write.rbac.clone())
+            .revalidate_plan(&plan.inputs, &plan.resolution, session)
+            .await?;
+        persist_procurement_work_items(&write.db, &write.procurement_items, session).await?;
+    }
+    if let Some(mut document) = write
+        .db
+        .business_documents()
+        .find_by_id(&write.order_id, session)
+        .await?
+    {
+        document.formalize(write.now);
+        write
+            .db
+            .business_documents()
+            .update(&mut document, session)
+            .await?;
+    }
+    write
+        .db
+        .sales_order()
+        .formalize_submission(
+            &mut write.order,
+            &write.aggregate.revision,
+            &write.aggregate.lines,
+            &write.aggregate.goods_lines,
+            &write.aggregate.voucher_lines,
+            session,
+        )
+        .await?;
+    write
+        .db
+        .sales_order_submissions()
+        .update(&mut write.submission, session)
+        .await?;
+    if let Some((projection, revision, delivery)) = write.projection {
+        persist_voucher_projection(&write.db, &projection, &revision, &delivery, session).await?;
+    }
+    // 销售单生效即形成原始应收（§6.8/§8.1.1）：子账 + 原始应收分录原子写入。
+    // 后续销售变更差额由 sales_review 生效路径另行入账，本路径只写首次生效。
+    create_original_receivable(&write.db, &write.order, &write.aggregate, write.now, session).await?;
+    write.db.audit_logs().create(&write.audit, session).await?;
     Ok(())
 }
 
@@ -292,7 +368,7 @@ fn build_procurement_work_items(
             line_ids.dedup();
             let responsibility_key = procurement_responsibility_key(&line_ids)?;
             let line_count = line_ids.len();
-            WorkItem::new_with_responsibility_key(
+            WorkItem::new_with_responsibility_scope(
                 WorkItemId::new(next_id()),
                 WorkItemData {
                     work_item_type: WorkItemType::ProcurementOrderCreation,
@@ -312,6 +388,7 @@ fn build_procurement_work_items(
                     )),
                 },
                 responsibility_key,
+                line_ids,
             )
             .map_err(Error::Logic)
         })
@@ -378,6 +455,13 @@ async fn persist_procurement_work_items(
             return Err(Error::ConflictError(
                 "同一销售责任行集合存在多条开放采购建单任务".to_string(),
             ));
+        }
+        if let Some(existing) = existing.first() {
+            if existing.responsibility_scope_ids() != item.responsibility_scope_ids() {
+                return Err(Error::ConflictError(
+                    "开放采购建单任务的冻结责任范围与当前解析不一致".to_string(),
+                ));
+            }
         }
         if existing.is_empty() {
             db.work_items().create(item, session).await?;
@@ -895,7 +979,9 @@ mod tests {
         .expect("草稿必须可构造")
     }
 
-    /// 形式化必须调用仓储 `formalize_submission`，且只接受 `IN_APPROVAL`。
+    /// 验证销售形式化的状态闸门、仓储入口与采购授权提交栅栏。
+    ///
+    /// 生产代码必须只接受审批中状态，并通过 policy CAS 提交采购责任授权快照。
     #[test]
     fn formalize_wraps_repository_and_only_accepts_in_approval() {
         let source = include_str!("formalize.rs");
@@ -904,6 +990,7 @@ mod tests {
         assert!(source.contains("build_voucher_execution_projection"));
         assert!(source.contains("create_projection_revision"));
         let production = source.split("/// 证明本模块只包装仓储").next().expect("生产代码");
+        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(!production.contains("CARD_SALES_APPROVAL"));
         let mut order = draft_order();
         assert!(ensure_final_approve_formalize(&order).is_err());

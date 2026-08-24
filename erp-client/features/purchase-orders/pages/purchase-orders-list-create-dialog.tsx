@@ -10,7 +10,14 @@ import {
     surfaceInsetClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
+import {
+    Alert,
+    AlertAction,
+    AlertDescription,
+    AlertTitle,
+} from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -41,10 +48,15 @@ import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
-import { multiplyFixed } from "@/lib/fixed-decimal"
+import {
+    compareDecimal,
+    multiplyFixed,
+    parseDecimal,
+} from "@/lib/fixed-decimal"
 
 type PurchaseBasisLineInput = {
     salesOrderLineId: string
+    selected: boolean
     quantity: string
 }
 
@@ -54,42 +66,63 @@ function buildLineInputs(
     return (
         basis?.lines.map((line) => ({
             salesOrderLineId: line.salesOrderLineId,
+            selected: true,
             quantity: line.maxCreateQuantity,
         })) ?? []
     )
 }
 
 function buildCreationSchema(basis?: PurchaseCreationBasis) {
+    const maximumByLineId = new Map(
+        basis?.lines.map((line) => [
+            line.salesOrderLineId,
+            line.maxCreateQuantity,
+        ]) ?? [],
+    )
     return z
         .object({
             lines: z
                 .array(
                     z.object({
                         salesOrderLineId: z.string().min(1),
+                        selected: z.boolean(),
                         quantity: z.string().trim(),
                     }),
                 )
                 .min(1, "请至少选择一条可采购明细"),
         })
         .superRefine((value, context) => {
+            if (!value.lines.some((line) => line.selected)) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["lines"],
+                    message: "请至少选择一条本次采购明细",
+                })
+            }
             value.lines.forEach((line, index) => {
-                const quantity = Number(line.quantity)
-                const max = Number(
-                    basis?.lines[index]?.maxCreateQuantity ?? "0",
-                )
-                if (!Number.isFinite(quantity) || quantity <= 0) {
-                    context.addIssue({
-                        code: "custom",
-                        path: ["lines", index, "quantity"],
-                        message: "本次采购数量必须大于 0",
+                if (!line.selected) return
+                const maximum =
+                    maximumByLineId.get(line.salesOrderLineId) ?? "0"
+                try {
+                    const quantity = parseDecimal(line.quantity, {
+                        maxScale: 6,
                     })
-                    return
-                }
-                if (!Number.isFinite(max) || quantity > max) {
+                    if (quantity.unscaled <= BigInt(0)) {
+                        throw new Error("NON_POSITIVE")
+                    }
+                    if (compareDecimal(line.quantity, maximum, 6) > 0) {
+                        context.addIssue({
+                            code: "custom",
+                            path: ["lines", index, "quantity"],
+                            message: `本次采购数量不能超过 ${maximum}`,
+                        })
+                    }
+                } catch {
                     context.addIssue({
                         code: "custom",
                         path: ["lines", index, "quantity"],
-                        message: `本次采购数量不能超过 ${basis?.lines[index]?.maxCreateQuantity ?? "0"}`,
+                        message:
+                            "本次采购数量必须是大于 0、最多 6 位小数的数值",
                     })
                 }
             })
@@ -98,9 +131,11 @@ function buildCreationSchema(basis?: PurchaseCreationBasis) {
 
 function CreationBasisSummary({
     basis,
+    selectionField,
     quantityField,
 }: {
     basis: PurchaseCreationBasis
+    selectionField: (index: number) => React.ReactNode
     quantityField: (index: number) => React.ReactNode
 }) {
     return (
@@ -161,7 +196,7 @@ function CreationBasisSummary({
                         </DescriptionDetails>
                     </DescriptionItem>
                     <DescriptionItem>
-                        <DescriptionTerm>预计含税采购额</DescriptionTerm>
+                        <DescriptionTerm>最大可采购含税额</DescriptionTerm>
                         <DescriptionDetails>
                             <MoneyValue value={basis.estimatedGross} />
                         </DescriptionDetails>
@@ -182,6 +217,7 @@ function CreationBasisSummary({
                     <Table data-density="compact">
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-16">本单</TableHead>
                                 <TableHead>销售项目</TableHead>
                                 <TableHead data-align="end">销售数量</TableHead>
                                 <TableHead data-align="end">已覆盖</TableHead>
@@ -197,6 +233,9 @@ function CreationBasisSummary({
                         <TableBody>
                             {basis.lines.map((line, index) => (
                                 <TableRow key={line.salesOrderLineId}>
+                                    <TableCell>
+                                        {selectionField(index)}
+                                    </TableCell>
                                     <TableCell className="max-w-[16rem] whitespace-normal">
                                         <div className="font-medium text-foreground">
                                             {line.itemName}
@@ -259,7 +298,7 @@ function CreationBasisSummary({
                     </Table>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    本次采购数量默认取最大可采购量，必须大于
+                    默认勾选全部明细并取最大可采购量；可取消不在本单采购的明细。已选数量必须大于
                     0，且不能超过当前剩余数量。
                 </p>
             </div>
@@ -279,7 +318,15 @@ export type PurchaseOrdersCreateDialogProps = {
     selectedBasisId: string
     onSelectedBasisIdChange: (value: string) => void
     createPending: boolean
-    onCreate: (lines: PurchaseBasisLineInput[]) => Promise<void> | void
+    createResult?: {
+        status: "succeeded" | "failed" | "unknown"
+        title: string
+        description: string
+        reference?: string
+    } | null
+    onCreate: (
+        lines: Array<{ salesOrderLineId: string; quantity: string }>,
+    ) => Promise<void> | void
 }
 
 export function PurchaseOrdersCreateDialog({
@@ -294,6 +341,7 @@ export function PurchaseOrdersCreateDialog({
     selectedBasisId,
     onSelectedBasisIdChange,
     createPending,
+    createResult,
     onCreate,
 }: PurchaseOrdersCreateDialogProps) {
     const selectedBasis = openBases.find((b) => b.basisId === selectedBasisId)
@@ -309,7 +357,14 @@ export function PurchaseOrdersCreateDialog({
         defaultValues: { lines: [] as PurchaseBasisLineInput[] },
         validators: { onChange: schema },
         onSubmit: async ({ value }) => {
-            await onCreate(value.lines)
+            await onCreate(
+                value.lines
+                    .filter((line) => line.selected)
+                    .map(({ salesOrderLineId, quantity }) => ({
+                        salesOrderLineId,
+                        quantity: quantity.trim(),
+                    })),
+            )
         },
     })
 
@@ -327,6 +382,33 @@ export function PurchaseOrdersCreateDialog({
                         采购先核对销售上下文，再选择供应商和本次数量创建草稿；不能跨销售单或跨供应商混拼。
                     </DialogDescription>
                 </DialogHeader>
+                {createResult ? (
+                    <Alert
+                        role={
+                            createResult.status === "failed"
+                                ? "alert"
+                                : "status"
+                        }
+                        variant={
+                            createResult.status === "failed"
+                                ? "destructive"
+                                : createResult.status === "unknown"
+                                  ? "warning"
+                                  : "success"
+                        }
+                        data-testid="purchase-create-result"
+                    >
+                        <AlertTitle>{createResult.title}</AlertTitle>
+                        <AlertDescription>
+                            <p>{createResult.description}</p>
+                            {createResult.reference ? (
+                                <p className="text-xs">
+                                    业务引用：{createResult.reference}
+                                </p>
+                            ) : null}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 <form
                     className="flex flex-col gap-4"
                     onSubmit={(event) => {
@@ -340,19 +422,21 @@ export function PurchaseOrdersCreateDialog({
                                 正在加载创建依据…
                             </p>
                         ) : basesFailed ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm text-destructive">
+                            <Alert variant="destructive">
+                                <AlertDescription>
                                     创建依据加载失败，请重试。
-                                </p>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={onRetryBases}
-                                >
-                                    重试
-                                </Button>
-                            </div>
+                                </AlertDescription>
+                                <AlertAction>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={onRetryBases}
+                                    >
+                                        重试
+                                    </Button>
+                                </AlertAction>
+                            </Alert>
                         ) : openBases.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 {basisFromUrl || salesOrderFromUrl
@@ -380,6 +464,32 @@ export function PurchaseOrdersCreateDialog({
                         {selectedBasis ? (
                             <CreationBasisSummary
                                 basis={selectedBasis}
+                                selectionField={(index) => (
+                                    <form.AppField
+                                        name={`lines[${index}].selected`}
+                                    >
+                                        {(field) => (
+                                            <label
+                                                className="inline-flex min-h-10 cursor-pointer items-center justify-center"
+                                                htmlFor={`purchase-basis-line-selected-${selectedBasis.lines[index]?.salesOrderLineId ?? index}`}
+                                            >
+                                                <Checkbox
+                                                    id={`purchase-basis-line-selected-${selectedBasis.lines[index]?.salesOrderLineId ?? index}`}
+                                                    checked={field.state.value}
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) =>
+                                                        field.handleChange(
+                                                            checked === true,
+                                                        )
+                                                    }
+                                                    aria-label={`本单采购 ${selectedBasis.lines[index]?.itemName ?? `第 ${index + 1} 行`}`}
+                                                    data-testid={`purchase-basis-line-selected-${selectedBasis.lines[index]?.salesOrderLineId ?? index}`}
+                                                />
+                                            </label>
+                                        )}
+                                    </form.AppField>
+                                )}
                                 quantityField={(index) => (
                                     <form.AppField
                                         name={`lines[${index}].quantity`}
@@ -389,6 +499,9 @@ export function PurchaseOrdersCreateDialog({
                                                 label={`本次采购数量，最大 ${selectedBasis.lines[index]?.maxCreateQuantity ?? "0"}`}
                                                 hideLabel
                                                 type="number"
+                                                inputMode="decimal"
+                                                min="0"
+                                                step="any"
                                                 inputClassName="num text-right"
                                                 testId={`purchase-basis-line-quantity-${selectedBasis.lines[index]?.salesOrderLineId ?? index}`}
                                             />
@@ -410,6 +523,7 @@ export function PurchaseOrdersCreateDialog({
                                     type="submit"
                                     data-testid="purchase-create-from-basis"
                                     disabled={
+                                        basesFailed ||
                                         !selectedBasis ||
                                         !canSubmit ||
                                         createPending

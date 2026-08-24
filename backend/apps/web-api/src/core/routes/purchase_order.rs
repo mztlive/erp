@@ -57,6 +57,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/purchase-orders/{id}/void",
+            with_permission(
+                post(purchase_order::purchase_order_void),
+                rbac,
+                purchase_order::purchase_order_void_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-orders/{id}/submit",
             with_permission(
                 post(purchase_order::purchase_order_submit),

@@ -85,7 +85,6 @@ export function PurchaseOrdersListPage() {
                                 actionKey: "create",
                                 label: "新建采购单",
                                 icon: PlusIcon,
-                                mobileVisibility: "hide",
                                 onClick: ctrl.openCreateDialog,
                             },
                         ]}
@@ -235,13 +234,16 @@ export function PurchaseOrdersListPage() {
                 onOpenChange={ctrl.setCreateOpen}
                 openBases={ctrl.openBases}
                 basesPending={ctrl.basesQuery.isLoading}
-                basesFailed={ctrl.basesQuery.isError}
+                basesFailed={
+                    ctrl.basesQuery.isError || ctrl.basesQuery.isRefetchError
+                }
                 onRetryBases={() => void ctrl.basesQuery.refetch()}
                 basisFromUrl={ctrl.basisFromUrl}
                 salesOrderFromUrl={ctrl.salesOrderFromUrl}
                 selectedBasisId={ctrl.selectedBasisId}
                 onSelectedBasisIdChange={ctrl.setSelectedBasisId}
                 createPending={ctrl.createMutation.isPending}
+                createResult={ctrl.actionResult}
                 onCreate={ctrl.handleCreate}
             />
         </PageScaffold>

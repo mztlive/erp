@@ -13,29 +13,32 @@ import {
 } from "./purchase-return-order-section"
 import { makePurchaseOrderCenter } from "@/features/purchase-orders/hooks/use-purchase-order-detail-fixtures"
 
-vi.mock("@/features/purchase-orders/hooks/use-purchase-return-orders-query", () => ({
-    usePurchaseReturnOrdersQuery: () => ({
-        data: [
-            {
-                purchaseReturnOrderId: "pro-1",
-                purchaseReturnNo: "TH-2026-001",
-                purchaseOrderId: "po-1",
-                returnMode: "company_warehouse_to_supplier",
-                returnModeLabel: "公司仓退供应商",
-                status: "PENDING_EXECUTION",
-                statusLabel: "待执行",
-                statusTone: "warning",
-                version: 1,
-                createdAt: "2026-08-01T08:00:00.000Z",
-                allowedActions: ["VIEW_DETAIL"],
-            },
-        ],
-        isPending: false,
-        isError: false,
-        isSuccess: true,
-        refetch: vi.fn(),
+vi.mock(
+    "@/features/purchase-orders/hooks/use-purchase-return-orders-query",
+    () => ({
+        usePurchaseReturnOrdersQuery: () => ({
+            data: [
+                {
+                    purchaseReturnOrderId: "pro-1",
+                    purchaseReturnNo: "TH-2026-001",
+                    purchaseOrderId: "po-1",
+                    returnMode: "company_warehouse_to_supplier",
+                    returnModeLabel: "公司仓退供应商",
+                    status: "PENDING_EXECUTION",
+                    statusLabel: "待执行",
+                    statusTone: "warning",
+                    version: 1,
+                    createdAt: "2026-08-01T08:00:00.000Z",
+                    allowedActions: ["VIEW_DETAIL"],
+                },
+            ],
+            isPending: false,
+            isError: false,
+            isSuccess: true,
+            refetch: vi.fn(),
+        }),
     }),
-}))
+)
 
 afterEach(() => {
     cleanup()

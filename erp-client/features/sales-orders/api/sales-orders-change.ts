@@ -49,8 +49,7 @@ export async function prepareStartSalesChangeOrder(
         (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0),
     )
     const latestSubmission = submissions[0]
-    const draftSource =
-        wc && wc.lines.length > 0 ? wc : latestSubmission
+    const draftSource = wc && wc.lines.length > 0 ? wc : latestSubmission
 
     // 变更单创建需要完整 draft；以当前工作副本/最近提交快照行作为目标草稿骨架。
     // 字段不足时后端会校验失败并经 ApiError 抛出。
@@ -125,6 +124,7 @@ export async function prepareStartSalesChangeOrder(
                 row.goods = {
                     sku_id: skuId,
                     sku_revision_id: skuRevisionId,
+                    service_region: line.service_region ?? null,
                     welfare_scenario: null,
                     fulfillment_mode: "COMPANY_WAREHOUSE",
                     fulfillment_due_at: Math.floor(Date.now() / 1000),

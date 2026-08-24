@@ -24,7 +24,7 @@ const backendRule = {
     service_region: "华东",
     owner_user_id: "buyer-1",
     owner_name: "采购李四",
-    status: "ENABLED",
+    status: "active",
     version: 3,
 }
 
@@ -34,7 +34,12 @@ beforeEach(() => {
 
 describe("procurement responsibility rule API", () => {
     it("maps list wire fields in one adapter layer", async () => {
-        mockedApiGet.mockResolvedValue({ items: [backendRule] })
+        mockedApiGet.mockResolvedValue({
+            items: [backendRule],
+            total: 1,
+            page: 1,
+            page_size: 200,
+        })
 
         await expect(fetchProcurementResponsibilityRules()).resolves.toEqual([
             {
@@ -53,7 +58,7 @@ describe("procurement responsibility rule API", () => {
             },
         ])
         expect(mockedApiGet).toHaveBeenCalledWith(
-            "/admin/procurement-responsibility-rules",
+            "/admin/procurement-responsibility-rules?page=1&page_size=200",
         )
     })
 
@@ -75,7 +80,7 @@ describe("procurement responsibility rule API", () => {
                 rule_type: "SKU",
                 sku_id: "sku-1",
                 owner_user_id: "buyer-1",
-                status: "ENABLED",
+                status: "active",
             }),
         )
 
@@ -94,8 +99,8 @@ describe("procurement responsibility rule API", () => {
             expect.objectContaining({
                 category_id: "category-1",
                 service_region: "华东",
-                expected_version: 3,
-                status: "DISABLED",
+                version: 3,
+                status: "disabled",
             }),
         )
     })

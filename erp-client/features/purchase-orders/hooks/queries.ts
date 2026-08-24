@@ -16,6 +16,7 @@ import {
     startPurchaseChange,
     submitPurchaseChange,
     submitPurchaseOrderForReview,
+    voidPurchaseOrderDraft,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type {
     CreationBasesQuery,
@@ -23,6 +24,7 @@ import type {
 } from "@/features/purchase-orders/api/purchase-orders"
 import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { workItemKeys } from "@/features/work-items/queries"
+import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
 
 export const purchaseOrderKeys = {
     all: ["purchase-orders"] as const,
@@ -32,8 +34,9 @@ export const purchaseOrderKeys = {
     detail: (id: string) => [...purchaseOrderKeys.all, "detail", id] as const,
     changeOrder: (id: string) =>
         [...purchaseOrderKeys.all, "change-order", id] as const,
+    creationBases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
     bases: (query: CreationBasesQuery = {}) =>
-        [...purchaseOrderKeys.all, "creation-bases", query] as const,
+        [...purchaseOrderKeys.creationBases(), query] as const,
     exportData: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.all, "export", query] as const,
 }
@@ -50,6 +53,8 @@ const invalidatePurchaseOrderApprovalCaches = async (
         queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
         queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
         queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
+        queryClient.invalidateQueries({ queryKey: workspaceHomeKeys.all }),
+        queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
     ])
 }
 
@@ -131,10 +136,22 @@ export function useSavePurchaseOrderDraftMutation() {
         mutationFn: savePurchaseOrderDraft,
         onSuccess: async (result, variables) => {
             if (result.status !== "succeeded") return
-            await queryClient.invalidateQueries({
-                queryKey: purchaseOrderKeys.all,
-            })
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
             void variables.purchaseOrderId
+        },
+    })
+}
+
+/**
+ * 作废采购草稿。成功后刷新采购覆盖、采购任务、工作台与销售单缓存。
+ */
+export function useVoidPurchaseOrderMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: voidPurchaseOrderDraft,
+        onSuccess: async (result) => {
+            if (result.status !== "succeeded") return
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }
@@ -208,8 +225,15 @@ export function useCreateFromBasisMutation() {
                 queryClient.invalidateQueries({
                     queryKey: purchaseOrderKeys.lists(),
                 }),
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.creationBases(),
+                    refetchType: "none",
+                }),
                 queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
                 queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
+                queryClient.invalidateQueries({
+                    queryKey: workspaceHomeKeys.all,
+                }),
                 queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
             ])
         },

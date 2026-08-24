@@ -45,8 +45,7 @@ export function formalActionFailure<T>(
     if (classifyFormalCommandError(error) === "unknown") {
         return {
             status: "unknown",
-            message:
-                "处理结果待确认。当前输入已保留，请稍后使用本次操作重试。",
+            message: "处理结果待确认。当前输入已保留，请稍后使用本次操作重试。",
             idempotencyKey,
         }
     }

@@ -2,7 +2,12 @@
 
 import type * as React from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeftIcon, FilePenLineIcon, ShieldCheckIcon } from "lucide-react"
+import {
+    ArrowLeftIcon,
+    FilePenLineIcon,
+    ShieldCheckIcon,
+    Trash2Icon,
+} from "lucide-react"
 
 import {
     DocumentHeader,
@@ -34,9 +39,11 @@ export function PurchaseOrderDetailHeader({
     canPay,
     canFulfill,
     canEdit,
+    canVoid,
     canOpenReview,
     canChange,
     requestLeave,
+    onRequestVoid,
     onRequestChange,
     result,
     onDismissResult,
@@ -53,9 +60,11 @@ export function PurchaseOrderDetailHeader({
     canPay: boolean
     canFulfill: boolean
     canEdit: boolean
+    canVoid: boolean
     canOpenReview: boolean
     canChange: boolean
     requestLeave: (go: () => void) => void
+    onRequestVoid: () => void
     onRequestChange: () => void
     result: PurchaseOrderDetailResult | null
     onDismissResult: () => void
@@ -129,6 +138,17 @@ export function PurchaseOrderDetailHeader({
                                               router.push(
                                                   `${baseHref}?mode=edit`,
                                               ),
+                                      },
+                                  ]
+                                : []),
+                            ...(canVoid && mode !== "edit"
+                                ? [
+                                      {
+                                          actionKey: "void",
+                                          label: "作废草稿",
+                                          icon: Trash2Icon,
+                                          variant: "destructive" as const,
+                                          onClick: () => onRequestVoid(),
                                       },
                                   ]
                                 : []),

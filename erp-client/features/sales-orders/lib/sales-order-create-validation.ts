@@ -39,6 +39,7 @@ const draftLineSchema = z.object({
     name: z.string().trim().min(1, "请输入销售项目"),
     sku: z.string(),
     skuRevisionId: z.string(),
+    serviceRegion: z.string().optional(),
     quantity: decimalInput("数量", 6, { positive: true }),
     unit: z.string().trim().min(1, "请输入单位"),
     unitPriceGross: decimalInput("含税单价", 4, { positive: true }),

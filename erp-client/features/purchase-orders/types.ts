@@ -269,6 +269,7 @@ export type PurchaseOrderCenterView = Readonly<{
 
 export type PurchaseCreationBasis = Readonly<{
     basisId: string
+    workItemId: string
     salesOrderId: string
     salesOrderNo: string
     customerName: string
@@ -281,9 +282,8 @@ export type PurchaseCreationBasis = Readonly<{
     fulfillmentResponsibility: FulfillmentResponsibility
     paymentTermCode: string
     paymentTermLabel: string
-    /** 可拆入本单的已确认分行 */
+    /** 可拆入本单的销售当前版本行 */
     lines: readonly {
-        procurementConfirmationLineId: string
         salesOrderLineId: string
         salesOrderRevisionLineId: string
         itemName: string
@@ -315,6 +315,13 @@ export type SavePurchaseOrderDraftInput = {
         inputTaxRate: string
         logisticsFeeReason?: string
     }>
+    idempotencyKey: string
+}
+
+export type VoidPurchaseOrderInput = {
+    purchaseOrderId: string
+    expectedLockVersion: number
+    reason: string
     idempotencyKey: string
 }
 
@@ -356,6 +363,7 @@ export type ReviewPurchaseOrderInput = {
 
 export type CreatePurchaseOrderFromBasisInput = {
     basisId: string
+    workItemId: string
     purchaseType: PurchaseType
     paymentTermCode: string
     lines: Array<{

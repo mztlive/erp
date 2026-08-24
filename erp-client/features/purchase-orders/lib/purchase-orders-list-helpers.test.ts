@@ -6,7 +6,9 @@ import {
     displayPurchaseOrderNo,
 } from "./purchase-orders-list-helpers"
 
-function makeRow(overrides: Partial<PurchaseOrderListItem> = {}): PurchaseOrderListItem {
+function makeRow(
+    overrides: Partial<PurchaseOrderListItem> = {},
+): PurchaseOrderListItem {
     return {
         purchaseOrderId: "po_1",
         purchaseNo: "PO-2026-001",
@@ -48,7 +50,10 @@ describe("displayPurchaseOrderNo", () => {
     it("无单号时回退草稿标签", () => {
         expect(
             displayPurchaseOrderNo(
-                makeRow({ purchaseNo: undefined, draftLabel: "草稿 · abc12345" }),
+                makeRow({
+                    purchaseNo: undefined,
+                    draftLabel: "草稿 · abc12345",
+                }),
             ),
         ).toBe("草稿 · abc12345")
     })
@@ -77,7 +82,9 @@ describe("buildPurchaseOrdersCsv", () => {
         const csv = buildPurchaseOrdersCsv([
             makeRow({ costMasked: true, purchaseNo: "PO-2" }),
         ])
-        expect(csv).toContain('"PO-2","已生效","供应商A","SO-2026-001","实物","***"')
+        expect(csv).toContain(
+            '"PO-2","已生效","供应商A","SO-2026-001","实物","***"',
+        )
     })
 
     it("字段含引号时正确转义", () => {

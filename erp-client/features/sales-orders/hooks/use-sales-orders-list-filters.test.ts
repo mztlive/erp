@@ -322,9 +322,7 @@ describe("lib/sales-orders-list-filters 纯函数", () => {
 
     it("salesOrdersListFiltersActive 同时考虑关键词与工作视图", () => {
         expect(salesOrdersListFiltersActive(makeUrl("q=SO"))).toBe(true)
-        expect(salesOrdersListFiltersActive(makeUrl("summary=mine"))).toBe(
-            true,
-        )
+        expect(salesOrdersListFiltersActive(makeUrl("summary=mine"))).toBe(true)
         expect(salesOrdersListFiltersActive(makeUrl())).toBe(false)
     })
 

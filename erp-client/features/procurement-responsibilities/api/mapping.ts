@@ -30,8 +30,7 @@ function productKind(value?: string | null): ProductKind | undefined {
 }
 
 function isEnabledStatus(status: string): boolean {
-    const normalized = status.trim().toUpperCase()
-    return normalized === "ENABLED" || normalized === "ACTIVE"
+    return status.trim().toLowerCase() === "active"
 }
 
 export function mapProcurementResponsibilityRule(
@@ -72,7 +71,7 @@ export function mapSaveProcurementResponsibilityRule(
         product_kind:
             input.ruleType === "PRODUCT_KIND" ? input.productKind : undefined,
         owner_user_id: input.ownerUserId,
-        status: input.enabled ? "ENABLED" : "DISABLED",
-        expected_version: input.expectedVersion,
+        status: input.enabled ? "active" : "disabled",
+        version: input.expectedVersion,
     }
 }

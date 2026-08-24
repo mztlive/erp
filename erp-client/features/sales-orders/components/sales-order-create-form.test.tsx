@@ -168,6 +168,7 @@ const filledLine = {
     name: "货物",
     sku: "sku-1",
     skuRevisionId: "sr-1",
+    serviceRegion: "华东",
     quantity: "1",
     unit: "件",
     unitPriceGross: "0.00",
@@ -255,6 +256,9 @@ describe("SalesOrderCreateForm submit recovery", () => {
         renderCreateForm(makeDraft(filledLine))
 
         expect(screen.getByLabelText("履约方式")).toBeTruthy()
+        expect(
+            (screen.getByLabelText("服务区域") as HTMLInputElement).value,
+        ).toBe("华东")
         expect(
             screen
                 .getByTestId("sales-line-procurement-owner-l1")

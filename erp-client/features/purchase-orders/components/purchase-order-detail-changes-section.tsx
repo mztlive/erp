@@ -30,9 +30,7 @@ export function PurchaseOrderDetailChangesSection({
 }: {
     order: PurchaseOrderCenterView
     canChange: boolean
-    changeBlocker:
-        | PurchaseOrderCenterView["actionBlockers"][number]
-        | undefined
+    changeBlocker: PurchaseOrderCenterView["actionBlockers"][number] | undefined
     onRequestChange: () => void
     workItemId?: string
     expectedTaskVersion?: string

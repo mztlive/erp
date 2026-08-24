@@ -12,14 +12,15 @@ use entities::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
     WorkingPurpose,
 };
+use entities::Permission;
 use validator::Validate;
 
 use super::adapter::{document_approval_view, document_type_for_sales_create};
 use super::dto;
 use super::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, OpenProcurementRejectionView,
-    PageView, RevisionView, SalesOrderDetailView, SalesOrderLineView, SalesOrderListParams, SalesOrderView,
-    SalesProcurementCoverageView, SubmissionView, WorkingCopyView,
+    PageView, PurchaseCreationAccessView, RevisionView, SalesOrderDetailView, SalesOrderLineView,
+    SalesOrderListParams, SalesOrderView, SalesProcurementCoverageView, SubmissionView, WorkingCopyView,
 };
 use super::mapper::{submission_view, working_copy_line_view};
 use super::pricing::zero_amount;
@@ -32,6 +33,7 @@ use crate::document_registry::find_approval_binding;
 use crate::{
     audit::AuditActor,
     errors::{Error, Result},
+    iam::subject,
 };
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
@@ -314,6 +316,9 @@ impl SalesOrderService {
             .count_active_by_sales_order(&order_id, &mut NoTransaction)
             .await?;
         let purchase_coverage = self.sales_procurement_coverage(&order).await?;
+        let purchase_creation_access = self
+            .purchase_creation_access(&order, &purchase_coverage, actor)
+            .await?;
 
         let open_procurement_rejection = self
             .resolve_open_procurement_rejection(&order_id, order.commercial_status, actor)
@@ -440,6 +445,7 @@ impl SalesOrderService {
             owner_user_name,
             purchase_order_count,
             purchase_coverage,
+            purchase_creation_access,
             settled_total,
             invoiced_total,
             lines: stable_lines
@@ -483,6 +489,116 @@ impl SalesOrderService {
             active_low_margin_manager_confirmation,
             approval,
         })
+    }
+
+    /// 计算当前账号从销售单继续创建采购单的访问投影。
+    ///
+    /// # 参数
+    /// * `order` - 当前销售稳定单
+    /// * `coverage` - 按销售与采购当前版本计算的采购覆盖
+    /// * `actor` - 当前已认证账号；内部无账号上下文时为空
+    ///
+    /// # 返回
+    /// 返回账号状态、静态采购建单权限与开放采购责任任务共同决定的访问投影。
+    ///
+    /// # 错误
+    /// 账号、任务或 RBAC 查询失败，以及权限值对象不合法时返回错误。
+    ///
+    /// # 关键业务约束
+    /// `allowed` 只在账号仍可登录、身份未变化、拥有 `purchase_order:create`
+    /// 且持有该销售单开放采购建单任务时为真，与 basis/create 接口的认证和
+    /// 授权边界一致。
+    async fn purchase_creation_access(
+        &self,
+        order: &entities::sales_order::SalesOrder,
+        coverage: &SalesProcurementCoverageView,
+        actor: Option<&AuditActor>,
+    ) -> Result<PurchaseCreationAccessView> {
+        if order.business_type != BusinessType::GoodsService {
+            return Ok(blocked_purchase_creation_access(
+                "非实物及服务销售单无需创建采购单",
+            ));
+        }
+        if order.commercial_status != CommercialStatus::Effective {
+            return Ok(blocked_purchase_creation_access("销售单最终生效后才能创建采购单"));
+        }
+        if coverage.remaining_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+            return Ok(blocked_purchase_creation_access("当前销售单待采购数量已全部覆盖"));
+        }
+        let Some(actor) = actor else {
+            return Ok(blocked_purchase_creation_access("当前调用缺少采购责任上下文"));
+        };
+        if let Some(message) = self.purchase_creation_actor_blocker(actor).await? {
+            return Ok(blocked_purchase_creation_access(message));
+        }
+        let task_count = self
+            .purchase_creation_task_count(&order.base.id, actor.id())
+            .await?;
+        if task_count == 0 {
+            return Ok(blocked_purchase_creation_access(
+                "当前账号不是该销售单待采购任务负责人",
+            ));
+        }
+        Ok(PurchaseCreationAccessView {
+            allowed: true,
+            task_count,
+            blocker: None,
+        })
+    }
+
+    /// 重验当前账号的登录状态、身份与采购建单权限。
+    ///
+    /// # 参数
+    /// * `actor` - JWT 已认证但需要按当前账号和 RBAC 事实重验的操作人
+    ///
+    /// # 返回
+    /// 账号与权限均有效时返回 `None`；否则返回可直接下发的明确 blocker。
+    ///
+    /// # 错误
+    /// 账号或 RBAC 查询失败，以及权限值对象不合法时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 必须使用当前账号记录和规范 Casbin 主体，不能仅信任请求中的历史认证
+    /// 快照。
+    async fn purchase_creation_actor_blocker(&self, actor: &AuditActor) -> Result<Option<&'static str>> {
+        let account = self
+            .db
+            .accounts()
+            .find_by_id(actor.id(), &mut NoTransaction)
+            .await?;
+        let Some(account) = account.filter(|account| account.kind == actor.kind() && account.can_login())
+        else {
+            return Ok(Some("当前账号不存在、已停用或身份已变化，不能创建采购单"));
+        };
+        let permission = Permission::parse("purchase_order:create")?;
+        let allowed = self
+            .require_rbac()?
+            .enforce(&subject(account.kind, &account.base.id), &permission)
+            .await?;
+        Ok((!allowed).then_some("当前账号缺少 purchase_order:create 权限"))
+    }
+
+    /// 统计当前账号在指定销售单下拥有的开放采购建单任务。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单稳定主键
+    /// * `actor_id` - 已通过当前账号与采购建单权限重验的账号主键
+    ///
+    /// # 返回
+    /// 返回该账号拥有的开放采购建单任务数量。
+    ///
+    /// # 错误
+    /// 工作项查询失败时返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 只统计任务仓储认定为开放且由当前账号负责的采购建单任务。
+    async fn purchase_creation_task_count(&self, sales_order_id: &str, actor_id: &str) -> Result<usize> {
+        Ok(self
+            .db
+            .work_items()
+            .list_open_procurement_owned_by(actor_id, Some(sales_order_id), None, &mut NoTransaction)
+            .await?
+            .len())
     }
 
     /// 计算销售单当前版本采购目标、覆盖、剩余与进度。
@@ -780,11 +896,32 @@ impl SalesOrderService {
     }
 }
 
+/// 构造禁止创建采购单的稳定访问投影。
+///
+/// # 参数
+/// * `message` - 可直接展示给调用方的明确业务阻塞说明
+///
+/// # 返回
+/// 返回 `allowed = false`、任务数为零且携带 blocker 的访问投影。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 禁止分支不得泄露任何开放任务数量，避免把未授权任务事实下发给调用方。
+fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView {
+    PurchaseCreationAccessView {
+        allowed: false,
+        task_count: 0,
+        blocker: Some(message.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use entities::sales_order::ReviewStatus;
 
-    use super::stage_has_active_review_task;
+    use super::{blocked_purchase_creation_access, stage_has_active_review_task};
 
     #[test]
     fn unified_and_legacy_pending_reviews_require_open_tasks() {
@@ -808,5 +945,80 @@ mod tests {
         ] {
             assert!(!stage_has_active_review_task(status));
         }
+    }
+
+    /// 采购创建访问投影必须在查询责任任务前重验当前账号和采购建单权限。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；账号状态、规范主体、权限或检查顺序缺失时测试失败。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 详情页 `allowed` 必须与 basis/create 接口的当前认证和 RBAC 边界一致。
+    #[test]
+    fn purchase_creation_access_revalidates_account_and_permission_before_tasks() {
+        let source = include_str!("query.rs");
+        let access = source
+            .split_once("async fn purchase_creation_access")
+            .expect("必须存在采购创建访问投影")
+            .1;
+        let actor_gate = access
+            .find("purchase_creation_actor_blocker(actor)")
+            .expect("必须先重验账号与权限");
+        let task_query = access
+            .find("purchase_creation_task_count")
+            .expect("必须查询开放采购任务");
+        assert!(actor_gate < task_query);
+
+        let actor_check = source
+            .split_once("async fn purchase_creation_actor_blocker")
+            .expect("必须存在账号与权限重验 helper")
+            .1;
+        let account = actor_check.find(".accounts()").expect("必须加载当前账号");
+        let can_login = actor_check
+            .find("account.can_login()")
+            .expect("必须检查当前账号可登录");
+        let permission = actor_check
+            .find("Permission::parse(\"purchase_order:create\")")
+            .expect("必须解析采购建单权限");
+        let enforce = actor_check
+            .find(".enforce(&subject(account.kind, &account.base.id), &permission)")
+            .expect("必须用规范账号主体重验权限");
+        assert!(account < can_login);
+        assert!(can_login < permission);
+        assert!(permission < enforce);
+        let inactive_blocker = "当前账号不存在、已停用或身份已变化，不能创建采购单";
+        assert!(actor_check.contains(inactive_blocker));
+        assert!(actor_check.contains("当前账号缺少 purchase_order:create 权限"));
+    }
+
+    /// 禁止访问投影必须返回明确 blocker 且隐藏任务数量。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；禁止投影仍允许创建、泄露任务数或缺少说明时测试失败。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 未授权账号不能从销售详情推断其名下或他人的采购任务数量。
+    #[test]
+    fn blocked_purchase_creation_access_is_explicit_and_hides_tasks() {
+        let view = blocked_purchase_creation_access("当前账号缺少 purchase_order:create 权限");
+
+        assert!(!view.allowed);
+        assert_eq!(view.task_count, 0);
+        assert_eq!(
+            view.blocker.as_deref(),
+            Some("当前账号缺少 purchase_order:create 权限")
+        );
     }
 }

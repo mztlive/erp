@@ -662,10 +662,28 @@ mod tests {
                 None,
             ),
             purchase_order(
+                "po-approval",
+                PurchaseOrderStatus::InApproval,
+                Some("sub-approval"),
+                None,
+            ),
+            purchase_order(
                 "po-effective",
                 PurchaseOrderStatus::Effective,
                 Some("sub-history"),
                 Some("rev-current"),
+            ),
+            purchase_order(
+                "po-partial",
+                PurchaseOrderStatus::PartiallyExecuted,
+                None,
+                Some("rev-partial"),
+            ),
+            purchase_order(
+                "po-completed",
+                PurchaseOrderStatus::Completed,
+                None,
+                Some("rev-completed"),
             ),
             purchase_order(
                 "po-voided",
@@ -686,8 +704,8 @@ mod tests {
             .map(|id| id.to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(submission_ids, vec!["sub-current", "sub-finance"]);
-        assert_eq!(revision_ids, vec!["rev-current"]);
+        assert_eq!(submission_ids, vec!["sub-current", "sub-finance", "sub-approval"]);
+        assert_eq!(revision_ids, vec!["rev-current", "rev-partial", "rev-completed"]);
     }
 
     /// 测试构造确保当前版本目标模型以稳定行和版本行双重定位。
@@ -717,6 +735,7 @@ mod tests {
                 sku_id: entities::ids::SkuId::new("sku-1"),
                 sku_revision_id: entities::ids::SkuRevisionId::new("skur-1"),
                 welfare_scenario: None,
+                service_region: None,
                 fulfillment_mode: entities::sales_order::FulfillmentMode::CompanyWarehouse,
                 fulfillment_due_at: entities::common::time::Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("2").unwrap(),

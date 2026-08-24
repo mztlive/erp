@@ -12,7 +12,8 @@ export const PURCHASE_CHANGE_ORDER_DOCUMENT_TYPE =
     "PurchaseChangeOrder" as const
 
 /** 工作项上的采购变更对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
-export const PURCHASE_CHANGE_ORDER_OBJECT_TYPE = "purchase_change_order" as const
+export const PURCHASE_CHANGE_ORDER_OBJECT_TYPE =
+    "purchase_change_order" as const
 
 export type PurchaseChangeOrderApprovalPhase = "draft" | "confirm" | "runtime"
 

@@ -68,6 +68,7 @@ export async function adjustProcurementRejectionDraft(input: {
             base.goods = {
                 sku_id: skuId,
                 sku_revision_id: skuRevisionId,
+                service_region: line.service_region ?? null,
                 welfare_scenario: null,
                 fulfillment_mode: "COMPANY_WAREHOUSE",
                 fulfillment_due_at: Math.floor(Date.now() / 1000),

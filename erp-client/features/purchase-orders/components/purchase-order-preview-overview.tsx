@@ -115,8 +115,7 @@ export function PurchaseOrderPreviewOverview({
                                         ? "warning"
                                         : identity.reviewStatus === "APPROVED"
                                           ? "success"
-                                          : identity.reviewStatus ===
-                                              "REJECTED"
+                                          : identity.reviewStatus === "REJECTED"
                                             ? "destructive"
                                             : "neutral",
                             },

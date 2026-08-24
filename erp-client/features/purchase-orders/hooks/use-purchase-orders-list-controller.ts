@@ -148,10 +148,16 @@ export function usePurchaseOrdersListController() {
     }, [exportQuery])
 
     const openBases = React.useMemo(() => {
+        if (basesQuery.isError || basesQuery.isRefetchError) return []
         const open = basesQuery.data?.filter((b) => !b.consumed) ?? []
         if (!salesOrderFromUrl) return open
         return open.filter((b) => b.salesOrderId === salesOrderFromUrl)
-    }, [basesQuery.data, salesOrderFromUrl])
+    }, [
+        basesQuery.data,
+        basesQuery.isError,
+        basesQuery.isRefetchError,
+        salesOrderFromUrl,
+    ])
 
     React.useEffect(() => {
         if (!basisFromUrl && !createFromSales) return
@@ -177,7 +183,11 @@ export function usePurchaseOrdersListController() {
     ) => {
         const basis = openBases.find((b) => b.basisId === selectedBasisId)
         if (!basis) return
-        const fingerprint = JSON.stringify({ basisId: basis.basisId, lines })
+        const fingerprint = JSON.stringify({
+            basisId: basis.basisId,
+            workItemId: basis.workItemId,
+            lines,
+        })
         if (createIntentRef.current?.fingerprint !== fingerprint) {
             createIntentRef.current = {
                 fingerprint,
@@ -186,6 +196,7 @@ export function usePurchaseOrdersListController() {
         }
         const result = await createMutation.mutateAsync({
             basisId: basis.basisId,
+            workItemId: basis.workItemId,
             purchaseType: basis.purchaseType,
             paymentTermCode: basis.paymentTermCode,
             lines,
@@ -212,15 +223,36 @@ export function usePurchaseOrdersListController() {
                 reference: result.reference,
             })
         } else if (result.status === "failed") {
+            createIntentRef.current = null
+            if (result.code === "CONFLICT") {
+                const refreshed = await basesQuery.refetch()
+                const remainingBases = (refreshed.data ?? []).filter(
+                    (candidate) =>
+                        !candidate.consumed &&
+                        (!salesOrderFromUrl ||
+                            candidate.salesOrderId === salesOrderFromUrl),
+                )
+                setSelectedBasisId(remainingBases[0]?.basisId ?? "")
+            }
             setActionResult({
                 status: "failed",
                 title: "建单失败",
-                description: result.message,
+                description:
+                    result.code === "CONFLICT"
+                        ? `${result.message} 创建依据已刷新，请核对后重试。`
+                        : result.message,
+            })
+        } else {
+            setActionResult({
+                status: "unknown",
+                title: "建单结果待确认",
+                description: `${result.message} 请保留当前弹窗并使用同一操作重试，系统会复用本次幂等键。`,
             })
         }
     }
 
     const openCreateDialog = React.useCallback(() => {
+        setActionResult(null)
         setSelectedBasisId(openBases[0]?.basisId ?? "")
         setCreateOpen(true)
     }, [openBases])

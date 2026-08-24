@@ -23,6 +23,7 @@ const apiMocks = vi.hoisted(() => ({
     startPurchaseChange: vi.fn(),
     submitPurchaseChange: vi.fn(),
     submitPurchaseOrderForReview: vi.fn(),
+    voidPurchaseOrderDraft: vi.fn(),
 }))
 
 vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
@@ -37,6 +38,7 @@ vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
     startPurchaseChange: apiMocks.startPurchaseChange,
     submitPurchaseChange: apiMocks.submitPurchaseChange,
     submitPurchaseOrderForReview: apiMocks.submitPurchaseOrderForReview,
+    voidPurchaseOrderDraft: apiMocks.voidPurchaseOrderDraft,
 }))
 
 const navMocks = vi.hoisted(() => ({
@@ -442,6 +444,58 @@ describe("usePurchaseOrderDetailEditActions", () => {
             expect.objectContaining({
                 status: "unknown",
                 title: "提交结果待确认",
+            }),
+        )
+    })
+
+    it("voids a purchase draft, refreshes related state and returns to view mode", async () => {
+        apiMocks.voidPurchaseOrderDraft.mockResolvedValue({
+            status: "succeeded",
+            data: {
+                purchaseOrderId: "po-1",
+                status: "VOIDED",
+                lockVersion: 4,
+            },
+            reference: "VOID-V4",
+        })
+        const order = makePurchaseOrderCenter({
+            allowedActions: ["EDIT", "SUBMIT", "VOID"],
+        })
+        const setResult = vi.fn()
+        const refetch = vi.fn(async () => ({ data: order }))
+        const { result } = renderHookWithProviders(
+            () =>
+                usePurchaseOrderDetailEditActions(
+                    makeProps({ order, setResult, refetch }),
+                ),
+            { queryClient: createFreshQueryClient() },
+        )
+
+        act(() => {
+            result.current.setVoidConfirmOpen(true)
+        })
+        await act(async () => {
+            await result.current.handleVoid()
+        })
+
+        expect(apiMocks.voidPurchaseOrderDraft.mock.calls[0]?.[0]).toEqual(
+            expect.objectContaining({
+                purchaseOrderId: "po-1",
+                expectedLockVersion: 3,
+                reason: "采购草稿不再需要",
+                idempotencyKey: expect.any(String),
+            }),
+        )
+        expect(result.current.voidConfirmOpen).toBe(false)
+        expect(navMocks.replace).toHaveBeenCalledWith(
+            "/procurement/orders/po-1",
+        )
+        expect(refetch).toHaveBeenCalledTimes(1)
+        expect(setResult).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: "succeeded",
+                title: "采购草稿已作废",
+                reference: "VOID-V4",
             }),
         )
     })

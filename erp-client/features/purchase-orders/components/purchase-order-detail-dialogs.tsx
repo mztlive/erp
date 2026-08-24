@@ -24,6 +24,8 @@ export function PurchaseOrderDetailDialogs({
     onSubmitConfirmOpenChange,
     approveConfirmOpen,
     onApproveConfirmOpenChange,
+    voidConfirmOpen,
+    onVoidConfirmOpenChange,
     changeConfirmOpen,
     onChangeConfirmOpenChange,
     leaveGuardOpen,
@@ -31,9 +33,11 @@ export function PurchaseOrderDetailDialogs({
     submitPending,
     savePending,
     reviewPending,
+    voidPending,
     changePending,
     onConfirmSubmit,
     onConfirmApprove,
+    onConfirmVoid,
     onConfirmChange,
     onSaveAndLeave,
     onDiscardAndLeave,
@@ -43,6 +47,8 @@ export function PurchaseOrderDetailDialogs({
     onSubmitConfirmOpenChange: (open: boolean) => void
     approveConfirmOpen: boolean
     onApproveConfirmOpenChange: (open: boolean) => void
+    voidConfirmOpen: boolean
+    onVoidConfirmOpenChange: (open: boolean) => void
     changeConfirmOpen: boolean
     onChangeConfirmOpenChange: (open: boolean) => void
     leaveGuardOpen: boolean
@@ -50,9 +56,11 @@ export function PurchaseOrderDetailDialogs({
     submitPending: boolean
     savePending: boolean
     reviewPending: boolean
+    voidPending: boolean
     changePending: boolean
     onConfirmSubmit: () => void
     onConfirmApprove: () => void
+    onConfirmVoid: () => void
     onConfirmChange: () => void
     onSaveAndLeave: () => void
     onDiscardAndLeave: () => void
@@ -87,6 +95,27 @@ export function PurchaseOrderDetailDialogs({
                 nextDepartment="履约 / 付款"
                 pending={reviewPending}
                 onConfirm={onConfirmApprove}
+            />
+
+            <FormalActionConfirmDialog
+                open={voidConfirmOpen}
+                onOpenChange={onVoidConfirmOpenChange}
+                title="作废采购草稿"
+                actionLabel="作废"
+                confirmLabel="确认作废"
+                fromStatus={{ label: "草稿", tone: "neutral" }}
+                toStatus={{ label: "已作废", tone: "destructive" }}
+                lockedFields={[
+                    `采购草稿 ${order.identity.draftLabel ?? order.identity.purchaseOrderId}`,
+                    `来源销售单 ${order.header.salesOrderNo}`,
+                ]}
+                effects={[
+                    "释放本草稿占用的销售待采购数量",
+                    "同步更新采购任务和继续建单依据",
+                ]}
+                irreversibleEffects={["作废后的采购草稿不能恢复或再次提交"]}
+                pending={voidPending}
+                onConfirm={onConfirmVoid}
             />
 
             <FormalActionConfirmDialog

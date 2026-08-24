@@ -58,6 +58,7 @@ type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 const MANAGE_PERMISSION: &str = "work_item:manage";
 const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
+const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
 
@@ -1847,7 +1848,7 @@ impl WorkItemService {
     /// 授权变化、版本冲突或仓储失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 事务内必须重验管理人、目标责任人与 Casbin 策略修订。
+    /// 事务内必须重验管理人和目标责任人，并以授权快照版本执行 policy CAS 后才可提交。
     async fn reassign_with_assignment_policy_audit(
         &self,
         input: AssignmentPolicyAuditInput<'_>,
@@ -1877,26 +1878,26 @@ impl WorkItemService {
         let item_id = item.base.id;
         let actor_id = actor.id().to_string();
         let actor_kind = actor.kind();
-        let rbac = self.rbac.clone();
+        let policy_revision = authorization.policy_revision;
+        let policy_rbac = self.rbac.clone();
+        let validation_rbac = policy_rbac.clone();
         let db = self.db.clone();
-        let client = db.client().clone();
-        let result = client
-            .with_transaction(move |session| {
+        let result = policy_rbac
+            .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
-                    ensure_policy_revision(&db, authorization.policy_revision, session).await?;
                     let mut current = db
                         .work_items()
                         .find_by_id(&item_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
                     if current.base.version != expected_task_version {
-                        return Err(WorkItemWriteError::VersionConflict);
+                        return Err(Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string()));
                     }
                     let allow_current_owner =
                         current.owner_user_id.as_deref() == Some(target_user_id.as_str());
                     ensure_assignment_policy_in_transaction(
                         &db,
-                        &rbac,
+                        &validation_rbac,
                         AssignmentPolicyCheck {
                             actor_kind,
                             actor_id: &actor_id,
@@ -1913,10 +1914,15 @@ impl WorkItemService {
                     db.work_items()
                         .update(&mut current, session)
                         .await
-                        .map_err(work_item_update_error)?;
+                        .map_err(|error| match error {
+                            database::Error::OptimisticLockingError => {
+                                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+                            }
+                            error => Error::from(error),
+                        })?;
                     ensure_assignment_policy_in_transaction(
                         &db,
-                        &rbac,
+                        &validation_rbac,
                         AssignmentPolicyCheck {
                             actor_kind,
                             actor_id: &actor_id,
@@ -1929,16 +1935,17 @@ impl WorkItemService {
                         session,
                     )
                     .await?;
-                    ensure_policy_revision(&db, authorization.policy_revision, session).await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<WorkItem, WorkItemWriteError>(current)
+                    Ok(current)
                 })
             })
             .await;
         match result {
             Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-            Err(WorkItemWriteError::VersionConflict) => Ok(WorkItemWriteOutcome::VersionConflict),
-            Err(WorkItemWriteError::Service(error)) => match self
+            Err(Error::ConflictError(message)) if message == REASSIGN_VERSION_CONFLICT => {
+                Ok(WorkItemWriteOutcome::VersionConflict)
+            }
+            Err(error) => match self
                 .idempotent_replay(&replay_audit_id, &replay_fingerprint, &replay_item_id)
                 .await?
             {
@@ -3015,11 +3022,18 @@ fn apply_subject_display(
     fields.counterparty_label = subject
         .and_then(|item| item.counterparty_label.clone())
         .or_else(|| fact.counterparty_label.clone());
-    if let Some(impact) = subject
-        .and_then(|item| item.impact_summary.clone())
-        .or_else(|| fact.impact_summary.clone())
-    {
-        fields.impact_summary = Some(impact);
+    let preserve_task_impact = fields.work_item_type == WorkItemType::ProcurementOrderCreation
+        && fields
+            .impact_summary
+            .as_deref()
+            .is_some_and(|impact| !impact.trim().is_empty());
+    if !preserve_task_impact {
+        if let Some(impact) = subject
+            .and_then(|item| item.impact_summary.clone())
+            .or_else(|| fact.impact_summary.clone())
+        {
+            fields.impact_summary = Some(impact);
+        }
     }
     fields.brief_source = subject
         .and_then(|item| item.brief_source.clone())
@@ -3596,6 +3610,20 @@ mod tests {
     };
     use std::collections::{HashMap, HashSet};
 
+    /// 验证工作项管理员转交的授权提交栅栏。
+    ///
+    /// 转交必须以分派授权快照版本执行 policy CAS，不能退回仅在事务内读取比较。
+    #[test]
+    fn reassign_binds_assignment_authorization_to_commit() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+
+        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
+        assert!(!production.contains("ensure_policy_revision(&db, authorization.policy_revision"));
+    }
+
     fn w13_access() -> ActorAccess {
         ActorAccess {
             actor_id: "finance-user".to_string(),
@@ -3707,7 +3735,7 @@ mod tests {
     }
 
     fn procurement_item(owner_user_id: &str) -> WorkItem {
-        WorkItem::new_with_responsibility_key(
+        WorkItem::new_with_responsibility_scope(
             WorkItemId::new("wi-procurement"),
             WorkItemData {
                 work_item_type: WorkItemType::ProcurementOrderCreation,
@@ -3724,6 +3752,7 @@ mod tests {
                 impact_summary: Some("1 行待创建采购单".to_string()),
             },
             "sales-lines:digest".to_string(),
+            vec!["sales-line-1".to_string()],
         )
         .unwrap()
     }

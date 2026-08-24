@@ -17,6 +17,7 @@ vi.mock("@/features/purchase-orders/api/purchase-orders", () => ({
 
 const basis: PurchaseCreationBasis = {
     basisId: "basis-1",
+    workItemId: "work-item-1",
     salesOrderId: "so-1",
     salesOrderNo: "XS202608240001",
     customerName: "客户甲",
@@ -29,7 +30,6 @@ const basis: PurchaseCreationBasis = {
     paymentTermLabel: "货到 30 天",
     lines: [
         {
-            procurementConfirmationLineId: "confirmation-line-1",
             salesOrderLineId: "sales-line-1",
             salesOrderRevisionLineId: "sales-revision-line-1",
             itemName: "测试商品",
@@ -48,7 +48,15 @@ const basis: PurchaseCreationBasis = {
     consumed: false,
 }
 
-function renderDialog(onCreate = vi.fn()) {
+function renderDialog(
+    onCreate = vi.fn(),
+    selectedBasis: PurchaseCreationBasis = basis,
+    createResult: {
+        status: "succeeded" | "failed" | "unknown"
+        title: string
+        description: string
+    } | null = null,
+) {
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false } },
     })
@@ -57,15 +65,16 @@ function renderDialog(onCreate = vi.fn()) {
             <PurchaseOrdersCreateDialog
                 open
                 onOpenChange={vi.fn()}
-                openBases={[basis]}
+                openBases={[selectedBasis]}
                 basesPending={false}
                 basesFailed={false}
                 onRetryBases={vi.fn()}
                 basisFromUrl={null}
                 salesOrderFromUrl="so-1"
-                selectedBasisId="basis-1"
+                selectedBasisId={selectedBasis.basisId}
                 onSelectedBasisIdChange={vi.fn()}
                 createPending={false}
+                createResult={createResult}
                 onCreate={onCreate}
             />
         </QueryClientProvider>,
@@ -117,5 +126,141 @@ describe("PurchaseOrdersCreateDialog", () => {
             ).disabled,
         ).toBe(true)
         expect(onCreate).not.toHaveBeenCalled()
+    })
+
+    it("submits only selected lines from a multi-line basis", async () => {
+        const multiLineBasis: PurchaseCreationBasis = {
+            ...basis,
+            lines: [
+                ...basis.lines,
+                {
+                    ...basis.lines[0],
+                    salesOrderLineId: "sales-line-2",
+                    salesOrderRevisionLineId: "sales-revision-line-2",
+                    itemName: "测试商品二",
+                    maxCreateQuantity: "2.5",
+                    remainingQuantity: "2.5",
+                },
+            ],
+        }
+        const onCreate = renderDialog(vi.fn(), multiLineBasis)
+        fireEvent.click(
+            await screen.findByTestId(
+                "purchase-basis-line-selected-sales-line-1",
+            ),
+        )
+        const secondQuantity = screen.getByTestId(
+            "purchase-basis-line-quantity-sales-line-2",
+        ) as HTMLInputElement
+        expect(secondQuantity.step).toBe("any")
+        fireEvent.change(secondQuantity, { target: { value: "0.5" } })
+        fireEvent.click(screen.getByTestId("purchase-create-from-basis"))
+
+        await waitFor(() =>
+            expect(onCreate).toHaveBeenCalledWith([
+                {
+                    salesOrderLineId: "sales-line-2",
+                    quantity: "0.5",
+                },
+            ]),
+        )
+    })
+
+    it("shows succeeded, failed and unknown command outcomes inside the open dialog", () => {
+        const client = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
+        const dialog = (createResult: {
+            status: "succeeded" | "failed" | "unknown"
+            title: string
+            description: string
+        }) => (
+            <QueryClientProvider client={client}>
+                <PurchaseOrdersCreateDialog
+                    open
+                    onOpenChange={vi.fn()}
+                    openBases={[basis]}
+                    basesPending={false}
+                    basesFailed={false}
+                    onRetryBases={vi.fn()}
+                    basisFromUrl={null}
+                    salesOrderFromUrl="so-1"
+                    selectedBasisId="basis-1"
+                    onSelectedBasisIdChange={vi.fn()}
+                    createPending={false}
+                    createResult={createResult}
+                    onCreate={vi.fn()}
+                />
+            </QueryClientProvider>
+        )
+        render(
+            dialog({
+                status: "succeeded",
+                title: "已创建采购草稿",
+                description: "该销售单仍有待采购数量，可继续建单。",
+            }),
+        )
+        expect(
+            screen.getByTestId("purchase-create-result").textContent,
+        ).toContain("仍有待采购数量，可继续建单")
+
+        cleanup()
+        render(
+            dialog({
+                status: "failed",
+                title: "建单失败",
+                description: "创建依据已刷新",
+            }),
+        )
+        expect(
+            screen.getByTestId("purchase-create-result").textContent,
+        ).toContain("创建依据已刷新")
+
+        cleanup()
+        render(
+            dialog({
+                status: "unknown",
+                title: "建单结果待确认",
+                description: "请使用同一操作重试",
+            }),
+        )
+        expect(
+            screen.getByTestId("purchase-create-result").textContent,
+        ).toContain("请使用同一操作重试")
+    })
+
+    it("does not render or submit stale bases after the basis query fails", () => {
+        const client = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        })
+        render(
+            <QueryClientProvider client={client}>
+                <PurchaseOrdersCreateDialog
+                    open
+                    onOpenChange={vi.fn()}
+                    openBases={[]}
+                    basesPending={false}
+                    basesFailed
+                    onRetryBases={vi.fn()}
+                    basisFromUrl={null}
+                    salesOrderFromUrl="so-1"
+                    selectedBasisId="basis-1"
+                    onSelectedBasisIdChange={vi.fn()}
+                    createPending={false}
+                    createResult={null}
+                    onCreate={vi.fn()}
+                />
+            </QueryClientProvider>,
+        )
+
+        expect(screen.getByText("创建依据加载失败，请重试。")).toBeTruthy()
+        expect(screen.queryByTestId("purchase-basis-basis-1")).toBeNull()
+        expect(
+            (
+                screen.getByTestId(
+                    "purchase-create-from-basis",
+                ) as HTMLButtonElement
+            ).disabled,
+        ).toBe(true)
     })
 })

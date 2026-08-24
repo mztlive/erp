@@ -10,7 +10,7 @@ use std::str::FromStr;
 use chrono::{Datelike, FixedOffset};
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PartyExt, PurchaseOrderExt,
-    SalesOrderExt, SupplierExt, SupplierOfferingExt, Transactional,
+    SalesOrderExt, SupplierExt, SupplierOfferingExt, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::DocumentType;
@@ -38,9 +38,14 @@ use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
+use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverageLine};
 use super::dto::{
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView, CreationBasisView,
+    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView,
+    CreationBasisListParams, CreationBasisView,
+};
+use super::procurement_task_sync::{
+    load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
 use super::shared::zero_amount;
 use super::PurchaseOrderService;
@@ -51,9 +56,10 @@ use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::audit::AuditActor;
 use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
-use crate::iam::{shared_rbac_service, SharedRbacService};
+use crate::iam::SharedRbacService;
 
 const CREATE_ACTION: &str = "purchase_order.create_from_basis";
+const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 
@@ -165,25 +171,54 @@ struct PreparedDraftWrite<'a> {
 }
 
 impl PurchaseOrderService {
-    /// 查询销售当前版本仍有剩余量的精确采购创建依据。
+    /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。
     ///
     /// # 参数
-    /// 无。
+    /// * `params` - 可选销售单与采购建单任务筛选
+    /// * `actor` - 当前已认证账号
     ///
     /// # 返回
-    /// 返回按销售单、精确拆分维度形成的创建依据。
+    /// 返回按具体开放任务、销售单和精确拆分维度形成的创建依据。
     ///
     /// # 错误
-    /// 当前销售版本、采购覆盖或供应商供给数据不一致，以及仓储查询失败时返回错误。
+    /// 当前销售版本、采购覆盖、任务范围或供应商供给数据不一致，以及仓储查询失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 只为 `remaining > 0` 且供应商当前可供量大于零的行生成依据。
-    pub async fn creation_basis_list(&self) -> Result<Vec<CreationBasisView>> {
+    /// 只展示当前账号拥有的开放任务冻结行；客户端不能看到或创建其他采购负责人的范围。
+    pub async fn creation_basis_list(
+        &self,
+        params: &CreationBasisListParams,
+        actor: &AuditActor,
+    ) -> Result<Vec<CreationBasisView>> {
+        let sales_order_id = normalized_optional_filter(params.sales_order_id.as_deref());
+        let work_item_id = normalized_optional_filter(params.work_item_id.as_deref());
+        let tasks = self
+            .db
+            .work_items()
+            .list_open_procurement_owned_by(
+                actor.id(),
+                sales_order_id.as_deref(),
+                work_item_id.as_deref(),
+                &mut NoTransaction,
+            )
+            .await?;
+        if tasks.is_empty() {
+            return Ok(Vec::new());
+        }
+        let order_ids = tasks
+            .iter()
+            .map(|task| task.business_object_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
         let orders = self
             .db
             .sales_orders()
             .find_many(
-                doc! { "commercial_status": CommercialStatus::Effective.as_str() },
+                doc! {
+                    "id": { "$in": order_ids },
+                    "commercial_status": CommercialStatus::Effective.as_str(),
+                },
                 &mut NoTransaction,
             )
             .await?;
@@ -195,12 +230,30 @@ impl PurchaseOrderService {
                     .collect::<Vec<_>>(),
             )
             .await?;
+        let orders = orders
+            .into_iter()
+            .map(|order| (order.base.id.clone(), order))
+            .collect::<HashMap<_, _>>();
         let mut views = Vec::new();
-        for order in orders {
-            let groups = basis_groups_for_order(&self.db, &order, &mut NoTransaction).await?;
+        for task in tasks {
+            if task.responsibility_key().is_none() || task.responsibility_scope_ids().is_empty() {
+                return Err(Error::ConflictError("采购建单任务缺少冻结责任范围".to_string()));
+            }
+            let Some(order) = orders.get(&task.business_object_id) else {
+                continue;
+            };
+            let groups = basis_groups_for_order(
+                &self.db,
+                order,
+                task.responsibility_scope_ids(),
+                &mut NoTransaction,
+            )
+            .await?;
             let owner_name = owner_names.get(&order.stable.created_by).cloned();
             for group in groups {
-                views.push(build_basis_view(&self.db, &order, &group, owner_name.clone()).await?);
+                views.push(
+                    build_basis_view(&self.db, order, &group, owner_name.clone(), &task.base.id).await?,
+                );
             }
         }
         Ok(views)
@@ -216,11 +269,11 @@ impl PurchaseOrderService {
     /// 返回新建采购单；同一幂等键与同一载荷重复提交时返回原结果。
     ///
     /// # 错误
-    /// 依据失效、数量非正或超过事务内最新剩余/可供量、幂等键载荷冲突、并发
-    /// 冲突、审批绑定或仓储写入失败时返回错误。
+    /// 操作账号不可登录或缺少采购创建权限、依据失效、数量非正或超过事务内最新
+    /// 剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定或仓储写入失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 事务内先以销售单 CAS guard 串行化，再重算剩余量；一次命令只写一张采购单。
+    /// 操作人授权版本通过 policy CAS 与提交绑定；事务内再以销售单 CAS guard 串行化并重算剩余量。
     pub async fn create_from_basis(
         &self,
         req: CreatePurchaseOrderFromBasisRequest,
@@ -230,6 +283,10 @@ impl PurchaseOrderService {
         let requested_lines = normalize_requested_lines(&req)?;
         let request_fingerprint = create_request_fingerprint(&req, &requested_lines);
         let audit_id = create_command_audit_id(actor.id(), &req.idempotency_key);
+        let PurchaseOrderAuthorization {
+            rbac,
+            policy_revision,
+        } = self.authorize_actor_permission(actor, CREATE_PERMISSION).await?;
         if let Some(result) = replay_creation(
             &self.db,
             &audit_id,
@@ -243,15 +300,15 @@ impl PurchaseOrderService {
         }
         let sales_order_id = parse_basis_sales_order_id(&req.basis_id)?;
         let db = self.db.clone();
-        let client = db.client().clone();
-        let rbac = shared_rbac_service(db.clone());
+        let binding_rbac = rbac.clone();
         let transaction_actor = actor.clone();
         let transaction_req = req.clone();
         let transaction_fingerprint = request_fingerprint.clone();
         let transaction_audit_id = audit_id.clone();
-        let transaction_result = client
-            .with_transaction(move |session| {
+        let transaction_result = rbac
+            .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
+                    ensure_purchase_order_actor_account(&db, &transaction_actor, session).await?;
                     let command = CreateBasisCommand {
                         sales_order_id: &sales_order_id,
                         req: &transaction_req,
@@ -260,7 +317,7 @@ impl PurchaseOrderService {
                         request_fingerprint: &transaction_fingerprint,
                         actor: &transaction_actor,
                     };
-                    create_from_basis_in_transaction(&db, &rbac, &command, session).await
+                    create_from_basis_in_transaction(&db, &binding_rbac, &command, session).await
                 })
             })
             .await;
@@ -312,17 +369,26 @@ async fn create_from_basis_in_transaction(
     {
         return Ok(result);
     }
+    let task = load_owned_open_procurement_task(
+        db,
+        &command.req.work_item_id,
+        command.sales_order_id,
+        command.actor.id(),
+        session,
+    )
+    .await?;
     let mut order = load_effective_sales_order(db, command.sales_order_id, session).await?;
-    let groups = basis_groups_for_order(db, &order, session).await?;
-    let selected = find_requested_group(&order, &groups, &command.req.basis_id)?.clone();
+    let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    let selected =
+        find_requested_group(&order, &groups, &command.req.basis_id, &command.req.work_item_id)?.clone();
     ensure_request_scope(command.req, &selected.scope)?;
     order.advance_procurement_guard(command.actor.id())?;
     db.sales_orders().update(&mut order, session).await?;
-    let latest_groups = basis_groups_for_order(db, &order, session).await?;
+    let latest_groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
     let latest = latest_groups
         .into_iter()
         .find(|group| group.scope == selected.scope)
-        .ok_or_else(|| Error::ConflictError("采购创建依据已失效，请刷新后重试".to_string()))?;
+        .ok_or_else(procurement_quantity_changed)?;
     let selected_lines = validate_requested_quantities(command.requested_lines, &latest)?;
     persist_basis_draft(db, rbac, &order, &latest, &selected_lines, command, session).await
 }
@@ -363,29 +429,37 @@ async fn load_effective_sales_order(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `order` - 已生效销售单
+/// * `responsibility_scope_ids` - 当前采购任务冻结的稳定销售行 ID
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
-/// 返回按精确拆分范围分组并稳定排序的依据。
+/// 返回任务责任范围内按精确拆分维度分组并稳定排序的依据。
 ///
 /// # 错误
 /// 当前指针、覆盖、供给或付款条件查询失败时返回错误。
 ///
 /// # 关键业务约束
-/// 同一依据内供应商、采购类型、付款条件和履约责任完全一致。
+/// 仅对任务冻结范围内的稳定销售行查询供应商供给；同一依据内供应商、采购类型、付款条件和履约责任完全一致。
 async fn basis_groups_for_order(
     db: &mongodb::Database,
     order: &SalesOrder,
+    responsibility_scope_ids: &[String],
     executor: &mut dyn Executor,
 ) -> Result<Vec<BasisGroup>> {
     if order.commercial_status != CommercialStatus::Effective {
         return Ok(Vec::new());
     }
+    let responsibility_scope_ids = responsibility_scope_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
     let mut payment_terms = HashMap::new();
     let mut groups: Vec<BasisGroup> = Vec::new();
     for line in coverage.lines {
-        if line.summary.remaining_quantity <= zero_quantity() {
+        if !responsibility_scope_ids.contains(line.revision_line.sales_order_line_id.as_ref())
+            || line.summary.remaining_quantity <= zero_quantity()
+        {
             continue;
         }
         let supplies = qualified_supplies_for_line(db, &line, executor).await?;
@@ -407,6 +481,23 @@ async fn basis_groups_for_order(
     }
     groups.sort_by_key(|group| basis_scope_key(&group.scope));
     Ok(groups)
+}
+
+/// 将可选查询文本规范化为空或去除首尾空白后的值。
+///
+/// # 参数
+/// * `value` - 可选原始查询文本
+///
+/// # 返回
+/// 空白值返回 `None`，否则返回规范化字符串。
+///
+/// # 错误
+/// 无。
+fn normalized_optional_filter(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 /// 将一条销售目标行的合格供给加入精确依据分组。
@@ -602,6 +693,7 @@ async fn qualified_supply(
 /// * `order` - 销售稳定单
 /// * `group` - 精确依据分组
 /// * `sales_owner_name` - 销售负责人展示名
+/// * `work_item_id` - 冻结本依据责任范围的开放采购建单任务
 ///
 /// # 返回
 /// 返回前端可直接选择逐行数量的依据视图。
@@ -616,6 +708,7 @@ async fn build_basis_view(
     order: &SalesOrder,
     group: &BasisGroup,
     sales_owner_name: Option<String>,
+    work_item_id: &str,
 ) -> Result<CreationBasisView> {
     let supplier_name = resolve_supplier_name(db, &group.scope.supplier_id, &mut NoTransaction)
         .await?
@@ -633,7 +726,8 @@ async fn build_basis_view(
         lines.push(basis_line_view(line, &group.scope.supplier_id, cost, gross)?);
     }
     Ok(CreationBasisView {
-        basis_id: basis_id_for(order, group),
+        work_item_id: work_item_id.to_string(),
+        basis_id: basis_id_for(order, group, work_item_id),
         sales_order_id: order.base.id.clone(),
         sales_order_no: order.order_no.clone(),
         customer_name: group.revision.customer_snapshot.customer_name.clone(),
@@ -1010,6 +1104,7 @@ async fn write_prepared_draft(
     for line in write.lines {
         db.purchase_order_submission_lines().create(line, session).await?;
     }
+    sync_procurement_tasks_for_sales_order(db, &write.order.sales_order_id, session).await?;
     db.audit_logs().create(write.audit, session).await?;
     Ok(())
 }
@@ -1020,12 +1115,13 @@ async fn write_prepared_draft(
 /// * `order` - 销售稳定单
 /// * `groups` - 当前可用依据集合
 /// * `basis_id` - 客户端依据 ID
+/// * `work_item_id` - 当前开放采购建单任务
 ///
 /// # 返回
 /// 返回与当前 guard、当前版本及精确范围完全匹配的依据。
 ///
 /// # 错误
-/// 依据不存在或已失效时返回 `NotFound`。
+/// 依据不存在或已失效时返回统一的剩余数量变化冲突。
 ///
 /// # 关键业务约束
 /// 不接受旧 guard 或旧销售版本生成的依据 ID。
@@ -1033,11 +1129,12 @@ fn find_requested_group<'a>(
     order: &SalesOrder,
     groups: &'a [BasisGroup],
     basis_id: &str,
+    work_item_id: &str,
 ) -> Result<&'a BasisGroup> {
     groups
         .iter()
-        .find(|group| basis_id_for(order, group) == basis_id)
-        .ok_or_else(|| Error::NotFound("采购创建依据不存在或已失效".to_string()))
+        .find(|group| basis_id_for(order, group, work_item_id) == basis_id)
+        .ok_or_else(procurement_quantity_changed)
 }
 
 /// 校验请求表头与依据精确范围一致。
@@ -1123,12 +1220,11 @@ fn validate_requested_quantities(
             .lines
             .iter()
             .find(|line| stable_line_id(line) == requested_line.sales_order_line_id)
-            .ok_or_else(|| Error::ConflictError("采购依据行已失效，请刷新后重试".to_string()))?;
-        if requested_line.quantity > basis.coverage.summary.remaining_quantity {
-            return Err(Error::ConflictError("本次数量超过最新采购剩余量".to_string()));
-        }
-        if requested_line.quantity > basis.max_create_quantity {
-            return Err(Error::ConflictError("本次数量超过供应商当前可供量".to_string()));
+            .ok_or_else(procurement_quantity_changed)?;
+        if requested_line.quantity > basis.coverage.summary.remaining_quantity
+            || requested_line.quantity > basis.max_create_quantity
+        {
+            return Err(procurement_quantity_changed());
         }
         selected.push(SelectedLine {
             basis: basis.clone(),
@@ -1170,6 +1266,7 @@ fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
 /// # 参数
 /// * `order` - 销售稳定单
 /// * `group` - 精确依据分组
+/// * `work_item_id` - 冻结本依据责任范围的开放任务
 ///
 /// # 返回
 /// 返回 `{sales_order_id}:{sha256}` 稳定依据 ID。
@@ -1179,9 +1276,10 @@ fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
 ///
 /// # 关键业务约束
 /// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据。
-fn basis_id_for(order: &SalesOrder, group: &BasisGroup) -> String {
+fn basis_id_for(order: &SalesOrder, group: &BasisGroup, work_item_id: &str) -> String {
     let mut parts = vec![
         order.base.id.clone(),
+        work_item_id.to_string(),
         order.procurement_guard_version.to_string(),
         group.revision.base.id.clone(),
         basis_scope_key(&group.scope),
@@ -1302,6 +1400,7 @@ fn stable_line_id(line: &BasisLine) -> &str {
 /// 同一幂等键用于不同依据、范围或数量时必须冲突。
 fn create_request_fingerprint(req: &CreatePurchaseOrderFromBasisRequest, lines: &[RequestedLine]) -> String {
     let mut parts = vec![
+        req.work_item_id.trim().to_string(),
         req.basis_id.trim().to_string(),
         req.purchase_type.as_str().to_string(),
         req.payment_term_code.trim().to_string(),
@@ -1642,6 +1741,20 @@ fn business_date_of(instant: Instant) -> Result<BusinessDate> {
         .ok_or_else(|| Error::Internal("履约期限日期非法".to_string()))
 }
 
+/// 返回统一的采购剩余或供给变化冲突。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回 HTTP 409 对应的稳定业务错误。
+///
+/// # 错误
+/// 无。
+fn procurement_quantity_changed() -> Error {
+    Error::ConflictError("可采购数量已更新，请刷新后重试".to_string())
+}
+
 /// 返回合法采购数量零值。
 ///
 /// # 参数
@@ -1720,5 +1833,20 @@ mod tests {
         };
 
         assert_eq!(super::basis_scope_key(&scope), "sup-1|PHYSICAL|NET-30|WAREHOUSE");
+    }
+
+    /// 验证采购依据创建的操作人授权提交栅栏。
+    ///
+    /// 服务层必须冻结账号与权限快照，并用同一 policy revision CAS 提交业务事务。
+    #[test]
+    fn create_from_basis_binds_actor_authorization_to_commit() {
+        let production = include_str!("creation_basis.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+
+        assert!(production.contains("authorize_actor_permission(actor, CREATE_PERMISSION)"));
+        assert!(production.contains("ensure_purchase_order_actor_account"));
+        assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
     }
 }

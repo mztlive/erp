@@ -19,6 +19,7 @@ import {
     useSavePurchaseOrderDraftMutation,
     useStartPurchaseChangeMutation,
     useSubmitPurchaseOrderMutation,
+    useVoidPurchaseOrderMutation,
 } from "@/features/purchase-orders/hooks/queries"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
@@ -59,6 +60,7 @@ export function usePurchaseOrderDetailEditActions({
     const acquireToken = useAcquireDraftTokenMutation()
     const saveMutation = useSavePurchaseOrderDraftMutation()
     const submitMutation = useSubmitPurchaseOrderMutation()
+    const voidMutation = useVoidPurchaseOrderMutation()
     const changeMutation = useStartPurchaseChangeMutation()
 
     const [draftEditToken, setDraftEditToken] = React.useState<string | null>(
@@ -67,6 +69,7 @@ export function usePurchaseOrderDetailEditActions({
     const [lineEdits, setLineEdits] =
         React.useState<PurchaseOrderDetailLineEdits>({})
     const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
+    const [voidConfirmOpen, setVoidConfirmOpen] = React.useState(false)
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
 
     const documentReference =
@@ -301,6 +304,57 @@ export function usePurchaseOrderDetailEditActions({
         }
     }
 
+    async function handleVoid() {
+        if (!order) return
+        const payload = {
+            purchaseOrderId,
+            expectedLockVersion: order.identity.lockVersion,
+            reason: "采购草稿不再需要",
+        }
+        const command = commandLedger.acquire(
+            "void",
+            `purchase:${purchaseOrderId}:void`,
+            payload,
+        )
+        const response = await voidMutation.mutateAsync({
+            ...command.payload,
+            idempotencyKey: command.idempotencyKey,
+        })
+        commandLedger.settle("void", response.status)
+        setVoidConfirmOpen(false)
+        if (response.status === "succeeded") {
+            setDraftEditToken(null)
+            setResult({
+                status: "succeeded",
+                title: "采购草稿已作废",
+                description:
+                    "该采购草稿不再占用销售待采购数量；如原任务已经完成，系统已建立新的待采购任务。",
+                reference: response.reference,
+                facts: [
+                    {
+                        label: "数据版本",
+                        value: `v${response.data.lockVersion}`,
+                    },
+                ],
+            })
+            router.replace(`/procurement/orders/${purchaseOrderId}`)
+            await refetch()
+        } else if (response.status === "unknown") {
+            setResult({
+                status: "unknown",
+                title: "作废结果待确认",
+                description: response.message,
+                reference: documentReference,
+            })
+        } else {
+            setResult({
+                status: "blocked",
+                title: "无法作废采购草稿",
+                description: response.message,
+            })
+        }
+    }
+
     async function handleStartChange() {
         if (!order) return
         const payload = {
@@ -359,13 +413,17 @@ export function usePurchaseOrderDetailEditActions({
         setLineEdits,
         submitConfirmOpen,
         setSubmitConfirmOpen,
+        voidConfirmOpen,
+        setVoidConfirmOpen,
         changeConfirmOpen,
         setChangeConfirmOpen,
         savePending: saveMutation.isPending,
         submitPending: submitMutation.isPending,
+        voidPending: voidMutation.isPending,
         changePending: changeMutation.isPending,
         handleSave,
         handleSubmit,
+        handleVoid,
         handleStartChange,
     }
 }

@@ -21,6 +21,10 @@ type TextFieldProps = {
     className?: string
     inputClassName?: string
     autoComplete?: string
+    inputMode?: React.ComponentProps<"input">["inputMode"]
+    min?: React.ComponentProps<"input">["min"]
+    max?: React.ComponentProps<"input">["max"]
+    step?: React.ComponentProps<"input">["step"]
     testId?: string
 }
 
@@ -38,6 +42,10 @@ export function TextField({
     className,
     inputClassName,
     autoComplete,
+    inputMode,
+    min,
+    max,
+    step,
     testId,
 }: TextFieldProps) {
     const field = useFieldContext<string>()
@@ -60,6 +68,10 @@ export function TextField({
                 placeholder={placeholder}
                 disabled={disabled}
                 autoComplete={autoComplete}
+                inputMode={inputMode}
+                min={min}
+                max={max}
+                step={step}
                 data-testid={testId}
                 aria-invalid={isInvalid || undefined}
                 className={inputClassName}

@@ -5,15 +5,15 @@ export interface PermissionItem {
     path: string
     description: string
     permission: {
-      resource: string
-      action: string
+        resource: string
+        action: string
     }
 }
 
 export interface PermissionGroup {
-    name: string;
-    description: string;
-    permissions: PermissionItem[];
+    name: string
+    description: string
+    permissions: PermissionItem[]
 }
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
@@ -1948,6 +1948,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/purchase-orders/{id}/void",
+                description: "作废采购单草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/purchase-orders/{id}/submit",
                 description: "提交采购单审批",
                 permission: {
@@ -1982,7 +1992,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 description: "查询采购创建依据",
                 permission: {
                     resource: "purchase_order",
-                    action: "list",
+                    action: "create",
                 },
             },
             {
@@ -4235,4 +4245,4 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
-];
+]

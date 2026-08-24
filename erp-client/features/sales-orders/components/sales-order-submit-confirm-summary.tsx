@@ -1,9 +1,6 @@
 "use client"
 
-import {
-    MoneyValue,
-    surfaceInsetClassName,
-} from "@/components/business"
+import { MoneyValue, surfaceInsetClassName } from "@/components/business"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -11,10 +8,7 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import { cn } from "@/lib/utils"
-import {
-    paymentTermLabel,
-    welfareScenarioLabel,
-} from "@/lib/business-options"
+import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import { calculateTotals } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-validation"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
@@ -64,12 +58,9 @@ export function SalesOrderSubmitConfirmSummary({
 }) {
     const natureLabel =
         snapshot.nature === "card_voucher" ? "卡券" : "实物与服务"
-    const welfareLabel =
-        welfareScenarioLabel(snapshot.welfareScene) || "—"
+    const welfareLabel = welfareScenarioLabel(snapshot.welfareScene) || "—"
     const paymentLabel =
-        paymentTermLabel(snapshot.paymentTerms) ||
-        snapshot.paymentTerms ||
-        "—"
+        paymentTermLabel(snapshot.paymentTerms) || snapshot.paymentTerms || "—"
 
     return (
         <section
@@ -148,12 +139,11 @@ export function SalesOrderSubmitConfirmSummary({
                     </dd>
                 </div>
                 <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">不含税金额</dt>
+                    <dt className="text-xs text-muted-foreground">
+                        不含税金额
+                    </dt>
                     <dd className="mt-0.5">
-                        <MoneyValue
-                            value={snapshot.amountNet}
-                            taxBasis="net"
-                        />
+                        <MoneyValue value={snapshot.amountNet} taxBasis="net" />
                     </dd>
                 </div>
                 <div className="min-w-0">

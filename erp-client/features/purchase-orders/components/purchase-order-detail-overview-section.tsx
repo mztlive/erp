@@ -2,10 +2,7 @@
 
 import Link from "next/link"
 
-import {
-    DocumentSection,
-    PrepaymentGate,
-} from "@/components/business"
+import { DocumentSection, PrepaymentGate } from "@/components/business"
 import {
     DescriptionDetails,
     DescriptionItem,

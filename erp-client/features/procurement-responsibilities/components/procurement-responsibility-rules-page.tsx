@@ -275,8 +275,8 @@ function RuleDialog({
                                                                 value ?? "",
                                                             )
                                                         }
+                                                        label="公司 SKU"
                                                         placeholder="搜索 SKU 或商品名称"
-                                                        aria-label="公司 SKU"
                                                     />
                                                 </Field>
                                             )}
@@ -415,6 +415,11 @@ export function ProcurementResponsibilityRulesPage() {
         lifecycleStatus: "all",
         revisionTiming: "current",
     })
+    const dependenciesPending =
+        Boolean(adminsQuery.isPending) || Boolean(categoriesQuery.isPending)
+    const dependenciesFailed =
+        Boolean(adminsQuery.isError) || Boolean(categoriesQuery.isError)
+    const dependencyError = adminsQuery.error ?? categoriesQuery.error
     const [dialogOpen, setDialogOpen] = React.useState(false)
     const [editing, setEditing] =
         React.useState<ProcurementResponsibilityRule>()
@@ -423,6 +428,23 @@ export function ProcurementResponsibilityRulesPage() {
         return (
             <PageScaffold>
                 <PageHeader title="采购责任规则" description="正在核对权限…" />
+            </PageScaffold>
+        )
+    }
+
+    if (profileQuery.isError) {
+        return (
+            <PageScaffold>
+                <PageHeader title="采购责任规则" />
+                <BusinessFailureState
+                    kind="system"
+                    title="权限信息加载失败"
+                    description={getErrorMessage(
+                        profileQuery.error,
+                        "暂时无法核对采购责任规则权限。",
+                    )}
+                    onRetry={() => void profileQuery.refetch()}
+                />
             </PageScaffold>
         )
     }
@@ -463,6 +485,14 @@ export function ProcurementResponsibilityRulesPage() {
                             type="button"
                             size="sm"
                             data-testid="procurement-responsibility-create"
+                            disabled={dependenciesPending || dependenciesFailed}
+                            title={
+                                dependenciesPending
+                                    ? "正在加载负责人和分类选项"
+                                    : dependenciesFailed
+                                      ? "负责人或分类选项加载失败，请先重试"
+                                      : undefined
+                            }
                             onClick={() => {
                                 setEditing(undefined)
                                 setDialogOpen(true)
@@ -474,6 +504,32 @@ export function ProcurementResponsibilityRulesPage() {
                     ) : undefined
                 }
             />
+            {canManage && dependenciesFailed ? (
+                <BusinessFailureState
+                    kind="system"
+                    title="规则编辑依赖加载失败"
+                    description={getErrorMessage(
+                        dependencyError,
+                        "暂时无法读取采购负责人或商品分类，当前不能新增或编辑规则。",
+                    )}
+                    action={
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                void adminsQuery.refetch()
+                                void categoriesQuery.refetch()
+                            }}
+                        >
+                            重试依赖数据
+                        </Button>
+                    }
+                />
+            ) : canManage && dependenciesPending ? (
+                <p className="text-sm text-muted-foreground">
+                    正在加载采购负责人和商品分类，加载完成后可编辑规则…
+                </p>
+            ) : null}
             <Card data-testid="procurement-responsibility-rules">
                 <CardHeader>
                     <CardTitle>责任规则列表</CardTitle>

@@ -45,6 +45,7 @@ describe("usePurchaseOrderDetailPermissions", () => {
         expect(result.current).toEqual({
             canEdit: false,
             canSubmit: false,
+            canVoid: false,
             canOpenReview: false,
             canApprove: false,
             canReject: false,
@@ -61,6 +62,7 @@ describe("usePurchaseOrderDetailPermissions", () => {
             allowedActions: [
                 "EDIT",
                 "SUBMIT",
+                "VOID",
                 "FULFILL",
                 "PAY",
                 "START_CHANGE",
@@ -74,6 +76,7 @@ describe("usePurchaseOrderDetailPermissions", () => {
         )
         expect(result.current.canEdit).toBe(true)
         expect(result.current.canSubmit).toBe(true)
+        expect(result.current.canVoid).toBe(true)
         expect(result.current.canFulfill).toBe(true)
         expect(result.current.canPay).toBe(true)
         expect(result.current.canChange).toBe(true)

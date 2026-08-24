@@ -12,7 +12,7 @@ beforeEach(() => {
 })
 
 describe("resolveSalesLineProcurementResponsibilities", () => {
-    it("posts physical sales lines without inventing a service-region field", async () => {
+    it("posts only the supported responsibility inputs including service region", async () => {
         mockedApiPost.mockResolvedValue({
             lines: [
                 {
@@ -31,6 +31,7 @@ describe("resolveSalesLineProcurementResponsibilities", () => {
                 name: "测试商品",
                 sku: "sku-1",
                 skuRevisionId: "sku-revision-1",
+                serviceRegion: " 华东 ",
                 quantity: "2",
                 unit: "件",
                 unitPriceGross: "100",
@@ -49,15 +50,16 @@ describe("resolveSalesLineProcurementResponsibilities", () => {
                     {
                         line_key: "line-1",
                         sku_id: "sku-1",
-                        sku_revision_id: "sku-revision-1",
-                        fulfillment_mode: "供应商直发",
+                        service_region: "华东",
                     },
                 ],
             },
         )
-        expect(
-            JSON.stringify(vi.mocked(mockedApiPost).mock.calls[0]?.[1]),
-        ).not.toContain("service_region")
+        const request = JSON.stringify(
+            vi.mocked(mockedApiPost).mock.calls[0]?.[1],
+        )
+        expect(request).not.toContain("sku_revision_id")
+        expect(request).not.toContain("fulfillment_mode")
         expect(result).toEqual([
             {
                 rowKey: "line-1",

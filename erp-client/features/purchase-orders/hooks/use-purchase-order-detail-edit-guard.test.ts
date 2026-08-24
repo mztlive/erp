@@ -73,24 +73,23 @@ describe("usePurchaseOrderDetailEditGuard", () => {
 
     it("is dirty when a line edit diverges from current content", () => {
         const order = makePurchaseOrderCenter()
-        const { result } = renderHook(
-            () =>
-                usePurchaseOrderDetailEditGuard({
-                    mode: "edit",
-                    order,
-                    paymentTermCode: order.header.paymentTermCode,
-                    note: "",
-                    lineEdits: {
-                        "line-1": {
-                            quantity: "99",
-                            unitCostGross:
-                                order.currentContent.lines[0].unitCostGross,
-                            inputTaxRate:
-                                order.currentContent.lines[0].inputTaxRate,
-                        },
+        const { result } = renderHook(() =>
+            usePurchaseOrderDetailEditGuard({
+                mode: "edit",
+                order,
+                paymentTermCode: order.header.paymentTermCode,
+                note: "",
+                lineEdits: {
+                    "line-1": {
+                        quantity: "99",
+                        unitCostGross:
+                            order.currentContent.lines[0].unitCostGross,
+                        inputTaxRate:
+                            order.currentContent.lines[0].inputTaxRate,
                     },
-                    onSave: async () => true,
-                }),
+                },
+                onSave: async () => true,
+            }),
         )
         expect(result.current.editDirty).toBe(true)
     })

@@ -319,11 +319,13 @@ export type ProductComboboxItem = Readonly<{
 
 export type ProductComboboxProps = EntityComboboxBaseProps & {
     products: readonly ProductComboboxItem[]
+    label?: string
 }
 
 /** ERP 商品/SKU 选择。 */
 export function ProductCombobox({
     products,
+    label = "商品",
     placeholder = "搜索 SKU 或商品名称",
     emptyLabel = "没有符合条件的商品",
     ...props
@@ -349,7 +351,7 @@ export function ProductCombobox({
         <BusinessObjectCombobox
             {...props}
             items={items}
-            label="商品"
+            label={label}
             placeholder={placeholder}
             emptyLabel={emptyLabel}
         />
@@ -577,7 +579,10 @@ export type CategoryComboboxItem = Readonly<{
     disabled?: boolean
 }>
 
-export type CategoryComboboxProps = Omit<TreeComboboxProps, "nodes" | "label"> & {
+export type CategoryComboboxProps = Omit<
+    TreeComboboxProps,
+    "nodes" | "label"
+> & {
     categories: readonly CategoryComboboxItem[]
 }
 
@@ -621,9 +626,10 @@ export function CategoryCombobox({
     emptyLabel = "没有符合条件的分类",
     ...props
 }: CategoryComboboxProps) {
-    const nodes = React.useMemo(() => buildCategoryNodes(categories), [
-        categories,
-    ])
+    const nodes = React.useMemo(
+        () => buildCategoryNodes(categories),
+        [categories],
+    )
 
     return (
         <TreeCombobox

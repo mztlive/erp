@@ -42,10 +42,10 @@ pub use self::dto::{
     ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CancelSalesOrderApprovalRequest,
     CardSalesApprovalAllowedAction, CloseEligibilityView, CreateSalesOrderRequest, DocumentApprovalView,
     LowMarginManagerAllowedAction, OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction,
-    RevisionView, SalesOrderCreateIntent, SalesOrderDetailView, SalesOrderDraftLineRequest,
-    SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams, SalesOrderStageSummary, SalesOrderView,
-    SalesOrderWorkingCopyLineView, SalesProcurementCoverageView, SaveWorkingCopyRequest, SubmissionView,
-    SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+    PurchaseCreationAccessView, RevisionView, SalesOrderCreateIntent, SalesOrderDetailView,
+    SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams,
+    SalesOrderStageSummary, SalesOrderView, SalesOrderWorkingCopyLineView, SalesProcurementCoverageView,
+    SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 pub(crate) use self::progress::update_sales_order_money_progress;
 

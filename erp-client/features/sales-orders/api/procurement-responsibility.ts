@@ -15,8 +15,7 @@ export async function resolveSalesLineProcurementResponsibilities(
         lines: lines.map((line) => ({
             line_key: line.rowKey,
             sku_id: line.sku,
-            sku_revision_id: line.skuRevisionId || undefined,
-            fulfillment_mode: line.fulfillmentMode || undefined,
+            service_region: line.serviceRegion?.trim() || undefined,
         })),
     }
     const response =

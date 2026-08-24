@@ -13,13 +13,18 @@ export type BackendProcurementResponsibilityRule = {
     product_kind?: ProductKind | string | null
     owner_user_id: string
     owner_name?: string | null
-    status: "ENABLED" | "DISABLED" | string
+    status: "active" | "disabled" | string
     version?: number
 }
 
 export type BackendProcurementResponsibilityRuleList =
     | BackendProcurementResponsibilityRule[]
-    | { items: BackendProcurementResponsibilityRule[] }
+    | {
+          items: BackendProcurementResponsibilityRule[]
+          total: number
+          page: number
+          page_size: number
+      }
 
 export type BackendSaveProcurementResponsibilityRule =
     BackendProcurementResponsibilityRule

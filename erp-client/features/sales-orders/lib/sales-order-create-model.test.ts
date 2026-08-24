@@ -13,6 +13,7 @@ const emptyLine = (overrides: Record<string, string> = {}) => ({
     name: "",
     sku: "",
     skuRevisionId: "",
+    serviceRegion: "",
     quantity: "1",
     unit: "",
     unitPriceGross: "0.00",
@@ -49,6 +50,7 @@ describe("createEmptyLine", () => {
     it("applies physical-service defaults", () => {
         const line = createEmptyLine("physical_service")
         expect(line.unit).toBe("")
+        expect(line.serviceRegion).toBe("")
         expect(line.fulfillmentMode).toBe("公司仓发")
         expect(line.cardForm).toBe("")
         expect(line.quantity).toBe("1")

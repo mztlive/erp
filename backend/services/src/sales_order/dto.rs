@@ -831,6 +831,17 @@ pub struct SalesProcurementCoverageView {
     pub progress: Rate,
 }
 
+/// 当前账号从销售单继续创建采购单的访问投影。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseCreationAccessView {
+    /// 当前账号是否拥有该销售单的开放采购建单任务。
+    pub allowed: bool,
+    /// 当前账号拥有的开放任务数量。
+    pub task_count: usize,
+    /// 不允许时的稳定业务说明。
+    pub blocker: Option<String>,
+}
+
 /// 销售单详情视图（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderDetailView {
@@ -876,6 +887,8 @@ pub struct SalesOrderDetailView {
     pub purchase_order_count: u64,
     /// 当前销售版本采购目标、覆盖、剩余与进度。
     pub purchase_coverage: SalesProcurementCoverageView,
+    /// 当前账号是否可以从该销售单继续创建采购单。
+    pub purchase_creation_access: PurchaseCreationAccessView,
     /// 应收子账已核销含税合计。
     pub settled_total: Amount,
     /// 应收子账净已开票含税合计。

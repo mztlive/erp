@@ -129,9 +129,7 @@ export function useSalesOrdersListChips(
         if (url.collection !== "all") {
             chips.push({
                 key: "collection",
-                label: `回款进度：${salesOrderCollectionLabel(
-                    url.collection,
-                )}`,
+                label: `回款进度：${salesOrderCollectionLabel(url.collection)}`,
                 clearLabel: "清除回款进度",
                 onClear: () => removeFilter("collection"),
             })

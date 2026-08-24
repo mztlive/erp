@@ -23,9 +23,7 @@ export function ApprovalPanel({
 }) {
     if (!order.approval) {
         return (
-            <p className="text-sm text-muted-foreground">
-                本单暂无审批绑定。
-            </p>
+            <p className="text-sm text-muted-foreground">本单暂无审批绑定。</p>
         )
     }
 

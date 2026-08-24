@@ -11,13 +11,14 @@ use services::{
     audit::AuditActor,
     purchase_order::{
         CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
-        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisView,
-        EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
-        PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView,
-        PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService, PurchaseReviewResult,
-        ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-        StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
-        SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisListParams,
+        CreationBasisView, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
+        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
+        PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
+        PurchaseReviewResult, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
+        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
+        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+        VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
     },
 };
 
@@ -131,8 +132,38 @@ pub async fn purchase_order_save_draft(
     Path(id): Path<String>,
     Json(req): Json<SavePurchaseOrderDraftRequest>,
 ) -> Result<SavePurchaseOrderDraftResult> {
-    let view = PurchaseOrderService::new(state.db())
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
         .save_draft(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "作废采购单草稿",
+    resource = "purchase_order",
+    action = "delete"
+)]
+/// 作废采购草稿并释放对应销售采购覆盖。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 采购单 ID
+/// * `req` - 期望版本、原因和幂等键
+///
+/// # 返回
+/// 返回作废后的状态与乐观锁版本。
+pub async fn purchase_order_void(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<VoidPurchaseOrderRequest>,
+) -> Result<VoidPurchaseOrderResult> {
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+        .void_draft(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -233,18 +264,24 @@ pub async fn purchase_order_review(
     group_desc = "采购单、采购提交与采购变更管理",
     desc = "查询采购创建依据",
     resource = "purchase_order",
-    action = "list"
+    action = "create"
 )]
-/// 查询采购创建依据（已通过的采购确认，页面 W08 建单入口）。
+/// 查询当前账号开放采购任务范围内的采购创建依据。
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前已认证账号
+/// * `params` - 可选销售单和采购建单任务筛选
 ///
 /// # 返回
-/// 返回全部已通过确认批次。
-pub async fn purchase_creation_basis_list(State(state): State<AppState>) -> Result<Vec<CreationBasisView>> {
+/// 返回当前账号可处理的精确采购创建依据。
+pub async fn purchase_creation_basis_list(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<CreationBasisListParams>,
+) -> Result<Vec<CreationBasisView>> {
     let views = PurchaseOrderService::new(state.db())
-        .creation_basis_list()
+        .creation_basis_list(&params, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(views))

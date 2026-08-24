@@ -25,7 +25,8 @@ import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
 type GateView = PurchaseOrderCenterView["progress"]["prepaymentGate"]
 type ActionBlocker =
-    PurchaseOrderCenterView["actionBlockers"][number] | undefined
+    | PurchaseOrderCenterView["actionBlockers"][number]
+    | undefined
 
 /**
  * 采购单详情子区。变更页签承接 PurchaseChangeOrder 通用审批区。

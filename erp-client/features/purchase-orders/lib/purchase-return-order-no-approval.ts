@@ -3,10 +3,12 @@ import type { BackendPurchaseReturnOrder } from "@/features/purchase-orders/api/
 import type { PurchaseReturnOrderRow } from "@/features/purchase-orders/types"
 
 /** 采购退货单作为合同 DocumentType 的固定值。 */
-export const PURCHASE_RETURN_ORDER_DOCUMENT_TYPE = "PurchaseReturnOrder" as const
+export const PURCHASE_RETURN_ORDER_DOCUMENT_TYPE =
+    "PurchaseReturnOrder" as const
 
 /** 工作项上的采购退货对象类型；与合同 DocumentType 并存时只认这两种字面量。 */
-export const PURCHASE_RETURN_ORDER_OBJECT_TYPE = "purchase_return_order" as const
+export const PURCHASE_RETURN_ORDER_OBJECT_TYPE =
+    "purchase_return_order" as const
 
 /** 合同 §4.3 对 PurchaseReturnOrder 的固定政策。 */
 export const PURCHASE_RETURN_ORDER_APPROVAL_REQUIREMENT = "NO_APPROVAL" as const
@@ -150,4 +152,6 @@ export function stripPurchaseReturnApprovalField<T extends object>(
 export const purchaseReturnActionsExcludeApproval = (
     actions: readonly string[],
 ): boolean =>
-    actions.every((action) => PURCHASE_RETURN_ORDER_BUSINESS_ACTIONS.has(action))
+    actions.every((action) =>
+        PURCHASE_RETURN_ORDER_BUSINESS_ACTIONS.has(action),
+    )

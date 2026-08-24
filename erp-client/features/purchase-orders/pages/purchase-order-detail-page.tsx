@@ -267,9 +267,11 @@ export function PurchaseOrderDetailPage({
                 canPay={permissions.canPay}
                 canFulfill={permissions.canFulfill}
                 canEdit={permissions.canEdit}
+                canVoid={permissions.canVoid}
                 canOpenReview={permissions.canOpenReview}
                 canChange={permissions.canChange}
                 requestLeave={guard.requestLeave}
+                onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
                 onRequestChange={() => editActions.setChangeConfirmOpen(true)}
                 result={result}
                 onDismissResult={() => handleResult(null)}
@@ -321,8 +323,6 @@ export function PurchaseOrderDetailPage({
             {mode === "edit" && permissions.canEdit ? (
                 <EditSurface
                     order={order}
-                    // @ts-expect-error useAppForm generic variance vs surface prop
-                    draftForm={draftForm}
                     lineEdits={editActions.lineEdits}
                     setLineEdits={editActions.setLineEdits}
                     draftEditToken={editActions.draftEditToken}
@@ -368,6 +368,8 @@ export function PurchaseOrderDetailPage({
                 onSubmitConfirmOpenChange={editActions.setSubmitConfirmOpen}
                 approveConfirmOpen={reviewActions.approveConfirmOpen}
                 onApproveConfirmOpenChange={reviewActions.setApproveConfirmOpen}
+                voidConfirmOpen={editActions.voidConfirmOpen}
+                onVoidConfirmOpenChange={editActions.setVoidConfirmOpen}
                 changeConfirmOpen={editActions.changeConfirmOpen}
                 onChangeConfirmOpenChange={editActions.setChangeConfirmOpen}
                 leaveGuardOpen={guard.leaveGuardOpen}
@@ -375,9 +377,11 @@ export function PurchaseOrderDetailPage({
                 submitPending={editActions.submitPending}
                 savePending={editActions.savePending}
                 reviewPending={reviewActions.reviewPending}
+                voidPending={editActions.voidPending}
                 changePending={editActions.changePending}
                 onConfirmSubmit={() => void editActions.handleSubmit()}
                 onConfirmApprove={() => void reviewActions.handleApprove()}
+                onConfirmVoid={() => void editActions.handleVoid()}
                 onConfirmChange={() => void editActions.handleStartChange()}
                 onSaveAndLeave={() => void guard.saveAndLeave()}
                 onDiscardAndLeave={guard.discardAndLeave}

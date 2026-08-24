@@ -22,9 +22,7 @@ export function PurchaseReturnOrderSection({
     returns: readonly PurchaseReturnOrderRow[]
 }) {
     if (returns.length === 0) {
-        return (
-            <p className="text-sm text-muted-foreground">暂无采购退货。</p>
-        )
+        return <p className="text-sm text-muted-foreground">暂无采购退货。</p>
     }
 
     return (

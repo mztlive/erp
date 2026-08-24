@@ -14,6 +14,7 @@ import {
     ReceivablePanel,
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
+import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
 import {
     isWorkSection,
     type NavSectionId,
@@ -23,6 +24,7 @@ import {
 
 export function SalesOrderDetailTabs({
     order,
+    selfReturn,
     section,
     navSection,
     visibleNav,
@@ -36,6 +38,7 @@ export function SalesOrderDetailTabs({
     onDataChanged,
 }: {
     order: SalesOrderDetailView
+    selfReturn: string
     section?: string
     navSection: NavSectionId
     visibleNav: Array<{
@@ -95,6 +98,24 @@ export function SalesOrderDetailTabs({
         >
             <ObjectSectionTabsPanel value="overview">
                 <OverviewPanel order={order} />
+                {order.nature === "physical_service" ? (
+                    <section
+                        className="rounded-lg border border-grid px-3"
+                        aria-labelledby="sales-order-procurement-heading"
+                    >
+                        <h2
+                            id="sales-order-procurement-heading"
+                            className="border-b border-grid py-2 text-sm font-medium"
+                        >
+                            采购进度
+                        </h2>
+                        <RelatedLanes
+                            order={order}
+                            selfReturn={selfReturn}
+                            lanes={["purchase"]}
+                        />
+                    </section>
+                ) : null}
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="approval">

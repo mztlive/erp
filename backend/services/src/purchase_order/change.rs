@@ -38,6 +38,7 @@ use super::dto::{
     SavePurchaseOrderLine, StartPurchaseChangeRequest, StartPurchaseChangeResult,
     SubmitPurchaseChangeRequest,
 };
+use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
@@ -692,59 +693,128 @@ impl PurchaseOrderService {
         .await
     }
 
-    /// 在同一事务内生成生效修订、应付差额并推进采购当前版本。
+    /// 准备生效修订与应付差额，并在同一事务内推进采购当前版本。
+    ///
+    /// # 参数
+    /// * `change` - 已通过最终审批动作校验的采购变更单
+    /// * `submission_id` - 当前冻结且待生效的变更提交主键
+    /// * `actor` - 最终审批动作的审计操作人
+    ///
+    /// # 返回
+    /// 返回新采购修订、应付差额引用和采购单最新乐观锁版本。
     ///
     /// # 错误
-    /// 基准版本漂移、提交状态非法或写入失败时返回错误。
+    /// 基准版本漂移、提交状态非法、销售采购 guard 并发冲突或写入失败时
+    /// 返回错误。
+    ///
+    /// # 关键业务约束
+    /// 采购修订、来源销售 guard、allocation、当前版本指针、采购任务和差额
+    /// 必须原子提交。
     async fn persist_effective_change(
         &self,
         change: PurchaseChangeOrder,
         submission_id: String,
         actor: &AuditActor,
     ) -> Result<PurchaseChangeEffectResult> {
+        let prepared = self
+            .prepare_effective_change_write(&change, &submission_id)
+            .await?;
+        let PreparedEffectiveChange {
+            write,
+            revision_id,
+            revision_no,
+            payable_delta_entry_id,
+        } = prepared;
+        let purchase_order_lock_version = write_effective_change(&self.db, write, actor).await?;
+        Ok(PurchaseChangeEffectResult {
+            change_id: change.base.id.clone(),
+            revision_id,
+            revision_no,
+            payable_delta_entry_id,
+            purchase_order_lock_version,
+            reference: format!("EFFECT-V{revision_no}"),
+        })
+    }
+
+    /// 准备采购变更生效事务所需的修订、差额和响应引用。
+    ///
+    /// # 参数
+    /// * `change` - 已通过最终审批动作校验的采购变更单
+    /// * `submission_id` - 当前冻结且待生效的变更提交主键
+    ///
+    /// # 返回
+    /// 返回可直接进入事务的完整写聚合及响应所需稳定引用。
+    ///
+    /// # 错误
+    /// 原采购单、基准版本或提交缺失，基准版本漂移，或修订与差额构建
+    /// 失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 这里只准备不可变写内容；采购、销售 guard、allocation 和任务的可见性
+    /// 由后续事务保证。
+    async fn prepare_effective_change_write(
+        &self,
+        change: &PurchaseChangeOrder,
+        submission_id: &str,
+    ) -> Result<PreparedEffectiveChange> {
         let order = self
             .db
             .purchase_orders()
             .find_by_id(&change.purchase_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("原采购单不存在".to_string()))?;
-        ensure_base_revision_current(&change, &order)?;
-        let (submission, lines) = self.load_pending_change_submission(&submission_id).await?;
-        let new_revision_no = self.next_revision_no(&order).await?;
+        ensure_base_revision_current(change, &order)?;
+        let (submission, lines) = self.load_pending_change_submission(submission_id).await?;
+        let revision_no = self.next_revision_no(&order).await?;
         let (revision, revision_lines) = self
-            .build_change_revision(&order, &submission, &lines, new_revision_no)
+            .build_change_revision(&order, &submission, &lines, revision_no)
             .await?;
+        let delta = self
+            .build_effective_change_delta(change, &order, &revision)
+            .await?;
+        Ok(PreparedEffectiveChange {
+            revision_id: revision.base.id.clone(),
+            revision_no,
+            payable_delta_entry_id: delta.0.as_ref().map(|(_, entry)| entry.base.id.clone()),
+            write: EffectiveChangeWrite {
+                order,
+                change: change.clone(),
+                submission,
+                revision,
+                revision_lines,
+                delta,
+            },
+        })
+    }
+
+    /// 基于采购变更基准版本和目标版本构建应付与成本差额。
+    ///
+    /// # 参数
+    /// * `change` - 提供基准采购修订引用的采购变更单
+    /// * `order` - 当前原采购单
+    /// * `revision` - 本次待生效的新采购修订
+    ///
+    /// # 返回
+    /// 返回可在生效事务中追加的应付差额与成本差额。
+    ///
+    /// # 错误
+    /// 基准版本不存在，或差额构建所需仓储事实缺失时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 差额只基于变更冻结的基准版本和本次目标版本计算，不采用可变草稿事实。
+    async fn build_effective_change_delta(
+        &self,
+        change: &PurchaseChangeOrder,
+        order: &PurchaseOrder,
+        revision: &PurchaseOrderRevision,
+    ) -> Result<EffectiveChangeDelta> {
         let base_revision = self
             .db
             .purchase_order_revisions()
             .find_by_id(&change.base_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("基准版本不存在".to_string()))?;
-        let delta = self
-            .build_change_deltas(&order, &base_revision, &revision)
-            .await?;
-        let payable_delta_entry_id = delta.0.as_ref().map(|(_, entry)| entry.base.id.clone());
-        write_effective_change(
-            &self.db,
-            EffectiveChangeWrite {
-                order: order.clone(),
-                change: change.clone(),
-                submission,
-                revision: revision.clone(),
-                revision_lines,
-                delta,
-            },
-            actor,
-        )
-        .await?;
-        Ok(PurchaseChangeEffectResult {
-            change_id: change.base.id.clone(),
-            revision_id: revision.base.id.clone(),
-            revision_no: new_revision_no,
-            payable_delta_entry_id,
-            purchase_order_lock_version: order.base.version,
-            reference: format!("EFFECT-V{new_revision_no}"),
-        })
+        self.build_change_deltas(order, &base_revision, revision).await
     }
 
     /// 加载待生效的变更提交及其明细。
@@ -1037,6 +1107,40 @@ async fn persist_bound_change_document(
     Ok(())
 }
 
+/// 采购变更生效时一次性追加的应付与成本差额。
+type EffectiveChangeDelta = (
+    Option<(entities::payable::PayableAccount, entities::payable::PayableEntry)>,
+    Vec<entities::cost::CostEntry>,
+);
+
+/// 已准备的采购变更生效事务写聚合与响应引用。
+///
+/// # 用途
+/// 将事务写内容和事务外已确定的修订、差额引用打包，避免生效编排方法
+/// 继续膨胀。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 无。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// `write` 必须作为整体进入同一事务，响应引用只能来自该写聚合。
+struct PreparedEffectiveChange {
+    /// 完整事务写聚合。
+    write: EffectiveChangeWrite,
+    /// 本次形成的新采购修订主键。
+    revision_id: String,
+    /// 本次形成的新采购修订序号。
+    revision_no: u32,
+    /// 本次追加的应付差额分录主键。
+    payable_delta_entry_id: Option<String>,
+}
+
 /// 采购变更生效写入所需的单据、版本与差额。
 ///
 /// # 用途
@@ -1065,10 +1169,7 @@ struct EffectiveChangeWrite {
     /// 生效版本行。
     revision_lines: Vec<entities::purchase_order::PurchaseOrderRevisionLine>,
     /// 应付差额与成本差额。
-    delta: (
-        Option<(entities::payable::PayableAccount, entities::payable::PayableEntry)>,
-        Vec<entities::cost::CostEntry>,
-    ),
+    delta: EffectiveChangeDelta,
 }
 
 /// 写入生效修订、应付差额与变更单状态。
@@ -1082,18 +1183,20 @@ struct EffectiveChangeWrite {
 /// * `actor` - 审计操作人
 ///
 /// # 返回
-/// 写入成功时返回 `Ok(())`。
+/// 写入成功时返回采购单更新后的乐观锁版本。
 ///
 /// # 错误
-/// 仓储失败时返回错误。
+/// 销售采购 guard、采购单或变更单 CAS 冲突时返回稳定冲突，其余仓储
+/// 失败向上传递。
 ///
 /// # 关键业务约束
-/// 变更单状态迁移必须与版本指针同一事务。
+/// 变更单状态迁移、来源销售 guard、allocation 和采购当前版本指针必须
+/// 位于同一事务。
 async fn write_effective_change(
     db: &mongodb::Database,
     mut write: EffectiveChangeWrite,
     actor: &AuditActor,
-) -> Result<()> {
+) -> Result<u64> {
     let audit = actor.clone().resource_log(
         "purchase_change_order.effect",
         "purchase_change_order",
@@ -1107,7 +1210,7 @@ async fn write_effective_change(
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
-            Box::pin(async move { persist_effective_writes(&db, write, audit, session).await })
+            Box::pin(async move { persist_effective_writes(&db, write, audit, &actor_id, session).await })
         })
         .await
 }
@@ -1121,22 +1224,25 @@ async fn write_effective_change(
 /// * `db` - 数据库
 /// * `write` - 采购单、变更单、版本与差额
 /// * `audit` - 已构造审计
+/// * `actor_id` - 推进来源销售采购 guard 的最终动作账号
 /// * `session` - 事务会话
 ///
 /// # 返回
-/// 写入成功时返回 `Ok(())`。
+/// 写入成功时返回采购单更新后的乐观锁版本。
 ///
 /// # 错误
-/// 仓储失败时返回错误。
+/// 来源销售单缺失、任一 CAS 并发冲突或其他仓储写入失败时返回错误。
 ///
 /// # 关键业务约束
-/// 采购单当前版本指针必须切到新修订。
+/// 先推进来源销售 guard，再按当前销售版本重建 allocation，最后切换采购
+/// 当前版本并同步任务。
 async fn persist_effective_writes(
     db: &mongodb::Database,
     write: EffectiveChangeWrite,
     audit: entities::AuditLog,
+    actor_id: &str,
     session: &mut ClientSession,
-) -> Result<()> {
+) -> Result<u64> {
     let EffectiveChangeWrite {
         mut order,
         mut change,
@@ -1145,6 +1251,7 @@ async fn persist_effective_writes(
         mut revision_lines,
         delta,
     } = write;
+    advance_source_sales_procurement_guard(db, &order, actor_id, session).await?;
     let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
     db.purchase_order()
         .create_effective_revision(&revision, &revision_lines, session)
@@ -1152,6 +1259,37 @@ async fn persist_effective_writes(
     persist_current_sales_allocations(db, &allocations, session).await?;
     order.stable.current_revision_id = Some(revision.base.id.clone());
     db.purchase_orders().update(&mut order, session).await?;
+    sync_procurement_tasks_for_sales_order(db, &order.sales_order_id, session).await?;
+    persist_effective_change_delta(db, &delta, session).await?;
+    submission.status = SubmissionStatus::Approved;
+    db.purchase_change_submissions()
+        .update(&mut submission, session)
+        .await?;
+    db.purchase_change_orders().update(&mut change, session).await?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(order.base.version)
+}
+
+/// 在采购变更生效事务内追加应付与成本差额。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `delta` - 基于冻结基准版本和目标版本计算的差额
+/// * `session` - 与采购修订和当前版本指针共用的事务会话
+///
+/// # 返回
+/// 全部差额写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 应付或成本事实写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 差额不得先于采购修订独立提交，任一失败必须回滚整个采购变更生效事务。
+async fn persist_effective_change_delta(
+    db: &mongodb::Database,
+    delta: &EffectiveChangeDelta,
+    session: &mut ClientSession,
+) -> Result<()> {
     if let Some((account, entry)) = &delta.0 {
         db.payable()
             .create_payable_with_entry(account, entry, session)
@@ -1162,12 +1300,39 @@ async fn persist_effective_writes(
             .create_cost_entry_with_allocations(entry, Vec::new(), session)
             .await?;
     }
-    submission.status = SubmissionStatus::Approved;
-    db.purchase_change_submissions()
-        .update(&mut submission, session)
-        .await?;
-    db.purchase_change_orders().update(&mut change, session).await?;
-    db.audit_logs().create(&audit, session).await?;
+    Ok(())
+}
+
+/// 在采购变更生效事务内推进来源销售单的采购串行化 guard。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `order` - 当前待切换生效版本的采购单
+/// * `actor_id` - 最终审批动作账号
+/// * `session` - 与采购修订、allocation 和任务同步共用的事务会话
+///
+/// # 返回
+/// 来源销售单 CAS 更新成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 来源销售单不存在、guard 溢出、乐观锁或瞬态事务冲突时返回错误。
+///
+/// # 关键业务约束
+/// 必须先通过销售单 `id + version` CAS 推进 `procurement_guard_version`，
+/// 后续才能重算采购覆盖。
+async fn advance_source_sales_procurement_guard(
+    db: &mongodb::Database,
+    order: &PurchaseOrder,
+    actor_id: &str,
+    session: &mut ClientSession,
+) -> Result<()> {
+    let mut sales_order = db
+        .sales_orders()
+        .find_by_id(&order.sales_order_id, session)
+        .await?
+        .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+    sales_order.advance_procurement_guard(actor_id)?;
+    db.sales_orders().update(&mut sales_order, session).await?;
     Ok(())
 }
 
@@ -1294,6 +1459,119 @@ mod tests {
     fn client_effect_fails_closed() {
         let error = PurchaseOrderService::reject_client_effect().unwrap_err();
         assert!(error.to_string().contains("客户端不得直接生效"));
+    }
+
+    /// 生效写事务必须先推进销售 guard，再重建分配、切换采购版本并同步任务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；写入顺序和最新采购锁版本返回链路不满足时测试失败。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// guard CAS 必须早于 allocation 重建，任务同步必须晚于采购当前版本更新。
+    #[test]
+    fn effect_write_serializes_and_rebuilds_procurement_coverage() {
+        let source = include_str!("change.rs");
+        let body = source
+            .split_once("async fn persist_effective_writes")
+            .expect("必须存在采购变更生效事务写方法")
+            .1;
+        let guard = body
+            .find("advance_source_sales_procurement_guard")
+            .expect("必须推进来源销售 guard");
+        let prepare = body
+            .find("prepare_current_sales_allocations")
+            .expect("必须重建当前销售分配");
+        let persist = body
+            .find("persist_current_sales_allocations")
+            .expect("必须持久化当前销售分配");
+        let pointer = body
+            .find("order.stable.current_revision_id")
+            .expect("必须切换采购当前版本");
+        let order_update = body
+            .find("db.purchase_orders().update")
+            .expect("必须 CAS 更新采购单");
+        let task_sync = body
+            .find("sync_procurement_tasks_for_sales_order")
+            .expect("必须同步采购任务");
+
+        assert!(guard < prepare);
+        assert!(prepare < persist);
+        assert!(persist < pointer);
+        assert!(pointer < order_update);
+        assert!(order_update < task_sync);
+        assert!(body.contains("Ok(order.base.version)"));
+        assert!(source.contains("let purchase_order_lock_version = write_effective_change"));
+    }
+
+    /// 来源销售 guard helper 必须在同一事务中加载销售单并执行版本 CAS。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；事务执行器或 guard CAS 缺失时测试失败。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 不得在事务外预读销售单后仅写采购修订，否则有效增减量可能并发越界。
+    #[test]
+    fn effect_guard_load_and_cas_share_transaction_session() {
+        let source = include_str!("change.rs");
+        let helper = source
+            .split_once("async fn advance_source_sales_procurement_guard")
+            .expect("必须存在来源销售 guard helper")
+            .1;
+        let load = helper
+            .find(".find_by_id(&order.sales_order_id, session)")
+            .expect("必须在事务内加载来源销售单");
+        let advance = helper
+            .find("sales_order.advance_procurement_guard(actor_id)")
+            .expect("必须推进 procurement guard");
+        let update = helper
+            .find("db.sales_orders().update(&mut sales_order, session)")
+            .expect("必须通过同一事务执行销售单 CAS");
+
+        assert!(load < advance);
+        assert!(advance < update);
+    }
+
+    /// 销售 guard 乐观锁与事务冲突必须映射为稳定 HTTP 409 服务错误。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无；任一并发错误未映射为稳定冲突文案时测试失败。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 采购变更生效不得把数据库 CAS 或 MongoDB 瞬态事务冲突泄露为 500。
+    #[test]
+    fn effect_concurrency_errors_map_to_stable_conflicts() {
+        let optimistic = crate::errors::Error::from(database::Error::OptimisticLockingError);
+        assert!(matches!(
+            optimistic,
+            crate::errors::Error::ConflictError(message)
+                if message == "数据已被其他请求修改，请刷新后重试"
+        ));
+
+        let transient = crate::errors::Error::from(database::Error::TransientTransactionConflict(
+            mongodb::error::Error::custom("write conflict"),
+        ));
+        assert!(matches!(
+            transient,
+            crate::errors::Error::ConflictError(message) if message == "并发事务冲突，请重试"
+        ));
     }
 
     /// 生效只接受当前冻结提交；错误提交或缺失提交失败关闭。
