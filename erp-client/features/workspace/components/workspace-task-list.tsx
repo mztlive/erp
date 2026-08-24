@@ -17,7 +17,7 @@ export function WorkspaceTaskList({
 }) {
     return (
         <ul
-            className="flex min-h-0 flex-1 flex-col overflow-auto"
+            className="flex min-h-0 flex-1 flex-col divide-y divide-border/30 overflow-auto scroll-fade-b"
             aria-label="待办列表"
         >
             {items.map((item) => (

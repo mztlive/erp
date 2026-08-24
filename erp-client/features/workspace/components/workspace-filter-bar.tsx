@@ -1,13 +1,13 @@
 "use client"
 
+import { SearchIcon } from "lucide-react"
+
 import {
     InputGroup,
     InputGroupAddon,
-    InputGroupButton,
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 
 import type { WorkspaceUrlState } from "../lib/url-state"
@@ -40,128 +40,177 @@ const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
 ]
 
 /**
- * 口径胶囊、类型页签、搜索与排序。只筛选左列，不改变指标数量口径。
+ * 贴画布的口径数字。数字本身是筛选，不是统计卡。
  */
-export function WorkspaceFilterBar({
-    urlState,
+export function WorkspaceOverviewBar({
     metrics,
     activeMetric,
-    searchDraft,
-    onSearchDraftChange,
     onMetricClick,
-    onFamilyChange,
-    onSortChange,
-    onSearch,
+    className,
 }: {
-    urlState: WorkspaceUrlState
     metrics: readonly WorkspaceMetric[]
     activeMetric: WorkspaceMetricKey
-    searchDraft: string
-    onSearchDraftChange: (value: string) => void
     onMetricClick: (key: WorkspaceMetricKey) => void
-    onFamilyChange: (family?: WorkspaceFamilyFilter) => void
-    onSortChange: (sort: WorkspaceSort) => void
-    onSearch: () => void
+    className?: string
 }) {
     const visibleMetrics = metrics.filter((metric) => metric.visible)
+
+    return (
+        <div
+            role="group"
+            aria-label="待办筛选"
+            className={cn(
+                "flex shrink-0 flex-wrap gap-x-8 gap-y-3 border-b border-border/30 pb-4",
+                className,
+            )}
+        >
+            {visibleMetrics.map((metric) => {
+                const active = metric.key === activeMetric
+                const danger =
+                    metric.tone === "destructive" && metric.count > 0
+                return (
+                    <button
+                        key={metric.key}
+                        type="button"
+                        aria-pressed={active}
+                        aria-label={`${metric.label} ${metric.count}`}
+                        onClick={() => onMetricClick(metric.key)}
+                        className="flex min-w-14 flex-col items-start gap-1 text-left"
+                    >
+                        <span
+                            className={cn(
+                                "num text-3xl leading-none font-semibold tracking-tight",
+                                danger
+                                    ? "text-destructive"
+                                    : active
+                                      ? "text-foreground"
+                                      : "text-muted-foreground",
+                            )}
+                        >
+                            {metric.count}
+                        </span>
+                        <span
+                            className={cn(
+                                "border-b pb-0.5 text-xs",
+                                active
+                                    ? "border-foreground font-medium text-foreground"
+                                    : "border-transparent text-muted-foreground",
+                            )}
+                        >
+                            {metric.label}
+                        </span>
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
+/**
+ * 队列类型。和待办列表同一列，不跨到作业面。
+ */
+export function WorkspaceFamilyNav({
+    urlState,
+    onFamilyChange,
+}: {
+    urlState: WorkspaceUrlState
+    onFamilyChange: (family?: WorkspaceFamilyFilter) => void
+}) {
     const familyValue = urlState.family ?? "all"
 
     return (
-        <div className="flex flex-col gap-2 border-b border-border/30 px-3 py-2">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <ToggleGroup
-                    value={[activeMetric]}
-                    onValueChange={(values) => {
-                        const next = values[0]
-                        if (!next) return
-                        onMetricClick(next as WorkspaceMetricKey)
-                    }}
-                    variant="outline"
-                    size="sm"
-                    spacing={0}
-                    aria-label="待办筛选"
-                >
-                    {visibleMetrics.map((metric) => (
-                        <ToggleGroupItem key={metric.key} value={metric.key}>
-                            {metric.label}
-                            <span
-                                className={cn(
-                                    "num",
-                                    metric.tone === "destructive" &&
-                                        metric.count > 0 &&
-                                        "text-destructive",
-                                )}
-                            >
-                                {metric.count}
-                            </span>
-                        </ToggleGroupItem>
-                    ))}
-                </ToggleGroup>
-                <form
-                    className="flex flex-wrap items-center gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        onSearch()
-                    }}
-                >
-                    <InputGroup className="w-52 max-w-full">
-                        <InputGroupInput
-                            value={searchDraft}
-                            onChange={(event) =>
-                                onSearchDraftChange(event.target.value)
-                            }
-                            placeholder="搜索单号或往来方"
-                            aria-label="搜索待办"
-                        />
-                        <InputGroupAddon align="inline-end">
-                            <InputGroupButton type="submit">
-                                搜索
-                            </InputGroupButton>
-                        </InputGroupAddon>
-                    </InputGroup>
-                    <NativeSelect
-                        value={urlState.sort}
-                        aria-label="排序"
-                        onChange={(event) =>
-                            onSortChange(event.target.value as WorkspaceSort)
+        <div
+            role="group"
+            aria-label="任务类型"
+            className="flex flex-wrap items-center gap-1"
+        >
+            {FAMILIES.map((family) => {
+                const value = family ?? "all"
+                const active = familyValue === value
+                return (
+                    <button
+                        key={value}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() =>
+                            onFamilyChange(
+                                family === undefined ? undefined : family,
+                            )
                         }
+                        className={cn(
+                            "h-8 px-1.5 text-sm",
+                            active
+                                ? "font-medium text-foreground"
+                                : "text-muted-foreground hover:text-foreground",
+                        )}
                     >
-                        {SORT_OPTIONS.map((option) => (
-                            <NativeSelectOption
-                                key={option.value}
-                                value={option.value}
-                            >
-                                {option.label}
-                            </NativeSelectOption>
-                        ))}
-                    </NativeSelect>
-                </form>
-            </div>
-            <ToggleGroup
-                value={[familyValue]}
-                onValueChange={(values) => {
-                    const next = values[0]
-                    if (!next) return
-                    onFamilyChange(
-                        next === "all"
-                            ? undefined
-                            : (next as WorkspaceFamilyFilter),
-                    )
-                }}
-                variant="outline"
-                size="sm"
-                spacing={0}
-                aria-label="任务类型"
-            >
-                {FAMILIES.map((family) => {
-                    const value = family ?? "all"
-                    return (
-                        <ToggleGroupItem key={value} value={value}>
-                            {family ? FAMILY_LABEL[family] : "全部"}
-                        </ToggleGroupItem>
-                    )
-                })}
-            </ToggleGroup>
+                        {family ? FAMILY_LABEL[family] : "全部"}
+                    </button>
+                )
+            })}
         </div>
+    )
+}
+
+/**
+ * 队列内搜索与排序。Enter 提交关键词，不另放搜索按钮。
+ */
+export function WorkspaceQueueToolbar({
+    urlState,
+    searchDraft,
+    onSearchDraftChange,
+    onSortChange,
+    onSearch,
+    stacked = false,
+}: {
+    urlState: WorkspaceUrlState
+    searchDraft: string
+    onSearchDraftChange: (value: string) => void
+    onSortChange: (sort: WorkspaceSort) => void
+    onSearch: () => void
+    stacked?: boolean
+}) {
+    return (
+        <form
+            className={cn(
+                "flex gap-2",
+                stacked ? "flex-col" : "max-w-xl flex-row items-center",
+            )}
+            onSubmit={(event) => {
+                event.preventDefault()
+                onSearch()
+            }}
+        >
+            <InputGroup className="min-w-0 flex-1">
+                <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                    value={searchDraft}
+                    onChange={(event) =>
+                        onSearchDraftChange(event.target.value)
+                    }
+                    placeholder="单号或往来方"
+                    aria-label="搜索待办"
+                />
+            </InputGroup>
+            <NativeSelect
+                size="sm"
+                value={urlState.sort}
+                aria-label="排序"
+                onChange={(event) =>
+                    onSortChange(event.target.value as WorkspaceSort)
+                }
+            >
+                {SORT_OPTIONS.map((option) => (
+                    <NativeSelectOption
+                        key={option.value}
+                        value={option.value}
+                    >
+                        {option.label}
+                    </NativeSelectOption>
+                ))}
+            </NativeSelect>
+        </form>
     )
 }

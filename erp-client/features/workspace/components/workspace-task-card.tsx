@@ -8,10 +8,7 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 
 /**
- * 工作台左列条目。
- *
- * 与公共 `WorkTaskItem` 分开：工作台只有「待我处理」口径，责任方恒为当前用户，
- * 摘要长串在右侧详情已完整展开，列表只保留扫读所需的单号、往来方、金额与截止。
+ * 工作台队列行。两行账本扫读：单号与金额，类型、往来方与截止。
  */
 export function WorkspaceTaskCard({
     item,
@@ -28,7 +25,6 @@ export function WorkspaceTaskCard({
         item.summarySections,
         item.counterpartyName,
     ).amounts[0]
-    // 单号常带单据类型前缀（「销售单 XS…」），与任务类型标签重复时去掉前缀。
     const number = stripTypePrefix(item.stableNumber, item.workItemTypeLabel)
 
     return (
@@ -44,35 +40,30 @@ export function WorkspaceTaskCard({
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
-                "flex w-full flex-col gap-1 border-b border-border/30 px-3 py-2.5 text-left transition-colors",
-                selected ? "bg-muted" : "hover:bg-muted/50",
-                blocked && "border-l-2 border-l-destructive",
+                "flex w-full flex-col gap-1 px-2 py-2.5 text-left transition-colors",
+                selected ? "bg-muted" : "hover:bg-muted/60",
             )}
         >
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                    {item.workItemTypeLabel}
-                </span>
-                {blocked ? (
-                    <StatusBadge label="受阻" tone="warning" />
-                ) : overdue ? (
-                    <StatusBadge label="已超期" tone="destructive" />
-                ) : null}
-            </div>
             <div className="flex items-baseline justify-between gap-3">
                 <span className="min-w-0 truncate font-medium">{number}</span>
                 {amount ? (
                     <span className="num shrink-0 text-sm">{amount.value}</span>
                 ) : null}
             </div>
-            <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span className="min-w-0 truncate">
-                    {item.counterpartyName ?? "—"}
+                    {item.workItemTypeLabel}
+                    {item.counterpartyName
+                        ? ` · ${item.counterpartyName}`
+                        : ""}
                 </span>
-                {item.dueAt && !overdue ? (
+                {blocked ? (
+                    <StatusBadge label="受阻" tone="warning" />
+                ) : overdue ? (
+                    <StatusBadge label="已超期" tone="destructive" />
+                ) : item.dueAt ? (
                     <span className="shrink-0">
-                        <time dateTime={item.dueAt}>{item.dueAtLabel}</time>{" "}
-                        截止
+                        <time dateTime={item.dueAt}>{item.dueAtLabel}</time>
                     </span>
                 ) : null}
             </div>

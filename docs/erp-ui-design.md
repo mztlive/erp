@@ -136,7 +136,7 @@ return (
 ```
 [画布 background]
   PageHeader / object-chrome     ← 贴画布，无底、无框
-  MetricStrip / 处理条 / 分段切换  ← 轻控件，不另开厚卡（M1 工作台不用 MetricStrip，口径放进主表面工具条）
+  MetricStrip / 处理条 / 分段切换  ← 轻控件，不另开厚卡（M1 工作台不用 MetricStrip，口径数字贴画布）
   主工作面 1～2 张                ← surfacePanelClassName
 ```
 
@@ -193,7 +193,7 @@ return (
 
 | 模式 | 骨架 |
 | --- | --- |
-| M1 工作台 | `PageScaffold` → Header → **一张**主表面（口径胶囊 + 类型页签 + 列表/详情主从；无独立统计卡） |
+| M1 工作台 | `PageScaffold` → Header → 口径数字贴画布 → 空态贴画布 / 队列列 + 作业列（发丝分隔，无外包大卡；无独立统计卡） |
 | M2 列表 | `PageScaffold` → Header → Metric → **一张** `BusinessTableFrame`（**含** `ListToolbar`，禁止 frame 外平行工具条） |
 | M3 队列 | `PageScaffold` → Header → **一张 sticky 处理面**（surface：范围/类型 + `ListToolbar` + chip + 连续处理条）→ 主卡 + 侧卡 |
 | M4 对象中心 | `PageScaffold` → object-chrome → `DocumentHeader` → Metric → 正文 surface（Tabs 外壳） |
@@ -346,7 +346,7 @@ return (
 
 | 模式 | 代号 | 适用 | 主组件 |
 | --- | --- | --- | --- |
-| 角色工作台 | M1 | 我的工作台 | `PageScaffold` `PageHeader` 工具条口径胶囊 + `WorkTaskItem` 列表/详情主从 |
+| 角色工作台 | M1 | 我的工作台 | `PageScaffold` `PageHeader` 口径数字条 + 队列/作业左右分栏 |
 | 高密度查询列表 | M2 | 单据列表、台账、同步批次 | `PageScaffold` `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet` |
 | 连续处理队列 | M3 | 履约作业、票款复核、接口异常（审批已并入 W01） | `PageScaffold` `SequentialProcessBar` `WorkTaskItem` |
 | 对象中心（单据枢纽） | M4 | 销售单、采购单、客户、供应商 | `PageScaffold` `PageHeader(object-chrome)` + `DocumentHeader(compact)` `DocumentSection` … |
@@ -357,17 +357,17 @@ return (
 ### 4.2 M1 角色工作台
 
 ```
-┌ PageHeader：我的工作台          [刷新] [数据更新时间]
-├ 一张主表面
-│  ├ 口径胶囊：待我处理 | 已超期 | 受阻 | 我发起的     搜索  排序
-│  ├ 类型页签：全部 | 审批 | 履约 | 财务 | 集成
-│  └ 有任务：左列列表 + 右侧详情（决定条吸底）
-│     无任务：单个空态，不拆左右栏
+┌ PageHeader：我的工作台                    [刷新] [数据更新时间]
+├ 口径数字贴画布（禁止 MetricStrip 卡）：12 待我处理    2 已超期    1 受阻
+├ 无任务：类型 + 搜索/排序贴画布 + 单个空态，不拆左右栏、不套大卡
+├ 有任务：画布左右分栏，中间一条发丝
+│    左列队列（约 20–24rem）：全部/审批/履约/财务/集成 + 搜索 + 排序 + 两行账本行
+│    右列作业面：类型 kicker + 标题 + 金额 inset + 明细；决定条吸底
 ```
 
 交互要点：
 
-- 口径胶囊可点：过滤左列，不跳到第二个待办页；禁止用独立 `MetricStrip` 统计卡。
+- 口径数字可点：过滤左列，不跳到第二个待办页；禁止用独立 `MetricStrip` 统计卡。
 - 审批任务在右侧提交通过或驳回，成功后自动选中下一条。
 - 非审批任务只提供「打开单据」，正式动作仍在对应业务工作面。
 - 数据更新时间：页头只展示一条待办 `DataFreshness`（≤1 分钟）。

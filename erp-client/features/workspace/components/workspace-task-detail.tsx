@@ -6,12 +6,19 @@ import { ApprovalActionBar } from "@/features/approval-workflow/components/appro
 import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import {
+    DescriptionDetails,
+    DescriptionItem,
+    DescriptionList,
+    DescriptionTerm,
+} from "@/components/ui/description-list"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
@@ -23,10 +30,7 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 
 /**
- * 工作台右侧详情。审批任务在页内提交决定；非审批任务只给打开单据。
- *
- * 版式分三层：金额条是决策重心，明细回答「买什么」，其余字段折叠待查。
- * 标题副行已展示的往来方与提交人不再进字段区，避免同一事实反复上屏。
+ * 工作台作业面。金额是决策重心，明细回答买什么，其余字段折叠。
  */
 export function WorkspaceTaskDetail({
     item,
@@ -114,12 +118,14 @@ export function WorkspaceTaskDetail({
 
     return (
         <section className="flex h-full min-h-0 flex-col" aria-label="当前任务">
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-                {/* 正文限宽：铺满宽屏会让标签与取值拉开到需要横扫的距离。 */}
-                <div className="flex max-w-3xl flex-col gap-5">
-                    <header className="flex flex-col gap-1">
+            <div className="min-h-0 flex-1 overflow-auto">
+                <div className="flex max-w-2xl flex-col gap-6 py-1">
+                    <header className="flex flex-col gap-2">
+                        <p className="text-xs text-muted-foreground">
+                            {item.workItemTypeLabel}
+                        </p>
                         <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-lg font-medium">
+                            <h2 className="text-xl font-semibold tracking-tight">
                                 {item.objectTitle}
                             </h2>
                             {blocked ? (
@@ -139,24 +145,29 @@ export function WorkspaceTaskDetail({
                     </header>
 
                     {primaryAmount ? (
-                        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-y border-border/40 py-3">
-                            <div>
-                                <span className="num text-2xl font-semibold">
+                        <div
+                            className={cn(
+                                surfaceInsetClassName,
+                                "flex flex-wrap items-end gap-x-8 gap-y-2 px-4 py-4",
+                            )}
+                        >
+                            <div className="flex flex-col gap-1">
+                                <span className="num text-3xl font-semibold tracking-tight">
                                     {primaryAmount.value}
                                 </span>
-                                <span className="ml-2 text-xs text-muted-foreground">
+                                <span className="text-xs text-muted-foreground">
                                     {primaryAmount.label}
                                 </span>
                             </div>
                             {otherAmounts.map((amount) => (
                                 <div
                                     key={amount.label}
-                                    className="text-sm text-muted-foreground"
+                                    className="flex flex-col gap-1"
                                 >
-                                    <span className="num text-foreground">
+                                    <span className="num text-lg font-medium">
                                         {amount.value}
                                     </span>
-                                    <span className="ml-1.5 text-xs">
+                                    <span className="text-xs text-muted-foreground">
                                         {amount.label}
                                     </span>
                                 </div>
@@ -184,7 +195,7 @@ export function WorkspaceTaskDetail({
                                 {briefLines.map((line) => (
                                     <li
                                         key={line.title}
-                                        className="flex justify-between gap-4 border-b border-border/30 py-1.5 last:border-b-0"
+                                        className="flex justify-between gap-4 border-b border-border/30 py-2 last:border-b-0"
                                     >
                                         <span className="min-w-0 truncate">
                                             {line.title}
@@ -235,7 +246,6 @@ export function WorkspaceTaskDetail({
                         </p>
                     ) : null}
 
-                    {/* 没有运行实例时不渲染空的「审批摘要」占位卡。 */}
                     {approvalTask ? (
                         instance ? (
                             <RuntimeSummary instance={instance} />
@@ -246,7 +256,7 @@ export function WorkspaceTaskDetail({
                 </div>
             </div>
             {actions ? (
-                <div className="shrink-0 border-t border-border/30 bg-card px-4 py-3">
+                <div className="shrink-0 border-t border-border/40 py-3">
                     {actions}
                 </div>
             ) : null}
@@ -262,25 +272,18 @@ function FieldGrid({
     className?: string
 }) {
     return (
-        <dl
-            className={cn(
-                "grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3",
-                className,
-            )}
-        >
+        <DescriptionList columns="two" className={className}>
             {sections.map((section) => (
-                <div key={section.label} className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">
-                        {section.label}
-                    </dt>
-                    <dd
-                        className={cn("truncate", section.numeric && "num")}
+                <DescriptionItem key={section.label}>
+                    <DescriptionTerm>{section.label}</DescriptionTerm>
+                    <DescriptionDetails
+                        className={cn(section.numeric && "num")}
                         title={section.value}
                     >
                         {section.value}
-                    </dd>
-                </div>
+                    </DescriptionDetails>
+                </DescriptionItem>
             ))}
-        </dl>
+        </DescriptionList>
     )
 }

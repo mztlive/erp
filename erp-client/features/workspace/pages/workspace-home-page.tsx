@@ -9,26 +9,29 @@ import {
     PageActions,
     PageHeader,
     PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import {
     Sheet,
     SheetContent,
     SheetDescription,
     SheetTitle,
 } from "@/components/ui/sheet"
-import { WorkspaceFilterBar } from "@/features/workspace/components/workspace-filter-bar"
+import {
+    WorkspaceFamilyNav,
+    WorkspaceOverviewBar,
+    WorkspaceQueueToolbar,
+} from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
 import { WorkspaceTaskDetail } from "@/features/workspace/components/workspace-task-detail"
 import { WorkspaceTaskList } from "@/features/workspace/components/workspace-task-list"
 import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
 import { deriveWorkItemsFreshness } from "@/features/workspace/lib/freshness"
 import { filterSummaryFor } from "@/features/workspace/lib/url-state"
-import { cn } from "@/lib/utils"
 
 /**
- * 唯一工作台：指标筛选左列，审批决定在右侧详情连续提交。
+ * 工作台：口径数字贴画布；有任务时队列与作业面左右分栏，审批在右侧连续提交。
  */
 export function WorkspaceHomePage() {
     const {
@@ -139,10 +142,21 @@ export function WorkspaceHomePage() {
         ? "可清除筛选后回到待我处理。"
         : "新任务到达后会出现在这里。"
     const emptyAction = hasActiveFilter ? (
-        <Button type="button" variant="outline" onClick={clearFilters}>
+        <Button type="button" variant="secondary" onClick={clearFilters}>
             回到待我处理
         </Button>
     ) : undefined
+
+    const queueToolbar = (stacked: boolean) => (
+        <WorkspaceQueueToolbar
+            urlState={urlState}
+            searchDraft={searchDraft}
+            onSearchDraftChange={setSearchDraft}
+            onSortChange={onSortChange}
+            onSearch={applySearch}
+            stacked={stacked}
+        />
+    )
 
     const detail = selected ? (
         <WorkspaceTaskDetail
@@ -152,11 +166,11 @@ export function WorkspaceHomePage() {
             }}
         />
     ) : (
-        <div className="flex flex-1 items-center justify-center p-6">
+        <div className="flex flex-1 items-center justify-center p-8">
             <BusinessEmptyState
                 kind="no-tasks"
                 title="选择一条待办开始处理"
-                description="从左侧列表选中任务后，可在此查看摘要并处理。"
+                description="从左侧队列选中任务后，可在此核对并提交决定。"
                 className="bg-transparent ring-0"
             />
         </div>
@@ -164,7 +178,6 @@ export function WorkspaceHomePage() {
 
     return (
         <PageScaffold className="min-h-0">
-            {/* 计数只在左列标题出现一次，页头不再重复同一句。 */}
             <PageHeader
                 title="我的工作台"
                 metadata={
@@ -193,26 +206,22 @@ export function WorkspaceHomePage() {
                 }
             />
 
-            <div
-                className={cn(
-                    surfacePanelClassName,
-                    "flex min-h-0 flex-1 flex-col overflow-hidden",
-                )}
-            >
-                <WorkspaceFilterBar
-                    urlState={urlState}
-                    metrics={metrics}
-                    activeMetric={activeMetric}
-                    searchDraft={searchDraft}
-                    onSearchDraftChange={setSearchDraft}
-                    onMetricClick={onMetricClick}
-                    onFamilyChange={onFamilyChange}
-                    onSortChange={onSortChange}
-                    onSearch={applySearch}
-                />
+            <WorkspaceOverviewBar
+                metrics={metrics}
+                activeMetric={activeMetric}
+                onMetricClick={onMetricClick}
+            />
 
-                {items.length === 0 ? (
-                    <div className="flex flex-1 items-center justify-center p-6">
+            {items.length === 0 ? (
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                    <div className="flex max-w-xl flex-col gap-3">
+                        <WorkspaceFamilyNav
+                            urlState={urlState}
+                            onFamilyChange={onFamilyChange}
+                        />
+                        {queueToolbar(false)}
+                    </div>
+                    <div className="flex flex-1 items-center justify-center">
                         <BusinessEmptyState
                             kind={hasActiveFilter ? "filter" : "no-tasks"}
                             title={emptyTitle}
@@ -221,38 +230,38 @@ export function WorkspaceHomePage() {
                             className="bg-transparent ring-0"
                         />
                     </div>
-                ) : (
-                    <div className="flex min-h-0 flex-1">
-                        <section
-                            className="flex min-h-0 w-full flex-col overflow-hidden lg:w-[min(24rem,38%)] lg:shrink-0 lg:border-r lg:border-border/30"
-                            aria-labelledby="workspace-task-main-title"
-                        >
-                            <header className="border-b border-border/30 px-3 py-2">
-                                <h2
-                                    id="workspace-task-main-title"
-                                    className="text-sm font-medium"
-                                >
-                                    {filterLabel}
-                                </h2>
-                                <p
-                                    className="text-xs text-muted-foreground"
-                                    aria-live="polite"
-                                >
-                                    当前共 {view.total} 项
-                                </p>
-                            </header>
-                            <WorkspaceTaskList
-                                items={items}
-                                selectedWorkItemId={selected?.workItemId}
-                                onSelect={onSelectTask}
+                </div>
+            ) : (
+                <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+                    <section
+                        className="flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0 xl:w-96"
+                        aria-label={filterLabel}
+                    >
+                        <header className="flex flex-col gap-2 pb-3">
+                            <p className="sr-only" aria-live="polite">
+                                {filterLabel} {view.total} 项
+                            </p>
+                            <WorkspaceFamilyNav
+                                urlState={urlState}
+                                onFamilyChange={onFamilyChange}
                             />
-                        </section>
-                        <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col">
-                            {detail}
-                        </div>
+                            {queueToolbar(true)}
+                        </header>
+                        <WorkspaceTaskList
+                            items={items}
+                            selectedWorkItemId={selected?.workItemId}
+                            onSelect={onSelectTask}
+                        />
+                    </section>
+                    <Separator
+                        orientation="vertical"
+                        className="hidden lg:block"
+                    />
+                    <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:pl-8">
+                        {detail}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             <Sheet
                 open={narrowDetailOpen && Boolean(selected)}

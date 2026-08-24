@@ -167,6 +167,9 @@ describe("WorkspaceHomePage", () => {
         expect(document.querySelector('[data-slot="metric-strip"]')).toBeNull()
         expect(screen.getByLabelText("待办筛选")).toBeTruthy()
         expect(screen.getByLabelText("任务类型")).toBeTruthy()
+        expect(screen.queryByRole("button", { name: "搜索" })).toBeNull()
+        expect(screen.getByLabelText("搜索待办")).toBeTruthy()
+        expect(document.querySelector("[data-slot=page-scaffold]")).toBeTruthy()
     })
 
     it("shows a single empty state when there are no tasks", () => {
