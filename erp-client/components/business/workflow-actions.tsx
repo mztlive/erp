@@ -104,6 +104,36 @@ type WorkflowDetailListProps = {
     tone?: "default" | "destructive"
 }
 
+function StatusChangeStrip({
+    sourceStatus,
+    targetStatus,
+    compact = false,
+}: {
+    sourceStatus: ReturnType<typeof normalizeStatus>
+    targetStatus: ReturnType<typeof normalizeStatus>
+    compact?: boolean
+}) {
+    return (
+        <section aria-label="状态变化">
+            <div
+                className={cn(
+                    "flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted",
+                    compact
+                        ? "justify-end px-3 py-2.5"
+                        : "justify-center p-4 sm:justify-start",
+                )}
+            >
+                <StatusBadge {...sourceStatus} />
+                <ArrowRightIcon
+                    aria-label="变更为"
+                    className="size-4 text-muted-foreground"
+                />
+                <StatusBadge {...targetStatus} />
+            </div>
+        </section>
+    )
+}
+
 function WorkflowDetailList({
     title,
     icon: Icon,
@@ -170,6 +200,10 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     effects?: readonly React.ReactNode[]
     /** 需要随正式动作一并提交的显式业务字段。 */
     formContent?: React.ReactNode
+    /** 覆盖确认层宽度等布局，默认 `sm:max-w-xl`。 */
+    contentClassName?: string
+    /** 横版把状态变化放到标题行右侧，并加宽确认层。 */
+    layout?: "stack" | "landscape"
     nextDepartment?: React.ReactNode
     irreversibleEffects?: readonly React.ReactNode[]
     pending?: boolean
@@ -196,6 +230,8 @@ function FormalActionConfirmDialog({
     lockedFields = [],
     effects = [],
     formContent,
+    contentClassName,
+    layout = "stack",
     nextDepartment,
     irreversibleEffects = [],
     pending = false,
@@ -236,33 +272,57 @@ function FormalActionConfirmDialog({
         }
     }, [onConfirm, onConfirmError, setOpen])
 
+    const header = (
+        <AlertDialogHeader
+            className={
+                layout === "landscape"
+                    ? "place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]"
+                    : undefined
+            }
+        >
+            <AlertDialogMedia className="text-primary">
+                <FileCheck2Icon aria-hidden="true" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{title ?? `确认${actionLabel}`}</AlertDialogTitle>
+            <AlertDialogDescription
+                className={layout === "landscape" ? "text-left" : undefined}
+            >
+                {description ?? "请核对状态变化和业务影响后再继续。"}
+            </AlertDialogDescription>
+        </AlertDialogHeader>
+    )
+
     return (
         <AlertDialog open={resolvedOpen} onOpenChange={setOpen}>
             {trigger ? <AlertDialogTrigger render={trigger} /> : null}
-            <AlertDialogContent className="sm:max-w-xl">
-                <AlertDialogHeader>
-                    <AlertDialogMedia className="text-primary">
-                        <FileCheck2Icon aria-hidden="true" />
-                    </AlertDialogMedia>
-                    <AlertDialogTitle>
-                        {title ?? `确认${actionLabel}`}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        {description ?? "请核对状态变化和业务影响后再继续。"}
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
+            <AlertDialogContent
+                className={cn(
+                    layout === "landscape"
+                        ? "sm:max-w-4xl data-[size=default]:sm:max-w-4xl"
+                        : "sm:max-w-xl data-[size=default]:sm:max-w-xl",
+                    contentClassName,
+                )}
+            >
+                {layout === "landscape" ? (
+                    <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                        {header}
+                        <StatusChangeStrip
+                            sourceStatus={sourceStatus}
+                            targetStatus={targetStatus}
+                            compact
+                        />
+                    </div>
+                ) : (
+                    header
+                )}
 
-                <div className="space-y-4">
-                    <section aria-label="状态变化">
-                        <div className="flex flex-wrap items-center justify-center gap-3 rounded-xl border border-border bg-muted p-4 sm:justify-start">
-                            <StatusBadge {...sourceStatus} />
-                            <ArrowRightIcon
-                                aria-label="变更为"
-                                className="size-4 text-muted-foreground"
-                            />
-                            <StatusBadge {...targetStatus} />
-                        </div>
-                    </section>
+                <div className="flex flex-col gap-4">
+                    {layout === "stack" ? (
+                        <StatusChangeStrip
+                            sourceStatus={sourceStatus}
+                            targetStatus={targetStatus}
+                        />
+                    ) : null}
 
                     <WorkflowDetailList
                         title="提交后锁定字段"

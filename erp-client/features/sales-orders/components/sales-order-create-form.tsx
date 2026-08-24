@@ -391,7 +391,6 @@ export function SalesOrderCreateForm({
                 <VoucherSalesOrderSubmitConfirmDialog
                     open={submission.submitConfirmOpen}
                     onOpenChange={submission.setSubmitConfirmOpen}
-                    approval={submission.approval}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
                     onConfirm={() => {
@@ -404,7 +403,6 @@ export function SalesOrderCreateForm({
                 <SalesOrderSubmitConfirmDialog
                     open={submission.submitConfirmOpen}
                     onOpenChange={submission.setSubmitConfirmOpen}
-                    approval={submission.approval}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
                     onConfirm={() => {

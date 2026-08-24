@@ -65,10 +65,10 @@ export function SalesOrderSubmitConfirmSummary({
     return (
         <section
             aria-label="本单摘要"
-            className="space-y-3 rounded-xl border border-border bg-muted p-4"
+            className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-muted p-4"
         >
             <h3 className="text-sm font-medium text-foreground">本单摘要</h3>
-            <DescriptionList columns="two" className="gap-x-4 gap-y-3">
+            <DescriptionList className="grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
                 <DescriptionItem>
                     <DescriptionTerm>客户</DescriptionTerm>
                     <DescriptionDetails>

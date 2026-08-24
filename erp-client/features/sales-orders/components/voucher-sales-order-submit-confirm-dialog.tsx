@@ -1,8 +1,6 @@
 "use client"
 
 import { FormalActionConfirmDialog } from "@/components/business"
-import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/components/voucher-sales-order-approval-area"
 import {
     SalesOrderSubmitConfirmSummary,
     type SalesOrderSubmitSnapshot,
@@ -11,19 +9,18 @@ import {
 /**
  * 卡券销售单提交确认。
  *
- * 以本单摘要为主，仅保留简短审批提示与冻结路线。卡券运营是普通单人节点，不得选择下一节点或审批人。
+ * 以本单摘要为主。卡券运营是普通单人节点，不得选择下一节点或审批人，也不展示审批路线卡片。
+ * 确认层用横版：状态在标题行右侧，标题与说明左对齐。
  */
 export function VoucherSalesOrderSubmitConfirmDialog({
     open,
     pending,
-    approval,
     snapshot,
     onOpenChange,
     onConfirm,
 }: {
     open: boolean
     pending: boolean
-    approval?: DocumentApprovalView
     snapshot: SalesOrderSubmitSnapshot
     onOpenChange: (open: boolean) => void
     onConfirm: () => void
@@ -37,15 +34,8 @@ export function VoucherSalesOrderSubmitConfirmDialog({
             fromStatus={{ label: "草稿", tone: "neutral" }}
             toStatus={{ label: "审批中", tone: "warning" }}
             description="提交后进入销售领导 → 运营两级审批；任一层驳回后将从第一节点开始下一轮。"
-            formContent={
-                <div className="space-y-3">
-                    <SalesOrderSubmitConfirmSummary snapshot={snapshot} />
-                    <VoucherSalesOrderApprovalArea
-                        phase="confirm"
-                        approval={approval}
-                    />
-                </div>
-            }
+            layout="landscape"
+            formContent={<SalesOrderSubmitConfirmSummary snapshot={snapshot} />}
             pending={pending}
             onConfirm={() => {
                 void onConfirm()
