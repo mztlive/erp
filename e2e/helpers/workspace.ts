@@ -56,6 +56,19 @@ export async function approveVisibleWorkspaceTask(page: Page): Promise<void> {
     await expect(page.getByRole("dialog")).toHaveCount(0)
 }
 
+/** 打开非审批任务，并通过固定业务按钮进入对应单据页面。 */
+export async function openVisibleWorkspaceDocument(page: Page): Promise<void> {
+    const detail = workspaceTaskDetail(page)
+    await expect(detail).toBeVisible({ timeout: 20_000 })
+    await expect(
+        detail.getByRole("button", { name: "通过", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+        detail.getByRole("button", { name: "驳回", exact: true }),
+    ).toHaveCount(0)
+    await detail.getByRole("button", { name: "打开单据", exact: true }).click()
+}
+
 /** 打开工作台并通过列表第一行。调用方自行断言任务消失或空态。 */
 export async function approveFirstWorkspaceTask(page: Page): Promise<Locator> {
     const firstTask = workspaceTaskButtons(page).first()
