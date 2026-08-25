@@ -1,6 +1,7 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
@@ -8,7 +9,7 @@ import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { surfaceInsetClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
     DescriptionDetails,
     DescriptionItem,
@@ -16,18 +17,30 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import { StatusBadge } from "@/components/ui/status-badge"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
+import {
+    workspaceOpenActionLabel,
+    workspaceReadActionLabel,
+} from "../api/work-item-meta"
 import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
+import { workspacePaperKind } from "../lib/paper-kind"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { WorkspaceDocumentPaperDialog } from "./workspace-document-paper-dialog"
 
 /**
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
+ * 查看/打开在页头图标；通过、驳回留在底栏。
  */
 export function WorkspaceTaskDetail({
     item,
@@ -53,6 +66,19 @@ export function WorkspaceTaskDetail({
         approvalTask && isBlockedWorkItem(item),
     )
     const documentHref = buildDocumentHref(item)
+    const canReadPaper = Boolean(
+        workspacePaperKind(item.businessObjectType) &&
+        item.businessObjectId.trim(),
+    )
+    const readActionLabel = workspaceReadActionLabel(item.businessObjectType)
+    const openActionLabel = workspaceOpenActionLabel(
+        item.workItemType,
+        item.businessObjectType,
+    )
+    const [paperOpen, setPaperOpen] = useState(false)
+    useEffect(() => {
+        setPaperOpen(false)
+    }, [item.workItemId])
     const documentFacts = useWorkspaceDocumentFacts(item)
     const facts = documentFacts.facts
     const summarySections = facts?.sections ?? item.summarySections
@@ -91,6 +117,29 @@ export function WorkspaceTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
+    const documentActions =
+        canReadPaper || documentHref ? (
+            <div className="flex shrink-0 items-center gap-1">
+                {canReadPaper ? (
+                    <IconActionButton
+                        label={readActionLabel}
+                        testId={`work-item-read-document-${item.workItemId}`}
+                        onClick={() => setPaperOpen(true)}
+                    >
+                        <FileTextIcon aria-hidden="true" />
+                    </IconActionButton>
+                ) : null}
+                {documentHref ? (
+                    <IconActionButton
+                        label={openActionLabel}
+                        testId={`work-item-open-document-${item.workItemId}`}
+                        href={documentHref}
+                    >
+                        <ArrowUpRightIcon aria-hidden="true" />
+                    </IconActionButton>
+                ) : null}
+            </div>
+        ) : null
     const actions = approvalTask ? (
         <ApprovalActionBar
             allowedActions={item.allowedActions}
@@ -98,47 +147,42 @@ export function WorkspaceTaskDetail({
             workItemId={item.workItemId}
             expectedTaskVersion={item.taskVersion}
             instance={instance}
-            documentHref={documentHref}
             canReadSensitive={canReadSensitive}
             approveWithoutDialog
+            hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
             onDecisionApplied={(view) =>
                 onDecisionApplied?.(view, item.workItemId)
             }
         />
-    ) : documentHref ? (
-        <Button
-            type="button"
-            data-testid={`work-item-open-document-${item.workItemId}`}
-            render={<a href={documentHref} aria-label="打开单据" />}
-        >
-            打开单据
-        </Button>
     ) : null
 
     return (
         <section className="flex h-full min-h-0 flex-col" aria-label="当前任务">
             <div className="min-h-0 flex-1 overflow-auto">
                 <div className="flex w-full flex-col">
-                    <header className="flex flex-col gap-2 border-b border-grid py-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <WorkspaceDocumentBadge item={item} />
-                            {blocked ? (
-                                <StatusBadge label="受阻" tone="warning" />
-                            ) : overdue ? (
-                                <StatusBadge
-                                    label="已超期"
-                                    tone="destructive"
-                                />
-                            ) : null}
+                    <header className="flex items-start justify-between gap-3 border-b border-grid py-5">
+                        <div className="flex min-w-0 flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <WorkspaceDocumentBadge item={item} />
+                                {blocked ? (
+                                    <StatusBadge label="受阻" tone="warning" />
+                                ) : overdue ? (
+                                    <StatusBadge
+                                        label="已超期"
+                                        tone="destructive"
+                                    />
+                                ) : null}
+                            </div>
+                            <h2 className="text-xl font-semibold tracking-tight">
+                                {item.objectTitle}
+                            </h2>
+                            <p className="text-sm text-muted-foreground">
+                                {canReadSensitive
+                                    ? subtitle
+                                    : "当前账号无权查看部分业务字段"}
+                            </p>
                         </div>
-                        <h2 className="text-xl font-semibold tracking-tight">
-                            {item.objectTitle}
-                        </h2>
-                        <p className="text-sm text-muted-foreground">
-                            {canReadSensitive
-                                ? subtitle
-                                : "当前账号无权查看部分业务字段"}
-                        </p>
+                        {documentActions}
                     </header>
 
                     {primaryAmount ? (
@@ -196,9 +240,9 @@ export function WorkspaceTaskDetail({
                             description={`${lineCount} 行`}
                         >
                             <ul className="flex flex-col text-sm">
-                                {briefLines.map((line) => (
+                                {briefLines.map((line, lineIndex) => (
                                     <li
-                                        key={line.title}
+                                        key={`${lineIndex}:${line.title}`}
                                         className="flex justify-between gap-4 border-b border-border/40 py-2.5 last:border-b-0"
                                     >
                                         <span className="min-w-0">
@@ -214,15 +258,11 @@ export function WorkspaceTaskDetail({
                             </ul>
                             {briefMoreCount ? (
                                 <p className="text-xs text-muted-foreground">
-                                    另有 {briefMoreCount} 行，打开单据查看
+                                    {canReadPaper
+                                        ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
+                                        : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}
                                 </p>
                             ) : null}
-                        </DetailBlock>
-                    ) : null}
-
-                    {item.nextActionHint ? (
-                        <DetailBlock title="下一步">
-                            <p className="text-sm">{item.nextActionHint}</p>
                         </DetailBlock>
                     ) : null}
 
@@ -250,12 +290,75 @@ export function WorkspaceTaskDetail({
                     ) : null}
                 </div>
             </div>
-            {actions ? (
-                <div className="shrink-0 border-t border-border/40 py-3">
+            {actions || item.nextActionHint ? (
+                <div
+                    className={cn(
+                        "flex shrink-0 items-center gap-4 border-t border-border/40 py-3",
+                        actions ? "justify-between" : "justify-end",
+                    )}
+                >
                     {actions}
+                    {item.nextActionHint ? (
+                        <p className="max-w-sm text-right text-xs text-muted-foreground">
+                            {item.nextActionHint}
+                        </p>
+                    ) : null}
                 </div>
             ) : null}
+            {canReadPaper ? (
+                <WorkspaceDocumentPaperDialog
+                    item={item}
+                    open={paperOpen}
+                    onOpenChange={setPaperOpen}
+                />
+            ) : null}
         </section>
+    )
+}
+
+function IconActionButton({
+    label,
+    testId,
+    href,
+    onClick,
+    children,
+}: {
+    label: string
+    testId: string
+    href?: string
+    onClick?: () => void
+    children: ReactNode
+}) {
+    return (
+        <Tooltip>
+            <TooltipTrigger
+                render={
+                    href ? (
+                        <a
+                            href={href}
+                            aria-label={label}
+                            data-testid={testId}
+                            className={buttonVariants({
+                                variant: "ghost",
+                                size: "icon-sm",
+                            })}
+                        />
+                    ) : (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={label}
+                            data-testid={testId}
+                            onClick={onClick}
+                        />
+                    )
+                }
+            >
+                {children}
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
     )
 }
 

@@ -166,6 +166,7 @@ export function urlStateFromMetricKey(
 
 /**
  * URL 状态转列表查询。timezone 必须来自当前工作角色所属组织。
+ * 当前选中项只留在 URL，不进入列表查询，否则服务端会把该条提到队首。
  */
 export function toTodayWorkspaceQuery(
     state: WorkspaceUrlState,
@@ -179,7 +180,6 @@ export function toTodayWorkspaceQuery(
         workItemType: state.workItemType,
         query: state.query,
         sort: state.sort,
-        currentWorkItemId: state.currentWorkItemId,
         timezone,
     }
 }

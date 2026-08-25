@@ -129,9 +129,7 @@ export function useWorkspaceHome() {
 
     /**
      * 决策应用后的收尾：切换到下一条并失效工作台列表查询。
-     * 列表查询键随 URL(currentWorkItemId) 变化；若直接 refetch 旧键，
-     * 请求会携带已完成任务的 current_work_item_id 被后端 404，列表不更新。
-     * 失效后由键回退后的活动查询重新拉取（不受 staleTime 影响）。
+     * 选中项只写 URL，不进入列表查询，避免把当前条提到队首。
      */
     const applyDecisionAfter = React.useCallback(
         (completedWorkItemId: string) => {

@@ -31,7 +31,7 @@ export function resolveWorkspaceHref(
 }
 
 /**
- * 非审批任务的「打开单据」地址。审批决定在本页提交，不跳第二套待办页。
+ * 非审批任务跳转目标工作面的地址。审批决定在本页提交，不跳第二套待办页。
  */
 export function buildDocumentHref(item: WorkspaceWorkItem): string | null {
     return buildHandlerHref({

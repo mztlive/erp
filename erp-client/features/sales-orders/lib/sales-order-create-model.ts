@@ -130,6 +130,20 @@ export function hasMeaningfulLines(
     )
 }
 
+/**
+ * 把同一交付日期写到全部明细。日期为空时原样返回副本，不改已有交期。
+ */
+export function applyDueDateToLines(
+    lines: readonly SalesOrderDraftLineInput[],
+    dueDate: string,
+): SalesOrderDraftLineInput[] {
+    const nextDueDate = dueDate.trim()
+    if (!nextDueDate) return [...lines]
+    return lines.map((line) =>
+        line.dueDate === nextDueDate ? line : { ...line, dueDate: nextDueDate },
+    )
+}
+
 export function calculateTotals(
     lineItems: readonly SalesOrderDraftLineInput[],
     taxRatePercent: string,

@@ -222,17 +222,19 @@ export function WorkspaceHomePage() {
             >
                 <section
                     className={cn(
-                        "flex min-h-0 flex-col p-3",
+                        "flex min-h-0 flex-col",
                         items.length === 0
-                            ? "flex-1"
+                            ? "flex-1 p-3"
                             : "w-full lg:w-80 lg:shrink-0 xl:w-96",
                     )}
                     aria-label={filterLabel}
                 >
                     <header
                         className={cn(
-                            "flex flex-col gap-2 pb-3",
-                            items.length === 0 && "max-w-xl",
+                            "flex flex-col gap-2",
+                            items.length === 0
+                                ? "max-w-xl pb-3"
+                                : "border-b border-grid px-3 pt-3 pb-3",
                         )}
                     >
                         <p className="sr-only" aria-live="polite">

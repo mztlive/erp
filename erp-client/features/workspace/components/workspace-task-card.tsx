@@ -4,12 +4,13 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
 import { splitDetailSections } from "../lib/detail-facts"
+import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 
 /**
- * 工作台队列行。两行账本扫读：单据徽章与单号、金额；往来方与截止。
+ * 工作台队列行。首行单号与金额对齐扫读，次行放类型徽章与往来方。
  */
 export function WorkspaceTaskCard({
     item,
@@ -26,7 +27,7 @@ export function WorkspaceTaskCard({
         item.summarySections,
         item.counterpartyName,
     ).amounts[0]
-    const number = stripTypePrefix(item.stableNumber, item.workItemTypeLabel)
+    const number = stripDocumentNumberPrefix(item.stableNumber)
     const dueOrStatus = blocked || overdue || Boolean(item.dueAt)
 
     return (
@@ -38,66 +39,48 @@ export function WorkspaceTaskCard({
                     ? `work-item-procurement-order-creation-${item.workItemId}`
                     : undefined
             }
-            aria-label={`${item.workItemTypeLabel} ${item.stableNumber}`}
+            aria-label={`${item.workItemTypeLabel} ${number}`}
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
-                "flex w-full items-start gap-1.5 px-2 py-2.5 text-left transition-colors",
-                selected ? "bg-muted" : "hover:bg-muted/60",
+                "relative flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors",
+                selected
+                    ? "bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
+                    : "hover:bg-muted/40",
             )}
         >
-            <WorkspaceDocumentBadge item={item} decorative className="mt-0.5" />
-            <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 truncate font-medium">
-                        {number}
-                    </span>
-                    {amount ? (
-                        <span className="num shrink-0 text-sm">
-                            {amount.value}
+            <span className="flex items-baseline justify-between gap-3">
+                <span className="num min-w-0 truncate text-sm font-medium">
+                    {number}
+                </span>
+                {amount ? (
+                    <span className="num shrink-0 text-sm">{amount.value}</span>
+                ) : null}
+            </span>
+            <span className="flex min-w-0 items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5">
+                    <WorkspaceDocumentBadge item={item} decorative />
+                    {item.counterpartyName ? (
+                        <span className="min-w-0 truncate text-xs text-muted-foreground">
+                            {item.counterpartyName}
                         </span>
                     ) : null}
                 </span>
-                {item.counterpartyName || dueOrStatus ? (
-                    <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                        <span className="min-w-0 truncate">
-                            {item.counterpartyName ?? ""}
-                        </span>
-                        {blocked ? (
-                            <StatusBadge label="受阻" tone="warning" />
-                        ) : overdue ? (
-                            <StatusBadge label="已超期" tone="destructive" />
-                        ) : item.dueAt ? (
-                            <span className="shrink-0">
-                                <time dateTime={item.dueAt}>
-                                    {item.dueAtLabel}
-                                </time>
-                            </span>
-                        ) : null}
-                    </span>
+                {dueOrStatus ? (
+                    blocked ? (
+                        <StatusBadge label="受阻" tone="warning" />
+                    ) : overdue ? (
+                        <StatusBadge label="已超期" tone="destructive" />
+                    ) : item.dueAt ? (
+                        <time
+                            dateTime={item.dueAt}
+                            className="shrink-0 text-xs text-muted-foreground"
+                        >
+                            {item.dueAtLabel}
+                        </time>
+                    ) : null
                 ) : null}
             </span>
         </button>
     )
-}
-
-/**
- * 去掉单号里与任务类型标签重复的前缀。
- *
- * # 参数
- * * `stableNumber` - 服务端单据标签，如「销售单 XS20260823114925」
- * * `typeLabel` - 任务类型标签，如「销售单审批」
- *
- * # 返回
- * 前缀重复时返回去掉前缀的单号，否则原样返回。
- */
-export function stripTypePrefix(
-    stableNumber: string,
-    typeLabel: string,
-): string {
-    const number = stableNumber.trim()
-    const prefix = number.split(/\s+/)[0]
-    if (!prefix || prefix === number) return number
-    if (!typeLabel.startsWith(prefix)) return number
-    return number.slice(prefix.length).trim() || number
 }

@@ -39,6 +39,8 @@ type TypeMeta = Readonly<{
     family: WorkspaceFamilyFilter
     badgeLabel: string
     badgeVariant: WorkspaceDocumentBadgeVariant
+    /** 跳转目标工作面的按钮文案；缺省则按单据名生成「打开销售单」。 */
+    openActionLabel?: string
 }>
 
 export const TYPE_META: Record<string, TypeMeta> = {
@@ -53,114 +55,134 @@ export const TYPE_META: Record<string, TypeMeta> = {
         family: "fulfillment",
         badgeLabel: "采购确认",
         badgeVariant: "indigo",
+        openActionLabel: "去确认采购计划",
     },
     PROCUREMENT_ORDER_CREATION: {
         label: "待采购建单",
         family: "fulfillment",
         badgeLabel: "待建采购",
         badgeVariant: "lime",
+        openActionLabel: "去建采购单",
     },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
         family: "approval",
         badgeLabel: "低毛利",
         badgeVariant: "rose",
+        openActionLabel: "去审批低毛利订单",
     },
     PURCHASE_ORDER_REVIEW: {
         label: "采购单财务审核",
         family: "finance",
         badgeLabel: "采购审核",
         badgeVariant: "cyan",
+        openActionLabel: "去审核采购单",
     },
     SALES_CHANGE_IMPACT_REVIEW: {
         label: "销售变更履约影响复核",
         family: "fulfillment",
         badgeLabel: "变更履约",
         badgeVariant: "teal",
+        openActionLabel: "去复核履约影响",
     },
     SALES_CHANGE_FINANCE_REVIEW: {
         label: "销售变更财务复核",
         family: "finance",
         badgeLabel: "变更财务",
         badgeVariant: "violet",
+        openActionLabel: "去复核财务影响",
     },
     CARD_FUNDS_REVIEW: {
         label: "卡券票款复核",
         family: "finance",
         badgeLabel: "卡券票款",
         badgeVariant: "orange",
+        openActionLabel: "去复核卡券票款",
     },
     CARD_FUNDS_DELTA_REVIEW: {
         label: "卡券票款差异复核",
         family: "finance",
         badgeLabel: "卡券差异",
         badgeVariant: "lime",
+        openActionLabel: "去复核票款差额",
     },
     CARD_SALES_MANAGER_APPROVAL: {
         label: "卡券销售领导审批",
         family: "approval",
         badgeLabel: "卡券领导",
         badgeVariant: "indigo",
+        openActionLabel: "去审批卡券销售",
     },
     CARD_SALES_OPERATION_APPROVAL: {
         label: "卡券运营审批",
         family: "approval",
         badgeLabel: "卡券运营",
         badgeVariant: "cyan",
+        openActionLabel: "去审批卡券运营",
     },
     OWNERSHIP_MIGRATION_SALES_CONFIRMATION: {
         label: "归属迁移销售确认",
         family: "approval",
         badgeLabel: "归属销售",
         badgeVariant: "orange",
+        openActionLabel: "去确认归属迁移",
     },
     OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION: {
         label: "归属迁移财务确认",
         family: "finance",
         badgeLabel: "归属财务",
         badgeVariant: "teal",
+        openActionLabel: "去确认财务归属",
     },
     INVENTORY_ADJUSTMENT_REVIEW: {
         label: "库存调整复核",
         family: "fulfillment",
         badgeLabel: "库存调整",
         badgeVariant: "teal",
+        openActionLabel: "去复核库存调整",
     },
     FINANCE_CORRECTION_REVIEW: {
         label: "财务纠错复核",
         family: "finance",
         badgeLabel: "财务纠错",
         badgeVariant: "rose",
+        openActionLabel: "去复核财务纠错",
     },
     SUPPLIER_SETTLEMENT_REVIEW: {
         label: "供应商结算复核",
         family: "finance",
         badgeLabel: "供应商结算",
         badgeVariant: "cyan",
+        openActionLabel: "去复核供应商结算",
     },
     IMPORT_BUSINESS_CONFIRMATION: {
         label: "导入业务确认",
         family: "exception",
         badgeLabel: "导入确认",
         badgeVariant: "orange",
+        openActionLabel: "去确认导入范围",
     },
     INTEGRATION_RESULT_UNKNOWN: {
         label: "集成结果未知",
         family: "exception",
         badgeLabel: "集成未知",
         badgeVariant: "violet",
+        openActionLabel: "去确认集成结果",
     },
     BUSINESS_EXCEPTION: {
         label: "业务异常",
         family: "exception",
         badgeLabel: "业务异常",
         badgeVariant: "rose",
+        openActionLabel: "去处理业务异常",
     },
 }
 
 type DocumentMeta = Readonly<{
     approvalLabel: string
     badgeLabel: string
+    /** 按钮里的单据全称；缺省用徽章短名。 */
+    documentName?: string
     badgeVariant: WorkspaceDocumentBadgeVariant
 }>
 
@@ -173,6 +195,7 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
     voucher_sales_order: {
         approvalLabel: "卡券销售单审批",
         badgeLabel: "卡券销售",
+        documentName: "卡券销售单",
         badgeVariant: "violet",
     },
     sales_change_order: {
@@ -193,11 +216,13 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
     stock_adjustment: {
         approvalLabel: "库存调整单审批",
         badgeLabel: "库存调整",
+        documentName: "库存调整单",
         badgeVariant: "teal",
     },
     customer_receipt: {
         approvalLabel: "回款复核",
         badgeLabel: "回款",
+        documentName: "回款单",
         badgeVariant: "success",
     },
     supplier_payment: {
@@ -233,21 +258,25 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
     delivery: {
         approvalLabel: "仓发单审批",
         badgeLabel: "仓发",
+        documentName: "仓发单",
         badgeVariant: "teal",
     },
     electronic_delivery: {
         approvalLabel: "电子交付单审批",
         badgeLabel: "电子交付",
+        documentName: "电子交付单",
         badgeVariant: "cyan",
     },
     service_fulfillment: {
         approvalLabel: "服务履约单审批",
         badgeLabel: "服务履约",
+        documentName: "服务履约单",
         badgeVariant: "success",
     },
     customer_acceptance: {
         approvalLabel: "客户验收单审批",
         badgeLabel: "客户验收",
+        documentName: "客户验收单",
         badgeVariant: "info",
     },
     invoice: {
@@ -350,6 +379,38 @@ export function workspaceDocumentBadge(
         fallbackLabel?.trim() ||
         workspaceTypeLabel(workItemType, businessObjectType)
     return { label, variant: "neutral" }
+}
+
+/**
+ * 按钮里使用的单据全称，例如「销售单」「卡券销售单」。
+ */
+export function workspaceDocumentName(
+    businessObjectType: string,
+): string | undefined {
+    const meta = documentMetaOf(businessObjectType)
+    if (!meta) return undefined
+    return meta.documentName ?? meta.badgeLabel
+}
+
+/**
+ * 页内纸质预览按钮。按单据命名，如「查看销售单」。
+ */
+export function workspaceReadActionLabel(businessObjectType: string): string {
+    const name = workspaceDocumentName(businessObjectType)
+    return name ? `查看${name}` : "查看单据"
+}
+
+/**
+ * 跳转目标工作面的按钮。专项任务用「去建采购单」等；通用审批用「打开销售单」。
+ */
+export function workspaceOpenActionLabel(
+    workItemType: string,
+    businessObjectType: string,
+): string {
+    const taskLabel = TYPE_META[workItemType]?.openActionLabel
+    if (taskLabel) return taskLabel
+    const name = workspaceDocumentName(businessObjectType)
+    return name ? `打开${name}` : "打开单据"
 }
 
 export const PRIORITY_RANK: Record<string, number> = {

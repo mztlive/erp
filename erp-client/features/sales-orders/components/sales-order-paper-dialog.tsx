@@ -74,7 +74,11 @@ export function SalesOrderPaperDialog({
     )
 }
 
-function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
+export function SalesOrderPaperDocument({
+    order,
+}: {
+    order: SalesOrderListItem
+}) {
     const isCard = order.nature === "card_voucher"
 
     return (

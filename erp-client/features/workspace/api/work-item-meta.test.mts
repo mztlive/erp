@@ -3,6 +3,8 @@ import test from "node:test"
 
 import {
     workspaceDocumentBadge,
+    workspaceOpenActionLabel,
+    workspaceReadActionLabel,
     workspaceTypeLabel,
     // @ts-expect-error TS5097 -- runtime TypeScript module under node:test
 } from "./work-item-meta.ts"
@@ -88,5 +90,35 @@ test("unknown types fall back to the provided label", () => {
     assert.deepEqual(
         workspaceDocumentBadge("UNREGISTERED_TASK", "", "自定义任务"),
         { label: "自定义任务", variant: "neutral" },
+    )
+})
+
+test("read and open actions are named by document and task", () => {
+    assert.equal(workspaceReadActionLabel("sales_order"), "查看销售单")
+    assert.equal(workspaceReadActionLabel("SalesOrder"), "查看销售单")
+    assert.equal(
+        workspaceReadActionLabel("voucher_sales_order"),
+        "查看卡券销售单",
+    )
+    assert.equal(workspaceReadActionLabel("purchase_order"), "查看采购单")
+    assert.equal(
+        workspaceOpenActionLabel("DOCUMENT_APPROVAL", "sales_order"),
+        "打开销售单",
+    )
+    assert.equal(
+        workspaceOpenActionLabel("DOCUMENT_APPROVAL", "purchase_order"),
+        "打开采购单",
+    )
+    assert.equal(
+        workspaceOpenActionLabel("PROCUREMENT_ORDER_CREATION", "sales_order"),
+        "去建采购单",
+    )
+    assert.equal(
+        workspaceOpenActionLabel("PURCHASE_ORDER_REVIEW", "purchase_order"),
+        "去审核采购单",
+    )
+    assert.equal(
+        workspaceOpenActionLabel("CUSTOMER_RECEIPT_REVIEW", "customer_receipt"),
+        "打开回款单",
     )
 })

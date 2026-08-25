@@ -3,12 +3,15 @@
 import * as React from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { toast } from "@/components/ui/toast"
 import {
     SellableSkuSelectDialog,
     type SellableSkuPick,
 } from "@/features/entity-selectors"
+import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/components/sales-order-create-due-date-batch-bar"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import { applyDueDateToLines } from "@/features/sales-orders/lib/sales-order-create-model"
 import { applySellablePicksToLines } from "@/features/sales-orders/lib/sales-order-create-sku-picks"
 import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 
@@ -43,21 +46,55 @@ export function SalesOrderCreateLineItemsSection({
         [form, picker],
     )
 
+    const handleApplyDueDate = React.useCallback(
+        (dueDate: string) => {
+            const lineItems = form.getFieldValue("lineItems")
+            const next = applyDueDateToLines(lineItems, dueDate)
+            form.setFieldValue("lineItems", next)
+            toast.add({
+                title: "已批量设置交期",
+                description: `已将 ${next.length} 条明细的交付日期设为 ${dueDate}。`,
+                type: "success",
+                timeout: 3000,
+            })
+        },
+        [form],
+    )
+
     return (
         <section
             id="sales-line-items-section"
             className="border-b border-grid p-4 md:p-5 lg:p-6"
         >
-            <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="font-heading text-sm font-semibold">销售明细</h2>
-                <form.Subscribe selector={(state) => state.values.nature}>
-                    {(nature) => (
-                        <Badge variant="outline" className="font-normal">
-                            {nature === "card_voucher"
-                                ? "卡券 · 仅一条"
-                                : "实物/服务 · 可多行"}
-                        </Badge>
-                    )}
+            <div className="mb-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-heading text-sm font-semibold">
+                        销售明细
+                    </h2>
+                    <form.Subscribe selector={(state) => state.values.nature}>
+                        {(nature) => (
+                            <Badge variant="outline" className="font-normal">
+                                {nature === "card_voucher"
+                                    ? "卡券 · 仅一条"
+                                    : "实物/服务 · 可多行"}
+                            </Badge>
+                        )}
+                    </form.Subscribe>
+                </div>
+                <form.Subscribe
+                    selector={(state) => ({
+                        nature: state.values.nature,
+                        lineCount: state.values.lineItems.length,
+                    })}
+                >
+                    {({ nature, lineCount }) =>
+                        nature === "physical_service" ? (
+                            <SalesOrderCreateDueDateBatchBar
+                                lineCount={lineCount}
+                                onApply={handleApplyDueDate}
+                            />
+                        ) : null
+                    }
                 </form.Subscribe>
             </div>
 

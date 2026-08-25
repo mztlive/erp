@@ -263,7 +263,6 @@ export async function fetchWorkspaceDashboard(
                   query: query.query,
                   sort: query.sort,
                   cursor: query.cursor,
-                  currentWorkItemId: query.currentWorkItemId,
                   timezone: query.timezone,
                   page: 1,
                   pageSize: 50,

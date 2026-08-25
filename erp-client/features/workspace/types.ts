@@ -133,7 +133,6 @@ export type TodayWorkspaceQuery = Readonly<{
     query?: string
     sort: WorkspaceSort
     cursor?: string
-    currentWorkItemId?: string
     timezone: string
 }>
 
