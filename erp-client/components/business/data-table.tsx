@@ -167,6 +167,7 @@ function DataTable<TData>({
     manualSorting = true,
     manualFiltering = true,
     enableRowSelection = false,
+    enableMultiRowSelection = true,
     enableColumnResizing = true,
     enableColumnPinning = true,
     layout = "flush",
@@ -360,11 +361,18 @@ function DataTable<TData>({
     ])
 
     const resolvedColumnPinning = React.useMemo(() => {
-        if (!onRowPreview) return columnPinning
-        const right = columnPinning.right ?? []
-        if (right.includes("__preview")) return columnPinning
-        return { ...columnPinning, right: [...right, "__preview"] }
-    }, [columnPinning, onRowPreview])
+        let next = columnPinning
+        if (enableRowSelection) {
+            const left = next.left ?? []
+            if (!left.includes("__selection")) {
+                next = { ...next, left: ["__selection", ...left] }
+            }
+        }
+        if (!onRowPreview) return next
+        const right = next.right ?? []
+        if (right.includes("__preview")) return next
+        return { ...next, right: [...right, "__preview"] }
+    }, [columnPinning, enableRowSelection, onRowPreview])
 
     // TanStack Table 返回不稳定函数引用；React Compiler 只需跳过这个 hook。
     // eslint-disable-next-line react-hooks/incompatible-library
@@ -403,6 +411,7 @@ function DataTable<TData>({
         manualSorting,
         manualFiltering,
         enableRowSelection,
+        enableMultiRowSelection,
         enableColumnResizing,
         enableColumnPinning,
         columnResizeMode: "onChange",

@@ -21,6 +21,7 @@ export type SourcingSupplierOption = Readonly<{
     fulfillmentResponsibility: FulfillmentResponsibility
     paymentTermCode: string
     paymentTermLabel: string
+    businessCategory?: string
     unitCostGross: string
     inputTaxRate: string
     maxCreateQuantity: string
@@ -132,6 +133,7 @@ export function buildSourcingWorkspace(
                 fulfillmentResponsibility: basis.fulfillmentResponsibility,
                 paymentTermCode: basis.paymentTermCode,
                 paymentTermLabel: basis.paymentTermLabel,
+                businessCategory: basis.businessCategory,
                 unitCostGross: line.unitCostGross,
                 inputTaxRate: line.inputTaxRate,
                 maxCreateQuantity: line.maxCreateQuantity,
@@ -222,33 +224,233 @@ export function findSourcingOption(
 }
 
 /**
- * 选中明细共同可选的供应商，供批量指定。
+ * 为一条销售明细选出最优供应商。
+ *
+ * 排序：能覆盖剩余数量优先，其次最低含税成本、最早交期、最大可创建量，
+ * 再按供应商名称稳定排序。
+ *
+ * @param options 该明细的合格供应商。
+ * @param remainingQuantity 销售剩余待采购数量；缺省时不比较覆盖能力。
+ * @returns 最优选项；无合格供给时为空。
+ */
+export function pickBestSourcingOption(
+    options: readonly SourcingSupplierOption[],
+    remainingQuantity?: string,
+): SourcingSupplierOption | undefined {
+    if (options.length === 0) return undefined
+    return [...options].sort((left, right) => {
+        const leftCovers = optionCoversRemaining(left, remainingQuantity)
+        const rightCovers = optionCoversRemaining(right, remainingQuantity)
+        if (leftCovers !== rightCovers) return leftCovers ? -1 : 1
+        const cost = compareDecimalSafe(
+            left.unitCostGross,
+            right.unitCostGross,
+            4,
+        )
+        if (cost !== 0) return cost
+        const leftDate = left.expectedDeliveryDate.trim()
+        const rightDate = right.expectedDeliveryDate.trim()
+        if (leftDate && rightDate) {
+            const dateCmp = leftDate.localeCompare(rightDate)
+            if (dateCmp !== 0) return dateCmp
+        } else if (leftDate) return -1
+        else if (rightDate) return 1
+        const quantity = compareDecimalSafe(
+            right.maxCreateQuantity,
+            left.maxCreateQuantity,
+            6,
+        )
+        if (quantity !== 0) return quantity
+        return left.supplierName.localeCompare(right.supplierName, "zh-CN")
+    })[0]
+}
+
+/**
+ * 为全部选源行填充各自最优供应商和对应最大可创建量。
+ *
+ * 没有合格供给的行保持原值，不改勾选状态。
  *
  * @param order 当前选源销售单。
  * @param lines 表单选源行。
- * @returns 所有勾选行都具备的供应商选项。
+ * @returns 填充后的选源行。
+ */
+export function assignBestSuppliers(
+    order: SourcingSalesOrder | undefined,
+    lines: readonly SourcingLineInput[],
+): SourcingLineInput[] {
+    if (!order) return lines.map((line) => ({ ...line }))
+    return lines.map((line) => {
+        const product = order.lines.find(
+            (candidate) => candidate.salesOrderLineId === line.salesOrderLineId,
+        )
+        const option = pickBestSourcingOption(
+            product?.options ?? [],
+            product?.remainingQuantity,
+        )
+        if (!option) return { ...line }
+        return {
+            ...line,
+            selected: true,
+            supplierId: option.supplierId,
+            quantity: option.maxCreateQuantity,
+        }
+    })
+}
+
+/** 选源销售单的汇总事实，供来源区密集展示。 */
+export type SourcingOrderSummary = Readonly<{
+    lineCount: number
+    coveredLineCount: number
+    uniqueSupplierCount: number
+    purchaseTypes: readonly PurchaseType[]
+    fulfillmentResponsibilities: readonly FulfillmentResponsibility[]
+    paymentTermLabels: readonly string[]
+    businessCategories: readonly string[]
+    minEstimatedGross: string
+}>
+
+/**
+ * 汇总一张选源销售单的行数、供给和最低含税估算。
+ *
+ * @param order 当前选源销售单。
+ * @returns 用于来源区展示的汇总。
+ */
+export function summarizeSourcingOrder(
+    order: SourcingSalesOrder,
+): SourcingOrderSummary {
+    const options = order.lines.flatMap((line) => [...line.options])
+    const amounts = order.lines.flatMap((line) => {
+        const option = pickBestSourcingOption(
+            line.options,
+            line.remainingQuantity,
+        )
+        if (!option) return []
+        try {
+            return [
+                multiplyFixed(option.unitCostGross, line.remainingQuantity, {
+                    leftMaxScale: 4,
+                    rightMaxScale: 6,
+                    outputScale: 2,
+                }),
+            ]
+        } catch {
+            return []
+        }
+    })
+    return {
+        lineCount: order.lines.length,
+        coveredLineCount: order.lines.filter((line) =>
+            isPositiveQuantity(line.coveredQuantity),
+        ).length,
+        uniqueSupplierCount: uniqueStable(
+            options.map((option) => option.supplierId),
+        ).length,
+        purchaseTypes: uniqueStable(
+            options.map((option) => option.purchaseType),
+        ),
+        fulfillmentResponsibilities: uniqueStable(
+            options.map((option) => option.fulfillmentResponsibility),
+        ),
+        paymentTermLabels: uniqueStable(
+            options.map((option) => option.paymentTermLabel),
+        ),
+        businessCategories: uniqueStable(
+            options
+                .map((option) => option.businessCategory?.trim() ?? "")
+                .filter(Boolean),
+        ),
+        minEstimatedGross: sumFixed(amounts, { maxScale: 2, outputScale: 2 }),
+    }
+}
+
+function optionCoversRemaining(
+    option: SourcingSupplierOption,
+    remainingQuantity: string | undefined,
+): boolean {
+    if (!remainingQuantity) return true
+    try {
+        return (
+            compareDecimal(option.maxCreateQuantity, remainingQuantity, 6) >= 0
+        )
+    } catch {
+        return false
+    }
+}
+
+function isPositiveQuantity(value: string): boolean {
+    try {
+        return compareDecimal(value, "0", 6) > 0
+    } catch {
+        return false
+    }
+}
+
+function uniqueStable<T>(values: readonly T[]): T[] {
+    const seen = new Set<T>()
+    const result: T[] = []
+    for (const value of values) {
+        if (seen.has(value)) continue
+        seen.add(value)
+        result.push(value)
+    }
+    return result
+}
+
+/**
+ * 勾选明细上出现过的供应商，供批量指定。
+ *
+ * 不要求所有勾选行都具备同一家供应商；应用到选中行时，没有该供给的行会跳过。
+ *
+ * @param order 当前选源销售单。
+ * @param lines 表单选源行。
+ * @returns 勾选行可选供应商的并集；没有勾选时退回全部明细。
  */
 export function commonSuppliersForSelected(
     order: SourcingSalesOrder | undefined,
     lines: readonly SourcingLineInput[],
 ): SourcingSupplierOption[] {
+    if (!order) return []
     const selected = lines.filter((line) => line.selected)
-    if (!order || selected.length === 0) return []
-    const optionLists = selected.map((line) => {
-        const product = order.lines.find(
-            (candidate) => candidate.salesOrderLineId === line.salesOrderLineId,
+    const targets = selected.length > 0 ? selected : lines
+    if (targets.length === 0) {
+        return uniqueOptions(
+            order.lines.flatMap((product) => [...product.options]),
         )
-        return product?.options ?? []
-    })
-    const [first, ...rest] = optionLists
-    if (!first) return []
-    return first.filter((option) =>
-        rest.every((options) =>
-            options.some(
-                (candidate) => candidate.supplierId === option.supplierId,
-            ),
-        ),
+    }
+    return uniqueOptions(
+        targets.flatMap((line) => {
+            const product = order.lines.find(
+                (candidate) =>
+                    candidate.salesOrderLineId === line.salesOrderLineId,
+            )
+            return product?.options ?? []
+        }),
     )
+}
+
+function uniqueOptions(
+    options: readonly SourcingSupplierOption[],
+): SourcingSupplierOption[] {
+    const seen = new Set<string>()
+    const result: SourcingSupplierOption[] = []
+    for (const option of options) {
+        if (!option.supplierId || seen.has(option.supplierId)) continue
+        seen.add(option.supplierId)
+        result.push(option)
+    }
+    return result
+}
+
+function compareDecimalSafe(
+    left: string,
+    right: string,
+    maxScale: number,
+): -1 | 0 | 1 {
+    try {
+        return compareDecimal(left, right, maxScale)
+    } catch {
+        return left.localeCompare(right, "en") as -1 | 0 | 1
+    }
 }
 
 /**

@@ -4,7 +4,6 @@ import { useSelector } from "@tanstack/react-form"
 
 import { EditableLineItemTable, ValidationSummary } from "@/components/business"
 import { toFieldErrors } from "@/components/form"
-import { createEmptyLine } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/components/sales-order-create-line-item-columns"
@@ -12,11 +11,15 @@ import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/co
 export type SalesOrderCreateLineItemTableProps = {
     form: SalesOrderCreateFormApi
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
+    onPickSku?: (rowIndex: number) => void
+    onAddSkus?: () => void
 }
 
 export function SalesOrderCreateLineItemTable({
     form,
     procurementOwners,
+    onPickSku,
+    onAddSkus,
 }: SalesOrderCreateLineItemTableProps) {
     /** 明细表根路径校验错误（如卡券仅一条）在明细区汇总展示。 */
     const lineItemIssues = useSelector(form.store, (state) => {
@@ -37,6 +40,7 @@ export function SalesOrderCreateLineItemTable({
                     values,
                     form,
                     procurementOwners,
+                    onPickSku,
                 )
                 return (
                     <>
@@ -46,7 +50,7 @@ export function SalesOrderCreateLineItemTable({
                             getRowId={(item) => item.rowKey}
                             caption="销售单创建明细"
                             emptyContent="至少需要一条销售明细。"
-                            addLabel="新增销售明细"
+                            addLabel="选择商品"
                             addDisabledReason={
                                 values.nature === "card_voucher"
                                     ? "卡券销售单每个版本必须恰好一条明细"
@@ -54,11 +58,7 @@ export function SalesOrderCreateLineItemTable({
                             }
                             onAddItem={
                                 values.nature === "physical_service"
-                                    ? () =>
-                                          form.pushFieldValue(
-                                              "lineItems",
-                                              createEmptyLine(values.nature),
-                                          )
+                                    ? onAddSkus
                                     : undefined
                             }
                             onRemoveItem={(_item, _rowId, rowIndex) => {

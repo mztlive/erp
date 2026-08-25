@@ -27,6 +27,7 @@ import {
     fromBackendStatus,
     mapFulfillment,
     mapPurchaseType,
+    parsePaymentTermSnapshot,
     paymentTermLabel,
     progressDisplay,
     secsToIso,
@@ -289,6 +290,9 @@ export function mapPurchaseChangeOrder(
 }
 
 export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
+    const paymentTerm = parsePaymentTermSnapshot(
+        basis.payment_term_code || "POSTPAY_NET30",
+    )
     return {
         basisId: basis.basis_id,
         workItemId: basis.work_item_id,
@@ -305,9 +309,8 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
             basis.fulfillment_responsibility ?? "WAREHOUSE",
         ),
         paymentTermCode: basis.payment_term_code || "POSTPAY_NET30",
-        paymentTermLabel: paymentTermLabel(
-            basis.payment_term_code || "POSTPAY_NET30",
-        ),
+        paymentTermLabel: paymentTerm.paymentTerm,
+        businessCategory: paymentTerm.businessCategory || undefined,
         lines: (basis.lines ?? []).map((line) => {
             const salesQuantity = String(
                 line.sales_quantity ?? line.confirmed_quantity ?? "0",

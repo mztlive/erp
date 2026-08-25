@@ -1,8 +1,15 @@
 "use client"
 
+import * as React from "react"
+
 import { Badge } from "@/components/ui/badge"
-import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import {
+    SellableSkuSelectDialog,
+    type SellableSkuPick,
+} from "@/features/entity-selectors"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import { applySellablePicksToLines } from "@/features/sales-orders/lib/sales-order-create-sku-picks"
 import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 
 export type SalesOrderCreateLineItemsSectionProps = {
@@ -10,10 +17,32 @@ export type SalesOrderCreateLineItemsSectionProps = {
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
 }
 
+type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
+
 export function SalesOrderCreateLineItemsSection({
     form,
     procurementOwners,
 }: SalesOrderCreateLineItemsSectionProps) {
+    const [picker, setPicker] = React.useState<SkuPickerState | null>(null)
+
+    const handleConfirmPicks = React.useCallback(
+        (picks: readonly SellableSkuPick[]) => {
+            if (picks.length === 0) return
+            const nature = form.getFieldValue("nature")
+            const lineItems = form.getFieldValue("lineItems")
+            form.setFieldValue(
+                "lineItems",
+                applySellablePicksToLines(
+                    lineItems,
+                    picks,
+                    nature,
+                    picker?.mode === "replace" ? picker.rowIndex : undefined,
+                ),
+            )
+        },
+        [form, picker],
+    )
+
     return (
         <section
             id="sales-line-items-section"
@@ -35,6 +64,21 @@ export function SalesOrderCreateLineItemsSection({
             <SalesOrderCreateLineItemTable
                 form={form}
                 procurementOwners={procurementOwners}
+                onPickSku={(rowIndex) =>
+                    setPicker({ mode: "replace", rowIndex })
+                }
+                onAddSkus={() => setPicker({ mode: "add" })}
+            />
+
+            <SellableSkuSelectDialog
+                open={picker != null}
+                onOpenChange={(open) => {
+                    if (!open) setPicker(null)
+                }}
+                multiple
+                excludeProductKind="VOUCHER"
+                title={picker?.mode === "replace" ? "更换销售商品" : "选择商品"}
+                onConfirm={handleConfirmPicks}
             />
 
             <div className="mt-5">

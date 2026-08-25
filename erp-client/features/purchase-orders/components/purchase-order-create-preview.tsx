@@ -1,180 +1,337 @@
 "use client"
 
+import * as React from "react"
+
 import {
     MoneyValue,
+    PaperDocument,
+    PaperDocumentViewport,
     QuantityValue,
     RateValue,
-    surfacePanelClassName,
 } from "@/components/business"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { PurchaseOrderCreateSwitchList } from "@/features/purchase-orders/components/purchase-order-create-switch-list"
+import type {
+    PurchaseOrderPreview,
+    PurchaseOrderPreviewLine,
+    SourcingSalesOrder,
+} from "@/features/purchase-orders/lib/purchase-order-create-model"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
+    PO_STATUS_LABEL,
+    PO_STATUS_TONE,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
-import type { PurchaseOrderPreview } from "@/features/purchase-orders/lib/purchase-order-create-model"
 import { multiplyFixed } from "@/lib/fixed-decimal"
-import { cn } from "@/lib/utils"
 
-export type PurchaseOrderCreatePreviewProps = {
+export type PurchaseOrderCreatePreviewDialogProps = {
+    open: boolean
     previews: readonly PurchaseOrderPreview[]
+    sourceOrder?: SourcingSalesOrder
+    creating?: boolean
+    actionError?: { title: string; description: string } | null
+    onOpenChange: (open: boolean) => void
+    onConfirm: () => void
 }
 
 /**
- * 按供应商拆分后的采购单预览，布局对齐采购单详情概览与明细。
+ * 弹出式采购单预览：按拆单结果切换，并用纸质单据展示将要创建的草稿。
  */
-export function PurchaseOrderCreatePreview({
+export function PurchaseOrderCreatePreviewDialog({
+    open,
     previews,
-}: PurchaseOrderCreatePreviewProps) {
+    sourceOrder,
+    creating,
+    actionError,
+    onOpenChange,
+    onConfirm,
+}: PurchaseOrderCreatePreviewDialogProps) {
+    const [activeKey, setActiveKey] = React.useState("")
+    const activePreview =
+        previews.find((preview) => preview.key === activeKey) ?? previews[0]
+    const activeIndex = activePreview
+        ? previews.findIndex((preview) => preview.key === activePreview.key)
+        : -1
+
+    React.useEffect(() => {
+        if (!open) return
+        if (previews.some((preview) => preview.key === activeKey)) return
+        setActiveKey(previews[0]?.key ?? "")
+    }, [activeKey, open, previews])
+
     return (
-        <div className="flex flex-col gap-4">
-            {previews.map((preview, index) => (
-                <article
-                    key={preview.key}
-                    className={cn(surfacePanelClassName, "overflow-hidden")}
-                    data-testid={`purchase-create-preview-${preview.supplierId}`}
-                >
-                    <div className="border-b border-grid px-4 py-3 md:px-5">
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <h2 className="font-heading text-sm font-semibold">
-                                预览采购单 {index + 1} · {preview.supplierName}
-                            </h2>
-                            <MoneyValue value={preview.totals.gross} />
-                        </div>
-                        <DescriptionList
-                            columns="three"
-                            className="mt-3 gap-y-3"
-                        >
-                            <DescriptionItem>
-                                <DescriptionTerm>供应商</DescriptionTerm>
-                                <DescriptionDetails>
-                                    {preview.supplierName}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>采购类型</DescriptionTerm>
-                                <DescriptionDetails>
-                                    {PURCHASE_TYPE_LABEL[preview.purchaseType]}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>履约责任</DescriptionTerm>
-                                <DescriptionDetails>
-                                    {
-                                        FULFILLMENT_RESPONSIBILITY_LABEL[
-                                            preview.fulfillmentResponsibility
-                                        ]
-                                    }
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>付款条件</DescriptionTerm>
-                                <DescriptionDetails>
-                                    {preview.paymentTermLabel}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>明细行数</DescriptionTerm>
-                                <DescriptionDetails className="num">
-                                    {preview.lines.length}
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                            <DescriptionItem>
-                                <DescriptionTerm>含税合计</DescriptionTerm>
-                                <DescriptionDetails>
-                                    <MoneyValue value={preview.totals.gross} />
-                                </DescriptionDetails>
-                            </DescriptionItem>
-                        </DescriptionList>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
+                    <DialogTitle>预览采购单</DialogTitle>
+                    <DialogDescription>
+                        将按供应商拆成 {previews.length}{" "}
+                        张采购草稿。可切换查看每张单，确认后再创建。
+                    </DialogDescription>
+                </DialogHeader>
+
+                {actionError ? (
+                    <div className="shrink-0 px-6 pt-4">
+                        <Alert variant="destructive">
+                            <AlertTitle>{actionError.title}</AlertTitle>
+                            <AlertDescription>
+                                {actionError.description}
+                            </AlertDescription>
+                        </Alert>
                     </div>
-                    <div className="overflow-x-auto">
-                        <Table data-density="compact">
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>采购项目</TableHead>
-                                    <TableHead data-align="end">数量</TableHead>
-                                    <TableHead data-align="end">
-                                        含税成本
-                                    </TableHead>
-                                    <TableHead data-align="end">
-                                        进项税率
-                                    </TableHead>
-                                    <TableHead data-align="end">
-                                        含税金额
-                                    </TableHead>
-                                    <TableHead data-align="end">
-                                        预计交期
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {preview.lines.map((line) => (
-                                    <TableRow key={line.salesOrderLineId}>
-                                        <TableCell className="max-w-[16rem] whitespace-normal">
-                                            <div className="font-medium">
-                                                {line.itemName}
-                                            </div>
-                                            {line.itemSku ? (
-                                                <div className="mt-0.5 text-xs text-muted-foreground">
-                                                    {line.itemSku}
-                                                </div>
-                                            ) : null}
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <QuantityValue
-                                                value={line.quantity}
-                                                unit={line.unit}
-                                            />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue
-                                                value={line.unitCostGross}
-                                            />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <RateValue
-                                                value={multiplyFixed(
-                                                    line.inputTaxRate,
-                                                    "100",
-                                                    {
-                                                        leftMaxScale: 6,
-                                                        rightMaxScale: 0,
-                                                        outputScale: 2,
-                                                    },
-                                                )}
-                                                precision={2}
-                                            />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue
-                                                value={line.grossAmount}
-                                            />
-                                        </TableCell>
-                                        <TableCell
-                                            data-align="end"
-                                            className="num"
-                                        >
-                                            {line.expectedDeliveryDate || "—"}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </article>
-            ))}
+                ) : null}
+
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+                    {previews.length > 1 ? (
+                        <PurchaseOrderCreateSwitchList
+                            label="将创建的采购单"
+                            activeId={activePreview?.key ?? ""}
+                            items={previews.map((preview, index) => ({
+                                id: preview.key,
+                                title: `${index + 1}. ${preview.supplierName}`,
+                                description: `${PURCHASE_TYPE_LABEL[preview.purchaseType]} · ${preview.paymentTermLabel} · ${preview.lines.length} 行`,
+                            }))}
+                            onSelect={setActiveKey}
+                        />
+                    ) : null}
+
+                    <PaperDocumentViewport
+                        fitKey={activePreview?.key ?? "empty"}
+                    >
+                        {activePreview ? (
+                            <PurchaseOrderPreviewPaper
+                                preview={activePreview}
+                                index={Math.max(activeIndex, 0)}
+                                sourceOrder={sourceOrder}
+                            />
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                当前没有可预览的采购单。
+                            </p>
+                        )}
+                    </PaperDocumentViewport>
+                </div>
+
+                <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        返回编辑
+                    </Button>
+                    <Button
+                        type="button"
+                        data-testid="purchase-create-from-basis"
+                        disabled={previews.length === 0 || creating}
+                        onClick={onConfirm}
+                    >
+                        {creating
+                            ? "创建中…"
+                            : `确认创建 ${previews.length} 张采购草稿`}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+/**
+ * 把拆单预览投影成纸质采购单，金额与明细以当前选源结果为准。
+ */
+function PurchaseOrderPreviewPaper({
+    preview,
+    index,
+    sourceOrder,
+}: {
+    preview: PurchaseOrderPreview
+    index: number
+    sourceOrder?: SourcingSalesOrder
+}) {
+    return (
+        <div data-testid={`purchase-create-preview-${preview.supplierId}`}>
+            <PaperDocument<PurchaseOrderPreviewLine>
+                frame="bare"
+                title="采购单"
+                subtitle="草稿预览"
+                documentNumber={`预览 ${index + 1}`}
+                status={{
+                    label: PO_STATUS_LABEL.DRAFT,
+                    tone: PO_STATUS_TONE.DRAFT,
+                }}
+                parties={[
+                    {
+                        id: "supplier",
+                        label: "供应商",
+                        name: preview.supplierName,
+                        fields: [
+                            {
+                                id: "payment",
+                                label: "付款条件",
+                                value: preview.paymentTermLabel,
+                            },
+                            {
+                                id: "type",
+                                label: "采购类型",
+                                value: PURCHASE_TYPE_LABEL[
+                                    preview.purchaseType
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        id: "source",
+                        label: "来源销售单",
+                        name: sourceOrder?.customerName ?? "—",
+                        reference: sourceOrder?.salesOrderNo,
+                        fields: [
+                            {
+                                id: "contract",
+                                label: "合同",
+                                value: sourceOrder?.contractNumber ?? "无合同",
+                                numeric: true,
+                            },
+                            {
+                                id: "owner",
+                                label: "负责销售",
+                                value: sourceOrder?.salesOwnerName ?? "—",
+                            },
+                        ],
+                    },
+                ]}
+                metadata={[
+                    {
+                        id: "fulfillment",
+                        label: "履约责任",
+                        value: FULFILLMENT_RESPONSIBILITY_LABEL[
+                            preview.fulfillmentResponsibility
+                        ],
+                    },
+                    {
+                        id: "lines",
+                        label: "明细行数",
+                        value: `${preview.lines.length} 行`,
+                        numeric: true,
+                    },
+                    {
+                        id: "delivery",
+                        label: "预计交期",
+                        value: earliestDeliveryDate(preview.lines),
+                        numeric: true,
+                    },
+                    {
+                        id: "gross",
+                        label: "含税合计",
+                        value: <MoneyValue value={preview.totals.gross} />,
+                    },
+                ]}
+                lineItemLabel="采购明细"
+                columns={[
+                    {
+                        id: "item",
+                        header: "采购项目",
+                        cell: (row) => (
+                            <div>
+                                <div>{row.itemName}</div>
+                                {row.itemSku ? (
+                                    <div className="num mt-1 text-xs text-muted-foreground">
+                                        {row.itemSku}
+                                    </div>
+                                ) : null}
+                            </div>
+                        ),
+                    },
+                    {
+                        id: "qty",
+                        header: "数量",
+                        align: "end",
+                        numeric: true,
+                        cell: (row) => (
+                            <QuantityValue
+                                value={row.quantity}
+                                unit={row.unit}
+                            />
+                        ),
+                    },
+                    {
+                        id: "cost",
+                        header: "含税成本",
+                        align: "end",
+                        numeric: true,
+                        cell: (row) => <MoneyValue value={row.unitCostGross} />,
+                    },
+                    {
+                        id: "tax",
+                        header: "进项税率",
+                        align: "end",
+                        numeric: true,
+                        cell: (row) => (
+                            <RateValue
+                                value={multiplyFixed(row.inputTaxRate, "100", {
+                                    leftMaxScale: 6,
+                                    rightMaxScale: 0,
+                                    outputScale: 2,
+                                })}
+                                precision={2}
+                            />
+                        ),
+                    },
+                    {
+                        id: "amount",
+                        header: "含税金额",
+                        align: "end",
+                        numeric: true,
+                        cell: (row) => <MoneyValue value={row.grossAmount} />,
+                    },
+                    {
+                        id: "due",
+                        header: "预计交期",
+                        align: "end",
+                        numeric: true,
+                        cell: (row) => row.expectedDeliveryDate || "—",
+                    },
+                ]}
+                rows={preview.lines}
+                getRowId={(row) => row.salesOrderLineId}
+                totals={[
+                    {
+                        id: "net",
+                        label: "不含税金额",
+                        value: <MoneyValue value={preview.totals.net} />,
+                    },
+                    {
+                        id: "tax",
+                        label: "税额",
+                        value: <MoneyValue value={preview.totals.tax} />,
+                    },
+                    {
+                        id: "gross",
+                        label: "含税合计",
+                        value: <MoneyValue value={preview.totals.gross} />,
+                        emphasized: true,
+                    },
+                ]}
+                remarks="本预览按当前选源结果拆单，确认后创建采购草稿，金额以系统计算为准。"
+            />
         </div>
     )
+}
+
+function earliestDeliveryDate(
+    lines: readonly PurchaseOrderPreviewLine[],
+): string {
+    const dates = lines
+        .map((line) => line.expectedDeliveryDate.trim())
+        .filter(Boolean)
+        .sort()
+    return dates[0] ?? "—"
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
 import type { SalesOrderComboboxItem } from "@/components/business/entity-comboboxes"
 import {
@@ -27,7 +27,12 @@ import {
     fetchSalesOrderDetail,
     fetchSalesOrders,
 } from "@/features/sales-orders/api"
-import { fetchMasterDataList } from "@/features/master-data/api"
+import {
+    fetchMasterDataList,
+    listSellableItemsPage,
+} from "@/features/master-data/api"
+import { fetchFileAsset } from "@/features/master-data/api/media-assets"
+import type { SellableSkuPickerListQuery } from "@/features/entity-selectors/lib/sellable-sku-picker-query"
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -59,6 +64,10 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "sales-order", "detail", id] as const,
     sellableSku: (input: SellableSkuSearch) =>
         [...entitySelectorKeys.all, "sellable-sku", input] as const,
+    sellableSkuPicker: (input: SellableSkuPickerListQuery) =>
+        [...entitySelectorKeys.all, "sellable-sku-picker", input] as const,
+    fileAsset: (assetId: string) =>
+        [...entitySelectorKeys.all, "file-asset", assetId] as const,
     companySku: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "company-sku", input] as const,
     malls: (purpose: string) =>
@@ -237,6 +246,42 @@ export function useSellableSkuSelectorQuery(input: SellableSkuSearch) {
         queryKey: entitySelectorKeys.sellableSku(input),
         queryFn: () => searchSellableSkus(input),
         ...commonQueryOptions(),
+    })
+}
+
+export function useSellableSkuPickerQuery(
+    input: SellableSkuPickerListQuery,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: entitySelectorKeys.sellableSkuPicker(input),
+        queryFn: () =>
+            listSellableItemsPage({
+                resource: "sellable-items",
+                q: input.q,
+                productKind: input.productKind,
+                productCategoryId: input.productCategoryId,
+                productBrandId: input.productBrandId,
+                productSupplierId: input.productSupplierId,
+                supplyRegion: input.supplyRegion,
+                productSalesPriceMin: input.productSalesPriceMin,
+                productSalesPriceMax: input.productSalesPriceMax,
+                maxSupplierCount: input.maxSupplierCount,
+                page: input.page,
+                pageSize: input.pageSize,
+            }),
+        enabled,
+        placeholderData: keepPreviousData,
+        staleTime: STALE_TIME,
+    })
+}
+
+export function useFileAssetQuery(assetId: string | undefined) {
+    return useQuery({
+        queryKey: entitySelectorKeys.fileAsset(assetId ?? ""),
+        queryFn: () => fetchFileAsset(assetId ?? ""),
+        enabled: Boolean(assetId?.trim()),
+        staleTime: STALE_TIME,
     })
 }
 

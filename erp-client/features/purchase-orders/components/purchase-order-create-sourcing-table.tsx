@@ -61,7 +61,7 @@ export function PurchaseOrderCreateSourcingTable({
                                             <Checkbox
                                                 id={`purchase-sourcing-selected-${product.salesOrderLineId}`}
                                                 checked={
-                                                    field.state.value as boolean
+                                                    field.state.value === true
                                                 }
                                                 onCheckedChange={(checked) =>
                                                     field.handleChange(

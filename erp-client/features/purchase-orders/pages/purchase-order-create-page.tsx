@@ -15,11 +15,9 @@ import {
     PageHeader,
     PageScaffold,
     StickyTotalBar,
-    WizardSteps,
     surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { OptionCombobox } from "@/components/business/option-combobox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     AlertDialog,
@@ -32,22 +30,19 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "@/components/ui/toast"
 import { PurchaseOrderCreateBatchBar } from "@/features/purchase-orders/components/purchase-order-create-batch-bar"
-import { PurchaseOrderCreatePreview } from "@/features/purchase-orders/components/purchase-order-create-preview"
+import { PurchaseOrderCreatePreviewDialog } from "@/features/purchase-orders/components/purchase-order-create-preview"
 import { PurchaseOrderCreateSourcingTable } from "@/features/purchase-orders/components/purchase-order-create-sourcing-table"
+import { PurchaseOrderCreateSourcePanel } from "@/features/purchase-orders/components/purchase-order-create-source-panel"
 import {
     useCreateFromSourcingMutation,
     useCreationBasesQuery,
 } from "@/features/purchase-orders/hooks/queries"
 import type { PurchaseOrderCreateFormApi } from "@/features/purchase-orders/lib/purchase-order-create-form-types"
 import {
+    assignBestSuppliers,
     buildDefaultSourcingLines,
     buildPurchaseOrderPreviews,
     buildSourcingWorkspace,
@@ -56,16 +51,12 @@ import {
     sumPreviewTotals,
     type SourcingLineInput,
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
-import { buildSourcingFormSchema } from "@/features/purchase-orders/lib/purchase-order-create-validation"
+import {
+    collectSourcingErrorMessages,
+    sourcingFormValidationError,
+} from "@/features/purchase-orders/lib/purchase-order-create-validation"
 import type { CreatedPurchaseOrderDraft } from "@/features/purchase-orders/types"
 import { cn } from "@/lib/utils"
-
-const CREATE_STEPS = [
-    { id: "sourcing", label: "选择供应商" },
-    { id: "preview", label: "预览采购单" },
-] as const
-
-type CreateStep = (typeof CREATE_STEPS)[number]["id"]
 
 /**
  * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建真实草稿。
@@ -83,7 +74,7 @@ export function PurchaseOrderCreatePage({
         workItemId: initialWorkItemId || undefined,
     })
     const createMutation = useCreateFromSourcingMutation()
-    const [step, setStep] = React.useState<CreateStep>("sourcing")
+    const [previewOpen, setPreviewOpen] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [createdOrders, setCreatedOrders] = React.useState<
         CreatedPurchaseOrderDraft[] | null
@@ -96,6 +87,7 @@ export function PurchaseOrderCreatePage({
         fingerprint: string
         idempotencyKey: string
     } | null>(null)
+    const submittingFromConfirmRef = React.useRef(false)
 
     const workspace = React.useMemo(
         () => buildSourcingWorkspace(basesQuery.data ?? []),
@@ -115,9 +107,7 @@ export function PurchaseOrderCreatePage({
                     (candidate) =>
                         candidate.salesOrderId === value.salesOrderId,
                 )
-                const parsed = buildSourcingFormSchema(order).safeParse(value)
-                if (parsed.success) return undefined
-                return parsed.error
+                return sourcingFormValidationError(order, value)
             },
         },
         onSubmit: async ({ value }) => {
@@ -207,14 +197,33 @@ export function PurchaseOrderCreatePage({
     const selectedOrder = workspace.find(
         (order) => order.salesOrderId === selectedSalesOrderId,
     )
+    const writeLines = React.useCallback(
+        (next: SourcingLineInput[]) => {
+            form.setFieldValue("lines", next)
+            next.forEach((line, index) => {
+                form.setFieldValue(
+                    `lines[${index}].salesOrderLineId`,
+                    line.salesOrderLineId,
+                )
+                form.setFieldValue(`lines[${index}].selected`, line.selected)
+                form.setFieldValue(
+                    `lines[${index}].supplierId`,
+                    line.supplierId,
+                )
+                form.setFieldValue(`lines[${index}].quantity`, line.quantity)
+            })
+        },
+        [form],
+    )
+
     React.useEffect(() => {
         const order = workspaceRef.current.find(
             (candidate) => candidate.salesOrderId === selectedSalesOrderId,
         )
-        form.setFieldValue("lines", buildDefaultSourcingLines(order))
-        setStep("sourcing")
+        writeLines(buildDefaultSourcingLines(order))
+        setPreviewOpen(false)
         setCreatedOrders(null)
-    }, [form, selectedSalesOrderId])
+    }, [selectedSalesOrderId, writeLines])
 
     const lines = useStore(form.store, (state) => state.values.lines)
     const previews = React.useMemo(
@@ -235,29 +244,96 @@ export function PurchaseOrderCreatePage({
     const applyBatchSupplier = React.useCallback(
         (supplierId: string) => {
             if (!selectedOrder) return
+            const selected = lines.filter((line) => line.selected)
+            const targets = selected.length > 0 ? selected : lines
+            let applied = 0
             lines.forEach((line, index) => {
-                if (!line.selected) return
+                if (
+                    targets.length > 0 &&
+                    !targets.some(
+                        (candidate) =>
+                            candidate.salesOrderLineId ===
+                            line.salesOrderLineId,
+                    )
+                ) {
+                    return
+                }
                 const product = selectedOrder.lines.find(
                     (candidate) =>
                         candidate.salesOrderLineId === line.salesOrderLineId,
                 )
                 const option = findSourcingOption(product, supplierId)
                 if (!option) return
+                form.setFieldValue(`lines[${index}].selected`, true)
                 form.setFieldValue(`lines[${index}].supplierId`, supplierId)
                 form.setFieldValue(
                     `lines[${index}].quantity`,
                     option.maxCreateQuantity,
                 )
+                applied += 1
+            })
+            toast.add({
+                title: applied > 0 ? "已批量指定供应商" : "没有可应用的明细",
+                description:
+                    applied > 0
+                        ? `已为 ${applied} 条明细填入该供应商。`
+                        : "选中行没有这家供应商的合格供给。",
+                type: applied > 0 ? "success" : "warning",
+                timeout: 4000,
             })
         },
         [form, lines, selectedOrder],
     )
 
+    const applyBestSuppliers = React.useCallback(() => {
+        if (!selectedOrder) return
+        const base =
+            lines.length === selectedOrder.lines.length
+                ? lines
+                : buildDefaultSourcingLines(selectedOrder)
+        const next = assignBestSuppliers(selectedOrder, base)
+        writeLines(next)
+        const filled = next.filter((line) => line.supplierId).length
+        toast.add({
+            title: filled > 0 ? "已匹配最优供应商" : "没有可匹配的供应商",
+            description:
+                filled > 0
+                    ? `已为 ${filled} 条明细填入最低含税成本、可覆盖剩余数量的供应商。`
+                    : "当前明细没有合格供给。",
+            type: filled > 0 ? "success" : "warning",
+            timeout: 4000,
+        })
+    }, [lines, selectedOrder, writeLines])
+
+    const canMatchBest = Boolean(
+        selectedOrder?.lines.some((line) => line.options.length > 0),
+    )
+
     const openPreview = React.useCallback(async () => {
+        for (const field of Object.values(form.fieldInfo)) {
+            const instance = field?.instance
+            if (!instance || instance.store.state.meta.isTouched) continue
+            instance.setMeta((prev) => ({ ...prev, isTouched: true }))
+        }
         await form.validate("submit")
-        if (!form.state.canSubmit) return
-        setActionError(null)
-        setStep("preview")
+        if (form.state.canSubmit) {
+            setActionError(null)
+            setPreviewOpen(true)
+            return
+        }
+        const description =
+            collectSourcingErrorMessages(form.getAllErrors()).join("；") ||
+            "请检查本次采购数量和供应商后重试。"
+        setActionError({
+            title: "无法预览采购单",
+            description,
+        })
+        toast.add({
+            title: "无法预览采购单",
+            description,
+            type: "error",
+            timeout: 6000,
+        })
     }, [form])
 
     if (basesQuery.isPending) {
@@ -267,9 +343,13 @@ export function PurchaseOrderCreatePage({
                     title="新建采购单"
                     description="正在加载可采购明细…"
                 />
-                <div className="space-y-3" aria-busy="true" aria-label="加载中">
-                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
-                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
+                <div
+                    className="flex flex-col gap-3"
+                    aria-busy="true"
+                    aria-label="加载中"
+                >
+                    <Skeleton className="h-16" />
+                    <Skeleton className="h-40" />
                 </div>
             </PageScaffold>
         )
@@ -351,9 +431,6 @@ export function PurchaseOrderCreatePage({
             <PageHeader
                 title="新建采购单"
                 description="先为每条销售明细选择供应商，再预览将要创建的采购单。"
-                metadata={
-                    <WizardSteps steps={CREATE_STEPS} currentStepId={step} />
-                }
                 actions={
                     <PageActions
                         actions={[
@@ -406,69 +483,24 @@ export function PurchaseOrderCreatePage({
                         event.stopPropagation()
                     }}
                 >
-                    <section
-                        className={cn(surfacePanelClassName, "overflow-hidden")}
-                    >
-                        <div className="space-y-4 p-4 md:p-5">
-                            <Field>
-                                <FieldLabel>来源销售单</FieldLabel>
-                                <OptionCombobox
-                                    className="w-full max-w-xl"
-                                    value={selectedSalesOrderId || null}
-                                    allowClear={false}
-                                    disabled={Boolean(initialSalesOrderId)}
-                                    aria-label="选择来源销售单"
-                                    placeholder="选择来源销售单"
-                                    options={workspace.map((order) => ({
-                                        value: order.salesOrderId,
-                                        label: `${order.salesOrderNo} · ${order.customerName}`,
-                                        keywords: `${order.salesOrderId} ${order.salesOwnerName ?? ""}`,
-                                    }))}
-                                    onValueChange={(value) =>
-                                        form.setFieldValue(
-                                            "salesOrderId",
-                                            value ?? "",
-                                        )
-                                    }
-                                />
-                            </Field>
-                            {selectedOrder ? (
-                                <DescriptionList columns="three">
-                                    <DescriptionItem>
-                                        <DescriptionTerm>客户</DescriptionTerm>
-                                        <DescriptionDetails>
-                                            {selectedOrder.customerName}
-                                        </DescriptionDetails>
-                                    </DescriptionItem>
-                                    <DescriptionItem>
-                                        <DescriptionTerm>合同</DescriptionTerm>
-                                        <DescriptionDetails className="num">
-                                            {selectedOrder.contractNumber ??
-                                                "无合同"}
-                                        </DescriptionDetails>
-                                    </DescriptionItem>
-                                    <DescriptionItem>
-                                        <DescriptionTerm>
-                                            负责销售
-                                        </DescriptionTerm>
-                                        <DescriptionDetails>
-                                            {selectedOrder.salesOwnerName ??
-                                                "—"}
-                                        </DescriptionDetails>
-                                    </DescriptionItem>
-                                </DescriptionList>
-                            ) : null}
-                        </div>
-                    </section>
+                    <PurchaseOrderCreateSourcePanel
+                        workspace={workspace}
+                        selectedSalesOrderId={selectedSalesOrderId}
+                        selectedOrder={selectedOrder}
+                        disabled={Boolean(initialSalesOrderId)}
+                        onSalesOrderChange={(value) =>
+                            form.setFieldValue("salesOrderId", value)
+                        }
+                    />
 
-                    {step === "sourcing" && selectedOrder ? (
+                    {selectedOrder ? (
                         <section
                             className={cn(
                                 surfacePanelClassName,
                                 "overflow-hidden",
                             )}
                         >
-                            <div className="space-y-3 p-4 md:p-5">
+                            <div className="flex flex-col gap-3 p-4 md:p-5">
                                 <div className="flex items-center justify-between gap-2">
                                     <h2 className="font-heading text-sm font-semibold">
                                         销售明细与供应商
@@ -481,22 +513,30 @@ export function PurchaseOrderCreatePage({
                                     selectedCount={selectedCount}
                                     options={commonSuppliers}
                                     onApply={applyBatchSupplier}
+                                    matchDisabled={!canMatchBest}
+                                    onMatchBest={applyBestSuppliers}
                                 />
-                                <PurchaseOrderCreateSourcingTable
-                                    form={
-                                        form as unknown as PurchaseOrderCreateFormApi
-                                    }
-                                    order={selectedOrder}
-                                />
+                                {lines.length === selectedOrder.lines.length &&
+                                lines.every(
+                                    (line, index) =>
+                                        line.salesOrderLineId ===
+                                        selectedOrder.lines[index]
+                                            ?.salesOrderLineId,
+                                ) ? (
+                                    <PurchaseOrderCreateSourcingTable
+                                        form={
+                                            form as unknown as PurchaseOrderCreateFormApi
+                                        }
+                                        order={selectedOrder}
+                                    />
+                                ) : (
+                                    <Skeleton className="h-40" />
+                                )}
                                 <p className="text-xs text-muted-foreground">
-                                    可逐行选择供应商，或勾选多行后批量指定共同可选供应商。同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单。
+                                    可逐行选择供应商，一键按最低含税成本和最早交期匹配最优供应商，或勾选多行后批量指定共同可选供应商。同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单。
                                 </p>
                             </div>
                         </section>
-                    ) : null}
-
-                    {step === "preview" ? (
-                        <PurchaseOrderCreatePreview previews={previews} />
                     ) : null}
 
                     <StickyTotalBar
@@ -519,47 +559,45 @@ export function PurchaseOrderCreatePage({
                                 ),
                             },
                         ]}
-                        leftActions={
-                            step === "preview" ? (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setStep("sourcing")}
-                                >
-                                    返回选源
-                                </Button>
-                            ) : undefined
-                        }
                         actions={
-                            step === "sourcing" ? (
-                                <Button
-                                    type="button"
-                                    data-testid="purchase-create-preview"
-                                    onClick={() => void openPreview()}
-                                >
-                                    预览采购单
-                                </Button>
-                            ) : (
-                                <Button
-                                    type="button"
-                                    data-testid="purchase-create-from-basis"
-                                    disabled={
-                                        previews.length === 0 ||
-                                        createMutation.isPending
-                                    }
-                                    onClick={() => setConfirmOpen(true)}
-                                >
-                                    {createMutation.isPending
-                                        ? "创建中…"
-                                        : `确认创建 ${previews.length} 张采购草稿`}
-                                </Button>
-                            )
+                            <Button
+                                type="button"
+                                data-testid="purchase-create-preview"
+                                onClick={() => void openPreview()}
+                            >
+                                预览采购单
+                            </Button>
                         }
                     />
                 </form>
             )}
 
-            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <PurchaseOrderCreatePreviewDialog
+                open={previewOpen}
+                previews={previews}
+                sourceOrder={selectedOrder}
+                creating={createMutation.isPending}
+                actionError={actionError}
+                onOpenChange={setPreviewOpen}
+                onConfirm={() => {
+                    setPreviewOpen(false)
+                    setConfirmOpen(true)
+                }}
+            />
+
+            <AlertDialog
+                open={confirmOpen}
+                onOpenChange={(open) => {
+                    setConfirmOpen(open)
+                    if (open) {
+                        submittingFromConfirmRef.current = false
+                        return
+                    }
+                    if (!submittingFromConfirmRef.current) {
+                        setPreviewOpen(true)
+                    }
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>确认创建采购单</AlertDialogTitle>
@@ -574,6 +612,7 @@ export function PurchaseOrderCreatePage({
                         <AlertDialogAction
                             data-testid="purchase-create-confirm"
                             onClick={() => {
+                                submittingFromConfirmRef.current = true
                                 setConfirmOpen(false)
                                 void form.handleSubmit()
                             }}

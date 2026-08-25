@@ -17,7 +17,7 @@ export {
     listProducts,
     updateProductListingStatus,
 } from "./lists/products"
-export { listSellableItems } from "./lists/sellable"
+export { listSellableItems, listSellableItemsPage } from "./lists/sellable"
 export { listVoucherCategories } from "./lists/voucher"
 export { listWarehouses } from "./lists/warehouse"
 export { joinFilterCodes, listSuppliers } from "./lists/supplier"

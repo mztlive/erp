@@ -40,6 +40,8 @@ pub struct SellableSkuFilter {
     pub supplier_id: Option<String>,
     /// 当前有效供给可供区域（精确匹配并集中的任一区域）；`None` 表示不筛选。
     pub supply_region: Option<String>,
+    /// 当前有效供给去重供应商数量上限（含）；`None` 表示不按供应保障筛选。
+    pub max_supplier_count: Option<u32>,
     /// 销售可见含税价下限（含）；`None` 表示无下限。
     pub sales_price_min: Option<Amount>,
     /// 销售可见含税价上限（含）；`None` 表示无上限。
@@ -71,6 +73,7 @@ impl SellableSkuFilter {
             brand_id: None,
             supplier_id: None,
             supply_region: None,
+            max_supplier_count: None,
             sales_price_min: None,
             sales_price_max: None,
             eligibility_as_of,
@@ -154,7 +157,7 @@ impl<'a> CatalogRepository<'a> {
     /// 供应商身份、采购成本、税率或起订量；`supplier_id` 仅参与筛选。
     ///
     /// # 参数
-    /// * `filter` - 关键字、类型、分类、品牌、供应商、区域、销售价与分页
+    /// * `filter` - 关键字、类型、分类、品牌、供应商、区域、供应保障、销售价与分页
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -335,6 +338,18 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
         .filter(|value| !value.is_empty())
     {
         pipeline.push(doc! { "$match": { "supply_regions": region } });
+    }
+    if let Some(max_supplier_count) = filter.max_supplier_count {
+        pipeline.push(doc! {
+            "$match": {
+                "$expr": {
+                    "$lte": [
+                        { "$size": { "$ifNull": ["$supplier_ids", []] } },
+                        i64::from(max_supplier_count),
+                    ]
+                }
+            }
+        });
     }
     if filter.sales_price_min.is_some() || filter.sales_price_max.is_some() {
         let mut range = Document::new();
@@ -602,6 +617,7 @@ mod tests {
             brand_id: Some("brand-1".to_string()),
             supplier_id: Some("supplier-1".to_string()),
             supply_region: Some("全国".to_string()),
+            max_supplier_count: Some(1),
             sales_price_min: Some(Amount::from_str("10.00").unwrap()),
             sales_price_max: Some(Amount::from_str("100.00").unwrap()),
             eligibility_as_of: date,
@@ -626,6 +642,7 @@ mod tests {
         assert!(json.contains("brand_id"));
         assert!(json.contains("supplier_ids"));
         assert!(json.contains("supply_regions"));
+        assert!(json.contains("$size"));
         assert!(json.contains("barcode"));
         assert!(json.contains("eligibility") || json.contains("valid_from"));
         assert!(!json.contains("dropship_supply_price"));

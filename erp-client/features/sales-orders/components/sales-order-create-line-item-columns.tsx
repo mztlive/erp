@@ -50,6 +50,7 @@ export function buildSalesOrderCreateLineItemColumns(
         string,
         SalesLineProcurementResponsibility
     > = new Map(),
+    onPickSku?: (rowIndex: number) => void,
 ): EditableLineItemColumn<SalesOrderDraftLineInput>[] {
     const nature = values.nature
     return [
@@ -63,6 +64,7 @@ export function buildSalesOrderCreateLineItemColumns(
                     values={values}
                     nature={nature}
                     rowIndex={rowIndex}
+                    onPickSku={onPickSku}
                 />
             ),
         },

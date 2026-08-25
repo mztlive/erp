@@ -61,6 +61,8 @@ export type DataTableProps<TData> = {
     manualSorting?: boolean
     manualFiltering?: boolean
     enableRowSelection?: boolean | ((row: Row<TData>) => boolean)
+    /** 默认 true；false 时勾选一行会清掉其它行。 */
+    enableMultiRowSelection?: boolean
     enableColumnResizing?: boolean
     enableColumnPinning?: boolean
     /** inset 自带卡片内距与圆角边框；flush 由外部框架提供边界。 */
@@ -102,4 +104,3 @@ export type DataTableProps<TData> = {
     highlightedRowId?: string
     className?: string
 }
-

@@ -105,6 +105,29 @@ export function paymentTermLabel(code: string): string {
     )
 }
 
+/**
+ * 供应商商务快照把结算方式和经营类目编进同一字符串。
+ * 展示付款条件时必须拆开，避免标题与内容错位。
+ */
+export function parsePaymentTermSnapshot(raw: string): {
+    paymentTerm: string
+    businessCategory: string
+} {
+    const trimmed = raw.trim()
+    if (!trimmed) {
+        return { paymentTerm: "—", businessCategory: "" }
+    }
+    const [termPart, ...categoryParts] = trimmed.split(/\s*[|｜]\s*经营类目：/)
+    const term = (termPart ?? "").trim()
+    return {
+        paymentTerm: paymentTermLabel(term),
+        businessCategory: categoryParts
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join("、"),
+    }
+}
+
 export function mapPurchaseType(value: string): PurchaseType {
     if (value === "PHYSICAL" || value === "VIRTUAL" || value === "SERVICE") {
         return value

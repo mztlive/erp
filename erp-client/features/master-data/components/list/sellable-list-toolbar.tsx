@@ -76,6 +76,9 @@ export function SellableListToolbar({
     productSalesPriceError,
     setProductSalesPriceError,
     productFilterOptionsQuery,
+    showSupplyPresetCounts = true,
+    hiddenProductKinds,
+    applyHint = "将同时应用上方关键词和以下筛选条件；结果也用于导出。",
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
@@ -109,6 +112,9 @@ export function SellableListToolbar({
     productSalesPriceError: string | null
     setProductSalesPriceError: SetState<string | null>
     productFilterOptionsQuery: ReturnType<typeof useProductFilterOptionsQuery>
+    showSupplyPresetCounts?: boolean
+    hiddenProductKinds?: readonly ProductKind[]
+    applyHint?: string
 }) {
     const panelId = React.useId()
     const priceErrorId = React.useId()
@@ -157,9 +163,15 @@ export function SellableListToolbar({
                                         }
                                     >
                                         {option.label}
-                                        <span className="num text-xs text-muted-foreground">
-                                            {supplyPresetCounts[option.value]}
-                                        </span>
+                                        {showSupplyPresetCounts ? (
+                                            <span className="num text-xs text-muted-foreground">
+                                                {
+                                                    supplyPresetCounts[
+                                                        option.value
+                                                    ]
+                                                }
+                                            </span>
+                                        ) : null}
                                     </Button>
                                 )
                             })}
@@ -231,9 +243,13 @@ export function SellableListToolbar({
                                         label="商品类型"
                                         value={productKindDraft}
                                         onValueChange={setProductKindDraft}
-                                        options={
-                                            PRODUCT_KIND_RADIO_FILTER_OPTIONS
-                                        }
+                                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS.filter(
+                                            (option) =>
+                                                option.value === "all" ||
+                                                !hiddenProductKinds?.includes(
+                                                    option.value as ProductKind,
+                                                ),
+                                        )}
                                     />
                                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                         <div className="flex min-w-0 flex-col gap-1.5 text-sm">
@@ -396,7 +412,7 @@ export function SellableListToolbar({
                                     </div>
                                     <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                                         <p className="text-xs text-muted-foreground">
-                                            将同时应用上方关键词和以下筛选条件；结果也用于导出。
+                                            {applyHint}
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button

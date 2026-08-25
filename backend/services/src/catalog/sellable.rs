@@ -32,6 +32,9 @@ pub struct SellableSkuListParams {
     pub supplier_id: Option<String>,
     /// 当前有效供给可供区域筛选（精确匹配）。
     pub supply_region: Option<String>,
+    /// 当前有效供给去重供应商数量上限（含）；用于「单一供应商」快捷视图。
+    #[validate(range(min = 1, message = "供应商数量上限必须大于0"))]
+    pub max_supplier_count: Option<u32>,
     /// 销售可见含税价下限（含）。
     pub sales_price_min: Option<Amount>,
     /// 销售可见含税价上限（含）。
@@ -166,7 +169,7 @@ impl CatalogService {
     /// 分页查询符合销售资格的公司 SKU。
     ///
     /// # 参数
-    /// * `params` - 搜索、类型、分类、品牌、供应商、区域、销售价、资格日期与分页
+    /// * `params` - 搜索、类型、分类、品牌、供应商、区域、供应保障、销售价、资格日期与分页
     ///
     /// # 返回
     /// 返回只读公司商品池分页视图；不包含任何采购成本或供应商身份。
@@ -189,6 +192,7 @@ impl CatalogService {
             brand_id: normalized_text(params.brand_id.as_deref()),
             supplier_id: normalized_text(params.supplier_id.as_deref()),
             supply_region: normalized_text(params.supply_region.as_deref()),
+            max_supplier_count: params.max_supplier_count,
             sales_price_min: params.sales_price_min,
             sales_price_max: params.sales_price_max,
             eligibility_as_of,
@@ -267,11 +271,33 @@ mod tests {
             brand_id: None,
             supplier_id: None,
             supply_region: None,
+            max_supplier_count: None,
             sales_price_min: None,
             sales_price_max: None,
             eligibility_as_of: None,
             page: Some(1),
             page_size: Some(101),
+        };
+
+        assert!(params.validate().is_err());
+    }
+
+    /// 供应商数量上限必须为正整数，避免把无供给 SKU 误当成筛选条件。
+    #[test]
+    fn sellable_sku_max_supplier_count_rejects_zero() {
+        let params = SellableSkuListParams {
+            q: None,
+            product_kind: None,
+            category_id: None,
+            brand_id: None,
+            supplier_id: None,
+            supply_region: None,
+            max_supplier_count: Some(0),
+            sales_price_min: None,
+            sales_price_max: None,
+            eligibility_as_of: None,
+            page: Some(1),
+            page_size: Some(20),
         };
 
         assert!(params.validate().is_err());

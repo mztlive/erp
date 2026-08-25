@@ -1,20 +1,21 @@
 "use client"
 
+import { PackageSearchIcon } from "lucide-react"
+
 import { toFieldErrors } from "@/components/form"
+import { Button } from "@/components/ui/button"
 import { Field, FieldError } from "@/components/ui/field"
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
-import {
-    SellableSkuSearchCombobox,
-    VoucherCategorySearchCombobox,
-} from "@/features/entity-selectors"
+import { VoucherCategorySearchCombobox } from "@/features/entity-selectors"
 
 export type SalesOrderCreateLineSkuEditorProps = {
     form: SalesOrderCreateFormApi
     values: CreateSalesOrderFormValues
     nature: SalesOrderNature
     rowIndex: number
+    onPickSku?: (rowIndex: number) => void
 }
 
 /** 明细行"销售项目"列：卡券选类目，实物/服务选公司商品池 SKU。 */
@@ -23,6 +24,7 @@ export function SalesOrderCreateLineSkuEditor({
     values,
     nature,
     rowIndex,
+    onPickSku,
 }: SalesOrderCreateLineSkuEditorProps) {
     const nameFieldName = `lineItems[${rowIndex}].name` as const
 
@@ -86,67 +88,37 @@ export function SalesOrderCreateLineSkuEditor({
             </form.AppField>
         </div>
     ) : (
-        <div className="min-w-48">
+        <div className="min-w-52">
             <form.AppField name={nameFieldName}>{() => null}</form.AppField>
             <form.AppField name={`lineItems[${rowIndex}].sku`}>
                 {(field) => {
                     const isInvalid =
                         field.state.meta.isTouched && !field.state.meta.isValid
                     const errors = toFieldErrors(field.state.meta.errors)
+                    const line = values.lineItems[rowIndex]
+                    const selectedLabel =
+                        line?.name.trim() || line?.sku.trim() || ""
                     return (
                         <Field data-invalid={isInvalid || undefined}>
-                            <SellableSkuSearchCombobox
-                                value={field.state.value || undefined}
-                                onValueChange={(id) => {
-                                    // 公司商品池稳定身份 = sku_id
-                                    field.handleChange(id ?? "")
-                                }}
-                                onItemChange={(product) => {
-                                    form.setFieldValue(
-                                        `lineItems[${rowIndex}].skuRevisionId`,
-                                        product?.revisionId ?? "",
-                                    )
-                                    form.setFieldValue(
-                                        nameFieldName,
-                                        product?.name ?? "",
-                                    )
-                                    form.setFieldValue(
-                                        `lineItems[${rowIndex}].unit`,
-                                        product?.baseUnit ?? "",
-                                    )
-                                    if (product?.salesVisiblePriceGross) {
-                                        form.setFieldValue(
-                                            `lineItems[${rowIndex}].unitPriceGross`,
-                                            product.salesVisiblePriceGross,
-                                        )
-                                    }
-                                }}
-                                excludeProductKind="VOUCHER"
-                                selectedItem={
-                                    values.lineItems[rowIndex]?.sku
-                                        ? {
-                                              productId:
-                                                  values.lineItems[rowIndex]
-                                                      .sku,
-                                              revisionId:
-                                                  values.lineItems[rowIndex]
-                                                      .skuRevisionId,
-                                              sku: values.lineItems[rowIndex]
-                                                  .sku,
-                                              name:
-                                                  values.lineItems[rowIndex]
-                                                      .name ||
-                                                  values.lineItems[rowIndex]
-                                                      .sku,
-                                              baseUnit:
-                                                  values.lineItems[rowIndex]
-                                                      .unit,
-                                          }
-                                        : undefined
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full justify-start"
+                                aria-label={
+                                    selectedLabel
+                                        ? `更换销售项目 ${selectedLabel}`
+                                        : "选择商品"
                                 }
-                                placeholder="搜索 SKU 或商品名称"
-                                emptyLabel="暂无可用的实物/服务 SKU（已排除卡券）"
-                            />
+                                onClick={() => onPickSku?.(rowIndex)}
+                            >
+                                <PackageSearchIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                <span className="min-w-0 truncate">
+                                    {selectedLabel || "选择商品"}
+                                </span>
+                            </Button>
                             {isInvalid ? <FieldError errors={errors} /> : null}
                         </Field>
                     )

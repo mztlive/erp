@@ -80,6 +80,8 @@ export type MasterDataListItem = Readonly<{
         supplierCount: number
         supplyRegions: readonly string[]
         eligibilityAsOf: string
+        /** SKU 主图文件资产；列表与选品 Dialog 用来回显缩略图。 */
+        mainImageAssetId?: string
     }>
 }>
 
