@@ -253,9 +253,11 @@ test("flow-08 销售变更单：生效销售单发起改单 → 采购确认 →
     await expect(
         page.getByRole("tab", { name: /版本/ }).getByText("改单中"),
     ).toBeVisible({ timeout: 20_000 })
-    // 聚焦条：生效的实物与服务订单优先提示「可以做客户验收」（验收随时可登记），
+    // 聚焦条：本流程不履约，没有可验收事实时不得提示「可以做客户验收」。
     // 改单提醒体现为版本页签「改单中」徽标 + 「发起改单」禁用（阻塞原因 tooltip）
-    await expect(page.getByText("可以做客户验收").first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByText("可以做客户验收")).toHaveCount(0, {
+        timeout: 10_000,
+    })
     await expect(page.getByRole("button", { name: "发起改单" })).toBeDisabled()
     await expect(
         page.getByRole("button", { name: "发起改单" }),

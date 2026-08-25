@@ -8,6 +8,7 @@ import {
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
 import {
+    AcceptancePanel,
     CollaborationPanel,
     FulfillmentPanel,
     OverviewPanel,
@@ -30,7 +31,6 @@ export function SalesOrderDetailTabs({
     navSection,
     visibleNav,
     canAccept,
-    acceptanceExpanded,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -49,7 +49,6 @@ export function SalesOrderDetailTabs({
         show: boolean
     }>
     canAccept: boolean
-    acceptanceExpanded: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -58,8 +57,7 @@ export function SalesOrderDetailTabs({
     onDataChanged: () => void
 }) {
     const items = visibleNav.map((item) => {
-        const todoOnFulfillment =
-            item.id === "fulfillment" && Boolean(canAccept)
+        const todoOnAcceptance = item.id === "acceptance" && Boolean(canAccept)
         const changeOnVersions =
             item.id === "versions" && Boolean(order.activeChangeOrder)
         const approvalPending =
@@ -70,7 +68,7 @@ export function SalesOrderDetailTabs({
             label: item.label,
             title: item.hint,
             badge:
-                todoOnFulfillment || changeOnVersions || approvalPending ? (
+                todoOnAcceptance || changeOnVersions || approvalPending ? (
                     <Badge
                         variant={changeOnVersions ? "warning" : "info"}
                         className="h-5 px-1.5 text-2xs font-normal"
@@ -132,12 +130,13 @@ export function SalesOrderDetailTabs({
             <ObjectSectionTabsPanel value="fulfillment" keepMounted>
                 <FulfillmentPanel
                     order={order}
-                    acceptanceExpanded={acceptanceExpanded}
-                    canAccept={Boolean(canAccept)}
-                    onExpandAcceptance={() => onSelectSection("acceptance")}
-                    onCollapseAcceptance={() => onSelectSection("fulfillment")}
+                    onOpenAcceptance={() => onSelectSection("acceptance")}
                     onDataChanged={onDataChanged}
                 />
+            </ObjectSectionTabsPanel>
+
+            <ObjectSectionTabsPanel value="acceptance">
+                <AcceptancePanel order={order} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="receivable" keepMounted>

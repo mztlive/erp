@@ -11,6 +11,7 @@ export {
 } from "@/features/sales-orders/components/sales-order-detail-overview-panel"
 export { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
 export { FulfillmentPanel } from "@/features/sales-orders/components/sales-order-detail-fulfillment-panel"
+export { AcceptancePanel } from "@/features/sales-orders/components/sales-order-detail-acceptance-panel"
 export {
     CollaborationPanel,
     ReceivablePanel,

@@ -19,13 +19,14 @@ export type NavSectionId =
     | "overview"
     | "approval"
     | "fulfillment"
+    | "acceptance"
     | "receivable"
     | "collaboration"
     | "versions"
 
-export type WorkSectionId = "approval" | "acceptance" | "change-review"
+export type WorkSectionId = "approval" | "change-review"
 
-export type FocusTaskId = WorkSectionId | "versions"
+export type FocusTaskId = "approval" | "acceptance" | "versions"
 
 export type FocusTask = {
     id: FocusTaskId
@@ -83,11 +84,7 @@ export function shouldOpenSalesOrderEditor(order: SalesOrderListItem) {
 }
 
 export function isWorkSection(section?: string): section is WorkSectionId {
-    return (
-        section === "approval" ||
-        section === "acceptance" ||
-        section === "change-review"
-    )
+    return section === "approval" || section === "change-review"
 }
 
 export function resolveNavSection(
@@ -101,8 +98,9 @@ export function resolveNavSection(
 
     switch (section) {
         case "fulfillment":
-        case "acceptance":
             return "fulfillment"
+        case "acceptance":
+            return isCard ? "fulfillment" : "acceptance"
         case "change-review":
             return "overview"
         case "receivable":
@@ -137,6 +135,22 @@ export function isSalesOrderApprovalInProgress(
     if (isOpenInstanceStatus(order.approval.instance?.status)) return true
     if (order.approval.instance) return false
     return REVIEW_CODES.has(order.primaryStatus.code)
+}
+
+/**
+ * 现在能否做客户验收。实物单且服务端放出登记动作还不够：
+ * 必须已有尚未验收完的履约事实（发货/电子交付/服务履约）。
+ * 已生效但交付尚未发生时不得当作当前待办。
+ */
+export function canRegisterCustomerAcceptance(
+    order: Pick<SalesOrderListItem, "nature" | "allowedActions">,
+    hasEligibleAcceptance: boolean,
+): boolean {
+    return (
+        order.nature === "physical_service" &&
+        order.allowedActions.includes("REGISTER_ACCEPTANCE") &&
+        hasEligibleAcceptance
+    )
 }
 
 export function resolveFocusTask(
@@ -193,7 +207,7 @@ export function resolveFocusTask(
 
 export function isActionableFocusTask(
     task: FocusTask | null,
-): task is FocusTask & { id: WorkSectionId } {
+): task is FocusTask & { id: "acceptance" } {
     // 审批入口已由「审批」tab 承接，不再用「去审批」主按钮跳转。
     return task != null && task.id === "acceptance"
 }
@@ -347,8 +361,14 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
         {
             id: "fulfillment",
             label: "履约",
-            hint: "采购、发货和验收",
+            hint: "采购、发货和交付",
             show: true,
+        },
+        {
+            id: "acceptance",
+            label: "验收",
+            hint: "客户验收与历史",
+            show: order.nature === "physical_service",
         },
         {
             id: "receivable",

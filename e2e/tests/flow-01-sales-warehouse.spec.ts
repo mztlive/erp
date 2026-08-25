@@ -597,8 +597,7 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     // ── W06 销售登记客户验收 ────────────────────────────────────────────────
     await switchAccount("sales")
     await gotoPage(salesPage, `/sales/orders/${salesOrderId}`)
-    await salesPage.getByRole("tab", { name: "履约" }).click()
-    await salesPage.getByRole("button", { name: "登记验收" }).click()
+    await salesPage.getByRole("tab", { name: "验收" }).click()
     await expect(
         salesPage.getByRole("heading", { name: "可验收的交付记录" }),
     ).toBeVisible({

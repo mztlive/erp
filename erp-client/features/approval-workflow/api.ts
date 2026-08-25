@@ -70,15 +70,14 @@ export const isApprovalConflict = (error: unknown): boolean => {
 /**
  * 读取冲突后的用户提示。409 不得自动重放决定。
  *
+ * 后端按《审批流程错误目录》返回具体冲突原因（哪个版本变了、下一步做什么），
+ * 这里只透传；仅在后端无可读文案时使用统一兜底。
+ *
  * @param error 未知异常
  * @returns 用户可见下一步
  */
-export const approvalConflictMessage = (error: unknown): string => {
-    if (!isApprovalConflict(error)) {
-        return getErrorMessage(error, "提交失败，请刷新后重试。")
-    }
-    return "责任或版本已变化，请刷新后重新确认"
-}
+export const approvalConflictMessage = (error: unknown): string =>
+    getErrorMessage(error, "提交失败，请刷新后重试。")
 
 /**
  * 提交当前开放审批任务的通过或驳回。

@@ -307,7 +307,8 @@ export async function createPurchaseOrderFromBasis(
         if (isApiError(error) && error.status === 409) {
             return {
                 status: "failed",
-                message: "可采购数量已更新，请刷新后重试",
+                // 后端冲突码自带具体原因，前端透传不再改写
+                message: getErrorMessage(error, "可采购数量已更新，请刷新后重试"),
                 code: "CONFLICT",
             }
         }

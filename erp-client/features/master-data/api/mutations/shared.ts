@@ -30,7 +30,11 @@ export function mapMutationError(
     if (error.status === 409) {
         return {
             outcome: "conflict",
-            message: "资料已被他人更新，请刷新后重新填写。",
+            // 后端冲突码自带具体原因，前端透传不再改写
+            message: getErrorMessage(
+                error,
+                "资料已被他人更新，请刷新后重新填写。",
+            ),
             serverLockVersion: fallbackLock?.version ?? 0,
             serverRevisionNo: fallbackLock?.revisionNo ?? 0,
         }

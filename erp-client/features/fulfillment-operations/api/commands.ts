@@ -210,7 +210,8 @@ export async function postFulfillmentOperation(
                 return {
                     status: "failed",
                     code: "SUBJECT_VERSION_MISMATCH",
-                    message: "数据已变更，请刷新后重试",
+                    // 后端冲突码自带具体原因（哪个版本变了），前端透传不再改写
+                    message: getErrorMessage(error, "数据已变更，请刷新后重试"),
                 }
             }
             return {

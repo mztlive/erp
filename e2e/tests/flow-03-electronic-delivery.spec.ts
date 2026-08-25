@@ -336,11 +336,7 @@ test("flow-03 虚拟商品电子交付全流程", async ({ page }) => {
             // ========== 第九步（销售）：客户验收 ==========
             await switchAccount("sales")
             await gotoPage(sales, `/sales/orders/${soId}`)
-            await sales.getByRole("tab", { name: "履约" }).click()
-            await expect(
-                sales.getByRole("button", { name: "登记验收" }).first(),
-            ).toBeVisible({ timeout: 30_000 })
-            await sales.getByRole("button", { name: "登记验收" }).click()
+            await sales.getByRole("tab", { name: "验收" }).click()
             // 可验收的交付记录：勾选电子交付批次
             const factPool = sales.locator("#acceptance-fact-pool")
             await expect(factPool).toBeVisible({ timeout: 30_000 })

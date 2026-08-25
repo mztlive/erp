@@ -176,6 +176,17 @@ export function mapEligibleFact(
     }
 }
 
+/** 是否还有尚未验收完的履约事实。无交付记录时不可当作当前验收待办。 */
+export function hasRemainingEligibleAcceptance(
+    eligibility: BackendEligibilityView,
+): boolean {
+    return (eligibility.sales_lines ?? []).some((line) =>
+        (line.fulfillment_facts ?? []).some(
+            (fact) => Number(fact.eligible_quantity) > 0,
+        ),
+    )
+}
+
 export function mapSalesLine(
     g: BackendSalesLineGroup,
 ): AcceptanceSalesLineGroup {

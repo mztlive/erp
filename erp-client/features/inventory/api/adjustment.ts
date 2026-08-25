@@ -185,7 +185,8 @@ export async function submitAdjustment(input: {
                 return {
                     status: "failed",
                     code: "BALANCE_LOCK_CONFLICT",
-                    message: "数据已变更，请刷新后重试",
+                    // 后端冲突码自带具体原因，前端透传不再改写
+                    message: getErrorMessage(error, "数据已变更，请刷新后重试"),
                     latestLockVersion: input.expectedBalanceLockVersion,
                 }
             }

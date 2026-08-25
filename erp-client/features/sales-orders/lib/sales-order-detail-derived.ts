@@ -1,6 +1,7 @@
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import {
     buildSelfHref,
+    canRegisterCustomerAcceptance,
     isActionableFocusTask,
     navItemsFor,
     resolveFocusTask,
@@ -18,13 +19,15 @@ export function deriveSalesOrderDetailState(
         section?: string
         fromWorkspace: string | null
         returnTo: string | null
+        hasEligibleAcceptance: boolean
     },
 ) {
-    const { section, fromWorkspace, returnTo } = input
+    const { section, fromWorkspace, returnTo, hasEligibleAcceptance } = input
 
-    const canAccept =
-        order.nature === "physical_service" &&
-        order.allowedActions.includes("REGISTER_ACCEPTANCE")
+    const canAccept = canRegisterCustomerAcceptance(
+        order,
+        hasEligibleAcceptance,
+    )
     const canStartChange =
         order.allowedActions.includes("START_SALES_CHANGE") ?? false
     const changeBlocker = order.actionBlockers.find(
@@ -36,7 +39,6 @@ export function deriveSalesOrderDetailState(
         from: fromWorkspace,
         isCard,
     })
-    const acceptanceExpanded = section === "acceptance"
     const showGoodsApproval =
         order.nature === "physical_service" && Boolean(order.approval)
     const showVoucherApproval =
@@ -62,8 +64,8 @@ export function deriveSalesOrderDetailState(
     const bannerJump =
         Boolean(focusTask) &&
         !hasPrimaryTaskAction &&
-        ((focusTask?.id === "versions" && navSection !== "versions") ||
-            (focusTask?.id === "acceptance" && !acceptanceExpanded))
+        focusTask?.id === "versions" &&
+        navSection !== "versions"
 
     return {
         canAccept,
@@ -71,7 +73,6 @@ export function deriveSalesOrderDetailState(
         changeBlocker,
         isCard,
         navSection,
-        acceptanceExpanded,
         showApproval,
         showEditor,
         focusTask,

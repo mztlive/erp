@@ -11,6 +11,7 @@ import type {
 } from "@/features/sales-orders/lib/acceptance-types"
 import {
     formatInstant,
+    hasRemainingEligibleAcceptance,
     mapFactType,
     mapHistoryItem,
     mapSalesLine,
@@ -25,6 +26,25 @@ export type FetchAcceptanceWorkspaceParams = {
     salesOrderId: string
     remainingOnly?: boolean
     workItemId?: string | null
+}
+
+/**
+ * 只问有没有尚未验收完的履约事实。详情焦点横幅用，不拉草稿和工作台。
+ */
+export async function fetchHasEligibleAcceptance(
+    salesOrderId: string,
+): Promise<boolean> {
+    try {
+        const eligibility = await apiGet<BackendEligibilityView>(
+            "/admin/customer-acceptances/eligible",
+            { sales_order_id: salesOrderId },
+        )
+        return hasRemainingEligibleAcceptance(eligibility)
+    } catch (err) {
+        const apiErr = err as ApiError
+        if (apiErr?.status === 404) return false
+        throw err
+    }
 }
 
 export async function fetchCustomerAcceptanceWorkspace(

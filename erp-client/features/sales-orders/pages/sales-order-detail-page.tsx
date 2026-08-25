@@ -28,6 +28,7 @@ import {
 import { SalesOrderDetailTabs } from "@/features/sales-orders/components/sales-order-detail-tabs"
 import {
     salesOrderKeys,
+    useSalesOrderAcceptanceEligibilityQuery,
     useSalesOrderDetailQuery,
 } from "@/features/sales-orders/hooks/queries"
 import { useSalesOrderDetailStartChange } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
@@ -53,6 +54,14 @@ export function SalesOrderDetailPage({
     section?: string
 }) {
     const query = useSalesOrderDetailQuery(salesOrderId)
+    const eligibilityQuery = useSalesOrderAcceptanceEligibilityQuery(
+        salesOrderId,
+        Boolean(
+            query.data &&
+            query.data.nature === "physical_service" &&
+            query.data.allowedActions.includes("REGISTER_ACCEPTANCE"),
+        ),
+    )
     const {
         returnTo,
         fromWorkspace,
@@ -152,6 +161,7 @@ export function SalesOrderDetailPage({
         section,
         fromWorkspace,
         returnTo,
+        hasEligibleAcceptance: eligibilityQuery.data === true,
     })
     if (derived.showEditor) {
         return (
@@ -309,7 +319,6 @@ export function SalesOrderDetailPage({
                     navSection={derived.navSection}
                     visibleNav={derived.visibleNav}
                     canAccept={derived.canAccept}
-                    acceptanceExpanded={derived.acceptanceExpanded}
                     workItemId={
                         section === "change-review"
                             ? undefined

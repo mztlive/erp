@@ -303,7 +303,9 @@ function defaultAllowedActions(
         })
     }
 
-    // 客户验收只属于已生效后的履约收口；审批中（PENDING_REVIEW）不得开放。
+    // 客户验收属于已生效后的履约收口；审批中不得开放。
+    // 此处只表示生命周期允许登记；详情页还要核对尚未验收完的履约事实，
+    // 发货/交付尚未发生时不得当成当前待办。
     if (
         commercial === "EFFECTIVE" &&
         fulfillment !== "COMPLETED" &&

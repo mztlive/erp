@@ -6,7 +6,10 @@
  */
 
 export type { FetchAcceptanceWorkspaceParams } from "@/features/sales-orders/lib/acceptance-workspace-fetch"
-export { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/lib/acceptance-workspace-fetch"
+export {
+    fetchCustomerAcceptanceWorkspace,
+    fetchHasEligibleAcceptance,
+} from "@/features/sales-orders/lib/acceptance-workspace-fetch"
 export {
     postCustomerAcceptanceWorkspace,
     reverseCustomerAcceptanceWorkspace,

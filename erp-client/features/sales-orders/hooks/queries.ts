@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
+import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptance"
 import {
     cancelSalesOrderApproval,
     createSalesOrder,
@@ -30,6 +31,8 @@ export const salesOrderKeys = {
         id: string,
         filters: { remainingOnly?: boolean; workItemId?: string | null },
     ) => [...salesOrderKeys.acceptanceRoot(id), filters] as const,
+    acceptanceEligibility: (id: string) =>
+        [...salesOrderKeys.acceptanceRoot(id), "eligibility"] as const,
 }
 
 export function useSalesOrdersQuery(
@@ -48,6 +51,17 @@ export function useSalesOrderDetailQuery(salesOrderId: string) {
         queryKey: salesOrderKeys.detail(salesOrderId),
         queryFn: () => fetchSalesOrderDetail(salesOrderId),
         enabled: Boolean(salesOrderId),
+    })
+}
+
+export function useSalesOrderAcceptanceEligibilityQuery(
+    salesOrderId: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: salesOrderKeys.acceptanceEligibility(salesOrderId),
+        queryFn: () => fetchHasEligibleAcceptance(salesOrderId),
+        enabled: enabled && Boolean(salesOrderId),
     })
 }
 
