@@ -68,6 +68,7 @@ export function useSalesOrderDetailPermissions() {
         navigate,
         command,
         openPurchase: navigate("openPurchase"),
+        previewPurchase: navigate("previewPurchase"),
         createPurchase: (serverAllows: boolean, serverReason?: string) =>
             command(serverAllows, "createPurchase", serverReason),
         openFulfillment: navigate("openFulfillment"),
@@ -85,6 +86,8 @@ function permissionKindFallback(kind: SalesOrderDetailPermissionKind): string {
     switch (kind) {
         case "openPurchase":
             return "当前账号没有采购单列表权限"
+        case "previewPurchase":
+            return "当前账号没有采购单详情权限，无法预览"
         case "createPurchase":
             return "当前账号没有创建采购单权限"
         case "openFulfillment":

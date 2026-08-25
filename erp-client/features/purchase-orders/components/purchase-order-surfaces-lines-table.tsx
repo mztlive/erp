@@ -1,19 +1,182 @@
 "use client"
 
-import { MoneyValue, QuantityValue } from "@/components/business"
+import * as React from "react"
+import type { ColumnDef } from "@tanstack/react-table"
+
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+    DataTable,
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+} from "@/components/business"
 import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
+import { multiplyFixed } from "@/lib/fixed-decimal"
 
 export type PurchaseOrderLinesTableOrder = NonNullable<
     ReturnType<typeof usePurchaseOrderCenterQuery>["data"]
 >
+
+export type PurchaseOrderLineRow =
+    PurchaseOrderLinesTableOrder["currentContent"]["lines"][number]
+
+function lineTypeLabel(lineType: PurchaseOrderLineRow["lineType"]) {
+    return lineType === "LOGISTICS_FEE" ? "物流费用" : "商品/服务"
+}
+
+function taxRatePercent(inputTaxRate: string) {
+    return multiplyFixed(inputTaxRate, "100", {
+        leftMaxScale: 6,
+        rightMaxScale: 0,
+        outputScale: 2,
+    })
+}
+
+function MaskedAmount() {
+    return <span className="text-sm text-muted-foreground">•••</span>
+}
+
+function buildPurchaseOrderLinesColumns(
+    costMasked: boolean,
+): ColumnDef<PurchaseOrderLineRow>[] {
+    return [
+        {
+            id: "item",
+            accessorFn: (row) => row.itemName,
+            header: "项目",
+            meta: { label: "项目", width: "flex" },
+            cell: ({ row }) => {
+                const line = row.original
+                return (
+                    <div className="whitespace-normal">
+                        <div className="font-medium">{line.itemName}</div>
+                        {line.procurementConfirmationLineId ? (
+                            <div className="text-tiny text-muted-foreground">
+                                {line.salesAllocationLabel ??
+                                    `确认分行 · ${line.itemName}`}
+                            </div>
+                        ) : null}
+                    </div>
+                )
+            },
+        },
+        {
+            id: "type",
+            accessorFn: (row) => lineTypeLabel(row.lineType),
+            header: "类型",
+            meta: { label: "类型", width: "status" },
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground">
+                    {lineTypeLabel(row.original.lineType)}
+                </span>
+            ),
+        },
+        {
+            id: "quantity",
+            accessorKey: "quantity",
+            header: "数量",
+            meta: {
+                label: "数量",
+                width: "quantity",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => {
+                const line = row.original
+                if (line.lineType === "LOGISTICS_FEE") return "—"
+                return (
+                    <QuantityValue
+                        value={line.quantity ?? "0"}
+                        unit={line.unit}
+                    />
+                )
+            },
+        },
+        {
+            id: "unitCost",
+            accessorKey: "unitCostGross",
+            header: "含税单价",
+            meta: {
+                label: "含税单价",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) =>
+                costMasked ? (
+                    <MaskedAmount />
+                ) : (
+                    <MoneyValue value={row.original.unitCostGross} />
+                ),
+        },
+        {
+            id: "taxRate",
+            accessorKey: "inputTaxRate",
+            header: "税率",
+            meta: {
+                label: "税率",
+                width: "rate",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => (
+                <RateValue
+                    value={taxRatePercent(row.original.inputTaxRate)}
+                    precision={2}
+                />
+            ),
+        },
+        {
+            id: "delivery",
+            accessorKey: "expectedDeliveryDate",
+            header: "交期",
+            meta: {
+                label: "交期",
+                width: "default",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => (
+                <span className="num text-xs">
+                    {row.original.expectedDeliveryDate ?? "—"}
+                </span>
+            ),
+        },
+        {
+            id: "gross",
+            accessorKey: "grossAmount",
+            header: "行含税",
+            meta: {
+                label: "行含税",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) =>
+                costMasked ? (
+                    <MaskedAmount />
+                ) : (
+                    <MoneyValue value={row.original.grossAmount} />
+                ),
+        },
+        {
+            id: "tax",
+            accessorKey: "taxAmount",
+            header: "税额",
+            meta: {
+                label: "税额",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) =>
+                costMasked ? (
+                    <MaskedAmount />
+                ) : (
+                    <MoneyValue value={row.original.taxAmount} />
+                ),
+        },
+    ]
+}
 
 export function LinesTable({
     order,
@@ -22,84 +185,26 @@ export function LinesTable({
     order: PurchaseOrderLinesTableOrder
     costMasked: boolean
 }) {
+    const lines = order.currentContent.lines
+    const columns = React.useMemo(
+        () => buildPurchaseOrderLinesColumns(costMasked),
+        [costMasked],
+    )
+
     return (
-        <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
-            <Table data-density="compact">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>项目</TableHead>
-                        <TableHead>类型</TableHead>
-                        <TableHead data-align="end">数量</TableHead>
-                        <TableHead data-align="end">含税单价</TableHead>
-                        <TableHead data-align="end">税率</TableHead>
-                        <TableHead data-align="end">交期</TableHead>
-                        <TableHead data-align="end">行含税</TableHead>
-                        <TableHead data-align="end">税额</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {order.currentContent.lines.map((line) => (
-                        <TableRow key={line.lineId}>
-                            <TableCell className="max-w-[16rem] whitespace-normal">
-                                <div className="font-medium">
-                                    {line.itemName}
-                                </div>
-                                {line.procurementConfirmationLineId ? (
-                                    <div className="text-tiny text-muted-foreground">
-                                        {line.salesAllocationLabel ??
-                                            `确认分行 · ${line.itemName}`}
-                                    </div>
-                                ) : null}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                                {line.lineType === "LOGISTICS_FEE"
-                                    ? "物流费用"
-                                    : "商品/服务"}
-                            </TableCell>
-                            <TableCell data-align="end">
-                                {line.lineType === "LOGISTICS_FEE" ? (
-                                    "—"
-                                ) : (
-                                    <QuantityValue
-                                        value={line.quantity ?? "0"}
-                                        unit={line.unit}
-                                    />
-                                )}
-                            </TableCell>
-                            <TableCell data-align="end">
-                                {costMasked ? (
-                                    "•••"
-                                ) : (
-                                    <MoneyValue value={line.unitCostGross} />
-                                )}
-                            </TableCell>
-                            <TableCell data-align="end" className="num text-xs">
-                                {(Number(line.inputTaxRate) * 100).toFixed(0)}%
-                            </TableCell>
-                            <TableCell data-align="end" className="num text-xs">
-                                {line.expectedDeliveryDate ?? "—"}
-                            </TableCell>
-                            <TableCell data-align="end">
-                                {costMasked ? (
-                                    "•••"
-                                ) : (
-                                    <MoneyValue
-                                        value={line.grossAmount}
-                                        taxBasis="gross"
-                                    />
-                                )}
-                            </TableCell>
-                            <TableCell data-align="end">
-                                {costMasked ? (
-                                    "•••"
-                                ) : (
-                                    <MoneyValue value={line.taxAmount} />
-                                )}
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
+        <DataTable
+            data={[...lines]}
+            columns={columns}
+            getRowId={(row) => row.lineId}
+            rowCount={lines.length}
+            rowLabel={(row) => row.itemName}
+            caption="采购明细"
+            layout="flush"
+            density="compact"
+            showPagination={false}
+            showColumnVisibility={false}
+            defaultColumnPinning={{ left: ["item"] }}
+            emptyTitle="暂无采购明细"
+        />
     )
 }

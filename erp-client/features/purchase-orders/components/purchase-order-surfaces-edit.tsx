@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import type { ColumnDef } from "@tanstack/react-table"
 
 import {
+    DataTable,
     surfaceInsetClassName,
     surfacePanelClassName,
 } from "@/components/business"
@@ -16,14 +18,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+import type { PurchaseOrderLineRow } from "@/features/purchase-orders/components/purchase-order-surfaces-lines-table"
 import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
 import {
     positiveDecimal,
@@ -43,6 +38,227 @@ export type LineEditDraft = {
 
 export type LineEdits = Record<string, LineEditDraft>
 
+type LineEditSetter = React.Dispatch<React.SetStateAction<LineEdits>>
+
+function patchLineEdit(
+    setLineEdits: LineEditSetter,
+    lineId: string,
+    fallbackTaxRate: string,
+    patch: Partial<LineEditDraft>,
+) {
+    setLineEdits((prev) => ({
+        ...prev,
+        [lineId]: {
+            ...prev[lineId],
+            inputTaxRate: prev[lineId]?.inputTaxRate ?? fallbackTaxRate,
+            ...patch,
+        },
+    }))
+}
+
+function lineSubtitle(line: PurchaseOrderLineRow) {
+    if (line.lineType === "LOGISTICS_FEE") return "物流费用"
+    if (line.procurementConfirmationLineId) {
+        return line.salesAllocationLabel ?? `确认分行 · ${line.itemName}`
+    }
+    return "商品/服务"
+}
+
+function taxRateInputValue(raw: string) {
+    if (raw === "") return ""
+    const value = Number(raw)
+    return Number.isFinite(value) ? String(value * 100) : raw
+}
+
+function parseTaxRateInput(raw: string) {
+    const parsed = Number(raw)
+    if (raw === "" || !Number.isFinite(parsed)) return raw
+    return String(parsed / 100)
+}
+
+function LineNumberInput({
+    value,
+    ariaLabel,
+    widthClass,
+    invalid,
+    invalidMessage,
+    suffix,
+    onValueChange,
+}: {
+    value: string
+    ariaLabel: string
+    widthClass: string
+    invalid: boolean
+    invalidMessage: string
+    suffix?: string
+    onValueChange: (value: string) => void
+}) {
+    return (
+        <>
+            <input
+                className={cn(
+                    "num rounded border border-border bg-background px-2 py-1 text-right text-sm",
+                    widthClass,
+                )}
+                value={value}
+                onChange={(event) => onValueChange(event.target.value)}
+                aria-label={ariaLabel}
+            />
+            {suffix ? (
+                <span className="ml-1 text-xs text-muted-foreground">
+                    {suffix}
+                </span>
+            ) : null}
+            {invalid ? (
+                <span className="block text-tiny text-destructive">
+                    {invalidMessage}
+                </span>
+            ) : null}
+        </>
+    )
+}
+
+function buildPurchaseOrderEditLineColumns(
+    lineEdits: LineEdits,
+    setLineEdits: LineEditSetter,
+): ColumnDef<PurchaseOrderLineRow>[] {
+    return [
+        {
+            id: "item",
+            accessorFn: (row) => row.itemName,
+            header: "项目",
+            meta: { label: "项目", width: "flex" },
+            cell: ({ row }) => {
+                const line = row.original
+                return (
+                    <div className="whitespace-normal">
+                        <div className="font-medium">{line.itemName}</div>
+                        <div className="text-tiny text-muted-foreground">
+                            {lineSubtitle(line)}
+                        </div>
+                    </div>
+                )
+            },
+        },
+        {
+            id: "quantity",
+            accessorKey: "quantity",
+            header: "数量",
+            meta: {
+                label: "数量",
+                width: "quantity",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => {
+                const line = row.original
+                if (line.lineType === "LOGISTICS_FEE") return "—"
+                const draft = lineEdits[line.lineId]
+                return (
+                    <LineNumberInput
+                        value={draft?.quantity ?? ""}
+                        ariaLabel={`${line.itemName} 数量`}
+                        widthClass="w-20"
+                        invalid={
+                            !positiveDecimal(draft?.quantity ?? line.quantity)
+                        }
+                        invalidMessage="须为正数"
+                        onValueChange={(value) =>
+                            patchLineEdit(
+                                setLineEdits,
+                                line.lineId,
+                                line.inputTaxRate,
+                                { quantity: value },
+                            )
+                        }
+                    />
+                )
+            },
+        },
+        {
+            id: "unitCost",
+            accessorKey: "unitCostGross",
+            header: "含税单价",
+            meta: {
+                label: "含税单价",
+                width: "amount",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => {
+                const line = row.original
+                const draft = lineEdits[line.lineId]
+                return (
+                    <LineNumberInput
+                        value={draft?.unitCostGross ?? ""}
+                        ariaLabel={`${line.itemName} 含税单价`}
+                        widthClass="w-28"
+                        invalid={
+                            !positiveDecimal(
+                                draft?.unitCostGross ?? line.unitCostGross,
+                            )
+                        }
+                        invalidMessage="须为正数"
+                        onValueChange={(value) =>
+                            patchLineEdit(
+                                setLineEdits,
+                                line.lineId,
+                                line.inputTaxRate,
+                                { unitCostGross: value },
+                            )
+                        }
+                    />
+                )
+            },
+        },
+        {
+            id: "taxRate",
+            accessorKey: "inputTaxRate",
+            header: "税率",
+            meta: {
+                label: "税率",
+                width: "rate",
+                align: "end",
+                numeric: true,
+            },
+            cell: ({ row }) => {
+                const line = row.original
+                const draft = lineEdits[line.lineId]
+                const storedRate = draft?.inputTaxRate ?? line.inputTaxRate
+                return (
+                    <LineNumberInput
+                        value={taxRateInputValue(storedRate)}
+                        ariaLabel={`${line.itemName} 税率（%）`}
+                        widthClass="w-20"
+                        suffix="%"
+                        invalid={!taxRateValid(storedRate)}
+                        invalidMessage="税率须为 0–100 的百分数"
+                        onValueChange={(value) =>
+                            patchLineEdit(
+                                setLineEdits,
+                                line.lineId,
+                                line.inputTaxRate,
+                                { inputTaxRate: parseTaxRateInput(value) },
+                            )
+                        }
+                    />
+                )
+            },
+        },
+        {
+            id: "delivery",
+            accessorKey: "expectedDeliveryDate",
+            header: "交期（只读）",
+            meta: { label: "交期", width: "default" },
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground">
+                    {row.original.expectedDeliveryDate ?? "—"}
+                </span>
+            ),
+        },
+    ]
+}
+
 export function EditSurface({
     order,
     lineEdits,
@@ -55,13 +271,19 @@ export function EditSurface({
 }: {
     order: NonNullable<ReturnType<typeof usePurchaseOrderCenterQuery>["data"]>
     lineEdits: LineEdits
-    setLineEdits: React.Dispatch<React.SetStateAction<LineEdits>>
+    setLineEdits: LineEditSetter
     draftEditToken: string | null
     canSubmit: boolean
     savePending: boolean
     onSave: () => void
     onSubmitOpen: () => void
 }) {
+    const lines = order.currentContent.lines
+    const columns = React.useMemo(
+        () => buildPurchaseOrderEditLineColumns(lineEdits, setLineEdits),
+        [lineEdits, setLineEdits],
+    )
+
     return (
         <div className="space-y-4">
             <Card className={surfacePanelClassName}>
@@ -142,224 +364,20 @@ export function EditSurface({
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                        <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
-                            <Table data-density="compact">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>项目</TableHead>
-                                        <TableHead data-align="end">
-                                            数量
-                                        </TableHead>
-                                        <TableHead data-align="end">
-                                            含税单价
-                                        </TableHead>
-                                        <TableHead data-align="end">
-                                            税率
-                                        </TableHead>
-                                        <TableHead>交期（只读）</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {order.currentContent.lines.map((line) => (
-                                        <TableRow key={line.lineId}>
-                                            <TableCell className="whitespace-normal">
-                                                <div className="font-medium">
-                                                    {line.itemName}
-                                                </div>
-                                                <div className="text-tiny text-muted-foreground">
-                                                    {line.lineType ===
-                                                    "LOGISTICS_FEE"
-                                                        ? "物流费用"
-                                                        : line.procurementConfirmationLineId
-                                                          ? (line.salesAllocationLabel ??
-                                                            `确认分行 · ${line.itemName}`)
-                                                          : "商品/服务"}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell data-align="end">
-                                                {line.lineType ===
-                                                "LOGISTICS_FEE" ? (
-                                                    "—"
-                                                ) : (
-                                                    <>
-                                                        <input
-                                                            className="num w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm"
-                                                            value={
-                                                                lineEdits[
-                                                                    line.lineId
-                                                                ]?.quantity ??
-                                                                ""
-                                                            }
-                                                            onChange={(event) =>
-                                                                setLineEdits(
-                                                                    (prev) => ({
-                                                                        ...prev,
-                                                                        [line.lineId]:
-                                                                            {
-                                                                                ...prev[
-                                                                                    line
-                                                                                        .lineId
-                                                                                ],
-                                                                                inputTaxRate:
-                                                                                    prev[
-                                                                                        line
-                                                                                            .lineId
-                                                                                    ]
-                                                                                        ?.inputTaxRate ??
-                                                                                    line.inputTaxRate,
-                                                                                quantity:
-                                                                                    event
-                                                                                        .target
-                                                                                        .value,
-                                                                            },
-                                                                    }),
-                                                                )
-                                                            }
-                                                            aria-label={`${line.itemName} 数量`}
-                                                        />
-                                                        {!positiveDecimal(
-                                                            lineEdits[
-                                                                line.lineId
-                                                            ]?.quantity ??
-                                                                line.quantity,
-                                                        ) ? (
-                                                            <span className="block text-tiny text-destructive">
-                                                                须为正数
-                                                            </span>
-                                                        ) : null}
-                                                    </>
-                                                )}
-                                            </TableCell>
-                                            <TableCell data-align="end">
-                                                <>
-                                                    <input
-                                                        className="num w-28 rounded border border-border bg-background px-2 py-1 text-right text-sm"
-                                                        value={
-                                                            lineEdits[
-                                                                line.lineId
-                                                            ]?.unitCostGross ??
-                                                            ""
-                                                        }
-                                                        onChange={(event) =>
-                                                            setLineEdits(
-                                                                (prev) => ({
-                                                                    ...prev,
-                                                                    [line.lineId]:
-                                                                        {
-                                                                            ...prev[
-                                                                                line
-                                                                                    .lineId
-                                                                            ],
-                                                                            inputTaxRate:
-                                                                                prev[
-                                                                                    line
-                                                                                        .lineId
-                                                                                ]
-                                                                                    ?.inputTaxRate ??
-                                                                                line.inputTaxRate,
-                                                                            unitCostGross:
-                                                                                event
-                                                                                    .target
-                                                                                    .value,
-                                                                        },
-                                                                }),
-                                                            )
-                                                        }
-                                                        aria-label={`${line.itemName} 含税单价`}
-                                                    />
-                                                    {!positiveDecimal(
-                                                        lineEdits[line.lineId]
-                                                            ?.unitCostGross ??
-                                                            line.unitCostGross,
-                                                    ) ? (
-                                                        <span className="block text-tiny text-destructive">
-                                                            须为正数
-                                                        </span>
-                                                    ) : null}
-                                                </>
-                                            </TableCell>
-                                            <TableCell data-align="end">
-                                                <>
-                                                    <input
-                                                        className="num w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm"
-                                                        value={(() => {
-                                                            const raw =
-                                                                lineEdits[
-                                                                    line.lineId
-                                                                ]
-                                                                    ?.inputTaxRate ??
-                                                                line.inputTaxRate
-                                                            if (raw === "")
-                                                                return ""
-                                                            const value =
-                                                                Number(raw)
-                                                            return Number.isFinite(
-                                                                value,
-                                                            )
-                                                                ? String(
-                                                                      value *
-                                                                          100,
-                                                                  )
-                                                                : raw
-                                                        })()}
-                                                        onChange={(event) => {
-                                                            const raw =
-                                                                event.target
-                                                                    .value
-                                                            const parsed =
-                                                                Number(raw)
-                                                            setLineEdits(
-                                                                (prev) => ({
-                                                                    ...prev,
-                                                                    [line.lineId]:
-                                                                        {
-                                                                            ...prev[
-                                                                                line
-                                                                                    .lineId
-                                                                            ],
-                                                                            inputTaxRate:
-                                                                                raw ===
-                                                                                    "" ||
-                                                                                !Number.isFinite(
-                                                                                    parsed,
-                                                                                )
-                                                                                    ? raw
-                                                                                    : String(
-                                                                                          parsed /
-                                                                                              100,
-                                                                                      ),
-                                                                        },
-                                                                }),
-                                                            )
-                                                        }}
-                                                        aria-label={`${line.itemName} 税率（%）`}
-                                                    />
-                                                    <span className="ml-1 text-xs text-muted-foreground">
-                                                        %
-                                                    </span>
-                                                    {!taxRateValid(
-                                                        lineEdits[line.lineId]
-                                                            ?.inputTaxRate ??
-                                                            line.inputTaxRate,
-                                                    ) ? (
-                                                        <span className="block text-tiny text-destructive">
-                                                            税率须为 0–100
-                                                            的百分数
-                                                        </span>
-                                                    ) : null}
-                                                </>
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {line.expectedDeliveryDate ??
-                                                    "—"}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
+                    <DataTable
+                        data={[...lines]}
+                        columns={columns}
+                        getRowId={(row) => row.lineId}
+                        rowCount={lines.length}
+                        rowLabel={(row) => row.itemName}
+                        caption="本单可调明细"
+                        layout="flush"
+                        density="compact"
+                        showPagination={false}
+                        showColumnVisibility={false}
+                        defaultColumnPinning={{ left: ["item"] }}
+                        emptyTitle="暂无采购明细"
+                    />
 
                     <div className="flex flex-wrap gap-2">
                         <Button

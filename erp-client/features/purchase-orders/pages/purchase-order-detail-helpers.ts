@@ -8,25 +8,25 @@ export type PurchaseOrderDetailSectionId =
 
 export type PurchaseOrderDetailMode = "view" | "edit" | "review"
 
-export type PurchaseOrderDetailNavItem = {
+export const PURCHASE_ORDER_DETAIL_NAV: readonly {
     id: PurchaseOrderDetailSectionId
     label: string
-    href: string
-}
+}[] = [
+    { id: "overview", label: "概览" },
+    { id: "lines", label: "明细与分配" },
+    { id: "fulfillment", label: "履约" },
+    { id: "payable", label: "应付与票款" },
+    { id: "changes", label: "变更与异常" },
+    { id: "audit", label: "审计" },
+]
 
 export function resolvePurchaseOrderDetailSection(
     section?: string,
 ): PurchaseOrderDetailSectionId {
-    if (
-        section === "lines" ||
-        section === "fulfillment" ||
-        section === "payable" ||
-        section === "changes" ||
-        section === "audit"
-    ) {
-        return section
-    }
-    return "overview"
+    return (
+        PURCHASE_ORDER_DETAIL_NAV.find((item) => item.id === section)?.id ??
+        "overview"
+    )
 }
 
 export function resolvePurchaseOrderDetailMode(
@@ -36,36 +36,18 @@ export function resolvePurchaseOrderDetailMode(
     return "view"
 }
 
-export function buildPurchaseOrderDetailNavItems(
-    baseHref: string,
-    mode: PurchaseOrderDetailMode,
-): PurchaseOrderDetailNavItem[] {
-    return [
-        { id: "overview", label: "概览", href: baseHref },
-        {
-            id: "lines",
-            label: "明细与分配",
-            href: `${baseHref}?section=lines${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "fulfillment",
-            label: "履约",
-            href: `${baseHref}?section=fulfillment${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "payable",
-            label: "应付与票款",
-            href: `${baseHref}?section=payable${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "changes",
-            label: "变更与异常",
-            href: `${baseHref}?section=changes${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-        {
-            id: "audit",
-            label: "审计",
-            href: `${baseHref}?section=audit${mode !== "view" ? `&mode=${mode}` : ""}`,
-        },
-    ]
+/**
+ * 采购单详情分区 URL。概览不带 `section`；切换分区时保留 mode / 任务等现有查询参数。
+ */
+export function purchaseOrderSectionHref(
+    purchaseOrderId: string,
+    section: PurchaseOrderDetailSectionId,
+    currentSearch?: string | URLSearchParams,
+): string {
+    const params = new URLSearchParams(currentSearch)
+    if (section === "overview") params.delete("section")
+    else params.set("section", section)
+    const qs = params.toString()
+    const base = `/procurement/orders/${purchaseOrderId}`
+    return qs ? `${base}?${qs}` : base
 }

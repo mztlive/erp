@@ -10,7 +10,7 @@ export {
     OverviewPanel,
 } from "@/features/sales-orders/components/sales-order-detail-overview-panel"
 export { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
-export { FulfillmentPanel } from "@/features/sales-orders/components/sales-order-detail-fulfillment-panel"
+export { PurchasePanel } from "@/features/sales-orders/components/sales-order-detail-purchase-panel"
 export { AcceptancePanel } from "@/features/sales-orders/components/sales-order-detail-acceptance-panel"
 export {
     CollaborationPanel,

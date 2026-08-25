@@ -98,6 +98,7 @@ export function resolveNavSection(
 
     switch (section) {
         case "fulfillment":
+        case "purchase":
             return "fulfillment"
         case "acceptance":
             return isCard ? "fulfillment" : "acceptance"
@@ -374,8 +375,8 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
         },
         {
             id: "fulfillment",
-            label: "履约",
-            hint: "采购、发货和交付",
+            label: "采购",
+            hint: "本单已创建的采购单",
             show: true,
         },
         {

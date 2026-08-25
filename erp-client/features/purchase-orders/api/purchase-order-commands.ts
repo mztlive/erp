@@ -300,9 +300,7 @@ export async function createPurchaseOrderFromBasis(
             status: "succeeded",
             data: {
                 purchaseOrderId: data.purchase_order_id,
-                draftLabel: data.purchase_no
-                    ? `草稿 · ${data.purchase_no}`
-                    : data.reference,
+                draftLabel: data.purchase_no || data.reference,
                 lockVersion: data.lock_version,
             },
             reference: data.reference || data.purchase_no,
@@ -324,23 +322,21 @@ export async function createPurchaseOrderFromBasis(
 }
 
 /**
- * 把后端创建结果映射成页面可用的草稿摘要。
+ * 把后端创建结果映射成页面可用的采购单摘要。
  *
- * @param data 单张采购草稿创建结果。
- * @returns 采购单 ID、草稿展示名和乐观锁版本。
+ * @param data 单张已提交采购单创建结果。
+ * @returns 采购单 ID、展示名和乐观锁版本。
  */
 function mapCreatedDraft(data: BackendCreateResult): CreatedPurchaseOrderDraft {
     return {
         purchaseOrderId: data.purchase_order_id,
-        draftLabel: data.purchase_no
-            ? `草稿 · ${data.purchase_no}`
-            : data.reference,
+        draftLabel: data.purchase_no || data.reference,
         lockVersion: data.lock_version,
     }
 }
 
 /**
- * 按选源行一次创建多张采购草稿。
+ * 按选源行一次创建多张采购单并提交审批。
  *
  * @param input 来源销售单、任务、逐行供应商与数量、幂等键。
  * @returns 正式命令结果；409 视为可采购数量冲突。

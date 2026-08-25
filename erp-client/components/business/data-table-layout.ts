@@ -25,7 +25,7 @@ const dataTableColumnWidthClasses: Record<DataTableColumnWidth, string> = {
 }
 
 export function alignmentClass(alignment: DataTableAlignment = "start") {
-    if (alignment === "end") return undefined
+    if (alignment === "end") return "text-right"
     if (alignment === "center") return "text-center"
     return "text-left"
 }

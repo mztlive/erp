@@ -37,7 +37,6 @@ import { purchaseOrderApprovalPhase } from "@/features/purchase-orders/lib/purch
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
-    buildPurchaseOrderDetailNavItems,
     resolvePurchaseOrderDetailMode,
     resolvePurchaseOrderDetailSection,
 } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
@@ -241,8 +240,6 @@ export function PurchaseOrderDetailPage({
     const costMasked = order.currentContent.costMasked
     const gate = order.progress.prepaymentGate
 
-    const navItems = buildPurchaseOrderDetailNavItems(baseHref, mode)
-
     const modeLabel =
         mode === "edit"
             ? order.identity.reviewStatus === "REJECTED"
@@ -337,7 +334,6 @@ export function PurchaseOrderDetailPage({
                 order={order}
                 activeSection={activeSection}
                 mode={mode}
-                navItems={navItems}
                 costMasked={costMasked}
                 gate={gate}
                 canPay={permissions.canPay}

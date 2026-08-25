@@ -73,7 +73,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
         <th
             data-slot="table-head"
             className={cn(
-                "h-(--table-row-height) bg-table-header px-(--table-cell-inline) py-(--table-cell-block) text-left align-middle text-xs font-medium tracking-wide whitespace-nowrap text-muted-foreground",
+                "h-(--table-row-height) bg-table-header px-(--table-cell-inline) py-(--table-cell-block) text-left align-middle text-xs font-medium tracking-wide whitespace-nowrap text-muted-foreground data-[align=end]:text-right data-[align=center]:text-center",
                 className,
             )}
             {...props}
@@ -86,7 +86,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         <td
             data-slot="table-cell"
             className={cn(
-                "min-h-(--table-row-height) px-(--table-cell-inline) py-(--table-cell-block) align-middle whitespace-nowrap",
+                "min-h-(--table-row-height) px-(--table-cell-inline) py-(--table-cell-block) align-middle whitespace-nowrap data-[align=end]:text-right data-[align=center]:text-center",
                 className,
             )}
             {...props}

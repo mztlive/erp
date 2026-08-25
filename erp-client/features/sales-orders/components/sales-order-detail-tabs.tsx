@@ -10,8 +10,8 @@ import { ApprovalPanel } from "@/features/sales-orders/components/sales-order-de
 import {
     AcceptancePanel,
     CollaborationPanel,
-    FulfillmentPanel,
     OverviewPanel,
+    PurchasePanel,
     ReceivablePanel,
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
@@ -62,6 +62,8 @@ export function SalesOrderDetailTabs({
             item.id === "versions" && Boolean(order.activeChangeOrder)
         const approvalPending =
             item.id === "approval" && isSalesOrderApprovalInProgress(order)
+        const purchaseCount =
+            item.id === "fulfillment" ? order.related.purchaseOrders : 0
 
         return {
             id: item.id,
@@ -78,6 +80,13 @@ export function SalesOrderDetailTabs({
                             : approvalPending
                               ? "进行中"
                               : "待办"}
+                    </Badge>
+                ) : purchaseCount > 0 ? (
+                    <Badge
+                        variant="secondary"
+                        className="h-5 px-1.5 text-2xs font-normal"
+                    >
+                        {purchaseCount}
                     </Badge>
                 ) : undefined,
         }
@@ -127,13 +136,8 @@ export function SalesOrderDetailTabs({
                 />
             </ObjectSectionTabsPanel>
 
-            <ObjectSectionTabsPanel value="fulfillment" keepMounted>
-                <FulfillmentPanel
-                    order={order}
-                    selfReturn={selfReturn}
-                    onOpenAcceptance={() => onSelectSection("acceptance")}
-                    onDataChanged={onDataChanged}
-                />
+            <ObjectSectionTabsPanel value="fulfillment">
+                <PurchasePanel order={order} selfReturn={selfReturn} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="acceptance">

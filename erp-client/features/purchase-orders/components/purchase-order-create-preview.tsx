@@ -44,7 +44,7 @@ export type PurchaseOrderCreatePreviewDialogProps = {
 }
 
 /**
- * 弹出式采购单预览：按拆单结果切换，并用纸质单据展示将要创建的草稿。
+ * 弹出式采购单预览：按拆单结果切换，并用纸质单据展示将要创建并提交审批的采购单。
  */
 export function PurchaseOrderCreatePreviewDialog({
     open,
@@ -75,7 +75,7 @@ export function PurchaseOrderCreatePreviewDialog({
                     <DialogTitle>预览采购单</DialogTitle>
                     <DialogDescription>
                         将按供应商拆成 {previews.length}{" "}
-                        张采购草稿。可切换查看每张单，确认后再创建。
+                        张采购单并提交审批。可切换查看每张单，确认后再创建。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -136,8 +136,8 @@ export function PurchaseOrderCreatePreviewDialog({
                         onClick={onConfirm}
                     >
                         {creating
-                            ? "创建中…"
-                            : `确认创建 ${previews.length} 张采购草稿`}
+                            ? "提交中…"
+                            : `确认创建并提交 ${previews.length} 张采购单`}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -162,11 +162,11 @@ function PurchaseOrderPreviewPaper({
             <PaperDocument<PurchaseOrderPreviewLine>
                 frame="bare"
                 title="采购单"
-                subtitle="草稿预览"
+                subtitle="提交预览"
                 documentNumber={`预览 ${index + 1}`}
                 status={{
-                    label: PO_STATUS_LABEL.DRAFT,
-                    tone: PO_STATUS_TONE.DRAFT,
+                    label: PO_STATUS_LABEL.PENDING_REVIEW,
+                    tone: PO_STATUS_TONE.PENDING_REVIEW,
                 }}
                 parties={[
                     {
@@ -320,7 +320,7 @@ function PurchaseOrderPreviewPaper({
                         emphasized: true,
                     },
                 ]}
-                remarks="本预览按当前选源结果拆单，确认后创建采购草稿，金额以系统计算为准。"
+                remarks="本预览按当前选源结果拆单，确认后创建采购单并提交审批，金额以系统计算为准。"
             />
         </div>
     )

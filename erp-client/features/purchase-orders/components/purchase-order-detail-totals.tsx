@@ -26,7 +26,6 @@ export function PurchaseOrderDetailTotals({
                     ) : (
                         <MoneyValue value={order.currentContent.totals.gross} />
                     ),
-                    basis: "含税",
                 },
                 {
                     id: "n",
@@ -36,7 +35,6 @@ export function PurchaseOrderDetailTotals({
                     ) : (
                         <MoneyValue value={order.currentContent.totals.net} />
                     ),
-                    basis: "不含税",
                 },
                 {
                     id: "t",

@@ -59,10 +59,14 @@ const invalidatePurchaseOrderApprovalCaches = async (
     ])
 }
 
-export function usePurchaseOrdersQuery(query: PurchaseOrderListQuery) {
+export function usePurchaseOrdersQuery(
+    query: PurchaseOrderListQuery,
+    options?: { enabled?: boolean },
+) {
     return useQuery({
         queryKey: purchaseOrderKeys.list(query),
         queryFn: () => fetchPurchaseOrders(query),
+        enabled: options?.enabled ?? true,
     })
 }
 
@@ -214,7 +218,7 @@ export function useSubmitPurchaseChangeMutation() {
 }
 
 /**
- * 按选源结果一次创建多张采购草稿。成功后失效列表、审批绑定与任务缓存。
+ * 按选源结果一次创建多张采购单并提交审批。成功后失效列表、审批绑定与任务缓存。
  */
 export function useCreateFromSourcingMutation() {
     const queryClient = useQueryClient()
@@ -242,7 +246,7 @@ export function useCreateFromSourcingMutation() {
 }
 
 /**
- * 按创建依据建草稿。成功后失效列表、审批绑定与任务缓存。
+ * 按创建依据建单并提交审批。成功后失效列表、审批绑定与任务缓存。
  */
 export function useCreateFromBasisMutation() {
     const queryClient = useQueryClient()

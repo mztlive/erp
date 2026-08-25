@@ -89,7 +89,7 @@ pub async fn purchase_order_detail(
     resource = "purchase_order",
     action = "create"
 )]
-/// 依据采购确认创建采购单（幂等：同拆单维度草稿复用）。
+/// 依据采购确认创建采购单并提交审批（幂等：同拆单维度结果复用）。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -117,7 +117,7 @@ pub async fn purchase_order_create(
     resource = "purchase_order",
     action = "create"
 )]
-/// 按选源行一次创建多张采购草稿（幂等：同键同载荷回放原结果）。
+/// 按选源行一次创建多张采购单并提交审批（幂等：同键同载荷回放原结果）。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -125,7 +125,7 @@ pub async fn purchase_order_create(
 /// * `req` - 选源创建请求（销售单、任务、逐行供应商与数量、幂等键）
 ///
 /// # 返回
-/// 返回本次创建或回放的全部采购草稿。
+/// 返回本次创建并提交或回放的全部采购单。
 pub async fn purchase_order_create_from_sourcing(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

@@ -2,7 +2,7 @@
 //!
 //! 创建依据由销售单当前版本的 `GOODS_SERVICE` 行、当前采购覆盖数量和供应商
 //! 当前合格供给共同形成。依据精确到销售当前版本、供应商、采购类型、付款条件与
-//! 履约责任；一次依据命令只创建一张采购单。
+//! 履约责任；一次依据命令只创建一张采购单，并在同一事务内提交审批。
 
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -38,6 +38,7 @@ use validator::Validate;
 use super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
 use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverageLine};
+use super::create_submit::submit_created_draft_in_session;
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView,
     CreationBasisListParams, CreationBasisView,
@@ -162,8 +163,6 @@ struct PreparedDraftWrite<'a> {
     submission: &'a PurchaseOrderSubmission,
     /// 当前草稿提交行。
     lines: &'a [PurchaseOrderSubmissionLine],
-    /// 同事务命令收据审计。
-    audit: &'a entities::AuditLog,
     /// 审计操作人。
     actor: &'a AuditActor,
 }
@@ -251,21 +250,22 @@ impl PurchaseOrderService {
         Ok(views)
     }
 
-    /// 依据精确拆分维度和逐行本次数量创建一张采购草稿。
+    /// 依据精确拆分维度和逐行本次数量创建一张采购单并提交审批。
     ///
     /// # 参数
     /// * `req` - 精确依据、逐行数量与幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回新建采购单；同一幂等键与同一载荷重复提交时返回原结果。
+    /// 返回已提交审批的采购单；同一幂等键与同一载荷重复提交时返回原结果。
     ///
     /// # 错误
     /// 操作账号不可登录或缺少采购创建权限、依据失效、数量非正或超过事务内最新
-    /// 剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定或仓储写入失败时返回错误。
+    /// 剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
     ///
     /// # 关键业务约束
     /// 操作人授权版本通过 policy CAS 与提交绑定；事务内再以销售单 CAS guard 串行化并重算剩余量。
+    /// 创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_basis(
         &self,
         req: CreatePurchaseOrderFromBasisRequest,
@@ -328,7 +328,7 @@ impl PurchaseOrderService {
     }
 }
 
-/// 在 MongoDB 事务内串行化、重算并写入一张采购草稿。
+/// 在 MongoDB 事务内串行化、重算并写入一张采购单后立即提交审批。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -769,7 +769,7 @@ fn basis_line_view(
     })
 }
 
-/// 在事务内持久化一张精确依据采购草稿。
+/// 在事务内持久化一张精确依据采购单并提交审批。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -781,13 +781,13 @@ fn basis_line_view(
 /// * `session` - MongoDB 事务会话
 ///
 /// # 返回
-/// 返回创建结果。
+/// 返回已提交审批的创建结果。
 ///
 /// # 错误
-/// 实体构造、审批绑定或仓储写入失败时返回错误。
+/// 实体构造、审批绑定、启动审批或仓储写入失败时返回错误。
 ///
 /// # 关键业务约束
-/// `creation_basis_id` 唯一，且本函数只创建一个采购聚合。
+/// `creation_basis_id` 唯一，且本函数只创建一个采购聚合；命令收据记录提交后正式号。
 pub(super) async fn persist_basis_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
@@ -831,28 +831,32 @@ pub(super) async fn persist_basis_draft(
         submission_lines.push(build_submission_line(&submission_id, (index + 1) as u32, line)?);
     }
     order.attach_draft_submission(submission.base.id.clone().into())?;
-    let receipt = CreationReceipt {
-        purchase_order_id: order.base.id.clone(),
-        purchase_no: order.purchase_no.clone(),
-        lock_version: order.base.version,
-    };
-    let audit = command.actor.clone().resource_log_with_id(
-        command.audit_id.to_string(),
-        CREATE_ACTION,
-        "purchase_order",
-        order.base.id.clone(),
-        Some(creation_receipt_message(command.request_fingerprint, &receipt)?),
-    )?;
     let write = PreparedDraftWrite {
         sales_order,
         order: &order,
         submission: &submission,
         lines: &submission_lines,
-        audit: &audit,
         actor: command.actor,
     };
     write_prepared_draft(db, rbac, &write, session).await?;
-    Ok(receipt.into_result(false))
+    let submitted = submit_created_draft_in_session(
+        db,
+        sales_order,
+        &order.base.id,
+        command.actor,
+        command.req.idempotency_key.as_str(),
+        session,
+    )
+    .await?;
+    write_creation_receipt(
+        db,
+        command,
+        &order.base.id,
+        submitted.purchase_no,
+        submitted.lock_version,
+        session,
+    )
+    .await
 }
 
 /// 一组已计算金额的本次采购行。
@@ -1037,12 +1041,12 @@ fn build_submission_line(
     .map_err(Into::into)
 }
 
-/// 写入采购草稿聚合、单据注册、审批绑定和命令收据。
+/// 写入采购草稿聚合、单据注册和审批绑定。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
-/// * `write` - 来源销售单、采购聚合、命令收据与审计操作人
+/// * `write` - 来源销售单、采购聚合与审计操作人
 /// * `session` - MongoDB 事务会话
 ///
 /// # 返回
@@ -1052,7 +1056,7 @@ fn build_submission_line(
 /// 审批绑定、单据注册或仓储写入失败时返回错误。
 ///
 /// # 关键业务约束
-/// 命令收据与采购聚合必须同事务提交。
+/// 本函数只写入草稿聚合；正式号与审批启动由随后的提交步骤完成。
 async fn write_prepared_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
@@ -1084,8 +1088,49 @@ async fn write_prepared_draft(
         db.purchase_order_submission_lines().create(line, session).await?;
     }
     sync_procurement_tasks_for_sales_order(db, &write.order.sales_order_id, session).await?;
-    db.audit_logs().create(write.audit, session).await?;
     Ok(())
+}
+
+/// 写入提交后的采购创建命令收据。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `command` - 原始请求、收据身份与审计操作人
+/// * `purchase_order_id` - 采购单主键
+/// * `purchase_no` - 提交后正式号
+/// * `lock_version` - 提交后乐观锁版本
+/// * `session` - MongoDB 事务会话
+///
+/// # 返回
+/// 返回可回放的创建结果。
+///
+/// # 错误
+/// 收据序列化或仓储写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 收据必须与提交后正式号同事务落库，回放不得返回空单号。
+async fn write_creation_receipt(
+    db: &mongodb::Database,
+    command: &CreateBasisCommand<'_>,
+    purchase_order_id: &str,
+    purchase_no: String,
+    lock_version: u64,
+    session: &mut ClientSession,
+) -> Result<CreatePurchaseOrderResult> {
+    let receipt = CreationReceipt {
+        purchase_order_id: purchase_order_id.to_string(),
+        purchase_no,
+        lock_version,
+    };
+    let audit = command.actor.clone().resource_log_with_id(
+        command.audit_id.to_string(),
+        CREATE_ACTION,
+        "purchase_order",
+        purchase_order_id.to_string(),
+        Some(creation_receipt_message(command.request_fingerprint, &receipt)?),
+    )?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(receipt.into_result(false))
 }
 
 /// 查找客户端选择的精确依据。
@@ -1827,5 +1872,6 @@ mod tests {
         assert!(production.contains("authorize_actor_permission(actor, CREATE_PERMISSION)"));
         assert!(production.contains("ensure_purchase_order_actor_account"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
+        assert!(production.contains("submit_created_draft_in_session"));
     }
 }

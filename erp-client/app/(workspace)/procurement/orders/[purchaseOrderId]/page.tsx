@@ -38,7 +38,7 @@ export default async function PurchaseOrderObjectPage({
             }
         >
             <PurchaseOrderDetailPage
-                key={`${purchaseOrderId}-${section ?? "overview"}-${mode ?? "view"}-${workItemId ?? ""}-${changeOrderId ?? ""}`}
+                key={`${purchaseOrderId}-${workItemId ?? ""}-${changeOrderId ?? ""}`}
                 purchaseOrderId={purchaseOrderId}
                 section={section}
                 mode={mode}

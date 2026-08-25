@@ -1,7 +1,7 @@
-//! 按选源结果一次创建多张采购草稿。
+//! 按选源结果一次创建多张采购单并提交审批。
 //!
 //! 销售明细选定供应商后，按供应商、采购类型、付款条件和履约责任拆成多张采购单，
-//! 并在同一事务内推进一次采购 guard 后写入全部草稿。
+//! 并在同一事务内推进一次采购 guard 后写入全部采购单并启动审批。
 
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
@@ -37,7 +37,7 @@ const CREATE_SOURCING_ACTION: &str = "purchase_order.create_from_sourcing";
 const CREATE_SOURCING_RECEIPT_PREFIX: &str = "purchase-order-sourcing-command-";
 const CREATE_SOURCING_ITEM_PREFIX: &str = "purchase-order-sourcing-item-";
 
-/// 选源命令中单张采购草稿的幂等收据。
+/// 选源命令中单张已提交采购单的幂等收据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SourcingOrderReceipt {
     /// 采购单主键。
@@ -51,11 +51,11 @@ struct SourcingOrderReceipt {
 /// 选源命令幂等收据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SourcingReceipt {
-    /// 本次创建的全部采购草稿。
+    /// 本次创建并已提交审批的全部采购单。
     orders: Vec<SourcingOrderReceipt>,
 }
 
-/// 已归入一张采购草稿的选源计划。
+/// 已归入一张采购单的选源计划。
 #[derive(Debug, Clone)]
 struct SourcingDraftPlan {
     /// 命中的精确依据分组。
@@ -65,22 +65,23 @@ struct SourcingDraftPlan {
 }
 
 impl PurchaseOrderService {
-    /// 按选源行一次创建多张采购草稿。
+    /// 按选源行一次创建多张采购单并提交审批。
     ///
     /// # 参数
     /// * `req` - 来源销售单、建单任务、逐行供应商与数量、幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回按精确拆分维度创建的全部采购草稿；同一幂等键与同一载荷重复提交时返回原结果。
+    /// 返回按精确拆分维度创建并已提交审批的全部采购单；同一幂等键与同一载荷重复提交时返回原结果。
     ///
     /// # 错误
     /// 操作账号不可登录或缺少采购创建权限、选源行重复或无合格供给、数量非正或超过
-    /// 事务内最新剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定或仓储写入失败时返回错误。
+    /// 事务内最新剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
     ///
     /// # 关键业务约束
     /// 同一销售行只能指定一家供应商；供应商、采购类型、付款条件或履约责任任一不同即拆单；
-    /// 操作人授权版本通过 policy CAS 与提交绑定，事务内只推进一次销售单采购 guard。
+    /// 操作人授权版本通过 policy CAS 与提交绑定，事务内只推进一次销售单采购 guard；
+    /// 创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_sourcing(
         &self,
         req: CreatePurchaseOrdersFromSourcingRequest,
@@ -155,7 +156,7 @@ impl PurchaseOrderService {
     }
 }
 
-/// 在 MongoDB 事务内按选源计划写入多张采购草稿。
+/// 在 MongoDB 事务内按选源计划写入多张采购单并提交审批。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -323,7 +324,7 @@ fn normalize_sourcing_assignments(
     Ok(lines)
 }
 
-/// 把选源行归入精确依据分组，形成待创建采购草稿计划。
+/// 把选源行归入精确依据分组，形成待创建采购单计划。
 ///
 /// # 参数
 /// * `groups` - 当前任务范围内的精确依据
@@ -449,7 +450,7 @@ fn sourcing_request_fingerprint(
 /// * `audit_id` - 稳定收据 ID
 /// * `request_fingerprint` - 当前命令载荷指纹
 /// * `sales_order_id` - 来源销售单，作为收据资源身份
-/// * `orders` - 已持久化的采购草稿
+/// * `orders` - 已提交审批的采购单
 /// * `actor` - 审计操作人
 /// * `session` - MongoDB 事务会话
 ///
@@ -460,7 +461,7 @@ fn sourcing_request_fingerprint(
 /// 收据序列化或仓储写入失败时返回错误。
 ///
 /// # 关键业务约束
-/// 收据与全部采购草稿必须同事务提交。
+/// 收据与全部已提交采购单必须同事务提交。
 async fn write_sourcing_receipt(
     db: &mongodb::Database,
     audit_id: &str,
@@ -562,7 +563,7 @@ mod tests {
     #[test]
     fn same_supplier_lines_share_one_group() {
         let groups = [("sup-a", &["line-1", "line-2"][..]), ("sup-b", &["line-1"][..])];
-        let assignments = vec![line("line-1", "sup-a"), line("line-2", "sup-a")];
+        let assignments = [line("line-1", "sup-a"), line("line-2", "sup-a")];
         let indexes = assignments
             .iter()
             .map(|assignment| find_assignment_group_index(&groups, assignment).expect("应命中供给"))
@@ -597,6 +598,7 @@ mod tests {
         assert!(production.contains("ensure_purchase_order_actor_account"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(production.contains("advance_procurement_guard"));
+        assert!(production.contains("persist_basis_draft"));
     }
 
     /// 构造测试用选源行。

@@ -58,7 +58,7 @@ import {
 import { cn } from "@/lib/utils"
 
 /**
- * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建真实草稿；成功后回到列表。
+ * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建并提交审批；成功后回到列表。
  */
 export function PurchaseOrderCreatePage({
     initialSalesOrderId = "",
@@ -143,11 +143,11 @@ export function PurchaseOrderCreatePage({
                 createIntentRef.current = null
                 const count = result.data.orders.length
                 toast.add({
-                    title: "采购草稿已创建",
+                    title: "采购单已提交审批",
                     description:
                         count > 1
-                            ? `已按供应商拆成 ${count} 张采购单。`
-                            : "已创建 1 张采购草稿。",
+                            ? `已按供应商拆成 ${count} 张采购单并提交审批。`
+                            : "已创建 1 张采购单并提交审批。",
                     type: "success",
                     timeout: 4000,
                 })
@@ -377,7 +377,7 @@ export function PurchaseOrderCreatePage({
         <PageScaffold className="pb-8">
             <PageHeader
                 title="新建采购单"
-                description="先为每条销售明细选择供应商，再预览将要创建的采购单。"
+                description="先为每条销售明细选择供应商，再预览将要创建并提交审批的采购单。"
                 actions={
                     <PageActions
                         actions={[
@@ -477,7 +477,7 @@ export function PurchaseOrderCreatePage({
                                     <Skeleton className="h-40" />
                                 )}
                                 <p className="text-xs text-muted-foreground">
-                                    可逐行选择供应商，一键按最低含税成本和最早交期匹配最优供应商，或勾选多行后批量指定共同可选供应商。同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单。
+                                    可逐行选择供应商，一键按最低含税成本和最早交期匹配最优供应商，或勾选多行后批量指定共同可选供应商。同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单；确认创建后直接提交审批。
                                 </p>
                             </div>
                         </section>
@@ -544,11 +544,11 @@ export function PurchaseOrderCreatePage({
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>确认创建采购单</AlertDialogTitle>
+                        <AlertDialogTitle>确认创建并提交审批</AlertDialogTitle>
                         <AlertDialogDescription>
                             将按当前选源结果创建 {previews.length}{" "}
-                            张采购草稿，含税合计 {previewTotals.gross}
-                            。创建成功后将回到采购单列表。
+                            张采购单并提交审批，含税合计 {previewTotals.gross}
+                            。提交成功后将回到采购单列表。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -561,7 +561,7 @@ export function PurchaseOrderCreatePage({
                                 void form.handleSubmit()
                             }}
                         >
-                            确认创建
+                            确认提交
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

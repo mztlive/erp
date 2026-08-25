@@ -672,7 +672,7 @@ pub struct CreatePurchaseOrderResult {
     pub purchase_no: String,
     /// 乐观锁版本。
     pub lock_version: u64,
-    /// 是否复用已有草稿（幂等重放）。
+    /// 是否复用已有创建结果（幂等重放）。
     pub replayed: bool,
     /// 业务引用。
     pub reference: String,
@@ -693,7 +693,7 @@ pub struct SourcingLineAssignment {
     pub quantity: String,
 }
 
-/// 按选源结果一次创建多张采购草稿的请求。
+/// 按选源结果一次创建多张采购单并提交审批的请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePurchaseOrdersFromSourcingRequest {
@@ -706,17 +706,17 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
     /// 已选定供应商的采购明细；同一销售行只能出现一次。
     #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
     pub lines: Vec<SourcingLineAssignment>,
-    /// 幂等键（同一命令重复创建返回同一批采购单）。
+    /// 幂等键（同一命令重复创建并提交时返回同一批采购单）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
 }
 
-/// 按选源结果一次创建多张采购草稿的结果。
+/// 按选源结果一次创建多张采购单并提交审批的结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreatePurchaseOrdersFromSourcingResult {
-    /// 本次创建或幂等回放的采购草稿。
+    /// 本次创建并提交或幂等回放的采购单。
     pub orders: Vec<CreatePurchaseOrderResult>,
-    /// 是否复用已有草稿（幂等重放）。
+    /// 是否复用已有创建并提交结果（幂等重放）。
     pub replayed: bool,
     /// 业务引用，指向来源销售单。
     pub reference: String,

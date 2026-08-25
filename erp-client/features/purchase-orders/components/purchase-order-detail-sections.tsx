@@ -1,9 +1,13 @@
 "use client"
 
-import Link from "next/link"
+import * as React from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 
-import { surfacePanelClassName } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import {
+    ObjectSectionTabs,
+    ObjectSectionTabsPanel,
+    surfacePanelClassName,
+} from "@/components/business"
 import { cn } from "@/lib/utils"
 
 import { PurchaseOrderDetailAuditSection } from "@/features/purchase-orders/components/purchase-order-detail-audit-section"
@@ -16,10 +20,12 @@ import {
 } from "@/features/purchase-orders/components/purchase-order-detail-overview-section"
 import { PurchaseOrderDetailPayableSection } from "@/features/purchase-orders/components/purchase-order-detail-payable-section"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
-import type {
-    PurchaseOrderDetailMode,
-    PurchaseOrderDetailNavItem,
-    PurchaseOrderDetailSectionId,
+import {
+    PURCHASE_ORDER_DETAIL_NAV,
+    purchaseOrderSectionHref,
+    resolvePurchaseOrderDetailSection,
+    type PurchaseOrderDetailMode,
+    type PurchaseOrderDetailSectionId,
 } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
@@ -36,7 +42,6 @@ export function PurchaseOrderDetailSections({
     order,
     activeSection,
     mode,
-    navItems,
     costMasked,
     gate,
     canPay,
@@ -55,7 +60,6 @@ export function PurchaseOrderDetailSections({
     order: PurchaseOrderCenterView
     activeSection: PurchaseOrderDetailSectionId
     mode: PurchaseOrderDetailMode
-    navItems: PurchaseOrderDetailNavItem[]
     costMasked: boolean
     gate: GateView
     canPay: boolean
@@ -71,31 +75,34 @@ export function PurchaseOrderDetailSections({
     changeWorkItemAllowedActions?: readonly string[]
     onChangeApprovalResult?: (result: PurchaseOrderDetailResult) => void
 }) {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+
+    const handleSectionChange = React.useCallback(
+        (next: string) => {
+            router.replace(
+                purchaseOrderSectionHref(
+                    order.identity.purchaseOrderId,
+                    resolvePurchaseOrderDetailSection(next),
+                    searchParams,
+                ),
+                { scroll: false },
+            )
+        },
+        [order.identity.purchaseOrderId, router, searchParams],
+    )
+
     return (
         <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
-            <nav
-                className="flex flex-wrap gap-1 border-b border-grid px-3 py-1.5"
-                aria-label="详情子区"
+            <ObjectSectionTabs
+                value={activeSection}
+                onValueChange={handleSectionChange}
+                items={PURCHASE_ORDER_DETAIL_NAV}
+                listLabel="采购单分区"
             >
-                {navItems.map((item) => (
-                    <Button
-                        key={item.id}
-                        type="button"
-                        size="sm"
-                        variant={
-                            activeSection === item.id ? "secondary" : "ghost"
-                        }
-                        render={<Link href={item.href} />}
-                    >
-                        {item.label}
-                    </Button>
-                ))}
-            </nav>
-
-            <div className="space-y-4 px-3 py-4 md:px-4">
-                {mode === "view" || activeSection !== "overview" ? (
-                    <div className="grid gap-4">
-                        {activeSection === "overview" && mode === "view" ? (
+                <ObjectSectionTabsPanel value="overview">
+                    {mode === "view" ? (
+                        <>
                             <PurchaseOrderDetailOverviewSection
                                 order={order}
                                 costMasked={costMasked}
@@ -103,64 +110,59 @@ export function PurchaseOrderDetailSections({
                                 canPay={canPay}
                                 w12PayHref={w12PayHref}
                             />
-                        ) : null}
-
-                        {activeSection === "lines" ? (
-                            <PurchaseOrderDetailLinesSection
-                                order={order}
-                                costMasked={costMasked}
-                            />
-                        ) : null}
-
-                        {activeSection === "fulfillment" ? (
-                            <PurchaseOrderDetailFulfillmentSection
-                                order={order}
-                                costMasked={costMasked}
-                                gate={gate}
-                                canFulfill={canFulfill}
-                                fulfillBlocker={fulfillBlocker}
-                                baseHref={baseHref}
-                                w12PayHref={w12PayHref}
-                            />
-                        ) : null}
-
-                        {activeSection === "payable" ? (
-                            <PurchaseOrderDetailPayableSection
-                                order={order}
-                                costMasked={costMasked}
-                                canPay={canPay}
-                                w12PayHref={w12PayHref}
-                            />
-                        ) : null}
-
-                        {activeSection === "changes" ? (
-                            <PurchaseOrderDetailChangesSection
-                                order={order}
-                                canChange={canChange}
-                                changeBlocker={changeBlocker}
-                                onRequestChange={onRequestChange}
-                                workItemId={changeWorkItemId}
-                                expectedTaskVersion={changeExpectedTaskVersion}
-                                workItemAllowedActions={
-                                    changeWorkItemAllowedActions
-                                }
-                                onApprovalResult={onChangeApprovalResult}
-                            />
-                        ) : null}
-
-                        {activeSection === "audit" ? (
-                            <PurchaseOrderDetailAuditSection order={order} />
-                        ) : null}
-
-                        {activeSection === "overview" && mode === "view" ? (
                             <PurchaseOrderDetailSummarySection
                                 order={order}
                                 costMasked={costMasked}
                             />
-                        ) : null}
-                    </div>
-                ) : null}
-            </div>
+                        </>
+                    ) : null}
+                </ObjectSectionTabsPanel>
+
+                <ObjectSectionTabsPanel value="lines">
+                    <PurchaseOrderDetailLinesSection
+                        order={order}
+                        costMasked={costMasked}
+                    />
+                </ObjectSectionTabsPanel>
+
+                <ObjectSectionTabsPanel value="fulfillment">
+                    <PurchaseOrderDetailFulfillmentSection
+                        order={order}
+                        costMasked={costMasked}
+                        gate={gate}
+                        canFulfill={canFulfill}
+                        fulfillBlocker={fulfillBlocker}
+                        baseHref={baseHref}
+                        w12PayHref={w12PayHref}
+                    />
+                </ObjectSectionTabsPanel>
+
+                <ObjectSectionTabsPanel value="payable">
+                    <PurchaseOrderDetailPayableSection
+                        order={order}
+                        costMasked={costMasked}
+                        canPay={canPay}
+                        w12PayHref={w12PayHref}
+                    />
+                </ObjectSectionTabsPanel>
+
+                <ObjectSectionTabsPanel value="changes">
+                    <PurchaseOrderDetailChangesSection
+                        order={order}
+                        canChange={canChange}
+                        changeBlocker={changeBlocker}
+                        onRequestChange={onRequestChange}
+                        workItemId={changeWorkItemId}
+                        expectedTaskVersion={changeExpectedTaskVersion}
+                        workItemAllowedActions={changeWorkItemAllowedActions}
+                        onApprovalResult={onChangeApprovalResult}
+                    />
+                </ObjectSectionTabsPanel>
+
+                <ObjectSectionTabsPanel value="audit">
+                    <PurchaseOrderDetailAuditSection order={order} />
+                </ObjectSectionTabsPanel>
+            </ObjectSectionTabs>
         </div>
     )
 }

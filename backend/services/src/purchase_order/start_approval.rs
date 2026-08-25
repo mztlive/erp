@@ -8,8 +8,8 @@ use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, NoTransaction, PurchaseOrderExt,
-    Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
+    PurchaseOrderExt, Transactional, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -20,7 +20,7 @@ use entities::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseO
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
-use mongodb::Database;
+use mongodb::{ClientSession, Database};
 
 use super::adapter::purchase_order_object_readable;
 use super::dto::SavePurchaseOrderLine;
@@ -45,9 +45,32 @@ pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
+    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `binding` - 创建时冻结的定义绑定
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回已持久化的定义图。
+///
+/// # 错误
+/// 定义不存在或仓储失败时返回冲突或仓储错误。
+///
+/// # 关键业务约束
+/// 新建采购单后立即提交时必须用同一事务会话读取绑定定义。
+pub(super) async fn load_bound_definition_graph_with_executor(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
+        .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("采购单绑定的审批定义不存在".to_string()))?;
     Ok(engine_graph(graph))
@@ -328,6 +351,33 @@ pub(super) async fn persist_purchase_order_start(
 ) -> Result<Option<(String, u64)>> {
     let db = db.clone();
     let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move { persist_purchase_order_start_with_session(&db, input, session).await })
+        })
+        .await
+}
+
+/// 在调用方事务会话中写入正式号、提交快照、运行事实与入口任务。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `input` - 提交写入集合
+/// * `session` - 已开启的 MongoDB 事务会话
+///
+/// # 返回
+/// 返回首个入口任务身份，无任务时为空。
+///
+/// # 错误
+/// 仓储写入失败或计划不完整时返回错误，由调用方事务回滚。
+///
+/// # 关键业务约束
+/// 创建并提交必须复用建单事务，不得再开一层事务。
+pub(super) async fn persist_purchase_order_start_with_session(
+    db: &Database,
+    input: PurchaseOrderStartPersistInput,
+    session: &mut ClientSession,
+) -> Result<Option<(String, u64)>> {
     let PurchaseOrderStartPersistInput {
         mut order,
         mut document,
@@ -342,50 +392,39 @@ pub(super) async fn persist_purchase_order_start(
         now,
         audit,
     } = input;
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move {
-                if let Some(guard) = procurement_guard {
-                    let coverage = super::draft_edit::advance_guard_and_load_coverage(
-                        &db,
-                        &order,
-                        &guard.actor_id,
-                        session,
-                    )
-                    .await?;
-                    super::draft_edit::validate_procurement_line_edit(
-                        &guard.requested_lines,
-                        &guard.existing_lines,
-                        &coverage,
-                    )?;
-                }
-                db.purchase_order()
-                    .create_purchase_submission(&mut order, &submission, &submission_lines, session)
-                    .await?;
-                db.purchase_order_submissions()
-                    .update(&mut superseded_draft, session)
-                    .await?;
-                db.business_documents().update(&mut document, session).await?;
-                let first_task = match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_runtime_writes(
-                            &db,
-                            &writes,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
-                            session,
-                        )
-                        .await?
-                    }
-                    PreparedExecution::Replay { .. } => None,
-                };
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<Option<(String, u64)>, crate::errors::Error>(first_task)
-            })
-        })
-        .await
+    if let Some(guard) = procurement_guard {
+        let coverage =
+            super::draft_edit::advance_guard_and_load_coverage(db, &order, &guard.actor_id, session).await?;
+        super::draft_edit::validate_procurement_line_edit(
+            &guard.requested_lines,
+            &guard.existing_lines,
+            &coverage,
+        )?;
+    }
+    db.purchase_order()
+        .create_purchase_submission(&mut order, &submission, &submission_lines, session)
+        .await?;
+    db.purchase_order_submissions()
+        .update(&mut superseded_draft, session)
+        .await?;
+    db.business_documents().update(&mut document, session).await?;
+    let first_task = match prepared {
+        PreparedExecution::Apply(writes) => {
+            persist_runtime_writes(
+                db,
+                &writes,
+                &snapshot_payload,
+                owner_role,
+                &organization_id,
+                now,
+                session,
+            )
+            .await?
+        }
+        PreparedExecution::Replay { .. } => None,
+    };
+    db.audit_logs().create(&audit, session).await?;
+    Ok(first_task)
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

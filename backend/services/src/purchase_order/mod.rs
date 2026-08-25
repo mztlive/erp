@@ -1,7 +1,7 @@
 //! 域 D15 `purchase_order` 服务编排（页面：W08）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
-//! - 依据创建采购单、保存草稿、提交启动审批、最终通过生效、撤回与采购变更提交
+//! - 依据/选源创建采购单并提交审批、保存草稿、提交启动审批、最终通过生效、撤回与采购变更提交
 //!   均为跨集合写入 → `database::Transactional::with_transaction`；
 //! - 最终通过（§8.1.4）在单事务内：锁定提交 → 逐行复验采购确认来源 →
 //!   复制为生效版本与版本行 → 形成销售分配 → 推进采购状态与版本指针 →
@@ -31,6 +31,7 @@ mod change_cancel;
 mod change_start;
 mod command_receipt;
 pub(crate) mod coverage;
+mod create_submit;
 mod creation_basis;
 mod draft_edit;
 mod dto;

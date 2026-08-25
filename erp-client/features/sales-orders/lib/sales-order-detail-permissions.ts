@@ -3,6 +3,7 @@ import { hasAnyPermission, hasPermission } from "@/lib/permissions"
 /** 销售单详情页按钮对应的 Casbin 权限码。 */
 export const SALES_ORDER_DETAIL_PERMISSIONS = {
     openPurchase: "purchase_order:list",
+    previewPurchase: "purchase_order:detail",
     createPurchase: "purchase_order:create",
     openReceivable: "receivable_account:list",
     registerAcceptance: "customer_acceptance:create",
@@ -29,6 +30,7 @@ export type PermissionGate = {
 
 const REASON: Record<SalesOrderDetailPermissionKind, string> = {
     openPurchase: "当前账号没有采购单列表权限",
+    previewPurchase: "当前账号没有采购单详情权限，无法预览",
     createPurchase: "当前账号没有创建采购单权限",
     openFulfillment: "当前账号没有履约/交付工作面权限",
     openReceivable: "当前账号没有客户往来权限",
