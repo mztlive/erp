@@ -1,13 +1,6 @@
 "use client"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    BusinessTableFrame,
-    PageScaffold,
-} from "@/components/business"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AllocationSession } from "@/features/supplier-payables/components/allocation-session"
+import { BusinessEmptyState, PageScaffold } from "@/components/business"
 import { PaymentReversalRequestDialog } from "@/features/supplier-payables/components/payment-reversal-request-dialog"
 import { PaymentReversalSubmitConfirmDialog } from "@/features/supplier-payables/components/payment-reversal-submit-confirm-dialog"
 import { SupplierRefundRequestDialog } from "@/features/supplier-payables/components/supplier-refund-request-dialog"
@@ -25,11 +18,9 @@ import { isSupplierPaymentWorkItem } from "@/features/supplier-payables/lib/supp
 import { isSupplierRefundWorkItem } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
-import {
-    VIEW_LABEL,
-    type FormalSubmitResult,
-} from "@/features/supplier-payables/types"
+import type { FormalSubmitResult } from "@/features/supplier-payables/types"
 import { useSupplierAccountsPage } from "./hooks/use-supplier-accounts-page"
+import { SupplierAllocationSessionPage } from "./supplier-allocation-session-page"
 import {
     SupplierAccountsAlerts,
     SupplierAccountsResultBanner,
@@ -119,6 +110,9 @@ export function SupplierAccountsPage() {
     const filterToolbar = (
         <SupplierAccountsToolbar
             view={view}
+            onViewChange={(nextView) => {
+                patchUrl({ view: nextView, page: null })
+            }}
             searchInput={searchInput}
             onSearchInputChange={setSearchInput}
             searchInputRef={searchInputRef}
@@ -196,88 +190,23 @@ export function SupplierAccountsPage() {
 
     if (session) {
         return (
-            <PageScaffold>
-                <AllocationSession
-                    {...session}
-                    onClose={closeSession}
-                    onDraftSessionIdChange={syncSessionId}
-                    onGoToInvoiceView={() => {
-                        closeSession()
-                        patchUrl({ view: "purchase_invoice" })
-                    }}
-                    onCompleted={(result) => {
-                        setLastResult(result)
-                    }}
-                />
-            </PageScaffold>
+            <SupplierAllocationSessionPage
+                {...session}
+                onClose={closeSession}
+                onDraftSessionIdChange={syncSessionId}
+                onGoToInvoiceView={() => {
+                    closeSession()
+                    patchUrl({ view: "purchase_invoice" })
+                }}
+                onCompleted={(result) => {
+                    setLastResult(result)
+                }}
+            />
         )
     }
 
-    if (listQuery.isPending && !data) {
-        return (
-            <PageScaffold density="compact">
-                <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="h-20 animate-pulse rounded-lg bg-muted"
-                        />
-                    ))}
-                </div>
-                <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
-            </PageScaffold>
-        )
-    }
-
-    // 查询失败且无缓存：筛选区保持常驻，错误态替换表格内容，可重试
-    if (listQuery.isError && !data) {
-        return (
-            <PageScaffold density="compact">
-                <BusinessTableFrame
-                    title="供应商往来"
-                    description="列表加载失败"
-                    toolbar={filterToolbar}
-                    table={
-                        <BusinessFailureState
-                            title="供应商往来加载失败"
-                            error={listQuery.error}
-                            onRetry={() => void listQuery.refetch()}
-                        />
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (!data) return null
-
-    if (!data.moduleAllowed) {
-        return (
-            <PageScaffold>
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="无供应商往来权限"
-                    description="权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (!data.hasDataScope) {
-        return (
-            <PageScaffold>
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="当前角色未配置供应商往来范围"
-                    description="不能显示为 0 元应付。请联系管理员配置组织/供应商范围后再查询。"
-                />
-            </PageScaffold>
-        )
-    }
-
-    const rows =
-        view === "payable"
+    const rows = data
+        ? view === "payable"
             ? sortedPayables
             : view === "payment"
               ? data.payments
@@ -286,96 +215,111 @@ export function SupplierAccountsPage() {
                 : trackFilter !== "all"
                   ? data.unallocated.filter((u) => u.track === trackFilter)
                   : data.unallocated
+        : []
 
     const pageRows = rows.slice(
         pagination.pageIndex * pagination.pageSize,
         pagination.pageIndex * pagination.pageSize + pagination.pageSize,
     )
 
+    const filterDescription =
+        listQuery.isError && !data
+            ? "列表加载失败"
+            : !data
+              ? "正在查询"
+              : hasActiveFilters
+                ? `当前筛选：${appliedChips.map((chip) => chip.label).join(" · ")}`
+                : "搜索供应商、采购单、结算单、付款单或发票号；筛选条件会保存在网址中，便于刷新、返回与分享。"
+
     return (
         <PageScaffold density="compact">
             <SupplierAccountsHeader
                 data={data}
+                isError={listQuery.isError}
+                isFetching={listQuery.isFetching}
                 onRefresh={() => void listQuery.refetch()}
                 onRegisterInvoice={() => {
                     setPickSupplierId(
-                        supplierId ?? data.suppliers[0]?.supplierId ?? "",
+                        supplierId ?? data?.suppliers[0]?.supplierId ?? "",
                     )
                     setPickSupplierOpen("purchase_invoice")
                 }}
                 onRegisterPayment={() => {
                     setPickSupplierId(
-                        supplierId ?? data.suppliers[0]?.supplierId ?? "",
+                        supplierId ?? data?.suppliers[0]?.supplierId ?? "",
                     )
                     setPickSupplierOpen("payment")
                 }}
                 onSettle={openSettlements}
             />
 
-            <SupplierAccountsAlerts
-                fromWorkspace={fromWorkspace}
-                purchaseOrderId={purchaseOrderId}
-                returnTo={returnTo}
-                policy={data.payablePriorityPolicy}
-            />
+            {data ? (
+                <SupplierAccountsAlerts
+                    fromWorkspace={fromWorkspace}
+                    purchaseOrderId={purchaseOrderId}
+                    returnTo={returnTo}
+                    policy={data.payablePriorityPolicy}
+                />
+            ) : null}
 
             <SupplierAccountsResultBanner
                 lastResult={lastResult}
                 onDismiss={() => setLastResult(null)}
             />
 
-            <SupplierAccountsMetrics
-                metrics={data.metrics}
-                view={view}
-                status={status}
-                due={due}
-                trackFilter={trackFilter}
-                paymentGate={paymentGate}
-                onFilter={patchUrl}
-            />
+            {data && !data.moduleAllowed ? (
+                <BusinessEmptyState
+                    kind="no-scope"
+                    title="无供应商往来权限"
+                    description="权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
+                />
+            ) : data && !data.hasDataScope ? (
+                <BusinessEmptyState
+                    kind="no-scope"
+                    title="当前角色未配置供应商往来范围"
+                    description="不能显示为 0 元应付。请联系管理员配置组织/供应商范围后再查询。"
+                />
+            ) : (
+                <>
+                    {!(listQuery.isError && !data) ? (
+                        <SupplierAccountsMetrics
+                            metrics={data?.metrics}
+                            view={view}
+                            status={status}
+                            due={due}
+                            trackFilter={trackFilter}
+                            paymentGate={paymentGate}
+                            onFilter={patchUrl}
+                        />
+                    ) : null}
 
-            <Tabs
-                value={view}
-                onValueChange={(v) => {
-                    patchUrl({ view: v, page: null })
-                }}
-            >
-                <TabsList>
-                    {(
-                        [
-                            "payable",
-                            "payment",
-                            "purchase_invoice",
-                            "unallocated",
-                        ] as const
-                    ).map((v) => (
-                        <TabsTrigger key={v} value={v}>
-                            {VIEW_LABEL[v]}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
-            </Tabs>
-
-            <SupplierAccountsTable
-                view={view}
-                data={data}
-                pageRows={pageRows}
-                unallocatedRowCount={rows.length}
-                pagination={pagination}
-                onPaginationChange={handlePaginationChange}
-                sorting={sorting}
-                onSortingChange={setSorting}
-                onClearFilters={clearFilters}
-                returnTo={returnTo}
-                fromWorkspace={fromWorkspace}
-                openPreview={openPreview}
-                openPaymentPreview={openPaymentPreview}
-                openSession={openSession}
-                setReverseTarget={setReverseTarget}
-                setRedInvoiceNo={setRedInvoiceNo}
-                setRefundRequest={refundFlow.setRefundRequest}
-                toolbar={filterToolbar}
-            />
+                    <SupplierAccountsTable
+                        view={view}
+                        data={data}
+                        pageRows={pageRows}
+                        rowCount={rows.length}
+                        loading={listQuery.isFetching}
+                        isError={listQuery.isError}
+                        error={listQuery.error}
+                        onRetry={() => void listQuery.refetch()}
+                        pagination={pagination}
+                        onPaginationChange={handlePaginationChange}
+                        sorting={sorting}
+                        onSortingChange={setSorting}
+                        filterDescription={filterDescription}
+                        onClearFilters={clearFilters}
+                        returnTo={returnTo}
+                        fromWorkspace={fromWorkspace}
+                        openPreview={openPreview}
+                        openPaymentPreview={openPaymentPreview}
+                        openSession={openSession}
+                        setReverseTarget={setReverseTarget}
+                        setRedInvoiceNo={setRedInvoiceNo}
+                        setRefundRequest={refundFlow.setRefundRequest}
+                        toolbar={filterToolbar}
+                    />
+                </>
+            )}
 
             <SupplierAccountsPreview
                 previewPayableId={previewPayableId}
@@ -455,7 +399,9 @@ export function SupplierAccountsPage() {
                 onOpenChange={(open) => {
                     if (!open) refundFlow.setRefundRequest(null)
                 }}
-                onSubmit={(reason) => void refundFlow.prepareRefundDraft(reason)}
+                onSubmit={(reason) =>
+                    void refundFlow.prepareRefundDraft(reason)
+                }
             />
 
             <SupplierRefundSubmitConfirmDialog

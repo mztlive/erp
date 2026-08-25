@@ -1,14 +1,11 @@
 "use client"
 
-import { MoneyValue } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+    MoneyValue,
+    surfaceInsetClassName,
+    surfacePanelClassName,
+} from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -50,18 +47,20 @@ export function AllocationPoolCard({
     onFillAllSelected,
 }: AllocationPoolCardProps) {
     return (
-        <Card id="alloc-pool">
-            <CardHeader className="border-b border-border">
-                <CardTitle className="text-base">
-                    同供应商待核销池
-                </CardTitle>
-                <CardDescription>
+        <section
+            id="alloc-pool"
+            className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            aria-label="同供应商待核销池"
+        >
+            <div className="border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold">同供应商待核销池</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                     仅 {supplierName} ·{" "}
                     {track === "payment" ? "开放应付" : "可收票余额"}
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+                </p>
+            </div>
+            <div className="space-y-2 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span>共 {pool.length} 个开放目标</span>
                     <div className="flex gap-1">
                         <Button
@@ -85,7 +84,7 @@ export function AllocationPoolCard({
                     </div>
                 </div>
                 {pool.length === 0 ? (
-                    <p className="p-3 text-sm text-muted-foreground">
+                    <p className="py-6 text-sm text-muted-foreground">
                         当前无开放目标
                     </p>
                 ) : (
@@ -99,10 +98,10 @@ export function AllocationPoolCard({
                             <div
                                 key={item.payableAccountId}
                                 className={cn(
-                                    "flex flex-col gap-2 rounded-xl border p-3",
+                                    "flex flex-col gap-2 rounded-lg border p-3",
                                     checked
-                                        ? "border-primary/40 bg-primary/5"
-                                        : "border-border",
+                                        ? "border-primary/30 bg-accent"
+                                        : "border-border bg-card",
                                 )}
                             >
                                 <div className="flex items-start gap-2">
@@ -146,7 +145,12 @@ export function AllocationPoolCard({
                                     </div>
                                 </div>
                                 {checked ? (
-                                    <div className="flex items-center gap-2 pl-6">
+                                    <div
+                                        className={cn(
+                                            surfaceInsetClassName,
+                                            "flex items-center gap-2 px-3 py-2",
+                                        )}
+                                    >
                                         <Label
                                             htmlFor={`amt-${item.payableAccountId}`}
                                             className="text-xs whitespace-nowrap"
@@ -155,11 +159,12 @@ export function AllocationPoolCard({
                                         </Label>
                                         <Input
                                             id={`amt-${item.payableAccountId}`}
-                                            className="num h-8"
+                                            className="num h-control min-h-0"
                                             inputMode="decimal"
                                             value={
-                                                amounts[item.payableAccountId] ??
-                                                ""
+                                                amounts[
+                                                    item.payableAccountId
+                                                ] ?? ""
                                             }
                                             onChange={(e) =>
                                                 onAmountChange(
@@ -174,7 +179,7 @@ export function AllocationPoolCard({
                         )
                     })
                 )}
-            </CardContent>
-        </Card>
+            </div>
+        </section>
     )
 }

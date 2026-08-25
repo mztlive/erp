@@ -4,22 +4,10 @@ import * as React from "react"
 
 import { DocumentHeader, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
-import { sumFixed } from "@/lib/fixed-decimal"
-import { cn } from "@/lib/utils"
-
-function remainingReceivable(gross: string, received: string) {
-    try {
-        return sumFixed([gross, `-${received}`], {
-            maxScale: 2,
-            outputScale: 2,
-            allowNegative: true,
-        })
-    } catch {
-        return gross
-    }
-}
+import { remainingReceivableAmount } from "@/features/sales-orders/lib/sales-order-receivable"
 
 export function SalesOrderIdentityHeader({
     order,
@@ -34,6 +22,11 @@ export function SalesOrderIdentityHeader({
         <DocumentHeader
             density="compact"
             title={order.customerName}
+            titleExtra={
+                <Badge variant="secondary" className="font-normal">
+                    {NATURE_LABEL[order.nature]}
+                </Badge>
+            }
             documentNumber={order.documentNumber}
             version={
                 order.currentRevisionNo == null
@@ -41,28 +34,8 @@ export function SalesOrderIdentityHeader({
                     : `v${order.currentRevisionNo}`
             }
             primaryStatus={order.primaryStatus}
-            statuses={[
-                {
-                    id: "fulfillment",
-                    label: "履约",
-                    status: order.fulfillment,
-                },
-                {
-                    id: "collection",
-                    label: "回款",
-                    status: order.collection,
-                },
-                {
-                    id: "invoicing",
-                    label: "开票",
-                    status: order.invoicing,
-                },
-            ]}
             meta={
                 <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Badge variant="secondary" className="font-normal">
-                        {NATURE_LABEL[order.nature]}
-                    </Badge>
                     <span>
                         负责人{" "}
                         <span className="font-medium text-foreground">
@@ -73,36 +46,43 @@ export function SalesOrderIdentityHeader({
                         ·
                     </span>
                     <span>{ORIGIN_LABEL[order.originSystem]}</span>
+                    <span className="text-border" aria-hidden="true">
+                        ·
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                        履约
+                        <StatusBadge
+                            tone={order.fulfillment.tone}
+                            label={order.fulfillment.label}
+                        />
+                    </span>
                 </span>
             }
             primaryAction={primaryAction}
             secondaryActions={secondaryActions}
-        >
-            <SalesOrderAmountSummary order={order} />
-        </DocumentHeader>
+            summary={<SalesOrderAmountSummary order={order} />}
+        />
     )
 }
 
 function AmountCell({
     label,
     value,
-    hint,
+    status,
     className,
 }: {
     label: string
     value: React.ReactNode
-    hint?: React.ReactNode
+    status?: { label: string; tone: StatusTone }
     className?: string
 }) {
     return (
-        <div className={cn("min-w-0", className)}>
+        <div className={className}>
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="mt-0.5 text-sm font-semibold tabular-nums">
+            <dd className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                 {value}
-                {hint != null ? (
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                        {hint}
-                    </span>
+                {status != null ? (
+                    <StatusBadge tone={status.tone} label={status.label} />
                 ) : null}
             </dd>
         </div>
@@ -110,7 +90,7 @@ function AmountCell({
 }
 
 function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
-    const receivableLeft = remainingReceivable(
+    const receivableLeft = remainingReceivableAmount(
         order.amountGross,
         order.receivedAmount,
     )
@@ -121,31 +101,46 @@ function SalesOrderAmountSummary({ order }: { order: SalesOrderDetailView }) {
             aria-label="销售单金额摘要"
         >
             <AmountCell
-                className="sm:pr-4"
+                className="min-w-0 sm:pr-4"
                 label="成交金额（含税）"
                 value={
-                    <MoneyValue value={order.amountGross} taxBasis="gross" />
+                    <MoneyValue
+                        value={order.amountGross}
+                        className="font-semibold"
+                    />
                 }
             />
             <AmountCell
-                className="sm:px-4"
+                className="min-w-0 sm:px-4"
                 label="已回款"
                 value={
-                    <MoneyValue value={order.receivedAmount} taxBasis="gross" />
+                    <MoneyValue
+                        value={order.receivedAmount}
+                        className="font-semibold"
+                    />
                 }
-                hint={order.collection.label}
+                status={order.collection}
             />
             <AmountCell
-                className="sm:px-4"
+                className="min-w-0 sm:px-4"
                 label="待回款"
-                value={<MoneyValue value={receivableLeft} taxBasis="gross" />}
+                value={
+                    <MoneyValue
+                        value={receivableLeft}
+                        className="font-semibold"
+                    />
+                }
             />
             <AmountCell
-                className="sm:pl-4"
+                className="min-w-0 sm:pl-4"
                 label="已开票"
                 value={
-                    <MoneyValue value={order.invoicedAmount} taxBasis="gross" />
+                    <MoneyValue
+                        value={order.invoicedAmount}
+                        className="font-semibold"
+                    />
                 }
+                status={order.invoicing}
             />
         </dl>
     )

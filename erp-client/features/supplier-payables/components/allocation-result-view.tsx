@@ -24,64 +24,80 @@ export function AllocationResultView({
     onClose,
     onResolveUnknown,
 }: AllocationResultViewProps) {
+    const showReturnToSource =
+        Boolean(result.returnTo || returnTo) && result.status === "succeeded"
+
     return (
-        <div className="space-y-3">
-            <FormalActionResult
-                status={
-                    result.status === "succeeded"
-                        ? "succeeded"
-                        : result.status === "unknown"
-                          ? "unknown"
-                          : result.status === "blocked"
-                            ? "blocked"
-                            : "rejected"
-                }
-                title={result.title}
-                description={result.description}
-                reference={result.reference ?? result.operationId}
-                facts={result.facts}
-            />
-            {result.status === "unknown" && hasSubmitKey ? (
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void onResolveUnknown()}
-                >
-                    按操作号查询最终结果
-                </Button>
-            ) : null}
-            {result.status === "blocked" && result.existingDocumentId ? (
-                <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                        已定位既有发票，不创建副本。可切换到进项发票视图继续核销。
-                    </p>
-                    {onGoToInvoiceView ? (
+        <FormalActionResult
+            status={
+                result.status === "succeeded"
+                    ? "succeeded"
+                    : result.status === "unknown"
+                      ? "unknown"
+                      : result.status === "blocked"
+                        ? "blocked"
+                        : "rejected"
+            }
+            title={result.title}
+            description={
+                result.status === "blocked" && result.existingDocumentId
+                    ? [
+                          result.description,
+                          "已定位既有发票，不创建副本。可切换到进项发票视图继续核销。",
+                      ]
+                          .filter(Boolean)
+                          .join(" ")
+                    : result.description
+            }
+            reference={result.reference ?? result.operationId}
+            facts={result.facts}
+            actions={
+                <>
+                    {result.status === "unknown" && hasSubmitKey ? (
                         <Button
                             type="button"
                             variant="outline"
+                            size="sm"
+                            onClick={() => void onResolveUnknown()}
+                        >
+                            按操作号查询最终结果
+                        </Button>
+                    ) : null}
+                    {result.status === "blocked" &&
+                    result.existingDocumentId &&
+                    onGoToInvoiceView ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={onGoToInvoiceView}
                         >
                             前往进项发票视图
                         </Button>
                     ) : null}
-                </div>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={onClose}>
-                    回到列表
-                </Button>
-                {(result.returnTo || returnTo) &&
-                result.status === "succeeded" ? (
                     <Button
                         type="button"
-                        render={
-                            <Link href={result.returnTo || returnTo || "/"} />
-                        }
+                        variant="outline"
+                        size="sm"
+                        onClick={onClose}
                     >
-                        返回来源并重新校验先款条件
+                        回到列表
                     </Button>
-                ) : null}
-            </div>
-        </div>
+                    {showReturnToSource ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            render={
+                                <Link
+                                    href={result.returnTo || returnTo || "/"}
+                                />
+                            }
+                        >
+                            返回来源并重新校验先款条件
+                        </Button>
+                    ) : null}
+                </>
+            }
+        />
     )
 }

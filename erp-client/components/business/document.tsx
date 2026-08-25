@@ -20,6 +20,7 @@ import {
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
+import { StatusTrackSummary } from "@/components/business/values"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Timeline,
@@ -59,6 +60,11 @@ interface DocumentHeaderProps extends Omit<
      * 避免把长句塞进 secondaryActions 拉高右侧。
      */
     meta?: React.ReactNode
+    /**
+     * 标题行附加物：业务性质等身份标签，紧跟主状态徽章。
+     * 不要把进度轨或长文案放这里。
+     */
+    titleExtra?: React.ReactNode
     primaryAction?: React.ReactNode
     secondaryActions?: React.ReactNode
     /**
@@ -67,7 +73,12 @@ interface DocumentHeaderProps extends Omit<
      */
     density?: DocumentHeaderDensity
     /**
-     * 身份卡内补充区：金额摘要等，渲染在状态轨下方，不另开一张卡。
+     * 金额/KPI 摘要。渲染在身份带下方、通栏铺开，避免宽屏并排留下大块空白。
+     * 不要再把金额摘要塞进 children。
+     */
+    summary?: React.ReactNode
+    /**
+     * 身份卡内补充区：有效期、说明等，仍渲染在主带下方。
      */
     children?: React.ReactNode
 }
@@ -79,15 +90,110 @@ function DocumentHeader({
     statuses = [],
     version,
     meta,
+    titleExtra,
     primaryAction,
     secondaryActions,
     density = "default",
+    summary,
     className,
     children,
     ...props
 }: DocumentHeaderProps) {
     const hasActions = primaryAction != null || secondaryActions != null
     const compact = density === "compact"
+
+    const identityBlock = (
+        <div
+            className={cn(
+                "min-w-0 flex-1",
+                compact ? "space-y-1" : "space-y-2",
+            )}
+        >
+            <div className="flex flex-wrap items-center gap-2">
+                <h1
+                    className={cn(
+                        "font-heading font-semibold tracking-tight",
+                        compact ? "text-xl" : "text-2xl",
+                    )}
+                >
+                    {title}
+                </h1>
+                <StatusBadge
+                    tone={primaryStatus.tone}
+                    label={primaryStatus.label}
+                />
+                {titleExtra}
+            </div>
+            <div
+                className={cn(
+                    "flex flex-wrap items-center gap-x-2.5 gap-y-1 text-muted-foreground",
+                    compact ? "text-xs" : "text-sm",
+                )}
+            >
+                <span>
+                    单号{" "}
+                    <span className="num text-foreground">
+                        {documentNumber}
+                    </span>
+                </span>
+                {version != null ? (
+                    <span
+                        className={cn(
+                            "num rounded-md bg-muted text-foreground",
+                            compact
+                                ? "px-1.5 py-0.5 text-tiny"
+                                : "px-2 py-1 text-xs",
+                        )}
+                    >
+                        版本 {version}
+                    </span>
+                ) : null}
+                {meta ? (
+                    <span className="min-w-0 text-muted-foreground">
+                        {meta}
+                    </span>
+                ) : null}
+            </div>
+        </div>
+    )
+
+    const actionBar = hasActions ? (
+        <div
+            data-slot="document-header-actions"
+            className="flex shrink-0 flex-wrap items-center justify-end gap-2"
+        >
+            {secondaryActions}
+            {primaryAction}
+        </div>
+    ) : null
+
+    const statusRow =
+        statuses.length > 0 ? (
+            <div
+                role="list"
+                aria-label="单据并行状态"
+                className={cn(
+                    "flex flex-wrap items-center gap-x-4 gap-y-2",
+                    compact ? "mt-3" : "mt-4",
+                )}
+            >
+                {statuses.map((track) => (
+                    <div
+                        key={track.id}
+                        role="listitem"
+                        className="flex items-center gap-1.5"
+                    >
+                        <span className="text-xs text-muted-foreground">
+                            {track.label}
+                        </span>
+                        <StatusBadge
+                            tone={track.status.tone}
+                            label={track.status.label}
+                        />
+                    </div>
+                ))}
+            </div>
+        ) : null
 
     return (
         <header
@@ -101,95 +207,21 @@ function DocumentHeader({
             )}
             {...props}
         >
-            {/* 标题行与动作同一带；避免动作掉到状态轨上方与徽章挤成一团 */}
+            {/* 标题行与动作同一带；金额摘要通栏在下，避免宽屏并排留白 */}
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                <div
-                    className={cn(
-                        "min-w-0 flex-1",
-                        compact ? "space-y-1" : "space-y-2",
-                    )}
-                >
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h1
-                            className={cn(
-                                "font-heading font-semibold tracking-tight",
-                                compact ? "text-xl" : "text-2xl",
-                            )}
-                        >
-                            {title}
-                        </h1>
-                        <StatusBadge
-                            tone={primaryStatus.tone}
-                            label={primaryStatus.label}
-                        />
-                    </div>
-                    <div
-                        className={cn(
-                            "flex flex-wrap items-center gap-x-2.5 gap-y-1 text-muted-foreground",
-                            compact ? "text-xs" : "text-sm",
-                        )}
-                    >
-                        <span>
-                            单号{" "}
-                            <span className="num text-foreground">
-                                {documentNumber}
-                            </span>
-                        </span>
-                        {version != null ? (
-                            <span
-                                className={cn(
-                                    "num rounded-md bg-muted text-foreground",
-                                    compact
-                                        ? "px-1.5 py-0.5 text-tiny"
-                                        : "px-2 py-1 text-xs",
-                                )}
-                            >
-                                版本 {version}
-                            </span>
-                        ) : null}
-                        {meta ? (
-                            <span className="min-w-0 text-muted-foreground">
-                                {meta}
-                            </span>
-                        ) : null}
-                    </div>
-                </div>
-
-                {hasActions ? (
-                    <div
-                        data-slot="document-header-actions"
-                        className="flex shrink-0 flex-wrap items-center justify-end gap-2"
-                    >
-                        {secondaryActions}
-                        {primaryAction}
-                    </div>
-                ) : null}
+                {identityBlock}
+                {actionBar}
             </div>
-
-            {statuses.length > 0 ? (
+            {statusRow}
+            {summary != null ? (
                 <div
-                    role="list"
-                    aria-label="单据并行状态"
+                    data-slot="document-header-summary"
                     className={cn(
-                        "flex flex-wrap items-center gap-x-4 gap-y-2",
-                        compact ? "mt-3" : "mt-4",
+                        "border-t border-border",
+                        compact ? "mt-3 pt-3" : "mt-4 pt-4",
                     )}
                 >
-                    {statuses.map((track) => (
-                        <div
-                            key={track.id}
-                            role="listitem"
-                            className="flex items-center gap-1.5"
-                        >
-                            <span className="text-xs text-muted-foreground">
-                                {track.label}
-                            </span>
-                            <StatusBadge
-                                tone={track.status.tone}
-                                label={track.status.label}
-                            />
-                        </div>
-                    ))}
+                    {summary}
                 </div>
             ) : null}
 
@@ -466,6 +498,10 @@ type RelatedDocument = Readonly<{
     documentType: string
     documentNumber: string
     status: DocumentStatus
+    /**
+     * 并行进度轨（履约/付款等）。有值时状态列加宽，供销售等角色扫单据是否卡住。
+     */
+    tracks?: readonly DocumentStatusTrack[]
     measure: RelatedDocumentMeasure
     owner: string
     openAction: React.ReactNode
@@ -485,6 +521,10 @@ function RelatedDocumentList({
     className,
     ...props
 }: RelatedDocumentListProps) {
+    const hasTracks = documents.some(
+        (document) => (document.tracks?.length ?? 0) > 0,
+    )
+
     return (
         <div
             data-slot="related-document-list"
@@ -497,10 +537,22 @@ function RelatedDocumentList({
                         aria-hidden="true"
                         className="hidden grid-cols-12 gap-3 border-b border-grid pb-2 text-xs font-medium text-muted-foreground md:grid"
                     >
-                        <span className="col-span-4">单据</span>
-                        <span className="col-span-2">状态</span>
+                        <span
+                            className={hasTracks ? "col-span-3" : "col-span-4"}
+                        >
+                            单据
+                        </span>
+                        <span
+                            className={hasTracks ? "col-span-4" : "col-span-2"}
+                        >
+                            {hasTracks ? "状态 / 进度" : "状态"}
+                        </span>
                         <span className="col-span-2">金额或数量</span>
-                        <span className="col-span-2">责任人</span>
+                        <span
+                            className={hasTracks ? "col-span-1" : "col-span-2"}
+                        >
+                            责任人
+                        </span>
                         <span className="col-span-2 text-right">操作</span>
                     </div>
                     <ul className="divide-y divide-grid">
@@ -510,13 +562,21 @@ function RelatedDocumentList({
                                 (document.measure.kind === "amount"
                                     ? "金额"
                                     : "数量")
+                            const tracks = document.tracks ?? []
 
                             return (
                                 <li
                                     key={document.id}
                                     className="grid grid-cols-1 gap-3 py-4 first:pt-3 last:pb-0 md:grid-cols-12 md:items-center"
                                 >
-                                    <div className="min-w-0 md:col-span-4">
+                                    <div
+                                        className={cn(
+                                            "min-w-0",
+                                            hasTracks
+                                                ? "md:col-span-3"
+                                                : "md:col-span-4",
+                                        )}
+                                    >
                                         <div className="text-xs text-muted-foreground">
                                             {document.documentType}
                                         </div>
@@ -524,14 +584,30 @@ function RelatedDocumentList({
                                             {document.documentNumber}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 md:col-span-2">
-                                        <span className="text-xs text-muted-foreground md:hidden">
-                                            状态
+                                    <div
+                                        className={cn(
+                                            "min-w-0",
+                                            hasTracks
+                                                ? "md:col-span-4"
+                                                : "flex items-center gap-2 md:col-span-2",
+                                        )}
+                                    >
+                                        <span className="mb-1 block text-xs text-muted-foreground md:hidden">
+                                            {hasTracks ? "状态 / 进度" : "状态"}
                                         </span>
-                                        <StatusBadge
-                                            tone={document.status.tone}
-                                            label={document.status.label}
-                                        />
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                            <StatusBadge
+                                                tone={document.status.tone}
+                                                label={document.status.label}
+                                            />
+                                            {tracks.length > 0 ? (
+                                                <StatusTrackSummary
+                                                    variant="inline"
+                                                    className="gap-x-3 gap-y-1"
+                                                    tracks={tracks}
+                                                />
+                                            ) : null}
+                                        </div>
                                     </div>
                                     <div className="md:col-span-2">
                                         <div className="text-xs text-muted-foreground">
@@ -548,7 +624,13 @@ function RelatedDocumentList({
                                             ) : null}
                                         </div>
                                     </div>
-                                    <div className="md:col-span-2">
+                                    <div
+                                        className={
+                                            hasTracks
+                                                ? "md:col-span-1"
+                                                : "md:col-span-2"
+                                        }
+                                    >
                                         <div className="text-xs text-muted-foreground md:hidden">
                                             责任人
                                         </div>

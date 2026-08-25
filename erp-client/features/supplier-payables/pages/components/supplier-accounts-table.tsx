@@ -5,6 +5,7 @@ import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
+    BusinessFailureState,
     BusinessTableFrame,
     DataTable,
 } from "@/components/business"
@@ -23,25 +24,25 @@ import {
     type UnallocatedRow,
 } from "@/features/supplier-payables/types"
 
-/** 工具条摘要去掉「N 条」计数：分页条已展示「共 N 条」，避免重复 */
-function stripSummaryCount(summary: string): string {
-    return summary.replace(/ · [\d,]+ 条$/, "")
-}
-
 export interface SupplierAccountsTableProps {
     view: SupplierAccountsView
-    data: SupplierAccountsListView
+    data: SupplierAccountsListView | undefined
     pageRows: readonly (
         | PayableRow
         | PaymentRow
         | PurchaseInvoiceRow
         | UnallocatedRow
     )[]
-    unallocatedRowCount: number
+    rowCount: number
+    loading: boolean
+    isError: boolean
+    error: unknown
+    onRetry: () => void
     pagination: PaginationState
     onPaginationChange: (next: PaginationState) => void
     sorting: SortingState
     onSortingChange: (next: SortingState) => void
+    filterDescription: string
     onClearFilters: () => void
     returnTo: string | undefined
     fromWorkspace: string | undefined
@@ -60,11 +61,16 @@ export function SupplierAccountsTable({
     view,
     data,
     pageRows,
-    unallocatedRowCount,
+    rowCount,
+    loading,
+    isError,
+    error,
+    onRetry,
     pagination,
     onPaginationChange,
     sorting,
     onSortingChange,
+    filterDescription,
     onClearFilters,
     returnTo,
     fromWorkspace,
@@ -95,91 +101,196 @@ export function SupplierAccountsTable({
 
     return (
         <BusinessTableFrame
-            title={VIEW_LABEL[view]}
-            description={
-                <span aria-live="polite">
-                    {`${stripSummaryCount(data.filterSummary)} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
+            showHeader
+            title={
+                <span className="inline-flex items-baseline gap-2">
+                    {VIEW_LABEL[view]}
+                    <span
+                        className="font-normal text-muted-foreground"
+                        aria-live="polite"
+                    >
+                        {rowCount.toLocaleString("zh-CN")} 条
+                    </span>
                 </span>
             }
+            description={filterDescription}
             toolbar={toolbar}
             table={
-                data.emptyReason === "FILTER_NO_RESULT" ? (
-                    <BusinessEmptyState
-                        kind="filter"
-                        title="当前筛选无结果"
-                        description={`没有符合「${stripSummaryCount(data.filterSummary)}」的记录。`}
-                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                        action={
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="rounded-lg shadow-none"
-                                onClick={onClearFilters}
-                                title="清除全部筛选条件，保留当前视图与排序"
-                            >
-                                清除筛选
-                            </Button>
-                        }
-                    />
-                ) : data.emptyReason === "NO_DATA" ? (
-                    <BusinessEmptyState
-                        kind="no-data"
-                        title="当前范围尚无供应商往来记录"
-                        description="应付形成后刷新；可从采购单或结算来源进入。"
-                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                    />
-                ) : (
-                    <>
-                        {view === "payable" ? (
-                            <DataTable
-                                columns={payableColumns}
-                                data={pageRows as PayableRow[]}
-                                getRowId={(r) => r.payableAccountId}
-                                pagination={pagination}
-                                onPaginationChange={onPaginationChange}
-                                sorting={sorting}
-                                onSortingChange={onSortingChange}
-                                rowCount={data.payables.length}
-                                layout="flush"
-                            />
-                        ) : null}
-                        {view === "payment" ? (
-                            <DataTable
-                                columns={paymentColumns}
-                                data={pageRows as PaymentRow[]}
-                                getRowId={(r) => r.paymentId}
-                                pagination={pagination}
-                                onPaginationChange={onPaginationChange}
-                                rowCount={data.payments.length}
-                                layout="flush"
-                            />
-                        ) : null}
-                        {view === "purchase_invoice" ? (
-                            <DataTable
-                                columns={invoiceColumns}
-                                data={pageRows as PurchaseInvoiceRow[]}
-                                getRowId={(r) => r.invoiceId}
-                                pagination={pagination}
-                                onPaginationChange={onPaginationChange}
-                                rowCount={data.invoices.length}
-                                layout="flush"
-                            />
-                        ) : null}
-                        {view === "unallocated" ? (
-                            <DataTable
-                                columns={unallocatedColumns}
-                                data={pageRows as UnallocatedRow[]}
-                                getRowId={(r) => r.id}
-                                pagination={pagination}
-                                onPaginationChange={onPaginationChange}
-                                rowCount={unallocatedRowCount}
-                                layout="flush"
-                            />
-                        ) : null}
-                    </>
-                )
+                <SupplierAccountsTableBody
+                    view={view}
+                    data={data}
+                    pageRows={pageRows}
+                    rowCount={rowCount}
+                    loading={loading}
+                    isError={isError}
+                    error={error}
+                    onRetry={onRetry}
+                    pagination={pagination}
+                    onPaginationChange={onPaginationChange}
+                    sorting={sorting}
+                    onSortingChange={onSortingChange}
+                    onClearFilters={onClearFilters}
+                    payableColumns={payableColumns}
+                    paymentColumns={paymentColumns}
+                    invoiceColumns={invoiceColumns}
+                    unallocatedColumns={unallocatedColumns}
+                />
             }
+        />
+    )
+}
+
+function SupplierAccountsTableBody({
+    view,
+    data,
+    pageRows,
+    rowCount,
+    loading,
+    isError,
+    error,
+    onRetry,
+    pagination,
+    onPaginationChange,
+    sorting,
+    onSortingChange,
+    onClearFilters,
+    payableColumns,
+    paymentColumns,
+    invoiceColumns,
+    unallocatedColumns,
+}: Pick<
+    SupplierAccountsTableProps,
+    | "view"
+    | "data"
+    | "pageRows"
+    | "rowCount"
+    | "loading"
+    | "isError"
+    | "error"
+    | "onRetry"
+    | "pagination"
+    | "onPaginationChange"
+    | "sorting"
+    | "onSortingChange"
+    | "onClearFilters"
+> & {
+    payableColumns: ReturnType<
+        typeof useSupplierAccountsColumns
+    >["payableColumns"]
+    paymentColumns: ReturnType<
+        typeof useSupplierAccountsColumns
+    >["paymentColumns"]
+    invoiceColumns: ReturnType<
+        typeof useSupplierAccountsColumns
+    >["invoiceColumns"]
+    unallocatedColumns: ReturnType<
+        typeof useSupplierAccountsColumns
+    >["unallocatedColumns"]
+}) {
+    if (isError && !data) {
+        return (
+            <BusinessFailureState
+                title="供应商往来加载失败"
+                error={error}
+                onRetry={onRetry}
+            />
+        )
+    }
+
+    if (loading && !data) {
+        return <div className="h-64 animate-pulse rounded-lg bg-muted" />
+    }
+
+    if (!data) return null
+
+    if (data.emptyReason === "FILTER_NO_RESULT") {
+        return (
+            <BusinessEmptyState
+                kind="filter"
+                title="当前筛选无结果"
+                description="换一个关键词或清除筛选后再试。"
+                action={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onClearFilters}
+                        title="清除全部筛选条件，保留当前视图与排序"
+                    >
+                        清除筛选
+                    </Button>
+                }
+            />
+        )
+    }
+
+    if (data.emptyReason === "NO_DATA") {
+        return (
+            <BusinessEmptyState
+                kind="no-data"
+                title="当前范围尚无供应商往来记录"
+                description="应付形成后刷新；可从采购单或结算来源进入。"
+            />
+        )
+    }
+
+    if (view === "payable") {
+        return (
+            <DataTable
+                columns={payableColumns}
+                data={pageRows as PayableRow[]}
+                getRowId={(r) => r.payableAccountId}
+                pagination={pagination}
+                onPaginationChange={onPaginationChange}
+                sorting={sorting}
+                onSortingChange={onSortingChange}
+                rowCount={rowCount}
+                layout="flush"
+                loading={loading}
+            />
+        )
+    }
+
+    if (view === "payment") {
+        return (
+            <DataTable
+                columns={paymentColumns}
+                data={pageRows as PaymentRow[]}
+                getRowId={(r) => r.paymentId}
+                pagination={pagination}
+                onPaginationChange={onPaginationChange}
+                rowCount={rowCount}
+                layout="flush"
+                loading={loading}
+            />
+        )
+    }
+
+    if (view === "purchase_invoice") {
+        return (
+            <DataTable
+                columns={invoiceColumns}
+                data={pageRows as PurchaseInvoiceRow[]}
+                getRowId={(r) => r.invoiceId}
+                pagination={pagination}
+                onPaginationChange={onPaginationChange}
+                rowCount={rowCount}
+                layout="flush"
+                loading={loading}
+            />
+        )
+    }
+
+    return (
+        <DataTable
+            columns={unallocatedColumns}
+            data={pageRows as UnallocatedRow[]}
+            getRowId={(r) => r.id}
+            pagination={pagination}
+            onPaginationChange={onPaginationChange}
+            rowCount={rowCount}
+            layout="flush"
+            loading={loading}
         />
     )
 }

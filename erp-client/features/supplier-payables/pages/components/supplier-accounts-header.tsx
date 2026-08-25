@@ -6,7 +6,9 @@ import { DataFreshness, PageActions, PageHeader } from "@/components/business"
 import type { SupplierAccountsListView } from "@/features/supplier-payables/types"
 
 export interface SupplierAccountsHeaderProps {
-    data: SupplierAccountsListView
+    data: SupplierAccountsListView | undefined
+    isError: boolean
+    isFetching: boolean
     onRefresh: () => void
     onRegisterInvoice: () => void
     onRegisterPayment: () => void
@@ -15,31 +17,38 @@ export interface SupplierAccountsHeaderProps {
 
 export function SupplierAccountsHeader({
     data,
+    isError,
+    isFetching,
     onRefresh,
     onRegisterInvoice,
     onRegisterPayment,
     onSettle,
 }: SupplierAccountsHeaderProps) {
+    const queriedAt = data?.queriedAt
+
     return (
         <PageHeader
             title="供应商往来"
             metadata={
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <DataFreshness
-                        updatedAt={new Date(data.queriedAt).toLocaleString(
-                            "zh-CN",
-                        )}
-                        dateTime={data.queriedAt}
-                        label="数据更新于"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        {data.payablePriorityPolicy.state === "AVAILABLE"
-                            ? "混合来源按系统优先级分配"
-                            : data.payablePriorityPolicy.state === "MISSING"
-                              ? "混合来源分配规则未配置"
-                              : "混合来源分配规则已更新"}
-                    </p>
-                </div>
+                <DataFreshness
+                    updatedAt={
+                        isError
+                            ? "查询失败"
+                            : queriedAt
+                              ? queriedAt.slice(11, 16)
+                              : "正在查询"
+                    }
+                    dateTime={queriedAt}
+                    state={
+                        isError
+                            ? "failed"
+                            : isFetching
+                              ? "syncing"
+                              : queriedAt
+                                ? "fresh"
+                                : "unknown"
+                    }
+                />
             }
             actions={
                 <PageActions
@@ -59,8 +68,8 @@ export function SupplierAccountsHeader({
                             icon: FilePlus2Icon,
                             variant: "outline",
                             mobileVisibility: "hide",
-                            disabled: !data.canRegisterInvoice,
-                            title: data.canRegisterInvoice
+                            disabled: !data?.canRegisterInvoice,
+                            title: data?.canRegisterInvoice
                                 ? undefined
                                 : "当前无进项发票登记权限",
                             onClick: onRegisterInvoice,
@@ -70,8 +79,8 @@ export function SupplierAccountsHeader({
                             label: "登记付款",
                             icon: WalletCardsIcon,
                             mobileVisibility: "hide",
-                            disabled: !data.canRegisterPayment,
-                            title: data.canRegisterPayment
+                            disabled: !data?.canRegisterPayment,
+                            title: data?.canRegisterPayment
                                 ? undefined
                                 : "当前无付款登记权限",
                             onClick: onRegisterPayment,

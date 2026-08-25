@@ -12,7 +12,7 @@ import type {
 } from "@/features/supplier-payables/types"
 
 export interface SupplierAccountsMetricsProps {
-    metrics: SupplierAccountsListView["metrics"]
+    metrics: SupplierAccountsListView["metrics"] | undefined
     view: SupplierAccountsView
     status: string | undefined
     due: "not_due" | "due_today" | "overdue" | "all" | undefined
@@ -30,10 +30,23 @@ export function SupplierAccountsMetrics({
     paymentGate,
     onFilter,
 }: SupplierAccountsMetricsProps) {
+    if (!metrics) {
+        return (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                    <div
+                        key={i}
+                        className="h-20 animate-pulse rounded-lg bg-muted"
+                    />
+                ))}
+            </div>
+        )
+    }
+
     return (
         // 指标 toggle 取消语义保留（D23）：再次点击已激活指标即取消该筛选
         // （due/paymentGate 置回 all、view 回 payable）；指标/视图/筛选变更均回第 1 页（P6）。
-        <MetricStrip>
+        <MetricStrip columns={5} aria-label="供应商往来指标">
             <MetricFilterItem
                 label="开放应付"
                 value={<MoneyValue value={metrics.openPayableTotal} />}
@@ -58,9 +71,7 @@ export function SupplierAccountsMetrics({
             />
             <MetricFilterItem
                 label="待分配付款"
-                value={
-                    <MoneyValue value={metrics.unallocatedPaymentTotal} />
-                }
+                value={<MoneyValue value={metrics.unallocatedPaymentTotal} />}
                 detail="付款轨道"
                 active={view === "unallocated" && trackFilter === "payment"}
                 onClick={() => {
@@ -76,8 +87,7 @@ export function SupplierAccountsMetrics({
                 value={<MoneyValue value={metrics.unallocatedInvoiceTotal} />}
                 detail="与付款独立"
                 active={
-                    view === "unallocated" &&
-                    trackFilter === "purchase_invoice"
+                    view === "unallocated" && trackFilter === "purchase_invoice"
                 }
                 onClick={() => {
                     onFilter({

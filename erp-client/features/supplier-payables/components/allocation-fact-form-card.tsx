@@ -3,18 +3,18 @@
 import {
     MoneyValue,
     ValidationSummary,
+    surfaceInsetClassName,
+    surfacePanelClassName,
     type ValidationIssue,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
+    DescriptionDetails,
+    DescriptionItem,
+    DescriptionList,
+    DescriptionTerm,
+} from "@/components/ui/description-list"
+import { cn } from "@/lib/utils"
 import type {
     InvoiceFormApi,
     PaymentFormApi,
@@ -37,7 +37,6 @@ export type AllocationFactFormCardProps = {
     issues: readonly ValidationIssue[]
     canSubmit: boolean
     isSubmitting: boolean
-    onClose: () => void
     onSubmitClick: () => void
 }
 
@@ -58,22 +57,24 @@ export function AllocationFactFormCard({
     issues,
     canSubmit,
     isSubmitting,
-    onClose,
     onSubmitClick,
 }: AllocationFactFormCardProps) {
     return (
-        <Card>
-            <CardHeader className="border-b border-border">
-                <CardTitle className="text-base">
-                    {track === "payment"
-                        ? "本次付款记录"
-                        : "本次进项发票记录"}
-                </CardTitle>
-                <CardDescription>
+        <section
+            className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            aria-label={
+                track === "payment" ? "本次付款记录" : "本次进项发票记录"
+            }
+        >
+            <div className="border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold">
+                    {track === "payment" ? "本次付款记录" : "本次进项发票记录"}
+                </h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                     未分配余额以提交后的系统结果为准
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-4">
+                </p>
+            </div>
+            <div className="space-y-4 p-4">
                 {track === "payment" ? (
                     <form
                         className="space-y-3"
@@ -110,9 +111,14 @@ export function AllocationFactFormCard({
                                 />
                             </>
                         ) : (
-                            <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                            <div
+                                className={cn(
+                                    surfaceInsetClassName,
+                                    "space-y-1 px-3 py-3 text-sm",
+                                )}
+                            >
                                 <div>原付款 {existingDocumentNo}</div>
-                                <div className="mt-1 flex justify-between">
+                                <div className="flex justify-between">
                                     <span className="text-muted-foreground">
                                         未分配余额
                                     </span>
@@ -174,9 +180,14 @@ export function AllocationFactFormCard({
                                 </div>
                             </>
                         ) : (
-                            <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                            <div
+                                className={cn(
+                                    surfaceInsetClassName,
+                                    "space-y-1 px-3 py-3 text-sm",
+                                )}
+                            >
                                 <div>原发票 {existingDocumentNo}</div>
-                                <div className="mt-1 flex justify-between">
+                                <div className="flex justify-between">
                                     <span className="text-muted-foreground">
                                         未分配余额
                                     </span>
@@ -190,34 +201,39 @@ export function AllocationFactFormCard({
                     </form>
                 )}
 
-                <Separator />
-
-                <dl className="grid grid-cols-3 gap-2 text-sm">
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            记录金额
-                        </dt>
-                        <dd>
-                            <MoneyValue value={factAmount || "0"} />
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            拟分配
-                        </dt>
-                        <dd>
-                            <MoneyValue value={allocatedHint} />
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            拟未分配
-                        </dt>
-                        <dd>
-                            <MoneyValue value={unallocatedHint} />
-                        </dd>
-                    </div>
-                </dl>
+                <DescriptionList
+                    columns="three"
+                    aria-label="本次分配摘要"
+                    className="border-t border-border pt-4"
+                >
+                    <DescriptionItem>
+                        <DescriptionTerm>记录金额</DescriptionTerm>
+                        <DescriptionDetails className="num text-base font-medium">
+                            <MoneyValue
+                                value={factAmount || "0"}
+                                taxBasis="gross"
+                            />
+                        </DescriptionDetails>
+                    </DescriptionItem>
+                    <DescriptionItem>
+                        <DescriptionTerm>拟分配</DescriptionTerm>
+                        <DescriptionDetails className="num text-base font-medium">
+                            <MoneyValue
+                                value={allocatedHint}
+                                taxBasis="gross"
+                            />
+                        </DescriptionDetails>
+                    </DescriptionItem>
+                    <DescriptionItem>
+                        <DescriptionTerm>拟未分配</DescriptionTerm>
+                        <DescriptionDetails className="num text-base font-medium">
+                            <MoneyValue
+                                value={unallocatedHint}
+                                taxBasis="gross"
+                            />
+                        </DescriptionDetails>
+                    </DescriptionItem>
+                </DescriptionList>
 
                 {mixedSources ? (
                     <p className="text-xs text-muted-foreground">
@@ -229,11 +245,8 @@ export function AllocationFactFormCard({
                 ) : null}
 
                 <ValidationSummary issues={issues} />
-            </CardContent>
-            <CardFooter className="justify-end gap-2 border-t border-border">
-                <Button type="button" variant="outline" onClick={onClose}>
-                    取消
-                </Button>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
                 <Button
                     type="button"
                     disabled={!canSubmit || isSubmitting}
@@ -241,7 +254,7 @@ export function AllocationFactFormCard({
                 >
                     确认登记并核销
                 </Button>
-            </CardFooter>
-        </Card>
+            </div>
+        </section>
     )
 }

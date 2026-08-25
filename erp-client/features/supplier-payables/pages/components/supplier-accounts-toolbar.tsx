@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -20,10 +16,11 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
-import type {
-    AllocationTrack,
-    PayableSourceType,
-    SupplierAccountsView,
+import {
+    VIEW_LABEL,
+    type AllocationTrack,
+    type PayableSourceType,
+    type SupplierAccountsView,
 } from "@/features/supplier-payables/types"
 
 /** 可被单独移除的已生效条件。 */
@@ -89,8 +86,16 @@ const TRACK_OPTIONS: ReadonlyArray<{
     { value: "purchase_invoice", label: "进项票" },
 ]
 
+const VIEW_OPTIONS: ReadonlyArray<{
+    value: SupplierAccountsView
+    label: string
+}> = (["payable", "payment", "purchase_invoice", "unallocated"] as const).map(
+    (value) => ({ value, label: VIEW_LABEL[value] }),
+)
+
 export interface SupplierAccountsToolbarProps {
     view: SupplierAccountsView
+    onViewChange: (view: SupplierAccountsView) => void
     searchInput: string
     onSearchInputChange: (value: string) => void
     searchInputRef: React.Ref<HTMLInputElement>
@@ -112,15 +117,14 @@ export interface SupplierAccountsToolbarProps {
     dueDraft: "not_due" | "due_today" | "overdue" | "all"
     setDueDraft: (value: "not_due" | "due_today" | "overdue" | "all") => void
     paymentGateDraft: "satisfied" | "unsatisfied" | "all"
-    setPaymentGateDraft: (
-        value: "satisfied" | "unsatisfied" | "all",
-    ) => void
+    setPaymentGateDraft: (value: "satisfied" | "unsatisfied" | "all") => void
     trackDraft: AllocationTrack | "all"
     setTrackDraft: (value: AllocationTrack | "all") => void
 }
 
 export function SupplierAccountsToolbar({
     view,
+    onViewChange,
     searchInput,
     onSearchInputChange,
     searchInputRef,
@@ -166,38 +170,68 @@ export function SupplierAccountsToolbar({
                             ref={searchInputRef}
                             placeholder="供应商、采购单、结算单、付款单、发票号"
                             value={searchInput}
-                            onChange={(e) => onSearchInputChange(e.target.value)}
+                            onChange={(e) =>
+                                onSearchInputChange(e.target.value)
+                            }
                             aria-label="搜索供应商往来"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
-                    <Button
-                        type="button"
-                        variant="outline"
-                        aria-expanded={panelOpen}
-                        aria-controls={panelId}
-                        onClick={() => setPanelOpen((open) => !open)}
-                    >
-                        <FilterIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                        更多筛选
-                        {hasStructuredFilters ? (
-                            <Badge variant="info">已启用</Badge>
-                        ) : null}
-                        <ChevronDownIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                            className={
-                                panelOpen
-                                    ? "rotate-180 transition-transform"
-                                    : "transition-transform"
-                            }
-                        />
-                    </Button>
+                    <>
+                        <div
+                            role="group"
+                            aria-label="供应商往来工作视图"
+                            className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
+                        >
+                            {VIEW_OPTIONS.map((option) => {
+                                const active = view === option.value
+                                return (
+                                    <Button
+                                        key={option.value}
+                                        type="button"
+                                        variant={active ? "secondary" : "ghost"}
+                                        className={
+                                            active
+                                                ? "bg-card shadow-xs"
+                                                : "shadow-none"
+                                        }
+                                        aria-pressed={active}
+                                        onClick={() =>
+                                            onViewChange(option.value)
+                                        }
+                                    >
+                                        {option.label}
+                                    </Button>
+                                )
+                            })}
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            aria-expanded={panelOpen}
+                            aria-controls={panelId}
+                            onClick={() => setPanelOpen((open) => !open)}
+                        >
+                            <FilterIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            更多筛选
+                            {hasStructuredFilters ? (
+                                <Badge variant="info">已启用</Badge>
+                            ) : null}
+                            <ChevronDownIcon
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                                className={
+                                    panelOpen
+                                        ? "rotate-180 transition-transform"
+                                        : "transition-transform"
+                                }
+                            />
+                        </Button>
+                    </>
                 }
                 secondary={
                     hasChips || panelOpen ? (
@@ -276,9 +310,7 @@ export function SupplierAccountsToolbar({
                                                 onValueChange={
                                                     setPaymentGateDraft
                                                 }
-                                                options={
-                                                    PAYMENT_GATE_OPTIONS
-                                                }
+                                                options={PAYMENT_GATE_OPTIONS}
                                             />
                                         </>
                                     ) : null}

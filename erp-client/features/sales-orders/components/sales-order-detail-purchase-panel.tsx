@@ -14,7 +14,10 @@ import { Button } from "@/components/ui/button"
 import { PurchaseOrderPaperDialog } from "@/features/purchase-orders/components/purchase-order-paper-dialog"
 import { usePurchaseOrdersQuery } from "@/features/purchase-orders/hooks/queries"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
-import type { PurchaseOrderListItem } from "@/features/purchase-orders/types"
+import type {
+    PurchaseOrderListItem,
+    PurchaseOrderStatus,
+} from "@/features/purchase-orders/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SectionLead } from "@/features/sales-orders/components/sales-order-detail-lifecycle-rail"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
@@ -25,6 +28,16 @@ import {
 import { cn } from "@/lib/utils"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
+
+/** 销售扫采购单时，阻塞态优先：审批中/草稿先于已生效。 */
+const PURCHASE_STATUS_SUMMARY_ORDER: readonly PurchaseOrderStatus[] = [
+    "PENDING_REVIEW",
+    "DRAFT",
+    "EFFECTIVE",
+    "PARTIAL",
+    "COMPLETED",
+    "VOID",
+]
 
 function PreviewButton({
     onClick,
@@ -53,6 +66,7 @@ function PreviewButton({
  * 销售单「采购」分区：列出本单已创建的采购单。
  * 有 `purchase_order:list` 才拉列表；有 `purchase_order:detail` 才能纸质预览。
  * 无列表权限时只展示销售单详情里的采购单笔数，不暴露单号与内容。
+ * 列表展示单据生命周期与履约/付款进度，供销售判断采购是否卡住。
  */
 export function PurchasePanel({
     order,
@@ -81,27 +95,36 @@ export function PurchasePanel({
     )
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
+    const listedRows = canList ? (listQuery.data?.rows ?? []) : []
+    const statusSummary = purchaseOrderStatusSummary(listedRows)
 
     return (
         <div className="flex flex-col gap-4">
             <SectionLead>
-                只看本销售单已经创建的采购单。有查看权限时可以预览纸质单据。
+                本销售单已创建的采购单。销售重点看每张单是否已生效，以及履约、付款有没有卡住。
             </SectionLead>
 
             <div className={cn(surfaceInsetClassName, "px-3 py-3")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                         <h3 className="text-sm font-medium">本单采购</h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            采购单 {purchaseCount} 笔 · {progress.label}
+                        <p
+                            className="mt-1 text-xs text-muted-foreground"
+                            data-testid="sales-order-purchase-status"
+                        >
+                            采购单 {purchaseCount} 笔
+                            {statusSummary
+                                ? ` · ${statusSummary}`
+                                : ` · ${progress.label}`}
                         </p>
                         <p
                             className="num mt-1 text-xs text-muted-foreground"
                             data-testid="sales-order-purchase-progress"
                         >
-                            销售总数量 {progress.salesQuantity} · 已覆盖{" "}
+                            数量覆盖 {progress.salesQuantity} · 已覆盖{" "}
                             {progress.coveredQuantity} · 剩余{" "}
                             {progress.remainingQuantity}
+                            {statusSummary ? ` · ${progress.label}` : null}
                         </p>
                     </div>
                     {createPurchase ? (
@@ -213,6 +236,61 @@ function PurchaseCountOnlyNotice({ count }: { count: number }) {
     )
 }
 
+function purchaseOrderStatusSummary(
+    rows: readonly PurchaseOrderListItem[],
+): string {
+    if (rows.length === 0) return ""
+    const counts = new Map<
+        PurchaseOrderStatus,
+        { label: string; count: number }
+    >()
+    for (const row of rows) {
+        const current = counts.get(row.status)
+        if (current) {
+            current.count += 1
+        } else {
+            counts.set(row.status, { label: row.statusLabel, count: 1 })
+        }
+    }
+    return PURCHASE_STATUS_SUMMARY_ORDER.flatMap((status) => {
+        const item = counts.get(status)
+        return item ? [`${item.count} 张${item.label}`] : []
+    }).join(" · ")
+}
+
+function purchaseProgressTracks(row: PurchaseOrderListItem) {
+    return [
+        {
+            id: "fulfillment",
+            label: "履约",
+            status: {
+                label: row.fulfillmentProgress,
+                tone:
+                    row.paymentGate === "BLOCKED"
+                        ? ("warning" as const)
+                        : row.fulfillmentProgress === "完成"
+                          ? ("success" as const)
+                          : row.fulfillmentProgress === "部分"
+                            ? ("info" as const)
+                            : ("neutral" as const),
+            },
+        },
+        {
+            id: "payment",
+            label: "付款",
+            status: {
+                label: row.paymentProgress,
+                tone:
+                    row.paymentProgress === "已付"
+                        ? ("success" as const)
+                        : row.paymentProgress === "部分"
+                          ? ("info" as const)
+                          : ("neutral" as const),
+            },
+        },
+    ]
+}
+
 function toRelatedPurchaseDocument(
     row: PurchaseOrderListItem,
     options: {
@@ -229,6 +307,7 @@ function toRelatedPurchaseDocument(
             label: row.statusLabel,
             tone: row.statusTone,
         },
+        tracks: purchaseProgressTracks(row),
         measure: {
             kind: "amount" as const,
             value: row.costMasked ? (
