@@ -17,20 +17,29 @@ export function VersionsPanel({
     onApprovalResult?: (result: SalesOrderDetailActionResult) => void
 }) {
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
+            {order.activeChangeOrder ? (
+                <div className="space-y-2">
+                    <SectionLead>
+                        改单生效前，客户仍按当前版本执行。下面是进行中的改单，再往下是已经生效的历史版本。
+                    </SectionLead>
+                    <SalesChangeOrderApprovalSection
+                        salesOrderId={order.id}
+                        nature={order.nature}
+                        changeOrder={order.activeChangeOrder}
+                        onResult={onApprovalResult}
+                    />
+                </div>
+            ) : (
+                <SectionLead>
+                    这里只看已经生效的销售版本。改单通过后会新增一版，旧版本仍可对照。
+                </SectionLead>
+            )}
             <RevisionHistoryCard
                 revisions={order.revisions}
                 currentVersion={order.currentRevisionNo}
                 contractRevisionLabel={order.contractRevisionLabel}
             />
-            {order.activeChangeOrder ? (
-                <SalesChangeOrderApprovalSection
-                    salesOrderId={order.id}
-                    nature={order.nature}
-                    changeOrder={order.activeChangeOrder}
-                    onResult={onApprovalResult}
-                />
-            ) : null}
         </div>
     )
 }

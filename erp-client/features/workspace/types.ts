@@ -76,6 +76,7 @@ export type WorkspaceWorkItem = Readonly<{
         label: string
         value: string
         numeric?: boolean
+        objectId?: string
     }>[]
     briefLines?: readonly Readonly<{
         title: string

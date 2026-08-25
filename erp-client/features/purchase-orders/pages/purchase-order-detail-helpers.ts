@@ -1,6 +1,6 @@
 export type PurchaseOrderDetailSectionId =
     | "overview"
-    | "lines"
+    | "approval"
     | "fulfillment"
     | "payable"
     | "changes"
@@ -13,7 +13,7 @@ export const PURCHASE_ORDER_DETAIL_NAV: readonly {
     label: string
 }[] = [
     { id: "overview", label: "概览" },
-    { id: "lines", label: "明细与分配" },
+    { id: "approval", label: "审批" },
     { id: "fulfillment", label: "履约" },
     { id: "payable", label: "应付与票款" },
     { id: "changes", label: "变更与异常" },

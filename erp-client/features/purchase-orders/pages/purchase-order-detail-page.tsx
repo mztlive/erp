@@ -264,12 +264,15 @@ export function PurchaseOrderDetailPage({
                 canPay={permissions.canPay}
                 canFulfill={permissions.canFulfill}
                 canEdit={permissions.canEdit}
+                canSubmit={permissions.canSubmit}
                 canVoid={permissions.canVoid}
                 canOpenReview={permissions.canOpenReview}
                 canChange={permissions.canChange}
                 requestLeave={guard.requestLeave}
                 onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
                 onRequestChange={() => editActions.setChangeConfirmOpen(true)}
+                onRequestSubmit={() => editActions.setSubmitConfirmOpen(true)}
+                onCancelResult={handleResult}
                 result={result}
                 onDismissResult={() => handleResult(null)}
             />
@@ -282,38 +285,6 @@ export function PurchaseOrderDetailPage({
                     expectedTaskVersion={focusedWorkItem?.taskVersion}
                     workItemAllowedActions={focusedWorkItem?.allowedActions}
                     onResult={handleResult}
-                />
-            ) : !isChangeOrderTask ? (
-                <PurchaseOrderApprovalArea
-                    phase={purchaseOrderApprovalPhase(
-                        order.approval,
-                        order.identity.status,
-                    )}
-                    approval={order.approval}
-                    documentId={order.identity.purchaseOrderId}
-                    workItemId={focusedWorkItem?.workItemId}
-                    expectedTaskVersion={focusedWorkItem?.taskVersion}
-                    workItemAllowedActions={focusedWorkItem?.allowedActions}
-                    onDecisionApplied={(view: ApprovalCommandView) =>
-                        handleResult({
-                            status: "succeeded",
-                            title: "审批决定已提交",
-                            description: view.latestRejectionReason
-                                ? `已按当前任务提交决定。${view.latestRejectionReason}`
-                                : "已按当前任务提交决定。",
-                            reference:
-                                order.identity.purchaseNo ??
-                                order.identity.draftLabel,
-                            facts: view.currentAssigneeName
-                                ? [
-                                      {
-                                          label: "当前审批人",
-                                          value: view.currentAssigneeName,
-                                      },
-                                  ]
-                                : undefined,
-                        })
-                    }
                 />
             ) : null}
 
@@ -356,6 +327,39 @@ export function PurchaseOrderDetailPage({
                         : undefined
                 }
                 onChangeApprovalResult={handleResult}
+                approvalPanel={
+                    <PurchaseOrderApprovalArea
+                        phase={purchaseOrderApprovalPhase(
+                            order.approval,
+                            order.identity.status,
+                        )}
+                        approval={order.approval}
+                        documentId={order.identity.purchaseOrderId}
+                        workItemId={focusedWorkItem?.workItemId}
+                        expectedTaskVersion={focusedWorkItem?.taskVersion}
+                        workItemAllowedActions={focusedWorkItem?.allowedActions}
+                        onDecisionApplied={(view: ApprovalCommandView) =>
+                            handleResult({
+                                status: "succeeded",
+                                title: "审批决定已提交",
+                                description: view.latestRejectionReason
+                                    ? `已按当前任务提交决定。${view.latestRejectionReason}`
+                                    : "已按当前任务提交决定。",
+                                reference:
+                                    order.identity.purchaseNo ??
+                                    order.identity.draftLabel,
+                                facts: view.currentAssigneeName
+                                    ? [
+                                          {
+                                              label: "当前审批人",
+                                              value: view.currentAssigneeName,
+                                          },
+                                      ]
+                                    : undefined,
+                            })
+                        }
+                    />
+                }
             />
 
             <PurchaseOrderDetailDialogs

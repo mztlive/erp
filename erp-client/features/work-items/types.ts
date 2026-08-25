@@ -83,6 +83,7 @@ export type WorkItemDto = Readonly<{
         label: string
         value: string
         numeric?: boolean
+        object_id?: string | null
     }>[]
     brief_lines?: readonly Readonly<{
         title: string
@@ -151,6 +152,7 @@ export type WorkItemProjection = Readonly<{
         label: string
         value: string
         numeric?: boolean
+        objectId?: string
     }>[]
     briefLines: readonly Readonly<{
         title: string
@@ -232,7 +234,12 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
             nextActionHint: dto.next_action_hint,
             workItemType: dto.work_item_type,
         }),
-        summarySections: dto.summary_sections ?? [],
+        summarySections: (dto.summary_sections ?? []).map((section) => ({
+            label: section.label,
+            value: section.value,
+            numeric: section.numeric ?? undefined,
+            objectId: section.object_id?.trim() || undefined,
+        })),
         briefLines: (dto.brief_lines ?? []).map((line) => ({
             title: line.title,
             quantity: line.quantity ?? undefined,

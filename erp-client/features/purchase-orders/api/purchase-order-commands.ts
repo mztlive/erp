@@ -65,6 +65,26 @@ export async function savePurchaseOrderDraft(
     }
 }
 
+/**
+ * 撤回尚未最终通过的采购单审批（`POST .../cancel-approval`）。
+ * 服务端按单据乐观锁与运行中实例撤回；前端不依赖详情里的 instance 投影。
+ */
+export async function cancelPurchaseOrderApproval(input: {
+    purchaseOrderId: string
+    expectedLockVersion: number
+    reason: string
+    idempotencyKey: string
+}): Promise<void> {
+    await apiPost(
+        `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/cancel-approval`,
+        {
+            expected_lock_version: input.expectedLockVersion,
+            reason: input.reason.trim(),
+            idempotency_key: input.idempotencyKey,
+        },
+    )
+}
+
 export async function voidPurchaseOrderDraft(
     input: VoidPurchaseOrderInput,
 ): Promise<

@@ -98,6 +98,33 @@ impl<'a> Repository<'a, SalesOrderRevisionLine> {
         )
         .await
     }
+
+    /// 按销售版本 ID 集合批量取回公共行版本（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 销售版本 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配公共行版本（未排序，调用方按版本分组并按行号排序）。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 空集合直接返回空列表，不发查询。
+    pub async fn list_lines_by_revisions(
+        &self,
+        revision_ids: &[SalesOrderRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevisionLine>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = revision_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        self.find_many(doc! { "sales_order_revision_id": { "$in": ids } }, executor)
+            .await
+    }
 }
 
 impl<'a> Repository<'a, SalesOrderGoodsServiceLineRevision> {

@@ -5,7 +5,18 @@ import type * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 import { displayProcessVersion } from "../display"
-import type { ApprovalDefinitionBinding } from "../types"
+import type {
+    ApprovalDefinitionBinding,
+    ApprovalDefinitionNode,
+} from "../types"
+
+function routeNodes(
+    definition: ApprovalDefinitionBinding,
+): readonly ApprovalDefinitionNode[] {
+    return definition.nodes.length > 0
+        ? definition.nodes
+        : definition.publishedNodes
+}
 
 function BindingHeading({
     compact,
@@ -48,6 +59,8 @@ export function DefinitionBindingCard({
         )
     }
 
+    const nodes = routeNodes(definition)
+
     return (
         <Card size="sm">
             <CardHeader>
@@ -59,13 +72,13 @@ export function DefinitionBindingCard({
                 </BindingHeading>
             </CardHeader>
             <CardContent>
-                {definition.nodes.length === 0 ? (
+                {nodes.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         当前流程尚未配置审批节点
                     </p>
                 ) : (
                     <ol className="space-y-2 text-sm">
-                        {definition.nodes.map((node, index) => (
+                        {nodes.map((node, index) => (
                             <li
                                 key={node.key}
                                 className="flex items-baseline gap-2"

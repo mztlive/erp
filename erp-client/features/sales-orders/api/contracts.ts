@@ -215,6 +215,14 @@ export type BackendSubmission = {
     lines?: BackendWorkingCopyLine[]
 }
 
+export type BackendRevisionLine = {
+    line_no: number
+    item_name: string
+    spec?: string | null
+    unit?: string | null
+    gross_amount: string
+}
+
 export type BackendRevision = {
     id: string
     revision_no: number
@@ -225,6 +233,20 @@ export type BackendRevision = {
     tax_amount: string
     effective_at: number
     created_at: number
+    customer_name?: string
+    contract_no?: string | null
+    contract_revision_id?: string | null
+    settlement_party_name?: string | null
+    payment_term_code?: string
+    payment_term_name?: string
+    invoice_type?: string
+    tax_point?: string
+    project_name?: string | null
+    business_remark?: string | null
+    previous_revision_id?: string | null
+    previous_revision_no?: number | null
+    line_summary?: string
+    lines?: BackendRevisionLine[]
 }
 
 export type BackendSalesOrderDetail = {

@@ -20,6 +20,7 @@ export {
 } from "./purchase-order-queries-api"
 
 export {
+    cancelPurchaseOrderApproval,
     createPurchaseOrderFromBasis,
     createPurchaseOrdersFromSourcing,
     reviewPurchaseOrder,

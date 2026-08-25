@@ -204,7 +204,8 @@ export function usePurchaseOrderDetailEditActions({
     }
 
     async function handleSubmit() {
-        if (!order || !draftEditToken) return
+        if (!order) return
+        if (mode === "edit" && !draftEditToken) return
         let submitCommand =
             commandLedger.peek<SubmitPurchaseOrderPayload>("submit")
         if (!submitCommand) {
@@ -217,8 +218,11 @@ export function usePurchaseOrderDetailEditActions({
                     expectedDraftContentHash:
                         order.currentContent.subjectHash ??
                         `v${order.currentContent.version}`,
-                    draftEditToken,
-                    paymentTermCode: getPaymentTermCode(),
+                    draftEditToken: draftEditToken ?? "",
+                    paymentTermCode:
+                        mode === "edit"
+                            ? getPaymentTermCode()
+                            : order.header.paymentTermCode,
                     lines: order.currentContent.lines.map((line) => ({
                         lineId: line.lineId,
                         lineType: line.lineType,

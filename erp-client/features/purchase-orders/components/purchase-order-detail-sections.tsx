@@ -8,18 +8,19 @@ import {
     ObjectSectionTabsPanel,
     surfacePanelClassName,
 } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
 import { PurchaseOrderDetailAuditSection } from "@/features/purchase-orders/components/purchase-order-detail-audit-section"
 import { PurchaseOrderDetailChangesSection } from "@/features/purchase-orders/components/purchase-order-detail-changes-section"
 import { PurchaseOrderDetailFulfillmentSection } from "@/features/purchase-orders/components/purchase-order-detail-fulfillment-section"
-import { PurchaseOrderDetailLinesSection } from "@/features/purchase-orders/components/purchase-order-detail-lines-section"
 import {
     PurchaseOrderDetailOverviewSection,
     PurchaseOrderDetailSummarySection,
 } from "@/features/purchase-orders/components/purchase-order-detail-overview-section"
 import { PurchaseOrderDetailPayableSection } from "@/features/purchase-orders/components/purchase-order-detail-payable-section"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import { isPurchaseOrderApprovalInProgress } from "@/features/purchase-orders/lib/purchase-order-approval"
 import {
     PURCHASE_ORDER_DETAIL_NAV,
     purchaseOrderSectionHref,
@@ -56,6 +57,7 @@ export function PurchaseOrderDetailSections({
     changeExpectedTaskVersion,
     changeWorkItemAllowedActions,
     onChangeApprovalResult,
+    approvalPanel,
 }: {
     order: PurchaseOrderCenterView
     activeSection: PurchaseOrderDetailSectionId
@@ -74,6 +76,7 @@ export function PurchaseOrderDetailSections({
     changeExpectedTaskVersion?: string
     changeWorkItemAllowedActions?: readonly string[]
     onChangeApprovalResult?: (result: PurchaseOrderDetailResult) => void
+    approvalPanel: React.ReactNode
 }) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -92,12 +95,26 @@ export function PurchaseOrderDetailSections({
         [order.identity.purchaseOrderId, router, searchParams],
     )
 
+    const approvalPending = isPurchaseOrderApprovalInProgress(order)
+    const items = PURCHASE_ORDER_DETAIL_NAV.map((item) => ({
+        ...item,
+        badge:
+            item.id === "approval" && approvalPending ? (
+                <Badge
+                    variant="info"
+                    className="h-5 px-1.5 text-2xs font-normal"
+                >
+                    进行中
+                </Badge>
+            ) : undefined,
+    }))
+
     return (
         <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
             <ObjectSectionTabs
                 value={activeSection}
                 onValueChange={handleSectionChange}
-                items={PURCHASE_ORDER_DETAIL_NAV}
+                items={items}
                 listLabel="采购单分区"
             >
                 <ObjectSectionTabsPanel value="overview">
@@ -118,11 +135,8 @@ export function PurchaseOrderDetailSections({
                     ) : null}
                 </ObjectSectionTabsPanel>
 
-                <ObjectSectionTabsPanel value="lines">
-                    <PurchaseOrderDetailLinesSection
-                        order={order}
-                        costMasked={costMasked}
-                    />
+                <ObjectSectionTabsPanel value="approval">
+                    {approvalPanel}
                 </ObjectSectionTabsPanel>
 
                 <ObjectSectionTabsPanel value="fulfillment">

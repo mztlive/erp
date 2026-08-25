@@ -14,7 +14,8 @@ use entities::purchase_order::{
 };
 
 use super::brief::{
-    format_business_due_label, format_quantity, line_title, BriefLine, BriefSection, ObjectBriefSource,
+    format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
+    ObjectBriefSource,
 };
 use super::presentation::{format_yuan, purchase_review_impact_summary};
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief, WorkItemService};
@@ -109,7 +110,7 @@ impl WorkItemService {
         let _ = executor;
         Ok(assemble_purchase_review_displays(
             &submissions,
-            &sales_nos_by_purchase_order(orders, &sales_order_nos),
+            &source_sales_orders_by_purchase_order(orders, &sales_order_nos),
             &lines_by_submission,
             &submitter_names,
         ))
@@ -226,28 +227,29 @@ impl WorkItemService {
     }
 }
 
-/// 把采购单上的来源销售单号改成按采购单 ID 查找。
+/// 把采购单上的来源销售单身份改成按采购单 ID 查找。
 ///
 /// # 参数
 /// * `orders` - 本批采购单
 /// * `sales_order_nos` - 销售单 ID 到单号
 ///
 /// # 返回
-/// 返回采购单 ID 到销售单号。
+/// 返回采购单 ID 到「销售单 ID + 单号」。缺单号时整条丢弃，避免把内部 ID 上屏。
 ///
 /// # 错误
 /// 无。
-fn sales_nos_by_purchase_order(
+fn source_sales_orders_by_purchase_order(
     orders: &[PurchaseOrder],
     sales_order_nos: &HashMap<String, String>,
-) -> HashMap<String, String> {
+) -> HashMap<String, (String, String)> {
     orders
         .iter()
         .filter_map(|order| {
+            let sales_order_id = order.sales_order_id.to_string();
             sales_order_nos
-                .get(&order.sales_order_id.to_string())
+                .get(&sales_order_id)
                 .cloned()
-                .map(|order_no| (order.base.id.clone(), order_no))
+                .map(|order_no| (order.base.id.clone(), (sales_order_id, order_no)))
         })
         .collect()
 }
@@ -256,7 +258,7 @@ fn sales_nos_by_purchase_order(
 ///
 /// # 参数
 /// * `submissions` - 本批采购提交
-/// * `sales_nos` - 采购单 ID 到销售单号
+/// * `source_sales_orders` - 采购单 ID 到来源销售单 ID 与单号
 /// * `lines_by_submission` - 提交 ID 到简报行
 /// * `submitter_names` - 账号 ID 到姓名
 ///
@@ -267,7 +269,7 @@ fn sales_nos_by_purchase_order(
 /// 无。
 fn assemble_purchase_review_displays(
     submissions: &[PurchaseOrderSubmission],
-    sales_nos: &HashMap<String, String>,
+    source_sales_orders: &HashMap<String, (String, String)>,
     lines_by_submission: &HashMap<String, Vec<BriefLine>>,
     submitter_names: &HashMap<String, String>,
 ) -> HashMap<String, PurchaseReviewDisplay> {
@@ -275,11 +277,12 @@ fn assemble_purchase_review_displays(
     submissions
         .iter()
         .map(|submission| {
+            let source_sales_order = source_sales_orders
+                .get(submission.purchase_order_id.as_ref())
+                .map(|(id, order_no)| (id.as_str(), order_no.as_str()));
             let display = purchase_review_display(
                 submission,
-                sales_nos
-                    .get(submission.purchase_order_id.as_ref())
-                    .map(String::as_str),
+                source_sales_order,
                 lines_by_submission
                     .get(&submission.base.id)
                     .cloned()
@@ -391,7 +394,7 @@ fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String
 ///
 /// # 参数
 /// * `submission` - 不可变采购提交
-/// * `sales_order_no` - 来源销售单号
+/// * `source_sales_order` - 来源销售单 ID 与单号
 /// * `lines` - 已按行号排好的简报行
 /// * `submitter_name` - 已解析的提交人姓名
 /// * `origin` - 初次提交或驳回后重提
@@ -403,7 +406,7 @@ fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String
 /// 无。
 fn purchase_review_display(
     submission: &PurchaseOrderSubmission,
-    sales_order_no: Option<&str>,
+    source_sales_order: Option<(&str, &str)>,
     lines: Vec<BriefLine>,
     submitter_name: Option<String>,
     origin: Option<&str>,
@@ -412,7 +415,7 @@ fn purchase_review_display(
     let (visible_lines, more_count) = split_purchase_brief_lines(lines);
     let brief = purchase_review_brief_source(
         supplier.clone(),
-        sales_order_no,
+        source_sales_order,
         submission,
         visible_lines,
         more_count,
@@ -436,7 +439,7 @@ fn purchase_review_display(
 ///
 /// # 参数
 /// * `supplier` - 供应商名称
-/// * `sales_order_no` - 来源销售单号
+/// * `source_sales_order` - 来源销售单 ID 与单号
 /// * `submission` - 不可变采购提交
 /// * `lines` - 截断后的简报行
 /// * `more_count` - 未展开的商品行数
@@ -450,7 +453,7 @@ fn purchase_review_display(
 /// 无。
 fn purchase_review_brief_source(
     supplier: Option<String>,
-    sales_order_no: Option<&str>,
+    source_sales_order: Option<(&str, &str)>,
     submission: &PurchaseOrderSubmission,
     lines: Vec<BriefLine>,
     more_count: u32,
@@ -463,7 +466,7 @@ fn purchase_review_brief_source(
         amount_label: Some(format_yuan(&submission.gross_amount)),
         extra_sections: purchase_review_sections(
             supplier.as_deref(),
-            sales_order_no,
+            source_sales_order,
             submission,
             payment.as_deref(),
             origin,
@@ -486,30 +489,31 @@ fn purchase_review_brief_source(
 ///
 /// # 参数
 /// * `supplier` - 供应商名称
-/// * `sales_order_no` - 来源销售单号
+/// * `source_sales_order` - 来源销售单 ID 与单号
 /// * `submission` - 不可变采购提交
 /// * `payment` - 已翻译的付款条件
 /// * `origin` - 提交来源
 ///
 /// # 返回
-/// 返回供应商、销售单、金额三元组、付款条件和提交号等段。
+/// 返回供应商、销售单、金额三元组、付款条件和提交号等段。销售单段携带可跳转身份。
 ///
 /// # 错误
 /// 无。
 fn purchase_review_sections(
     supplier: Option<&str>,
-    sales_order_no: Option<&str>,
+    source_sales_order: Option<(&str, &str)>,
     submission: &PurchaseOrderSubmission,
     payment: Option<&str>,
     origin: Option<&str>,
 ) -> Vec<BriefSection> {
     let mut sections = Vec::new();
     push_section(&mut sections, "供应商", supplier, false);
-    push_section(
+    let (sales_order_id, sales_order_no) = source_sales_order.unzip();
+    push_document_section(
         &mut sections,
         "来源销售单",
         sales_order_no.map(str::trim).filter(|text| !text.is_empty()),
-        false,
+        sales_order_id,
     );
     push_section(
         &mut sections,
@@ -767,6 +771,7 @@ fn push_section(sections: &mut Vec<BriefSection>, label: &str, value: Option<&st
         label: label.to_string(),
         value: value.to_string(),
         numeric,
+        object_id: None,
     });
 }
 

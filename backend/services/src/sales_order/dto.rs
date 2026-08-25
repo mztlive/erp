@@ -702,7 +702,25 @@ pub struct SubmissionView {
     pub lines: Vec<SalesOrderWorkingCopyLineView>,
 }
 
+/// 销售版本公共行摘要（详情「版本」分区展示当时明细，不含子类型字段）。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct RevisionLineView {
+    /// 本版展示顺序。
+    pub line_no: u32,
+    /// 销售项名称快照。
+    pub item_name: String,
+    /// 规格快照。
+    pub spec: Option<String>,
+    /// 单位快照。
+    pub unit: Option<String>,
+    /// 行含税金额。
+    pub gross_amount: Amount,
+}
+
 /// 销售版本视图。
+///
+/// 表头快照来自不可变 `sales_order_revision`，明细摘要来自同版公共行；后续基础资料
+/// 或改单不得回写这些字段。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct RevisionView {
     /// 实体主键。
@@ -713,6 +731,30 @@ pub struct RevisionView {
     pub revision_source: entities::sales_order::RevisionSource,
     /// 内容指纹。
     pub content_hash: String,
+    /// 当时客户名称快照。
+    pub customer_name: String,
+    /// 当时合同编号快照；无合同时为空。
+    pub contract_no: Option<String>,
+    /// 当时锁定的合同修订。
+    pub contract_revision_id: Option<String>,
+    /// 当时结算主体名称快照。
+    pub settlement_party_name: Option<String>,
+    /// 当时付款条件代码。
+    pub payment_term_code: String,
+    /// 当时付款条件名称。
+    pub payment_term_name: String,
+    /// 当时开票类型。
+    pub invoice_type: String,
+    /// 当时税点。
+    pub tax_point: String,
+    /// 当时客户项目名称。
+    pub project_name: Option<String>,
+    /// 当时业务备注。
+    pub business_remark: Option<String>,
+    /// 前一生效版本。
+    pub previous_revision_id: Option<String>,
+    /// 前一生效版本号；无法在本单版本列表中解析时为空。
+    pub previous_revision_no: Option<u32>,
     /// 含税合计。
     pub gross_amount: Amount,
     /// 不含税合计。
@@ -723,6 +765,10 @@ pub struct RevisionView {
     pub effective_at: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 明细摘要，如「年货礼盒、企业福利卡 共 2 项」；无行时为空串。
+    pub line_summary: String,
+    /// 当时公共行，按行号升序。
+    pub lines: Vec<RevisionLineView>,
 }
 
 /// 卡券销售审批工作面允许执行的固定动作。

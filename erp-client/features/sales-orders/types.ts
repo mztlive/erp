@@ -144,17 +144,35 @@ export type ActionBlocker = {
     reason: string
 }
 
+export type SalesOrderRevisionLineSnapshot = {
+    lineNo: number
+    name: string
+    spec?: string
+    unit?: string
+    amountGross: string
+}
+
 export type SalesOrderRevisionSnapshot = {
     revisionNo: number
     effectiveAt: string
-    /** 合同精确修订标签，如 HT-2026-0312@v3 */
+    /** 合同精确修订标签，如 HT-2026-0312@v3；无合同时为空。 */
     contractRevisionLabel: string
     /** 客户主数据快照（不被当前值覆盖） */
     customerSnapshot: string
     amountGross: string
+    amountNet: string
+    taxAmount: string
     lineSummary: string
+    settlementParty: string
+    paymentTerm: string
+    invoiceType: string
+    taxPoint: string
+    projectName: string
+    businessRemark: string
+    previousRevisionNo?: number
     changeOrderId?: string
     note: string
+    lines: readonly SalesOrderRevisionLineSnapshot[]
 }
 
 export type SalesChangeOrderSummary = {

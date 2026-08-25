@@ -6,15 +6,16 @@ use entities::ids::{
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
 };
 use entities::sales_order::{
-    GoodsLineFields, LineType, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderSubmission,
-    SalesOrderSubmissionData, SalesOrderSubmissionLine, SalesOrderSubmissionLineData, SalesOrderWorkingCopy,
-    SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, VoucherLineDraft,
-    WorkingPurpose,
+    GoodsLineFields, LineType, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
+    SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
+    SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
+    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, VoucherLineDraft, WorkingPurpose,
 };
 use id_generator::next_id;
 
 use super::dto::{
-    SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderWorkingCopyLineView, SubmissionView,
+    RevisionLineView, RevisionView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
+    SalesOrderWorkingCopyLineView, SubmissionView,
 };
 use super::pricing::line_totals;
 use crate::audit::AuditActor;
@@ -549,6 +550,102 @@ pub(super) fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOr
     }
 }
 
+/// 构造销售版本历史视图（含当时表头快照与公共行摘要）。
+///
+/// # 参数
+/// * `revision` - 正式销售版本实体
+/// * `lines` - 该版本下的公共行；调用方须已按行号升序
+/// * `previous_revision_no` - 前一生效版本号；无法在本单版本列表解析时为空
+///
+/// # 返回
+/// 返回详情「版本」分区使用的视图。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 快照字段只读正式版本内联值，不得用当前客户/合同主数据回填。
+pub(super) fn revision_view(
+    revision: SalesOrderRevision,
+    lines: Vec<SalesOrderRevisionLine>,
+    previous_revision_no: Option<u32>,
+) -> RevisionView {
+    RevisionView {
+        id: revision.base.id,
+        revision_no: revision.revision.revision_no,
+        revision_source: revision.revision_source,
+        content_hash: revision.content_hash,
+        customer_name: revision.customer_snapshot.customer_name,
+        contract_no: revision.contract_snapshot.map(|snapshot| snapshot.contract_no),
+        contract_revision_id: revision.contract_revision_id.as_ref().map(ToString::to_string),
+        settlement_party_name: revision
+            .settlement_party_snapshot
+            .map(|snapshot| snapshot.settlement_party_name),
+        payment_term_code: revision.payment_term_snapshot.payment_term_code,
+        payment_term_name: revision.payment_term_snapshot.payment_term_name,
+        invoice_type: revision.invoice_requirement_snapshot.invoice_type,
+        tax_point: revision.invoice_requirement_snapshot.tax_point,
+        project_name: revision.project_name,
+        business_remark: revision.business_remark,
+        previous_revision_id: revision.previous_revision_id.as_ref().map(ToString::to_string),
+        previous_revision_no,
+        gross_amount: revision.gross_amount,
+        net_amount: revision.net_amount,
+        tax_amount: revision.tax_amount,
+        effective_at: revision.effective_at.unix_secs() as u64,
+        created_at: revision.base.created_at,
+        line_summary: revision_line_summary(&lines),
+        lines: lines.into_iter().map(revision_line_view).collect(),
+    }
+}
+
+/// 把公共行版本收成详情页一行摘要。
+///
+/// # 参数
+/// * `line` - 公共行版本实体
+///
+/// # 返回
+/// 返回行号、名称、规格、单位与含税金额。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 不展开实物/卡券子类型字段，版本列表只展示公共行快照。
+fn revision_line_view(line: SalesOrderRevisionLine) -> RevisionLineView {
+    RevisionLineView {
+        line_no: line.line_no,
+        item_name: line.item_name_snapshot,
+        spec: line.spec_snapshot,
+        unit: line.unit_snapshot,
+        gross_amount: line.gross_amount,
+    }
+}
+
+/// 把版本公共行收成一条可读摘要。
+///
+/// # 参数
+/// * `lines` - 已按行号排序的公共行
+///
+/// # 返回
+/// 无行时返回空串；有行时返回「名称、名称 共 N 项」。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 名称顺序与传入行顺序一致，调用方须先按行号排序。
+fn revision_line_summary(lines: &[SalesOrderRevisionLine]) -> String {
+    if lines.is_empty() {
+        return String::new();
+    }
+    let names = lines
+        .iter()
+        .map(|line| line.item_name_snapshot.as_str())
+        .collect::<Vec<_>>();
+    format!("{} 共 {} 项", names.join("、"), lines.len())
+}
+
 /// 构造提交明细行视图（与工作副本行视图同形）。
 ///
 /// # 参数
@@ -556,6 +653,9 @@ pub(super) fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOr
 ///
 /// # 返回
 /// 返回视图。
+///
+/// # 错误
+/// 无。
 fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
         id: line.base.id,
@@ -582,5 +682,100 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
         card_count: line.card_count,
         transaction_amount: line.transaction_amount,
         card_form: line.card_form,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use entities::common::time::Instant;
+    use entities::ids::{
+        ContractRevisionId, PartyRevisionId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
+        SalesOrderRevisionLineId,
+    };
+    use entities::money::{Amount, Rate};
+    use entities::sales_order::{
+        HeaderSnapshotData, LineType, RevisionSource, SalesOrderRevision, SalesOrderRevisionData,
+        SalesOrderRevisionLine, SalesOrderRevisionLineData,
+    };
+
+    use super::{revision_line_summary, revision_view};
+
+    fn amt(value: &str) -> Amount {
+        Amount::from_str(value).unwrap()
+    }
+
+    fn header_data() -> SalesOrderRevisionData {
+        SalesOrderRevisionData {
+            sales_order_id: SalesOrderId::new("o-1"),
+            revision_no: 1,
+            revision_source: RevisionSource::ErpApproval,
+            source_snapshot_id: None,
+            previous_revision_id: None,
+            content_hash: "abc123def456".to_string(),
+            customer_revision_id: Some(PartyRevisionId::new("party-rev-1")),
+            contract_revision_id: Some(ContractRevisionId::new("contract-rev-1")),
+            snapshot: HeaderSnapshotData {
+                customer_name: "东方企业".to_string(),
+                contract_no: Some("HT-2026-0088".to_string()),
+                settlement_party_name: Some("集团结算中心".to_string()),
+                payment_term_code: "NET30".to_string(),
+                payment_term_name: "月结 30 天".to_string(),
+                invoice_type: "增值税专用发票".to_string(),
+                tax_point: "6".to_string(),
+            },
+            project_name: Some("端午福利项目".to_string()),
+            business_remark: None,
+            voucher_category_sku_id: None,
+            voucher_expiry_at: None,
+            gross_amount: amt("29.97"),
+            net_amount: amt("26.07"),
+            tax_amount: amt("3.90"),
+            effective_at: Instant::from_unix_secs(1_800_000_000),
+            recorded_at: Instant::from_unix_secs(1_800_000_100),
+        }
+    }
+
+    fn revision_line(name: &str, line_no: u32) -> SalesOrderRevisionLine {
+        SalesOrderRevisionLine::new(
+            SalesOrderRevisionLineId::new(format!("rl-{line_no}")),
+            SalesOrderRevisionLineData {
+                sales_order_revision_id: SalesOrderRevisionId::new("rev-1"),
+                sales_order_line_id: SalesOrderLineId::new(format!("line-{line_no}")),
+                line_no,
+                line_type: LineType::GoodsService,
+                gross_amount: amt("29.97"),
+                net_amount: amt("26.07"),
+                tax_amount: amt("3.90"),
+                sales_tax_rate: Rate::from_str("0.130000").unwrap(),
+                item_name_snapshot: name.to_string(),
+                spec_snapshot: Some("10kg".to_string()),
+                unit_snapshot: Some("盒".to_string()),
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn revision_view_keeps_header_snapshot_and_line_summary() {
+        let revision = SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), header_data()).unwrap();
+        let view = revision_view(revision, vec![revision_line("年货礼盒", 1)], None);
+
+        assert_eq!(view.revision_no, 1);
+        assert_eq!(view.customer_name, "东方企业");
+        assert_eq!(view.contract_no.as_deref(), Some("HT-2026-0088"));
+        assert_eq!(view.settlement_party_name.as_deref(), Some("集团结算中心"));
+        assert_eq!(view.payment_term_name, "月结 30 天");
+        assert_eq!(view.line_summary, "年货礼盒 共 1 项");
+        assert_eq!(view.lines[0].item_name, "年货礼盒");
+        assert_eq!(view.previous_revision_no, None);
+    }
+
+    #[test]
+    fn revision_line_summary_joins_names_and_count() {
+        let lines = vec![revision_line("年货礼盒", 1), revision_line("企业福利卡", 2)];
+        assert_eq!(revision_line_summary(&lines), "年货礼盒、企业福利卡 共 2 项");
+        assert_eq!(revision_line_summary(&[]), "");
     }
 }

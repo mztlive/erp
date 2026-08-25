@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
 import { splitDetailSections } from "../lib/detail-facts"
+import { findSourceSalesOrder } from "../lib/source-sales-order"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
@@ -28,7 +29,14 @@ export function WorkspaceTaskCard({
         item.counterpartyName,
     ).amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
+    const sourceSales = findSourceSalesOrder(item.summarySections)
     const dueOrStatus = blocked || overdue || Boolean(item.dueAt)
+    const counterpartyLine = [
+        item.counterpartyName,
+        sourceSales ? `来源 ${sourceSales.orderNo}` : undefined,
+    ]
+        .filter(Boolean)
+        .join(" · ")
 
     return (
         <button
@@ -39,7 +47,11 @@ export function WorkspaceTaskCard({
                     ? `work-item-procurement-order-creation-${item.workItemId}`
                     : undefined
             }
-            aria-label={`${item.workItemTypeLabel} ${number}`}
+            aria-label={
+                sourceSales
+                    ? `${item.workItemTypeLabel} ${number} 来源 ${sourceSales.orderNo}`
+                    : `${item.workItemTypeLabel} ${number}`
+            }
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
@@ -60,9 +72,9 @@ export function WorkspaceTaskCard({
             <span className="flex min-w-0 items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
                     <WorkspaceDocumentBadge item={item} decorative />
-                    {item.counterpartyName ? (
+                    {counterpartyLine ? (
                         <span className="min-w-0 truncate text-xs text-muted-foreground">
-                            {item.counterpartyName}
+                            {counterpartyLine}
                         </span>
                     ) : null}
                 </span>

@@ -317,6 +317,9 @@ pub struct WorkItemSummarySection {
     pub value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub numeric: Option<bool>,
+    /// 可跳转关联单据的稳定身份；仅作路由键，不上屏。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object_id: Option<String>,
 }
 
 /// 事项简报中的一行业务明细。
@@ -553,6 +556,7 @@ impl WorkItemView {
                             label: section.label.clone(),
                             value: section.value.clone(),
                             numeric: section.numeric.then_some(true),
+                            object_id: section.object_id.clone(),
                         })
                         .collect()
                 })

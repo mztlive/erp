@@ -10,6 +10,7 @@ export type WorkspaceFactSection = Readonly<{
     label: string
     value: string
     numeric?: boolean
+    objectId?: string
 }>
 
 export type WorkspaceFactLine = Readonly<{
@@ -126,12 +127,12 @@ async function loadCustomerReceiptFacts(
             numeric: true,
         })
     }
-    const lines = (receipt.allocations ?? []).slice(0, LINE_LIMIT).map(
-        (row): WorkspaceFactLine => ({
+    const lines = (receipt.allocations ?? [])
+        .slice(0, LINE_LIMIT)
+        .map((row): WorkspaceFactLine => ({
             title: "核销应收",
             quantity: formatYuan(row.allocated_amount),
-        }),
-    )
+        }))
     return {
         impact: "不审批则回款不能过账、不能核销应收",
         listSummary: joinSummary([amount, receipt.bank_reference ?? undefined]),
@@ -196,7 +197,9 @@ function salesContentToFacts(
             content.customer_name,
             formatYuan(content.gross_amount),
             content.payment_term_name ?? undefined,
-            first ? `${first.title}${first.quantity ? ` ${first.quantity}` : ""}` : undefined,
+            first
+                ? `${first.title}${first.quantity ? ` ${first.quantity}` : ""}`
+                : undefined,
         ]),
         sections,
         lines,

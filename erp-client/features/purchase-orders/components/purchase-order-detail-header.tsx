@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import {
     ArrowLeftIcon,
     FilePenLineIcon,
+    SendIcon,
     ShieldCheckIcon,
     Trash2Icon,
 } from "lucide-react"
@@ -18,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
+import { PurchaseOrderCancelApprovalButton } from "@/features/purchase-orders/components/purchase-order-cancel-approval-button"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PURCHASE_TYPE_LABEL,
@@ -39,12 +41,15 @@ export function PurchaseOrderDetailHeader({
     canPay,
     canFulfill,
     canEdit,
+    canSubmit,
     canVoid,
     canOpenReview,
     canChange,
     requestLeave,
     onRequestVoid,
     onRequestChange,
+    onRequestSubmit,
+    onCancelResult,
     result,
     onDismissResult,
 }: {
@@ -60,12 +65,15 @@ export function PurchaseOrderDetailHeader({
     canPay: boolean
     canFulfill: boolean
     canEdit: boolean
+    canSubmit: boolean
     canVoid: boolean
     canOpenReview: boolean
     canChange: boolean
     requestLeave: (go: () => void) => void
     onRequestVoid: () => void
     onRequestChange: () => void
+    onRequestSubmit: () => void
+    onCancelResult: (result: PurchaseOrderDetailResult) => void
     result: PurchaseOrderDetailResult | null
     onDismissResult: () => void
 }) {
@@ -74,109 +82,127 @@ export function PurchaseOrderDetailHeader({
             <PageHeader
                 variant="object-chrome"
                 metadata={
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span
                             ref={titleRef}
                             tabIndex={-1}
-                            className="outline-none font-medium text-foreground"
+                            className="text-xl font-semibold tracking-tight text-foreground outline-none"
                         >
-                            {modeLabel}
+                            采购单
                         </span>
+                        <span>{modeLabel}</span>
                     </span>
                 }
                 actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "back",
-                                label: "返回列表",
-                                icon: ArrowLeftIcon,
-                                variant: "outline",
-                                onClick: () =>
-                                    requestLeave(() =>
-                                        router.push("/procurement/orders"),
-                                    ),
-                            },
-                            ...(canPay
-                                ? [
-                                      {
-                                          actionKey: "pay",
-                                          label: "去供应商往来",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              router.push(w12PayHref),
-                                      },
-                                      {
-                                          actionKey: "settle",
-                                          label: "去对账结算",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              router.push(w27SettleHref),
-                                      },
-                                  ]
-                                : []),
-                            ...(canFulfill
-                                ? [
-                                      {
-                                          actionKey: "fulfill",
-                                          label: "去交付",
-                                          variant: "outline" as const,
-                                          onClick: () =>
-                                              router.push(
-                                                  `/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`,
-                                              ),
-                                      },
-                                  ]
-                                : []),
-                            ...(canEdit && mode !== "edit"
-                                ? [
-                                      {
-                                          actionKey: "edit",
-                                          label: "编辑草稿",
-                                          icon: FilePenLineIcon,
-                                          onClick: () =>
-                                              router.push(
-                                                  `${baseHref}?mode=edit`,
-                                              ),
-                                      },
-                                  ]
-                                : []),
-                            ...(canVoid && mode !== "edit"
-                                ? [
-                                      {
-                                          actionKey: "void",
-                                          label: "作废草稿",
-                                          icon: Trash2Icon,
-                                          variant: "destructive" as const,
-                                          onClick: () => onRequestVoid(),
-                                      },
-                                  ]
-                                : []),
-                            ...(canOpenReview && mode !== "review"
-                                ? [
-                                      {
-                                          actionKey: "review",
-                                          label: "打开审核",
-                                          icon: ShieldCheckIcon,
-                                          onClick: () =>
-                                              router.push(
-                                                  `${baseHref}?mode=review`,
-                                              ),
-                                      },
-                                  ]
-                                : []),
-                            ...(canChange
-                                ? [
-                                      {
-                                          actionKey: "change",
-                                          label: "发起采购变更",
-                                          variant: "outline" as const,
-                                          onClick: () => onRequestChange(),
-                                      },
-                                  ]
-                                : []),
-                        ]}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <PageActions
+                            actions={[
+                                {
+                                    actionKey: "back",
+                                    label: "返回列表",
+                                    icon: ArrowLeftIcon,
+                                    variant: "outline",
+                                    onClick: () =>
+                                        requestLeave(() =>
+                                            router.push("/procurement/orders"),
+                                        ),
+                                },
+                                ...(canPay
+                                    ? [
+                                          {
+                                              actionKey: "pay",
+                                              label: "去供应商往来",
+                                              variant: "outline" as const,
+                                              onClick: () =>
+                                                  router.push(w12PayHref),
+                                          },
+                                          {
+                                              actionKey: "settle",
+                                              label: "去对账结算",
+                                              variant: "outline" as const,
+                                              onClick: () =>
+                                                  router.push(w27SettleHref),
+                                          },
+                                      ]
+                                    : []),
+                                ...(canFulfill
+                                    ? [
+                                          {
+                                              actionKey: "fulfill",
+                                              label: "去交付",
+                                              variant: "outline" as const,
+                                              onClick: () =>
+                                                  router.push(
+                                                      `/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`,
+                                                  ),
+                                          },
+                                      ]
+                                    : []),
+                                ...(canEdit && mode !== "edit"
+                                    ? [
+                                          {
+                                              actionKey: "edit",
+                                              label: "编辑草稿",
+                                              icon: FilePenLineIcon,
+                                              variant: "outline" as const,
+                                              onClick: () =>
+                                                  router.push(
+                                                      `${baseHref}?mode=edit`,
+                                                  ),
+                                          },
+                                      ]
+                                    : []),
+                                ...(canSubmit
+                                    ? [
+                                          {
+                                              actionKey: "submit",
+                                              label: "提交审批",
+                                              icon: SendIcon,
+                                              onClick: () => onRequestSubmit(),
+                                          },
+                                      ]
+                                    : []),
+                                ...(canVoid && mode !== "edit"
+                                    ? [
+                                          {
+                                              actionKey: "void",
+                                              label: "作废草稿",
+                                              icon: Trash2Icon,
+                                              variant: "destructive" as const,
+                                              onClick: () => onRequestVoid(),
+                                          },
+                                      ]
+                                    : []),
+                                ...(canOpenReview && mode !== "review"
+                                    ? [
+                                          {
+                                              actionKey: "review",
+                                              label: "打开审核",
+                                              icon: ShieldCheckIcon,
+                                              onClick: () =>
+                                                  router.push(
+                                                      `${baseHref}?mode=review`,
+                                                  ),
+                                          },
+                                      ]
+                                    : []),
+                                ...(canChange
+                                    ? [
+                                          {
+                                              actionKey: "change",
+                                              label: "发起采购变更",
+                                              variant: "outline" as const,
+                                              onClick: () => onRequestChange(),
+                                          },
+                                      ]
+                                    : []),
+                            ]}
+                        />
+                        <PurchaseOrderCancelApprovalButton
+                            order={order}
+                            onResult={onCancelResult}
+                        />
+                    </div>
                 }
             />
 
@@ -209,9 +235,9 @@ export function PurchaseOrderDetailHeader({
                     tone: order.identity.statusTone,
                 }}
                 version={
-                    order.identity.revisionNo
-                        ? order.identity.revisionNo
-                        : "草稿"
+                    order.identity.revisionNo == null
+                        ? "尚未生效"
+                        : `v${order.identity.revisionNo}`
                 }
                 meta={
                     <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">

@@ -260,19 +260,74 @@ const REVISION_SOURCE_LABEL: Record<string, string> = {
     MALL_SYNC: "商城同步",
 }
 
+/** 快照里误写入的稳定身份（ObjectId / UUID hex）不得当规格或单位上屏。 */
+const SNAPSHOT_IDENTITY = /^[0-9a-f]{24}(?:[0-9a-f]{8})?$/i
+
+function snapshotLabel(value?: string | null): string | undefined {
+    const trimmed = value?.trim() ?? ""
+    if (!trimmed || SNAPSHOT_IDENTITY.test(trimmed)) return undefined
+    return trimmed
+}
+
+function mapRevisionLines(
+    lines: BackendRevision["lines"],
+): SalesOrderRevisionSnapshot["lines"] {
+    if (!lines?.length) return []
+    return [...lines]
+        .sort((a, b) => a.line_no - b.line_no)
+        .map((line) => ({
+            lineNo: line.line_no,
+            name: line.item_name,
+            spec: snapshotLabel(line.spec),
+            unit: snapshotLabel(line.unit),
+            amountGross: line.gross_amount,
+        }))
+}
+
+function mapRevisionLineSummary(
+    summary: string | undefined,
+    lines: SalesOrderRevisionSnapshot["lines"],
+): string {
+    const trimmed = summary?.trim() ?? ""
+    if (trimmed) return trimmed
+    if (!lines.length) return ""
+    return `${lines.map((line) => line.name).join("、")} 共 ${lines.length} 项`
+}
+
 export function mapRevisions(
     revisions: BackendRevision[] | undefined,
 ): SalesOrderRevisionSnapshot[] {
     if (!revisions?.length) return []
-    return revisions.map((rev) => ({
-        revisionNo: rev.revision_no,
-        effectiveAt: formatInstant(rev.effective_at),
-        contractRevisionLabel: "",
-        customerSnapshot: "",
-        amountGross: rev.gross_amount,
-        lineSummary: "",
-        note: REVISION_SOURCE_LABEL[rev.revision_source] ?? rev.revision_source,
-    }))
+    const revisionNoById = new Map(
+        revisions.map((rev) => [rev.id, rev.revision_no]),
+    )
+    return revisions.map((rev) => {
+        const lines = mapRevisionLines(rev.lines)
+        const previousFromList = rev.previous_revision_id
+            ? revisionNoById.get(rev.previous_revision_id)
+            : undefined
+        return {
+            revisionNo: rev.revision_no,
+            effectiveAt: formatInstant(rev.effective_at),
+            contractRevisionLabel: rev.contract_no?.trim() ?? "",
+            customerSnapshot: rev.customer_name?.trim() ?? "",
+            amountGross: rev.gross_amount,
+            amountNet: rev.net_amount ?? "",
+            taxAmount: rev.tax_amount ?? "",
+            lineSummary: mapRevisionLineSummary(rev.line_summary, lines),
+            settlementParty: rev.settlement_party_name?.trim() ?? "",
+            paymentTerm: rev.payment_term_name?.trim() ?? "",
+            invoiceType: rev.invoice_type?.trim() ?? "",
+            taxPoint: rev.tax_point?.trim() ?? "",
+            projectName: rev.project_name?.trim() ?? "",
+            businessRemark: rev.business_remark?.trim() ?? "",
+            previousRevisionNo: rev.previous_revision_no ?? previousFromList,
+            note:
+                REVISION_SOURCE_LABEL[rev.revision_source] ??
+                rev.revision_source,
+            lines,
+        }
+    })
 }
 
 function defaultAllowedActions(

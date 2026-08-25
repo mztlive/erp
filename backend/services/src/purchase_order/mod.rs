@@ -23,6 +23,7 @@ use mongodb::Database;
 
 mod adapter;
 mod allocation_maintenance;
+mod approval_query;
 mod authorization;
 mod cancel_approval;
 mod change;

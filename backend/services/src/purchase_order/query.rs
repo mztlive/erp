@@ -7,7 +7,7 @@ use entities::purchase_order::PurchaseOrder;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
 
-use super::adapter::document_approval_view;
+use super::approval_query::load_document_approval;
 use super::dto::{
     PageView, PurchaseActionBlockerView, PurchaseOrderCenterView, PurchaseOrderLineView,
     PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseReviewDomainAction,
@@ -237,7 +237,13 @@ impl PurchaseOrderService {
             changes,
             payable_summary,
             review_work_item,
-            approval: document_approval_view(binding.as_ref(), None, order.stable.status),
+            approval: load_document_approval(
+                &self.db,
+                order.base.id.as_ref(),
+                binding.as_ref(),
+                order.stable.status,
+            )
+            .await?,
             created_at: order.base.created_at,
         })
     }

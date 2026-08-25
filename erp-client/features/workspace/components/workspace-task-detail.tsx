@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
@@ -29,14 +30,23 @@ import {
     workspaceReadActionLabel,
 } from "../api/work-item-meta"
 import { useWorkspaceDocumentFacts } from "../hooks/use-workspace-document-facts"
+import { useWorkspaceSourceSalesOrder } from "../hooks/use-workspace-source-sales-order"
 import { buildDocumentHref } from "../lib/destination"
 import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
 import { workspacePaperKind } from "../lib/paper-kind"
+import {
+    linkedDocumentHref,
+    linkedDocumentPaperKind,
+    withSourceSalesOrder,
+} from "../lib/source-sales-order"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { WorkspaceDocumentPaperDialog } from "./workspace-document-paper-dialog"
+import {
+    WorkspaceDocumentPaperDialog,
+    type WorkspacePaperTarget,
+} from "./workspace-document-paper-dialog"
 
 /**
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
@@ -66,22 +76,29 @@ export function WorkspaceTaskDetail({
         approvalTask && isBlockedWorkItem(item),
     )
     const documentHref = buildDocumentHref(item)
+    const currentPaperKind = workspacePaperKind(item.businessObjectType)
     const canReadPaper = Boolean(
-        workspacePaperKind(item.businessObjectType) &&
-        item.businessObjectId.trim(),
+        currentPaperKind && item.businessObjectId.trim(),
     )
     const readActionLabel = workspaceReadActionLabel(item.businessObjectType)
     const openActionLabel = workspaceOpenActionLabel(
         item.workItemType,
         item.businessObjectType,
     )
-    const [paperOpen, setPaperOpen] = useState(false)
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
+    const [paper, setPaper] = useState<WorkspacePaperTarget | null>(null)
     useEffect(() => {
-        setPaperOpen(false)
+        setPaper(null)
     }, [item.workItemId])
     const documentFacts = useWorkspaceDocumentFacts(item)
+    const sourceSales = useWorkspaceSourceSalesOrder(item)
     const facts = documentFacts.facts
-    const summarySections = facts?.sections ?? item.summarySections
+    const summarySections = withSourceSalesOrder(
+        facts?.sections ?? item.summarySections ?? [],
+        sourceSales.source,
+    )
     const briefLines = facts?.lines ?? item.briefLines
     const briefMoreCount = facts?.moreCount ?? item.briefMoreCount
     const counterpartyName = facts?.counterparty ?? item.counterpartyName
@@ -99,6 +116,7 @@ export function WorkspaceTaskDetail({
     const overdue = item.dueBucket === "overdue"
     const subtitle = [
         counterpartyName,
+        sourceSales.source ? `来源 ${sourceSales.source.orderNo}` : undefined,
         detailFacts.submitter ? `${detailFacts.submitter} 提交` : undefined,
         item.enteredAtLabel,
     ]
@@ -120,11 +138,17 @@ export function WorkspaceTaskDetail({
     const documentActions =
         canReadPaper || (approvalTask && documentHref) ? (
             <div className="flex shrink-0 items-center gap-1">
-                {canReadPaper ? (
+                {canReadPaper && currentPaperKind ? (
                     <IconActionButton
                         label={readActionLabel}
                         testId={`work-item-read-document-${item.workItemId}`}
-                        onClick={() => setPaperOpen(true)}
+                        onClick={() =>
+                            setPaper({
+                                kind: currentPaperKind,
+                                objectId: item.businessObjectId,
+                                title: item.stableNumber,
+                            })
+                        }
                     >
                         <FileTextIcon aria-hidden="true" />
                     </IconActionButton>
@@ -238,7 +262,21 @@ export function WorkspaceTaskDetail({
 
                     {documentFields.length > 0 ? (
                         <DetailBlock title="单据信息">
-                            <FieldGrid sections={documentFields} />
+                            <FieldGrid
+                                sections={documentFields}
+                                returnTo={returnTo}
+                                onPreview={(section) => {
+                                    const kind = linkedDocumentPaperKind(
+                                        section.label,
+                                    )
+                                    if (!kind || !section.objectId) return
+                                    setPaper({
+                                        kind,
+                                        objectId: section.objectId,
+                                        title: `${section.label} ${section.value}`,
+                                    })
+                                }}
+                            />
                         </DetailBlock>
                     ) : null}
 
@@ -313,13 +351,13 @@ export function WorkspaceTaskDetail({
                     ) : null}
                 </div>
             ) : null}
-            {canReadPaper ? (
-                <WorkspaceDocumentPaperDialog
-                    item={item}
-                    open={paperOpen}
-                    onOpenChange={setPaperOpen}
-                />
-            ) : null}
+            <WorkspaceDocumentPaperDialog
+                target={paper}
+                open={Boolean(paper)}
+                onOpenChange={(open) => {
+                    if (!open) setPaper(null)
+                }}
+            />
         </section>
     )
 }
@@ -395,12 +433,16 @@ function DetailBlock({
     )
 }
 
-/** 单据字段两列键值表。 */
+/** 单据字段两列键值表。关联单据可预览或跳转。 */
 function FieldGrid({
     sections,
+    returnTo,
+    onPreview,
     className,
 }: {
     sections: readonly DetailSection[]
+    returnTo: string
+    onPreview: (section: DetailSection) => void
     className?: string
 }) {
     return (
@@ -412,10 +454,68 @@ function FieldGrid({
                         className={cn(section.numeric && "num")}
                         title={section.value}
                     >
-                        {section.value}
+                        {section.objectId ? (
+                            <LinkedDocumentValue
+                                section={section}
+                                returnTo={returnTo}
+                                onPreview={onPreview}
+                            />
+                        ) : (
+                            section.value
+                        )}
                     </DescriptionDetails>
                 </DescriptionItem>
             ))}
         </DescriptionList>
+    )
+}
+
+function LinkedDocumentValue({
+    section,
+    returnTo,
+    onPreview,
+}: {
+    section: DetailSection
+    returnTo: string
+    onPreview: (section: DetailSection) => void
+}) {
+    const objectId = section.objectId?.trim()
+    if (!objectId) return section.value
+    const href = linkedDocumentHref(section.label, objectId, returnTo)
+    const canPreview = Boolean(linkedDocumentPaperKind(section.label))
+    if (!href && !canPreview) return section.value
+    return (
+        <span className="inline-flex min-w-0 items-center gap-1">
+            {canPreview ? (
+                <button
+                    type="button"
+                    className="num min-w-0 truncate text-left text-primary underline-offset-2 hover:underline"
+                    aria-label={`预览${section.label} ${section.value}`}
+                    data-testid={`source-document-preview-${objectId}`}
+                    onClick={() => onPreview(section)}
+                >
+                    {section.value}
+                </button>
+            ) : href ? (
+                <a
+                    href={href}
+                    className="num min-w-0 truncate text-primary underline-offset-2 hover:underline"
+                    aria-label={`打开${section.label} ${section.value}`}
+                >
+                    {section.value}
+                </a>
+            ) : (
+                section.value
+            )}
+            {href ? (
+                <IconActionButton
+                    label={`打开${section.label}`}
+                    testId={`source-document-open-${objectId}`}
+                    href={href}
+                >
+                    <ArrowUpRightIcon aria-hidden="true" />
+                </IconActionButton>
+            ) : null}
+        </span>
     )
 }

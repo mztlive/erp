@@ -77,6 +77,20 @@ export const purchaseOrderApprovalPhase = (
         : "draft"
 
 /**
+ * 采购单审批是否仍在途。已通过/已撤回不得再占「进行中」。
+ *
+ * @param order 采购单中心视图的身份与审批投影。
+ */
+export const isPurchaseOrderApprovalInProgress = (order: {
+    identity: { status: string }
+    approval?: { allowedActions?: readonly string[] } | null
+}): boolean => {
+    if (order.identity.status === "PENDING_REVIEW") return true
+    const actions = order.approval?.allowedActions ?? []
+    return actions.includes("CANCEL") || actions.includes("CANCEL_APPROVAL")
+}
+
+/**
  * 合并采购单与当前任务的服务端动作白名单。只做并集过滤，不补默认动作。
  *
  * @param documentActions 单据 `allowed_actions`。

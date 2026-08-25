@@ -10,6 +10,8 @@ export type DetailSection = Readonly<{
     label: string
     value: string
     numeric?: boolean
+    /** 可预览或跳转的关联单据稳定身份。 */
+    objectId?: string
 }>
 
 /** 抽到金额条的段，并按此顺序上屏；第一项作为主金额放大。 */
@@ -27,6 +29,7 @@ const COUNTERPARTY_LABELS = new Set(["客户", "供应商", "往来方"])
 const KEY_LABELS = new Set([
     "业务性质",
     "付款条件",
+    "来源销售单",
     "提交来源",
     "到账日",
     "银行流水",

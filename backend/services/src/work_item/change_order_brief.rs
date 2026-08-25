@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use database::{Executor, PurchaseOrderExt, SalesOrderExt, SalesReviewExt};
 
-use super::brief::{join_list_summary, non_empty, push_section, ObjectBriefSource};
+use super::brief::{join_list_summary, non_empty, push_document_section, push_section, ObjectBriefSource};
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
 use crate::errors::Result;
 
@@ -65,7 +65,13 @@ impl WorkItemService {
             );
             fact.impact_summary = Some("不审批则销售变更不能生效".to_string());
             let mut sections = Vec::new();
-            push_section(&mut sections, "来源销售单", sales_no.as_deref(), false);
+            let sales_order_id = change.sales_order_id.to_string();
+            push_document_section(
+                &mut sections,
+                "来源销售单",
+                sales_no.as_deref(),
+                Some(sales_order_id.as_str()),
+            );
             push_section(&mut sections, "变更类型", Some(change.change_type.label()), false);
             push_section(&mut sections, "原因", non_empty(&change.reason).as_deref(), false);
             fact.brief_source = Some(ObjectBriefSource {

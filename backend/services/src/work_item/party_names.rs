@@ -246,6 +246,7 @@ mod tests {
             label: label.to_string(),
             value: value.to_string(),
             numeric: None,
+            object_id: None,
         }
     }
 

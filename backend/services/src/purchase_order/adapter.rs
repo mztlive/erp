@@ -4,6 +4,7 @@
 //! 领域动作只通过实体状态邻接与仓储更新，不得 `$set` 绕过不变式。
 //! `PurchaseReviewStatus` 与待财务审核不得充当流程节点。
 
+use bpm::engine::DefinitionGraph;
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -18,7 +19,7 @@ use entities::sales_order::SalesOrder;
 
 use super::dto::{
     DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
-    DocumentApprovalView,
+    DocumentApprovalNodeView, DocumentApprovalView,
 };
 use crate::approval::business_adapter::{
     adapter_spec_of, ensure_adapter_spec_complete, subject_ref_for, AdapterReadScope, ApprovalAdapterSpec,
@@ -395,13 +396,38 @@ pub fn document_approval_view(
     instance: Option<DocumentApprovalInstanceView>,
     status: PurchaseOrderStatus,
 ) -> DocumentApprovalView {
+    document_approval_view_with_definition(binding, None, instance, status)
+}
+
+/// 由绑定、定义图与可选实例构造只读审批结构。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `graph` - 绑定对应的定义图；缺省时只保留绑定 id 与版本
+/// * `instance` - 已启动时的实例摘要
+/// * `status` - 当前业务状态
+///
+/// # 返回
+/// 返回含流程名与有序节点的只读审批结构。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 节点只投影名称与顺序，不展开审批人。
+pub fn document_approval_view_with_definition(
+    binding: Option<&ApprovalDefinitionBinding>,
+    graph: Option<&DefinitionGraph>,
+    instance: Option<DocumentApprovalInstanceView>,
+    status: PurchaseOrderStatus,
+) -> DocumentApprovalView {
     DocumentApprovalView {
         requirement: match ApprovalRequirement::ProcessRequired {
             ApprovalRequirement::ProcessRequired => "PROCESS_REQUIRED",
             ApprovalRequirement::NoApproval => "NO_APPROVAL",
         }
         .to_string(),
-        definition: binding.map(definition_view_from_binding),
+        definition: binding.map(|item| definition_view_from_binding(item, graph)),
         instance,
         recent_history: Vec::new(),
         history_page: DocumentApprovalHistoryPageView {
@@ -412,13 +438,33 @@ pub fn document_approval_view(
     }
 }
 
-/// 由冻结绑定投影定义摘要。节点详情不在单据详情展开。
-fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> DocumentApprovalDefinitionView {
+/// 由冻结绑定与可选定义图投影定义摘要。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `graph` - 绑定定义图；缺省时名称与节点为空
+///
+/// # 返回
+/// 返回定义 id、名称、版本与有序节点。
+fn definition_view_from_binding(
+    binding: &ApprovalDefinitionBinding,
+    graph: Option<&DefinitionGraph>,
+) -> DocumentApprovalDefinitionView {
+    let mut nodes = graph
+        .map(|item| item.nodes.iter().collect::<Vec<_>>())
+        .unwrap_or_default();
+    nodes.sort_by_key(|node| node.display_order);
     DocumentApprovalDefinitionView {
         id: binding.approval_process_definition_id.as_ref().to_string(),
-        name: String::new(),
+        name: graph.map(|item| item.definition.name.clone()).unwrap_or_default(),
         version: binding.approval_definition_version,
-        nodes: Vec::new(),
+        nodes: nodes
+            .into_iter()
+            .map(|node| DocumentApprovalNodeView {
+                key: node.node_key.clone(),
+                name: node.node_name.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -683,6 +729,8 @@ mod tests {
         let view = document_approval_view(Some(&binding), None, PurchaseOrderStatus::Draft);
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
+        assert!(view.definition.as_ref().unwrap().name.is_empty());
+        assert!(view.definition.as_ref().unwrap().nodes.is_empty());
         assert!(view.instance.is_none());
         assert!(view.recent_history.len() <= RECENT_HISTORY_LIMIT);
         assert_eq!(view.allowed_actions, vec!["SUBMIT".to_string()]);

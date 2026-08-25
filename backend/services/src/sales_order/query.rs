@@ -9,7 +9,8 @@ use database::{
 };
 use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
-    BusinessType, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy, WorkingPurpose,
+    BusinessType, ReviewStatus, SalesOrderRevision, SalesOrderRevisionLine, SalesOrderSubmissionLine,
+    SalesOrderWorkingCopy, WorkingPurpose,
 };
 use entities::Permission;
 use validator::Validate;
@@ -22,7 +23,7 @@ use super::dto::{
     SalesOrderLineView, SalesOrderListParams, SalesOrderView, SalesProcurementCoverageView, SubmissionView,
     WorkingCopyView,
 };
-use super::mapper::{submission_view, working_copy_line_view};
+use super::mapper::{revision_view, submission_view, working_copy_line_view};
 use super::pricing::zero_amount;
 use super::status::{
     compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id, stage_code_label_tone,
@@ -59,6 +60,64 @@ fn empty_sales_procurement_coverage() -> SalesProcurementCoverageView {
         remaining_quantity: entities::money::Quantity::from_str("0").expect("零数量合法"),
         progress: entities::money::Rate::from_str("0").expect("零进度合法"),
     }
+}
+
+/// 按销售版本 ID 分组公共行，并在组内按行号升序。
+///
+/// # 参数
+/// * `lines` - 一次批量查出的公共行版本
+///
+/// # 返回
+/// 返回以版本 ID 为键的行清单。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 组内必须按 `line_no` 升序，详情页明细顺序与落库行号一致。
+fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, Vec<SalesOrderRevisionLine>> {
+    let mut grouped: HashMap<String, Vec<SalesOrderRevisionLine>> = HashMap::new();
+    for line in lines {
+        grouped
+            .entry(line.sales_order_revision_id.to_string())
+            .or_default()
+            .push(line);
+    }
+    for group in grouped.values_mut() {
+        group.sort_by_key(|line| line.line_no);
+    }
+    grouped
+}
+
+/// 在本单版本列表内解析每个版本的前一版本号。
+///
+/// # 参数
+/// * `revisions` - 同一销售单的正式版本
+///
+/// # 返回
+/// 返回「当前版本 ID → 前一版本号」；找不到前一版本时不写入。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 只在本单已加载的版本列表内解析，不另查仓储。
+fn previous_revision_numbers(revisions: &[SalesOrderRevision]) -> HashMap<String, u32> {
+    let by_id: HashMap<&str, u32> = revisions
+        .iter()
+        .map(|row| (row.base.id.as_str(), row.revision.revision_no))
+        .collect();
+    let mut out = HashMap::new();
+    for row in revisions {
+        let Some(previous_id) = row.previous_revision_id.as_ref() else {
+            continue;
+        };
+        let Some(previous_no) = by_id.get(previous_id.as_ref()) else {
+            continue;
+        };
+        out.insert(row.base.id.clone(), *previous_no);
+    }
+    out
 }
 
 impl SalesOrderService {
@@ -257,11 +316,7 @@ impl SalesOrderService {
             })
             .collect();
 
-        let revisions = self
-            .db
-            .sales_order_revisions()
-            .list_by_order(&order_id, &mut NoTransaction)
-            .await?;
+        let revisions = self.load_revision_views(&order_id).await?;
 
         let owner_user_id = detail_owner_user_id(
             working_copy_view
@@ -412,20 +467,7 @@ impl SalesOrderService {
                 .collect(),
             working_copy: working_copy_view,
             submissions: submission_views,
-            revisions: revisions
-                .into_iter()
-                .map(|revision| RevisionView {
-                    id: revision.base.id,
-                    revision_no: revision.revision.revision_no,
-                    revision_source: revision.revision_source,
-                    content_hash: revision.content_hash,
-                    gross_amount: revision.gross_amount,
-                    net_amount: revision.net_amount,
-                    tax_amount: revision.tax_amount,
-                    effective_at: revision.effective_at.unix_secs() as u64,
-                    created_at: revision.base.created_at,
-                })
-                .collect(),
+            revisions,
             stage: dto::SalesOrderStageSummary {
                 code: stage_code,
                 label: stage_label,
@@ -441,6 +483,46 @@ impl SalesOrderService {
             active_card_sales_approval,
             approval,
         })
+    }
+
+    /// 组装销售单正式版本历史视图（含当时表头快照与明细摘要）。
+    ///
+    /// # 参数
+    /// * `order_id` - 稳定销售单
+    ///
+    /// # 返回
+    /// 返回按版本号倒序的版本视图。
+    ///
+    /// # 错误
+    /// * `RepositoryError` - 查询正式版本或版本行失败
+    ///
+    /// # 关键业务约束
+    /// 版本行按版本 ID 一次批量取出，禁止按版本循环查询。
+    async fn load_revision_views(&self, order_id: &SalesOrderId) -> Result<Vec<RevisionView>> {
+        let revisions = self
+            .db
+            .sales_order_revisions()
+            .list_by_order(order_id, &mut NoTransaction)
+            .await?;
+        let revision_ids = revisions
+            .iter()
+            .map(|row| SalesOrderRevisionId::new(row.base.id.clone()))
+            .collect::<Vec<_>>();
+        let lines = self
+            .db
+            .sales_order_revision_lines()
+            .list_lines_by_revisions(&revision_ids, &mut NoTransaction)
+            .await?;
+        let mut lines_by_revision = group_revision_lines(lines);
+        let previous_nos = previous_revision_numbers(&revisions);
+        Ok(revisions
+            .into_iter()
+            .map(|revision| {
+                let lines = lines_by_revision.remove(&revision.base.id).unwrap_or_default();
+                let previous_revision_no = previous_nos.get(&revision.base.id).copied();
+                revision_view(revision, lines, previous_revision_no)
+            })
+            .collect())
     }
 
     /// 计算当前账号从销售单继续创建采购单的访问投影。

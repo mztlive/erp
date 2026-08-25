@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     acquireDraftEditToken,
+    cancelPurchaseOrderApproval,
     createPurchaseOrderFromBasis,
     createPurchaseOrdersFromSourcing,
     fetchCreationBases,
@@ -143,6 +144,19 @@ export function useSavePurchaseOrderDraftMutation() {
             if (result.status !== "succeeded") return
             await invalidatePurchaseOrderApprovalCaches(queryClient)
             void variables.purchaseOrderId
+        },
+    })
+}
+
+/**
+ * 撤回尚未最终通过的采购单审批。成功后刷新单据、审批与任务缓存。
+ */
+export function useCancelPurchaseOrderApprovalMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: cancelPurchaseOrderApproval,
+        onSuccess: async () => {
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })
 }

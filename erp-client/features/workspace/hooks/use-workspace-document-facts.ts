@@ -15,7 +15,7 @@ import type { WorkspaceWorkItem } from "@/features/workspace/types"
 export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
     const hasSummary = Boolean(
         (item.summarySections && item.summarySections.length > 0) ||
-            (item.briefLines && item.briefLines.length > 0),
+        (item.briefLines && item.briefLines.length > 0),
     )
     const enabled = shouldLoadDocumentFacts({
         businessObjectType: item.businessObjectType,

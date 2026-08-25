@@ -36,6 +36,8 @@ pub(crate) struct BriefSection {
     pub label: String,
     pub value: String,
     pub numeric: bool,
+    /// 可跳转关联单据的稳定身份；仅作路由键，不上屏。
+    pub object_id: Option<String>,
 }
 
 /// 组装后的事项简报。
@@ -124,7 +126,7 @@ fn has_section(sections: &[BriefSection], label: &str) -> bool {
     sections.iter().any(|section| section.label == label)
 }
 
-/// 向简报追加非空键值段。
+/// 向简报追加非空键值段。关联单据请用 [`push_document_section`]。
 ///
 /// # 参数
 /// * `sections` - 已组装的键值段
@@ -133,7 +135,7 @@ fn has_section(sections: &[BriefSection], label: &str) -> bool {
 /// * `numeric` - 是否按数字对齐
 ///
 /// # 返回
-/// 无。空值不上屏。
+/// 无。空值不上屏。本函数不写入跳转身份。
 ///
 /// # 错误
 /// 无。
@@ -150,6 +152,41 @@ pub(crate) fn push_section(
         label: label.to_string(),
         value: value.to_string(),
         numeric,
+        object_id: None,
+    });
+}
+
+/// 向简报追加可预览或跳转的关联单据段。
+///
+/// # 参数
+/// * `sections` - 已组装的键值段
+/// * `label` - 标签
+/// * `value` - 面向用户的单号
+/// * `object_id` - 关联单据稳定身份；空白不上屏为链接
+///
+/// # 返回
+/// 无。空值单号不上屏。
+///
+/// # 错误
+/// 无。
+pub(crate) fn push_document_section(
+    sections: &mut Vec<BriefSection>,
+    label: &str,
+    value: Option<&str>,
+    object_id: Option<&str>,
+) {
+    let Some(value) = value.map(str::trim).filter(|text| !text.is_empty()) else {
+        return;
+    };
+    let object_id = object_id
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string);
+    sections.push(BriefSection {
+        label: label.to_string(),
+        value: value.to_string(),
+        numeric: false,
+        object_id,
     });
 }
 
@@ -322,5 +359,27 @@ mod tests {
         );
         assert_eq!(non_empty("  ").as_deref(), None);
         assert_eq!(non_empty(" 客户 ").as_deref(), Some("客户"));
+    }
+
+    #[test]
+    fn document_section_keeps_routing_id_off_screen() {
+        let mut sections = Vec::new();
+        push_document_section(&mut sections, "来源销售单", Some("SO-1"), Some("so-1"));
+        assert_eq!(sections[0].label, "来源销售单");
+        assert_eq!(sections[0].value, "SO-1");
+        assert!(!sections[0].numeric);
+        assert_eq!(sections[0].object_id.as_deref(), Some("so-1"));
+    }
+
+    #[test]
+    fn document_section_skips_blank_number_and_blank_id() {
+        let mut skipped = Vec::new();
+        push_document_section(&mut skipped, "来源销售单", Some("  "), Some("so-1"));
+        assert!(skipped.is_empty());
+
+        let mut unlinked = Vec::new();
+        push_document_section(&mut unlinked, "来源销售单", Some("SO-1"), Some("  "));
+        assert_eq!(unlinked[0].value, "SO-1");
+        assert_eq!(unlinked[0].object_id, None);
     }
 }

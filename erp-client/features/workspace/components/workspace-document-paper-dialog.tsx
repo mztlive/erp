@@ -14,29 +14,30 @@ import { PurchaseOrderPaperDocument } from "@/features/purchase-orders/component
 import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
 import { SalesOrderPaperDocument } from "@/features/sales-orders/components/sales-order-paper-dialog"
 import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
-import {
-    workspacePaperKind,
-    type WorkspacePaperKind,
-} from "@/features/workspace/lib/paper-kind"
-import type { WorkspaceWorkItem } from "@/features/workspace/types"
+import { type WorkspacePaperKind } from "@/features/workspace/lib/paper-kind"
 import { XIcon } from "lucide-react"
 
+export type WorkspacePaperTarget = Readonly<{
+    kind: WorkspacePaperKind
+    objectId: string
+    title?: string
+}>
+
 type WorkspaceDocumentPaperDialogProps = {
-    item: WorkspaceWorkItem
+    target: WorkspacePaperTarget | null
     open: boolean
     onOpenChange: (open: boolean) => void
 }
 
 /**
  * 工作台纸质预览：透明浮层，点开后再拉该类型只读详情，不跳目标工作面。
+ * 当前任务单据和来源销售单共用同一套预览。
  */
 export function WorkspaceDocumentPaperDialog({
-    item,
+    target,
     open,
     onOpenChange,
 }: WorkspaceDocumentPaperDialogProps) {
-    const kind = workspacePaperKind(item.businessObjectType)
-
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -44,8 +45,8 @@ export function WorkspaceDocumentPaperDialog({
                 className="flex max-h-[min(96vh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-5xl dark:ring-0"
             >
                 <DialogTitle className="sr-only">
-                    {item.stableNumber
-                        ? `${item.stableNumber} 纸质预览`
+                    {target?.title
+                        ? `${target.title} 纸质预览`
                         : "单据纸质预览"}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
@@ -69,10 +70,10 @@ export function WorkspaceDocumentPaperDialog({
                     </DialogClose>
 
                     <div className="max-h-[min(96vh,56rem)] overflow-y-auto overscroll-contain">
-                        {kind ? (
+                        {target ? (
                             <WorkspacePaperBody
-                                kind={kind}
-                                objectId={item.businessObjectId}
+                                kind={target.kind}
+                                objectId={target.objectId}
                                 enabled={open}
                             />
                         ) : null}
