@@ -26,8 +26,8 @@ use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 
 use super::dto::{
-    DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
-    DocumentApprovalView,
+    DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView, DocumentApprovalHistoryPageView,
+    DocumentApprovalInstanceView, DocumentApprovalView,
 };
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
@@ -594,10 +594,50 @@ fn sum_line_quantity(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> {
 /// * `review` - 当前审核轨
 ///
 /// # 返回
-/// 返回有界只读审批结构。
+/// 返回有界只读审批结构，历史为空。
+#[cfg(test)]
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
+    commercial: CommercialStatus,
+    review: ReviewStatus,
+) -> DocumentApprovalView {
+    document_approval_view_with_history(
+        binding,
+        instance,
+        Vec::new(),
+        DocumentApprovalHistoryPageView {
+            next_cursor: None,
+            has_more: false,
+        },
+        commercial,
+        review,
+    )
+}
+
+/// 由绑定、运行实例与有界历史构造只读审批结构。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定
+/// * `instance` - 已启动时的实例摘要
+/// * `recent_history` - 有界最近历史，调用方负责截断
+/// * `history_page` - 完整历史分页游标
+/// * `commercial` - 当前商业主状态
+/// * `review` - 当前审核轨
+///
+/// # 返回
+/// 返回有界只读审批结构。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// `recent_history` 不得超过 [`RECENT_HISTORY_LIMIT`]；超出部分走分页端点。
+pub fn document_approval_view_with_history(
+    binding: Option<&ApprovalDefinitionBinding>,
+    instance: Option<DocumentApprovalInstanceView>,
+    recent_history: Vec<DocumentApprovalHistoryItemView>,
+    history_page: DocumentApprovalHistoryPageView,
     commercial: CommercialStatus,
     review: ReviewStatus,
 ) -> DocumentApprovalView {
@@ -609,11 +649,8 @@ pub fn document_approval_view(
         .to_string(),
         definition: binding.map(definition_view_from_binding),
         instance,
-        recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
+        recent_history,
+        history_page,
         allowed_actions: allowed_document_actions(commercial, review),
     }
 }
@@ -958,6 +995,43 @@ mod tests {
             ReviewStatus::InApproval,
         );
         assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
+        let with_history = document_approval_view_with_history(
+            Some(&binding),
+            Some(DocumentApprovalInstanceView {
+                id: "inst-1".into(),
+                status: "RUNNING".into(),
+                current_round_no: 1,
+                current_node: Some("procurement_confirm".into()),
+                current_node_name: Some("采购确认".into()),
+                current_assignee: Some("u1".into()),
+                current_assignee_name: Some("李思勇".into()),
+                latest_rejection: None,
+                process_version: Some(2),
+                blocker_code: None,
+            }),
+            vec![DocumentApprovalHistoryItemView {
+                execution_id: "exec-1".into(),
+                round_no: 1,
+                execution_no: 1,
+                node_key: "procurement_confirm".into(),
+                node_name: "采购确认".into(),
+                result: "ACTIVE".into(),
+                assignee_name: Some("李思勇".into()),
+                decided_by: None,
+                decision_reason: None,
+                decided_at: None,
+            }],
+            DocumentApprovalHistoryPageView {
+                next_cursor: None,
+                has_more: false,
+            },
+            CommercialStatus::PendingReview,
+            ReviewStatus::InApproval,
+        );
+        assert_eq!(with_history.instance.as_ref().unwrap().id, "inst-1");
+        assert_eq!(with_history.recent_history.len(), 1);
+        assert_eq!(with_history.recent_history[0].node_name, "采购确认");
+        assert!(with_history.recent_history.len() <= RECENT_HISTORY_LIMIT);
     }
 
     /// 对象读取权空组织或空审批人失败关闭。

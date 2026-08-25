@@ -153,11 +153,14 @@ pub async fn instance_history(
     let limit = query
         .normalized_limit()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    let items = runtime_service(&state)
-        .instance_history(&actor, &id, limit)
+    let after_execution_no = query
+        .normalized_cursor()
+        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
+    let page = runtime_service(&state)
+        .instance_history(&actor, &id, after_execution_no, limit)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
-    ok_json(items)
+    ok_json(page)
 }
 
 #[permission_macros::permission(

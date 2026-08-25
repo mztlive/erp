@@ -15,7 +15,8 @@ use entities::sales_order::{
 use entities::Permission;
 use validator::Validate;
 
-use super::adapter::{document_approval_view, document_type_for_sales_create};
+use super::adapter::document_type_for_sales_create;
+use super::approval_query::load_document_approval;
 use super::dto;
 use super::dto::{
     ActiveCardSalesApprovalView, PageView, PurchaseCreationAccessView, RevisionView, SalesOrderDetailView,
@@ -385,12 +386,17 @@ impl SalesOrderService {
             .await
             .ok()
             .flatten();
-        let approval = Some(document_approval_view(
-            binding.as_ref(),
-            None,
-            order.commercial_status,
-            order.review_status,
-        ));
+        let approval = Some(
+            load_document_approval(
+                &self.db,
+                order.business_type,
+                id,
+                binding.as_ref(),
+                order.commercial_status,
+                order.review_status,
+            )
+            .await?,
+        );
 
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),

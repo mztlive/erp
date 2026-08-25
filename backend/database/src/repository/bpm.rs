@@ -383,6 +383,36 @@ impl<'a> BpmWorkflowRepository<'a> {
             .await
     }
 
+    /// 按主体读取最近一条审批实例，含已终态，供单据详情投影。
+    ///
+    /// 命中 `idx_approval_process_instances_subject_history`。撤回等命令仍应使用
+    /// `find_non_terminal_by_subject`，不得用本方法替代状态校验。
+    ///
+    /// # 参数
+    /// * `subject` - 业务对象引用
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 按 `started_at desc, id desc` 的最新实例；没有时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_latest_by_subject(
+        &self,
+        subject: &SubjectRef,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalProcessInstance>> {
+        let mut rows = find_limited(
+            &self.db.collection(INSTANCES),
+            latest_subject_filter(subject),
+            doc! { "started_at": -1, "id": -1 },
+            1,
+            executor,
+        )
+        .await?;
+        Ok(rows.pop())
+    }
+
     /// 查询实例当前 `ACTIVE|BLOCKED` 执行。
     ///
     /// # 错误
@@ -866,6 +896,24 @@ fn non_terminal_subject_filter(subject: &SubjectRef, subject_version: u32) -> Do
     }
 }
 
+/// 构造按主体读取历史实例的过滤条件，不含状态限制。
+///
+/// # 参数
+/// * `subject` - 业务对象引用
+///
+/// # 返回
+/// 返回含主体键与软删除约束的查询文档。
+///
+/// # 错误
+/// 无。
+fn latest_subject_filter(subject: &SubjectRef) -> Document {
+    doc! {
+        "subject.subject_kind": subject.subject_kind(),
+        "subject.subject_id": subject.subject_id(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
 fn current_execution_filter(instance_id: &ApprovalProcessInstanceId) -> Document {
     doc! {
         "process_instance_id": instance_id.as_ref(),
@@ -1160,8 +1208,8 @@ mod tests {
         classify_cas_miss, current_execution_filter, definition_child_filter,
         definition_graph_transition_limit, execution_end_filter, execution_history_filter,
         execution_history_limit, instance_advance_filter, instance_insert_document, instance_list_filter_doc,
-        instance_list_scope_empty, instance_list_sort, instance_summary_projection, merge_documents,
-        non_terminal_subject_filter, receipt_key_filter, ApprovalInstanceListCursor,
+        instance_list_scope_empty, instance_list_sort, instance_summary_projection, latest_subject_filter,
+        merge_documents, non_terminal_subject_filter, receipt_key_filter, ApprovalInstanceListCursor,
         ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
         AssignDocumentNoOutcome, CasWriteOutcome, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY,
         MAX_INSTANCE_PAGE,
@@ -1210,6 +1258,18 @@ mod tests {
             filter.get_document("status").unwrap(),
             &doc! { "$in": ["RUNNING", "BLOCKED"] }
         );
+    }
+
+    /// 详情投影按主体查最近实例，不得附带状态或提交版本。
+    #[test]
+    fn latest_subject_filter_omits_status_and_version() {
+        let subject = SubjectRef::new("sales_order", "so-1").unwrap();
+        let filter = latest_subject_filter(&subject);
+        assert!(!filter.contains_key("status"));
+        assert!(!filter.contains_key("subject_version"));
+        assert_eq!(filter.get_str("subject.subject_kind").unwrap(), "sales_order");
+        assert_eq!(filter.get_str("subject.subject_id").unwrap(), "so-1");
+        assert!(filter.contains_key("deleted_at"));
     }
 
     #[test]

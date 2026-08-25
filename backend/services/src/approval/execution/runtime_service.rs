@@ -27,6 +27,7 @@ use super::apply_plan::PlannedWrites;
 use super::authorization::{converge_eligibility, AuthorizationFailure};
 use super::decision::prepare_decision;
 use super::idempotency::normalize_idempotency_key;
+use super::runtime_history::{history_item_from_execution, history_page_from, RuntimeHistoryPage};
 use super::runtime_query::{
     ensure_list_view_status, recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
     RuntimeRecoveryAction,
@@ -206,39 +207,35 @@ impl ApprovalRuntimeService {
     /// # 参数
     /// * `actor` - 操作人
     /// * `instance_id` - 实例 ID
+    /// * `after_execution_no` - 上一页最后执行序号；首页为空
     /// * `limit` - 页大小
     ///
+    /// # 返回
+    /// 返回按 `execution_no` 升序的历史页，字段对齐审批 Tab。
+    ///
     /// # 错误
-    /// 仓储失败或不存在时返回错误。
+    /// 仓储失败时返回错误。
     pub async fn instance_history(
         &self,
         actor: &AuditActor,
         instance_id: &str,
+        after_execution_no: Option<u32>,
         limit: u32,
-    ) -> Result<Vec<RuntimeInstanceListItem>> {
-        let _ = (actor, limit);
+    ) -> Result<RuntimeHistoryPage> {
+        let _ = actor;
+        let fetch_limit = limit.saturating_add(1);
         let rows = self
             .db
             .bpm_workflow()
             .list_execution_history(
                 &bpm::ids::ApprovalProcessInstanceId::new(instance_id),
-                None,
-                limit,
+                after_execution_no,
+                fetch_limit,
                 &mut NoTransaction,
             )
             .await?;
-        Ok(rows
-            .into_iter()
-            .map(|execution| RuntimeInstanceListItem {
-                instance_id: instance_id.to_string(),
-                status: execution.status.as_str().to_string(),
-                current_round_no: execution.round_no,
-                current_node_key: Some(execution.node_key),
-                current_node_name: Some(execution.node_name),
-                current_assignee_participant_id: Some(execution.assignee_participant_id.as_str().to_string()),
-                document_id: None,
-            })
-            .collect())
+        let items = rows.iter().map(history_item_from_execution).collect();
+        Ok(history_page_from(items, limit))
     }
 
     /// 返回当前 blocker 的唯一合法恢复动作。

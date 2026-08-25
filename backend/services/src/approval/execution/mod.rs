@@ -13,6 +13,7 @@ pub mod notification_worker;
 pub mod observability;
 pub mod reassign;
 pub mod resume;
+pub mod runtime_history;
 pub mod runtime_query;
 pub mod runtime_service;
 pub mod start;
@@ -31,6 +32,10 @@ pub use decision::{prepare_decision, DecisionExecutionInput};
 pub use notification_worker::ApprovalNotificationOutboxPort;
 pub use reassign::{prepare_reassign, ReassignExecutionInput};
 pub use resume::{prepare_resume, ResumeExecutionInput};
+pub use runtime_history::{
+    history_item_from_execution, history_page_from, latest_rejection_reason, RuntimeHistoryItem,
+    RuntimeHistoryPage,
+};
 pub use runtime_query::{
     ensure_list_view_status, recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
     RuntimeRecoveryAction,

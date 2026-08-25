@@ -177,13 +177,20 @@ type ApprovalInstanceListItem = {
     document_id?: string | null
 }
 
-/** /admin/approval-instances/{id}/history 返回的执行行（后端实际形状）。 */
+/** /admin/approval-instances/{id}/history 返回的执行行。 */
 type ApprovalHistoryExecution = {
-    instance_id: string
-    status: string
-    current_round_no: number
-    current_node_key?: string | null
-    current_node_name?: string | null
+    execution_id: string
+    round_no: number
+    execution_no: number
+    node_key: string
+    node_name?: string | null
+    result: string
+}
+
+type ApprovalHistoryPage = {
+    items: ApprovalHistoryExecution[]
+    next_cursor?: string | null
+    has_more?: boolean
 }
 
 type BackendSalesOrderDetail = {
@@ -449,10 +456,17 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
             .first()
             .innerText()
         expect(linesAfterReject).toBe(order1LinesBeforeReject)
-        // 审批区入口存在（CANCEL 动作来自单据层；弹窗依赖 instance 恒为 null，见 doc_mismatches）
+        // 审批区入口存在；详情应投影运行实例，审批 Tab 不得再是空状态。
         await expect(
             salesPage.getByRole("button", { name: "撤回审批" }).first(),
         ).toBeVisible({ timeout: 20_000 })
+        await salesPage.getByRole("tab", { name: "审批" }).click()
+        await expect(salesPage.getByText("当前没有可展示的审批进度")).toHaveCount(0)
+        await expect(salesPage.getByText("暂无审批记录")).toHaveCount(0)
+        await expect(salesPage.getByText("采购确认").first()).toBeVisible({
+            timeout: 20_000,
+        })
+        await expect(salesPage.getByText("已驳回").first()).toBeVisible()
 
         // ---------- 审批轮次 +1 且回到首节点（审批实例 API 佐证） ----------
         // 驳回后进入第 2 轮、节点回到「采购确认」。
@@ -464,24 +478,24 @@ test.describe("[flow-05] 审批驳回与三条出路", () => {
         expect(inst.current_node_name).toBe("采购确认")
 
         // 执行历史：第 1 轮 REJECTED、第 2 轮 ACTIVE
-        const history = await api<ApprovalHistoryExecution[]>(
+        const history = await api<ApprovalHistoryPage>(
             request,
             "GET",
             `/admin/approval-instances/${inst.instance_id}/history`,
             { token: salesToken },
         )
         expect(
-            history.some(
-                (item) => item.current_round_no === 1 && item.status === "REJECTED",
+            history.items.some(
+                (item) => item.round_no === 1 && item.result === "REJECTED",
             ),
             "历史应含第 1 轮 REJECTED 执行",
         ).toBe(true)
         expect(
-            history.some(
+            history.items.some(
                 (item) =>
-                    item.current_round_no === 2 &&
-                    item.status === "ACTIVE" &&
-                    item.current_node_name === "采购确认",
+                    item.round_no === 2 &&
+                    item.result === "ACTIVE" &&
+                    item.node_name === "采购确认",
             ),
             "历史应含第 2 轮 ACTIVE 首节点执行",
         ).toBe(true)

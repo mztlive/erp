@@ -196,6 +196,30 @@ impl InstanceHistoryQuery {
         }
         Err(format!("limit 必须在 1 到 {MAX_HISTORY_LIMIT} 之间"))
     }
+
+    /// 将游标解析为上一页最后一条执行序号。
+    ///
+    /// # 参数
+    /// 无；读取 `cursor` 字段。
+    ///
+    /// # 返回
+    /// 首页返回 `None`；后续页返回上一页 `execution_no`。
+    ///
+    /// # 错误
+    /// 非空但不是无符号整数时返回说明。
+    pub fn normalized_cursor(&self) -> Result<Option<u32>, String> {
+        let Some(raw) = self
+            .cursor
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(None);
+        };
+        raw.parse::<u32>()
+            .map(Some)
+            .map_err(|_| "cursor 必须是执行序号".to_string())
+    }
 }
 
 /// 决定 HTTP 请求。
@@ -308,8 +332,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        CancelBlockedHttpRequest, InstanceListCursor, InstanceListQuery, InstanceListView,
-        InstanceStatusFilter, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
+        CancelBlockedHttpRequest, InstanceHistoryQuery, InstanceListCursor, InstanceListQuery,
+        InstanceListView, InstanceStatusFilter, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
         UpgradeBindingHttpRequest, DETAIL_HISTORY_LIMIT,
     };
 
@@ -413,5 +437,30 @@ mod tests {
         let decoded = InstanceListCursor::decode(&encoded, InstanceListView::Mine).expect("同 view");
         assert_eq!(decoded.sort_id, "wi-1");
         assert_eq!(DETAIL_HISTORY_LIMIT, 20);
+    }
+
+    /// 历史游标只接受执行序号。
+    #[test]
+    fn history_cursor_parses_execution_no() {
+        let empty = InstanceHistoryQuery {
+            cursor: None,
+            limit: None,
+        };
+        assert_eq!(empty.normalized_cursor().expect("首页"), None);
+        let blank = InstanceHistoryQuery {
+            cursor: Some("  ".into()),
+            limit: None,
+        };
+        assert_eq!(blank.normalized_cursor().expect("空白等同首页"), None);
+        let ok = InstanceHistoryQuery {
+            cursor: Some("8".into()),
+            limit: Some(50),
+        };
+        assert_eq!(ok.normalized_cursor().expect("合法序号"), Some(8));
+        let bad = InstanceHistoryQuery {
+            cursor: Some("round-1".into()),
+            limit: None,
+        };
+        assert!(bad.normalized_cursor().is_err());
     }
 }

@@ -2,7 +2,22 @@
  * 审批区用户可见文案。枚举必须映射中文，内部 ID 不得上屏。
  */
 
+import { formatDateTime } from "@/lib/datetime"
+
 import type { ApprovalAllowedAction, RecoveryOption } from "./types"
+
+/** 与 `StatusBadge` tone 对齐，审批状态同时用文字、图标和颜色。 */
+export type ApprovalStatusTone =
+    | "neutral"
+    | "info"
+    | "success"
+    | "warning"
+    | "destructive"
+    | "void"
+
+/** 32 位十六进制或标准 UUID。服务端人名偶尔回落成用户 id。 */
+const OPAQUE_ID =
+    /^(?:[0-9a-f]{24,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
 
 export const INSTANCE_STATUS_LABEL: Record<string, string> = {
     RUNNING: "审批中",
@@ -51,6 +66,71 @@ export const displayInstanceStatus = (status?: string | null): string =>
  */
 export const displayExecutionStatus = (status?: string | null): string =>
     EXECUTION_STATUS_LABEL[status ?? ""] ?? "办理中"
+
+/**
+ * 实例状态色调。未知码与「审批中」一致，按进行中处理。
+ */
+export const instanceStatusTone = (
+    status?: string | null,
+): ApprovalStatusTone => {
+    switch (status) {
+        case "APPROVED":
+            return "success"
+        case "CANCELLED":
+            return "void"
+        case "BLOCKED":
+            return "destructive"
+        case "RUNNING":
+            return "warning"
+        default:
+            return "warning"
+    }
+}
+
+/**
+ * 节点执行状态色调。未知码与「办理中」一致。
+ */
+export const executionStatusTone = (
+    status?: string | null,
+): ApprovalStatusTone => {
+    switch (status) {
+        case "APPROVED":
+            return "success"
+        case "REJECTED":
+        case "BLOCKED":
+            return "destructive"
+        case "CANCELLED":
+            return "void"
+        case "SUPERSEDED":
+            return "neutral"
+        case "ACTIVE":
+            return "info"
+        default:
+            return "info"
+    }
+}
+
+/**
+ * 人员展示名。空值或内部 ID 不上屏，由调用方回落到「—」或省略。
+ */
+export const displayActorName = (value?: string | null): string | undefined => {
+    const text = value?.trim()
+    if (!text || OPAQUE_ID.test(text)) return undefined
+    return text
+}
+
+/**
+ * Unix 秒时间戳转本地时间。无效值不上屏。
+ */
+export const displayUnixSeconds = (
+    secs?: number | null,
+): { dateTime: string; label: string } | undefined => {
+    if (secs == null || secs <= 0) return undefined
+    const dateTime = new Date(secs * 1000).toISOString()
+    const label = formatDateTime(dateTime, "full")
+    if (!label || label === "—") return undefined
+    return { dateTime, label }
+}
 
 /**
  * 当前轮次文案。

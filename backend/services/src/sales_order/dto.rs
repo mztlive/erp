@@ -930,10 +930,18 @@ pub struct DocumentApprovalInstanceView {
     pub current_round_no: u32,
     /// 当前节点键。
     pub current_node: Option<String>,
+    /// 当前节点名称。
+    pub current_node_name: Option<String>,
     /// 当前审批人。
     pub current_assignee: Option<String>,
+    /// 当前审批人显示名。
+    pub current_assignee_name: Option<String>,
     /// 最近驳回原因。
     pub latest_rejection: Option<String>,
+    /// 绑定定义业务版本。
+    pub process_version: Option<u32>,
+    /// 受阻代码；非 BLOCKED 为空。
+    pub blocker_code: Option<String>,
 }
 
 /// 有界历史项。
@@ -943,10 +951,22 @@ pub struct DocumentApprovalHistoryItemView {
     pub execution_id: String,
     /// 轮次。
     pub round_no: u32,
+    /// 实例内执行序号。
+    pub execution_no: u32,
     /// 节点键。
     pub node_key: String,
+    /// 节点名称。
+    pub node_name: String,
     /// 结束结果。
     pub result: String,
+    /// 审批人显示名。
+    pub assignee_name: Option<String>,
+    /// 决定人。
+    pub decided_by: Option<String>,
+    /// 决定原因。
+    pub decision_reason: Option<String>,
+    /// 决定时间（unix 秒）。
+    pub decided_at: Option<i64>,
 }
 
 /// 完整历史分页。

@@ -1,12 +1,61 @@
 "use client"
 
 import type * as React from "react"
+import {
+    BanIcon,
+    CircleAlertIcon,
+    CircleCheckIcon,
+    CircleDashedIcon,
+    CircleDotIcon,
+    type LucideIcon,
+    TriangleAlertIcon,
+    UserRoundIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import {
+    Timeline,
+    TimelineDescription,
+    TimelineHeader,
+    TimelineItem,
+    TimelineMarker,
+    TimelineTime,
+    TimelineTitle,
+} from "@/components/ui/timeline"
+import { cn } from "@/lib/utils"
 
-import { displayExecutionStatus, displayRound } from "../display"
+import {
+    displayActorName,
+    displayExecutionStatus,
+    displayRound,
+    displayUnixSeconds,
+    executionStatusTone,
+} from "../display"
 import type { ApprovalHistoryItem } from "../types"
+
+const TONE_ICON: Record<StatusTone, LucideIcon> = {
+    neutral: CircleDashedIcon,
+    info: CircleDotIcon,
+    success: CircleCheckIcon,
+    warning: CircleAlertIcon,
+    destructive: TriangleAlertIcon,
+    void: BanIcon,
+}
+
+const TONE_MARKER_CLASS: Record<StatusTone, string> = {
+    neutral:
+        "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
+    info: "border-info-border bg-info-soft text-info-soft-foreground",
+    success:
+        "border-success-border bg-success-soft text-success-soft-foreground",
+    warning:
+        "border-warning-border bg-warning-soft text-warning-soft-foreground",
+    destructive:
+        "border-destructive-border bg-destructive-soft text-destructive-soft-foreground",
+    void: "border-neutral-border bg-neutral-soft text-neutral-soft-foreground",
+}
 
 function HistoryHeading({
     compact,
@@ -19,6 +68,63 @@ function HistoryHeading({
         return <h2 className="text-sm font-medium">{children}</h2>
     }
     return <CardTitle>{children}</CardTitle>
+}
+
+function HistoryEntry({ item }: { item: ApprovalHistoryItem }) {
+    const tone = executionStatusTone(item.result)
+    const Icon = TONE_ICON[tone]
+    const actor =
+        displayActorName(item.decidedBy) ?? displayActorName(item.assigneeName)
+    const decidedAt = displayUnixSeconds(item.decidedAt)
+    const rejected = item.result === "REJECTED"
+    const current = item.result === "ACTIVE"
+
+    return (
+        <TimelineItem>
+            <TimelineMarker className={TONE_MARKER_CLASS[tone]}>
+                <Icon aria-hidden="true" />
+            </TimelineMarker>
+            <TimelineHeader>
+                <TimelineTitle className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span>{item.nodeName}</span>
+                    <StatusBadge
+                        tone={tone}
+                        label={displayExecutionStatus(item.result)}
+                    />
+                </TimelineTitle>
+                {decidedAt ? (
+                    <TimelineTime dateTime={decidedAt.dateTime}>
+                        {decidedAt.label}
+                    </TimelineTime>
+                ) : null}
+            </TimelineHeader>
+            <TimelineDescription>
+                {actor ? (
+                    <p className="inline-flex items-center gap-1.5">
+                        <UserRoundIcon
+                            aria-hidden="true"
+                            className="size-3.5 shrink-0"
+                        />
+                        <span>{actor}</span>
+                    </p>
+                ) : current ? (
+                    <p>等待办理</p>
+                ) : null}
+                {item.decisionReason ? (
+                    <p
+                        className={cn(
+                            "mt-2 rounded-lg px-2.5 py-1.5 text-sm",
+                            rejected
+                                ? "border border-destructive-border bg-destructive-soft text-destructive-soft-foreground"
+                                : "bg-muted text-foreground",
+                        )}
+                    >
+                        {item.decisionReason}
+                    </p>
+                ) : null}
+            </TimelineDescription>
+        </TimelineItem>
+    )
 }
 
 /**
@@ -44,47 +150,32 @@ export function ExecutionHistory({
     const rounds = groupByRound(items)
 
     return (
-        <Card size="sm">
-            <CardHeader>
+        <Card size="sm" className="border border-border shadow-sm">
+            <CardHeader className="border-b">
                 <HistoryHeading compact={compact}>审批历史</HistoryHeading>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="flex flex-col gap-5">
                 {rounds.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         暂无审批记录
                     </p>
                 ) : (
                     rounds.map((round) => (
-                        <section key={round.roundNo} className="space-y-2">
-                            <h3 className="text-sm font-medium">
+                        <section
+                            key={round.roundNo}
+                            className="flex flex-col gap-3"
+                        >
+                            <h3 className="text-xs font-medium tracking-wide text-muted-foreground">
                                 {displayRound(round.roundNo)}
                             </h3>
-                            <ol className="space-y-2">
+                            <Timeline>
                                 {round.items.map((item) => (
-                                    <li
+                                    <HistoryEntry
                                         key={item.executionId}
-                                        className="rounded-md border border-border px-3 py-2 text-sm"
-                                    >
-                                        <p>
-                                            {item.nodeName} ·{" "}
-                                            {displayExecutionStatus(
-                                                item.result,
-                                            )}
-                                        </p>
-                                        {item.assigneeName || item.decidedBy ? (
-                                            <p className="text-muted-foreground">
-                                                {item.decidedBy ??
-                                                    item.assigneeName}
-                                            </p>
-                                        ) : null}
-                                        {item.decisionReason ? (
-                                            <p className="text-muted-foreground">
-                                                {item.decisionReason}
-                                            </p>
-                                        ) : null}
-                                    </li>
+                                        item={item}
+                                    />
                                 ))}
-                            </ol>
+                            </Timeline>
                         </section>
                     ))
                 )}

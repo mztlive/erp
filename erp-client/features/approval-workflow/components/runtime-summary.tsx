@@ -4,12 +4,21 @@ import type * as React from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+    DescriptionDetails,
+    DescriptionItem,
+    DescriptionList,
+    DescriptionTerm,
+} from "@/components/ui/description-list"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
 import {
+    displayActorName,
     displayInstanceStatus,
     displayProcessVersion,
     displayRound,
+    instanceStatusTone,
     isBlockedStatus,
 } from "../display"
 import type { ApprovalRuntimeInstance } from "../types"
@@ -32,6 +41,25 @@ function SummaryHeading({
     return <CardTitle>{children}</CardTitle>
 }
 
+function SummaryFact({
+    label,
+    value,
+    emphasized,
+}: {
+    label: string
+    value: string
+    emphasized?: boolean
+}) {
+    return (
+        <DescriptionItem>
+            <DescriptionTerm>{label}</DescriptionTerm>
+            <DescriptionDetails className={cn(emphasized && "font-medium")}>
+                {value}
+            </DescriptionDetails>
+        </DescriptionItem>
+    )
+}
+
 export function RuntimeSummary({
     instance,
     className,
@@ -44,8 +72,11 @@ export function RuntimeSummary({
 }) {
     if (!instance) {
         return (
-            <Card size="sm" className={className}>
-                <CardHeader>
+            <Card
+                size="sm"
+                className={cn("border border-border shadow-sm", className)}
+            >
+                <CardHeader className="border-b">
                     <SummaryHeading compact={compact}>审批摘要</SummaryHeading>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
@@ -60,43 +91,57 @@ export function RuntimeSummary({
         name: instance.processName,
         version: instance.processVersion,
     })
+    const currentNode = instance.currentNodeName ?? instance.currentNode ?? "—"
+    const currentAssignee =
+        displayActorName(instance.currentAssigneeName) ??
+        displayActorName(instance.currentAssignee) ??
+        "—"
+    const rejectionBy = displayActorName(instance.latestRejectionBy)
 
     return (
         <Card
             size="sm"
             className={cn(
+                "border border-border shadow-sm",
+                blocked && "border-destructive-border bg-destructive/5",
                 className,
-                blocked && "border-destructive/40 bg-destructive/5",
             )}
             data-blocked={blocked ? "true" : "false"}
         >
-            <CardHeader>
-                <SummaryHeading compact={compact}>{processLabel}</SummaryHeading>
+            <CardHeader className="border-b">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <SummaryHeading compact={compact}>
+                        {processLabel}
+                    </SummaryHeading>
+                    <StatusBadge
+                        tone={instanceStatusTone(instance.status)}
+                        label={displayInstanceStatus(instance.status)}
+                    />
+                </div>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-                <p>审批状态：{displayInstanceStatus(instance.status)}</p>
-                <p>当前轮次：{displayRound(instance.currentRoundNo)}</p>
-                <p>
-                    当前节点：
-                    {instance.currentNodeName ?? instance.currentNode ?? "—"}
-                </p>
-                <p>
-                    当前审批人：
-                    {instance.currentAssigneeName ??
-                        instance.currentAssignee ??
-                        "—"}
-                </p>
+            <CardContent className="flex flex-col gap-4">
+                <DescriptionList columns="three">
+                    <SummaryFact
+                        label="当前审批人"
+                        value={currentAssignee}
+                        emphasized
+                    />
+                    <SummaryFact label="当前节点" value={currentNode} />
+                    <SummaryFact
+                        label="当前轮次"
+                        value={displayRound(instance.currentRoundNo)}
+                    />
+                </DescriptionList>
                 {instance.latestRejection ? (
-                    <p>
-                        最近驳回：
-                        {instance.latestRejectionBy
-                            ? `${instance.latestRejectionBy} / `
-                            : ""}
-                        {instance.latestRejection}
-                    </p>
-                ) : (
-                    <p>最近驳回：无</p>
-                )}
+                    <Alert variant="destructive">
+                        <AlertTitle>
+                            最近驳回{rejectionBy ? ` · ${rejectionBy}` : ""}
+                        </AlertTitle>
+                        <AlertDescription>
+                            {instance.latestRejection}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 {blocked ? (
                     <Alert variant="destructive">
                         <AlertTitle>审批受阻</AlertTitle>

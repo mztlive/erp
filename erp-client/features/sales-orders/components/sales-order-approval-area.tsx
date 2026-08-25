@@ -84,7 +84,7 @@ export function SalesOrderApprovalArea({
     }
 
     return (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-4">
             <RuntimeSummary instance={approval?.instance} compact />
             <ExecutionHistory
                 items={historyItems}
