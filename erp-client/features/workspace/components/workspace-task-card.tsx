@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils"
 import { splitDetailSections } from "../lib/detail-facts"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 
 /**
- * 工作台队列行。两行账本扫读：单号与金额，类型、往来方与截止。
+ * 工作台队列行。两行账本扫读：单据徽章与单号、金额；往来方与截止。
  */
 export function WorkspaceTaskCard({
     item,
@@ -26,6 +27,7 @@ export function WorkspaceTaskCard({
         item.counterpartyName,
     ).amounts[0]
     const number = stripTypePrefix(item.stableNumber, item.workItemTypeLabel)
+    const dueOrStatus = blocked || overdue || Boolean(item.dueAt)
 
     return (
         <button
@@ -44,29 +46,33 @@ export function WorkspaceTaskCard({
                 selected ? "bg-muted" : "hover:bg-muted/60",
             )}
         >
-            <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate font-medium">{number}</span>
+            <div className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-1.5">
+                    <WorkspaceDocumentBadge item={item} decorative />
+                    <span className="min-w-0 truncate font-medium">
+                        {number}
+                    </span>
+                </span>
                 {amount ? (
                     <span className="num shrink-0 text-sm">{amount.value}</span>
                 ) : null}
             </div>
-            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span className="min-w-0 truncate">
-                    {item.workItemTypeLabel}
-                    {item.counterpartyName
-                        ? ` · ${item.counterpartyName}`
-                        : ""}
-                </span>
-                {blocked ? (
-                    <StatusBadge label="受阻" tone="warning" />
-                ) : overdue ? (
-                    <StatusBadge label="已超期" tone="destructive" />
-                ) : item.dueAt ? (
-                    <span className="shrink-0">
-                        <time dateTime={item.dueAt}>{item.dueAtLabel}</time>
+            {item.counterpartyName || dueOrStatus ? (
+                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span className="min-w-0 truncate">
+                        {item.counterpartyName ?? ""}
                     </span>
-                ) : null}
-            </div>
+                    {blocked ? (
+                        <StatusBadge label="受阻" tone="warning" />
+                    ) : overdue ? (
+                        <StatusBadge label="已超期" tone="destructive" />
+                    ) : item.dueAt ? (
+                        <span className="shrink-0">
+                            <time dateTime={item.dueAt}>{item.dueAtLabel}</time>
+                        </span>
+                    ) : null}
+                </div>
+            ) : null}
         </button>
     )
 }

@@ -24,6 +24,7 @@ import { type DetailSection, splitDetailSections } from "../lib/detail-facts"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 
 /**
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
@@ -119,13 +120,8 @@ export function WorkspaceTaskDetail({
             <div className="min-h-0 flex-1 overflow-auto">
                 <div className="flex w-full flex-col">
                     <header className="flex flex-col gap-2 border-b border-grid py-5">
-                        <p className="text-xs text-muted-foreground">
-                            {item.workItemTypeLabel}
-                        </p>
                         <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-xl font-semibold tracking-tight">
-                                {item.objectTitle}
-                            </h2>
+                            <WorkspaceDocumentBadge item={item} />
                             {blocked ? (
                                 <StatusBadge label="受阻" tone="warning" />
                             ) : overdue ? (
@@ -135,6 +131,9 @@ export function WorkspaceTaskDetail({
                                 />
                             ) : null}
                         </div>
+                        <h2 className="text-xl font-semibold tracking-tight">
+                            {item.objectTitle}
+                        </h2>
                         <p className="text-sm text-muted-foreground">
                             {canReadSensitive
                                 ? subtitle

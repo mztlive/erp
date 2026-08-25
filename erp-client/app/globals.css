@@ -89,6 +89,29 @@
     --color-neutral-soft-foreground: var(--neutral-soft-foreground);
     --color-neutral-border: var(--neutral-border);
 
+    /* 单据种类色 —— 工作台类型徽章，不用于受阻/超期状态 */
+    --color-orange-soft: var(--orange-soft);
+    --color-orange-soft-foreground: var(--orange-soft-foreground);
+    --color-orange-border: var(--orange-border);
+    --color-teal-soft: var(--teal-soft);
+    --color-teal-soft-foreground: var(--teal-soft-foreground);
+    --color-teal-border: var(--teal-border);
+    --color-violet-soft: var(--violet-soft);
+    --color-violet-soft-foreground: var(--violet-soft-foreground);
+    --color-violet-border: var(--violet-border);
+    --color-lime-soft: var(--lime-soft);
+    --color-lime-soft-foreground: var(--lime-soft-foreground);
+    --color-lime-border: var(--lime-border);
+    --color-rose-soft: var(--rose-soft);
+    --color-rose-soft-foreground: var(--rose-soft-foreground);
+    --color-rose-border: var(--rose-border);
+    --color-indigo-soft: var(--indigo-soft);
+    --color-indigo-soft-foreground: var(--indigo-soft-foreground);
+    --color-indigo-border: var(--indigo-border);
+    --color-cyan-soft: var(--cyan-soft);
+    --color-cyan-soft-foreground: var(--cyan-soft-foreground);
+    --color-cyan-border: var(--cyan-border);
+
     /* 高密度表格与工具条表面 */
     --color-surface-sunken: var(--surface-sunken);
     --color-surface-control: var(--surface-control);
@@ -221,6 +244,28 @@
     --neutral-soft-foreground: oklch(0.45 0 0);
     --neutral-border: oklch(0.902 0 0);
 
+    --orange-soft: oklch(0.98 0.03 55);
+    --orange-soft-foreground: oklch(0.55 0.15 50);
+    --orange-border: oklch(0.9 0.07 55);
+    --teal-soft: oklch(0.97 0.03 195);
+    --teal-soft-foreground: oklch(0.42 0.1 195);
+    --teal-border: oklch(0.88 0.06 195);
+    --violet-soft: oklch(0.97 0.02 295);
+    --violet-soft-foreground: oklch(0.45 0.18 295);
+    --violet-border: oklch(0.88 0.06 295);
+    --lime-soft: oklch(0.98 0.04 125);
+    --lime-soft-foreground: oklch(0.45 0.14 125);
+    --lime-border: oklch(0.88 0.08 125);
+    --rose-soft: oklch(0.97 0.02 8);
+    --rose-soft-foreground: oklch(0.52 0.16 8);
+    --rose-border: oklch(0.88 0.06 8);
+    --indigo-soft: oklch(0.96 0.03 278);
+    --indigo-soft-foreground: oklch(0.42 0.16 278);
+    --indigo-border: oklch(0.88 0.06 278);
+    --cyan-soft: oklch(0.97 0.03 210);
+    --cyan-soft-foreground: oklch(0.42 0.1 210);
+    --cyan-border: oklch(0.88 0.06 210);
+
     --border: oklch(0.902 0 0);
     --overlay: oklch(0 0 0 / 45%);
     --input: oklch(0.898 0 0);
@@ -302,6 +347,28 @@
     --neutral-soft: oklch(0.269 0 0);
     --neutral-soft-foreground: oklch(0.8 0 0);
     --neutral-border: oklch(1 0 0 / 12%);
+
+    --orange-soft: oklch(0.34 0.06 55);
+    --orange-soft-foreground: oklch(0.86 0.1 55);
+    --orange-border: oklch(0.45 0.08 55);
+    --teal-soft: oklch(0.32 0.05 195);
+    --teal-soft-foreground: oklch(0.84 0.08 195);
+    --teal-border: oklch(0.42 0.07 195);
+    --violet-soft: oklch(0.32 0.06 295);
+    --violet-soft-foreground: oklch(0.86 0.1 295);
+    --violet-border: oklch(0.44 0.08 295);
+    --lime-soft: oklch(0.32 0.06 125);
+    --lime-soft-foreground: oklch(0.86 0.1 125);
+    --lime-border: oklch(0.44 0.08 125);
+    --rose-soft: oklch(0.32 0.06 8);
+    --rose-soft-foreground: oklch(0.86 0.1 8);
+    --rose-border: oklch(0.44 0.08 8);
+    --indigo-soft: oklch(0.32 0.06 278);
+    --indigo-soft-foreground: oklch(0.86 0.1 278);
+    --indigo-border: oklch(0.44 0.08 278);
+    --cyan-soft: oklch(0.32 0.05 210);
+    --cyan-soft-foreground: oklch(0.84 0.08 210);
+    --cyan-border: oklch(0.42 0.07 210);
 
     --border: oklch(1 0 0 / 10%);
     --overlay: oklch(0 0 0 / 65%);

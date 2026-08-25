@@ -20,6 +20,13 @@ const badgeVariants = cva(
                 warning:
                     "border-warning-border bg-warning-soft text-warning-soft-foreground [a]:hover:bg-warning-soft/70",
                 info: "border-info-border bg-info-soft text-info-soft-foreground [a]:hover:bg-info-soft/70",
+                orange: "border-orange-border bg-orange-soft text-orange-soft-foreground [a]:hover:bg-orange-soft/70",
+                teal: "border-teal-border bg-teal-soft text-teal-soft-foreground [a]:hover:bg-teal-soft/70",
+                violet: "border-violet-border bg-violet-soft text-violet-soft-foreground [a]:hover:bg-violet-soft/70",
+                lime: "border-lime-border bg-lime-soft text-lime-soft-foreground [a]:hover:bg-lime-soft/70",
+                rose: "border-rose-border bg-rose-soft text-rose-soft-foreground [a]:hover:bg-rose-soft/70",
+                indigo: "border-indigo-border bg-indigo-soft text-indigo-soft-foreground [a]:hover:bg-indigo-soft/70",
+                cyan: "border-cyan-border bg-cyan-soft text-cyan-soft-foreground [a]:hover:bg-cyan-soft/70",
                 neutral:
                     "border-neutral-border bg-neutral-soft text-neutral-soft-foreground [a]:hover:bg-neutral-soft/70",
                 outline:

@@ -6,6 +6,24 @@
 
 import type { WorkspaceFamilyFilter, WorkspaceWorkItem } from "../types"
 
+/** 单据类型徽章色。不用 warning / destructive，避免和受阻、超期状态抢语义。 */
+export type WorkspaceDocumentBadgeVariant =
+    | "info"
+    | "success"
+    | "orange"
+    | "teal"
+    | "violet"
+    | "lime"
+    | "rose"
+    | "indigo"
+    | "cyan"
+    | "neutral"
+
+export type WorkspaceDocumentBadgeMeta = Readonly<{
+    label: string
+    variant: WorkspaceDocumentBadgeVariant
+}>
+
 export const FAMILY_META: Record<
     WorkspaceFamilyFilter,
     { label: string; defaultExpanded: boolean }
@@ -16,104 +34,267 @@ export const FAMILY_META: Record<
     exception: { label: "数据治理与异常", defaultExpanded: false },
 }
 
-export const TYPE_META: Record<
-    string,
-    {
-        label: string
-        family: WorkspaceFamilyFilter
-    }
-> = {
+type TypeMeta = Readonly<{
+    label: string
+    family: WorkspaceFamilyFilter
+    badgeLabel: string
+    badgeVariant: WorkspaceDocumentBadgeVariant
+}>
+
+export const TYPE_META: Record<string, TypeMeta> = {
     DOCUMENT_APPROVAL: {
         label: "单据审批",
         family: "approval",
+        badgeLabel: "单据",
+        badgeVariant: "info",
     },
     PROCUREMENT_CONFIRMATION: {
         label: "采购二次确认",
         family: "fulfillment",
+        badgeLabel: "采购确认",
+        badgeVariant: "indigo",
     },
     PROCUREMENT_ORDER_CREATION: {
         label: "待采购建单",
         family: "fulfillment",
+        badgeLabel: "待建采购",
+        badgeVariant: "lime",
     },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
         family: "approval",
+        badgeLabel: "低毛利",
+        badgeVariant: "rose",
     },
     PURCHASE_ORDER_REVIEW: {
         label: "采购单财务审核",
         family: "finance",
+        badgeLabel: "采购审核",
+        badgeVariant: "cyan",
     },
     SALES_CHANGE_IMPACT_REVIEW: {
         label: "销售变更履约影响复核",
         family: "fulfillment",
+        badgeLabel: "变更履约",
+        badgeVariant: "teal",
     },
     SALES_CHANGE_FINANCE_REVIEW: {
         label: "销售变更财务复核",
         family: "finance",
+        badgeLabel: "变更财务",
+        badgeVariant: "violet",
     },
     CARD_FUNDS_REVIEW: {
         label: "卡券票款复核",
         family: "finance",
+        badgeLabel: "卡券票款",
+        badgeVariant: "orange",
     },
     CARD_FUNDS_DELTA_REVIEW: {
         label: "卡券票款差异复核",
         family: "finance",
+        badgeLabel: "卡券差异",
+        badgeVariant: "lime",
     },
     CARD_SALES_MANAGER_APPROVAL: {
         label: "卡券销售领导审批",
         family: "approval",
+        badgeLabel: "卡券领导",
+        badgeVariant: "indigo",
     },
     CARD_SALES_OPERATION_APPROVAL: {
         label: "卡券运营审批",
         family: "approval",
+        badgeLabel: "卡券运营",
+        badgeVariant: "cyan",
     },
     OWNERSHIP_MIGRATION_SALES_CONFIRMATION: {
         label: "归属迁移销售确认",
         family: "approval",
+        badgeLabel: "归属销售",
+        badgeVariant: "orange",
     },
     OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION: {
         label: "归属迁移财务确认",
         family: "finance",
+        badgeLabel: "归属财务",
+        badgeVariant: "teal",
     },
     INVENTORY_ADJUSTMENT_REVIEW: {
         label: "库存调整复核",
         family: "fulfillment",
+        badgeLabel: "库存调整",
+        badgeVariant: "teal",
     },
     FINANCE_CORRECTION_REVIEW: {
         label: "财务纠错复核",
         family: "finance",
+        badgeLabel: "财务纠错",
+        badgeVariant: "rose",
     },
     SUPPLIER_SETTLEMENT_REVIEW: {
         label: "供应商结算复核",
         family: "finance",
+        badgeLabel: "供应商结算",
+        badgeVariant: "cyan",
     },
     IMPORT_BUSINESS_CONFIRMATION: {
         label: "导入业务确认",
         family: "exception",
+        badgeLabel: "导入确认",
+        badgeVariant: "orange",
     },
     INTEGRATION_RESULT_UNKNOWN: {
         label: "集成结果未知",
         family: "exception",
+        badgeLabel: "集成未知",
+        badgeVariant: "violet",
     },
     BUSINESS_EXCEPTION: {
         label: "业务异常",
         family: "exception",
+        badgeLabel: "业务异常",
+        badgeVariant: "rose",
     },
 }
 
-const DOCUMENT_APPROVAL_LABEL: Record<string, string> = {
-    SalesOrder: "销售单审批",
-    VoucherSalesOrder: "卡券销售单审批",
-    PurchaseOrder: "采购单审批",
-    CustomerReceipt: "回款复核",
-    CustomerRefund: "客户退款审批",
-    ReceiptReversal: "回款冲正审批",
-    sales_order: "销售单审批",
-    voucher_sales_order: "卡券销售单审批",
-    purchase_order: "采购单审批",
-    customer_receipt: "回款复核",
-    customer_refund: "客户退款审批",
-    receipt_reversal: "回款冲正审批",
+type DocumentMeta = Readonly<{
+    approvalLabel: string
+    badgeLabel: string
+    badgeVariant: WorkspaceDocumentBadgeVariant
+}>
+
+const DOCUMENT_META: Record<string, DocumentMeta> = {
+    sales_order: {
+        approvalLabel: "销售单审批",
+        badgeLabel: "销售单",
+        badgeVariant: "info",
+    },
+    voucher_sales_order: {
+        approvalLabel: "卡券销售单审批",
+        badgeLabel: "卡券销售",
+        badgeVariant: "violet",
+    },
+    sales_change_order: {
+        approvalLabel: "销售变更单审批",
+        badgeLabel: "销售变更",
+        badgeVariant: "indigo",
+    },
+    purchase_order: {
+        approvalLabel: "采购单审批",
+        badgeLabel: "采购单",
+        badgeVariant: "orange",
+    },
+    purchase_change_order: {
+        approvalLabel: "采购变更单审批",
+        badgeLabel: "采购变更",
+        badgeVariant: "lime",
+    },
+    stock_adjustment: {
+        approvalLabel: "库存调整单审批",
+        badgeLabel: "库存调整",
+        badgeVariant: "teal",
+    },
+    customer_receipt: {
+        approvalLabel: "回款复核",
+        badgeLabel: "回款",
+        badgeVariant: "success",
+    },
+    supplier_payment: {
+        approvalLabel: "付款审批",
+        badgeLabel: "付款",
+        badgeVariant: "cyan",
+    },
+    customer_refund: {
+        approvalLabel: "客户退款审批",
+        badgeLabel: "客户退款",
+        badgeVariant: "rose",
+    },
+    supplier_refund: {
+        approvalLabel: "供应商退款审批",
+        badgeLabel: "供应商退款",
+        badgeVariant: "violet",
+    },
+    receipt_reversal: {
+        approvalLabel: "回款冲正审批",
+        badgeLabel: "回款冲正",
+        badgeVariant: "indigo",
+    },
+    payment_reversal: {
+        approvalLabel: "付款冲正审批",
+        badgeLabel: "付款冲正",
+        badgeVariant: "lime",
+    },
+    purchase_receipt: {
+        approvalLabel: "采购收货单审批",
+        badgeLabel: "采购收货",
+        badgeVariant: "orange",
+    },
+    delivery: {
+        approvalLabel: "仓发单审批",
+        badgeLabel: "仓发",
+        badgeVariant: "teal",
+    },
+    electronic_delivery: {
+        approvalLabel: "电子交付单审批",
+        badgeLabel: "电子交付",
+        badgeVariant: "cyan",
+    },
+    service_fulfillment: {
+        approvalLabel: "服务履约单审批",
+        badgeLabel: "服务履约",
+        badgeVariant: "success",
+    },
+    customer_acceptance: {
+        approvalLabel: "客户验收单审批",
+        badgeLabel: "客户验收",
+        badgeVariant: "info",
+    },
+    invoice: {
+        approvalLabel: "发票审批",
+        badgeLabel: "发票",
+        badgeVariant: "rose",
+    },
+    sales_return_case: {
+        approvalLabel: "销售退货单审批",
+        badgeLabel: "销售退货",
+        badgeVariant: "violet",
+    },
+    purchase_return_order: {
+        approvalLabel: "采购退货单审批",
+        badgeLabel: "采购退货",
+        badgeVariant: "orange",
+    },
+}
+
+const DOCUMENT_TYPED_WORK_ITEMS = new Set([
+    "DOCUMENT_APPROVAL",
+    "APPROVAL_INSTANCE",
+])
+
+/**
+ * 把业务对象种类收成小写稳定码，兼容 PascalCase 与 snake_case。
+ *
+ * @param businessObjectType 业务对象种类。
+ * @returns 例如 `SalesOrder` → `sales_order`。
+ */
+function normalizeObjectType(businessObjectType: string): string {
+    return businessObjectType
+        .trim()
+        .replace(/([a-z])([A-Z])/g, "$1_$2")
+        .toLowerCase()
+}
+
+/**
+ * 按业务对象种类查找单据展示元数据。
+ *
+ * @param businessObjectType 业务对象种类，允许 PascalCase 或 snake_case。
+ * @returns 命中时返回单据文案与徽章色，否则 undefined。
+ */
+function documentMetaOf(businessObjectType: string): DocumentMeta | undefined {
+    const exact = DOCUMENT_META[businessObjectType]
+    if (exact) return exact
+    return DOCUMENT_META[normalizeObjectType(businessObjectType)]
 }
 
 /**
@@ -121,19 +302,54 @@ const DOCUMENT_APPROVAL_LABEL: Record<string, string> = {
  *
  * @param workItemType 任务类型码。
  * @param businessObjectType 业务对象种类。
- * @returns 列表第一行类型标签。
+ * @returns 类型标签，例如「销售单审批」。
  */
 export function workspaceTypeLabel(
     workItemType: string,
     businessObjectType: string,
 ): string {
-    if (workItemType === "DOCUMENT_APPROVAL") {
+    if (DOCUMENT_TYPED_WORK_ITEMS.has(workItemType)) {
         return (
-            DOCUMENT_APPROVAL_LABEL[businessObjectType] ??
+            documentMetaOf(businessObjectType)?.approvalLabel ??
             TYPE_META.DOCUMENT_APPROVAL.label
         )
     }
     return TYPE_META[workItemType]?.label ?? workItemType
+}
+
+/**
+ * 工作台单据类型徽章。通用审批按单据种类着色，其它任务按任务类型着色。
+ *
+ * @param workItemType 任务类型码。
+ * @param businessObjectType 业务对象种类。
+ * @param fallbackLabel 未知类型时的兜底文案，通常是已算好的 `workItemTypeLabel`。
+ * @returns 短标签与徽章色，供队列和详情扫读。
+ */
+export function workspaceDocumentBadge(
+    workItemType: string,
+    businessObjectType: string,
+    fallbackLabel?: string,
+): WorkspaceDocumentBadgeMeta {
+    if (DOCUMENT_TYPED_WORK_ITEMS.has(workItemType)) {
+        const documentMeta = documentMetaOf(businessObjectType)
+        if (documentMeta) {
+            return {
+                label: documentMeta.badgeLabel,
+                variant: documentMeta.badgeVariant,
+            }
+        }
+    }
+    const typeMeta = TYPE_META[workItemType]
+    if (typeMeta) {
+        return {
+            label: typeMeta.badgeLabel,
+            variant: typeMeta.badgeVariant,
+        }
+    }
+    const label =
+        fallbackLabel?.trim() ||
+        workspaceTypeLabel(workItemType, businessObjectType)
+    return { label, variant: "neutral" }
 }
 
 export const PRIORITY_RANK: Record<string, number> = {
