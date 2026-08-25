@@ -57,6 +57,8 @@ type CustomerAccountDetailPreviewProps = Readonly<{
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    /** 销售单对象中心只读本单事实；冲正/退款/红票留在财务工作台。默认展示。 */
+    showCorrectionActions?: boolean
 }>
 
 /**
@@ -84,6 +86,7 @@ export function CustomerAccountDetailPreview({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    showCorrectionActions = true,
 }: CustomerAccountDetailPreviewProps) {
     return (
         <QuickPreviewSheet
@@ -212,7 +215,8 @@ export function CustomerAccountDetailPreview({
                                 继续核销
                             </Button>
                         ) : null}
-                        {data.receipt?.allowedActions.includes(
+                        {showCorrectionActions &&
+                        data.receipt?.allowedActions.includes(
                             "REVERSE_RECEIPT",
                         ) ? (
                             <Button
@@ -236,7 +240,8 @@ export function CustomerAccountDetailPreview({
                                 冲正
                             </Button>
                         ) : null}
-                        {data.receipt?.allowedActions.includes("REFUND") ? (
+                        {showCorrectionActions &&
+                        data.receipt?.allowedActions.includes("REFUND") ? (
                             <Button
                                 type="button"
                                 variant="outline"
@@ -280,7 +285,8 @@ export function CustomerAccountDetailPreview({
                                 继续分配
                             </Button>
                         ) : null}
-                        {data.refund &&
+                        {showCorrectionActions &&
+                        data.refund &&
                         isUnsubmittedCustomerRefundStatus(data.refund.status) &&
                         data.refund.approval?.allowedActions.includes(
                             "SUBMIT",
@@ -299,7 +305,8 @@ export function CustomerAccountDetailPreview({
                                 提交审批
                             </Button>
                         ) : null}
-                        {data.reversal &&
+                        {showCorrectionActions &&
+                        data.reversal &&
                         isUnsubmittedReceiptReversalStatus(
                             data.reversal.status,
                         ) &&
@@ -320,7 +327,8 @@ export function CustomerAccountDetailPreview({
                                 提交审批
                             </Button>
                         ) : null}
-                        {data.invoice?.allowedActions.includes(
+                        {showCorrectionActions &&
+                        data.invoice?.allowedActions.includes(
                             "ISSUE_RED_INVOICE",
                         ) ? (
                             <Button

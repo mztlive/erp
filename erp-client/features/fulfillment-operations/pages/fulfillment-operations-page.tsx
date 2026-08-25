@@ -30,14 +30,15 @@ import { useFulfillmentOperationsController } from "./hooks/use-fulfillment-oper
 import { sourceReturnHref } from "./lib/presentation"
 
 type FulfillmentOperationsPageProps = {
-    /** 销售单详情内使用；提供后不写履约工作区 URL。 */
+    /** 深链锁定销售单时使用；提供后不写履约工作区 URL。 */
     embeddedSalesOrderId?: string
     onSalesOrderChanged?: () => void
     onOpenAcceptance?: () => void
 }
 
 /**
- * 履约处理。独立页面保留岗位筛选；销售单详情按本单聚合五类履约并原地操作。
+ * 履约处理工作台。独立页面保留岗位筛选与队列连续处理。
+ * 销售单详情的履约分区不再嵌入本页，只复用本单范围的队列与处理面。
  * PurchaseReceipt、Delivery、ElectronicDelivery、ServiceFulfillment 均为 NO_APPROVAL。
  */
 export function FulfillmentOperationsPage({

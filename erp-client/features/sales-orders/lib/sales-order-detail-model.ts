@@ -310,6 +310,20 @@ export function receivableWorkspaceHref(
     return `/finance/customer-accounts?${params.toString()}`
 }
 
+/** 打开客户往来并锁定本单，不自动进入登记会话。 */
+export function customerAccountsForOrderHref(
+    order: Pick<SalesOrderListItem, "id">,
+    selfReturn: string,
+) {
+    const params = new URLSearchParams({
+        view: "receivable",
+        salesOrderId: order.id,
+        from: "W05",
+        returnTo: selfReturn,
+    })
+    return `/finance/customer-accounts?${params.toString()}`
+}
+
 export function fulfillmentWorkspaceHref(
     order: SalesOrderListItem,
     selfReturn: string,
@@ -373,7 +387,7 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
         {
             id: "receivable",
             label: "票款",
-            hint: "回款和开票",
+            hint: "本单回款和开票",
             show: true,
         },
         {

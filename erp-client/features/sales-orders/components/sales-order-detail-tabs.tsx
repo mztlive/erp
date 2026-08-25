@@ -130,6 +130,7 @@ export function SalesOrderDetailTabs({
             <ObjectSectionTabsPanel value="fulfillment" keepMounted>
                 <FulfillmentPanel
                     order={order}
+                    selfReturn={selfReturn}
                     onOpenAcceptance={() => onSelectSection("acceptance")}
                     onDataChanged={onDataChanged}
                 />
@@ -140,7 +141,11 @@ export function SalesOrderDetailTabs({
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="receivable" keepMounted>
-                <ReceivablePanel order={order} onDataChanged={onDataChanged} />
+                <ReceivablePanel
+                    order={order}
+                    selfReturn={selfReturn}
+                    onDataChanged={onDataChanged}
+                />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="collaboration">
