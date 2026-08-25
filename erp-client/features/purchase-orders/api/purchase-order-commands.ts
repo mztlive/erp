@@ -1,7 +1,10 @@
 import { apiPost } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalActionResponse } from "@/features/purchase-orders/types"
 import type {
     CreatePurchaseOrderFromBasisInput,
+    CreatePurchaseOrdersFromSourcingInput,
+    CreatedPurchaseOrderDraft,
     PurchaseChangeOrderSummary,
     ReviewPurchaseOrderInput,
     SavePurchaseOrderDraftInput,
@@ -15,6 +18,7 @@ import type {
     BackendPurchaseChangeOrder,
     BackendReviewResult,
     BackendSaveResult,
+    BackendSourcingCreateResult,
     BackendSubmitResult,
     BackendVoidResult,
 } from "./purchase-order-wire-types"
@@ -308,7 +312,71 @@ export async function createPurchaseOrderFromBasis(
             return {
                 status: "failed",
                 // 后端冲突码自带具体原因，前端透传不再改写
-                message: getErrorMessage(error, "可采购数量已更新，请刷新后重试"),
+                message: getErrorMessage(
+                    error,
+                    "可采购数量已更新，请刷新后重试",
+                ),
+                code: "CONFLICT",
+            }
+        }
+        return formalActionFailure(error, input.idempotencyKey)
+    }
+}
+
+/**
+ * 把后端创建结果映射成页面可用的草稿摘要。
+ *
+ * @param data 单张采购草稿创建结果。
+ * @returns 采购单 ID、草稿展示名和乐观锁版本。
+ */
+function mapCreatedDraft(data: BackendCreateResult): CreatedPurchaseOrderDraft {
+    return {
+        purchaseOrderId: data.purchase_order_id,
+        draftLabel: data.purchase_no
+            ? `草稿 · ${data.purchase_no}`
+            : data.reference,
+        lockVersion: data.lock_version,
+    }
+}
+
+/**
+ * 按选源行一次创建多张采购草稿。
+ *
+ * @param input 来源销售单、任务、逐行供应商与数量、幂等键。
+ * @returns 正式命令结果；409 视为可采购数量冲突。
+ */
+export async function createPurchaseOrdersFromSourcing(
+    input: CreatePurchaseOrdersFromSourcingInput,
+): Promise<FormalActionResponse<{ orders: CreatedPurchaseOrderDraft[] }>> {
+    try {
+        const data = await apiPost<BackendSourcingCreateResult>(
+            "/admin/purchase-orders/from-sourcing",
+            {
+                work_item_id: input.workItemId,
+                sales_order_id: input.salesOrderId,
+                lines: input.lines.map((line) => ({
+                    sales_order_line_id: line.salesOrderLineId,
+                    supplier_id: line.supplierId,
+                    quantity: line.quantity,
+                })),
+                idempotency_key: input.idempotencyKey,
+            },
+        )
+        return {
+            status: "succeeded",
+            data: {
+                orders: (data.orders ?? []).map(mapCreatedDraft),
+            },
+            reference: data.reference,
+        }
+    } catch (error) {
+        if (isApiError(error) && error.status === 409) {
+            return {
+                status: "failed",
+                message: getErrorMessage(
+                    error,
+                    "可采购数量已更新，请刷新后重试",
+                ),
                 code: "CONFLICT",
             }
         }

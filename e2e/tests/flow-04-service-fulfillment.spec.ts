@@ -26,7 +26,7 @@ import * as path from "node:path"
 
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
-import { gotoPage, clickButton } from "../helpers/ui"
+import { clickButton, completePurchaseOrderCreate, gotoPage } from "../helpers/ui"
 import { approveWorkspaceTaskByDocumentNo } from "../helpers/workspace"
 
 // ── 流程内专用工具（保持 helpers 通用，不放业务专有逻辑） ─────────────────────────
@@ -263,34 +263,15 @@ test("flow-04 线下服务履约：客户/合同→销售单→采购确认→�
     await switchAccount("procurement")
     await gotoPage(procPage, "/procurement/orders")
     await clickButton(procPage, "新建采购单")
-    const poCreateDialog = procPage.locator('[role="dialog"]').last()
-    await expect(
-        poCreateDialog.getByRole("heading", { name: "从采购创建依据建单" }),
-    ).toBeVisible()
-
-    const emptyBasisText = poCreateDialog.getByText(
-        "当前没有可消费的创建依据。请先在采购二次确认完成确认。",
-    )
+    await expect(procPage).toHaveURL(/mode=create/, { timeout: 20_000 })
+    const emptyBasisText = procPage.getByText("当前没有可建采购依据")
     if (await emptyBasisText.isVisible().catch(() => false)) {
-        // 代码事实：后端 /admin/purchase-creation-bases 恒返回空、POST /admin/purchase-orders 恒 404
         await expect(emptyBasisText).toBeVisible({ timeout: 20_000 })
-        await expect(
-            poCreateDialog.getByRole("button", { name: "创建草稿并打开" }),
-        ).toBeDisabled()
         console.log(
-            "⚠ flow-04 阻塞点: 采购创建依据接口已删除（backend/services/src/purchase_order/creation_basis.rs），",
-            "采购单无法通过 UI 创建；销售单→采购确认→生效链路已验证，",
-            "采购单审批→服务履约→销售验收步骤已实现但需后端恢复建单入口后执行。",
+            "⚠ flow-04 阻塞点: 当前没有可建采购依据，采购单无法通过 UI 创建。",
         )
     } else {
-        // 后端恢复采购创建依据后的完整后续（当前不执行，保持选择器与代码一致）
-        await pickComboboxOption(
-            procPage,
-            poCreateDialog.getByLabel("选择创建依据"),
-            salesOrderNo,
-            salesOrderNo,
-        )
-        await poCreateDialog.getByRole("button", { name: "创建草稿并打开" }).click()
+        await completePurchaseOrderCreate(procPage)
         await expect(procPage).toHaveURL(/\/procurement\/orders\/[^?]+/, { timeout: 20_000 })
         const poId = procPage.url().match(/\/procurement\/orders\/([^?]+)/)?.[1] ?? ""
 

@@ -678,6 +678,50 @@ pub struct CreatePurchaseOrderResult {
     pub reference: String,
 }
 
+/// 选源建单的单行供应商与数量。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SourcingLineAssignment {
+    /// 销售稳定行身份。
+    #[validate(custom(function = "non_blank", message = "销售行不能为空"))]
+    pub sales_order_line_id: String,
+    /// 本行选用的供应商。
+    #[validate(custom(function = "non_blank", message = "供应商不能为空"))]
+    pub supplier_id: String,
+    /// 本次创建数量；事务内必须大于零且不超过最新可创建数量。
+    #[validate(custom(function = "non_blank", message = "本次数量不能为空"))]
+    pub quantity: String,
+}
+
+/// 按选源结果一次创建多张采购草稿的请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CreatePurchaseOrdersFromSourcingRequest {
+    /// 冻结本次销售行责任范围的开放采购建单任务。
+    #[validate(custom(function = "non_blank", message = "采购建单任务不能为空"))]
+    pub work_item_id: String,
+    /// 来源销售单。
+    #[validate(custom(function = "non_blank", message = "销售单不能为空"))]
+    pub sales_order_id: String,
+    /// 已选定供应商的采购明细；同一销售行只能出现一次。
+    #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
+    pub lines: Vec<SourcingLineAssignment>,
+    /// 幂等键（同一命令重复创建返回同一批采购单）。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 按选源结果一次创建多张采购草稿的结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CreatePurchaseOrdersFromSourcingResult {
+    /// 本次创建或幂等回放的采购草稿。
+    pub orders: Vec<CreatePurchaseOrderResult>,
+    /// 是否复用已有草稿（幂等重放）。
+    pub replayed: bool,
+    /// 业务引用，指向来源销售单。
+    pub reference: String,
+}
+
 /// 保存采购草稿请求（表头 + 完整行替换；金额由服务端逐行计算）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SavePurchaseOrderDraftRequest {

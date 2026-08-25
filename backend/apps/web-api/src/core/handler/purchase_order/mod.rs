@@ -11,14 +11,15 @@ use services::{
     audit::AuditActor,
     purchase_order::{
         CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
-        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisListParams,
-        CreationBasisView, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
-        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseOrderCenterView,
-        PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService, PurchaseReviewResult,
-        ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-        StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
-        SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, VoidPurchaseOrderRequest,
-        VoidPurchaseOrderResult,
+        CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
+        CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
+        CreationBasisListParams, CreationBasisView, EffectPurchaseChangeRequest, PageView,
+        PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseChangeOrderView,
+        PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
+        PurchaseReviewResult, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
+        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
+        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
+        VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
     },
 };
 
@@ -104,6 +105,34 @@ pub async fn purchase_order_create(
 ) -> Result<CreatePurchaseOrderResult> {
     let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
         .create_from_basis(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "按选源结果创建采购单",
+    resource = "purchase_order",
+    action = "create"
+)]
+/// 按选源行一次创建多张采购草稿（幂等：同键同载荷回放原结果）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 选源创建请求（销售单、任务、逐行供应商与数量、幂等键）
+///
+/// # 返回
+/// 返回本次创建或回放的全部采购草稿。
+pub async fn purchase_order_create_from_sourcing(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CreatePurchaseOrdersFromSourcingRequest>,
+) -> Result<CreatePurchaseOrdersFromSourcingResult> {
+    let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
+        .create_from_sourcing(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

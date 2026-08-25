@@ -21,6 +21,7 @@ export {
 
 export {
     createPurchaseOrderFromBasis,
+    createPurchaseOrdersFromSourcing,
     reviewPurchaseOrder,
     savePurchaseOrderDraft,
     startPurchaseChange,

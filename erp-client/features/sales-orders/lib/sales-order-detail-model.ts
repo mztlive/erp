@@ -346,7 +346,7 @@ export function purchaseOrdersWorkspaceHref(
 ) {
     const params = new URLSearchParams({ salesOrderId: order.id })
     if (canCreatePurchaseFromSalesOrder(order)) {
-        params.set("action", "create")
+        params.set("mode", "create")
     }
     params.set("from", "W05")
     params.set("returnTo", selfReturn)

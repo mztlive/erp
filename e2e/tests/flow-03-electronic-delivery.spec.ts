@@ -29,7 +29,7 @@ import path from "path"
 
 import { createSinglePageAccountSwitcher } from "../helpers/login"
 import { api, apiLogin } from "../helpers/api"
-import { gotoPage } from "../helpers/ui"
+import { completePurchaseOrderCreate, gotoPage } from "../helpers/ui"
 import { approveFirstWorkspaceTask } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
@@ -239,13 +239,8 @@ test("flow-03 虚拟商品电子交付全流程", async ({ page }) => {
         await switchAccount("procurement")
         await gotoPage(procurement, "/procurement/orders")
         await procurement.getByRole("button", { name: "新建采购单" }).first().click()
-        const basisDialog = procurement.locator('[role="dialog"]').last()
-        await expect(basisDialog).toBeVisible({ timeout: 20_000 })
-        await expect(
-            basisDialog.getByText("从采购创建依据建单").first(),
-        ).toBeVisible()
-        // 依据默认预选首个（openCreateDialog 自动选中 openBases[0]）
-        await basisDialog.getByRole("button", { name: "创建草稿并打开" }).click()
+        await expect(procurement).toHaveURL(/mode=create/, { timeout: 20_000 })
+        await completePurchaseOrderCreate(procurement)
         await expect(procurement).toHaveURL(/\/procurement\/orders\/[^/]+\?mode=edit/, {
             timeout: 30_000,
         })

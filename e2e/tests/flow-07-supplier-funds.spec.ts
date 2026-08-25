@@ -42,7 +42,13 @@ import path from "path"
 
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
-import { clickButton, expectTableRow, gotoPage, pickOption } from "../helpers/ui"
+import {
+    clickButton,
+    completePurchaseOrderCreate,
+    expectTableRow,
+    gotoPage,
+    pickOption,
+} from "../helpers/ui"
 import { approveWorkspaceTaskByDocumentNo } from "../helpers/workspace"
 
 // ---------------------------------------------------------------------------
@@ -333,21 +339,14 @@ test("供应商票款：付款→审批→过账→核销应付；进项发票�
     // =====================================================================
     await gotoPage(procurementPage, "/procurement/orders")
     await clickButton(procurementPage, "新建采购单")
-    dlg = await lastDialog(procurementPage)
-    await expect(dlg.getByText("从采购创建依据建单", { exact: true })).toBeVisible({
-        timeout: 20_000,
-    })
-    // 阻塞点检查：当前代码后端恒返回空创建依据（见 creation_basis.rs），显式失败给出原因
-    const noBasis = dlg.getByText("当前没有可消费的创建依据")
+    await expect(procurementPage).toHaveURL(/mode=create/, { timeout: 20_000 })
+    const noBasis = procurementPage.getByText("当前没有可建采购依据")
     if (await noBasis.isVisible().catch(() => false)) {
         throw new Error(
-            "阻塞点：后端 /admin/purchase-creation-bases 恒返回空列表、/admin/purchase-orders 恒 404 " +
-                "（backend/services/src/purchase_order/creation_basis.rs 已删除采购确认批次），" +
-                "无法按文档 §7.4 创建采购单，供应商应付无从形成。请先恢复采购单创建能力后重跑本流程。",
+            "阻塞点：当前没有可建采购依据，无法按文档 §7.4 创建采购单，供应商应付无从形成。",
         )
     }
-    // 依据存在时首条自动选中，直接建单并进入编辑工作区
-    await confirmDialog(procurementPage, "创建草稿并打开")
+    await completePurchaseOrderCreate(procurementPage)
     await procurementPage.waitForURL(/\/procurement\/orders\/[^/]+\?mode=edit/, {
         timeout: 30_000,
     })

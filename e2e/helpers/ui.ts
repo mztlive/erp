@@ -16,6 +16,19 @@ export async function clickButton(page: Page, name: string | RegExp): Promise<vo
     await page.getByRole("button", { name }).first().click()
 }
 
+/** 在新建采购单页预览并确认创建草稿。 */
+export async function completePurchaseOrderCreate(page: Page): Promise<void> {
+    await expect(page.getByRole("heading", { name: "新建采购单" })).toBeVisible({
+        timeout: 20_000,
+    })
+    await page.getByTestId("purchase-create-preview").click()
+    await expect(page.getByText("预览采购单").first()).toBeVisible({
+        timeout: 10_000,
+    })
+    await page.getByTestId("purchase-create-from-basis").click()
+    await page.getByTestId("purchase-create-confirm").click()
+}
+
 /** 点击弹窗/Dialog 内的按钮。 */
 export async function clickDialogButton(page: Page, name: string | RegExp): Promise<void> {
     const dialog = page.locator('[role="dialog"], [data-slot="dialog"]').last()

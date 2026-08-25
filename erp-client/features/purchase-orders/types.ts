@@ -375,6 +375,23 @@ export type CreatePurchaseOrderFromBasisInput = {
     idempotencyKey: string
 }
 
+export type CreatePurchaseOrdersFromSourcingInput = {
+    workItemId: string
+    salesOrderId: string
+    lines: Array<{
+        salesOrderLineId: string
+        supplierId: string
+        quantity: string
+    }>
+    idempotencyKey: string
+}
+
+export type CreatedPurchaseOrderDraft = {
+    purchaseOrderId: string
+    draftLabel: string
+    lockVersion: number
+}
+
 export type FormalActionResponse<T = unknown> =
     | { status: "succeeded"; data: T; reference: string }
     | { status: "failed"; message: string; code: string }

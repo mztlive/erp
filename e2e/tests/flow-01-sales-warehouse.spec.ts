@@ -22,8 +22,8 @@
  *    采购入库单与仓发发货单工作项（含留货），操作员在工作面直接"确认入库/确认发货"，
  *    没有独立的"提交到货信息"步骤。
  * 2. doc=7.4: "选源在本环节完成：采购单创建时选择供给、成本与交期"。
- *    code=销售单生效后，W08 按销售明细与当前合格供给生成候选依据；采购选择依据创建草稿，
- *    系统带入供应商/成本/税率/交期，提交审批前可按页面权限核对调整。
+ *    code=销售单生效后，W08 按销售明细与当前合格供给进入新建采购单页；采购为每行选择供应商，
+ *    预览按供应商拆分的采购单后确认创建草稿，提交审批前可按页面权限核对调整。
  * 3. doc=W02: 统一待办在 /workspace/tasks。code=/workspace/tasks 永久重定向到 /workspace（唯一工作台）。
  * 4. doc=9.1: 回款草稿提交后按 CustomerReceipt 审批，末节点通过并过账后计入已收。
  *    code=一致（提交即启动审批，销售领导复核通过后过账核销）；"待复核"已收敛为"审批中"。
@@ -478,28 +478,21 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     await createPurchaseLink.click()
     await expect(poPage).toHaveURL(
         new RegExp(
-            `/procurement/orders\\?.*salesOrderId=${salesOrderId}.*action=create`,
+            `/procurement/orders\\?.*salesOrderId=${salesOrderId}.*mode=create`,
         ),
         { timeout: 20_000 },
     )
-    const basisDialog = dialogOn(poPage)
-    await expect(basisDialog.getByText("从采购创建依据建单")).toBeVisible({
+    await expect(poPage.getByRole("heading", { name: "新建采购单" })).toBeVisible({
         timeout: 10_000,
     })
     // 从销售单进入后只展示该单依据；业务头、销售行、数量与交期必须可核对。
-    await expect(basisDialog.getByText(salesOrderNo).first()).toBeVisible({
+    await expect(poPage.getByText(salesOrderNo).first()).toBeVisible({
         timeout: 20_000,
     })
-    await expect(basisDialog.getByText(CUSTOMER_LEGAL).first()).toBeVisible()
-    await expect(basisDialog.getByText(CONTRACT_NO).first()).toBeVisible()
-    await expect(basisDialog.getByText(salesOwnerName).first()).toBeVisible()
-    const supplierFact = basisDialog
-        .locator('[data-slot="description-item"]')
-        .filter({ hasText: "拟采购供应商" })
-    await expect(
-        supplierFact.locator('[data-slot="description-details"]'),
-    ).toHaveText(/.+/)
-    const basisLine = basisDialog
+    await expect(poPage.getByText(CUSTOMER_LEGAL).first()).toBeVisible()
+    await expect(poPage.getByText(CONTRACT_NO).first()).toBeVisible()
+    await expect(poPage.getByText(salesOwnerName).first()).toBeVisible()
+    const basisLine = poPage
         .getByRole("row")
         .filter({ hasText: skuName })
         .first()
@@ -510,7 +503,12 @@ test("flow-01 实物销售单仓发完整基准流程", async ({ page, request }
     await expect(basisLine.locator('[data-slot="money-value"]')).toHaveCount(1)
     await expect(basisLine.locator('[data-slot="rate-value"]')).toHaveText(/%$/)
     await expect(basisLine).toContainText(TODAY_DATE)
-    await clickDialogButton(poPage, "创建草稿并打开")
+    await poPage.getByTestId("purchase-create-preview").click()
+    await expect(poPage.getByText("预览采购单").first()).toBeVisible({
+        timeout: 10_000,
+    })
+    await poPage.getByTestId("purchase-create-from-basis").click()
+    await poPage.getByTestId("purchase-create-confirm").click()
     await poPage.waitForURL(
         /\/procurement\/orders\/[0-9a-f]{24,32}\?mode=edit/,
         {

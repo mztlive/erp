@@ -43,6 +43,7 @@ import { api, apiLogin } from "../helpers/api"
 import {
     gotoPage,
     clickButton,
+    completePurchaseOrderCreate,
     fillByLabel,
     expectTableRow,
 } from "../helpers/ui"
@@ -347,23 +348,14 @@ test.describe("flow-02 供应商直接发客户（代发）", () => {
         await switchAccount("procurement")
         await gotoPage(procurementPage, "/procurement/orders")
         await clickButton(procurementPage, "新建采购单")
-        const basisDialog = procurementPage.getByRole("dialog").last()
-        await expect(basisDialog).toBeVisible({ timeout: 20_000 })
-        await expect(basisDialog.getByText("从采购创建依据建单")).toBeVisible()
-
-        const noBasisText = basisDialog.getByText("当前没有可消费的创建依据")
+        await expect(procurementPage).toHaveURL(/mode=create/, { timeout: 20_000 })
+        const noBasisText = procurementPage.getByText("当前没有可建采购依据")
         if (await noBasisText.isVisible().catch(() => false)) {
             throw new Error(
-                "采购创建依据为空：后端 creation_basis_list 恒返回空列表（backend/services/src/purchase_order/creation_basis.rs 已删除旧确认批次），" +
-                    "W08 无可用建单入口，流程无法继续。若运行后端为旧构建，请重启后端后重试。",
+                "采购创建依据为空：后端 creation_basis_list 返回空列表，W08 无可用建单入口，流程无法继续。",
             )
         }
-        // 选择第一个（唯一）创建依据 → 创建草稿并打开（进入编辑态）
-        await pickFirstOption(basisDialog, "选择创建依据")
-        await expect(basisDialog.getByText("拆单键（不可混拼）")).toBeVisible({
-            timeout: 10_000,
-        })
-        await basisDialog.getByRole("button", { name: "创建草稿并打开" }).click()
+        await completePurchaseOrderCreate(procurementPage)
         await expect(procurementPage).toHaveURL(
             /\/procurement\/orders\/[0-9a-f]{32}\?mode=edit/,
             { timeout: 30_000 },

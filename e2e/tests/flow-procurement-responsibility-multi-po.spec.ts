@@ -512,18 +512,22 @@ async function purchaseOrderByQuantity(
   return matched;
 }
 
-function basisLocator(dialog: Locator, basis: CreationBasis): Locator {
-  return dialog.getByTestId(`purchase-basis-${basis.basis_id}`);
+function sourcingQuantity(
+  page: Page,
+  line: CreationBasisLine,
+): Locator {
+  return page.getByTestId(
+    `purchase-sourcing-quantity-${line.sales_order_line_id}`,
+  );
 }
 
-function basisQuantity(
-  dialog: Locator,
-  basis: CreationBasis,
-  line: CreationBasisLine = basis.lines[0]!,
-): Locator {
-  return basisLocator(dialog, basis).getByTestId(
-    `purchase-basis-line-quantity-${line.sales_order_line_id}`,
-  );
+async function createPurchaseDraftsFromSourcing(page: Page): Promise<void> {
+  await page.getByTestId("purchase-create-preview").click();
+  await expect(page.getByText("预览采购单").first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.getByTestId("purchase-create-from-basis").click();
+  await page.getByTestId("purchase-create-confirm").click();
 }
 
 test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建立两张采购草稿", async ({
@@ -757,10 +761,9 @@ test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建�
   });
 
   await test.step("第一次建立数量 4 的采购草稿，销售与任务剩余数量变为 6", async () => {
-    const dialog = page.getByRole("dialog").last();
-    await expect(
-      dialog.getByRole("heading", { name: "从采购创建依据建单" }),
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: "新建采购单" })).toBeVisible({
+      timeout: 20_000,
+    });
     const bases = await creationBases(
       request,
       procurementToken,
@@ -807,12 +810,12 @@ test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建�
       remaining: 10,
     });
 
-    const quantity = basisQuantity(dialog, basis);
+    const quantity = sourcingQuantity(page, basis.lines[0]!);
     await expect(quantity).toHaveValue("10", { timeout: 20_000 });
     await quantity.fill("4");
-    await dialog.getByTestId("purchase-create-from-basis").click();
-    await expect(dialog.getByTestId("purchase-create-result")).toContainText(
-      "已创建采购草稿",
+    await createPurchaseDraftsFromSourcing(page);
+    await page.waitForURL(
+      /\/procurement\/orders\/[0-9a-f]{24,32}\?mode=edit/,
       { timeout: 30_000 },
     );
     const remainingBases = await creationBases(
@@ -823,9 +826,7 @@ test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建�
     );
     const remainingBasis = remainingBases[0]!;
     expect(remainingBasis.basis_id).not.toBe(basis.basis_id);
-    await expect(basisQuantity(dialog, remainingBasis)).toHaveValue("6", {
-      timeout: 30_000,
-    });
+    expect(numericQuantity(remainingBasis.lines[0]?.remaining_quantity)).toBe(6);
 
     await expectCoverage(request, salesToken, salesOrderId, {
       purchaseOrders: 1,
@@ -867,15 +868,12 @@ test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建�
     await mobileContinue.click();
     await expect(page).toHaveURL(
       new RegExp(
-        `/procurement/orders\\?.*salesOrderId=${salesOrderId}.*action=create`,
+        `/procurement/orders\\?.*salesOrderId=${salesOrderId}.*mode=create`,
       ),
       { timeout: 20_000 },
     );
     await expect(
-      page
-        .getByRole("dialog")
-        .last()
-        .getByRole("heading", { name: "从采购创建依据建单" }),
+      page.getByRole("heading", { name: "新建采购单" }),
     ).toBeVisible({ timeout: 20_000 });
     await gotoPage(page, "/workspace");
     const task = page.getByTestId(
@@ -887,10 +885,9 @@ test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建�
   });
 
   await test.step("第二次建立数量 6 的另一张采购草稿，剩余归零且任务完成", async () => {
-    const dialog = page.getByRole("dialog").last();
-    await expect(
-      dialog.getByRole("heading", { name: "从采购创建依据建单" }),
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: "新建采购单" })).toBeVisible({
+      timeout: 20_000,
+    });
     const bases = await creationBases(
       request,
       procurementToken,
@@ -898,14 +895,14 @@ test("采购责任在销售最终生效后派发建单任务，并按 4 + 6 建�
       procurementTask.id,
     );
     const basis = bases[0]!;
-    const quantity = basisQuantity(dialog, basis);
+    const quantity = sourcingQuantity(page, basis.lines[0]!);
     await expect(quantity).toHaveValue("6", { timeout: 20_000 });
     await quantity.fill("6");
-    await dialog.getByTestId("purchase-create-from-basis").click();
-    await expect(dialog).not.toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("当前销售单的可采购数量已覆盖")).toBeVisible({
-      timeout: 20_000,
-    });
+    await createPurchaseDraftsFromSourcing(page);
+    await page.waitForURL(
+      /\/procurement\/orders\/[0-9a-f]{24,32}\?mode=edit/,
+      { timeout: 30_000 },
+    );
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     await expectCoverage(request, salesToken, salesOrderId, {

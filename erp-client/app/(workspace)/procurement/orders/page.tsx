@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
 import { PurchaseOrdersListPage } from "@/features/purchase-orders/pages/purchase-orders-list-page"
 
 export const metadata: Metadata = {
@@ -24,7 +25,26 @@ function PurchaseOrdersFallback() {
  * 或审批动作；采购退货创建结果、详情、提交确认不展示绑定卡、决定、
  * 撤回或审批历史。PENDING_EXECUTION 是待执行分工态，不是审批复核。
  */
-export default function PurchaseOrdersPage() {
+export default async function PurchaseOrdersPage({
+    searchParams,
+}: {
+    searchParams: Promise<{
+        mode?: string
+        action?: string
+        salesOrderId?: string
+        workItemId?: string
+    }>
+}) {
+    const params = await searchParams
+    if (params.mode === "create" || params.action === "create") {
+        return (
+            <PurchaseOrderCreatePage
+                initialSalesOrderId={params.salesOrderId}
+                initialWorkItemId={params.workItemId}
+            />
+        )
+    }
+
     return (
         <Suspense fallback={<PurchaseOrdersFallback />}>
             <PurchaseOrdersListPage />

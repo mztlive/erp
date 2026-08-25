@@ -271,7 +271,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
         return withParams(
             registration.baseHref,
             new URLSearchParams({
-                action: "create",
+                mode: "create",
                 salesOrderId: businessObjectId,
                 workItemId,
             }),

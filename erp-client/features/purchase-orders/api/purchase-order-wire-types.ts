@@ -176,6 +176,12 @@ export type BackendCreateResult = {
     reference: string
 }
 
+export type BackendSourcingCreateResult = {
+    orders: BackendCreateResult[]
+    replayed?: boolean
+    reference: string
+}
+
 export type BackendSaveResult = {
     lock_version: number
     totals: { gross: string; net: string; tax: string }

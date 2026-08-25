@@ -39,6 +39,7 @@ mod procurement_task_sync;
 mod query;
 mod review;
 mod shared;
+mod sourcing_create;
 mod start_approval;
 mod submission;
 mod view_mapping;
@@ -49,16 +50,17 @@ pub use self::change_adapter::purchase_change_order_object_readable;
 pub use self::dto::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
-    CreationBasisLineView, CreationBasisListParams, CreationBasisView, DocumentApprovalView,
-    EffectPurchaseChangeRequest, PageView, PurchaseActionBlockerView, PurchaseChangeEffectResult,
-    PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
-    PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView, PurchaseOrderListParams,
-    PurchaseOrderReviewDecisionCommand, PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction,
-    PurchaseReviewResult, PurchaseReviewWorkItemView, PurchaseSalesAllocationView,
-    ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-    SavePurchaseOrderLine, SavePurchaseOrderLinePatch, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-    SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
-    VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+    CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult, CreationBasisLineView,
+    CreationBasisListParams, CreationBasisView, DocumentApprovalView, EffectPurchaseChangeRequest, PageView,
+    PurchaseActionBlockerView, PurchaseChangeEffectResult, PurchaseChangeOrderListParams,
+    PurchaseChangeOrderView, PurchaseChangeSubmitResult, PurchaseOrderCenterView, PurchaseOrderLineView,
+    PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderReviewDecisionCommand,
+    PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction, PurchaseReviewResult,
+    PurchaseReviewWorkItemView, PurchaseSalesAllocationView, ReviewPurchaseOrderCommand,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
+    SavePurchaseOrderLinePatch, SourcingLineAssignment, StartPurchaseChangeRequest,
+    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
+    SubmitPurchaseOrderResult, TotalsView, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 
 use crate::errors::{Error, Result};

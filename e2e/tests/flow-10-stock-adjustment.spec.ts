@@ -50,7 +50,7 @@ import { Locator, Page, expect, test } from "@playwright/test"
 
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
-import { pickOption } from "../helpers/ui"
+import { completePurchaseOrderCreate, pickOption } from "../helpers/ui"
 import {
     approveFirstWorkspaceTask,
     approveWorkspaceTaskByDocumentNo,
@@ -266,28 +266,14 @@ test("flow-10 库存调整：创建盘亏调整单 → 财务审批 → 自动�
     // ---- S2.5 采购(caigou) 从创建依据建采购单并提交 ----
     await caigouPage.goto("/procurement/orders")
     await caigouPage.getByRole("button", { name: "新建采购单" }).first().click()
-    const poDialog = caigouPage.getByRole("dialog")
-    await expect(poDialog).toBeVisible({ timeout: 20_000 })
-    await expect(poDialog.getByText("从采购创建依据建单")).toBeVisible()
-
-    // 依据列表异步加载：等待「选择创建依据」就绪或空态文案出现（二者必居其一）
-    const basisCombobox = poDialog.getByPlaceholder("选择创建依据")
-    const basisEmptyHint = poDialog.getByText(
-        "当前没有可消费的创建依据。请先在采购二次确认完成确认。",
-    )
-    await expect(basisCombobox.or(basisEmptyHint)).toBeVisible({
-        timeout: 20_000,
-    })
+    await expect(caigouPage).toHaveURL(/mode=create/, { timeout: 20_000 })
+    const basisEmptyHint = caigouPage.getByText("当前没有可建采购依据")
     if (await basisEmptyHint.isVisible().catch(() => false)) {
         throw new Error(
-            "前置缺陷（阻断 flow-10）：销售单已生效，但「从采购创建依据建单」弹窗显示" +
-                "「当前没有可消费的创建依据」——创建依据推导依赖销售单生效 + 已通过提交 +" +
-                "合格供应商供给，出现空态说明采购链前置未就绪，无法继续库存调整核心流程。",
+            "前置缺陷（阻断 flow-10）：销售单已生效，但新建采购单页没有可建采购依据，无法继续库存调整核心流程。",
         )
     }
-    await basisCombobox.click()
-    await caigouPage.getByRole("option").first().click()
-    await poDialog.getByRole("button", { name: "创建草稿并打开" }).click()
+    await completePurchaseOrderCreate(caigouPage)
     // 采购草稿编辑面：付款条件来自创建依据且只读，仅数量/含税单价可调整。
     await expect(caigouPage.getByText("采购草稿").first()).toBeVisible({ timeout: 30_000 })
     await expect(

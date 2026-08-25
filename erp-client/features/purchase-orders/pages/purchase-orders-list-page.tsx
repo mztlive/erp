@@ -17,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { usePurchaseOrdersListController } from "@/features/purchase-orders/hooks/use-purchase-orders-list-controller"
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
-import { PurchaseOrdersCreateDialog } from "@/features/purchase-orders/pages/purchase-orders-list-create-dialog"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
 
 export function PurchaseOrdersListPage() {
@@ -85,7 +84,7 @@ export function PurchaseOrdersListPage() {
                                 actionKey: "create",
                                 label: "新建采购单",
                                 icon: PlusIcon,
-                                onClick: ctrl.openCreateDialog,
+                                onClick: ctrl.openCreatePage,
                             },
                         ]}
                     />
@@ -216,7 +215,7 @@ export function PurchaseOrdersListPage() {
                                                 variant="secondary"
                                                 size="sm"
                                                 className="rounded-lg shadow-none"
-                                                onClick={ctrl.openCreateDialog}
+                                                onClick={ctrl.openCreatePage}
                                             >
                                                 新建采购单
                                             </Button>
@@ -227,25 +226,6 @@ export function PurchaseOrdersListPage() {
                         }
                     />
                 }
-            />
-
-            <PurchaseOrdersCreateDialog
-                open={ctrl.createOpen}
-                onOpenChange={ctrl.setCreateOpen}
-                openBases={ctrl.openBases}
-                basesPending={ctrl.basesQuery.isLoading}
-                basesFailed={
-                    ctrl.basesQuery.isError || ctrl.basesQuery.isRefetchError
-                }
-                basesError={ctrl.basesQuery.error}
-                onRetryBases={() => void ctrl.basesQuery.refetch()}
-                basisFromUrl={ctrl.basisFromUrl}
-                salesOrderFromUrl={ctrl.salesOrderFromUrl}
-                selectedBasisId={ctrl.selectedBasisId}
-                onSelectedBasisIdChange={ctrl.setSelectedBasisId}
-                createPending={ctrl.createMutation.isPending}
-                createResult={ctrl.actionResult}
-                onCreate={ctrl.handleCreate}
             />
         </PageScaffold>
     )

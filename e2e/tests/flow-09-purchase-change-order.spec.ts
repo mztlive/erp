@@ -30,7 +30,7 @@ import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
 import { api, apiLogin } from "../helpers/api"
 import { createSinglePageAccountSwitcher } from "../helpers/login"
-import { openCreateDialog } from "../helpers/ui"
+import { completePurchaseOrderCreate, openCreateDialog } from "../helpers/ui"
 
 test.setTimeout(300_000)
 
@@ -293,23 +293,14 @@ test("[flow-09] 采购变更单：销售链前置 → 采购单生效 → 发起
     // 5) 采购从 W08 列表「新建采购单」选源建单
     await procurementPage.goto("/procurement/orders")
     await procurementPage.getByRole("button", { name: "新建采购单" }).first().click()
-    const poCreateDialog = procurementPage.locator('[role="dialog"]').last()
-    await expect(poCreateDialog).toBeVisible({ timeout: 20_000 })
-    await expect(poCreateDialog.getByText("从采购创建依据建单")).toBeVisible()
-    const noBasis = poCreateDialog.getByText(
-        "当前没有可消费的创建依据。请先在采购二次确认完成确认。",
-    )
+    await expect(procurementPage).toHaveURL(/mode=create/, { timeout: 20_000 })
+    const noBasis = procurementPage.getByText("当前没有可建采购依据")
     if (await noBasis.isVisible().catch(() => false)) {
         throw new Error(
-            "前置缺陷（阻断 flow-09 核心流程）：销售单已生效，但「从采购创建依据建单」弹窗显示" +
-                "「当前没有可消费的创建依据」——backend/services/src/purchase_order/creation_basis.rs 的 " +
-                "creation_basis_list 恒返回空数组、create_from_basis 恒返回 404（旧采购确认批次已删除，" +
-                "新选源建单未实现），采购单当前无法通过 UI 创建（文档 §7.2/§7.4 要求销售单生效后选源建单）。",
+            "前置缺陷（阻断 flow-09 核心流程）：销售单已生效，但新建采购单页没有可建采购依据。",
         )
     }
-    // 功能就绪后：选中创建依据 → 创建草稿并打开 → 提交审批
-    await pickCombobox(procurementPage, poCreateDialog.getByPlaceholder("选择创建依据"))
-    await clickDialogButton(procurementPage, "创建草稿并打开")
+    await completePurchaseOrderCreate(procurementPage)
     await expect(procurementPage).toHaveURL(/\/procurement\/orders\/[0-9a-f]+/, {
         timeout: 30_000,
     })

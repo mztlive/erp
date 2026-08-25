@@ -6,6 +6,7 @@ import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     acquireDraftEditToken,
     createPurchaseOrderFromBasis,
+    createPurchaseOrdersFromSourcing,
     fetchCreationBases,
     fetchPurchaseChangeOrderDetail,
     fetchPurchaseOrderCenter,
@@ -208,6 +209,34 @@ export function useSubmitPurchaseChangeMutation() {
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
             await invalidatePurchaseOrderApprovalCaches(queryClient)
+        },
+    })
+}
+
+/**
+ * 按选源结果一次创建多张采购草稿。成功后失效列表、审批绑定与任务缓存。
+ */
+export function useCreateFromSourcingMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: createPurchaseOrdersFromSourcing,
+        onSuccess: async (result) => {
+            if (result.status !== "succeeded") return
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.lists(),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.creationBases(),
+                    refetchType: "none",
+                }),
+                queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
+                queryClient.invalidateQueries({
+                    queryKey: workspaceHomeKeys.all,
+                }),
+                queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
+            ])
         },
     })
 }

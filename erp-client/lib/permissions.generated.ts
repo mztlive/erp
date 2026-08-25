@@ -2007,6 +2007,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/from-sourcing",
+                description: "按选源结果创建采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/purchase-orders/{id}",
                 description: "查询采购单对象中心",

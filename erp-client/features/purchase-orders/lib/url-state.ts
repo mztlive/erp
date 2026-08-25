@@ -15,6 +15,7 @@ export type PurchaseOrdersUrlState = {
     salesOrderId?: string
     workItemId?: string
     action?: string
+    mode?: string
 }
 
 const STATUS_VALUES: readonly PurchaseOrderStatusFilter[] = [
@@ -47,6 +48,7 @@ const codec = createUrlStateCodec<PurchaseOrdersUrlState>([
     { key: "salesOrderId", type: "string" },
     { key: "workItemId", type: "string" },
     { key: "action", type: "string" },
+    { key: "mode", type: "string" },
 ])
 
 export const parsePurchaseOrdersSearchParams = codec.parse

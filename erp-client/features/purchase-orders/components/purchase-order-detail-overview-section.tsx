@@ -13,7 +13,11 @@ import { Button } from "@/components/ui/button"
 
 import { LinesTable } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import { PurchaseOrderDetailTotals } from "@/features/purchase-orders/components/purchase-order-detail-totals"
-import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
+import {
+    FULFILLMENT_RESPONSIBILITY_LABEL,
+    PURCHASE_TYPE_LABEL,
+    type PurchaseOrderCenterView,
+} from "@/features/purchase-orders/types"
 
 type GateView = PurchaseOrderCenterView["progress"]["prepaymentGate"]
 
@@ -48,6 +52,33 @@ export function PurchaseOrderDetailOverviewSection({
                         >
                             {order.header.salesOrderNo}
                         </Link>
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>同销售单采购单</DescriptionTerm>
+                    <DescriptionDetails>
+                        <Link
+                            href={`/procurement/orders?salesOrderId=${encodeURIComponent(order.header.salesOrderId)}`}
+                            className="text-primary underline-offset-2 hover:underline"
+                        >
+                            查看拆分结果
+                        </Link>
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>采购类型</DescriptionTerm>
+                    <DescriptionDetails>
+                        {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>履约责任</DescriptionTerm>
+                    <DescriptionDetails>
+                        {
+                            FULFILLMENT_RESPONSIBILITY_LABEL[
+                                order.header.fulfillmentResponsibility
+                            ]
+                        }
                     </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>

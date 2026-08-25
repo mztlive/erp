@@ -74,7 +74,7 @@ struct LineSupply {
 
 /// 一条可进入精确创建依据的销售当前版本行。
 #[derive(Debug, Clone)]
-struct BasisLine {
+pub(super) struct BasisLine {
     /// 当前销售版本行及采购覆盖摘要。
     coverage: SalesProcurementCoverageLine,
     /// 本供应商被确定选用的供给。
@@ -85,44 +85,44 @@ struct BasisLine {
 
 /// 一张采购单的精确拆分维度。
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct BasisScope {
+pub(super) struct BasisScope {
     /// 唯一供应商。
-    supplier_id: SupplierAccountId,
+    pub(super) supplier_id: SupplierAccountId,
     /// 采购类型。
-    purchase_type: PurchaseType,
+    pub(super) purchase_type: PurchaseType,
     /// 付款条件。
-    payment_term_code: String,
+    pub(super) payment_term_code: String,
     /// 履约责任。
-    fulfillment_responsibility: FulfillmentResponsibility,
+    pub(super) fulfillment_responsibility: FulfillmentResponsibility,
 }
 
 /// 一条精确采购创建依据。
 #[derive(Debug, Clone)]
-struct BasisGroup {
+pub(super) struct BasisGroup {
     /// 销售当前版本。
-    revision: SalesOrderRevision,
+    pub(super) revision: SalesOrderRevision,
     /// 精确拆分维度。
-    scope: BasisScope,
+    pub(super) scope: BasisScope,
     /// 可采购明细。
-    lines: Vec<BasisLine>,
+    pub(super) lines: Vec<BasisLine>,
 }
 
 /// 已规范化的本次采购行请求。
 #[derive(Debug, Clone)]
-struct RequestedLine {
+pub(super) struct RequestedLine {
     /// 稳定销售行。
-    sales_order_line_id: String,
+    pub(super) sales_order_line_id: String,
     /// 本次采购数量。
-    quantity: Quantity,
+    pub(super) quantity: Quantity,
 }
 
 /// 已通过事务内最新剩余量校验的采购行。
 #[derive(Debug, Clone)]
-struct SelectedLine {
+pub(super) struct SelectedLine {
     /// 当前依据行。
-    basis: BasisLine,
+    pub(super) basis: BasisLine,
     /// 本次采购数量。
-    quantity: Quantity,
+    pub(super) quantity: Quantity,
 }
 
 /// 幂等命令收据载荷。
@@ -137,19 +137,19 @@ struct CreationReceipt {
 }
 
 /// 事务内采购创建命令上下文。
-struct CreateBasisCommand<'a> {
+pub(super) struct CreateBasisCommand<'a> {
     /// 来源销售单。
-    sales_order_id: &'a SalesOrderId,
+    pub(super) sales_order_id: &'a SalesOrderId,
     /// 原始创建请求。
-    req: &'a CreatePurchaseOrderFromBasisRequest,
+    pub(super) req: &'a CreatePurchaseOrderFromBasisRequest,
     /// 已规范化逐行数量。
-    requested_lines: &'a [RequestedLine],
+    pub(super) requested_lines: &'a [RequestedLine],
     /// 稳定命令收据 ID。
-    audit_id: &'a str,
+    pub(super) audit_id: &'a str,
     /// 命令载荷指纹。
-    request_fingerprint: &'a str,
+    pub(super) request_fingerprint: &'a str,
     /// 审计操作人。
-    actor: &'a AuditActor,
+    pub(super) actor: &'a AuditActor,
 }
 
 /// 待一次性持久化的采购草稿聚合。
@@ -400,7 +400,7 @@ async fn create_from_basis_in_transaction(
 ///
 /// # 关键业务约束
 /// 非生效销售单不能占用采购剩余量。
-async fn load_effective_sales_order(
+pub(super) async fn load_effective_sales_order(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
     executor: &mut dyn Executor,
@@ -432,7 +432,7 @@ async fn load_effective_sales_order(
 ///
 /// # 关键业务约束
 /// 仅对任务冻结范围内的稳定销售行查询供应商供给；同一依据内供应商、采购类型、付款条件和履约责任完全一致。
-async fn basis_groups_for_order(
+pub(super) async fn basis_groups_for_order(
     db: &mongodb::Database,
     order: &SalesOrder,
     responsibility_scope_ids: &[String],
@@ -788,7 +788,7 @@ fn basis_line_view(
 ///
 /// # 关键业务约束
 /// `creation_basis_id` 唯一，且本函数只创建一个采购聚合。
-async fn persist_basis_draft(
+pub(super) async fn persist_basis_draft(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
     sales_order: &SalesOrder,
@@ -1189,7 +1189,7 @@ fn normalize_requested_lines(req: &CreatePurchaseOrderFromBasisRequest) -> Resul
 ///
 /// # 关键业务约束
 /// 同时校验 `quantity <= remaining` 与 `quantity <= min(remaining, available)`。
-fn validate_requested_quantities(
+pub(super) fn validate_requested_quantities(
     requested: &[RequestedLine],
     group: &BasisGroup,
 ) -> Result<Vec<SelectedLine>> {
@@ -1255,7 +1255,7 @@ fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
 ///
 /// # 关键业务约束
 /// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据。
-fn basis_id_for(order: &SalesOrder, group: &BasisGroup, work_item_id: &str) -> String {
+pub(super) fn basis_id_for(order: &SalesOrder, group: &BasisGroup, work_item_id: &str) -> String {
     let mut parts = vec![
         order.base.id.clone(),
         work_item_id.to_string(),
@@ -1312,7 +1312,7 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
 ///
 /// # 关键业务约束
 /// 该键只用于分组和指纹，不作为数据库自然键。
-fn basis_scope_key(scope: &BasisScope) -> String {
+pub(super) fn basis_scope_key(scope: &BasisScope) -> String {
     format!(
         "{}|{}|{}|{}",
         scope.supplier_id,
@@ -1359,7 +1359,7 @@ fn maximum_create_quantity(remaining: Quantity, available: Option<Quantity>) -> 
 ///
 /// # 关键业务约束
 /// 所有覆盖与请求匹配均使用稳定销售行，不按 SKU 猜测。
-fn stable_line_id(line: &BasisLine) -> &str {
+pub(super) fn stable_line_id(line: &BasisLine) -> &str {
     line.coverage.revision_line.sales_order_line_id.as_ref()
 }
 
@@ -1730,7 +1730,7 @@ fn business_date_of(instant: Instant) -> Result<BusinessDate> {
 ///
 /// # 错误
 /// 无。
-fn procurement_quantity_changed() -> Error {
+pub(super) fn procurement_quantity_changed() -> Error {
     Error::ConflictError("可采购数量已更新，请刷新后重试".to_string())
 }
 

@@ -41,6 +41,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/purchase-orders/from-sourcing",
+            with_permission(
+                post(purchase_order::purchase_order_create_from_sourcing),
+                rbac,
+                purchase_order::purchase_order_create_from_sourcing_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-orders/{id}",
             with_permission(
                 get(purchase_order::purchase_order_detail),
