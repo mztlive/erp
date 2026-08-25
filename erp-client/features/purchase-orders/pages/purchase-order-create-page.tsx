@@ -9,7 +9,6 @@ import { ArrowLeftIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
-    FormalActionResult,
     MoneyValue,
     PageActions,
     PageHeader,
@@ -56,11 +55,10 @@ import {
     collectSourcingErrorMessages,
     sourcingFormValidationError,
 } from "@/features/purchase-orders/lib/purchase-order-create-validation"
-import type { CreatedPurchaseOrderDraft } from "@/features/purchase-orders/types"
 import { cn } from "@/lib/utils"
 
 /**
- * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建真实草稿。
+ * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建真实草稿；成功后回到列表。
  */
 export function PurchaseOrderCreatePage({
     initialSalesOrderId = "",
@@ -77,9 +75,6 @@ export function PurchaseOrderCreatePage({
     const createMutation = useCreateFromSourcingMutation()
     const [previewOpen, setPreviewOpen] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
-    const [createdOrders, setCreatedOrders] = React.useState<
-        CreatedPurchaseOrderDraft[] | null
-    >(null)
     const [actionError, setActionError] = React.useState<{
         title: string
         description: string
@@ -146,15 +141,17 @@ export function PurchaseOrderCreatePage({
             })
             if (result.status === "succeeded") {
                 createIntentRef.current = null
-                const orders = result.data.orders
-                if (orders.length === 1 && orders[0]) {
-                    router.push(
-                        `/procurement/orders/${orders[0].purchaseOrderId}?mode=edit`,
-                    )
-                    return
-                }
-                setCreatedOrders(orders)
-                setActionError(null)
+                const count = result.data.orders.length
+                toast.add({
+                    title: "采购草稿已创建",
+                    description:
+                        count > 1
+                            ? `已按供应商拆成 ${count} 张采购单。`
+                            : "已创建 1 张采购草稿。",
+                    type: "success",
+                    timeout: 4000,
+                })
+                router.replace("/procurement/orders")
                 return
             }
             if (result.status === "failed") {
@@ -222,7 +219,6 @@ export function PurchaseOrderCreatePage({
         if (basesQuery.isPending) return
         writeLines(buildDefaultSourcingLines(selectedOrder))
         setPreviewOpen(false)
-        setCreatedOrders(null)
     }, [basesQuery.isPending, selectedOrder, writeLines])
 
     const lines = useStore(form.store, (state) => state.values.lines)
@@ -371,55 +367,6 @@ export function PurchaseOrderCreatePage({
                         >
                             返回列表
                         </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (createdOrders) {
-        return (
-            <PageScaffold>
-                <PageHeader
-                    title="采购草稿已创建"
-                    description={`已按供应商拆成 ${createdOrders.length} 张采购单。`}
-                    actions={
-                        <PageActions
-                            actions={[
-                                {
-                                    actionKey: "back",
-                                    label: "返回列表",
-                                    icon: ArrowLeftIcon,
-                                    variant: "outline",
-                                    onClick: () =>
-                                        router.push("/procurement/orders"),
-                                },
-                            ]}
-                        />
-                    }
-                />
-                <FormalActionResult
-                    status="succeeded"
-                    title="已创建采购草稿"
-                    description="可分别打开各张草稿继续编辑或提交审批。"
-                    actions={
-                        <div className="flex flex-wrap gap-2">
-                            {createdOrders.map((order) => (
-                                <Button
-                                    key={order.purchaseOrderId}
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    render={
-                                        <Link
-                                            href={`/procurement/orders/${order.purchaseOrderId}?mode=edit`}
-                                        />
-                                    }
-                                >
-                                    {order.draftLabel}
-                                </Button>
-                            ))}
-                        </div>
                     }
                 />
             </PageScaffold>
@@ -601,7 +548,7 @@ export function PurchaseOrderCreatePage({
                         <AlertDialogDescription>
                             将按当前选源结果创建 {previews.length}{" "}
                             张采购草稿，含税合计 {previewTotals.gross}
-                            。创建后可分别打开草稿编辑或提交审批。
+                            。创建成功后将回到采购单列表。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
