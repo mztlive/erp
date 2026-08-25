@@ -1,13 +1,22 @@
 "use client"
 
-import { SearchIcon } from "lucide-react"
+import type { ComponentProps } from "react"
+import { ChevronDownIcon, SearchIcon } from "lucide-react"
 
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
     InputGroup,
     InputGroupAddon,
+    InputGroupButton,
     InputGroupInput,
 } from "@/components/ui/input-group"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { cn } from "@/lib/utils"
 
 import type { WorkspaceUrlState } from "../lib/url-state"
@@ -39,19 +48,40 @@ const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
     { value: "created_desc", label: "进入时间" },
 ]
 
+/** 文字导航项。选中靠字重，不用胶囊底。 */
+function WorkspaceTextNavButton({
+    active,
+    children,
+    ...props
+}: ComponentProps<"button"> & { active: boolean }) {
+    return (
+        <button
+            {...props}
+            type="button"
+            aria-pressed={active}
+            className={cn(
+                "h-8 px-1.5 text-sm",
+                active
+                    ? "font-medium text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+            )}
+        >
+            {children}
+        </button>
+    )
+}
+
 /**
- * 贴画布的口径数字。数字本身是筛选，不是统计卡。
+ * 队列口径切换。只切换待办范围，不展示统计数字。
  */
-export function WorkspaceOverviewBar({
+export function WorkspaceQueueScopeNav({
     metrics,
     activeMetric,
     onMetricClick,
-    className,
 }: {
     metrics: readonly WorkspaceMetric[]
     activeMetric: WorkspaceMetricKey
     onMetricClick: (key: WorkspaceMetricKey) => void
-    className?: string
 }) {
     const visibleMetrics = metrics.filter((metric) => metric.visible)
 
@@ -59,49 +89,17 @@ export function WorkspaceOverviewBar({
         <div
             role="group"
             aria-label="待办筛选"
-            className={cn(
-                "flex shrink-0 flex-wrap gap-x-8 gap-y-3 border-b border-border/30 pb-4",
-                className,
-            )}
+            className="flex flex-wrap items-center gap-1"
         >
-            {visibleMetrics.map((metric) => {
-                const active = metric.key === activeMetric
-                const danger =
-                    metric.tone === "destructive" && metric.count > 0
-                return (
-                    <button
-                        key={metric.key}
-                        type="button"
-                        aria-pressed={active}
-                        aria-label={`${metric.label} ${metric.count}`}
-                        onClick={() => onMetricClick(metric.key)}
-                        className="flex min-w-14 flex-col items-start gap-1 text-left"
-                    >
-                        <span
-                            className={cn(
-                                "num text-3xl leading-none font-semibold tracking-tight",
-                                danger
-                                    ? "text-destructive"
-                                    : active
-                                      ? "text-foreground"
-                                      : "text-muted-foreground",
-                            )}
-                        >
-                            {metric.count}
-                        </span>
-                        <span
-                            className={cn(
-                                "border-b pb-0.5 text-xs",
-                                active
-                                    ? "border-foreground font-medium text-foreground"
-                                    : "border-transparent text-muted-foreground",
-                            )}
-                        >
-                            {metric.label}
-                        </span>
-                    </button>
-                )
-            })}
+            {visibleMetrics.map((metric) => (
+                <WorkspaceTextNavButton
+                    key={metric.key}
+                    active={metric.key === activeMetric}
+                    onClick={() => onMetricClick(metric.key)}
+                >
+                    {metric.label}
+                </WorkspaceTextNavButton>
+            ))}
         </div>
     )
 }
@@ -126,26 +124,18 @@ export function WorkspaceFamilyNav({
         >
             {FAMILIES.map((family) => {
                 const value = family ?? "all"
-                const active = familyValue === value
                 return (
-                    <button
+                    <WorkspaceTextNavButton
                         key={value}
-                        type="button"
-                        aria-pressed={active}
+                        active={familyValue === value}
                         onClick={() =>
                             onFamilyChange(
                                 family === undefined ? undefined : family,
                             )
                         }
-                        className={cn(
-                            "h-8 px-1.5 text-sm",
-                            active
-                                ? "font-medium text-foreground"
-                                : "text-muted-foreground hover:text-foreground",
-                        )}
                     >
                         {family ? FAMILY_LABEL[family] : "全部"}
-                    </button>
+                    </WorkspaceTextNavButton>
                 )
             })}
         </div>
@@ -153,7 +143,7 @@ export function WorkspaceFamilyNav({
 }
 
 /**
- * 队列内搜索与排序。Enter 提交关键词，不另放搜索按钮。
+ * 队列内搜索与排序。同属一条搜索栏，Enter 提交关键词。
  */
 export function WorkspaceQueueToolbar({
     urlState,
@@ -161,27 +151,25 @@ export function WorkspaceQueueToolbar({
     onSearchDraftChange,
     onSortChange,
     onSearch,
-    stacked = false,
 }: {
     urlState: WorkspaceUrlState
     searchDraft: string
     onSearchDraftChange: (value: string) => void
     onSortChange: (sort: WorkspaceSort) => void
     onSearch: () => void
-    stacked?: boolean
 }) {
+    const sortLabel =
+        SORT_OPTIONS.find((option) => option.value === urlState.sort)?.label ??
+        "排序"
+
     return (
         <form
-            className={cn(
-                "flex gap-2",
-                stacked ? "flex-col" : "max-w-xl flex-row items-center",
-            )}
             onSubmit={(event) => {
                 event.preventDefault()
                 onSearch()
             }}
         >
-            <InputGroup className="min-w-0 flex-1">
+            <InputGroup className="min-w-0">
                 <InputGroupAddon>
                     <SearchIcon aria-hidden="true" />
                 </InputGroupAddon>
@@ -190,27 +178,53 @@ export function WorkspaceQueueToolbar({
                     onChange={(event) =>
                         onSearchDraftChange(event.target.value)
                     }
-                    placeholder="单号或往来方"
+                    placeholder="搜索单号或往来方"
                     aria-label="搜索待办"
                 />
+                <InputGroupAddon
+                    align="inline-end"
+                    className="border-l border-border/60 pl-1"
+                >
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            render={
+                                <InputGroupButton
+                                    variant="ghost"
+                                    size="xs"
+                                    aria-label={`排序：${sortLabel}`}
+                                />
+                            }
+                        >
+                            排序
+                            <ChevronDownIcon data-icon="inline-end" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                            align="end"
+                            className="w-auto min-w-40"
+                        >
+                            <DropdownMenuGroup>
+                                <DropdownMenuRadioGroup
+                                    value={urlState.sort}
+                                    onValueChange={(value) => {
+                                        if (value) {
+                                            onSortChange(value as WorkspaceSort)
+                                        }
+                                    }}
+                                >
+                                    {SORT_OPTIONS.map((option) => (
+                                        <DropdownMenuRadioItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </DropdownMenuRadioItem>
+                                    ))}
+                                </DropdownMenuRadioGroup>
+                            </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </InputGroupAddon>
             </InputGroup>
-            <NativeSelect
-                size="sm"
-                value={urlState.sort}
-                aria-label="排序"
-                onChange={(event) =>
-                    onSortChange(event.target.value as WorkspaceSort)
-                }
-            >
-                {SORT_OPTIONS.map((option) => (
-                    <NativeSelectOption
-                        key={option.value}
-                        value={option.value}
-                    >
-                        {option.label}
-                    </NativeSelectOption>
-                ))}
-            </NativeSelect>
         </form>
     )
 }

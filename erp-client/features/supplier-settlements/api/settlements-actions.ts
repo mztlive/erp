@@ -3,7 +3,7 @@
  * 从 api/settlements.ts 拆出；请求体与结果映射保持不变。
  */
 
-import { apiPost } from "@/lib/api"
+import { apiPost, getErrorMessage } from "@/lib/api"
 import type {
     AppendEvidenceInput,
     CreateDraftInput,
@@ -65,8 +65,11 @@ export async function createSettlementDraft(
                 status: "blocked",
                 code: "SOURCE_EVIDENCE_MISSING",
                 title: "来源证据尚未完备",
-                message:
+                // 后端 errorMessage 优先；仅在后端无文案时使用本地兜底
+                message: getErrorMessage(
+                    err,
                     "当前供应商与期间尚无完整来源证据批次，请先通过来源证据录入命令补齐履约、退款、费用与账单行证据。",
+                ),
             }
         }
         throw err

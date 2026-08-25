@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sheet"
 import {
     WorkspaceFamilyNav,
-    WorkspaceOverviewBar,
+    WorkspaceQueueScopeNav,
     WorkspaceQueueToolbar,
 } from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
@@ -33,7 +33,7 @@ import { filterSummaryFor } from "@/features/workspace/lib/url-state"
 import { cn } from "@/lib/utils"
 
 /**
- * 工作台：口径数字贴画布；有任务时队列与作业面左右分栏，审批在右侧连续提交。
+ * 工作台：页头切换待办口径，队列与作业面左右分栏，审批在右侧连续提交。
  */
 export function WorkspaceHomePage() {
     const {
@@ -149,14 +149,13 @@ export function WorkspaceHomePage() {
         </Button>
     ) : undefined
 
-    const queueToolbar = (stacked: boolean) => (
+    const queueToolbar = (
         <WorkspaceQueueToolbar
             urlState={urlState}
             searchDraft={searchDraft}
             onSearchDraftChange={setSearchDraft}
             onSortChange={onSortChange}
             onSearch={applySearch}
-            stacked={stacked}
         />
     )
 
@@ -179,7 +178,7 @@ export function WorkspaceHomePage() {
     )
 
     return (
-        <PageScaffold className="min-h-0">
+        <PageScaffold className="min-h-0" density="compact">
             <PageHeader
                 title="我的工作台"
                 metadata={
@@ -191,90 +190,90 @@ export function WorkspaceHomePage() {
                     />
                 }
                 actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "refresh",
-                                label: refreshing ? "刷新中" : "刷新",
-                                icon: RefreshCwIcon,
-                                variant: "ghost",
-                                disabled: refreshing,
-                                onClick: refresh,
-                                className:
-                                    "text-muted-foreground hover:text-foreground",
-                            },
-                        ]}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <WorkspaceQueueScopeNav
+                            metrics={metrics}
+                            activeMetric={activeMetric}
+                            onMetricClick={onMetricClick}
+                        />
+                        <PageActions
+                            actions={[
+                                {
+                                    actionKey: "refresh",
+                                    label: refreshing ? "刷新中" : "刷新",
+                                    icon: RefreshCwIcon,
+                                    variant: "ghost",
+                                    disabled: refreshing,
+                                    onClick: refresh,
+                                    className:
+                                        "text-muted-foreground hover:text-foreground",
+                                },
+                            ]}
+                        />
+                    </div>
                 }
             />
 
-            <WorkspaceOverviewBar
-                className="border-b-0 pb-0"
-                metrics={metrics}
-                activeMetric={activeMetric}
-                onMetricClick={onMetricClick}
-            />
-
-            {items.length === 0 ? (
-                <div
+            <div
+                className={cn(
+                    surfacePanelClassName,
+                    "flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row",
+                )}
+            >
+                <section
                     className={cn(
-                        surfacePanelClassName,
-                        "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4",
+                        "flex min-h-0 flex-col p-3",
+                        items.length === 0
+                            ? "flex-1"
+                            : "w-full lg:w-80 lg:shrink-0 xl:w-96",
                     )}
+                    aria-label={filterLabel}
                 >
-                    <div className="flex max-w-xl flex-col gap-3">
+                    <header
+                        className={cn(
+                            "flex flex-col gap-2 pb-3",
+                            items.length === 0 && "max-w-xl",
+                        )}
+                    >
+                        <p className="sr-only" aria-live="polite">
+                            {filterLabel} {view.total} 项
+                        </p>
                         <WorkspaceFamilyNav
                             urlState={urlState}
                             onFamilyChange={onFamilyChange}
                         />
-                        {queueToolbar(false)}
-                    </div>
-                    <div className="flex flex-1 items-center justify-center">
-                        <BusinessEmptyState
-                            kind={hasActiveFilter ? "filter" : "no-tasks"}
-                            title={emptyTitle}
-                            description={emptyDescription}
-                            action={emptyAction}
-                            className="bg-transparent ring-0"
-                        />
-                    </div>
-                </div>
-            ) : (
-                <div
-                    className={cn(
-                        surfacePanelClassName,
-                        "flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row",
-                    )}
-                >
-                    <section
-                        className="flex min-h-0 w-full flex-col p-3 lg:w-80 lg:shrink-0 xl:w-96"
-                        aria-label={filterLabel}
-                    >
-                        <header className="flex flex-col gap-2 pb-3">
-                            <p className="sr-only" aria-live="polite">
-                                {filterLabel} {view.total} 项
-                            </p>
-                            <WorkspaceFamilyNav
-                                urlState={urlState}
-                                onFamilyChange={onFamilyChange}
+                        {queueToolbar}
+                    </header>
+                    {items.length === 0 ? (
+                        <div className="flex flex-1 items-center justify-center p-6">
+                            <BusinessEmptyState
+                                kind={hasActiveFilter ? "filter" : "no-tasks"}
+                                title={emptyTitle}
+                                description={emptyDescription}
+                                action={emptyAction}
+                                className="bg-transparent ring-0"
                             />
-                            {queueToolbar(true)}
-                        </header>
+                        </div>
+                    ) : (
                         <WorkspaceTaskList
                             items={items}
                             selectedWorkItemId={selected?.workItemId}
                             onSelect={onSelectTask}
                         />
-                    </section>
-                    <Separator
-                        orientation="vertical"
-                        className="hidden lg:block"
-                    />
-                    <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:p-5">
-                        {detail}
-                    </div>
-                </div>
-            )}
+                    )}
+                </section>
+                {items.length > 0 ? (
+                    <>
+                        <Separator
+                            orientation="vertical"
+                            className="hidden lg:block"
+                        />
+                        <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:p-5">
+                            {detail}
+                        </div>
+                    </>
+                ) : null}
+            </div>
 
             <Sheet
                 open={narrowDetailOpen && Boolean(selected)}

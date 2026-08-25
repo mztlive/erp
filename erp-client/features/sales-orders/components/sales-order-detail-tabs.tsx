@@ -16,6 +16,7 @@ import {
 } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
 import {
+    isSalesOrderApprovalInProgress,
     isWorkSection,
     type NavSectionId,
     type SalesOrderDetailActionResult,
@@ -62,7 +63,7 @@ export function SalesOrderDetailTabs({
         const changeOnVersions =
             item.id === "versions" && Boolean(order.activeChangeOrder)
         const approvalPending =
-            item.id === "approval" && Boolean(order.approval?.instance)
+            item.id === "approval" && isSalesOrderApprovalInProgress(order)
 
         return {
             id: item.id,

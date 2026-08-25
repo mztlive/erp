@@ -168,6 +168,13 @@ export const isBlockedStatus = (status?: string | null): boolean =>
     status === "BLOCKED"
 
 /**
+ * 判断实例是否仍在途。只认服务端 `RUNNING` / `BLOCKED`；
+ * `APPROVED` / `CANCELLED` 是终态，未知码不当成进行中。
+ */
+export const isOpenInstanceStatus = (status?: string | null): boolean =>
+    status === "RUNNING" || status === "BLOCKED"
+
+/**
  * 人员失效类 blocker。仅这些类别可显示恢复原审批人。
  */
 export const PERSONNEL_BLOCKER_CODES = new Set([

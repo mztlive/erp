@@ -124,7 +124,7 @@ export const COST_BASIS_LABEL: Record<CostBasis, string> = {
     NONE: "未覆盖",
 }
 
-/** 失败明细错误码中文映射；未命中不展示原码。 */
+/** 失败明细错误码中文映射；仅在后端未返回 error_detail 时兜底，禁止原码上屏。 */
 export const FAILURE_CODE_LABEL: Record<string, string> = {
     SOURCE_SCHEMA_FIELD_MISSING: "来源字段缺失",
     TAX_BASIS_UNRESOLVED: "税口径无法解析",

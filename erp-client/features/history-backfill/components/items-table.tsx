@@ -180,12 +180,13 @@ export function ItemsTable({
                     if (item.failure) {
                         return (
                             <div className="max-w-[14rem] text-xs">
+                                {/* 后端 error_detail 优先；映射仅在后端缺说明时兜底，避免枚举原值上屏 */}
                                 <div>
-                                    {FAILURE_CODE_LABEL[
-                                        item.failure.errorCode
-                                    ] ?? item.failure.summary}
+                                    {item.failure.summary ??
+                                        (FAILURE_CODE_LABEL[
+                                            item.failure.errorCode
+                                        ] ?? item.failure.errorCode)}
                                 </div>
-                                <div>{item.failure.summary}</div>
                                 <div className="text-muted-foreground">
                                     {PIPELINE_STAGE_LABEL[
                                         item.failure

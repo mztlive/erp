@@ -5,7 +5,20 @@ import {
     displayUnixSeconds,
     executionStatusTone,
     instanceStatusTone,
+    isOpenInstanceStatus,
 } from "./display"
+
+describe("isOpenInstanceStatus", () => {
+    it("treats only RUNNING and BLOCKED as in-flight", () => {
+        expect(isOpenInstanceStatus("RUNNING")).toBe(true)
+        expect(isOpenInstanceStatus("BLOCKED")).toBe(true)
+        expect(isOpenInstanceStatus("APPROVED")).toBe(false)
+        expect(isOpenInstanceStatus("CANCELLED")).toBe(false)
+        expect(isOpenInstanceStatus("UNKNOWN")).toBe(false)
+        expect(isOpenInstanceStatus(undefined)).toBe(false)
+        expect(isOpenInstanceStatus(null)).toBe(false)
+    })
+})
 
 describe("instanceStatusTone", () => {
     it("maps known instance statuses to badge tones", () => {

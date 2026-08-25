@@ -61,21 +61,22 @@ export interface ApiRequestOptions {
     signal?: AbortSignal
     /** 超时毫秒数，默认 DEFAULT_TIMEOUT_MS。 */
     timeoutMs?: number
+    /** 浏览器 HTTP 缓存策略（透传 fetch cache）。 */
+    cache?: RequestCache
 }
 
 /**
- * 通用请求封装：拼接 base URL、附带 Authorization 头、超时控制、
- * 统一解包 ApiResponse 信封并返回业务数据。
+ * 组装并发送请求：拼接 base URL、附带 Authorization 头、超时控制。
+ * 网络层失败统一映射为 Network 类 ApiError；响应状态由调用方分支处理。
  *
  * @param path 以 "/" 开头的接口路径。
  * @param options 请求选项。
- * @returns 信封解包后的业务数据（T）。
- * @throws {ApiError} 网络失败 / 非 2xx / 业务失败 / 解析失败统一抛 ApiError。
+ * @throws {ApiError} fetch 失败（断网、超时、取消）时抛出。
  */
-const apiFetch = async <T>(
+const sendRequest = async (
     path: string,
-    options: ApiRequestOptions = {},
-): Promise<T> => {
+    options: ApiRequestOptions,
+): Promise<Response> => {
     const headers: Record<string, string> = { ...options.headers }
     const token = getToken()
     if (token) {
@@ -99,17 +100,42 @@ const apiFetch = async <T>(
         ? AbortSignal.any([AbortSignal.timeout(timeoutMs), options.signal])
         : AbortSignal.timeout(timeoutMs)
 
-    let res: Response
     try {
-        res = await fetch(`${getApiBaseUrl()}${path}`, {
+        return await fetch(`${getApiBaseUrl()}${path}`, {
             method: options.method ?? "GET",
             headers,
             body,
             signal,
+            cache: options.cache,
         })
     } catch (cause) {
         throw fromFetchError(cause)
     }
+}
+
+/** 错误响应体尽力解析为对象，供统一错误层提取后端 errorMessage 与错误码。 */
+const readErrorBody = async (res: Response): Promise<unknown> => {
+    try {
+        const text = await res.text()
+        return text ? JSON.parse(text) : undefined
+    } catch {
+        return undefined
+    }
+}
+
+/**
+ * 通用请求封装：统一解包 ApiResponse 信封并返回业务数据。
+ *
+ * @param path 以 "/" 开头的接口路径。
+ * @param options 请求选项。
+ * @returns 信封解包后的业务数据（T）。
+ * @throws {ApiError} 网络失败 / 非 2xx / 业务失败 / 解析失败统一抛 ApiError。
+ */
+const apiFetch = async <T>(
+    path: string,
+    options: ApiRequestOptions = {},
+): Promise<T> => {
+    const res = await sendRequest(path, options)
 
     const bodyText = await res.text()
     let parsed: unknown
@@ -156,6 +182,33 @@ const apiFetch = async <T>(
 
     // 成功：优先取信封 data，非信封形态（如纯 JSON 接口）直接返回原体
     return (envelope?.data ?? parsed) as T
+}
+
+/**
+ * GET 请求并以 Blob 返回二进制内容（文件预览/下载等）。
+ *
+ * 失败路径与 apiFetch 完全一致：401 归 Auth 并通知 session 清理；
+ * 非 2xx 归 Http/Validation；错误响应体仍按 JSON 信封解析，
+ * 优先透传后端 errorMessage，仅在其缺失时使用统一兜底文案。
+ *
+ * @param path 接口路径。
+ * @param options 请求选项。
+ */
+export const apiGetBlob = async (
+    path: string,
+    options: ApiRequestOptions = {},
+): Promise<Blob> => {
+    const res = await sendRequest(path, options)
+    const requestId = res.headers.get("X-Trace-Id") ?? undefined
+
+    if (res.status === 401) {
+        notifyUnauthorized()
+        throw fromAuth(401, await readErrorBody(res), requestId)
+    }
+    if (!res.ok) {
+        throw fromHttpResponse(res.status, await readErrorBody(res), requestId)
+    }
+    return res.blob()
 }
 
 /**

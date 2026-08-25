@@ -2,8 +2,8 @@
  * 工作台详情的键值段分层。
  *
  * 服务端简报把 10 余个键值段平铺下发（见 `work_item/brief.rs`），全部等权上屏会让
- * 审批人找不到落点。这里按「金额条 / 常显字段 / 折叠字段」三层拆开：金额条是决策
- * 重心，常显字段影响审批判断，其余是查证用的背书信息，默认收起。
+ * 审批人找不到落点。这里按「金额条 / 常显字段 / 其余字段」三层拆开：金额条是决策
+ * 重心，常显字段影响审批判断，其余是查证用的背书信息。作业面全部展开，只用来排序。
  */
 
 export type DetailSection = Readonly<{
@@ -23,7 +23,7 @@ const AMOUNT_ORDER: readonly string[] = [
 /** 与标题行往来方同义的段，值一致时不重复上屏。 */
 const COUNTERPARTY_LABELS = new Set(["客户", "供应商", "往来方"])
 
-/** 影响审批判断、默认展开的段。 */
+/** 影响审批判断、排在单据信息前面的段。 */
 const KEY_LABELS = new Set([
     "业务性质",
     "付款条件",
@@ -39,9 +39,9 @@ const OPAQUE_ID =
 export type WorkspaceDetailFacts = Readonly<{
     /** 金额条，主金额在首位。 */
     amounts: readonly DetailSection[]
-    /** 默认展开的字段。 */
+    /** 影响审批判断的字段，排在单据信息前面。 */
     keyFields: readonly DetailSection[]
-    /** 折叠起来的字段。 */
+    /** 其余单据字段，作业面与常显字段一并展开。 */
     moreFields: readonly DetailSection[]
     /** 已解析成人名的提交人，用于标题副行。 */
     submitter?: string

@@ -1,8 +1,6 @@
 import {
     createApiError,
-    getApiBaseUrl,
-    getToken,
-    notifyUnauthorized,
+    apiPostForm,
 } from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { contractPdfError } from "@/features/contracts/lib/pdf"
@@ -73,69 +71,17 @@ export async function uploadContractPdf(
     // 服务端流式解析先取文件，再读取 JSON 命令；顺序是协议的一部分。
     form.append("file", input.pdfFile, input.pdfFile.name)
     form.append("command", JSON.stringify(command))
-    const headers: Record<string, string> = {}
-    const token = getToken()
-    if (token) headers.Authorization = `Bearer ${token}`
-    let response: Response
-    try {
-        response = await fetch(`${getApiBaseUrl()}/admin/contracts/upload`, {
-            method: "POST",
-            headers,
-            body: form,
-            signal: AbortSignal.timeout(60_000),
-        })
-    } catch (cause) {
-        throw createApiError({
-            kind: "Network",
-            message: "网络请求失败或连接超时",
-            cause,
-        })
-    }
-    const text = await response.text()
-    let parsed: unknown
-    try {
-        parsed = text ? JSON.parse(text) : null
-    } catch (cause) {
-        throw createApiError({
-            kind: "Parse",
-            message: "响应数据解析失败",
-            cause,
-            responseData: text,
-        })
-    }
-    const envelope = parsed as {
-        success?: boolean
-        status?: number
-        errorMessage?: string
-        data?: BackendContractUpload | null
-    } | null
-    if (response.status === 401 || envelope?.status === 401) {
-        notifyUnauthorized()
-        throw createApiError({
-            kind: "Auth",
-            message: "登录状态已失效，请重新登录",
-            status: 401,
-            responseData: parsed,
-        })
-    }
-    if (!response.ok || envelope?.success === false) {
-        throw createApiError({
-            kind: response.status === 400 ? "Validation" : "Http",
-            message:
-                envelope?.errorMessage ||
-                (response.status === 400
-                    ? "请求未通过业务校验"
-                    : `请求失败（HTTP ${response.status}）`),
-            status: response.status,
-            responseData: parsed,
-        })
-    }
-    const created = envelope?.data
+
+    // 统一信封解包：网络 / 鉴权 / 业务失败由 lib/api 层抛出带后端文案的 ApiError。
+    const created = await apiPostForm<BackendContractUpload | null>(
+        "/admin/contracts/upload",
+        form,
+        { timeoutMs: 60_000 },
+    )
     if (!created?.id || !created.revision_id) {
         throw createApiError({
             kind: "Parse",
             message: "上传响应缺少合同或修订身份",
-            responseData: parsed,
         })
     }
 

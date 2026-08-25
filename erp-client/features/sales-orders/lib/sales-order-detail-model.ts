@@ -1,3 +1,4 @@
+import { isOpenInstanceStatus } from "@/features/approval-workflow/display"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/contracts"
 import {
@@ -125,16 +126,28 @@ export function resolveNavSection(
     return "overview"
 }
 
+/**
+ * 销售单审批是否仍需处理。已通过/已撤回的实例只是历史投影，不得再占焦点。
+ * 尚无 instance 时，仅在单据仍处审核轨才当作待审批（投影尚未回写）。
+ */
+export function isSalesOrderApprovalInProgress(
+    order: Pick<SalesOrderListItem, "approval" | "primaryStatus">,
+): boolean {
+    if (!order.approval) return false
+    if (isOpenInstanceStatus(order.approval.instance?.status)) return true
+    if (order.approval.instance) return false
+    return REVIEW_CODES.has(order.primaryStatus.code)
+}
+
 export function resolveFocusTask(
     order: SalesOrderListItem,
     canAccept: boolean,
 ): FocusTask | null {
-    // 有审批绑定且仍在审核轨（含尚无 instance 投影的审批中）时，优先引导去审批，
-    // 不得被验收等履约动作抢焦点。
+    // 审批仍在途时优先引导去审批，不得被验收等履约动作抢焦点。
+    // 已通过的实例不得仅因「有 instance」就继续提示等审批。
     if (
         order.nature === "physical_service" &&
-        order.approval &&
-        (order.approval.instance || REVIEW_CODES.has(order.primaryStatus.code))
+        isSalesOrderApprovalInProgress(order)
     ) {
         return {
             id: "approval",
@@ -146,8 +159,7 @@ export function resolveFocusTask(
     }
     if (
         order.nature === "card_voucher" &&
-        order.approval &&
-        (order.approval.instance || REVIEW_CODES.has(order.primaryStatus.code))
+        isSalesOrderApprovalInProgress(order)
     ) {
         return {
             id: "approval",

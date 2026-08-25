@@ -5,7 +5,7 @@ import { gotoPage } from "./ui";
 /**
  * W01 我的工作台定位与审批动作。
  *
- * 与现网布局对齐：页头「我的工作台」；口径数字贴画布，无独立 MetricStrip；
+ * 与现网布局对齐：页头「我的工作台」+ 口径分段（无顶部统计数字、无 MetricStrip）；
  * 待办列表只渲染一份；桌面队列/作业左右分栏，窄屏用 Sheet。
  */
 
@@ -33,6 +33,9 @@ export async function expectWorkspaceHome(page: Page): Promise<void> {
   await expect(page.locator('[data-slot="metric-strip"]')).toHaveCount(0);
   await expect(page.getByText("工作台汇总")).toHaveCount(0);
   await expect(page.getByText(/早上好|下午好|晚上好/)).toHaveCount(0);
+  await expect(
+    page.getByLabel("待办筛选").getByText(/^\d+$/),
+  ).toHaveCount(0);
 }
 
 export async function gotoWorkspace(page: Page): Promise<void> {
