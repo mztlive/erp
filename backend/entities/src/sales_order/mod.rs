@@ -34,7 +34,7 @@ pub use entity::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, LineStatus,
     ReviewStatus, SalesOrder, SalesOrderData, SalesOrderLine, SalesOrderLineData, SalesOrderUpdate,
 };
-pub use procurement::ProcurementCoverageSummary;
+pub use procurement::{procurement_responsibility_key, ProcurementCoverageSummary};
 pub use revision::{
     RevisionSource, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
     SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
@@ -49,8 +49,8 @@ pub use submission::{
     SubmissionStatus,
 };
 pub use types::{
-    BusinessType, CardForm, FulfillmentMode, GoodsLineFields, LineType, OriginSystem, VoucherLineDraft,
-    VoucherLineFields, WelfareScenario,
+    BusinessType, CardForm, ExternalIdentityResolution, FulfillmentMode, GoodsLineFields, LineType,
+    OriginSystem, VoucherLineDraft, VoucherLineFields, WelfareScenario,
 };
 pub use working_copy::{
     SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine,

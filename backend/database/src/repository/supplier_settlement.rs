@@ -550,6 +550,30 @@ impl<'a> Repository<'a, SupplierSettlementDifferenceEvidence> {
 }
 
 impl<'a> Repository<'a, SupplierSettlementItem> {
+    /// 按结算单读取全部冻结明细，按创建时间和主键升序排列。
+    ///
+    /// # 参数
+    /// * `statement_id` - 供应商结算单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该结算单的全部未删除冻结明细。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_statement(
+        &self,
+        statement_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementItem>> {
+        self.find_many_sorted(
+            doc! { "statement_id": statement_id },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 分页检索供应商结算明细列表（投影查询）。
     ///
     /// 只返回 [`SupplierSettlementItemRow`] 所需的列表字段，不加载整文档；
@@ -587,6 +611,37 @@ impl<'a> Repository<'a, SupplierSettlementItem> {
 }
 
 impl<'a> Repository<'a, SupplierSettlementDifference> {
+    /// 按结算明细批量读取差异，按创建时间和主键升序排列。
+    ///
+    /// # 参数
+    /// * `statement_item_ids` - 结算明细主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回关联这些结算明细的全部未删除差异。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_statement_item_ids(
+        &self,
+        statement_item_ids: &[SupplierSettlementItemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementDifference>> {
+        if statement_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! {
+                "statement_item_id": {
+                    "$in": statement_item_ids.iter().map(ToString::to_string).collect::<Vec<_>>()
+                }
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 分页检索供应商结算差异列表（投影查询）。
     ///
     /// 只返回 [`SupplierSettlementDifferenceRow`] 所需的列表字段，不加载整文档；

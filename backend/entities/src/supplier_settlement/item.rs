@@ -17,6 +17,64 @@ use crate::ids::{
 };
 use crate::money::{Amount, Quantity};
 
+/// 已冻结双方金额派生的成本差额三元组。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SettlementCostDelta {
+    /// 含税差额。
+    pub gross: Amount,
+    /// 不含税差额。
+    pub net: Amount,
+    /// 税额差额。
+    pub tax: Amount,
+}
+
+impl SettlementCostDelta {
+    /// 返回零差额。
+    ///
+    /// # 返回
+    /// 返回三项均为零的差额。
+    pub fn zero() -> Self {
+        let zero = Amount::try_from(Decimal::ZERO).expect("零是合法金额");
+        Self {
+            gross: zero,
+            net: zero,
+            tax: zero,
+        }
+    }
+
+    /// 将另一组三元组累加到当前差额。
+    ///
+    /// # 参数
+    /// * `other` - 待累加差额
+    pub fn add_assign(&mut self, other: Self) {
+        self.gross = self.gross.checked_add(other.gross);
+        self.net = self.net.checked_add(other.net);
+        self.tax = self.tax.checked_add(other.tax);
+    }
+
+    /// 判断三项差额是否均为零。
+    ///
+    /// # 返回
+    /// 三项均为零时返回 `true`。
+    pub fn is_zero(self) -> bool {
+        self == Self::zero()
+    }
+
+    /// 校验差额满足 `gross = net + tax`。
+    ///
+    /// # 返回
+    /// 恒等成立时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 恒等不成立时返回领域错误。
+    pub fn validate(self) -> Result<()> {
+        if self.net.checked_add(self.tax) != self.gross {
+            return Err(Error::from("结算成本差额不满足含税等于不含税加税额"));
+        }
+        Ok(())
+    }
+}
+
 /// 结算明细创建数据（不含系统字段；`erp_calculated_amount` 由结算构成派生）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierSettlementItemData {
@@ -156,6 +214,40 @@ impl SupplierSettlementItem {
             supplier_billed_tax_amount: data.supplier_billed_tax_amount,
         })
     }
+
+    /// 判断结算明细是否属于指定结算单。
+    ///
+    /// # 参数
+    /// * `statement_id` - 供应商结算单主键
+    ///
+    /// # 返回
+    /// 归属一致时返回 `true`。
+    pub fn belongs_to_statement(&self, statement_id: &SupplierSettlementStatementId) -> bool {
+        self.statement_id == *statement_id
+    }
+
+    /// 从冻结的供应商账单与 ERP 三元组派生成本差额。
+    ///
+    /// # 返回
+    /// 返回供应商账单减 ERP 计算值的含税、不含税和税额差额。
+    ///
+    /// # 错误
+    /// 派生差额不满足 `gross = net + tax` 时返回领域错误。
+    pub fn supplier_minus_erp_delta(&self) -> Result<SettlementCostDelta> {
+        let delta = SettlementCostDelta {
+            gross: self
+                .supplier_billed_amount
+                .checked_sub(self.erp_calculated_amount),
+            net: self
+                .supplier_billed_net_amount
+                .checked_sub(self.erp_calculated_net_amount),
+            tax: self
+                .supplier_billed_tax_amount
+                .checked_sub(self.erp_calculated_tax_amount),
+        };
+        delta.validate()?;
+        Ok(delta)
+    }
 }
 
 /// 校验金额非负。
@@ -214,6 +306,11 @@ mod tests {
 
         assert_eq!(item.erp_calculated_amount, Amount::from_str("100.00").unwrap());
         assert_eq!(item.supplier_billed_amount, Amount::from_str("99.50").unwrap());
+        assert!(item.belongs_to_statement(&SupplierSettlementStatementId::new("statement-1")));
+        let delta = item.supplier_minus_erp_delta().unwrap();
+        assert_eq!(delta.gross, Amount::from_str("-0.50").unwrap());
+        assert_eq!(delta.net, Amount::from_str("-0.43").unwrap());
+        assert_eq!(delta.tax, Amount::from_str("-0.07").unwrap());
     }
 
     #[test]

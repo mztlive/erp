@@ -9,6 +9,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::state::DocumentState;
 
+/// 可由订单与原供应商动作共同证明的业务终态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VerifiedSupplierOrderResolution {
+    /// 供应商已接单。
+    OrderAccepted,
+    /// 供应商明确拒单。
+    OrderRejected,
+    /// 供应商履约完成。
+    OrderCompleted,
+    /// 供应商取消完成。
+    Canceled,
+    /// 供应商退款完成。
+    Refunded,
+}
+
 /// 供应商履约主线状态（数据模型 §6.19、§7.6）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

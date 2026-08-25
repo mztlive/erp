@@ -127,6 +127,29 @@ impl<'a> Repository<'a, BusinessDocument> {
         }
     }
 
+    /// 注册已经通过实体无审批不变量校验的业务单据。
+    ///
+    /// 本方法提供给 `NO_APPROVAL` 创建路径使用；调用方必须先通过
+    /// [`BusinessDocument::ensure_no_approval_registration`] 校验业务类型、注册行
+    /// 预置绑定与统一绑定端口返回值，再调用本语义入口。
+    ///
+    /// # 参数
+    /// * `doc` - 已校验为无审批注册的业务单据
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回值与 [`Self::register`] 相同。
+    ///
+    /// # 错误
+    /// 唯一键冲突或 MongoDB 写入失败时返回错误。
+    pub async fn register_no_approval_document(
+        &self,
+        doc: &BusinessDocument,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>> {
+        self.register(doc, executor).await
+    }
+
     /// 以 `id + document_no 为空 + expected_version` 一次性赋值正式编号。
     ///
     /// 成功时同时写入 `document_no_assigned_at`，不得覆盖已有编号。同载荷回读

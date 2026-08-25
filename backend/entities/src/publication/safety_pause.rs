@@ -53,6 +53,24 @@ impl SafetyPauseCause {
             Self::Unknown => "UNKNOWN",
         }
     }
+
+    /// 返回非供应停止原因对应的固定后续 blocker。
+    ///
+    /// # 返回
+    /// 已注册非人工后续原因返回 blocker 代码与业务说明；供应停止和未知原因返回 `None`。
+    pub fn follow_up_blocker(self) -> Option<(SafetyPauseBlockerCode, &'static str)> {
+        match self {
+            Self::ZeroInventory | Self::SupplyUnavailable | Self::AvailabilityStale => Some((
+                SafetyPauseBlockerCode::NoManualFollowUpTaskByCurrentPolicy,
+                "当前政策只记录安全暂停证据，不创建人工后续任务",
+            )),
+            Self::CostChangeUnconfirmed | Self::CriticalSupplyChangeUnconfirmed => Some((
+                SafetyPauseBlockerCode::NormalReviewWorkItemTypeUnregistered,
+                "正常供给变化复核任务类型尚未注册，发布保持安全暂停",
+            )),
+            Self::SupplierStopped | Self::Unknown => None,
+        }
+    }
 }
 
 /// 触发安全暂停的固定来源对象类型。
@@ -338,6 +356,19 @@ mod tests {
             pause_revision_id: ProductPublicationRevisionId::new("rev-2"),
             delivery_id: ProductPublicationDeliveryId::new("delivery-2"),
         }]
+    }
+
+    #[test]
+    fn blocker_policy_is_fixed_by_safety_pause_cause() {
+        assert_eq!(
+            SafetyPauseCause::ZeroInventory.follow_up_blocker(),
+            Some((
+                SafetyPauseBlockerCode::NoManualFollowUpTaskByCurrentPolicy,
+                "当前政策只记录安全暂停证据，不创建人工后续任务",
+            ))
+        );
+        assert!(SafetyPauseCause::SupplierStopped.follow_up_blocker().is_none());
+        assert!(SafetyPauseCause::Unknown.follow_up_blocker().is_none());
     }
 
     #[test]

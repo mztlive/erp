@@ -417,6 +417,94 @@ impl SalesOrderWorkingCopy {
         Ok(())
     }
 
+    /// 判断乐观锁版本是否与调用方期望一致。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方读取到的实体版本
+    ///
+    /// # 返回
+    /// 当前版本与期望版本一致时返回 `true`。
+    pub fn matches_version(&self, expected_version: u64) -> bool {
+        self.base.version == expected_version
+    }
+
+    /// 判断工作副本是否仍属于给定销售关系上下文。
+    ///
+    /// # 参数
+    /// * `contract_id` - 当前命令选择的合同
+    /// * `customer_id` - 合同解析出的客户
+    /// * `settlement_party_id` - 合同解析出的结算主体
+    ///
+    /// # 返回
+    /// 三项关系与工作副本冻结关系完全一致时返回 `true`。
+    pub fn matches_contract_context(
+        &self,
+        contract_id: &ContractId,
+        customer_id: &CustomerAccountId,
+        settlement_party_id: &PartyId,
+    ) -> bool {
+        self.contract_id.as_ref() == Some(contract_id)
+            && &self.customer_id == customer_id
+            && &self.settlement_party_id == settlement_party_id
+    }
+
+    /// 返回卡券提交所需的目标商城与卡券类目。
+    ///
+    /// # 参数
+    /// * `today` - 服务端提交业务日
+    ///
+    /// # 返回
+    /// 非卡券工作副本返回 `None`；卡券字段完整且到期日合法时返回目标商城与类目引用。
+    ///
+    /// # 错误
+    /// 卡券缺目标商城、应收到期日、卡券类目，或应收到期日早于提交日时返回错误。
+    pub fn voucher_submission_identity_refs(
+        &self,
+        today: BusinessDate,
+    ) -> Result<Option<(&SourceSystemId, &SkuId)>> {
+        if !self.business_type.is_voucher() {
+            return Ok(None);
+        }
+        let target_mall_id = self
+            .target_mall_id
+            .as_ref()
+            .ok_or_else(|| Error::from("卡券销售提交前必须选择目标商城"))?;
+        let receivable_due_date = self
+            .receivable_due_date
+            .ok_or_else(|| Error::from("卡券销售提交前必须填写应收到期日"))?;
+        if receivable_due_date < today {
+            return Err(Error::from("应收到期日不得早于服务端提交日"));
+        }
+        let voucher_category_id = self
+            .voucher_category_sku_id
+            .as_ref()
+            .ok_or_else(|| Error::from("卡券销售提交前必须选择卡券类目"))?;
+        Ok(Some((target_mall_id, voucher_category_id)))
+    }
+
+    /// 判断工作副本是否已经提交锁定。
+    ///
+    /// # 返回
+    /// 状态为 `Submitted` 时返回 `true`。
+    pub fn is_submitted(&self) -> bool {
+        self.stable.status == WorkingCopyStatus::Submitted
+    }
+
+    /// 为提交锁定工作副本，已提交副本保持不变。
+    ///
+    /// # 返回
+    /// 本次从编辑态迁移到已提交时返回 `true`；原本已提交时返回 `false`。
+    ///
+    /// # 错误
+    /// 冲突或已放弃副本不能提交时返回 [`Error::InvalidStateTransition`]。
+    pub fn lock_for_submission_if_needed(&mut self) -> Result<bool> {
+        if self.is_submitted() {
+            return Ok(false);
+        }
+        self.submit()?;
+        Ok(true)
+    }
+
     /// 保存草稿：递增 `draft_version` 并更新内容指纹（自动保存条件更新基础）。
     ///
     /// # 参数
@@ -598,6 +686,52 @@ mod tests {
         assert_eq!(copy.project_name.as_deref(), Some("端午福利项目"));
         assert_eq!(copy.stable.status(), WorkingCopyStatus::Editing);
         assert_eq!(copy.draft_version, 1);
+    }
+
+    #[test]
+    fn version_relationship_and_submission_rules_are_entity_owned() {
+        let mut copy =
+            SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), header_data(), "admin-1")
+                .unwrap();
+        assert!(copy.matches_version(copy.base.version));
+        assert!(copy.matches_contract_context(
+            &ContractId::new("contract-1"),
+            &CustomerAccountId::new("cust-1"),
+            &PartyId::new("party-1"),
+        ));
+        assert!(!copy.is_submitted());
+        assert!(copy.lock_for_submission_if_needed().unwrap());
+        assert!(copy.is_submitted());
+        assert!(!copy.lock_for_submission_if_needed().unwrap());
+    }
+
+    #[test]
+    fn voucher_submission_refs_require_complete_non_expired_context() {
+        let mut copy =
+            SalesOrderWorkingCopy::new(SalesOrderWorkingCopyId::new("wc-1"), header_data(), "admin-1")
+                .unwrap();
+        assert!(copy
+            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
+            .unwrap()
+            .is_none());
+
+        copy.business_type = BusinessType::Voucher;
+        assert!(copy
+            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
+            .is_err());
+        copy.target_mall_id = Some(SourceSystemId::new("mall-1"));
+        copy.voucher_category_sku_id = Some(SkuId::new("voucher-1"));
+        copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 24).unwrap());
+        assert!(copy
+            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
+            .is_err());
+        copy.receivable_due_date = Some(BusinessDate::from_ymd(2026, 8, 25).unwrap());
+        let (mall, category) = copy
+            .voucher_submission_identity_refs(BusinessDate::from_ymd(2026, 8, 25).unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(mall.as_ref(), "mall-1");
+        assert_eq!(category.as_ref(), "voucher-1");
     }
 
     #[test]

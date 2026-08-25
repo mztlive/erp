@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::ids::MallSalesOrderSnapshotId;
 use crate::source_registry::{ExternalObjectType, RelationRole};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -50,6 +50,49 @@ pub struct MappingTargetRegistration {
     pub source_identity_fields: &'static [&'static str],
     /// 固定谱系关系。
     pub relation_role: RelationRole,
+}
+
+/// 规范化商城快照中的来源身份候选值。
+///
+/// 值对象只接受非空文本；JSON 字符串或整数等传输形态由 Service 适配为
+/// 文本后再构造，避免实体依赖具体序列化格式。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MappingSourceIdentity(String);
+
+impl MappingSourceIdentity {
+    /// 构造并规范化来源身份候选值。
+    ///
+    /// # 参数
+    /// * `value` - 快照中已转换为文本的来源身份
+    ///
+    /// # 返回
+    /// 返回去除首尾空白后的来源身份。
+    ///
+    /// # 错误
+    /// 规范化后为空时返回错误。
+    pub fn new(value: impl Into<String>) -> Result<Self> {
+        let value = value.into().trim().to_string();
+        if value.is_empty() {
+            return Err(Error::from("快照来源标识不能为空"));
+        }
+        Ok(Self(value))
+    }
+
+    /// 返回规范化来源身份文本。
+    ///
+    /// # 返回
+    /// 返回稳定的来源身份字符串切片。
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// 消费值对象并返回规范化来源身份文本。
+    ///
+    /// # 返回
+    /// 返回稳定的来源身份字符串。
+    pub fn into_string(self) -> String {
+        self.0
+    }
 }
 
 impl MappingTaskType {
@@ -119,6 +162,95 @@ impl MappingTaskType {
             }),
             Self::UniqueLineItem | Self::AmountFormat => None,
         }
+    }
+
+    /// 返回固定责任角色；无法由系统唯一解析时返回 `None`。
+    ///
+    /// # 返回
+    /// 客户/合同归销售，卡券类目/唯一明细归运营，金额格式归财务；
+    /// 结算主体需要显式路由，返回 `None`。
+    pub fn owner_role(self) -> Option<&'static str> {
+        match self {
+            Self::Customer | Self::Contract => Some("role-sales"),
+            Self::VoucherCategory | Self::UniqueLineItem => Some("role-operations"),
+            Self::AmountFormat => Some("role-finance"),
+            Self::SettlementEntity => None,
+        }
+    }
+
+    /// 返回映射任务固定 SLA 秒数。
+    ///
+    /// # 返回
+    /// 卡券类目与唯一明细为 4 小时，其余类型为 24 小时。
+    pub fn sla_seconds(self) -> i64 {
+        match self {
+            Self::VoucherCategory | Self::UniqueLineItem => 4 * 60 * 60,
+            Self::Customer | Self::Contract | Self::AmountFormat | Self::SettlementEntity => 24 * 60 * 60,
+        }
+    }
+
+    /// 校验确认命令的目标类型与谱系关系是否匹配固定注册表。
+    ///
+    /// # 参数
+    /// * `command_object_type` - 命令目标对象类型
+    /// * `relation_role` - 命令谱系关系
+    ///
+    /// # 返回
+    /// 已注册且目标形状完全匹配时返回 `true`。
+    pub fn accepts_target(self, command_object_type: &str, relation_role: RelationRole) -> bool {
+        self.target_registration().is_some_and(|registration| {
+            command_object_type.trim() == registration.command_object_type
+                && relation_role == registration.relation_role
+        })
+    }
+
+    /// 返回规范化快照来源身份字段的用户标签。
+    ///
+    /// # 参数
+    /// * `field` - 注册表中的来源字段名
+    ///
+    /// # 返回
+    /// 返回对应业务身份标签；未知字段返回通用标签。
+    pub fn source_identity_label(field: &str) -> &'static str {
+        match field {
+            "customer_external_id" | "customer_id" | "company_id" => "来源客户身份",
+            "contract_external_id" | "contract_no" | "contract_id" => "来源合同身份",
+            "settlement_party_external_id" | "settlement_party_id" | "parent_company_id" => {
+                "来源结算主体身份"
+            }
+            "voucher_category_external_id" | "card_type_id" | "category_id" => "来源卡券类目身份",
+            _ => "来源身份",
+        }
+    }
+
+    /// 从来源身份候选值中确定当前映射类型的唯一外部身份。
+    ///
+    /// 注册字段按同一来源身份解释；快照可同时携带多个兼容字段，但所有
+    /// 已提供值必须完全一致，避免将冲突身份写入同一谱系。
+    ///
+    /// # 参数
+    /// * `candidates` - 按注册字段提取并规范化的来源身份候选值
+    ///
+    /// # 返回
+    /// 返回唯一来源身份值对象。
+    ///
+    /// # 错误
+    /// 映射类型未注册、身份字段缺失或候选值冲突时返回错误。
+    pub fn external_identity(self, candidates: &[MappingSourceIdentity]) -> Result<MappingSourceIdentity> {
+        let registration = self
+            .target_registration()
+            .ok_or_else(|| Error::from("该差异类型没有可注册的外部规范身份"))?;
+        let Some(first) = candidates.first() else {
+            return Err(Error::from(format!(
+                "规范化快照缺少 {}，无法建立{}谱系",
+                registration.source_identity_fields.join("/"),
+                self.label()
+            )));
+        };
+        if candidates.iter().any(|value| value != first) {
+            return Err(Error::from(format!("快照中的{}来源标识互相冲突", self.label())));
+        }
+        Ok(first.clone())
     }
 }
 
@@ -246,6 +378,41 @@ impl MasterMappingTask {
             resolution: None,
             resolved_at: None,
         })
+    }
+
+    /// 判断乐观锁版本是否与命令期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端冻结版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `true`。
+    pub fn has_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
+    /// 返回正式任务应冻结的业务主题版本。
+    ///
+    /// # 返回
+    /// 返回当前映射任务乐观锁版本的十进制字符串。
+    pub fn subject_version(&self) -> String {
+        self.base.version.to_string()
+    }
+
+    /// 判断映射任务是否仍接受确认或来源修复动作。
+    ///
+    /// # 返回
+    /// 状态为待处理时返回 `true`。
+    pub fn is_pending(&self) -> bool {
+        self.status == MappingTaskStatus::Pending
+    }
+
+    /// 判断映射任务是否允许重新归集。
+    ///
+    /// # 返回
+    /// 只有已解决状态返回 `true`。
+    pub fn can_reapply(&self) -> bool {
+        self.status == MappingTaskStatus::Resolved
     }
 
     /// 登记映射解决。
@@ -416,6 +583,53 @@ mod tests {
         assert!(ensure_transition(MappingTaskStatus::Pending, MappingTaskStatus::Closed).is_ok());
         assert!(ensure_transition(MappingTaskStatus::Closed, MappingTaskStatus::Pending).is_err());
         assert!(ensure_transition(MappingTaskStatus::Resolved, MappingTaskStatus::Unresolvable).is_err());
+    }
+
+    #[test]
+    fn mapping_registry_owns_routing_sla_and_target_shape() {
+        assert_eq!(MappingTaskType::Customer.owner_role(), Some("role-sales"));
+        assert_eq!(MappingTaskType::VoucherCategory.sla_seconds(), 4 * 60 * 60);
+        assert!(MappingTaskType::Customer.accepts_target(" CUSTOMER ", RelationRole::Primary));
+        assert!(!MappingTaskType::Contract.accepts_target("CUSTOMER", RelationRole::Primary));
+        assert_eq!(
+            MappingTaskType::source_identity_label("contract_id"),
+            "来源合同身份"
+        );
+        let customer_candidates = [
+            MappingSourceIdentity::new(" C-1 ").unwrap(),
+            MappingSourceIdentity::new("C-1").unwrap(),
+        ];
+        assert_eq!(
+            MappingTaskType::Customer
+                .external_identity(&customer_candidates)
+                .unwrap()
+                .as_str(),
+            "C-1"
+        );
+        let conflicting_contracts = [
+            MappingSourceIdentity::new("CT-1").unwrap(),
+            MappingSourceIdentity::new("CT-2").unwrap(),
+        ];
+        assert!(MappingTaskType::Contract
+            .external_identity(&conflicting_contracts)
+            .is_err());
+        assert!(MappingTaskType::VoucherCategory.external_identity(&[]).is_err());
+        assert!(MappingTaskType::UniqueLineItem
+            .external_identity(&[MappingSourceIdentity::new("line-1").unwrap()])
+            .is_err());
+        assert!(MappingSourceIdentity::new("   ").is_err());
+    }
+
+    #[test]
+    fn task_exposes_version_and_action_state_rules() {
+        let mut task = MasterMappingTask::new(MasterMappingTaskId::new("t-rules"), task_data()).unwrap();
+        assert!(task.has_version(1));
+        assert_eq!(task.subject_version(), "1");
+        assert!(task.is_pending());
+        assert!(!task.can_reapply());
+        task.resolve("已确认".to_string(), Instant::from_unix_secs(1_700_000_000))
+            .unwrap();
+        assert!(task.can_reapply());
     }
 
     #[test]

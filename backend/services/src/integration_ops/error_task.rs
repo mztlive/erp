@@ -10,8 +10,7 @@ use validator::Validate;
 
 use super::dto::SortDir;
 use super::evidence::{
-    error_evidence_policy, evidence_satisfies_policy, prior_query_confirmed_no_result, EvidenceSubject,
-    IntegrationEvidenceAuthority,
+    error_evidence_policy, evidence_satisfies_policy, EvidenceSubject, IntegrationEvidenceAuthority,
 };
 use super::producer::{error_owner_role, error_work_item};
 use super::{
@@ -135,13 +134,7 @@ impl IntegrationOpsService {
         let mut items = self
             .db
             .work_items()
-            .find_many(
-                mongodb::bson::doc! {
-                    "business_object_type": "integration_error_task",
-                    "business_object_id": task_id,
-                },
-                &mut NoTransaction,
-            )
+            .list_for_integration_error_task(task_id, &mut NoTransaction)
             .await?;
         if items.len() > 1 {
             return Err(Error::ConflictError("错误任务存在多个正式责任关联".to_string()));
@@ -201,10 +194,7 @@ fn error_action_projection(
         );
     }
     let mut allowed_actions = vec!["QUERY_ORIGINAL_RESULT".to_string(), "ADD_EVIDENCE".to_string()];
-    if prior_query_confirmed_no_result(task)
-        && (task.error_class.can_auto_retry()
-            || task.error_class == entities::integration_ops::ErrorClass::ResultUnknown)
-    {
+    if task.can_replay_original() {
         allowed_actions.push("REPLAY_ORIGINAL".to_string());
     }
     if linked_evidence

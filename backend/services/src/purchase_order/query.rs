@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PayableExt, PurchaseOrderExt, SalesOrderExt, WorkItemExt};
-use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, WorkItemExt};
+use entities::purchase_order::PurchaseOrder;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
 
@@ -169,11 +169,8 @@ impl PurchaseOrderService {
         let allocations = self.resolve_allocations(&order).await?;
         let changes = self
             .db
-            .purchase_change_orders()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_id": order.base.id.clone() },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_changes_by_order(&order.base.id.clone().into(), &mut NoTransaction)
             .await?
             .into_iter()
             .map(|change| super::dto::PurchaseChangeSummaryView {
@@ -200,17 +197,9 @@ impl PurchaseOrderService {
         let review_work_item = self.resolve_review_work_item(&order, actor_id).await?;
         let payable_summary = self
             .db
-            .payable_accounts()
-            .find_many(
-                mongodb::bson::doc! {
-                    "source_document_id": order.base.id.clone(),
-                    "source_type": entities::payable::PayableSourceType::PurchaseOrder.as_str(),
-                },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .find_payable_account(&order.base.id.clone().into(), &mut NoTransaction)
             .await?
-            .into_iter()
-            .next()
             .map(|account| super::dto::PurchaseOrderPayableSummaryView {
                 payable_open_amount: account.open_total,
                 paid_allocated_amount: account.settled_total,
@@ -259,15 +248,12 @@ impl PurchaseOrderService {
         order: &PurchaseOrder,
         actor_id: &str,
     ) -> Result<Option<PurchaseReviewWorkItemView>> {
-        let Some(submission_id) = order.current_submission_id.as_deref() else {
+        let Ok(submission_id) = order.submission_id_for_formalization() else {
             return Ok(None);
         };
-        let _ = (order, actor_id, submission_id);
+        let _ = (order, actor_id, &submission_id);
         return Ok(None);
         #[allow(unreachable_code)]
-        if order.stable.status != PurchaseOrderStatus::InApproval {
-            return Ok(None);
-        }
         let mut items = self
             .db
             .work_items()
@@ -276,7 +262,7 @@ impl PurchaseOrderService {
             .into_iter()
             .filter(|item| {
                 item.work_item_type == WorkItemType::PurchaseOrderReview
-                    && item.subject_version == submission_id
+                    && item.subject_version == submission_id.as_ref()
             })
             .collect::<Vec<_>>();
         if items.len() > 1 {
@@ -297,15 +283,13 @@ impl PurchaseOrderService {
         let submission = self
             .db
             .purchase_order_submissions()
-            .find_by_id(submission_id, &mut NoTransaction)
+            .find_by_id(submission_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::ConflictError("采购审核待办引用的提交不存在，已禁止操作".to_string()))?;
-        if submission.status != SubmissionStatus::Pending {
-            return Err(Error::ConflictError(
-                "采购审核待办引用的提交已不在待审核状态，已禁止操作".to_string(),
-            ));
-        }
-        let separation_satisfied = submission.submitted_by.as_deref() != Some(actor_id);
+        submission.ensure_pending().map_err(|_| {
+            Error::ConflictError("采购审核待办引用的提交已不在待审核状态，已禁止操作".to_string())
+        })?;
+        let separation_satisfied = submission.reviewer_is_separated(actor_id);
         let (domain_allowed_actions, action_blockers) =
             review_task_access(&item, actor_id, assignment_eligible, separation_satisfied);
         Ok(Some(PurchaseReviewWorkItemView {
@@ -354,10 +338,7 @@ impl PurchaseOrderService {
         let accounts = self
             .db
             .accounts()
-            .find_many(
-                mongodb::bson::doc! { "id": { "$in": unique } },
-                &mut NoTransaction,
-            )
+            .list_by_ids(&unique, &mut NoTransaction)
             .await?;
         Ok(accounts
             .into_iter()
@@ -392,11 +373,15 @@ impl PurchaseOrderService {
         if unique.is_empty() {
             return Ok(HashMap::new());
         }
-        let ids = unique.iter().cloned().collect::<Vec<_>>();
+        let ids = unique
+            .iter()
+            .cloned()
+            .map(entities::ids::SalesOrderId::new)
+            .collect::<Vec<_>>();
         let numbers = self
             .db
-            .sales_orders()
-            .find_many(mongodb::bson::doc! { "id": { "$in": ids } }, &mut NoTransaction)
+            .purchase_order()
+            .find_sales_orders_by_ids(&ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -430,13 +415,15 @@ impl PurchaseOrderService {
             return Ok(HashMap::new());
         }
         let mut totals = HashMap::new();
+        let submission_ids = pointer_ids
+            .iter()
+            .cloned()
+            .map(entities::ids::PurchaseOrderSubmissionId::new)
+            .collect::<Vec<_>>();
         let submissions = self
             .db
-            .purchase_order_submissions()
-            .find_many(
-                mongodb::bson::doc! { "id": { "$in": pointer_ids } },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .find_submissions_by_ids(&submission_ids, &mut NoTransaction)
             .await?;
         for submission in submissions {
             totals.insert(
@@ -448,13 +435,15 @@ impl PurchaseOrderService {
                 ),
             );
         }
+        let revision_ids = pointer_ids
+            .iter()
+            .cloned()
+            .map(entities::ids::PurchaseOrderRevisionId::new)
+            .collect::<Vec<_>>();
         let revisions = self
             .db
-            .purchase_order_revisions()
-            .find_many(
-                mongodb::bson::doc! { "id": { "$in": pointer_ids } },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
             .await?;
         for revision in revisions {
             totals.insert(
@@ -483,11 +472,8 @@ impl PurchaseOrderService {
             {
                 let lines = self
                     .db
-                    .purchase_order_revision_lines()
-                    .find_many(
-                        mongodb::bson::doc! { "purchase_order_revision_id": revision_id },
-                        &mut NoTransaction,
-                    )
+                    .purchase_order()
+                    .list_revision_lines(&revision_id.clone().into(), &mut NoTransaction)
                     .await?;
                 return Ok((
                     "REVISION".to_string(),
@@ -505,17 +491,10 @@ impl PurchaseOrderService {
             {
                 let lines = self
                     .db
-                    .purchase_order_submission_lines()
-                    .find_many(
-                        mongodb::bson::doc! { "purchase_order_submission_id": submission_id },
-                        &mut NoTransaction,
-                    )
+                    .purchase_order()
+                    .list_submission_lines(&submission_id.clone().into(), &mut NoTransaction)
                     .await?;
-                let source = if submission.status == SubmissionStatus::Draft {
-                    "DRAFT"
-                } else {
-                    "SUBMISSION"
-                };
+                let source = submission.content_source();
                 return Ok((
                     source.to_string(),
                     lines.iter().map(submission_line_to_view).collect(),
@@ -545,23 +524,20 @@ impl PurchaseOrderService {
         };
         let lines = self
             .db
-            .purchase_order_revision_lines()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_revision_id": revision_id },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_revision_lines(&revision_id.clone().into(), &mut NoTransaction)
             .await?;
-        let line_ids: Vec<String> = lines.iter().map(|line| line.base.id.clone()).collect();
+        let line_ids = lines
+            .iter()
+            .map(|line| entities::ids::PurchaseOrderRevisionLineId::new(line.base.id.clone()))
+            .collect::<Vec<_>>();
         if line_ids.is_empty() {
             return Ok(Vec::new());
         }
         let allocations = self
             .db
             .purchase_line_sales_allocations()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_revision_line_id": { "$in": line_ids } },
-                &mut NoTransaction,
-            )
+            .find_by_purchase_revision_line_ids(&line_ids, &mut NoTransaction)
             .await?;
         Ok(allocations
             .into_iter()

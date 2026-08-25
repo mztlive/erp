@@ -1,8 +1,8 @@
 //! `customer_assignment`：客户归属（数据模型 §6.2，页面：W03）。
 //!
 //! 同一客户同一时点恰好一个 `OWNER`、同一客户/用户/角色的有效期不得
-//! 重叠（跨行约束由 P3 事务校验，§6.2）；负责人变化后只影响新增单据
-//! 权限，不删除历史参与权（W03 / §11.1）。
+//! 重叠；区间与角色冲突由实体判定，P3 只负责事务内加载并持久化冲突行
+//! （§6.2）。负责人变化后只影响新增单据权限，不删除历史参与权（W03 / §11.1）。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -74,7 +74,7 @@ pub struct CustomerAssignmentData {
 /// 归属更新数据。
 ///
 /// 归属变化按「结束旧归属并建立新归属」维护（W03），原地更新只允许
-/// 结束有效期（`Set` 时校验晚于 `valid_from`，用于提前结束）。
+/// 直接结束协作归属（`Set` 时校验晚于 `valid_from`）；负责人必须换任。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CustomerAssignmentUpdate {
     /// 归属生效结束日期更新意图。
@@ -142,25 +142,120 @@ impl CustomerAssignment {
         })
     }
 
-    /// 更新归属（仅允许结束有效期）。
+    /// 直接结束协作归属。
     ///
-    /// 归属角色与人员变更必须结束旧归属并建立新归属（W03：结束旧
-    /// OWNER 有效期并建立新 OWNER，写变更原因），不原地修改。
+    /// 负责人归属必须通过换任建立新的负责人后结束，不能被独立结束；
+    /// 协作归属允许直接设置结束日期。
     ///
     /// # 参数
-    /// * `update` - 更新数据
+    /// * `valid_to` - 生效结束日期
+    ///
+    /// # 返回
+    /// 结束成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 负责人归属被直接结束，或结束日期不晚于开始日期时返回错误。
+    pub fn end_directly(&mut self, valid_to: BusinessDate) -> Result<()> {
+        if self.assignment_role == AssignmentRole::Owner {
+            return Err(Error::from("负责人不能直接结束，请通过换任建立新的负责人归属"));
+        }
+        self.set_valid_to(valid_to)
+    }
+
+    /// 兼容归属生命周期更新入口。
+    ///
+    /// 该入口与 [`Self::end_directly`] 使用相同领域规则，只允许直接结束
+    /// 协作归属；负责人换任必须使用 [`Self::end_for_replacement`]。
+    ///
+    /// # 参数
+    /// * `update` - 结束日期更新意图
     ///
     /// # 返回
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当 `valid_to` 不晚于 `valid_from` 时返回错误。
+    /// 负责人归属被直接结束，或结束日期不晚于开始日期时返回错误。
     pub fn update(&mut self, update: CustomerAssignmentUpdate) -> Result<()> {
         if let Some(valid_to) = update.valid_to.into_option() {
-            ensure_window_valid(self.valid_from, Some(valid_to))?;
-            self.valid_to = Some(valid_to);
+            self.end_directly(valid_to)?;
         }
         Ok(())
+    }
+
+    /// 在新归属冲突时结束当前归属。
+    ///
+    /// OWNER 与同一客户任一 OWNER 冲突；COLLABORATOR 只与同一客户、
+    /// 同一用户的 COLLABORATOR 冲突。结束日为新区间开始日，保持开区间
+    /// 无重叠且无空档。
+    ///
+    /// # 参数
+    /// * `replacement` - 待建立的新归属
+    ///
+    /// # 返回
+    /// 当前归属被结束时返回 `true`；无冲突时返回 `false`。
+    ///
+    /// # 错误
+    /// 新归属开始日期不晚于冲突旧归属开始日期时返回错误。
+    pub fn end_for_replacement(&mut self, replacement: &Self) -> Result<bool> {
+        if !self.conflicts_with(replacement) {
+            return Ok(false);
+        }
+        if replacement.valid_from <= self.valid_from {
+            return Err(Error::from(
+                "新归属开始日期必须晚于旧归属开始日期，请调整生效日期",
+            ));
+        }
+        self.set_valid_to(replacement.valid_from)?;
+        Ok(true)
+    }
+
+    /// 判断当前归属是否与待建立归属冲突。
+    ///
+    /// # 参数
+    /// * `other` - 待比较的新归属
+    ///
+    /// # 返回
+    /// 同一客户下角色/用户组合需要唯一且有效期重叠时返回 `true`。
+    pub fn conflicts_with(&self, other: &Self) -> bool {
+        if self.customer_id != other.customer_id || self.assignment_role != other.assignment_role {
+            return false;
+        }
+        let role_conflicts = other.assignment_role == AssignmentRole::Owner || self.user_id == other.user_id;
+        role_conflicts && windows_overlap(self.valid_from, self.valid_to, other.valid_from, other.valid_to)
+    }
+
+    /// 校验归属属于指定客户。
+    ///
+    /// # 参数
+    /// * `customer_id` - 期望的客户角色 ID
+    ///
+    /// # 返回
+    /// 归属客户匹配时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 归属不属于指定客户时返回错误。
+    pub fn ensure_customer(&self, customer_id: &CustomerAccountId) -> Result<()> {
+        if &self.customer_id == customer_id {
+            return Ok(());
+        }
+        Err(Error::from("归属不属于该客户"))
+    }
+
+    /// 校验乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端期望版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前版本与期望版本不一致时返回错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        if self.base.version == expected {
+            return Ok(());
+        }
+        Err(Error::from("数据已被其他请求修改，请刷新后重试"))
     }
 
     /// 判断归属当前是否有效（按业务日期判定有效期）。
@@ -173,6 +268,43 @@ impl CustomerAssignment {
     pub fn is_active_on(&self, as_of: BusinessDate) -> bool {
         as_of >= self.valid_from && self.valid_to.is_none_or(|valid_to| as_of < valid_to)
     }
+
+    /// 设置结束日期并复用有效期不变式。
+    ///
+    /// # 参数
+    /// * `valid_to` - 生效结束日期
+    ///
+    /// # 返回
+    /// 设置成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 结束日期不晚于开始日期时返回错误。
+    fn set_valid_to(&mut self, valid_to: BusinessDate) -> Result<()> {
+        ensure_window_valid(self.valid_from, Some(valid_to))?;
+        self.valid_to = Some(valid_to);
+        Ok(())
+    }
+}
+
+/// 判断两个生效区间是否重叠（结束日为开区间）。
+///
+/// # 参数
+/// * `a_from` - 第一个区间开始日
+/// * `a_to` - 第一个区间结束日；`None` 表示无穷远
+/// * `b_from` - 第二个区间开始日
+/// * `b_to` - 第二个区间结束日；`None` 表示无穷远
+///
+/// # 返回
+/// 两个左闭右开区间存在交集时返回 `true`。
+fn windows_overlap(
+    a_from: BusinessDate,
+    a_to: Option<BusinessDate>,
+    b_from: BusinessDate,
+    b_to: Option<BusinessDate>,
+) -> bool {
+    let a_covers = |day: BusinessDate| a_to.is_none_or(|end| day < end);
+    let b_covers = |day: BusinessDate| b_to.is_none_or(|end| day < end);
+    a_covers(b_from) && b_covers(a_from)
 }
 
 /// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
@@ -274,11 +406,14 @@ mod tests {
         assert!(open_assignment.is_active_on(BusinessDate::from_ymd(2030, 1, 1).unwrap()));
     }
 
-    /// 更新：提前结束有效期，倒挂被拒；人员/角色不原地修改。
+    /// 正常路径：协作归属可以直接结束，人员与角色保持不变。
     #[test]
-    fn update_only_ends_validity() {
-        let mut assignment =
-            CustomerAssignment::new(CustomerAssignmentId::new("assign-4"), assignment_data()).unwrap();
+    fn collaborator_can_end_directly() {
+        let data = CustomerAssignmentData {
+            assignment_role: AssignmentRole::Collaborator,
+            ..assignment_data()
+        };
+        let mut assignment = CustomerAssignment::new(CustomerAssignmentId::new("assign-4"), data).unwrap();
         assignment
             .update(CustomerAssignmentUpdate {
                 valid_to: FieldUpdate::Set(BusinessDate::from_ymd(2026, 3, 31).unwrap()),
@@ -288,13 +423,103 @@ mod tests {
             assignment.valid_to,
             Some(BusinessDate::from_ymd(2026, 3, 31).unwrap())
         );
-
-        let reversed = CustomerAssignmentUpdate {
-            valid_to: FieldUpdate::Set(BusinessDate::from_ymd(2025, 1, 1).unwrap()),
-        };
-        assert!(assignment.update(reversed).is_err());
         assert_eq!(assignment.user_id, "sales-zhangsan");
-        assert_eq!(assignment.assignment_role, AssignmentRole::Owner);
+        assert_eq!(assignment.assignment_role, AssignmentRole::Collaborator);
+    }
+
+    /// 失败路径：负责人不能直接结束，倒挂结束日期也被拒绝。
+    #[test]
+    fn direct_end_rejects_owner_and_reversed_window() {
+        let mut owner =
+            CustomerAssignment::new(CustomerAssignmentId::new("assign-owner"), assignment_data()).unwrap();
+        assert!(owner
+            .end_directly(BusinessDate::from_ymd(2026, 3, 31).unwrap())
+            .is_err());
+
+        let data = CustomerAssignmentData {
+            assignment_role: AssignmentRole::Collaborator,
+            ..assignment_data()
+        };
+        let mut collaborator =
+            CustomerAssignment::new(CustomerAssignmentId::new("assign-collaborator"), data).unwrap();
+        assert!(collaborator
+            .end_directly(BusinessDate::from_ymd(2025, 1, 1).unwrap())
+            .is_err());
+    }
+
+    /// 冲突规则：负责人跨用户冲突，协作者只与同用户冲突。
+    #[test]
+    fn replacement_conflicts_follow_role_and_user_rules() {
+        let mut owner =
+            CustomerAssignment::new(CustomerAssignmentId::new("owner-old"), assignment_data()).unwrap();
+        let new_owner_data = CustomerAssignmentData {
+            user_id: "sales-lisi".to_string(),
+            valid_from: BusinessDate::from_ymd(2026, 6, 1).unwrap(),
+            valid_to: None,
+            ..assignment_data()
+        };
+        let new_owner =
+            CustomerAssignment::new(CustomerAssignmentId::new("owner-new"), new_owner_data).unwrap();
+        assert!(owner.conflicts_with(&new_owner));
+        assert!(owner.end_for_replacement(&new_owner).unwrap());
+        assert_eq!(owner.valid_to, Some(new_owner.valid_from));
+
+        let collaborator_data = CustomerAssignmentData {
+            assignment_role: AssignmentRole::Collaborator,
+            ..assignment_data()
+        };
+        let collaborator = CustomerAssignment::new(
+            CustomerAssignmentId::new("collaborator-old"),
+            collaborator_data.clone(),
+        )
+        .unwrap();
+        let other_user_data = CustomerAssignmentData {
+            user_id: "sales-lisi".to_string(),
+            valid_from: BusinessDate::from_ymd(2026, 6, 1).unwrap(),
+            ..collaborator_data
+        };
+        let other_user =
+            CustomerAssignment::new(CustomerAssignmentId::new("collaborator-new"), other_user_data).unwrap();
+        assert!(!collaborator.conflicts_with(&other_user));
+    }
+
+    /// 边界路径：结束日为开区间，相接窗口不冲突；同日起点无法换任。
+    #[test]
+    fn replacement_respects_exclusive_end_and_start_boundary() {
+        let mut old = CustomerAssignment::new(CustomerAssignmentId::new("old"), assignment_data()).unwrap();
+        let adjacent_data = CustomerAssignmentData {
+            valid_from: BusinessDate::from_ymd(2026, 12, 31).unwrap(),
+            valid_to: None,
+            ..assignment_data()
+        };
+        let adjacent = CustomerAssignment::new(CustomerAssignmentId::new("adjacent"), adjacent_data).unwrap();
+        assert!(!old.conflicts_with(&adjacent));
+        assert!(!old.end_for_replacement(&adjacent).unwrap());
+
+        let same_start = CustomerAssignment::new(
+            CustomerAssignmentId::new("same-start"),
+            CustomerAssignmentData {
+                valid_to: None,
+                ..assignment_data()
+            },
+        )
+        .unwrap();
+        assert!(old.end_for_replacement(&same_start).is_err());
+    }
+
+    /// 版本与客户归属校验覆盖成功和失败路径。
+    #[test]
+    fn version_and_customer_identity_are_enforced() {
+        let assignment =
+            CustomerAssignment::new(CustomerAssignmentId::new("assign-version"), assignment_data()).unwrap();
+        assert!(assignment.ensure_version(1).is_ok());
+        assert!(assignment.ensure_version(2).is_err());
+        assert!(assignment
+            .ensure_customer(&CustomerAccountId::new("customer-1"))
+            .is_ok());
+        assert!(assignment
+            .ensure_customer(&CustomerAccountId::new("customer-2"))
+            .is_err());
     }
 
     /// 实体 BSON 往返。

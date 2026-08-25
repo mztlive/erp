@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
@@ -9,10 +11,11 @@ use entities::catalog::{
     SkuCoverageStatus,
 };
 use entities::common::time::BusinessDate;
-use entities::ids::{ProductId, ProductRevisionId};
+use entities::file_asset::FileAsset;
+use entities::ids::{FileAssetId, ProductId, ProductRevisionId};
 use entities::money::Amount;
 
-use super::super::extensions::CatalogExt;
+use super::super::extensions::{CatalogExt, FileAssetExt};
 use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
 use super::product_pipeline::product_list_pipeline;
@@ -163,10 +166,26 @@ pub struct ProductRevisionRow {
     pub effective_from: BusinessDate,
     /// 生效结束日；空表示长期。
     pub effective_to: Option<BusinessDate>,
+    /// 该修订关联的 SPU 级媒体行；分页查询由 CatalogRepository 批量装配。
+    #[serde(default)]
+    pub media: Vec<ProductRevisionMedia>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 商品停用事务所需的稳定实体、当前修订、媒体与下一序号快照。
+#[derive(Debug, Clone)]
+pub struct ProductDisableSnapshot {
+    /// 待停用的商品稳定实体。
+    pub product: Product,
+    /// 按当前指针或最大修订号解析出的当前商品修订。
+    pub current_revision: Option<ProductRevision>,
+    /// 当前商品修订关联的媒体行。
+    pub media: Vec<ProductRevisionMedia>,
+    /// 同一商品内的历史最大修订序号；无修订时为空。
+    pub latest_revision_no: Option<u32>,
 }
 
 /// 商品修订列表筛选条件（修订表追加写入，无软删除过滤）。
@@ -339,6 +358,265 @@ impl<'a> CatalogRepository<'a> {
         })
     }
 
+    /// 按语义化筛选条件分页查询商品聚合结果。
+    ///
+    /// # 参数
+    /// * `filter` - 商品、当前 SKU 关系、价格、分页与排序条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回商品聚合投影分页结果。
+    ///
+    /// # 错误
+    /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
+    pub async fn product_page(
+        &self,
+        filter: &ProductFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductRow>> {
+        self.search_products(filter, executor).await
+    }
+
+    /// 分页查询商品修订并批量装配关联媒体。
+    ///
+    /// # 参数
+    /// * `filter` - 商品修订、状态、分页与排序条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已带关联媒体行的商品修订分页投影。
+    ///
+    /// # 错误
+    /// MongoDB 查询、计数或关联媒体批量读取失败时返回错误。
+    pub async fn product_revision_page(
+        &self,
+        filter: &ProductRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductRevisionRow>> {
+        let mut result = self
+            .db
+            .product_revisions()
+            .search_product_revisions(filter, executor)
+            .await?;
+        self.attach_product_revision_media(&mut result.items, executor)
+            .await?;
+        Ok(result)
+    }
+
+    /// 读取指定商品的历史最大修订序号。
+    ///
+    /// # 参数
+    /// * `product_id` - 商品稳定 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回历史最大修订号；无修订时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn latest_product_revision_no(
+        &self,
+        product_id: &ProductId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let revisions = self
+            .db
+            .product_revisions()
+            .find_by_product_ids(std::slice::from_ref(product_id), executor)
+            .await?;
+        Ok(revisions
+            .iter()
+            .map(|revision| revision.revision.revision_no)
+            .max())
+    }
+
+    /// 读取商品停用事务所需的关系快照。
+    ///
+    /// # 参数
+    /// * `product_id` - 待停用商品稳定 ID
+    /// * `executor` - 数据访问执行器；停用流程必须传入事务会话
+    ///
+    /// # 返回
+    /// 商品不存在时返回 `None`；存在时返回商品、当前修订、媒体与历史最大修订号。
+    ///
+    /// # 错误
+    /// MongoDB 查询、关系解析或反序列化失败时返回错误。
+    pub async fn product_disable_snapshot(
+        &self,
+        product_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductDisableSnapshot>> {
+        let Some(product) = self.db.products().find_by_id(product_id, executor).await? else {
+            return Ok(None);
+        };
+        let revisions = self
+            .db
+            .product_revisions()
+            .find_by_product_ids(&[ProductId::new(product_id)], executor)
+            .await?;
+        let latest_revision_no = revisions.iter().map(|row| row.revision.revision_no).max();
+        let current_revision = select_current_product_revision(&product, &revisions).cloned();
+        let media = self
+            .media_for_current_product_revision(current_revision.as_ref(), executor)
+            .await?;
+        Ok(Some(ProductDisableSnapshot {
+            product,
+            current_revision,
+            media,
+            latest_revision_no,
+        }))
+    }
+
+    /// 批量解析一组商品的当前修订。
+    ///
+    /// 优先使用稳定主表的当前修订指针；指针缺失或失效时回退到该商品最大修订号。
+    ///
+    /// # 参数
+    /// * `products` - 待解析的商品稳定实体
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回 `product_id -> 当前商品修订` 映射；没有任何修订的商品不出现在映射中。
+    ///
+    /// # 错误
+    /// MongoDB 批量查询或反序列化失败时返回错误。
+    pub async fn current_product_revisions(
+        &self,
+        products: &[Product],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, ProductRevision>> {
+        let product_ids = products
+            .iter()
+            .map(|product| ProductId::new(product.base.id.clone()))
+            .collect::<Vec<_>>();
+        let revisions = self
+            .db
+            .product_revisions()
+            .find_by_product_ids(&product_ids, executor)
+            .await?;
+        Ok(select_current_product_revisions(products, revisions))
+    }
+
+    /// 解析单个商品的当前修订。
+    ///
+    /// # 参数
+    /// * `product` - 已加载的商品稳定实体
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前指针命中或最大修订号对应的修订；无修订时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn current_product_revision(
+        &self,
+        product: &Product,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductRevision>> {
+        Ok(self
+            .current_product_revisions(std::slice::from_ref(product), executor)
+            .await?
+            .remove(&product.base.id))
+    }
+
+    /// 返回一组 Catalog 文件引用中尚未登记的文件资产 ID。
+    ///
+    /// # 参数
+    /// * `asset_ids` - 商品媒体或 SKU 主图引用的文件资产 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未命中的 ID，保持输入顺序并去除重复值。
+    ///
+    /// # 错误
+    /// MongoDB 批量查询或反序列化失败时返回错误。
+    pub async fn missing_file_asset_ids(
+        &self,
+        asset_ids: &[FileAssetId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FileAssetId>> {
+        if asset_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = self
+            .db
+            .file_assets()
+            .find_many(
+                in_filter("id", asset_ids.iter().map(ToString::to_string)),
+                executor,
+            )
+            .await?;
+        let existing = rows
+            .into_iter()
+            .map(|asset: FileAsset| asset.base.id)
+            .collect::<HashSet<_>>();
+        let mut missing = Vec::new();
+        let mut seen = HashSet::new();
+        for asset_id in asset_ids {
+            if !existing.contains(asset_id.as_ref()) && seen.insert(asset_id.to_string()) {
+                missing.push(asset_id.clone());
+            }
+        }
+        Ok(missing)
+    }
+
+    /// 批量装配商品修订投影的媒体关系。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页商品修订投影
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 成功时原位填充每行 `media` 字段。
+    ///
+    /// # 错误
+    /// MongoDB 批量查询或反序列化失败时返回错误。
+    async fn attach_product_revision_media(
+        &self,
+        rows: &mut [ProductRevisionRow],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let revision_ids = rows
+            .iter()
+            .map(|row| ProductRevisionId::new(row.id.clone()))
+            .collect::<Vec<_>>();
+        let media = self
+            .db
+            .product_revision_medias()
+            .find_media_by_revision_ids(&revision_ids, executor)
+            .await?;
+        let mut grouped = group_product_revision_media(media);
+        for row in rows {
+            row.media = grouped.remove(&row.id).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// 读取可选当前商品修订的关联媒体。
+    ///
+    /// # 参数
+    /// * `revision` - 已解析出的可选当前商品修订
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 无当前修订时返回空集合，否则返回该修订全部媒体行。
+    ///
+    /// # 错误
+    /// MongoDB 批量查询或反序列化失败时返回错误。
+    async fn media_for_current_product_revision(
+        &self,
+        revision: Option<&ProductRevision>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevisionMedia>> {
+        let Some(revision) = revision else {
+            return Ok(Vec::new());
+        };
+        self.db
+            .product_revision_medias()
+            .find_media_by_revision_ids(&[ProductRevisionId::new(revision.base.id.clone())], executor)
+            .await
+    }
+
     /// 执行商品列表类型化聚合并收集唯一的 facet 结果。
     async fn aggregate_products(
         &self,
@@ -411,6 +689,92 @@ impl<'a> CatalogRepository<'a> {
         .await?;
         Ok(())
     }
+}
+
+/// 从同一商品的修订集合解析当前修订。
+///
+/// # 参数
+/// * `product` - 商品稳定实体
+/// * `revisions` - 该商品的全部修订
+///
+/// # 返回
+/// 优先返回当前指针命中的修订；否则返回最大修订号；无修订时返回 `None`。
+///
+/// # 错误
+/// 无。
+fn select_current_product_revision<'a>(
+    product: &Product,
+    revisions: &'a [ProductRevision],
+) -> Option<&'a ProductRevision> {
+    product
+        .stable
+        .current_revision_id
+        .as_deref()
+        .and_then(|current_id| revisions.iter().find(|revision| revision.base.id == current_id))
+        .or_else(|| {
+            revisions
+                .iter()
+                .max_by_key(|revision| revision.revision.revision_no)
+        })
+}
+
+/// 批量解析商品当前修订映射。
+///
+/// # 参数
+/// * `products` - 商品稳定实体集合
+/// * `revisions` - 这些商品的全部修订
+///
+/// # 返回
+/// 返回 `product_id -> 当前修订` 映射，没有修订的商品被忽略。
+///
+/// # 错误
+/// 无。
+fn select_current_product_revisions(
+    products: &[Product],
+    revisions: Vec<ProductRevision>,
+) -> HashMap<String, ProductRevision> {
+    let mut grouped: HashMap<String, Vec<ProductRevision>> = HashMap::new();
+    for revision in revisions {
+        grouped
+            .entry(revision.product_id.to_string())
+            .or_default()
+            .push(revision);
+    }
+    products
+        .iter()
+        .filter_map(|product| {
+            let revisions = grouped.get(&product.base.id)?;
+            select_current_product_revision(product, revisions)
+                .cloned()
+                .map(|revision| (product.base.id.clone(), revision))
+        })
+        .collect()
+}
+
+/// 按商品修订 ID 分组并排序媒体行。
+///
+/// # 参数
+/// * `rows` - 多个商品修订的媒体关系行
+///
+/// # 返回
+/// 返回 `product_revision_id -> 媒体行` 映射，各组按展示顺序升序排列。
+///
+/// # 错误
+/// 无。
+fn group_product_revision_media(
+    rows: Vec<ProductRevisionMedia>,
+) -> HashMap<String, Vec<ProductRevisionMedia>> {
+    let mut grouped: HashMap<String, Vec<ProductRevisionMedia>> = HashMap::new();
+    for row in rows {
+        grouped
+            .entry(row.product_revision_id.to_string())
+            .or_default()
+            .push(row);
+    }
+    for media in grouped.values_mut() {
+        media.sort_by_key(|row| row.sort_order);
+    }
+    grouped
 }
 
 /// 构建商品修订排序文档（白名单：`created_at`/`revision_no`）。

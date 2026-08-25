@@ -1,38 +1,26 @@
 use database::{CatalogExt, NoTransaction};
-use entities::catalog::sku::{Sku, SkuData};
+use entities::catalog::sku::{Sku, SkuData, SkuEditAction, SkuEditIdentity, SkuEditIdentityError};
 use entities::catalog::sku_revision::{SkuRevision, SkuRevisionData};
 use entities::catalog::specification::{compute_specification_signature, SpecSignatureEntry};
-use entities::catalog::{EnableStatus, ListingStatus, ProductId, SkuId, SkuRevisionId};
+use entities::catalog::{next_revision_no, EnableStatus, ListingStatus, ProductId, SkuId, SkuRevisionId};
 use entities::common::time::BusinessDate;
 use id_generator::next_id;
-use mongodb::bson::doc;
 
 use super::CatalogService;
 use crate::catalog::dto::{ProductSkuInput, SpecEntryInput};
 use crate::errors::{Error, Result};
 
-/// 规格编辑动作（数据模型 §6.3：保留/新增/重新启用/移除）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum SkuEditAction {
-    /// 全新签名：分配新 SKU 身份并写首个修订。
-    Create,
-    /// 签名未变：沿用原 `sku_id` 并追加修订。
-    Keep,
-    /// 历史停用签名再次出现：复用原 `sku_id`、追加修订并显式重新启用。
-    Reactivate,
-}
-
-/// 规格编辑计划中的一行（`Create`/`Keep`/`Reactivate` 都伴随一条新 SKU 修订）。
+/// 规格编辑计划中的一行；每种动作都伴随一条新 SKU 修订。
 pub(super) struct SkuEditItem {
     /// 编辑动作。
     pub(super) action: SkuEditAction,
-    /// 待写入的 SKU（新增时为新建；重新启用时为已置 `Active` 的既有实体）。
+    /// 待写入的 SKU。
     pub(super) sku: Sku,
     /// 待写入的 SKU 修订。
     pub(super) revision: SkuRevision,
 }
 
-/// 新 SKU 构建上下文（所属 SPU、生效区间、操作人）。
+/// 新 SKU 构建上下文。
 pub(super) struct NewSkuContext<'a> {
     /// 所属 SPU。
     pub(super) product_id: &'a ProductId,
@@ -45,47 +33,32 @@ pub(super) struct NewSkuContext<'a> {
 }
 
 impl CatalogService {
-    /// 构造新 SKU 行（规范化自由规格 → 计算签名 → 生成 SKU 身份 + 首个修订）。
+    /// 构造新 SKU 行。
+    ///
+    /// 规范化自由规格、校验新身份意图与条码占用，并创建稳定 SKU 及首个修订。
     ///
     /// # 参数
-    /// * `ctx` - 新 SKU 上下文（所属 SPU、生效区间、操作人）
-    /// * `input` - SKU 输入行（含独立 SKU 名称）
+    /// * `ctx` - 新 SKU 所属商品、生效区间与创建人
+    /// * `input` - SKU 输入行
     ///
     /// # 返回
     /// 返回 `Create` 动作的规格编辑行。
     ///
     /// # 错误
-    /// 规格名/值非法、签名冲突、条码冲突时返回错误。
+    /// 身份、规格、条码或实体字段违反规则，以及仓储查询失败时返回错误。
     pub(super) async fn build_new_sku_item(
         &self,
         ctx: NewSkuContext<'_>,
         input: ProductSkuInput,
     ) -> Result<SkuEditItem> {
+        new_sku_edit_identity(&input)
+            .ensure_new()
+            .map_err(map_sku_edit_error)?;
         let signature = specification_signature_for(&input.spec_entries)?;
         self.ensure_barcode_available(&input.barcode, None).await?;
-        let sku_id = SkuId::new(next_id());
-        let revision_id = SkuRevisionId::new(next_id());
-        let revision = SkuRevision::new(
-            revision_id.clone(),
-            SkuRevisionData {
-                sku_id: sku_id.clone(),
-                revision_no: 1,
-                name: input.name,
-                description: None,
-                specification: None,
-                barcode: input.barcode,
-                source_main_image_asset_id: input.main_image_asset_id.clone(),
-                weight_kg: input.weight_kg,
-                volume_m3: input.volume_m3,
-                sales_visible_price_gross: input.sales_visible_price_gross,
-                market_price: input.market_price,
-                status: EnableStatus::Active,
-                effective_from: ctx.effective_from,
-                effective_to: ctx.effective_to,
-            },
-        )?;
+        let revision = build_initial_sku_revision(&input, ctx.effective_from, ctx.effective_to)?;
         let mut sku = Sku::new(
-            sku_id,
+            SkuId::new(revision.sku_id.to_string()),
             SkuData {
                 sku_no: input.sku_no,
                 product_id: ctx.product_id.clone(),
@@ -96,7 +69,7 @@ impl CatalogService {
             },
             ctx.created_by,
         )?;
-        sku.stable.current_revision_id = Some(revision.base.id.clone());
+        sku.attach_revision(&revision, ctx.created_by)?;
         Ok(SkuEditItem {
             action: SkuEditAction::Create,
             sku,
@@ -104,17 +77,17 @@ impl CatalogService {
         })
     }
 
-    /// 校验条码未被其他在用 SKU 使用（数据模型 §6.3：冲突转人工，不自动合并）。
+    /// 校验条码未被其他在用 SKU 使用。
     ///
     /// # 参数
     /// * `barcode` - 条码原值
-    /// * `current_sku_id` - 本次写入归属的 SKU（同 SKU 自身修订不视为冲突）
+    /// * `current_sku_id` - 本次写入归属 SKU；同一 SKU 自身修订不视为冲突
     ///
     /// # 返回
-    /// 可用时返回 `Ok(())`。
+    /// 条码为空或未被其他 SKU 占用时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 条码已被其他在用 SKU 使用时返回 `BusinessLogicError`。
+    /// 条码已被其他在用 SKU 使用，或仓储查询失败时返回错误。
     pub(super) async fn ensure_barcode_available(
         &self,
         barcode: &Option<String>,
@@ -127,14 +100,14 @@ impl CatalogService {
         else {
             return Ok(());
         };
-        let active = self
+        let owners = self
             .db
-            .sku_revisions()
-            .find_active_by_barcode(barcode, &mut NoTransaction)
+            .catalog()
+            .barcode_owner_sku_ids(barcode, &mut NoTransaction)
             .await?;
-        if active
+        if owners
             .iter()
-            .any(|revision| revision.sku_id.as_ref() != current_sku_id.unwrap_or_default())
+            .any(|sku_id| sku_id != current_sku_id.unwrap_or_default())
         {
             return Err(Error::BusinessLogicError(format!(
                 "条码已被其他在用SKU使用: {barcode}"
@@ -143,29 +116,62 @@ impl CatalogService {
         Ok(())
     }
 
-    /// 计算某 SKU 已有修订的最大序号 + 1（唯一索引兜底并发）。
+    /// 计算某 SKU 应写入的下一修订序号。
     ///
     /// # 参数
-    /// * `sku_id` - SKU
+    /// * `sku_id` - SKU 稳定 ID
     ///
     /// # 返回
-    /// 返回下一个修订序号。
+    /// 返回从 1 开始、按历史最大修订号递增的下一序号。
     ///
     /// # 错误
-    /// 数据库查询失败时返回错误。
-    pub(super) async fn next_sku_revision_no(&self, sku_id: &str) -> Result<u32> {
-        let revisions = self
+    /// 仓储查询失败或修订序号达到上限时返回错误。
+    pub(super) async fn next_sku_revision_no(&self, sku_id: &SkuId) -> Result<u32> {
+        let latest = self
             .db
-            .sku_revisions()
-            .find_many(doc! { "sku_id": sku_id }, &mut NoTransaction)
+            .catalog()
+            .latest_sku_revision_no(sku_id, &mut NoTransaction)
             .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0)
-            + 1)
+        Ok(next_revision_no(latest)?)
     }
+}
+
+/// 构造新 SKU 的首个修订。
+///
+/// # 参数
+/// * `input` - 新 SKU 输入
+/// * `effective_from` / `effective_to` - 首个修订生效区间
+///
+/// # 返回
+/// 返回使用新稳定 SKU ID、修订号 1 的不可变 SKU 修订。
+///
+/// # 错误
+/// SKU 修订字段违反实体不变式时返回错误。
+fn build_initial_sku_revision(
+    input: &ProductSkuInput,
+    effective_from: BusinessDate,
+    effective_to: Option<BusinessDate>,
+) -> Result<SkuRevision> {
+    let sku_id = SkuId::new(next_id());
+    Ok(SkuRevision::new(
+        SkuRevisionId::new(next_id()),
+        SkuRevisionData {
+            sku_id,
+            revision_no: 1,
+            name: input.name.clone(),
+            description: None,
+            specification: None,
+            barcode: input.barcode.clone(),
+            source_main_image_asset_id: input.main_image_asset_id.clone(),
+            weight_kg: input.weight_kg,
+            volume_m3: input.volume_m3,
+            sales_visible_price_gross: input.sales_visible_price_gross,
+            market_price: input.market_price,
+            status: EnableStatus::Active,
+            effective_from,
+            effective_to,
+        },
+    )?)
 }
 
 /// 根据请求中的 SPU 局部规格名和值计算 SKU 身份签名。
@@ -174,15 +180,14 @@ impl CatalogService {
 /// * `entries` - 一个 SKU 的全部规格名和值
 ///
 /// # 返回
-/// 返回去除首尾空白、按规格名和值排序后的规范化签名。
+/// 返回去除首尾空白并按规格名和值排序后的规范化签名。
 ///
 /// # 错误
-/// 规格名/值为空、超长或同一规格名重复时返回验证错误。
+/// 规格名值为空、超长或同一规格名重复时返回领域错误。
 pub(super) fn specification_signature_for(entries: &[SpecEntryInput]) -> Result<String> {
     let signature_entries = entries
         .iter()
         .map(|entry| SpecSignatureEntry {
-            // 字段名为兼容既有 HTTP 契约保留；业务含义是 SPU 局部规格名和值。
             attribute_code: entry.attribute_code.clone(),
             value_code: entry.attribute_value_code.clone(),
         })
@@ -190,127 +195,65 @@ pub(super) fn specification_signature_for(entries: &[SpecEntryInput]) -> Result<
     Ok(compute_specification_signature(&signature_entries)?)
 }
 
-/// 校验既有规格行的稳定身份、期望修订与显式重新启用意图。
+/// 构造既有 SKU 编辑身份值对象。
 ///
 /// # 参数
-/// * `existing` - 规范化签名命中的既有稳定 SKU
 /// * `input` - 客户端提交的 SKU 行
-/// * `reactivating` - 该 SKU 当前是否处于停用状态
 /// * `change_reason` - 请求级变更原因
 ///
 /// # 返回
-/// 身份、修订与重新启用意图一致时返回 `Ok(())`。
+/// 返回借用输入字段的 SKU 编辑身份快照。
 ///
 /// # 错误
-/// 身份缺失/不匹配、期望修订过期、稳定字段被改动，或停用 SKU 未明确重新
-/// 启用并填写原因时返回验证或冲突错误。
-pub(super) fn ensure_existing_sku_identity(
-    existing: &Sku,
-    input: &ProductSkuInput,
-    reactivating: bool,
-    change_reason: Option<&str>,
-) -> Result<()> {
-    if input.sku_id.as_ref().map(ToString::to_string).as_deref() != Some(existing.base.id.as_str()) {
-        return Err(Error::ValidationError(
-            "既有规格行必须携带匹配的稳定 sku_id".to_string(),
-        ));
+/// 无；具体身份规则由 [`Sku::classify_edit`] 校验。
+pub(super) fn existing_sku_edit_identity<'a>(
+    input: &'a ProductSkuInput,
+    change_reason: Option<&'a str>,
+) -> SkuEditIdentity<'a> {
+    SkuEditIdentity {
+        sku_id: input.sku_id.as_ref(),
+        expected_revision_id: input.expected_sku_revision_id.as_ref(),
+        sku_no: &input.sku_no,
+        base_unit_id: &input.base_unit_id,
+        reenable: input.reenable,
+        change_reason,
     }
-    let expected_revision = input.expected_sku_revision_id.as_ref().map(ToString::to_string);
-    if expected_revision.as_deref() != existing.stable.current_revision_id.as_deref() {
-        return Err(Error::ConflictError(
-            "SKU 修订已变化，请刷新商品后重试".to_string(),
-        ));
-    }
-    if input.sku_no.trim() != existing.sku_no || input.base_unit_id != existing.base_unit_id {
-        return Err(Error::ValidationError(
-            "SKU 编码和基础单位为稳定身份字段，编辑时不得修改".to_string(),
-        ));
-    }
-    if reactivating && (!input.reenable || change_reason.is_none_or(str::is_empty)) {
-        return Err(Error::ValidationError(
-            "重新启用历史停用 SKU 必须明确 reenable=true 并填写 change_reason".to_string(),
-        ));
-    }
-    if !reactivating && input.reenable {
-        return Err(Error::ValidationError(
-            "当前启用 SKU 不得提交重新启用意图".to_string(),
-        ));
-    }
-    Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use entities::ids::UnitOfMeasureId;
-
-    fn existing_sku(status: EnableStatus) -> Sku {
-        let mut sku = Sku::new(
-            SkuId::new("sku-1"),
-            SkuData {
-                sku_no: "SKU-001".to_string(),
-                product_id: ProductId::new("product-1"),
-                base_unit_id: UnitOfMeasureId::new("unit-1"),
-                specification_signature: "color=red".to_string(),
-                status,
-                listing_status: ListingStatus::Unlisted,
-            },
-            "tester",
-        )
-        .unwrap();
-        sku.stable.current_revision_id = Some("sku-rev-2".to_string());
-        sku
+/// 构造新 SKU 身份值对象。
+///
+/// # 参数
+/// * `input` - 客户端提交的新 SKU 行
+///
+/// # 返回
+/// 返回用于校验“不得猜测既有身份”的借用快照。
+///
+/// # 错误
+/// 无；具体身份规则由 [`SkuEditIdentity::ensure_new`] 校验。
+fn new_sku_edit_identity(input: &ProductSkuInput) -> SkuEditIdentity<'_> {
+    SkuEditIdentity {
+        sku_id: input.sku_id.as_ref(),
+        expected_revision_id: input.expected_sku_revision_id.as_ref(),
+        sku_no: &input.sku_no,
+        base_unit_id: &input.base_unit_id,
+        reenable: input.reenable,
+        change_reason: None,
     }
+}
 
-    fn existing_input(reenable: bool) -> ProductSkuInput {
-        ProductSkuInput {
-            sku_id: Some(SkuId::new("sku-1")),
-            expected_sku_revision_id: Some(SkuRevisionId::new("sku-rev-2")),
-            reenable,
-            sku_no: "SKU-001".to_string(),
-            name: "测试 SKU".to_string(),
-            base_unit_id: UnitOfMeasureId::new("unit-1"),
-            barcode: None,
-            main_image_asset_id: None,
-            weight_kg: None,
-            volume_m3: None,
-            sales_visible_price_gross: None,
-            market_price: None,
-            spec_entries: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn existing_sku_requires_exact_current_revision() {
-        let sku = existing_sku(EnableStatus::Active);
-        let mut input = existing_input(false);
-        input.expected_sku_revision_id = Some(SkuRevisionId::new("stale-revision"));
-
-        assert!(ensure_existing_sku_identity(&sku, &input, false, None).is_err());
-    }
-
-    #[test]
-    fn disabled_sku_requires_explicit_reenable_and_reason() {
-        let sku = existing_sku(EnableStatus::Disabled);
-
-        assert!(ensure_existing_sku_identity(&sku, &existing_input(false), true, None).is_err());
-        assert!(ensure_existing_sku_identity(&sku, &existing_input(true), true, Some("恢复销售")).is_ok());
-    }
-
-    /// 商品规格直接使用请求中的 SPU 局部名称和值，不查询全局规格字典。
-    #[test]
-    fn specification_signature_uses_spu_local_spec_text() {
-        let entries = vec![
-            SpecEntryInput {
-                attribute_code: "颜色".to_string(),
-                attribute_value_code: "红色".to_string(),
-            },
-            SpecEntryInput {
-                attribute_code: "尺码".to_string(),
-                attribute_value_code: "L".to_string(),
-            },
-        ];
-
-        assert_eq!(specification_signature_for(&entries).unwrap(), "尺码=L|颜色=红色");
+/// 把 SKU 身份领域错误映射为稳定的 Service 错误语义。
+///
+/// # 参数
+/// * `error` - SKU 身份规则错误
+///
+/// # 返回
+/// 修订过期映射为 409 冲突，其余输入意图错误映射为参数验证错误。
+///
+/// # 错误
+/// 无；本方法只做错误边界适配。
+pub(super) fn map_sku_edit_error(error: SkuEditIdentityError) -> Error {
+    match error {
+        SkuEditIdentityError::RevisionConflict => Error::ConflictError(error.to_string()),
+        _ => Error::ValidationError(error.to_string()),
     }
 }

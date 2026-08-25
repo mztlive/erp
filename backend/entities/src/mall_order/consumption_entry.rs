@@ -178,6 +178,35 @@ impl MallConsumptionEntry {
         self.attribution_status = to;
         Ok(())
     }
+
+    /// 判断消费事实是否是指定商品与支付来源的原始消费。
+    ///
+    /// # 参数
+    /// * `mall_order_item_id` - 退款行引用的商城订单明细
+    /// * `mall_payment_source_id` - 退款分配引用的原支付来源
+    ///
+    /// # 返回
+    /// 商品、支付来源均一致且方向为原始消费时返回 `true`。
+    pub fn matches_refund_source(
+        &self,
+        mall_order_item_id: &MallOrderItemId,
+        mall_payment_source_id: &MallPaymentSourceId,
+    ) -> bool {
+        &self.mall_order_item_id == mall_order_item_id
+            && &self.mall_payment_source_id == mall_payment_source_id
+            && self.direction == ConsumptionDirection::Consumption
+    }
+
+    /// 判断累计退款是否仍在原始消费金额范围内。
+    ///
+    /// # 参数
+    /// * `refunded_total` - 含本次在内的累计净退款金额
+    ///
+    /// # 返回
+    /// 当前事实为原始消费且累计退款不超过消费金额时返回 `true`。
+    pub fn allows_cumulative_refund(&self, refunded_total: Amount) -> bool {
+        self.direction == ConsumptionDirection::Consumption && refunded_total <= self.amount
+    }
 }
 
 #[cfg(test)]
@@ -266,6 +295,24 @@ mod tests {
     }
 
     /// 归集推进与状态机：合法/非法迁移。
+    #[test]
+    fn refund_source_relationship_is_entity_owned() {
+        let entry = MallConsumptionEntry::new(MallConsumptionEntryId::new("ce-1"), data()).unwrap();
+        assert!(
+            entry.matches_refund_source(&MallOrderItemId::new("item-1"), &MallPaymentSourceId::new("ps-1"),)
+        );
+        assert!(entry.allows_cumulative_refund(Amount::from_str("80.00").unwrap()));
+        assert!(!entry.allows_cumulative_refund(Amount::from_str("80.01").unwrap()));
+        assert!(
+            !entry.matches_refund_source(&MallOrderItemId::new("item-2"), &MallPaymentSourceId::new("ps-1"),)
+        );
+        let reversal =
+            MallConsumptionEntry::new(MallConsumptionEntryId::new("ce-2"), reversal_data()).unwrap();
+        assert!(!reversal
+            .matches_refund_source(&MallOrderItemId::new("item-1"), &MallPaymentSourceId::new("ps-1"),));
+        assert!(!reversal.allows_cumulative_refund(Amount::from_str("1.00").unwrap()));
+    }
+
     #[test]
     fn attribution_advances_and_machine_edges_are_fixed() {
         let mut entry = MallConsumptionEntry::new(MallConsumptionEntryId::new("ce-1"), data()).unwrap();

@@ -6,8 +6,8 @@
 //! 状态机按 §7.5：草稿 → 已过账 → 已冲正（`POSTED` 后不可编辑，误录时新增
 //! 反向验收及反向分配，不覆盖原行）。非卡券明细只有累计净有效验收通过数量
 //! 达到当前有效履约数量时才算履约完成；短少、拒收和服务不通过只记录结果，
-//! 不直接改库存、应收或采购（需要后续处理时创建 `sales_return_case` 或补履约
-//! 记录）——均为跨聚合规则，由 P3 完成。
+//! 不直接改库存、应收或采购。Service 负责加载履约事实与分配，本实体负责草稿/
+//! 过账/冲正资格、表头行归属及分配数量守恒。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -226,6 +226,109 @@ impl CustomerAcceptance {
         Ok(())
     }
 
+    /// 判断既有验收单是否属于同一业务身份。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 请求声明的销售单
+    /// * `acceptance_no` - 请求可选的验收单号
+    ///
+    /// # 返回
+    /// 销售单一致，且提供单号时单号也一致，返回 `true`。
+    pub fn matches_business_identity(
+        &self,
+        sales_order_id: &SalesOrderId,
+        acceptance_no: Option<&str>,
+    ) -> bool {
+        self.sales_order_id == *sales_order_id
+            && acceptance_no.is_none_or(|acceptance_no| self.acceptance_no == acceptance_no)
+    }
+
+    /// 判断验收单是否已经过账。
+    ///
+    /// # 返回
+    /// 状态为 `Posted` 时返回 `true`。
+    pub fn is_posted(&self) -> bool {
+        self.status == CustomerAcceptanceState::Posted
+    }
+
+    /// 校验已有验收草稿可按期望版本完整替换。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方提交的乐观锁版本
+    ///
+    /// # 返回
+    /// 草稿且版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态或版本不满足时返回错误。
+    pub fn ensure_draft_version(&self, expected_version: u64) -> Result<()> {
+        if self.status != CustomerAcceptanceState::Draft {
+            return Err(Error::from("只有草稿状态的客户验收单可以登记"));
+        }
+        if self.base.version != expected_version {
+            return Err(Error::from("客户验收草稿已变化，请刷新后重试"));
+        }
+        Ok(())
+    }
+
+    /// 校验验收单仍为草稿。
+    ///
+    /// # 返回
+    /// 草稿状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非草稿状态返回错误。
+    pub fn ensure_draft(&self) -> Result<()> {
+        if self.status != CustomerAcceptanceState::Draft {
+            return Err(Error::from("只有草稿状态的客户验收单可以过账"));
+        }
+        Ok(())
+    }
+
+    /// 校验已加载验收行完整且全部归属本单。
+    ///
+    /// # 参数
+    /// * `lines` - 已在事务内加载的验收行
+    ///
+    /// # 返回
+    /// 至少一行且全部行归属本单时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 空行或行表头关联不一致时返回错误。
+    pub fn ensure_posting_lines(&self, lines: &[CustomerAcceptanceLine]) -> Result<()> {
+        if lines.is_empty() {
+            return Err(Error::from("客户验收单没有行，无法过账"));
+        }
+        let acceptance_id = CustomerAcceptanceId::new(self.base.id.clone());
+        if lines
+            .iter()
+            .any(|line| line.customer_acceptance_id != acceptance_id)
+        {
+            return Err(Error::from("客户验收行与验收单关联不一致"));
+        }
+        Ok(())
+    }
+
+    /// 校验验收单可按期望版本冲正。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方提交的乐观锁版本
+    ///
+    /// # 返回
+    /// 已过账且版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态或版本不满足时返回错误。
+    pub fn ensure_reversible(&self, expected_version: u64) -> Result<()> {
+        if self.base.version != expected_version {
+            return Err(Error::from("数据已被其他请求修改，请刷新后重试"));
+        }
+        if self.status != CustomerAcceptanceState::Posted {
+            return Err(Error::from("只有已过账的客户验收单可以冲正"));
+        }
+        Ok(())
+    }
+
     /// 过账验收（草稿 → 已过账）。
     ///
     /// 过账时写 `acceptance_fulfillment_allocation` 的 `APPLY`/`REVERSE` 并重算
@@ -312,8 +415,8 @@ pub struct CustomerAcceptanceLineData {
 /// 客户验收行实体（数据模型 §6.7 行）。
 ///
 /// 三个结果数量均不得为负；短少、拒收和服务不通过只记录结果，不直接改库存、
-/// 应收或采购（§6.7，跨聚合动作由 P3 处理）。验收行的通过、短少、拒收数量
-/// 必须由其有效分配覆盖且合计守恒——跨聚合校验由 P3 完成。
+/// 应收或采购。Service 加载分配后，由本实体校验分配合计等于通过数量，并校验
+/// 履约事实销售明细与验收行一致。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct CustomerAcceptanceLine {
     #[serde(flatten)]
@@ -374,6 +477,34 @@ impl CustomerAcceptanceLine {
             reason,
             evidence_attachment_id: data.evidence_attachment_id,
         })
+    }
+
+    /// 校验履约分配合计等于本行通过数量。
+    ///
+    /// # 参数
+    /// * `allocated_quantities` - 本行全部拟应用分配数量
+    ///
+    /// # 返回
+    /// 分配合计守恒时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 数量求和失败或合计不等于通过数量时返回错误。
+    pub fn ensure_allocation_conserved<I>(&self, allocated_quantities: I) -> Result<()>
+    where
+        I: IntoIterator<Item = Quantity>,
+    {
+        let total =
+            allocated_quantities
+                .into_iter()
+                .try_fold(rust_decimal::Decimal::ZERO, |total, quantity| {
+                    Quantity::try_from(total + quantity.to_decimal())
+                        .map(|quantity| quantity.to_decimal())
+                        .map_err(|error| Error::from(error.to_string()))
+                })?;
+        if total != self.accepted_quantity.to_decimal() {
+            return Err(Error::from("验收行分配合计必须等于通过数量"));
+        }
+        Ok(())
     }
 }
 
@@ -497,7 +628,49 @@ mod tests {
         assert_eq!(line.accepted_quantity, Quantity::from_str("9").unwrap());
     }
 
-    /// 失败路径：负数量、行号越界、说明超长。
+    /// 过账规则校验业务身份、版本、表头行归属、分配守恒与冲正资格。
+    #[test]
+    fn posting_rules_validate_status_version_association_and_allocation_total() {
+        let mut acceptance =
+            CustomerAcceptance::new(CustomerAcceptanceId::new("acceptance-1"), data()).unwrap();
+        let line =
+            CustomerAcceptanceLine::new(CustomerAcceptanceLineId::new("line-posting"), line_data()).unwrap();
+        assert!(acceptance.matches_business_identity(&SalesOrderId::new("so-1"), Some("CA-2026-001"),));
+        assert!(!acceptance.matches_business_identity(&SalesOrderId::new("other-order"), None));
+        assert!(!acceptance.matches_business_identity(&SalesOrderId::new("so-1"), Some("other-no")));
+        assert!(acceptance.ensure_draft_version(acceptance.base.version).is_ok());
+        assert!(acceptance
+            .ensure_draft_version(acceptance.base.version + 1)
+            .is_err());
+        assert!(acceptance.ensure_draft().is_ok());
+        assert!(acceptance.ensure_posting_lines(&[]).is_err());
+        assert!(acceptance
+            .ensure_posting_lines(std::slice::from_ref(&line))
+            .is_ok());
+        let foreign_line = CustomerAcceptanceLine::new(
+            CustomerAcceptanceLineId::new("foreign-line"),
+            CustomerAcceptanceLineData {
+                customer_acceptance_id: CustomerAcceptanceId::new("other-acceptance"),
+                ..line_data()
+            },
+        )
+        .unwrap();
+        assert!(acceptance
+            .ensure_posting_lines(std::slice::from_ref(&foreign_line))
+            .is_err());
+        assert!(line
+            .ensure_allocation_conserved([Quantity::from_str("9").unwrap()])
+            .is_ok());
+        assert!(line
+            .ensure_allocation_conserved([Quantity::from_str("8").unwrap()])
+            .is_err());
+        acceptance.mark_posted().unwrap();
+        assert!(acceptance.ensure_draft().is_err());
+        assert!(acceptance.ensure_draft_version(acceptance.base.version).is_err());
+        assert!(acceptance.ensure_reversible(acceptance.base.version + 1).is_err());
+        assert!(acceptance.ensure_reversible(acceptance.base.version).is_ok());
+    }
+
     #[test]
     fn line_rejects_quantity_violations() {
         let negative = CustomerAcceptanceLineData {

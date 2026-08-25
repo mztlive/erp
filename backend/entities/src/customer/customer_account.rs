@@ -200,6 +200,23 @@ impl CustomerAccount {
         self.stable.status().is_active()
     }
 
+    /// 校验客户角色乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端期望版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前版本与期望版本不一致时返回错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        if self.base.version == expected {
+            return Ok(());
+        }
+        Err(crate::errors::Error::from("数据已被其他请求修改，请刷新后重试"))
+    }
+
     /// 应用默认付款条件更新。
     ///
     /// # 参数
@@ -348,6 +365,19 @@ mod tests {
         assert_eq!(account.default_payment_term_id.as_deref(), Some("PREPAY_50"));
         assert_eq!(account.customer_no, "C-2026-001");
         assert_eq!(account.party_id, PartyId::new("party-1"));
+    }
+
+    /// 版本校验接受当前版本并拒绝过期版本。
+    #[test]
+    fn version_check_rejects_stale_expected_version() {
+        let account = CustomerAccount::new(
+            CustomerAccountId::new("customer-version"),
+            account_data(),
+            "admin-1",
+        )
+        .unwrap();
+        assert!(account.ensure_version(1).is_ok());
+        assert!(account.ensure_version(2).is_err());
     }
 
     /// 实体 BSON 往返。

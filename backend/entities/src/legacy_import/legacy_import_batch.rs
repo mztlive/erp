@@ -10,6 +10,8 @@ use crate::errors::{Error, Result};
 use crate::ids::FileAssetId;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use super::ConfirmationScope;
+
 /// 批次号最大长度。
 const BATCH_NO_MAX_LEN: usize = 64;
 /// 来源对象集合描述最大长度。
@@ -223,6 +225,138 @@ impl LegacyImportBatch {
             failure_code_summary,
             confirmation_status_summary,
         })
+    }
+
+    /// 返回批次对象集要求的固定确认范围。
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序的必要确认范围。
+    ///
+    /// # 错误
+    /// 批次对象集包含未注册类型时返回错误。
+    pub fn required_confirmation_scopes(&self) -> Result<std::collections::BTreeSet<ConfirmationScope>> {
+        ConfirmationScope::required_for_object_set(&self.source_object_set)
+    }
+
+    /// 判断批次是否已进入不可继续应用的结果终态。
+    ///
+    /// # 返回
+    /// 完成、部分失败或失败时返回 `true`。
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self.status,
+            LegacyImportBatchStatus::Completed
+                | LegacyImportBatchStatus::PartialFailed
+                | LegacyImportBatchStatus::Failed
+        )
+    }
+
+    /// 判断乐观锁版本是否与命令期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端冻结版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `true`。
+    pub fn has_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
+    /// 判断规则版本是否与试算冻结值一致。
+    ///
+    /// # 参数
+    /// * `expected` - 试算冻结的规则版本
+    ///
+    /// # 返回
+    /// 规范化后与当前批次规则版本一致时返回 `true`。
+    pub fn has_rule_version(&self, expected: &str) -> bool {
+        self.import_rule_version == expected.trim()
+    }
+
+    /// 推进到待确认阶段。
+    ///
+    /// 待校验批次依次经过校验中后进入待确认；校验中直接进入待确认；
+    /// 已在待确认时幂等返回。
+    ///
+    /// # 返回
+    /// 推进成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 批次已离开可确认阶段时返回错误。
+    pub fn prepare_confirmation(&mut self) -> Result<()> {
+        match self.status {
+            LegacyImportBatchStatus::PendingValidation => {
+                self.advance(LegacyImportBatchStatus::Validating)?;
+                self.advance(LegacyImportBatchStatus::PendingConfirmation)
+            }
+            LegacyImportBatchStatus::Validating => self.advance(LegacyImportBatchStatus::PendingConfirmation),
+            LegacyImportBatchStatus::PendingConfirmation => Ok(()),
+            _ => Err(Error::from("批次已离开可确认阶段，禁止创建确认事实")),
+        }
+    }
+
+    /// 判断批次是否处于逐行应用阶段。
+    ///
+    /// # 返回
+    /// 状态为导入中时返回 `true`。
+    pub fn is_importing(&self) -> bool {
+        self.status == LegacyImportBatchStatus::Importing
+    }
+
+    /// 判断批次是否接受责任范围确认决策。
+    ///
+    /// # 返回
+    /// 状态为待确认时返回 `true`。
+    pub fn accepts_confirmation_decision(&self) -> bool {
+        self.status == LegacyImportBatchStatus::PendingConfirmation
+    }
+
+    /// 判断批次是否已完成确认并等待启动应用。
+    ///
+    /// # 返回
+    /// 状态为待应用时返回 `true`。
+    pub fn is_ready_to_apply(&self) -> bool {
+        self.status == LegacyImportBatchStatus::ReadyToApply
+    }
+
+    /// 判断批次是否允许取消尚未应用的项目。
+    ///
+    /// # 返回
+    /// 待应用或导入中状态返回 `true`。
+    pub fn accepts_pending_cancellation(&self) -> bool {
+        matches!(
+            self.status,
+            LegacyImportBatchStatus::ReadyToApply | LegacyImportBatchStatus::Importing
+        )
+    }
+
+    /// 判断批次是否允许重新准备失败项目。
+    ///
+    /// # 返回
+    /// 部分失败或失败状态返回 `true`。
+    pub fn accepts_failed_retry(&self) -> bool {
+        matches!(
+            self.status,
+            LegacyImportBatchStatus::PartialFailed | LegacyImportBatchStatus::Failed
+        )
+    }
+
+    /// 根据待处理与失败行数派生应用后的批次状态。
+    ///
+    /// # 参数
+    /// * `pending_rows` - 尚未进入终态的行数
+    /// * `failed_rows` - 已失败行数
+    ///
+    /// # 返回
+    /// 全部完成且无失败返回完成；全部完成但有失败返回部分失败；否则保持导入中。
+    pub fn application_outcome(pending_rows: u64, failed_rows: u64) -> LegacyImportBatchStatus {
+        if pending_rows > 0 {
+            LegacyImportBatchStatus::Importing
+        } else if failed_rows == 0 {
+            LegacyImportBatchStatus::Completed
+        } else {
+            LegacyImportBatchStatus::PartialFailed
+        }
     }
 
     /// 推进批次状态。
@@ -485,6 +619,42 @@ mod tests {
             LegacyImportBatchStatus::Importing
         )
         .is_err());
+    }
+
+    #[test]
+    fn confirmation_and_application_rules_are_owned_by_batch() {
+        let mut batch =
+            LegacyImportBatch::new(LegacyImportBatchId::new("batch-rules"), batch_data()).unwrap();
+        assert!(!batch.is_terminal());
+        assert!(batch.has_version(1));
+        assert!(batch.has_rule_version(" v1 "));
+        batch.prepare_confirmation().unwrap();
+        assert_eq!(batch.status, LegacyImportBatchStatus::PendingConfirmation);
+        assert!(batch.accepts_confirmation_decision());
+        assert!(!batch.is_ready_to_apply());
+        assert!(batch
+            .required_confirmation_scopes()
+            .unwrap()
+            .contains(&ConfirmationScope::Sales));
+        batch.advance(LegacyImportBatchStatus::ReadyToApply).unwrap();
+        assert!(batch.is_ready_to_apply());
+        assert!(batch.accepts_pending_cancellation());
+        batch.advance(LegacyImportBatchStatus::Importing).unwrap();
+        assert!(batch.accepts_pending_cancellation());
+        batch.advance(LegacyImportBatchStatus::PartialFailed).unwrap();
+        assert!(batch.accepts_failed_retry());
+        assert_eq!(
+            LegacyImportBatch::application_outcome(0, 0),
+            LegacyImportBatchStatus::Completed
+        );
+        assert_eq!(
+            LegacyImportBatch::application_outcome(0, 1),
+            LegacyImportBatchStatus::PartialFailed
+        );
+        assert_eq!(
+            LegacyImportBatch::application_outcome(1, 0),
+            LegacyImportBatchStatus::Importing
+        );
     }
 
     #[test]

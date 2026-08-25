@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::stable::StableBase;
 use crate::common::state::{ensure_transition, DocumentState};
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::ids::{SalesChangeOrderId, SalesChangeSubmissionId, SalesOrderId, SalesOrderRevisionId};
 use crate::validation::normalize_required_text;
 
@@ -252,6 +252,49 @@ impl SalesChangeOrder {
         })
     }
 
+    /// 判断乐观锁版本是否与调用方期望一致。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方读取到的实体版本
+    ///
+    /// # 返回
+    /// 当前版本与期望版本一致时返回 `true`。
+    pub fn matches_version(&self, expected_version: u64) -> bool {
+        self.base.version == expected_version
+    }
+
+    /// 判断变更单是否处于可提交或可作废的草稿态。
+    ///
+    /// # 返回
+    /// 状态为 `Draft` 时返回 `true`。
+    pub fn is_draft(&self) -> bool {
+        self.stable.status == SalesChangeOrderStatus::Draft
+    }
+
+    /// 返回当前冻结的变更提交身份。
+    ///
+    /// # 返回
+    /// 返回当前提交 ID。
+    ///
+    /// # 错误
+    /// 变更单尚未提交审批时返回错误。
+    pub fn required_current_submission_id(&self) -> Result<&SalesChangeSubmissionId> {
+        self.current_submission_id
+            .as_ref()
+            .ok_or_else(|| Error::from("变更单尚未提交审批"))
+    }
+
+    /// 判断销售单当前版本是否仍等于变更基准版本。
+    ///
+    /// # 参数
+    /// * `current_revision_id` - 原销售单当前版本
+    ///
+    /// # 返回
+    /// 当前版本与变更单冻结基准版本一致时返回 `true`。
+    pub fn base_revision_matches(&self, current_revision_id: &str) -> bool {
+        self.base_revision_id.as_ref() == current_revision_id
+    }
+
     /// 更新变更单（仅 `Draft` 状态允许修改变更类型与原因）。
     ///
     /// # 参数
@@ -419,6 +462,20 @@ mod tests {
             ..data()
         };
         assert!(SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), overlong, "admin-1").is_err());
+    }
+
+    #[test]
+    fn version_status_and_revision_relationship_rules_are_entity_owned() {
+        let mut order = SalesChangeOrder::new(SalesChangeOrderId::new("co-1"), data(), "admin-1").unwrap();
+        assert!(order.matches_version(order.base.version));
+        assert!(order.is_draft());
+        assert!(order.base_revision_matches("rev-1"));
+        assert!(order.required_current_submission_id().is_err());
+        order
+            .start_approval(SalesChangeSubmissionId::new("sub-1"), "hash-1", "admin-1")
+            .unwrap();
+        assert!(!order.is_draft());
+        assert_eq!(order.required_current_submission_id().unwrap().as_ref(), "sub-1");
     }
 
     #[test]

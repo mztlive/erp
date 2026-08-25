@@ -20,7 +20,6 @@ use entities::customer::{
 use entities::field_update::FieldUpdate;
 use entities::ids::PartyId;
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
@@ -239,37 +238,16 @@ impl CustomerService {
         ))
     }
 
-    /// 查找法定名称或简称命中的主体 ID，供客户编号与名称统一关键词搜索。
+    /// 查找当前法定名称或简称命中的主体 ID，供客户编号与名称统一关键词搜索。
     async fn matching_party_ids(&self, keyword: &str) -> Result<Vec<String>> {
-        let escaped = regex::escape(keyword);
-        let revisions = self
+        Ok(self
             .db
-            .party_revisions()
-            .find_many(
-                doc! {
-                    "$or": [
-                        { "legal_name": { "$regex": &escaped, "$options": "i" } },
-                        { "short_name": { "$regex": &escaped, "$options": "i" } },
-                    ]
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let revision_ids: Vec<String> = revisions.into_iter().map(|revision| revision.base.id).collect();
-        let mut ids: Vec<String> = self
-            .db
-            .parties()
-            .find_many(
-                doc! { "current_revision_id": { "$in": revision_ids } },
-                &mut NoTransaction,
-            )
+            .party()
+            .matching_current_party_ids_by_name(keyword, &mut NoTransaction)
             .await?
             .into_iter()
-            .map(|party| party.base.id)
-            .collect();
-        ids.sort();
-        ids.dedup();
-        Ok(ids)
+            .map(|party_id| party_id.to_string())
+            .collect())
     }
 
     /// 批量补齐客户当前主体身份与归属，避免列表逐行查询。
@@ -282,50 +260,30 @@ impl CustomerService {
         if rows.is_empty() {
             return Ok(Vec::new());
         }
-        let party_ids: Vec<String> = rows.iter().map(|row| row.party_id.clone()).collect();
-        let parties = self
-            .db
-            .parties()
-            .find_many(doc! { "id": { "$in": party_ids } }, &mut NoTransaction)
-            .await?;
-        let revision_ids: Vec<String> = parties
+        let party_ids: Vec<PartyId> = rows
             .iter()
-            .filter_map(|party| party.stable.current_revision_id.clone())
+            .map(|row| PartyId::new(row.party_id.clone()))
             .collect();
-        let revisions = self
+        let (parties, revisions) = self
             .db
-            .party_revisions()
-            .find_many(doc! { "id": { "$in": revision_ids } }, &mut NoTransaction)
+            .party()
+            .list_with_current_revisions(&party_ids, &mut NoTransaction)
             .await?;
         let customer_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
-        let today = BusinessDate::today().to_string();
         let assignments = self
             .db
             .customer_assignments()
-            .find_many(
-                doc! {
-                    "customer_id": { "$in": customer_ids },
-                    "valid_from": { "$lte": &today },
-                    "$or": [
-                        { "valid_to": null },
-                        { "valid_to": { "$gt": &today } },
-                    ],
-                },
-                &mut NoTransaction,
-            )
+            .list_active_for_customers(&customer_ids, BusinessDate::today(), &mut NoTransaction)
             .await?;
         let account_ids: Vec<String> = assignments
             .iter()
             .map(|assignment| assignment.user_id.clone())
             .collect();
-        let account_names: HashMap<String, String> = self
+        let account_names = self
             .db
             .accounts()
-            .find_many(doc! { "id": { "$in": account_ids } }, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|account| (account.base.id, account.name))
-            .collect();
+            .names_by_ids(&account_ids, &mut NoTransaction)
+            .await?;
         Ok(assemble_customer_views(
             rows,
             parties,
@@ -355,7 +313,7 @@ impl CustomerService {
             Some(user_id) => self
                 .db
                 .accounts()
-                .find_by_id(user_id, &mut NoTransaction)
+                .find_account(user_id, &mut NoTransaction)
                 .await?
                 .map(|account| account.name),
             None => None,
@@ -394,11 +352,9 @@ impl CustomerService {
     ) -> Result<CustomerView> {
         req.validate()?;
         let mut account = self.load_customer(id).await?;
-        if account.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
+        account
+            .ensure_version(req.version)
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
         account.update(
             CustomerAccountUpdate {
                 default_payment_term_id: payment_term_update(req.default_payment_term_id),
@@ -467,7 +423,7 @@ impl CustomerService {
     async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
         self.db
             .customer_accounts()
-            .find_by_id(id, &mut NoTransaction)
+            .find_customer(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))
     }
@@ -485,7 +441,7 @@ impl CustomerService {
     async fn ensure_party_exists(&self, party_id: &PartyId) -> Result<()> {
         self.db
             .parties()
-            .find_by_id(party_id, &mut NoTransaction)
+            .find_party(party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("企业主体不存在，请先创建主体".to_string()))?;
         Ok(())
@@ -506,15 +462,12 @@ impl CustomerService {
         let account = self
             .db
             .accounts()
-            .find_by_id(user_id, &mut NoTransaction)
+            .find_account(user_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("负责销售账号不存在".to_string()))?;
-        if !account.status.is_active() {
-            return Err(Error::BusinessLogicError(
-                "负责销售账号已停用，不能建立客户归属".to_string(),
-            ));
-        }
-        Ok(())
+        account
+            .ensure_can_login()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))
     }
 
     /// 查询主体编号与当前法定名称（D07 跨域读；缺失时静默降级为 `None`）。
@@ -525,20 +478,20 @@ impl CustomerService {
     /// # 返回
     /// 返回 `(party_no, legal_name)` 元组。
     async fn party_identity(&self, party_id: &PartyId) -> (Option<String>, Option<String>) {
-        let Ok(Some(party)) = self.db.parties().find_by_id(party_id, &mut NoTransaction).await else {
+        let Ok(Some((party, revision))) = self
+            .db
+            .party()
+            .find_with_current_revision(party_id, &mut NoTransaction)
+            .await
+        else {
             return (None, None);
         };
-        let legal_name = match &party.stable.current_revision_id {
-            Some(revision_id) => self
-                .db
-                .party_revisions()
-                .find_by_id(revision_id, &mut NoTransaction)
-                .await
+        let legal_name = revision.and_then(|revision| {
+            party
+                .current_revision(std::slice::from_ref(&revision))
                 .ok()
-                .flatten()
-                .map(|revision| revision.legal_name),
-            None => None,
-        };
+                .map(|current| current.legal_name.clone())
+        });
         (Some(party.party_no), legal_name)
     }
 
@@ -550,25 +503,16 @@ impl CustomerService {
     /// # 返回
     /// 返回当前生效 OWNER 的销售人员；无生效归属时返回 `None`。
     async fn current_owner_user_id(&self, customer_id: &str) -> Result<Option<String>> {
-        let today = BusinessDate::today();
-        let today_str = today.to_string();
-        let assignments = self
+        Ok(self
             .db
             .customer_assignments()
-            .find_many(
-                doc! {
-                    "customer_id": customer_id,
-                    "assignment_role": AssignmentRole::Owner.as_str(),
-                    "valid_from": { "$lte": &today_str },
-                    "$or": [
-                        { "valid_to": null },
-                        { "valid_to": { "$gt": &today_str } },
-                    ],
-                },
+            .find_current_owner(
+                &CustomerAccountId::new(customer_id),
+                BusinessDate::today(),
                 &mut NoTransaction,
             )
-            .await?;
-        Ok(assignments.first().map(|assignment| assignment.user_id.clone()))
+            .await?
+            .map(|assignment| assignment.user_id))
     }
 }
 

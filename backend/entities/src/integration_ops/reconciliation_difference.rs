@@ -117,6 +117,28 @@ impl ReconciliationDifference {
             right_fact_reference,
         })
     }
+
+    /// 判断差异分类是否表示潜在资金影响。
+    ///
+    /// 固定关键词覆盖金额、资金、支付、退款、余额、应收和应付差异；匹配
+    /// 不区分大小写，供终态证据策略选择财务补偿要求。
+    ///
+    /// # 返回
+    /// 差异分类包含任一固定资金关键词时返回 `true`。
+    pub fn has_financial_impact(&self) -> bool {
+        let value = self.difference_type.to_ascii_lowercase();
+        [
+            "amount",
+            "fund",
+            "payment",
+            "refund",
+            "balance",
+            "receivable",
+            "payable",
+        ]
+        .iter()
+        .any(|keyword| value.contains(keyword))
+    }
 }
 
 #[cfg(test)]
@@ -229,6 +251,26 @@ mod tests {
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-8"), single_evidence)
                 .unwrap();
         assert!(difference.right_fact_reference.is_none());
+    }
+
+    #[test]
+    fn financial_impact_uses_fixed_case_insensitive_keywords() {
+        let mut financial = difference_data();
+        financial.difference_type = "Refund_Amount_Mismatch".to_string();
+        let financial =
+            ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-financial"), financial)
+                .unwrap();
+        assert!(financial.has_financial_impact());
+
+        let operational = ReconciliationDifference::new(
+            ReconciliationDifferenceId::new("diff-operational"),
+            ReconciliationDifferenceData {
+                difference_type: "status_code_mismatch".to_string(),
+                ..difference_data()
+            },
+        )
+        .unwrap();
+        assert!(!operational.has_financial_impact());
     }
 
     #[test]

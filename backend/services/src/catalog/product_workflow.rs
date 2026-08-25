@@ -1,24 +1,25 @@
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, CatalogExt, FileAssetExt, NoTransaction, Transactional};
-use entities::catalog::product::{Product, ProductData, ProductUpdate};
+use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional};
+use entities::catalog::product::{Product, ProductData};
 use entities::catalog::product_revision::{ProductRevision, ProductRevisionData};
-use entities::catalog::product_revision_media::{MediaRole, ProductRevisionMedia, ProductRevisionMediaData};
-use entities::catalog::sku::{Sku, SkuUpdate};
+use entities::catalog::product_revision_media::{
+    ensure_unique_media_sort_orders, MediaRole, ProductRevisionMedia, ProductRevisionMediaData,
+};
+use entities::catalog::sku::{Sku, SkuEditAction};
 use entities::catalog::sku_revision::{SkuRevision, SkuRevisionData};
 use entities::catalog::{
-    EnableStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind, ProductRevisionId,
-    ProductRevisionMediaId, SkuRevisionId,
+    next_revision_no, EnableStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind,
+    ProductRevisionId, ProductRevisionMediaId, SkuId, SkuRevisionId, SpecificationSignatureSet,
+    UnitOfMeasure, UnitOfMeasureId,
 };
 use entities::common::time::BusinessDate;
 use id_generator::next_id;
-use mongodb::bson::doc;
 use validator::Validate;
 
 use super::sku_edit::{
-    ensure_existing_sku_identity, specification_signature_for, NewSkuContext, SkuEditAction, SkuEditItem,
+    existing_sku_edit_identity, map_sku_edit_error, specification_signature_for, NewSkuContext, SkuEditItem,
 };
-use super::support::ensure_version;
 use super::CatalogService;
 use crate::audit::AuditActor;
 use crate::catalog::dto::{
@@ -172,7 +173,7 @@ impl CatalogService {
         )?;
         pending_assets.ensure_all_used(&used)?;
         let mut product = self.load_product(id).await?;
-        ensure_version(product.base.version, req.version)?;
+        ensure_product_version(&product, req.version)?;
         let plan = self
             .build_spec_edit_plan(&mut product, req, actor, &pending_assets)
             .await?;
@@ -218,80 +219,36 @@ impl CatalogService {
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let mut product = db
-                        .products()
-                        .find_by_id(&id, session)
+                    let snapshot = db
+                        .catalog()
+                        .product_disable_snapshot(&id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("商品不存在".to_string()))?;
-                    ensure_version(product.base.version, req.version)?;
-                    if !product.is_active() {
-                        return Err(Error::BusinessLogicError("商品已经停用".to_string()));
-                    }
-
-                    let current_revision_id = product
-                        .stable
-                        .current_revision_id
-                        .clone()
+                    let mut product = snapshot.product;
+                    ensure_product_version(&product, req.version)?;
+                    product
+                        .disable(&actor_id)
+                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+                    let revision_no = next_revision_no(snapshot.latest_revision_no)?;
+                    let current_revision = snapshot
+                        .current_revision
                         .ok_or_else(|| Error::NotFound("商品当前修订不存在".to_string()))?;
-                    let current_revision = db
-                        .product_revisions()
-                        .find_by_id(&current_revision_id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("商品当前修订不存在".to_string()))?;
-                    let product_id = ProductId::new(product.base.id.clone());
-                    let revision_no = db
-                        .product_revisions()
-                        .find_many(doc! { "product_id": product_id.to_string() }, session)
-                        .await?
-                        .into_iter()
-                        .map(|revision| revision.revision.revision_no)
-                        .max()
-                        .unwrap_or(0)
-                        .checked_add(1)
-                        .ok_or_else(|| Error::BusinessLogicError("商品修订序号已达上限".to_string()))?;
-                    let source_media = db
-                        .product_revision_medias()
-                        .find_media_by_revision_ids(&[ProductRevisionId::new(current_revision_id)], session)
-                        .await?;
-                    let revision_id = ProductRevisionId::new(next_id());
-                    let revision = ProductRevision::new(
-                        revision_id.clone(),
-                        ProductRevisionData {
-                            product_id,
-                            revision_no,
-                            name: current_revision.name,
-                            description: current_revision.description,
-                            specification: current_revision.specification,
-                            category_id: current_revision.category_id,
-                            brand_id: current_revision.brand_id,
-                            status: EnableStatus::Disabled,
-                            effective_from: req.effective_from,
-                            effective_to: current_revision.effective_to,
-                        },
+                    let revision = current_revision.disabled_successor(
+                        ProductRevisionId::new(next_id()),
+                        revision_no,
+                        req.effective_from,
                     )?;
-                    let media = source_media
-                        .into_iter()
+                    let media = snapshot
+                        .media
+                        .iter()
                         .map(|row| {
-                            ProductRevisionMedia::new(
+                            row.copy_to_revision(
                                 ProductRevisionMediaId::new(next_id()),
-                                ProductRevisionMediaData {
-                                    product_revision_id: revision_id.clone(),
-                                    file_asset_id: row.file_asset_id,
-                                    media_role: row.media_role,
-                                    sort_order: row.sort_order,
-                                    alt_text: row.alt_text,
-                                },
+                                ProductRevisionId::new(revision.base.id.clone()),
                             )
                         })
                         .collect::<std::result::Result<Vec<_>, _>>()?;
-
-                    product.update(
-                        ProductUpdate {
-                            status: Some(EnableStatus::Disabled),
-                        },
-                        actor_id,
-                    )?;
-                    product.stable.current_revision_id = Some(revision.base.id.clone());
+                    product.attach_revision(&revision, &actor_id)?;
                     db.products().update(&mut product, session).await?;
                     db.catalog()
                         .create_product_revision_with_media(&revision, &media, session)
@@ -357,20 +314,10 @@ impl CatalogService {
             )
             .collect::<Vec<_>>();
         let mut sku_items = Vec::with_capacity(req.skus.len());
-        let mut seen_signatures = std::collections::HashSet::new();
+        let mut signatures = SpecificationSignatureSet::new();
         for sku_input in req.skus {
-            if sku_input.sku_id.is_some()
-                || sku_input.expected_sku_revision_id.is_some()
-                || sku_input.reenable
-            {
-                return Err(Error::ValidationError(
-                    "新建商品的 SKU 不得指定既有身份或重新启用意图".to_string(),
-                ));
-            }
             let signature = specification_signature_for(&sku_input.spec_entries)?;
-            if !seen_signatures.insert(signature) {
-                return Err(Error::BusinessLogicError("规格集合中存在重复签名".to_string()));
-            }
+            signatures.register_signature(signature)?;
             let item = self
                 .build_new_sku_item(
                     NewSkuContext {
@@ -400,7 +347,7 @@ impl CatalogService {
                 effective_to: req.effective_to,
             },
         )?;
-        product.stable.current_revision_id = Some(revision.base.id.clone());
+        product.attach_revision(&revision, actor.id())?;
         Ok(ProductDraft {
             change_reason: req.change_reason,
             product,
@@ -431,24 +378,39 @@ impl CatalogService {
         product_kind: ProductKind,
         pending_assets: &PendingFileAssets,
     ) -> Result<()> {
-        let category = self.load_category(category_id.as_ref()).await?;
+        let unit_ids = skus
+            .iter()
+            .map(|sku| sku.base_unit_id.clone())
+            .collect::<Vec<_>>();
+        let references = self
+            .db
+            .catalog()
+            .catalog_reference_data(Some(category_id), brand_id, &unit_ids, &mut NoTransaction)
+            .await?;
+        let category = references
+            .category
+            .ok_or_else(|| Error::NotFound("商品分类不存在".to_string()))?;
         if category.product_kind != product_kind {
             return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
         }
-        self.ensure_brand_and_unit_ok(brand_id, skus.iter().map(|sku| &sku.base_unit_id))
-            .await?;
-        for sku in skus {
-            let Some(asset_id) = sku.main_image_asset_id.as_ref() else {
-                continue;
-            };
-            if pending_assets.contains_id(asset_id) {
-                continue;
-            }
-            self.db
-                .file_assets()
-                .find_by_id(asset_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("SKU 主图文件不存在".to_string()))?;
+        if references.brand.is_none() {
+            return Err(Error::NotFound("商品品牌不存在".to_string()));
+        }
+        ensure_units_available(&unit_ids, &references.units)?;
+        let asset_ids = skus
+            .iter()
+            .filter_map(|sku| sku.main_image_asset_id.as_ref())
+            .filter(|asset_id| !pending_assets.contains_id(asset_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !self
+            .db
+            .catalog()
+            .missing_file_asset_ids(&asset_ids, &mut NoTransaction)
+            .await?
+            .is_empty()
+        {
+            return Err(Error::NotFound("SKU 主图文件不存在".to_string()));
         }
         Ok(())
     }
@@ -472,28 +434,37 @@ impl CatalogService {
         role: MediaRole,
         pending_assets: &PendingFileAssets,
     ) -> Result<Vec<ProductRevisionMedia>> {
-        let mut rows = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            if !pending_assets.contains_id(&input.file_asset_id) {
-                self.db
-                    .file_assets()
-                    .find_by_id(input.file_asset_id.as_ref(), &mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("媒体文件不存在".to_string()))?;
-            }
-            let row = ProductRevisionMedia::new(
-                ProductRevisionMediaId::new(next_id()),
-                ProductRevisionMediaData {
-                    product_revision_id: revision_id.clone(),
-                    file_asset_id: input.file_asset_id.clone(),
-                    media_role: role,
-                    sort_order: input.sort_order,
-                    alt_text: input.alt_text.clone(),
-                },
-            )?;
-            rows.push(row);
+        let asset_ids = inputs
+            .iter()
+            .map(|input| &input.file_asset_id)
+            .filter(|asset_id| !pending_assets.contains_id(asset_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !self
+            .db
+            .catalog()
+            .missing_file_asset_ids(&asset_ids, &mut NoTransaction)
+            .await?
+            .is_empty()
+        {
+            return Err(Error::NotFound("媒体文件不存在".to_string()));
         }
-        ensure_unique_sort_orders(rows.iter().map(|row| row.sort_order), "媒体展示顺序")?;
+        let rows = inputs
+            .iter()
+            .map(|input| {
+                ProductRevisionMedia::new(
+                    ProductRevisionMediaId::new(next_id()),
+                    ProductRevisionMediaData {
+                        product_revision_id: revision_id.clone(),
+                        file_asset_id: input.file_asset_id.clone(),
+                        media_role: role,
+                        sort_order: input.sort_order,
+                        alt_text: input.alt_text.clone(),
+                    },
+                )
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        ensure_unique_media_sort_orders(&rows)?;
         Ok(rows)
     }
 
@@ -581,8 +552,8 @@ impl CatalogService {
         let product_id = ProductId::new(product.base.id.clone());
         let existing = self
             .db
-            .skus()
-            .find_many(doc! { "product_id": product_id.to_string() }, &mut NoTransaction)
+            .catalog()
+            .skus_for_product(&product_id, &mut NoTransaction)
             .await?;
         let current_by_signature: HashMap<String, Sku> = existing
             .into_iter()
@@ -606,7 +577,7 @@ impl CatalogService {
             .collect::<Vec<_>>();
 
         let mut sku_items = Vec::with_capacity(req.skus.len());
-        let mut seen_signatures = std::collections::HashSet::new();
+        let mut signatures = SpecificationSignatureSet::new();
         let mut disable = Vec::new();
         let change_reason = req.change_reason.as_deref().map(str::trim);
         let audit_message = change_reason
@@ -614,50 +585,30 @@ impl CatalogService {
             .map(str::to_string);
         for sku_input in req.skus {
             let signature = specification_signature_for(&sku_input.spec_entries)?;
-            if !seen_signatures.insert(signature.clone()) {
-                return Err(Error::BusinessLogicError("规格集合中存在重复签名".to_string()));
-            }
+            signatures.register_signature(signature.clone())?;
             if let Some(mut existing_sku) = current_by_signature.get(&signature).cloned() {
-                // 保留/重新启用：沿用原 sku_id，追加修订；重新启用显式置 Active。
-                let reactivating = !existing_sku.is_active();
-                ensure_existing_sku_identity(&existing_sku, &sku_input, reactivating, change_reason)?;
+                let identity = existing_sku_edit_identity(&sku_input, change_reason);
+                let action = existing_sku
+                    .classify_edit(&identity)
+                    .map_err(map_sku_edit_error)?;
                 self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str()))
                     .await?;
-                let revision_no = self.next_sku_revision_no(&existing_sku.base.id).await?;
+                let sku_id = SkuId::new(existing_sku.base.id.clone());
+                let revision_no = self.next_sku_revision_no(&sku_id).await?;
                 let revision = self.build_sku_revision(
-                    &existing_sku.base.id,
+                    &sku_id,
                     revision_no,
                     req.effective_from,
                     req.effective_to,
                     &sku_input,
                 )?;
-                if reactivating {
-                    existing_sku.update(
-                        SkuUpdate {
-                            status: Some(EnableStatus::Active),
-                        },
-                        actor.id(),
-                    )?;
-                }
+                existing_sku.attach_revision(&revision, actor.id())?;
                 sku_items.push(SkuEditItem {
-                    action: if reactivating {
-                        SkuEditAction::Reactivate
-                    } else {
-                        SkuEditAction::Keep
-                    },
+                    action,
                     sku: existing_sku,
                     revision,
                 });
             } else {
-                // 全新签名：分配新 SKU 身份。
-                if sku_input.sku_id.is_some()
-                    || sku_input.expected_sku_revision_id.is_some()
-                    || sku_input.reenable
-                {
-                    return Err(Error::ValidationError(
-                        "新增规格签名不得指定或猜测既有 SKU 身份".to_string(),
-                    ));
-                }
                 let item = self
                     .build_new_sku_item(
                         NewSkuContext {
@@ -673,14 +624,9 @@ impl CatalogService {
             }
         }
         for (signature, sku) in &current_by_signature {
-            if sku.is_active() && !seen_signatures.contains(signature) {
+            if sku.is_active() && !signatures.contains(signature) {
                 let mut sku = sku.clone();
-                sku.update(
-                    SkuUpdate {
-                        status: Some(EnableStatus::Disabled),
-                    },
-                    actor.id(),
-                )?;
+                sku.disable(actor.id())?;
                 disable.push(sku);
             }
         }
@@ -700,9 +646,7 @@ impl CatalogService {
                 effective_to: req.effective_to,
             },
         )?;
-        product.stable.current_revision_id = Some(revision.base.id.clone());
-        product.stable.status = req.status;
-        product.stable.touch(actor.id());
+        product.attach_revision(&revision, actor.id())?;
         Ok(SpecEditPlan {
             change_reason: audit_message,
             product: product.clone(),
@@ -766,10 +710,8 @@ impl CatalogService {
                             }
                             SkuEditAction::Keep | SkuEditAction::Reactivate => {
                                 db.sku_revisions().create(&item.revision, session).await?;
-                                if item.action == SkuEditAction::Reactivate {
-                                    let mut sku = item.sku.clone();
-                                    db.skus().update(&mut sku, session).await?;
-                                }
+                                let mut sku = item.sku.clone();
+                                db.skus().update(&mut sku, session).await?;
                             }
                         }
                     }
@@ -798,7 +740,7 @@ impl CatalogService {
     /// 实体校验失败时返回错误。
     fn build_sku_revision(
         &self,
-        sku_id: &str,
+        sku_id: &SkuId,
         revision_no: u32,
         effective_from: BusinessDate,
         effective_to: Option<BusinessDate>,
@@ -807,7 +749,7 @@ impl CatalogService {
         Ok(SkuRevision::new(
             SkuRevisionId::new(next_id()),
             SkuRevisionData {
-                sku_id: sku_id.to_string().into(),
+                sku_id: sku_id.clone(),
                 revision_no,
                 name: input.name.clone(),
                 description: None,
@@ -835,18 +777,13 @@ impl CatalogService {
     ///
     /// # 错误
     /// 数据库查询失败时返回错误。
-    pub(super) async fn next_product_revision_no(&self, product_id: &str) -> Result<u32> {
-        let revisions = self
+    pub(super) async fn next_product_revision_no(&self, product_id: &ProductId) -> Result<u32> {
+        let latest = self
             .db
-            .product_revisions()
-            .find_many(doc! { "product_id": product_id }, &mut NoTransaction)
+            .catalog()
+            .latest_product_revision_no(product_id, &mut NoTransaction)
             .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0)
-            + 1)
+        Ok(next_revision_no(latest)?)
     }
 }
 
@@ -869,22 +806,45 @@ fn resolve_product_file_references(
     Ok(used)
 }
 
-/// 校验一组整数内无重复（用于媒体展示顺序等组合唯一前置检查）。
+/// 校验商品乐观锁版本。
 ///
 /// # 参数
-/// * `values` - 待检查值
-/// * `label` - 字段说明
+/// * `product` - 当前商品稳定实体
+/// * `expected` - 客户端读取时看到的期望版本
 ///
 /// # 返回
-/// 无重复时返回 `Ok(())`。
+/// 当前版本与期望版本一致时返回 `Ok(())`。
 ///
 /// # 错误
-/// 存在重复时返回 `BusinessLogicError`。
-fn ensure_unique_sort_orders(values: impl Iterator<Item = i32>, label: &str) -> Result<()> {
-    let mut seen = std::collections::HashSet::new();
-    for value in values {
-        if !seen.insert(value) {
-            return Err(Error::BusinessLogicError(format!("{label}不能重复")));
+/// 版本不一致时返回稳定的 409 冲突错误。
+fn ensure_product_version(product: &Product, expected: u64) -> Result<()> {
+    if !product.has_version(expected) {
+        return Err(Error::ConflictError(
+            "数据已被其他请求修改，请刷新后重试".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 校验批量读取的基础单位完整且全部启用。
+///
+/// # 参数
+/// * `expected_ids` - SKU 输入引用的基础单位 ID
+/// * `units` - Repository 批量读取到的计量单位实体
+///
+/// # 返回
+/// 每个引用均存在且启用时返回 `Ok(())`。
+///
+/// # 错误
+/// 任一单位缺失时返回 `NotFound`，停用时返回业务逻辑错误。
+fn ensure_units_available(expected_ids: &[UnitOfMeasureId], units: &[UnitOfMeasure]) -> Result<()> {
+    for unit_id in expected_ids {
+        let unit = units
+            .iter()
+            .find(|unit| unit.base.id == unit_id.as_ref())
+            .ok_or_else(|| Error::NotFound("计量单位不存在".to_string()))?;
+        if !unit.is_active() {
+            return Err(Error::BusinessLogicError("基础单位已停用".to_string()));
         }
     }
     Ok(())

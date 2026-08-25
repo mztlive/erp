@@ -193,6 +193,17 @@ impl MallSalesOrderSnapshot {
         })
     }
 
+    /// 判断传入来源更新时间是否早于当前快照。
+    ///
+    /// # 参数
+    /// * `candidate_updated_at` - 待接收快照的来源更新时间
+    ///
+    /// # 返回
+    /// 待接收时间早于当前快照时返回 `true`。
+    pub fn supersedes_candidate(&self, candidate_updated_at: Instant) -> bool {
+        self.source_updated_at > candidate_updated_at
+    }
+
     /// 标记快照已应用。
     ///
     /// 指纹与当前销售版本不同且基础资料与唯一明细校验通过时，才形成新销售
@@ -304,6 +315,17 @@ mod tests {
         assert!(
             MallSalesOrderSnapshot::new(MallSalesOrderSnapshotId::new("s-4"), overlong_snapshot).is_err()
         );
+    }
+
+    #[test]
+    fn stale_candidate_is_derived_from_source_update_time() {
+        let snapshot =
+            MallSalesOrderSnapshot::new(MallSalesOrderSnapshotId::new("snap-stale"), snapshot_data())
+                .unwrap();
+        assert!(snapshot.supersedes_candidate(Instant::from_unix_secs(
+            snapshot.source_updated_at.unix_secs() - 1
+        )));
+        assert!(!snapshot.supersedes_candidate(snapshot.source_updated_at));
     }
 
     #[test]

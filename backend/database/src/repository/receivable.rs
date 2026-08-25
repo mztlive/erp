@@ -550,6 +550,32 @@ impl<'a> Repository<'a, ReceivableAccount> {
     }
 }
 
+impl<'a> Repository<'a, ReceivableAccount> {
+    /// 批量按应收子账 ID 读取活跃账户。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应收子账 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的应收子账；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_accounts_by_ids(
+        &self,
+        account_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>> {
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.find_many(doc! { "id": { "$in": account_ids } }, executor)
+            .await
+    }
+}
+
 impl<'a> Repository<'a, ReceivableEntry> {
     /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
     ///
@@ -739,6 +765,30 @@ impl<'a> Repository<'a, CustomerReceipt> {
     ) -> Result<Option<CustomerReceipt>> {
         self.find_one_by_field("receipt_no", receipt_no, executor).await
     }
+
+    /// 批量按回款单 ID 读取活跃回款事实。
+    ///
+    /// # 参数
+    /// * `receipt_ids` - 回款单 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的回款单；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_receipts_by_ids(
+        &self,
+        receipt_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerReceipt>> {
+        if receipt_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.find_many(doc! { "id": { "$in": receipt_ids } }, executor)
+            .await
+    }
 }
 
 impl<'a> Repository<'a, ReceiptAllocation> {
@@ -861,6 +911,30 @@ impl<'a> Repository<'a, Invoice> {
             executor,
         )
         .await
+    }
+
+    /// 批量按发票 ID 读取活跃发票事实。
+    ///
+    /// # 参数
+    /// * `invoice_ids` - 发票 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的发票；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_invoices_by_ids(
+        &self,
+        invoice_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Invoice>> {
+        if invoice_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.find_many(doc! { "id": { "$in": invoice_ids } }, executor)
+            .await
     }
 }
 

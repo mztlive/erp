@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use database::{PayableExt, PurchaseOrderExt, SalesOrderExt};
+use database::{FulfillmentExt, PayableExt, PurchaseOrderExt};
+use entities::fulfillment::PurchaseFulfillmentEligibility;
 use entities::ids::{PayableAccountId, PayableEntryId, PurchaseLineSalesAllocationId, PurchaseOrderId};
-use entities::money::{round_to_cent, Amount};
+use entities::money::Amount;
 use entities::payable::AllocationAction as PayableAllocationAction;
-use entities::purchase_order::{PurchaseOrder, PurchaseOrderRevision, PurchaseOrderStatus};
-use mongodb::bson::doc;
+use entities::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
 use mongodb::Database;
 
 use crate::errors::{Error, Result};
@@ -21,12 +21,8 @@ use crate::errors::{Error, Result};
 /// # 错误
 /// 采购单不在生效/部分执行状态时返回 `BusinessLogicError`。
 pub(super) fn ensure_po_fulfillable(po: &PurchaseOrder) -> Result<()> {
-    match po.stable.status {
-        PurchaseOrderStatus::Effective | PurchaseOrderStatus::PartiallyExecuted => Ok(()),
-        _ => Err(Error::BusinessLogicError(
-            "采购单不在可履约状态，无法过账".to_string(),
-        )),
-    }
+    PurchaseFulfillmentEligibility::ensure_order_fulfillable(po.stable.status)
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
 /// 校验 `PREPAY` 采购履约门槛（§8.1.5）。
@@ -51,27 +47,16 @@ pub(super) async fn ensure_prepay_gate(
     po: &PurchaseOrder,
 ) -> Result<()> {
     let revision = load_po_current_revision(db, session, po).await?;
-    let snapshot = &revision.payment_term_snapshot;
-    if !snapshot.prepay_gate {
+    if !revision.payment_term_snapshot.prepay_gate {
         return Ok(());
     }
     let effective_paid = effective_paid_amount(db, session, &revision.purchase_order_id).await?;
-    if let Some(min_amount) = snapshot.prepay_minimum_amount {
-        if effective_paid.to_decimal() < min_amount.to_decimal() {
-            return Err(Error::BusinessLogicError(
-                "该采购单为先款后货，有效付款未达金额门槛，请先完成付款".to_string(),
-            ));
-        }
-    }
-    if let Some(min_ratio) = snapshot.prepay_minimum_ratio {
-        let required = round_to_cent(revision.gross_amount.to_decimal() * min_ratio.to_decimal());
-        if effective_paid.to_decimal() < required {
-            return Err(Error::BusinessLogicError(
-                "该采购单为先款后货，有效付款未达比例门槛，请先完成付款".to_string(),
-            ));
-        }
-    }
-    Ok(())
+    PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+        &revision.payment_term_snapshot,
+        revision.gross_amount,
+        effective_paid,
+    )
+    .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
 /// 取采购单当前生效版本。
@@ -123,14 +108,8 @@ async fn effective_paid_amount(
     po_id: &PurchaseOrderId,
 ) -> Result<Amount> {
     let accounts = db
-        .payable_accounts()
-        .find_many(
-            doc! {
-                "source_document_id": po_id.to_string(),
-                "source_type": "purchase_order",
-            },
-            session,
-        )
+        .fulfillment()
+        .list_payable_accounts_for_purchase_order(po_id, session)
         .await?;
     let account_ids: Vec<PayableAccountId> = accounts
         .iter()
@@ -191,30 +170,33 @@ pub(super) async fn ensure_allocation_valid(
         .purchase_order_revision_lines()
         .find_lines_by_revision_ids(&[revision.base.id.clone().into()], session)
         .await?;
-    if !revision_lines
+    let current_purchase_line_ids = revision_lines
         .iter()
-        .any(|line| line.base.id == allocation.purchase_order_revision_line_id.to_string())
-    {
-        return Err(Error::BusinessLogicError(
-            "采购销售分配不属于当前生效版本".to_string(),
-        ));
-    }
-    let sales_revision_lines = db
-        .sales_order_revision_lines()
-        .find_many(
-            doc! {
-                "id": allocation.sales_order_revision_line_id.to_string(),
-                "sales_order_line_id": sales_order_line_id.to_string(),
-            },
+        .map(|line| line.base.id.clone().into())
+        .collect::<Vec<_>>();
+    let sales_revision_line = db
+        .fulfillment()
+        .sales_revision_line_for_allocation(
+            &allocation.sales_order_revision_line_id,
+            sales_order_line_id,
             session,
         )
         .await?;
-    if sales_revision_lines.is_empty() {
-        return Err(Error::BusinessLogicError(
-            "采购销售分配与销售明细不一致".to_string(),
-        ));
-    }
-    Ok(())
+    let sales_association = sales_revision_line.map(|line| {
+        (
+            entities::ids::SalesOrderRevisionLineId::new(line.base.id),
+            line.sales_order_line_id,
+        )
+    });
+    PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+        &allocation,
+        &current_purchase_line_ids,
+        sales_association
+            .as_ref()
+            .map(|(revision_line_id, stable_line_id)| (revision_line_id, stable_line_id)),
+        sales_order_line_id,
+    )
+    .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
 #[cfg(test)]

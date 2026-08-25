@@ -12,8 +12,12 @@
 //! 筛选/行类型定义在本文件，经 `PublicationExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use entities::catalog::SkuRevision;
 use entities::common::time::Instant;
-use entities::ids::{InboxMessageId, IntegrationErrorTaskId, SkuId, SourceSystemId, WorkItemId};
+use entities::ids::{
+    InboxMessageId, IntegrationErrorTaskId, SkuId, SkuRevisionId, SourceSystemId, SupplierOfferingId,
+    SupplierOfferingRevisionId, WorkItemId,
+};
 use entities::integration_ops::ErrorClass;
 use entities::money::Amount;
 use entities::publication::{
@@ -21,6 +25,7 @@ use entities::publication::{
     ProductPublicationRevisionMedia, ProductPublicationStatus, PublicationDeliveryStatus, SafetyPauseCause,
     SafetyPauseSourceObjectType, SaleStatus, SystemSafetyPauseOperation,
 };
+use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
@@ -253,6 +258,61 @@ impl<'a> Repository<'a, ProductPublication> {
             total: total as i64,
         })
     }
+
+    /// 按稳定 ID 读取商品发布。
+    ///
+    /// # 参数
+    /// * `id` - 商品发布 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除发布；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_product_publication(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductPublication>> {
+        self.find_by_id(id, executor).await
+    }
+
+    /// 批量读取引用指定在售修订且处于安全暂停候选状态的发布。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 当前在售发布修订 ID 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回商城生效或待发布且当前版本命中输入集合的稳定发布。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_safety_pause_candidate_publications(
+        &self,
+        revision_ids: &[ProductPublicationRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductPublication>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! {
+                "status": {
+                    "$in": ProductPublicationStatus::safety_pause_candidates()
+                        .iter()
+                        .map(ProductPublicationStatus::as_str)
+                        .collect::<Vec<_>>()
+                },
+                "current_revision_id": {
+                    "$in": revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>()
+                },
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 发布修订列表投影行（Decimal128 金额原样投影，不做舍入换算）。
@@ -345,6 +405,37 @@ impl<'a> Repository<'a, ProductPublicationRevision> {
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
             options,
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取指定供给修订形成的上架发布修订。
+    ///
+    /// # 参数
+    /// * `offering_revision_ids` - 供给修订 ID 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回供给修订命中且允许商城下单的发布修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_on_sale_by_offering_revisions(
+        &self,
+        offering_revision_ids: &[SupplierOfferingRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductPublicationRevision>> {
+        if offering_revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! {
+                "supplier_offering_revision_id": {
+                    "$in": offering_revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>()
+                },
+                "sale_status": SaleStatus::OnSale.as_str(),
+            },
             executor,
         )
         .await
@@ -880,6 +971,89 @@ impl<'a> PublicationRepository<'a> {
         )
         .await?;
         Ok(())
+    }
+}
+
+impl<'a> Repository<'a, SupplierOfferingRevision> {
+    /// 按稳定 ID 读取发布修订引用的供给修订。
+    ///
+    /// # 参数
+    /// * `id` - 供给修订 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除供给修订；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_publication_offering_revision(
+        &self,
+        id: &SupplierOfferingRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOfferingRevision>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+
+    /// 列出稳定供给的全部不可变商业条款修订。
+    ///
+    /// # 参数
+    /// * `offering_id` - 供应商供给稳定 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的供给修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_publication_offering_revisions(
+        &self,
+        offering_id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingRevision>> {
+        self.find_many(doc! { "supplier_offering_id": offering_id.to_string() }, executor)
+            .await
+    }
+}
+
+impl<'a> Repository<'a, SkuRevision> {
+    /// 按稳定 ID 读取发布修订引用的 SKU 修订。
+    ///
+    /// # 参数
+    /// * `id` - SKU 修订 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除 SKU 修订；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_publication_sku_revision(
+        &self,
+        id: &SkuRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SkuRevision>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+}
+
+impl<'a> Repository<'a, SupplierOffering> {
+    /// 按稳定 ID 读取发布或安全暂停使用的供给身份。
+    ///
+    /// # 参数
+    /// * `id` - 供给稳定 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除供给；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_publication_supplier_offering(
+        &self,
+        id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOffering>> {
+        self.find_by_id(id.as_ref(), executor).await
     }
 }
 

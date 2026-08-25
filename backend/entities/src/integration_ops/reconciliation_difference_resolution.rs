@@ -139,6 +139,17 @@ impl ResultingStatus {
     }
 }
 
+/// 客户端差异版本与当前追加记录的比较结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolutionVersionCheck {
+    /// 版本字符串合法且等于当前决定序号。
+    Current,
+    /// 版本字符串不是十进制非负整数。
+    Invalid,
+    /// 版本合法但已经过期或超前。
+    Stale,
+}
+
 /// 差异决定记录的创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReconciliationDifferenceResolutionData {
@@ -180,6 +191,58 @@ pub struct ReconciliationDifferenceResolution {
 }
 
 impl ReconciliationDifferenceResolution {
+    /// 返回当前差异决定版本。
+    ///
+    /// # 参数
+    /// * `latest` - 当前最新决定；尚无决定时为 `None`
+    ///
+    /// # 返回
+    /// 尚无决定返回 0，否则返回最新决定序号。
+    pub fn current_version(latest: Option<&Self>) -> u64 {
+        u64::from(latest.map_or(0, |record| record.resolution_no))
+    }
+
+    /// 比较客户端版本与当前决定版本。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端冻结的十进制版本字符串
+    /// * `latest` - 当前最新决定
+    ///
+    /// # 返回
+    /// 返回合法且当前、格式非法或陈旧三态结果。
+    pub fn check_version(expected: &str, latest: Option<&Self>) -> ResolutionVersionCheck {
+        let Ok(expected) = expected.trim().parse::<u64>() else {
+            return ResolutionVersionCheck::Invalid;
+        };
+        if expected == Self::current_version(latest) {
+            ResolutionVersionCheck::Current
+        } else {
+            ResolutionVersionCheck::Stale
+        }
+    }
+
+    /// 判断差异是否仍可追加业务决定。
+    ///
+    /// # 参数
+    /// * `latest` - 当前最新决定
+    ///
+    /// # 返回
+    /// 尚无决定或最新决定非终态时返回 `true`。
+    pub fn is_open(latest: Option<&Self>) -> bool {
+        latest.is_none_or(|record| !record.resulting_status.is_terminal())
+    }
+
+    /// 计算下一条追加决定序号。
+    ///
+    /// # 参数
+    /// * `latest` - 当前最新决定
+    ///
+    /// # 返回
+    /// 尚无决定返回 1；存在决定时返回当前序号加一；溢出时返回 `None`。
+    pub fn next_resolution_no(latest: Option<&Self>) -> Option<u32> {
+        latest.map_or(Some(1), |record| record.resolution_no.checked_add(1))
+    }
+
     /// 创建由 W02 受控关闭命令形成的专用领域关闭证据。
     ///
     /// # 错误
@@ -280,7 +343,7 @@ fn reference_field_is_present(field: &str, prefix: &str) -> bool {
 mod tests {
     use super::{
         ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionData, ResolutionAction,
-        ResultingStatus,
+        ResolutionVersionCheck, ResultingStatus,
     };
     use crate::common::time::Instant;
     use crate::ids::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
@@ -384,6 +447,41 @@ mod tests {
         );
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn version_and_open_state_are_derived_from_latest_record() {
+        assert_eq!(
+            ReconciliationDifferenceResolution::check_version("0", None),
+            ResolutionVersionCheck::Current
+        );
+        assert_eq!(
+            ReconciliationDifferenceResolution::check_version("bad", None),
+            ResolutionVersionCheck::Invalid
+        );
+        assert!(ReconciliationDifferenceResolution::is_open(None));
+        assert_eq!(
+            ReconciliationDifferenceResolution::next_resolution_no(None),
+            Some(1)
+        );
+
+        let mut input = data(ResolutionAction::ConfirmNoError);
+        input.resolution_no = 7;
+        input.evidence_reference = Some("audit_log:a-1".to_string());
+        let terminal = ReconciliationDifferenceResolution::new(
+            ReconciliationDifferenceResolutionId::new("res-terminal"),
+            input,
+        )
+        .unwrap();
+        assert_eq!(
+            ReconciliationDifferenceResolution::check_version("7", Some(&terminal)),
+            ResolutionVersionCheck::Current
+        );
+        assert!(!ReconciliationDifferenceResolution::is_open(Some(&terminal)));
+        assert_eq!(
+            ReconciliationDifferenceResolution::next_resolution_no(Some(&terminal)),
+            Some(8)
+        );
     }
 
     #[test]

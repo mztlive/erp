@@ -397,6 +397,34 @@ impl SalesOrderSubmission {
         Err(Error::from("提交快照形成后不可修改"))
     }
 
+    /// 由当前最大提交序号计算下一次提交序号。
+    ///
+    /// # 参数
+    /// * `current_max` - 当前已冻结提交中的最大序号；尚无提交时为 `0`
+    ///
+    /// # 返回
+    /// 返回严格递增的下一提交序号。
+    ///
+    /// # 错误
+    /// 当前序号达到 `u32::MAX` 时返回错误。
+    pub fn next_submission_no(current_max: u32) -> Result<u32> {
+        current_max
+            .checked_add(1)
+            .ok_or_else(|| Error::from("销售提交序号溢出"))
+    }
+
+    /// 判断提交是否匹配幂等收据冻结的业务身份。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 收据关联的销售单
+    /// * `submitted_by` - 收据关联的提交人
+    ///
+    /// # 返回
+    /// 销售单与提交人均一致时返回 `true`。
+    pub fn matches_receipt_identity(&self, sales_order_id: &str, submitted_by: &str) -> bool {
+        self.sales_order_id.as_ref() == sales_order_id && self.submitted_by == submitted_by
+    }
+
     /// 通过提交（`InReview → Approved`）。
     ///
     /// # 参数
@@ -676,6 +704,84 @@ impl SalesOrderSubmissionLine {
             card_form: built.voucher.as_ref().map(|v| v.card_form),
         })
     }
+
+    /// 还原实物及服务字段组。
+    ///
+    /// # 返回
+    /// 返回用于正式版本行构造的完整实物及服务字段组。
+    ///
+    /// # 错误
+    /// 行类型不是实物及服务，或任一必填字段缺失时返回错误。
+    pub fn goods_fields(&self) -> Result<GoodsLineFields> {
+        if self.line_type != LineType::GoodsService {
+            return Err(Error::from(format!("第 {} 行不是实物及服务行", self.line_no)));
+        }
+        Ok(GoodsLineFields {
+            sku_id: self
+                .sku_id
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", self.line_no)))?,
+            sku_revision_id: self
+                .sku_revision_id
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
+            welfare_scenario: self.welfare_scenario,
+            service_region: self.service_region.clone(),
+            fulfillment_mode: self
+                .fulfillment_mode
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约方式", self.line_no)))?,
+            fulfillment_due_at: self
+                .fulfillment_due_at
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
+            quantity: self
+                .quantity
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
+            base_unit_code: self
+                .base_unit_code
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", self.line_no)))?,
+            unit_price_gross: self
+                .unit_price_gross
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", self.line_no)))?,
+        })
+    }
+
+    /// 还原卡券字段组。
+    ///
+    /// # 返回
+    /// 返回用于正式版本行构造的完整卡券字段组。
+    ///
+    /// # 错误
+    /// 行类型不是卡券，或任一必填字段缺失时返回错误。
+    pub fn voucher_fields(&self) -> Result<VoucherLineDraft> {
+        if self.line_type != LineType::Voucher {
+            return Err(Error::from(format!("第 {} 行不是卡券行", self.line_no)));
+        }
+        Ok(VoucherLineDraft {
+            face_value: self
+                .face_value
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", self.line_no)))?,
+            card_count: self
+                .card_count
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", self.line_no)))?,
+            unit_price_gross: self
+                .unit_price_gross
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", self.line_no)))?,
+            face_value_total: self
+                .face_value_total
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", self.line_no)))?,
+            transaction_amount: self
+                .transaction_amount
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", self.line_no)))?,
+            gift_amount: self
+                .gift_amount
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", self.line_no)))?,
+            gift_rate: self.gift_rate,
+            card_form: self
+                .card_form
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -900,6 +1006,39 @@ mod tests {
             ..voucher_header_data()
         };
         assert!(SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-card-2"), past_due).is_err());
+    }
+
+    #[test]
+    fn submission_sequence_and_receipt_identity_are_entity_owned() {
+        let submission =
+            SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), header_data()).unwrap();
+        assert_eq!(SalesOrderSubmission::next_submission_no(0).unwrap(), 1);
+        assert_eq!(SalesOrderSubmission::next_submission_no(7).unwrap(), 8);
+        assert!(SalesOrderSubmission::next_submission_no(u32::MAX).is_err());
+        assert!(submission.matches_receipt_identity("o-1", "sales-1"));
+        assert!(!submission.matches_receipt_identity("o-2", "sales-1"));
+        assert!(!submission.matches_receipt_identity("o-1", "sales-2"));
+    }
+
+    #[test]
+    fn submission_line_restores_typed_field_groups() {
+        let goods = SalesOrderSubmissionLine::new(
+            SalesOrderSubmissionLineId::new("sl-1"),
+            SalesOrderSubmissionId::new("s-1"),
+            line_data(1),
+        )
+        .unwrap();
+        assert_eq!(goods.goods_fields().unwrap().sku_id.as_ref(), "sku-1");
+        assert!(goods.voucher_fields().is_err());
+
+        let voucher = SalesOrderSubmissionLine::new(
+            SalesOrderSubmissionLineId::new("sl-2"),
+            SalesOrderSubmissionId::new("s-1"),
+            voucher_line_data(1),
+        )
+        .unwrap();
+        assert_eq!(voucher.voucher_fields().unwrap().card_count, 3);
+        assert!(voucher.goods_fields().is_err());
     }
 
     #[test]

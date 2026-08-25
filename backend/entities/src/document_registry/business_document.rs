@@ -198,6 +198,48 @@ impl ApprovalDefinitionBinding {
     }
 }
 
+/// 未提交单据审批绑定升级失败原因。
+#[derive(Debug, thiserror::Error)]
+pub enum ApprovalBindingUpgradeError {
+    /// 单据尚未持有审批定义绑定。
+    #[error("尚未绑定审批定义")]
+    MissingBinding,
+    /// 单据已经形成正式事实。
+    #[error("已提交单据不能升级审批绑定")]
+    Formalized,
+    /// 单据已经启动过审批实例。
+    #[error("已启动单据不能升级审批绑定")]
+    ApprovalStarted,
+    /// 单据版本或绑定版本与调用方预期不一致。
+    #[error("数据已被其他请求修改，请刷新后重试")]
+    VersionConflict,
+    /// 升级原因没有有效内容。
+    #[error("升级原因不能为空")]
+    EmptyReason,
+    /// 绑定值对象拒绝新版本。
+    #[error(transparent)]
+    BindingInvariant(#[from] Error),
+}
+
+/// 未提交单据审批绑定升级输入。
+#[derive(Debug)]
+pub struct ApprovalBindingUpgradeInput<'a> {
+    /// 当前发布审批定义 ID。
+    pub approval_process_definition_id: ApprovalProcessDefinitionId,
+    /// 当前发布审批定义业务版本。
+    pub approval_definition_version: u32,
+    /// 仓储确认该单据是否已启动过审批实例。
+    pub approval_started: bool,
+    /// 调用方期望的单据注册版本。
+    pub expected_document_version: u64,
+    /// 调用方期望的审批绑定版本。
+    pub expected_binding_version: u64,
+    /// 本次升级原因。
+    pub reason: &'a str,
+    /// 绑定升级时间。
+    pub at: Instant,
+}
+
 /// 单据注册创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BusinessDocumentData {
@@ -306,6 +348,34 @@ impl BusinessDocument {
         Ok(())
     }
 
+    /// 校验 `NO_APPROVAL` 单据注册不得写入任何审批绑定。
+    ///
+    /// # 参数
+    /// * `expected_document_type` - 强类型业务实体声明的单据类型
+    /// * `returned_binding` - 统一绑定端口返回的可选绑定
+    ///
+    /// # 返回
+    /// 注册类型一致、注册行未预置绑定且端口返回空绑定时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 类型不一致、注册行已有绑定或端口返回绑定时返回错误。
+    pub fn ensure_no_approval_registration(
+        &self,
+        expected_document_type: DocumentType,
+        returned_binding: Option<&ApprovalDefinitionBinding>,
+    ) -> Result<()> {
+        if self.document_type != expected_document_type {
+            return Err(Error::from("无审批单据注册类型与业务实体不一致"));
+        }
+        if self.approval_binding.is_some() {
+            return Err(Error::from("无审批单据注册行不得预置审批绑定"));
+        }
+        if returned_binding.is_some() {
+            return Err(Error::from("无审批单据不得写入审批绑定"));
+        }
+        Ok(())
+    }
+
     /// 整体升级未提交单据的审批绑定。
     ///
     /// # 参数
@@ -335,6 +405,85 @@ impl BusinessDocument {
         Ok(())
     }
 
+    /// 校验未提交单据是否允许升级审批绑定。
+    ///
+    /// # 参数
+    /// * `approval_started` - 仓储确认该单据是否已经启动过审批实例
+    /// * `expected_document_version` - 调用方期望的单据注册版本
+    /// * `expected_binding_version` - 调用方期望的审批绑定版本
+    /// * `reason` - 本次升级原因
+    ///
+    /// # 返回
+    /// 全部未提交升级约束满足时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 缺少绑定、已提交、已启动、双版本冲突或原因为空时返回对应错误。
+    ///
+    /// # 关键业务约束
+    /// 审批启动事实由 Service 跨仓储提供，其余 ERP 单据绑定不变式由实体统一判断。
+    pub fn ensure_unsubmitted_approval_binding_upgrade(
+        &self,
+        approval_started: bool,
+        expected_document_version: u64,
+        expected_binding_version: u64,
+        reason: &str,
+    ) -> std::result::Result<(), ApprovalBindingUpgradeError> {
+        let Some(binding) = self.approval_binding.as_ref() else {
+            return Err(ApprovalBindingUpgradeError::MissingBinding);
+        };
+        if self.formalized_at.is_some() {
+            return Err(ApprovalBindingUpgradeError::Formalized);
+        }
+        if approval_started {
+            return Err(ApprovalBindingUpgradeError::ApprovalStarted);
+        }
+        if self.base.version != expected_document_version
+            || binding.approval_binding_version != expected_binding_version
+        {
+            return Err(ApprovalBindingUpgradeError::VersionConflict);
+        }
+        if reason.trim().is_empty() {
+            return Err(ApprovalBindingUpgradeError::EmptyReason);
+        }
+        Ok(())
+    }
+
+    /// 整体升级满足未提交约束的审批绑定。
+    ///
+    /// # 参数
+    /// * `input` - 当前发布定义、审批启动事实、期望版本、升级原因与发生时间
+    ///
+    /// # 返回
+    /// 成功时整体替换审批绑定并将绑定 CAS 版本加一。
+    ///
+    /// # 错误
+    /// 未提交升级约束失败或绑定值对象拒绝新版本时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 校验与写入使用同一实体快照，禁止只更新定义 ID、版本或时间中的部分字段。
+    pub fn upgrade_unsubmitted_approval_binding(
+        &mut self,
+        input: ApprovalBindingUpgradeInput<'_>,
+    ) -> std::result::Result<(), ApprovalBindingUpgradeError> {
+        self.ensure_unsubmitted_approval_binding_upgrade(
+            input.approval_started,
+            input.expected_document_version,
+            input.expected_binding_version,
+            input.reason,
+        )?;
+        let current = self
+            .approval_binding
+            .as_ref()
+            .ok_or(ApprovalBindingUpgradeError::MissingBinding)?;
+        self.approval_binding = Some(current.upgrade(
+            input.approval_process_definition_id,
+            input.approval_definition_version,
+            input.expected_binding_version,
+            input.at,
+        )?);
+        Ok(())
+    }
+
     /// 标记单据首次正式化。
     ///
     /// `formalized_at` 只记录首次成为正式事实的时间，重复调用不覆盖。
@@ -353,7 +502,10 @@ impl BusinessDocument {
 
 #[cfg(test)]
 mod tests {
-    use super::{ApprovalDefinitionBinding, BusinessDocument, BusinessDocumentData, DocumentType};
+    use super::{
+        ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
+        BusinessDocument, BusinessDocumentData, DocumentType,
+    };
     use crate::common::time::Instant;
     use crate::ids::BusinessDocumentId;
     use bpm::ApprovalProcessDefinitionId;
@@ -440,6 +592,115 @@ mod tests {
             Instant::from_unix_secs(1),
         )
         .is_err());
+    }
+
+    /// 无审批注册要求类型一致且注册行与绑定端口都保持空绑定。
+    #[test]
+    fn no_approval_registration_rejects_any_binding_or_type_mismatch() {
+        let document = BusinessDocument::new(
+            BusinessDocumentId::new("delivery-1"),
+            BusinessDocumentData {
+                document_type: DocumentType::ElectronicDelivery,
+                document_no: "ED-1".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(document
+            .ensure_no_approval_registration(DocumentType::ElectronicDelivery, None)
+            .is_ok());
+        assert!(document
+            .ensure_no_approval_registration(DocumentType::Delivery, None)
+            .is_err());
+
+        let binding = ApprovalDefinitionBinding::new(
+            ApprovalProcessDefinitionId::new("def-1"),
+            1,
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        assert!(document
+            .ensure_no_approval_registration(DocumentType::ElectronicDelivery, Some(&binding),)
+            .is_err());
+        let mut prebound = document.clone();
+        prebound.bind_approval_definition(binding).unwrap();
+        assert!(prebound
+            .ensure_no_approval_registration(DocumentType::ElectronicDelivery, None)
+            .is_err());
+    }
+
+    /// 未提交绑定升级由实体统一校验双 CAS、提交状态、启动事实与原因。
+    #[test]
+    fn unsubmitted_binding_upgrade_enforces_all_document_rules() {
+        let mut document = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
+        document
+            .bind_approval_definition(
+                ApprovalDefinitionBinding::new(
+                    ApprovalProcessDefinitionId::new("def-1"),
+                    1,
+                    Instant::from_unix_secs(10),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let document_version = document.base.version;
+
+        document
+            .upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
+                approval_process_definition_id: ApprovalProcessDefinitionId::new("def-2"),
+                approval_definition_version: 2,
+                approval_started: false,
+                expected_document_version: document_version,
+                expected_binding_version: 1,
+                reason: "切换到当前发布版本",
+                at: Instant::from_unix_secs(11),
+            })
+            .unwrap();
+        assert_eq!(
+            document
+                .approval_binding
+                .as_ref()
+                .unwrap()
+                .approval_binding_version,
+            2
+        );
+
+        let mut missing = BusinessDocument::new(BusinessDocumentId::new("bd-2"), data()).unwrap();
+        let missing_version = missing.base.version;
+        assert!(matches!(
+            missing.upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
+                approval_process_definition_id: ApprovalProcessDefinitionId::new("def-2"),
+                approval_definition_version: 2,
+                approval_started: false,
+                expected_document_version: missing_version,
+                expected_binding_version: 1,
+                reason: "原因",
+                at: Instant::from_unix_secs(11),
+            }),
+            Err(ApprovalBindingUpgradeError::MissingBinding)
+        ));
+
+        let mut formalized = document.clone();
+        formalized.formalize(Instant::from_unix_secs(12));
+        assert!(matches!(
+            formalized.ensure_unsubmitted_approval_binding_upgrade(false, document_version, 2, "原因"),
+            Err(ApprovalBindingUpgradeError::Formalized)
+        ));
+        assert!(matches!(
+            document.ensure_unsubmitted_approval_binding_upgrade(true, document_version, 2, "原因"),
+            Err(ApprovalBindingUpgradeError::ApprovalStarted)
+        ));
+        assert!(matches!(
+            document.ensure_unsubmitted_approval_binding_upgrade(false, document_version + 1, 2, "原因"),
+            Err(ApprovalBindingUpgradeError::VersionConflict)
+        ));
+        assert!(matches!(
+            document.ensure_unsubmitted_approval_binding_upgrade(false, document_version, 1, "原因"),
+            Err(ApprovalBindingUpgradeError::VersionConflict)
+        ));
+        assert!(matches!(
+            document.ensure_unsubmitted_approval_binding_upgrade(false, document_version, 2, "   "),
+            Err(ApprovalBindingUpgradeError::EmptyReason)
+        ));
     }
 
     /// 失败路径：超长编号被拒。

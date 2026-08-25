@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, CatalogExt, NoTransaction, PartyExt, SupplierApiExt, SupplierExt, SupplierOfferingExt,
+    AccessControlExt, CatalogExt, NoTransaction, SupplierApiExt, SupplierExt, SupplierOfferingExt,
     Transactional,
 };
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
@@ -17,16 +17,16 @@ use entities::ids::{
     SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingAvailabilityId, SupplierOfferingId,
     SupplierOfferingRevisionId,
 };
-use entities::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
+use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::party::{Party, PartyRevision};
 use entities::supplier::{CapabilityCode, SupplierAccount};
 use entities::supplier_offering::{
-    AvailabilityStatus, OfferingStatus, PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability,
-    SupplierOfferingAvailabilityData, SupplierOfferingCommand, SupplierOfferingCommandData,
-    SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
+    AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingStatus,
+    PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
+    SupplierOfferingCommand, SupplierOfferingCommandData, SupplierOfferingData, SupplierOfferingRevision,
+    SupplierOfferingRevisionData,
 };
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
@@ -128,7 +128,7 @@ impl SupplierOfferingService {
             .iter()
             .map(|row| SupplierOfferingId::new(row.id.clone()))
             .collect::<Vec<_>>();
-        let revisions = self.current_revisions(&offering_ids).await?;
+        let revisions = self.current_revisions(&page.items).await?;
         let availabilities = self.current_availabilities(&offering_ids).await?;
         let context = self.list_context(&page.items).await?;
         let items = page
@@ -163,39 +163,11 @@ impl SupplierOfferingService {
     /// # 错误
     /// 数据库查询失败时返回错误。
     async fn resolve_keyword_sku_ids(&self, keyword: &str) -> Result<Vec<SkuId>> {
-        let pattern = regex::escape(keyword);
-        let by_no = self
-            .db
-            .skus()
-            .find_many(
-                doc! {
-                    "deleted_at": 0_i64,
-                    "sku_no": { "$regex": &pattern, "$options": "i" },
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let by_name = self
-            .db
-            .sku_revisions()
-            .find_many(
-                doc! {
-                    "deleted_at": 0_i64,
-                    "name": { "$regex": &pattern, "$options": "i" },
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        let mut ids = by_no
-            .into_iter()
-            .map(|sku| SkuId::new(sku.base.id))
-            .collect::<Vec<_>>();
-        for revision in by_name {
-            ids.push(revision.sku_id);
-        }
-        ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
-        ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
-        Ok(ids)
+        self.db
+            .catalog()
+            .resolve_sku_ids_by_keyword(keyword, &mut NoTransaction)
+            .await
+            .map_err(Into::into)
     }
 
     /// 按 SPU 编号 / SKU 编号解析公司 SKU 主键（模糊、忽略大小写）。
@@ -216,64 +188,11 @@ impl SupplierOfferingService {
         product_no: Option<&str>,
         sku_no: Option<&str>,
     ) -> Result<Option<Vec<SkuId>>> {
-        let mut by_product: Option<Vec<SkuId>> = None;
-        let mut by_sku: Option<Vec<SkuId>> = None;
-
-        if let Some(no) = product_no {
-            let pattern = regex::escape(no);
-            let products = self
-                .db
-                .products()
-                .find_many(
-                    doc! {
-                        "deleted_at": 0_i64,
-                        "product_no": { "$regex": &pattern, "$options": "i" },
-                    },
-                    &mut NoTransaction,
-                )
-                .await?;
-            if products.is_empty() {
-                return Ok(Some(Vec::new()));
-            }
-            let product_ids = products
-                .iter()
-                .map(|product| product.base.id.clone())
-                .collect::<Vec<_>>();
-            let skus = self
-                .db
-                .skus()
-                .find_many(
-                    doc! {
-                        "deleted_at": 0_i64,
-                        "product_id": { "$in": product_ids },
-                    },
-                    &mut NoTransaction,
-                )
-                .await?;
-            by_product = Some(skus.into_iter().map(|sku| SkuId::new(sku.base.id)).collect());
-        }
-
-        if let Some(no) = sku_no {
-            let pattern = regex::escape(no);
-            let skus = self
-                .db
-                .skus()
-                .find_many(
-                    doc! {
-                        "deleted_at": 0_i64,
-                        "sku_no": { "$regex": &pattern, "$options": "i" },
-                    },
-                    &mut NoTransaction,
-                )
-                .await?;
-            by_sku = Some(skus.into_iter().map(|sku| SkuId::new(sku.base.id)).collect());
-        }
-
-        match (by_product, by_sku) {
-            (None, None) => Ok(None),
-            (Some(ids), None) | (None, Some(ids)) => Ok(Some(ids)),
-            (Some(left), Some(right)) => Ok(Some(left.into_iter().filter(|id| right.contains(id)).collect())),
-        }
+        self.db
+            .catalog()
+            .resolve_sku_ids_by_codes(product_no, sku_no, &mut NoTransaction)
+            .await
+            .map_err(Into::into)
     }
 
     /// 将当前可供状态转换为供给主键候选集，确保关联条件在分页前生效。
@@ -427,12 +346,9 @@ impl SupplierOfferingService {
             None => None,
         };
         let current_no = self.current_revision_no(&offering).await?;
-        if current_no != req.expected_revision_no {
-            return Err(Error::ConflictError(
-                "供给版本已经变化，请刷新后重新保存".to_string(),
-            ));
-        }
-        let next_no = current_no + 1;
+        let next_no = offering
+            .next_revision_no(current_no, req.expected_revision_no)
+            .map_err(|_| Error::ConflictError("供给版本已经变化，请刷新后重新保存".to_string()))?;
         let revision = build_revision(
             &SupplierOfferingId::new(offering.base.id.clone()),
             next_no,
@@ -446,6 +362,7 @@ impl SupplierOfferingService {
         }
         offering.update_status(next_status, actor.id())?;
         offering.stable.current_revision_id = Some(revision.base.id.clone());
+        let expected_version = offering.next_persisted_version()?;
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.revise",
             "supplier_offering",
@@ -459,11 +376,11 @@ impl SupplierOfferingService {
         } else {
             prior_revision
                 .as_ref()
-                .and_then(|prior| revision_safety_pause_cause(prior, &revision))
+                .and_then(|prior| safety_pause_cause_for_revision(revision.impact_from(prior)))
         };
         let safety_pause = safety_pause_cause.map(|cause| {
             let source_version = if cause == SafetyPauseCause::SupplierStopped {
-                format!("offering:{}", offering.base.version + 1)
+                format!("offering:{expected_version}")
             } else {
                 format!("revision:{}", revision.base.id)
             };
@@ -487,7 +404,6 @@ impl SupplierOfferingService {
         let fingerprint_for_tx = fingerprint.clone();
         let offering_id = offering.base.id.clone();
         let revision_id = revision.base.id.clone();
-        let expected_version = offering.base.version + 1;
         let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
@@ -561,17 +477,12 @@ impl SupplierOfferingService {
             .find_by_offering_id(&offering_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给可供状态不存在".to_string()))?;
-        let prior_safety_pause_cause = availability_safety_pause_cause(
-            availability.availability_status,
-            availability.available_quantity,
-        );
-        if req
-            .expected_version
-            .is_some_and(|version| version != availability.base.version)
-        {
-            return Err(Error::ConflictError(
-                "可供状态已经变化，请刷新后重新保存".to_string(),
-            ));
+        let prior_safety_pause_cause =
+            safety_pause_cause_for_availability(availability.interruption_reason());
+        if let Some(expected_version) = req.expected_version {
+            availability
+                .ensure_version(expected_version)
+                .map_err(|_| Error::ConflictError("可供状态已经变化，请刷新后重新保存".to_string()))?;
         }
         let source_updated_at = req
             .source_updated_at
@@ -586,13 +497,11 @@ impl SupplierOfferingService {
             source_revision_token: req.source_revision_token,
             updated_by: actor.id().to_string(),
         })?;
-        let next_safety_pause_cause = availability_safety_pause_cause(
-            availability.availability_status,
-            availability.available_quantity,
-        );
+        let next_safety_pause_cause = safety_pause_cause_for_availability(availability.interruption_reason());
         let safety_pause_cause = (next_safety_pause_cause != prior_safety_pause_cause)
             .then_some(next_safety_pause_cause)
             .flatten();
+        let result_version = availability.next_persisted_version()?;
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.availability.update",
             "supplier_offering",
@@ -605,13 +514,13 @@ impl SupplierOfferingService {
             cause,
             source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
             source_object_id: offering_id.to_string(),
-            source_version: format!("availability:{}", availability.base.version + 1),
+            source_version: format!("availability:{result_version}"),
             occurred_at: source_updated_at,
             idempotency_key: format!(
                 "w22:offering:{}:{}:{}",
                 offering_id,
                 cause.as_str().to_ascii_lowercase(),
-                availability.base.version + 1
+                result_version
             ),
             owner_user_id: actor.id().to_string(),
         });
@@ -620,7 +529,6 @@ impl SupplierOfferingService {
         let fingerprint_for_tx = fingerprint.clone();
         let result_offering_id = offering_id.to_string();
         let result_status = availability.availability_status;
-        let result_version = availability.base.version + 1;
         let result_source_updated_at = availability.source_updated_at.unix_secs();
         let transaction_result = client
             .with_transaction(move |session| {
@@ -745,56 +653,25 @@ impl SupplierOfferingService {
     }
 
     async fn current_revision_no(&self, offering: &SupplierOffering) -> Result<u32> {
-        let revisions = self
-            .db
+        self.db
             .supplier_offering_revisions()
-            .find_revisions_by_offering_ids(
-                &[SupplierOfferingId::new(offering.base.id.clone())],
+            .current_revision_no(
+                &SupplierOfferingId::new(offering.base.id.clone()),
                 &mut NoTransaction,
             )
-            .await?;
-        Ok(revisions
-            .into_iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0))
+            .await
+            .map_err(Into::into)
     }
 
     async fn current_revisions(
         &self,
-        offering_ids: &[SupplierOfferingId],
+        rows: &[database::SupplierOfferingRow],
     ) -> Result<HashMap<String, SupplierOfferingRevision>> {
-        let offerings = self
-            .db
-            .supplier_offerings()
-            .find_many(
-                doc! { "id": { "$in": offering_ids.iter().map(ToString::to_string).collect::<Vec<_>>() } },
-                &mut NoTransaction,
-            )
-            .await?;
-        let current = offerings
-            .into_iter()
-            .filter_map(|offering| {
-                offering
-                    .stable
-                    .current_revision_id
-                    .map(|revision_id| (revision_id, offering.base.id))
-            })
-            .collect::<HashMap<_, _>>();
-        let revisions = self
-            .db
-            .supplier_offering_revisions()
-            .find_revisions_by_offering_ids(offering_ids, &mut NoTransaction)
-            .await?;
-        Ok(revisions
-            .into_iter()
-            .filter_map(|revision| {
-                current
-                    .get(&revision.base.id)
-                    .cloned()
-                    .map(|offering_id| (offering_id, revision))
-            })
-            .collect())
+        self.db
+            .supplier_offering_repository()
+            .load_current_revisions(rows, &mut NoTransaction)
+            .await
+            .map_err(Into::into)
     }
 
     async fn current_availabilities(
@@ -812,56 +689,10 @@ impl SupplierOfferingService {
     }
 
     async fn list_context(&self, rows: &[database::SupplierOfferingRow]) -> Result<OfferingListContext> {
-        let sku_ids = rows.iter().map(|row| row.sku_id.to_string()).collect::<Vec<_>>();
-        let skus = self
+        let (skus, sku_revisions, products, suppliers, parties, party_revisions) = self
             .db
-            .skus()
-            .find_many(doc! { "id": { "$in": &sku_ids } }, &mut NoTransaction)
-            .await?;
-        let sku_revision_ids = skus
-            .iter()
-            .filter_map(|sku| sku.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
-        let product_ids = skus
-            .iter()
-            .map(|sku| sku.product_id.to_string())
-            .collect::<Vec<_>>();
-        let sku_revisions = self
-            .db
-            .sku_revisions()
-            .find_many(doc! { "id": { "$in": sku_revision_ids } }, &mut NoTransaction)
-            .await?;
-        let products = self
-            .db
-            .products()
-            .find_many(doc! { "id": { "$in": product_ids } }, &mut NoTransaction)
-            .await?;
-        let supplier_ids = rows
-            .iter()
-            .map(|row| row.supplier_id.to_string())
-            .collect::<Vec<_>>();
-        let suppliers = self
-            .db
-            .supplier_accounts()
-            .find_many(doc! { "id": { "$in": supplier_ids } }, &mut NoTransaction)
-            .await?;
-        let party_ids = suppliers
-            .iter()
-            .map(|supplier| supplier.party_id.to_string())
-            .collect::<Vec<_>>();
-        let parties = self
-            .db
-            .parties()
-            .find_many(doc! { "id": { "$in": party_ids } }, &mut NoTransaction)
-            .await?;
-        let party_revision_ids = parties
-            .iter()
-            .filter_map(|party| party.stable.current_revision_id.clone())
-            .collect::<Vec<_>>();
-        let party_revisions = self
-            .db
-            .party_revisions()
-            .find_many(doc! { "id": { "$in": party_revision_ids } }, &mut NoTransaction)
+            .supplier_offering_repository()
+            .load_display_entities(rows, &mut NoTransaction)
             .await?;
         Ok(OfferingListContext {
             skus: by_id(skus),
@@ -921,42 +752,27 @@ impl SupplierOfferingService {
     }
 }
 
-fn availability_safety_pause_cause(
-    status: AvailabilityStatus,
-    quantity: Option<Quantity>,
+/// 将供给域的可供中断原因映射为发布安全暂停原因。
+fn safety_pause_cause_for_availability(
+    reason: Option<AvailabilityInterruptionReason>,
 ) -> Option<SafetyPauseCause> {
-    match (status, quantity) {
-        (AvailabilityStatus::Stopped, _) => Some(SafetyPauseCause::SupplierStopped),
-        (AvailabilityStatus::Unavailable, _) => Some(SafetyPauseCause::SupplyUnavailable),
-        (AvailabilityStatus::Stale, _) => Some(SafetyPauseCause::AvailabilityStale),
-        (AvailabilityStatus::Available, Some(quantity)) if quantity.to_decimal().is_zero() => {
-            Some(SafetyPauseCause::ZeroInventory)
-        }
-        _ => None,
-    }
+    reason.map(|reason| match reason {
+        AvailabilityInterruptionReason::SupplierStopped => SafetyPauseCause::SupplierStopped,
+        AvailabilityInterruptionReason::SupplyUnavailable => SafetyPauseCause::SupplyUnavailable,
+        AvailabilityInterruptionReason::AvailabilityStale => SafetyPauseCause::AvailabilityStale,
+        AvailabilityInterruptionReason::ZeroInventory => SafetyPauseCause::ZeroInventory,
+    })
 }
 
-fn revision_safety_pause_cause(
-    prior: &SupplierOfferingRevision,
-    next: &SupplierOfferingRevision,
-) -> Option<SafetyPauseCause> {
-    let critical_changed = prior.bulk_minimum_order_quantity != next.bulk_minimum_order_quantity
-        || prior.supply_region != next.supply_region
-        || prior.product_capabilities != next.product_capabilities
-        || prior.dropship_express != next.dropship_express
-        || prior.valid_from != next.valid_from
-        || prior.valid_to != next.valid_to;
-    if critical_changed {
-        return Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed);
+/// 将供给商业条款影响映射为发布安全暂停原因。
+fn safety_pause_cause_for_revision(impact: OfferingRevisionImpact) -> Option<SafetyPauseCause> {
+    match impact {
+        OfferingRevisionImpact::None => None,
+        OfferingRevisionImpact::CostChanged => Some(SafetyPauseCause::CostChangeUnconfirmed),
+        OfferingRevisionImpact::CriticalSupplyChanged => {
+            Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed)
+        }
     }
-    let cost_changed = prior.dropship_supply_price_gross != next.dropship_supply_price_gross
-        || prior.dropship_supply_price_net != next.dropship_supply_price_net
-        || prior.bulk_supply_price_gross != next.bulk_supply_price_gross
-        || prior.bulk_supply_price_net != next.bulk_supply_price_net
-        || prior.input_tax_rate != next.input_tax_rate
-        || prior.freight_amount != next.freight_amount
-        || prior.service_fee_amount != next.service_fee_amount;
-    cost_changed.then_some(SafetyPauseCause::CostChangeUnconfirmed)
 }
 
 fn typed_id<T>(value: Option<&str>, constructor: impl Fn(String) -> T) -> Option<T> {
@@ -977,27 +793,24 @@ fn build_revision(
     let bulk_gross = parse_unit_price(&terms.bulk_supply_price_gross, "集采供给价")?;
     SupplierOfferingRevision::new(
         SupplierOfferingRevisionId::new(next_id()),
-        SupplierOfferingRevisionData {
-            supplier_offering_id: offering_id.clone(),
+        SupplierOfferingRevisionData::from_gross_prices(
+            offering_id.clone(),
             revision_no,
-            dropship_supply_price_gross: dropship_gross,
-            dropship_supply_price_net: price_net(dropship_gross, rate),
-            bulk_supply_price_gross: bulk_gross,
-            bulk_supply_price_net: price_net(bulk_gross, rate),
-            input_tax_rate: rate,
-            dropship_express: terms.dropship_express.clone(),
-            freight_amount: parse_amount(terms.freight_amount.as_deref())?,
-            service_fee_amount: parse_amount(terms.service_fee_amount.as_deref())?,
-            bulk_minimum_order_quantity: Quantity::from_str(terms.bulk_minimum_order_quantity.trim())
-                .map_err(|_| {
-                    Error::ValidationError(format!("非法集采起订量: {}", terms.bulk_minimum_order_quantity))
-                })?,
-            supply_region: terms.supply_region.clone(),
-            product_capabilities: terms.product_capabilities.clone(),
-            valid_from: parse_business_date(&terms.valid_from)?,
-            valid_to: terms.valid_to.as_deref().map(parse_business_date).transpose()?,
-            prefill_source_refs: PrefillSourceRefs::default(),
-        },
+            dropship_gross,
+            bulk_gross,
+            rate,
+            terms.dropship_express.clone(),
+            parse_amount(terms.freight_amount.as_deref())?,
+            parse_amount(terms.service_fee_amount.as_deref())?,
+            Quantity::from_str(terms.bulk_minimum_order_quantity.trim()).map_err(|_| {
+                Error::ValidationError(format!("非法集采起订量: {}", terms.bulk_minimum_order_quantity))
+            })?,
+            terms.supply_region.clone(),
+            terms.product_capabilities.clone(),
+            parse_business_date(&terms.valid_from)?,
+            terms.valid_to.as_deref().map(parse_business_date).transpose()?,
+            PrefillSourceRefs::default(),
+        ),
     )
     .map_err(Into::into)
 }
@@ -1054,11 +867,6 @@ fn parse_quantity(value: Option<&str>) -> Result<Option<Quantity>> {
 
 fn parse_business_date(value: &str) -> Result<BusinessDate> {
     BusinessDate::from_str(value.trim()).map_err(|_| Error::ValidationError(format!("非法业务日期: {value}")))
-}
-
-fn price_net(gross: UnitPrice, rate: Rate) -> UnitPrice {
-    UnitPrice::try_from(gross.to_decimal() - round_to_cent(gross.to_decimal() * rate.to_decimal()))
-        .expect("合法含税价与税率必须生成合法不含税价")
 }
 
 fn build_view(
@@ -1223,97 +1031,12 @@ fn replay_command<T: DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use super::{availability_safety_pause_cause, price_net, revision_safety_pause_cause, typed_id};
-    use entities::common::time::BusinessDate;
+    use super::typed_id;
     use entities::ids::SkuId;
-    use entities::ids::{SupplierOfferingId, SupplierOfferingRevisionId};
-    use entities::money::{Amount, Quantity, Rate, UnitPrice};
-    use entities::publication::SafetyPauseCause;
-    use entities::supplier_offering::{
-        AvailabilityStatus, PrefillSourceRefs, SupplierOfferingRevision, SupplierOfferingRevisionData,
-    };
 
     #[test]
     fn blank_filter_ids_are_omitted() {
         assert!(typed_id(Some("  "), SkuId::new).is_none());
         assert_eq!(typed_id(Some(" sku-1 "), SkuId::new).unwrap().as_ref(), "sku-1");
-    }
-
-    #[test]
-    fn net_price_uses_contract_rounding() {
-        let gross = UnitPrice::from_str("11.30").unwrap();
-        let rate = Rate::from_str("0.13").unwrap();
-        assert_eq!(price_net(gross, rate).to_string(), "9.83");
-    }
-
-    #[test]
-    fn availability_causes_only_registered_safety_pause() {
-        assert_eq!(
-            availability_safety_pause_cause(AvailabilityStatus::Stopped, None),
-            Some(SafetyPauseCause::SupplierStopped)
-        );
-        assert_eq!(
-            availability_safety_pause_cause(
-                AvailabilityStatus::Available,
-                Some(Quantity::from_str("0").unwrap())
-            ),
-            Some(SafetyPauseCause::ZeroInventory)
-        );
-        assert_eq!(
-            availability_safety_pause_cause(
-                AvailabilityStatus::Available,
-                Some(Quantity::from_str("1").unwrap())
-            ),
-            None
-        );
-    }
-
-    #[test]
-    fn revision_diff_separates_cost_and_critical_supply_changes() {
-        let prior = offering_revision("10.00", vec!["CN"], vec!["refund"]);
-        let cost = offering_revision("11.00", vec!["CN"], vec!["refund"]);
-        let critical = offering_revision("10.00", vec!["CN", "HK"], vec!["refund"]);
-
-        assert_eq!(
-            revision_safety_pause_cause(&prior, &cost),
-            Some(SafetyPauseCause::CostChangeUnconfirmed)
-        );
-        assert_eq!(
-            revision_safety_pause_cause(&prior, &critical),
-            Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed)
-        );
-    }
-
-    fn offering_revision(
-        gross: &str,
-        regions: Vec<&str>,
-        capabilities: Vec<&str>,
-    ) -> SupplierOfferingRevision {
-        let gross = UnitPrice::from_str(gross).unwrap();
-        let tax = Rate::from_str("0.00").unwrap();
-        SupplierOfferingRevision::new(
-            SupplierOfferingRevisionId::new("revision-1"),
-            SupplierOfferingRevisionData {
-                supplier_offering_id: SupplierOfferingId::new("offering-1"),
-                revision_no: 1,
-                dropship_supply_price_gross: gross,
-                dropship_supply_price_net: gross,
-                bulk_supply_price_gross: gross,
-                bulk_supply_price_net: gross,
-                input_tax_rate: tax,
-                dropship_express: None,
-                freight_amount: Some(Amount::from_str("0").unwrap()),
-                service_fee_amount: Some(Amount::from_str("0").unwrap()),
-                bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
-                supply_region: regions.into_iter().map(str::to_string).collect(),
-                product_capabilities: capabilities.into_iter().map(str::to_string).collect(),
-                valid_from: BusinessDate::from_str("2026-08-14").unwrap(),
-                valid_to: None,
-                prefill_source_refs: PrefillSourceRefs::default(),
-            },
-        )
-        .unwrap()
     }
 }

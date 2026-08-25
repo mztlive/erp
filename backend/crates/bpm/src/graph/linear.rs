@@ -2,9 +2,11 @@
 //!
 //! 完整图可达性、发布完整性由后续阶段聚合校验；本模块只按顺序生成连线草稿。
 
+use crate::ids::{ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
 use crate::model::types::{
     ApprovalTerminalResult, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN,
 };
+use crate::model::{ApprovalNodeDefinition, ApprovalTransitionDefinition, Timestamp};
 
 /// 尚未赋予主键的线性连线草稿。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +62,61 @@ pub fn generate_linear_transitions(node_keys: &[String]) -> ModelResult<Vec<Line
         });
     }
     Ok(drafts)
+}
+
+/// 由完整节点集合和调用方提供的 ID 构造线性连线实体。
+///
+/// # 参数
+/// * `definition_id` - 连线所属定义 ID
+/// * `nodes` - 待构图节点，展示顺序必须连续
+/// * `transition_ids` - 与生成连线一一对应的调用方生成 ID
+/// * `at` - 调用方提供的构图时间
+///
+/// # 返回
+/// 返回每个节点一条通过与一条驳回的完整连线实体。
+///
+/// # 错误
+/// 节点非法、ID 数量不匹配或连线实体构造失败时返回模型错误。
+///
+/// # 关键业务约束
+/// BPM 不生成 ID 或读取时钟，连线形态完全由线性生成器决定。
+pub fn build_linear_transitions(
+    definition_id: &ApprovalProcessDefinitionId,
+    nodes: &[ApprovalNodeDefinition],
+    transition_ids: Vec<ApprovalTransitionDefinitionId>,
+    at: Timestamp,
+) -> ModelResult<Vec<ApprovalTransitionDefinition>> {
+    let keys = super::ordered_nodes(nodes)?
+        .into_iter()
+        .map(|node| node.node_key.clone())
+        .collect::<Vec<_>>();
+    let drafts = generate_linear_transitions(&keys)?;
+    if drafts.len() != transition_ids.len() {
+        return Err(ModelError::InvalidField("线性连线身份数量不匹配"));
+    }
+    drafts
+        .into_iter()
+        .zip(transition_ids)
+        .map(|(draft, transition_id)| {
+            if let Some(to_node_key) = draft.to_node_key {
+                return ApprovalTransitionDefinition::to_node(
+                    transition_id,
+                    definition_id.clone(),
+                    draft.from_node_key,
+                    draft.event,
+                    to_node_key,
+                    at,
+                );
+            }
+            ApprovalTransitionDefinition::to_approved(
+                transition_id,
+                definition_id.clone(),
+                draft.from_node_key,
+                draft.event,
+                at,
+            )
+        })
+        .collect()
 }
 
 /// 规范化并拒绝空、超长与重复节点键。

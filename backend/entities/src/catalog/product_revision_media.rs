@@ -5,6 +5,8 @@
 //! `(product_revision_id, media_role, sort_order)` 唯一（唯一约束跨行，
 //! 属 P3/索引校验）。媒体行随所属修订一并不可变。
 
+use std::collections::HashSet;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
@@ -113,6 +115,54 @@ impl ProductRevisionMedia {
             alt_text,
         })
     }
+
+    /// 把当前媒体快照复制到新的商品修订。
+    ///
+    /// # 参数
+    /// * `id` - 新媒体行主键
+    /// * `product_revision_id` - 目标商品修订 ID
+    ///
+    /// # 返回
+    /// 返回文件、用途、顺序和替代文本保持不变的新媒体行。
+    ///
+    /// # 错误
+    /// 复制后的字段违反媒体实体不变式时返回领域错误。
+    pub fn copy_to_revision(
+        &self,
+        id: ProductRevisionMediaId,
+        product_revision_id: ProductRevisionId,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            ProductRevisionMediaData {
+                product_revision_id,
+                file_asset_id: self.file_asset_id.clone(),
+                media_role: self.media_role,
+                sort_order: self.sort_order,
+                alt_text: self.alt_text.clone(),
+            },
+        )
+    }
+}
+
+/// 校验同一商品修订内每种媒体用途的展示顺序唯一。
+///
+/// # 参数
+/// * `rows` - 同一商品修订下待写入的全部媒体行
+///
+/// # 返回
+/// 每个 `(media_role, sort_order)` 组合唯一时返回 `Ok(())`。
+///
+/// # 错误
+/// 同一媒体用途出现重复展示顺序时返回领域错误。
+pub fn ensure_unique_media_sort_orders(rows: &[ProductRevisionMedia]) -> Result<()> {
+    let mut seen = HashSet::with_capacity(rows.len());
+    for row in rows {
+        if !seen.insert((row.media_role, row.sort_order)) {
+            return Err(Error::from("媒体展示顺序不能重复"));
+        }
+    }
+    Ok(())
 }
 
 /// 校验展示顺序为非负整数。
@@ -172,6 +222,39 @@ mod tests {
             ..data()
         };
         assert!(ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), overlong_alt).is_err());
+    }
+
+    /// 媒体复制保持内容快照并切换所属商品修订。
+    #[test]
+    fn copy_to_revision_preserves_media_snapshot() {
+        let media = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
+        let copied = media
+            .copy_to_revision(
+                ProductRevisionMediaId::new("media-2"),
+                ProductRevisionId::new("rev-2"),
+            )
+            .unwrap();
+
+        assert_eq!(copied.product_revision_id, ProductRevisionId::new("rev-2"));
+        assert_eq!(copied.file_asset_id, media.file_asset_id);
+        assert_eq!(copied.media_role, media.media_role);
+        assert_eq!(copied.sort_order, media.sort_order);
+    }
+
+    /// 同一用途的重复顺序被拒绝，不同用途可复用相同顺序。
+    #[test]
+    fn media_sort_orders_are_unique_per_role() {
+        let carousel = ProductRevisionMedia::new(ProductRevisionMediaId::new("media-1"), data()).unwrap();
+        let detail = ProductRevisionMedia::new(
+            ProductRevisionMediaId::new("media-2"),
+            ProductRevisionMediaData {
+                media_role: MediaRole::Detail,
+                ..data()
+            },
+        )
+        .unwrap();
+        assert!(ensure_unique_media_sort_orders(&[carousel.clone(), detail]).is_ok());
+        assert!(ensure_unique_media_sort_orders(&[carousel.clone(), carousel]).is_err());
     }
 
     /// 媒体用途 serde 形态与中文标签。

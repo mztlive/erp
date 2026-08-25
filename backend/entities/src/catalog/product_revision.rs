@@ -111,6 +111,86 @@ impl ProductRevision {
         })
     }
 
+    /// 从当前快照派生一份改名或改描述的后继修订。
+    ///
+    /// 分类、品牌、规格与状态沿用当前不可变快照，只替换展示文案和生效区间。
+    ///
+    /// # 参数
+    /// * `id` - 新修订主键
+    /// * `revision_no` - 同一商品内的下一修订序号
+    /// * `name` - 新商品名称
+    /// * `description` - 新商品描述
+    /// * `effective_from` / `effective_to` - 新修订生效区间
+    ///
+    /// # 返回
+    /// 返回经完整实体校验的新商品修订。
+    ///
+    /// # 错误
+    /// 名称、描述、修订序号或生效区间违反实体不变式时返回错误。
+    pub fn content_successor(
+        &self,
+        id: ProductRevisionId,
+        revision_no: u32,
+        name: String,
+        description: Option<String>,
+        effective_from: BusinessDate,
+        effective_to: Option<BusinessDate>,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            ProductRevisionData {
+                product_id: self.product_id.clone(),
+                revision_no,
+                name,
+                description,
+                specification: self.specification.clone(),
+                category_id: self.category_id.clone(),
+                brand_id: self.brand_id.clone(),
+                status: self.status,
+                effective_from,
+                effective_to,
+            },
+        )
+    }
+
+    /// 从当前快照派生一份停用后继修订。
+    ///
+    /// 名称、描述、规格、分类、品牌与原结束日保持不变，仅把状态切为停用并设置
+    /// 新修订的生效开始日。
+    ///
+    /// # 参数
+    /// * `id` - 新修订主键
+    /// * `revision_no` - 同一商品内的下一修订序号
+    /// * `effective_from` - 停用修订生效开始日
+    ///
+    /// # 返回
+    /// 返回经完整实体校验的停用商品修订。
+    ///
+    /// # 错误
+    /// 修订序号或生效区间违反实体不变式时返回错误。
+    pub fn disabled_successor(
+        &self,
+        id: ProductRevisionId,
+        revision_no: u32,
+        effective_from: BusinessDate,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            ProductRevisionData {
+                product_id: self.product_id.clone(),
+                revision_no,
+                name: self.name.clone(),
+                description: self.description.clone(),
+                specification: self.specification.clone(),
+                category_id: self.category_id.clone(),
+                brand_id: self.brand_id.clone(),
+                status: EnableStatus::Disabled,
+                effective_from,
+                effective_to: self.effective_to,
+            },
+        )
+    }
+
     /// 判断修订是否处于启用状态。
     ///
     /// # 返回
@@ -227,6 +307,46 @@ mod tests {
             ..data()
         };
         assert!(ProductRevision::new(ProductRevisionId::new("rev-1"), equal_window).is_err());
+    }
+
+    /// 后继修订只替换允许变化的内容并保留稳定快照字段。
+    #[test]
+    fn content_successor_preserves_stable_snapshot_fields() {
+        let current = ProductRevision::new(ProductRevisionId::new("rev-1"), data()).unwrap();
+        let successor = current
+            .content_successor(
+                ProductRevisionId::new("rev-2"),
+                2,
+                "新名称".to_string(),
+                Some("新描述".to_string()),
+                BusinessDate::from_ymd(2026, 2, 1).unwrap(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(successor.revision.revision_no, 2);
+        assert_eq!(successor.name, "新名称");
+        assert_eq!(successor.category_id, current.category_id);
+        assert_eq!(successor.brand_id, current.brand_id);
+        assert_eq!(successor.status, current.status);
+    }
+
+    /// 停用后继修订保留当前快照并只切换状态。
+    #[test]
+    fn disabled_successor_preserves_content_and_disables_status() {
+        let current = ProductRevision::new(ProductRevisionId::new("rev-1"), data()).unwrap();
+        let successor = current
+            .disabled_successor(
+                ProductRevisionId::new("rev-2"),
+                2,
+                BusinessDate::from_ymd(2026, 2, 1).unwrap(),
+            )
+            .unwrap();
+
+        assert_eq!(successor.name, current.name);
+        assert_eq!(successor.description, current.description);
+        assert_eq!(successor.status, EnableStatus::Disabled);
+        assert_eq!(successor.revision.revision_no, 2);
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

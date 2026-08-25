@@ -85,6 +85,22 @@ impl ServiceFulfillmentState {
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
+
+    /// 判断当前状态能否执行首次确认。
+    ///
+    /// # 返回
+    /// 仅草稿状态返回 `true`。
+    pub fn is_confirmable(self) -> bool {
+        matches!(self, Self::Draft)
+    }
+
+    /// 判断当前状态能否作为客户验收履约事实。
+    ///
+    /// # 返回
+    /// 已确认状态返回 `true`。
+    pub fn is_acceptance_eligible(self) -> bool {
+        matches!(self, Self::Confirmed)
+    }
 }
 
 impl DocumentState for ServiceFulfillmentState {
@@ -302,8 +318,8 @@ impl ServiceFulfillment {
     ///
     /// 完成履约记录号、记录人、完成说明与快照指纹格式校验；校验
     /// `recorded_at` 不早于 `occurred_at`、服务结束时间不早于开始时间。
-    /// 已确认记录必须引用同一销售明细和采购单的有效采购销售分配——跨聚合
-    /// 校验由 P3 完成（§6.7）。
+    /// Service 加载采购单、当前版本和采购销售分配后，由履约资格值对象校验
+    /// 关联；本实体负责确认与验收事实状态。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::ServiceFulfillmentId`）
@@ -394,6 +410,55 @@ impl ServiceFulfillment {
             completion_note,
             status: ServiceFulfillmentState::Draft,
         })
+    }
+
+    /// 返回单据注册与无审批绑定重验使用的组织上下文。
+    ///
+    /// # 返回
+    /// 返回所属销售稳定明细主键。
+    ///
+    /// # 错误
+    /// 销售稳定明细主键为空时返回错误。
+    pub fn registration_context_id(&self) -> Result<&str> {
+        let id = self.sales_order_line_id.as_ref();
+        if id.trim().is_empty() {
+            return Err(Error::from("服务履约缺少销售明细，无法构造绑定上下文"));
+        }
+        Ok(id)
+    }
+
+    /// 校验记录可执行首次确认。
+    ///
+    /// # 返回
+    /// 草稿状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非草稿状态返回错误。
+    pub fn ensure_confirmable(&self) -> Result<()> {
+        if !self.status.is_confirmable() {
+            return Err(Error::from("只有草稿状态的服务履约记录可以确认"));
+        }
+        Ok(())
+    }
+
+    /// 校验服务履约可作为指定验收行的履约事实并返回成功数量。
+    ///
+    /// # 参数
+    /// * `sales_order_line_id` - 验收行所属销售稳定明细
+    ///
+    /// # 返回
+    /// 已确认且销售明细一致时返回服务数量。
+    ///
+    /// # 错误
+    /// 状态无效或销售明细关联不一致时返回错误。
+    pub fn acceptance_quantity(&self, sales_order_line_id: &SalesOrderLineId) -> Result<Quantity> {
+        if !self.status.is_acceptance_eligible() {
+            return Err(Error::from("服务履约事实状态无效"));
+        }
+        if self.sales_order_line_id != *sales_order_line_id {
+            return Err(Error::from("履约事实不属于本验收明细"));
+        }
+        Ok(self.quantity)
     }
 
     /// 更新线下服务履约记录（仅草稿）。
@@ -613,6 +678,31 @@ mod tests {
         assert!(
             ensure_transition(ServiceFulfillmentState::Reversed, ServiceFulfillmentState::Draft).is_err()
         );
+    }
+
+    /// 确认与验收资格由实体状态及销售明细关联共同决定。
+    #[test]
+    fn confirmation_and_acceptance_rules_are_entity_owned() {
+        let mut fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-rule"), data()).unwrap();
+        assert!(fulfillment.ensure_confirmable().is_ok());
+        assert!(fulfillment
+            .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
+            .is_err());
+        fulfillment.confirm().unwrap();
+        assert!(fulfillment.ensure_confirmable().is_err());
+        assert_eq!(
+            fulfillment
+                .acceptance_quantity(&SalesOrderLineId::new("so-line-1"))
+                .unwrap(),
+            Quantity::from_str("1").unwrap()
+        );
+        assert!(fulfillment
+            .acceptance_quantity(&SalesOrderLineId::new("other-line"))
+            .is_err());
+        assert_eq!(fulfillment.registration_context_id().unwrap(), "so-line-1");
+        let mut missing_context = fulfillment.clone();
+        missing_context.sales_order_line_id = SalesOrderLineId::new("   ");
+        assert!(missing_context.registration_context_id().is_err());
     }
 
     /// 敏感字段：双指纹稳定且带密钥；Debug 不泄漏明文/密文/指纹。

@@ -2,9 +2,9 @@
 //!
 //! Handler 只转换协议；本文件编排仓储、prepare_* 与事务写入。
 
-use bpm::engine::{CommitRequired, DefinitionGraph, Eligibility, TaskCloseReason, TaskIntent};
+use bpm::engine::{CommitRequired, Eligibility, TaskCloseReason, TaskIntent};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::types::{ApprovalCommandKind, ApprovalDecision, ApprovalTransitionEvent};
+use bpm::model::types::{ApprovalCommandKind, ApprovalDecision, ModelError};
 use bpm::model::{ParticipantId, Timestamp};
 use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
@@ -17,9 +17,10 @@ use database::{
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::WorkItemId;
-use entities::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority, WorkItemStatus};
+use entities::work_item::{
+    ApprovalDecisionTaskError, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
+};
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
@@ -168,6 +169,9 @@ impl ApprovalRuntimeService {
     /// * `actor` - 操作人
     /// * `instance_id` - 实例 ID
     ///
+    /// # 返回
+    /// 返回实例状态与当前执行投影。
+    ///
     /// # 错误
     /// 不存在或无权时不泄露存在性。
     pub async fn instance_detail(
@@ -178,8 +182,8 @@ impl ApprovalRuntimeService {
         let _ = actor;
         let instance = self
             .db
-            .approval_process_instances()
-            .find_one(doc! { "id": instance_id }, &mut NoTransaction)
+            .bpm_workflow()
+            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
         let execution = self
@@ -240,6 +244,13 @@ impl ApprovalRuntimeService {
 
     /// 返回当前 blocker 的唯一合法恢复动作。
     ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `instance_id` - 审批实例 ID
+    ///
+    /// # 返回
+    /// 返回实例 ID 与当前允许的恢复动作集合。
+    ///
     /// # 错误
     /// 实例不存在时不泄露存在性。
     pub async fn recovery_options(
@@ -250,8 +261,8 @@ impl ApprovalRuntimeService {
         let _ = actor;
         let instance = self
             .db
-            .approval_process_instances()
-            .find_one(doc! { "id": instance_id }, &mut NoTransaction)
+            .bpm_workflow()
+            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
         let blocked = instance.status == bpm::model::types::ApprovalProcessInstanceStatus::Blocked;
@@ -267,6 +278,17 @@ impl ApprovalRuntimeService {
     /// `prepare_decision` 规划，并在一个 MongoDB 事务中应用：最终通过先登记
     /// 领域动作（单据生效），再写实例推进（CAS）、执行结束/插入、审批人绑定、
     /// 命令收据、任务完成/关闭/新建、通知 outbox 与审计。
+    ///
+    /// # 参数
+    /// * `actor` - 当前决定人
+    /// * `work_item_id` - 当前开放单据审批任务 ID
+    /// * `decision` - `APPROVE` 或 `REJECT`
+    /// * `reason` - 可选决定原因；空白按未提供处理
+    /// * `expected_task_version` - 调用方持有的任务版本
+    /// * `idempotency_key` - 本次决定命令幂等键
+    ///
+    /// # 返回
+    /// 返回回放或实际应用后的审批命令视图。
     ///
     /// # 错误
     /// 任务不存在、责任不一致、版本冲突或仓储失败时返回错误。
@@ -297,30 +319,20 @@ impl ApprovalRuntimeService {
         let item = self
             .db
             .work_items()
-            .find_one(doc! { "id": work_item_id }, &mut NoTransaction)
+            .find_document_approval_by_id(work_item_id, &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
-        if item.owner_user_id.as_deref() != Some(actor.id()) {
-            return Err(Error::Forbidden("无权执行该审批动作".to_string()));
-        }
-        if item.status != WorkItemStatus::Open {
-            return Err(Error::ConflictError("APPROVAL_TASK_NOT_OPEN".to_string()));
-        }
-        if item.base.version != expected_task_version {
-            return Err(Error::ConflictError("任务版本已变化，请刷新后重试".to_string()));
-        }
         let execution_id = item
-            .approval_node_execution_id
-            .as_ref()
-            .ok_or_else(|| Error::ConflictError("APPROVAL_TASK_NOT_OPEN".to_string()))?
+            .approval_execution_for_decision(actor.id(), expected_task_version)
+            .map_err(map_approval_task_error)?
             .as_ref()
             .to_string();
 
         // ---------- 执行、实例与定义图 ----------
         let execution = self
             .db
-            .approval_node_executions()
-            .find_one(doc! { "id": &execution_id }, &mut NoTransaction)
+            .bpm_workflow()
+            .find_execution_by_id(&ApprovalNodeExecutionId::new(&execution_id), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
         // CAS 期望版本 = 加载时的持久化版本（引擎计划会在快照上自增版本）。
@@ -328,8 +340,8 @@ impl ApprovalRuntimeService {
         let instance_id = execution.process_instance_id.as_ref().to_string();
         let instance = self
             .db
-            .approval_process_instances()
-            .find_one(doc! { "id": &instance_id }, &mut NoTransaction)
+            .bpm_workflow()
+            .find_instance_by_id(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
             .await?
             .ok_or_else(hidden_not_found)?;
         let expected_instance_version = instance.base.version;
@@ -339,7 +351,6 @@ impl ApprovalRuntimeService {
             .load_definition_graph(&instance.process_definition_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
-        let graph = engine_graph(graph);
         let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
         let spec = adapter_spec_of(document_type)?;
         let organization_id = item.owner_organization_id.clone();
@@ -353,7 +364,9 @@ impl ApprovalRuntimeService {
                 &spec,
             )
             .await?;
-        let target_node_key = decision_target_node_key(&graph, &execution.node_key, decision)?;
+        let target_node_key = graph
+            .decision_target_node_key(&execution.node_key, decision)
+            .map_err(map_runtime_graph_error)?;
         let next_eligibility = match &target_node_key {
             Some(node_key) => {
                 let node = graph
@@ -385,15 +398,13 @@ impl ApprovalRuntimeService {
         let open_task_count = self
             .db
             .work_items()
-            .find_many(
-                doc! {
-                    "approval_node_execution_id": &execution_id,
-                    "status": WorkItemStatus::Open.as_str(),
-                },
+            .count_open_document_approval_by_execution(
+                &ApprovalNodeExecutionId::new(&execution_id),
                 &mut NoTransaction,
             )
-            .await?
-            .len();
+            .await?;
+        let open_task_count = usize::try_from(open_task_count)
+            .map_err(|_| Error::Internal("开放审批任务数量溢出".to_string()))?;
 
         // ---------- 规划决定 ----------
         let now = Instant::now();
@@ -435,8 +446,8 @@ impl ApprovalRuntimeService {
                     .await?;
                 let instance = self
                     .db
-                    .approval_process_instances()
-                    .find_one(doc! { "id": &instance_id }, &mut NoTransaction)
+                    .bpm_workflow()
+                    .find_instance_by_id(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
                     .await?
                     .ok_or_else(hidden_not_found)?;
                 Ok(map_command_view(
@@ -529,6 +540,21 @@ impl ApprovalRuntimeService {
 
     /// 写时重验审批人资格：账号启用、具备 `approval_instance:decide`、能读取
     /// 被审单据。任一失败收敛为对应人员 blocker，不得回滚为空。
+    ///
+    /// # 参数
+    /// * `assignee_id` - 当前或下一节点审批人账号 ID
+    /// * `assignee_name` - 定义或执行中的显示名快照
+    /// * `organization_id` - 被审单据责任组织
+    /// * `spec` - 单据类型审批适配器规格
+    ///
+    /// # 返回
+    /// 返回 BPM 可消费的有效或结构化受阻资格。
+    ///
+    /// # 错误
+    /// Repository、权限解析、RBAC 或对象读取适配器失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 账号后台有效性由实体判断，Service 只编排权限与对象读取 I/O。
     async fn revalidate_approver(
         &self,
         assignee_id: &str,
@@ -539,10 +565,10 @@ impl ApprovalRuntimeService {
         let failure = match self
             .db
             .accounts()
-            .find_one(doc! { "id": assignee_id }, &mut NoTransaction)
+            .find_approval_assignee_by_id(assignee_id, &mut NoTransaction)
             .await?
         {
-            Some(account) if account.is_kind(entities::AccountKind::Admin) && account.can_login() => {
+            Some(account) if account.is_active_backoffice() => {
                 let permission = entities::Permission::parse(STATIC_APPROVE_PERMISSION)
                     .map_err(|error| Error::Internal(format!("静态审批权限不变量损坏: {error}")))?;
                 if self
@@ -567,16 +593,27 @@ impl ApprovalRuntimeService {
         converge_eligibility(assignee_id, assignee_name, failure)
     }
 
-    /// 实例节点当前审批人（三方责任校验的实例侧事实）。
+    /// 读取实例节点当前审批人，作为三方责任校验的实例侧事实。
+    ///
+    /// # 参数
+    /// * `instance_id` - 审批实例 ID
+    /// * `node_key` - 当前定义节点键
+    ///
+    /// # 返回
+    /// 返回实例审批人绑定中的当前参与人 ID。
+    ///
+    /// # 错误
+    /// Repository 查询失败或实例缺少节点审批人绑定时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 查询条件由 BPM Repository 封装，Service 不拼装实例与节点过滤文档。
     async fn instance_assignee_id(&self, instance_id: &str, node_key: &str) -> Result<String> {
         let assignee = self
             .db
-            .approval_instance_assignees()
-            .find_one(
-                doc! {
-                    "process_instance_id": instance_id,
-                    "node_key": node_key,
-                },
+            .bpm_workflow()
+            .find_assignee_for_node(
+                &ApprovalProcessInstanceId::new(instance_id),
+                node_key,
                 &mut NoTransaction,
             )
             .await?
@@ -652,26 +689,37 @@ impl ApprovalRuntimeService {
         })
     }
 
+    /// 查询当前账号拥有的开放单据审批任务。
+    ///
+    /// # 参数
+    /// * `actor` - 当前已认证账号
+    /// * `query` - 可选单据类型与页大小
+    ///
+    /// # 返回
+    /// 返回由开放审批任务映射的运行实例列表页。
+    ///
+    /// # 错误
+    /// WorkItem Repository 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 任务类型、开放状态、责任人与可选单据类型全部由 Repository 固定查询封装。
     async fn list_mine(
         &self,
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        let mut filter = doc! {
-            "status": "OPEN",
-            "owner_user_id": actor.id(),
-            "work_item_type": "DOCUMENT_APPROVAL",
-        };
-        if let Some(document_type) = &query.document_type {
-            filter.insert("business_object_type", document_type);
-        }
-        let rows = self.db.work_items().find_many(filter, &mut NoTransaction).await?;
+        let rows = self
+            .db
+            .work_items()
+            .list_open_document_approval_owned_by(
+                actor.id(),
+                query.document_type.as_deref(),
+                query.limit,
+                &mut NoTransaction,
+            )
+            .await?;
         Ok(RuntimeInstanceListPage {
-            items: rows
-                .into_iter()
-                .take(query.limit as usize)
-                .map(item_from_mine_item)
-                .collect(),
+            items: rows.into_iter().map(item_from_mine_item).collect(),
         })
     }
 
@@ -747,6 +795,50 @@ impl ApprovalRuntimeService {
             outcome,
         })
     }
+}
+
+/// 将单据审批任务前置校验映射为稳定的 Service 错误。
+///
+/// # 参数
+/// * `error` - WorkItem 返回的决定前置失败原因
+///
+/// # 返回
+/// 返回权限拒绝或稳定冲突错误。
+///
+/// # 错误
+/// 无；本方法只执行错误分类转换。
+///
+/// # 关键业务约束
+/// 非当前责任人必须保持禁止语义，任务状态、版本和执行引用失败必须保持冲突语义。
+fn map_approval_task_error(error: ApprovalDecisionTaskError) -> Error {
+    match error {
+        ApprovalDecisionTaskError::NotCurrentOwner => Error::Forbidden("无权执行该审批动作".to_string()),
+        ApprovalDecisionTaskError::VersionConflict => {
+            Error::ConflictError("任务版本已变化，请刷新后重试".to_string())
+        }
+        ApprovalDecisionTaskError::NotDocumentApproval
+        | ApprovalDecisionTaskError::NotOpen
+        | ApprovalDecisionTaskError::MissingExecution => {
+            Error::ConflictError("APPROVAL_TASK_NOT_OPEN".to_string())
+        }
+    }
+}
+
+/// 将 BPM 决定连线错误映射为运行时冲突。
+///
+/// # 参数
+/// * `error` - BPM 图模型返回的决定连线错误
+///
+/// # 返回
+/// 返回失败关闭的运行时冲突错误。
+///
+/// # 错误
+/// 无；本方法只执行错误分类转换。
+///
+/// # 关键业务约束
+/// 持久化图缺失或重复决定连线时不得继续推导下一审批人。
+fn map_runtime_graph_error(error: ModelError) -> Error {
+    Error::ConflictError(error.to_string())
 }
 
 /// 隐藏实例存在性。
@@ -836,33 +928,6 @@ fn item_from_instance_id(
         current_assignee_participant_id,
         document_id: None,
     }
-}
-
-/// 将仓储定义图转为引擎定义图。字段一一对应，不得在此补默认节点。
-fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> DefinitionGraph {
-    DefinitionGraph {
-        definition: graph.definition,
-        nodes: graph.nodes,
-        transitions: graph.transitions,
-    }
-}
-
-/// 解析决定的目标节点：通过/驳回连线指向的下一节点；指向终态时返回 `None`。
-fn decision_target_node_key(
-    graph: &DefinitionGraph,
-    current_node_key: &str,
-    decision: ApprovalDecision,
-) -> Result<Option<String>> {
-    let event = match decision {
-        ApprovalDecision::Approve => ApprovalTransitionEvent::Approve,
-        ApprovalDecision::Reject => ApprovalTransitionEvent::Reject,
-    };
-    let edge = graph
-        .transitions
-        .iter()
-        .find(|item| item.from_node_key == current_node_key && item.event == event)
-        .ok_or_else(|| Error::ConflictError("审批定义缺少决定连线".to_string()))?;
-    Ok(edge.to_node_key.clone())
 }
 
 /// 由决定后的写入构造实例列表投影。
@@ -972,25 +1037,29 @@ async fn persist_decision_writes(
     // 任务：完成当前、按原因关闭、为下一节点新建。
     complete_or_close_tasks(
         db,
-        &writes.complete_tasks,
-        &writes.close_tasks,
-        work_item_id,
-        expected_task_version,
-        ended_execution_id,
-        actor_id,
-        now,
+        CompleteOrCloseTasksInput {
+            complete_tasks: &writes.complete_tasks,
+            close_tasks: &writes.close_tasks,
+            work_item_id,
+            expected_task_version,
+            ended_execution_id,
+            actor_id,
+            now,
+        },
         session,
     )
     .await?;
     create_open_tasks(
         db,
-        writes,
-        new_task_ids,
-        owner_role,
-        owner_organization_id,
-        subject_version,
-        business_object_id,
-        now,
+        CreateOpenTasksInput {
+            writes,
+            new_task_ids,
+            owner_role,
+            owner_organization_id,
+            subject_version,
+            business_object_id,
+            now,
+        },
         session,
     )
     .await?;
@@ -1018,54 +1087,75 @@ async fn persist_decision_writes(
     Ok(())
 }
 
-/// 完成或关闭当前执行对应的开放任务（CAS 保持任务版本不变式）。
+/// 完成或关闭审批任务所需的同一决定上下文。
+struct CompleteOrCloseTasksInput<'a> {
+    complete_tasks: &'a [ApprovalNodeExecutionId],
+    close_tasks: &'a [(ApprovalNodeExecutionId, TaskCloseReason)],
+    work_item_id: &'a str,
+    expected_task_version: u64,
+    ended_execution_id: &'a str,
+    actor_id: &'a str,
+    now: Instant,
+}
+
+/// 完成或关闭当前执行对应的开放任务，CAS 保持任务版本不变式。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `input` - 当前决定涉及的任务结束事实与并发版本
+/// * `session` - 调用方事务会话
+///
+/// # 返回
+/// 当前执行对应任务完成或关闭并通过 CAS 写回时返回 `Ok(())`。
+///
+/// # 错误
+/// 任务缺失、实体状态变更或 Repository CAS 失败时返回错误。
+///
+/// # 关键业务约束
+/// 任务读取固定走单据审批语义 Repository，生命周期变更由 WorkItem 实体方法执行。
 async fn complete_or_close_tasks(
     db: &Database,
-    complete_tasks: &[ApprovalNodeExecutionId],
-    close_tasks: &[(ApprovalNodeExecutionId, TaskCloseReason)],
-    work_item_id: &str,
-    expected_task_version: u64,
-    ended_execution_id: &str,
-    actor_id: &str,
-    now: Instant,
+    input: CompleteOrCloseTasksInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    let mut endings: Vec<(String, Option<String>)> = complete_tasks
+    let mut endings: Vec<(String, Option<String>)> = input
+        .complete_tasks
         .iter()
         .map(|id| (id.as_ref().to_string(), None))
         .collect();
     endings.extend(
-        close_tasks
+        input
+            .close_tasks
             .iter()
             .map(|(id, reason)| (id.as_ref().to_string(), Some(reason.as_str().to_string()))),
     );
     for (execution_id, close_reason) in endings {
-        if execution_id != ended_execution_id {
+        if execution_id != input.ended_execution_id {
             continue;
         }
         let item = db
             .work_items()
-            .find_one(doc! { "id": work_item_id }, session)
+            .find_document_approval_by_id(input.work_item_id, session)
             .await?
             .ok_or_else(hidden_not_found)?;
         let mut item = item;
         match close_reason {
             Some(reason) => item
                 .close_by_approval_runtime(
-                    actor_id,
+                    input.actor_id,
                     entities::work_item::WorkItemCloseData { close_reason: reason },
-                    now,
+                    input.now,
                 )
                 .map_err(|error| Error::ValidationError(error.to_string()))?,
             None => item
-                .complete_by_approval_runtime(actor_id, now)
+                .complete_by_approval_runtime(input.actor_id, input.now)
                 .map_err(|error| Error::ValidationError(error.to_string()))?,
         }
         db.work_items()
             .close_approval_task(
                 &item,
-                expected_task_version,
-                &ApprovalNodeExecutionId::new(ended_execution_id),
+                input.expected_task_version,
+                &ApprovalNodeExecutionId::new(input.ended_execution_id),
                 session,
             )
             .await?;
@@ -1073,19 +1163,27 @@ async fn complete_or_close_tasks(
     Ok(())
 }
 
+/// 创建开放审批任务所需的决定输出与单据责任上下文。
+struct CreateOpenTasksInput<'a> {
+    writes: &'a PlannedWrites,
+    new_task_ids: &'a [String],
+    owner_role: &'a str,
+    owner_organization_id: &'a str,
+    subject_version: &'a str,
+    business_object_id: &'a str,
+    now: Instant,
+}
+
 /// 为 `HumanTaskRequested` 意图创建新开放任务。
+///
+/// # 错误
+/// 任务实体构造失败或 Repository 写入失败时返回错误。
 async fn create_open_tasks(
     db: &Database,
-    writes: &PlannedWrites,
-    new_task_ids: &[String],
-    owner_role: &str,
-    owner_organization_id: &str,
-    subject_version: &str,
-    business_object_id: &str,
-    now: Instant,
+    input: CreateOpenTasksInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    for (index, intent) in writes.create_tasks.iter().enumerate() {
+    for (index, intent) in input.writes.create_tasks.iter().enumerate() {
         let TaskIntent::HumanTaskRequested {
             execution_id,
             assignee,
@@ -1095,19 +1193,19 @@ async fn create_open_tasks(
             continue;
         };
         let item = WorkItem::new_document_approval(
-            WorkItemId::new(new_task_ids.get(index).cloned().unwrap_or_else(next_id)),
+            WorkItemId::new(input.new_task_ids.get(index).cloned().unwrap_or_else(next_id)),
             DocumentApprovalWorkItemData {
                 approval_node_execution_id: execution_id.clone(),
-                business_object_type: writes.instance.subject.subject_kind().to_string(),
-                business_object_id: business_object_id.to_string(),
-                subject_version: subject_version.to_string(),
-                owner_role: owner_role.to_string(),
-                owner_organization_id: owner_organization_id.to_string(),
+                business_object_type: input.writes.instance.subject.subject_kind().to_string(),
+                business_object_id: input.business_object_id.to_string(),
+                subject_version: input.subject_version.to_string(),
+                owner_role: input.owner_role.to_string(),
+                owner_organization_id: input.owner_organization_id.to_string(),
                 owner_user_id: assignee.as_str().to_string(),
                 priority: WorkItemPriority::Normal,
                 due_at: None,
             },
-            now,
+            input.now,
         )
         .map_err(|error| Error::ValidationError(error.to_string()))?;
         db.work_items().create(&item, session).await?;

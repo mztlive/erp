@@ -199,6 +199,18 @@ impl MallPaymentSource {
         self.mall_card_instance_id = Some(mall_card_instance_id);
         Ok(())
     }
+
+    /// 判断支付来源是否绑定给定卡实例。
+    ///
+    /// # 参数
+    /// * `mall_card_instance_id` - 余额恢复目标卡实例
+    ///
+    /// # 返回
+    /// 支付来源为卡券且已绑定同一卡实例时返回 `true`。
+    pub fn uses_card_instance(&self, mall_card_instance_id: &MallCardInstanceId) -> bool {
+        self.source_type == PaymentSourceType::Card
+            && self.mall_card_instance_id.as_ref() == Some(mall_card_instance_id)
+    }
 }
 
 /// 校验来源类型与引用字段的互斥关系（§6.17）。
@@ -336,6 +348,8 @@ mod tests {
             card.mall_card_instance_id,
             Some(MallCardInstanceId::new("card-1"))
         );
+        assert!(card.uses_card_instance(&MallCardInstanceId::new("card-1")));
+        assert!(!card.uses_card_instance(&MallCardInstanceId::new("card-2")));
 
         let mut wechat = MallPaymentSource::new(MallPaymentSourceId::new("ps-10"), wechat_data()).unwrap();
         assert!(wechat

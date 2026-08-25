@@ -65,7 +65,21 @@ impl From<database::Error> for Error {
 /// # 返回
 /// 已知索引返回字段级中文提示；无法识别时返回通用冲突提示。
 fn duplicate_key_conflict_message(error: &database::Error) -> String {
-    match error.duplicate_index_name() {
+    duplicate_index_conflict_message(error.duplicate_index_name())
+}
+
+/// 将唯一索引名称映射为面向用户的冲突提示。
+///
+/// # 参数
+/// * `index_name` - MongoDB 唯一索引名称；无法识别或缺失时使用通用提示
+///
+/// # 返回
+/// 已知索引返回字段级中文提示；未知索引返回通用冲突提示。
+///
+/// # 错误
+/// 无。
+fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
+    match index_name {
         Some("uk_parties_party_no") => "主体编号已存在".to_string(),
         Some("uk_parties_credit_code") => "统一社会信用代码已存在".to_string(),
         Some("uk_party_bank_accounts_bank_account_no") => "银行账户编号已存在".to_string(),
@@ -222,7 +236,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 mod tests {
     use mongodb::error::Error as MongoError;
 
-    use super::{approval_codes, Error};
+    use super::{approval_codes, duplicate_index_conflict_message, Error};
 
     #[test]
     fn optimistic_locking_error_maps_to_conflict() {
@@ -241,42 +255,16 @@ mod tests {
 
     #[test]
     fn known_party_duplicate_index_maps_to_field_message() {
-        use mongodb::{
-            bson::{deserialize_from_document, doc},
-            error::{ErrorKind, WriteError, WriteFailure},
-        };
+        let message = duplicate_index_conflict_message(Some("uk_parties_party_no"));
 
-        let write_error: WriteError = deserialize_from_document(doc! {
-            "code": 11000,
-            "codeName": "DuplicateKey",
-            "errmsg": "E11000 duplicate key error collection: erp.parties index: uk_parties_party_no dup key: { party_no: \"PTY-1\" }",
-            "errInfo": null,
-        })
-        .expect("write error fixture should deserialize");
-        let mongo_error: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
-        let error = Error::from(database::Error::DuplicateKey(mongo_error));
-
-        assert_eq!(error.to_string(), "数据冲突: 主体编号已存在");
+        assert_eq!(message, "主体编号已存在");
     }
 
     #[test]
     fn contract_number_duplicate_index_maps_to_contract_message() {
-        use mongodb::{
-            bson::{deserialize_from_document, doc},
-            error::{ErrorKind, WriteError, WriteFailure},
-        };
+        let message = duplicate_index_conflict_message(Some("uk_contracts_contract_no"));
 
-        let write_error: WriteError = deserialize_from_document(doc! {
-            "code": 11000,
-            "codeName": "DuplicateKey",
-            "errmsg": "E11000 duplicate key error collection: erp.contracts index: uk_contracts_contract_no dup key: { contract_no: \"HT-1\" }",
-            "errInfo": null,
-        })
-        .expect("write error fixture should deserialize");
-        let mongo_error: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
-        let error = Error::from(database::Error::DuplicateKey(mongo_error));
-
-        assert_eq!(error.to_string(), "数据冲突: 合同编号已存在");
+        assert_eq!(message, "合同编号已存在");
     }
 
     #[test]

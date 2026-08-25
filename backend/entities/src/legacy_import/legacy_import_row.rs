@@ -460,6 +460,58 @@ impl LegacyImportRow {
         Ok(())
     }
 
+    /// 将试算行推进到可导入状态。
+    ///
+    /// 待解析行按试算成功结果登记为有效；待映射行必须同时提供来源稳定身份。
+    /// 已无效或映射冲突的行不得进入应用阶段。
+    ///
+    /// # 参数
+    /// * `external_identity_map_id` - 待映射行对应的来源稳定身份
+    ///
+    /// # 返回
+    /// 行已达到解析有效且映射完成时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 行已无效、映射冲突，或待映射行缺少来源稳定身份时返回错误。
+    pub fn prepare_for_import(
+        &mut self,
+        external_identity_map_id: Option<ExternalIdentityMapId>,
+    ) -> Result<()> {
+        if self.parse_status == ParseStatus::PendingParse {
+            self.mark_parse_result(ParseStatus::Valid, None, None)?;
+        }
+        Self::ensure_parseable(self)?;
+        if self.mapping_status == MappingStatus::PendingMapping {
+            let identity =
+                external_identity_map_id.ok_or_else(|| Error::from("待映射行必须提供来源稳定身份"))?;
+            self.mark_mapped(identity)?;
+        }
+        Self::ensure_mapped(self)
+    }
+
+    /// 统计指定导入状态的行数。
+    ///
+    /// # 参数
+    /// * `rows` - 同一批次或查询结果中的导入行
+    /// * `status` - 待统计的导入状态
+    ///
+    /// # 返回
+    /// 返回导入状态匹配的行数。
+    pub fn count_by_import_status(rows: &[Self], status: ImportStatus) -> u64 {
+        rows.iter().filter(|row| row.import_status == status).count() as u64
+    }
+
+    /// 统计仍等待导入的行数。
+    ///
+    /// # 参数
+    /// * `rows` - 同一批次或查询结果中的导入行
+    ///
+    /// # 返回
+    /// 返回导入状态为 `PendingImport` 的行数。
+    pub fn pending_import_count(rows: &[Self]) -> u64 {
+        Self::count_by_import_status(rows, ImportStatus::PendingImport)
+    }
+
     /// 校验行已通过解析。
     ///
     /// # 参数
@@ -655,6 +707,61 @@ mod tests {
             .unwrap();
         skipped.mark_skipped("DUPLICATE".to_string(), None).unwrap();
         assert!(skipped.prepare_failed_retry().is_err());
+    }
+
+    #[test]
+    fn prepare_for_import_advances_pending_row_and_requires_identity() {
+        let mut missing =
+            LegacyImportRow::new(LegacyImportRowId::new("row-prepare-missing"), row_data()).unwrap();
+        assert!(missing.prepare_for_import(None).is_err());
+        assert_eq!(missing.parse_status, ParseStatus::Valid);
+        assert_eq!(missing.mapping_status, MappingStatus::PendingMapping);
+
+        let mut ready =
+            LegacyImportRow::new(LegacyImportRowId::new("row-prepare-ready"), row_data()).unwrap();
+        ready
+            .prepare_for_import(Some(ExternalIdentityMapId::new("map-ready")))
+            .unwrap();
+        assert_eq!(ready.parse_status, ParseStatus::Valid);
+        assert_eq!(ready.mapping_status, MappingStatus::Mapped);
+    }
+
+    #[test]
+    fn prepare_for_import_rejects_invalid_or_conflicting_rows() {
+        let mut invalid =
+            LegacyImportRow::new(LegacyImportRowId::new("row-prepare-invalid"), row_data()).unwrap();
+        invalid
+            .mark_parse_result(ParseStatus::Invalid, Some("INVALID".to_string()), None)
+            .unwrap();
+        assert!(invalid.prepare_for_import(None).is_err());
+
+        let mut conflict =
+            LegacyImportRow::new(LegacyImportRowId::new("row-prepare-conflict"), row_data()).unwrap();
+        conflict
+            .mark_parse_result(ParseStatus::Valid, None, None)
+            .unwrap();
+        conflict
+            .mark_conflict("IDENTITY_CONFLICT".to_string(), None)
+            .unwrap();
+        assert!(conflict.prepare_for_import(None).is_err());
+    }
+
+    #[test]
+    fn import_status_counts_are_deterministic() {
+        let mut imported =
+            LegacyImportRow::new(LegacyImportRowId::new("row-count-imported"), row_data()).unwrap();
+        imported
+            .prepare_for_import(Some(ExternalIdentityMapId::new("map-count")))
+            .unwrap();
+        imported.mark_imported("SO-COUNT".to_string(), None).unwrap();
+        let pending = LegacyImportRow::new(LegacyImportRowId::new("row-count-pending"), row_data()).unwrap();
+        let rows = vec![imported, pending];
+
+        assert_eq!(
+            LegacyImportRow::count_by_import_status(&rows, ImportStatus::Imported),
+            1
+        );
+        assert_eq!(LegacyImportRow::pending_import_count(&rows), 1);
     }
 
     #[test]

@@ -1,9 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::catalog::{EnableStatus, ListingStatus, Sku, SkuRevision, SkuRevisionAttributeValue};
+use entities::catalog::{EnableStatus, ListingStatus, Product, Sku, SkuRevision, SkuRevisionAttributeValue};
 use entities::common::time::BusinessDate;
 use entities::ids::{ProductId, SkuId};
 use entities::money::{Amount, Quantity};
@@ -39,6 +41,9 @@ pub struct SkuRow {
     pub listing_status: ListingStatus,
     /// 当前 SKU 修订 ID。
     pub current_revision_id: Option<String>,
+    /// 当前 SKU 修订名称；分页查询由 CatalogRepository 批量装配。
+    #[serde(default)]
+    pub name: Option<String>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -361,6 +366,386 @@ impl<'a> Repository<'a, SkuRevision> {
 }
 
 impl<'a> CatalogRepository<'a> {
+    /// 按 SKU 编号或当前修订名称解析公司 SKU 主键。
+    ///
+    /// 两个字段均按字面量部分匹配并忽略大小写；名称命中只接受稳定 SKU 当前修订，
+    /// 避免历史名称继续污染供给列表关键字筛选。
+    ///
+    /// # 参数
+    /// * `keyword` - 已去除首尾空白的关键字
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重并按主键排序的命中 SKU 主键；无命中时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn resolve_sku_ids_by_keyword(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuId>> {
+        let mut sku_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut sku_filter, "sku_no", Some(keyword));
+        let mut skus = Repository::<Sku>::new(self.db, SKUS)
+            .find_many(sku_filter, executor)
+            .await?;
+
+        let mut revision_filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut revision_filter, "name", Some(keyword));
+        let revisions = Repository::<SkuRevision>::new(self.db, SKU_REVISIONS)
+            .find_many(revision_filter, executor)
+            .await?;
+        if !revisions.is_empty() {
+            let revision_ids = revisions.into_iter().map(|revision| revision.base.id);
+            skus.extend(
+                Repository::new(self.db, SKUS)
+                    .find_many(in_filter("current_revision_id", revision_ids), executor)
+                    .await?,
+            );
+        }
+
+        let mut ids = skus
+            .into_iter()
+            .map(|sku| SkuId::new(sku.base.id))
+            .collect::<Vec<_>>();
+        ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
+        ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
+        Ok(ids)
+    }
+
+    /// 按 SPU 编号和 SKU 编号解析供给筛选所需的公司 SKU 主键。
+    ///
+    /// 两个字段均按字面量部分匹配并忽略大小写；同时提供时取交集。任一已提供
+    /// 条件无命中时返回空集合，`None` 只表示两个条件均未提供。
+    ///
+    /// # 参数
+    /// * `product_no` - 公司商品编号筛选
+    /// * `sku_no` - 公司 SKU 编号筛选
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回可选的去重 SKU 主键集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn resolve_sku_ids_by_codes(
+        &self,
+        product_no: Option<&str>,
+        sku_no: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Vec<SkuId>>> {
+        let by_product = match product_no {
+            Some(product_no) => Some(self.sku_ids_by_product_no(product_no, executor).await?),
+            None => None,
+        };
+        let by_sku = match sku_no {
+            Some(sku_no) => Some(self.sku_ids_by_sku_no(sku_no, executor).await?),
+            None => None,
+        };
+        let mut ids = match (by_product, by_sku) {
+            (None, None) => return Ok(None),
+            (Some(ids), None) | (None, Some(ids)) => ids,
+            (Some(left), Some(right)) => left.into_iter().filter(|id| right.contains(id)).collect(),
+        };
+        ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
+        ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
+        Ok(Some(ids))
+    }
+
+    /// 按商品编号解析其下全部 SKU 主键。
+    ///
+    /// # 参数
+    /// * `product_no` - 公司商品编号字面量关键字
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回命中商品下的全部未删除 SKU 主键。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn sku_ids_by_product_no(
+        &self,
+        product_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuId>> {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut filter, "product_no", Some(product_no));
+        let products = Repository::<Product>::new(self.db, <mongodb::Database as CatalogExt>::PRODUCTS)
+            .find_many(filter, executor)
+            .await?;
+        if products.is_empty() {
+            return Ok(Vec::new());
+        }
+        let product_ids = products
+            .into_iter()
+            .map(|product| ProductId::new(product.base.id))
+            .collect::<Vec<_>>();
+        Ok(Repository::<Sku>::new(self.db, SKUS)
+            .find_by_product_ids(&product_ids, executor)
+            .await?
+            .into_iter()
+            .map(|sku| SkuId::new(sku.base.id))
+            .collect())
+    }
+
+    /// 按 SKU 编号解析 SKU 主键。
+    ///
+    /// # 参数
+    /// * `sku_no` - 公司 SKU 编号字面量关键字
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回命中的未删除 SKU 主键。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    async fn sku_ids_by_sku_no(&self, sku_no: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        insert_literal_regex_filter(&mut filter, "sku_no", Some(sku_no));
+        Ok(Repository::<Sku>::new(self.db, SKUS)
+            .find_many(filter, executor)
+            .await?
+            .into_iter()
+            .map(|sku| SkuId::new(sku.base.id))
+            .collect())
+    }
+
+    /// 分页查询 SKU 并批量装配当前修订名称。
+    ///
+    /// # 参数
+    /// * `keyword` - SKU 编号或当前修订名称关键字；`None` 表示不筛选
+    /// * `filter` - SKU 编号、归属、状态、分页与排序条件；调用方不得预填 `ids`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已带当前修订名称的 SKU 分页投影。
+    ///
+    /// # 错误
+    /// MongoDB 查询、计数或当前修订批量读取失败时返回错误。
+    pub async fn sku_page(
+        &self,
+        keyword: Option<&str>,
+        filter: &SkuFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SkuRow>> {
+        let mut filter = filter.clone();
+        filter.ids = match keyword {
+            Some(keyword) => Some(
+                self.resolve_sku_ids_by_keyword(keyword, executor)
+                    .await?
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect(),
+            ),
+            None => None,
+        };
+        let mut result = self.db.skus().search_skus(&filter, executor).await?;
+        self.attach_current_sku_names(&mut result.items, executor).await?;
+        Ok(result)
+    }
+
+    /// 分页查询 SKU 修订投影。
+    ///
+    /// # 参数
+    /// * `filter` - SKU 修订、名称、条码、状态、分页与排序条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回 SKU 修订分页投影。
+    ///
+    /// # 错误
+    /// MongoDB 查询、计数或结果反序列化失败时返回错误。
+    pub async fn sku_revision_page(
+        &self,
+        filter: &SkuRevisionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<SkuRevisionRow>> {
+        self.db
+            .sku_revisions()
+            .search_sku_revisions(filter, executor)
+            .await
+    }
+
+    /// 按稳定 ID 读取单个未删除 SKU。
+    ///
+    /// # 参数
+    /// * `sku_id` - SKU 稳定 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配 SKU；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn sku(&self, sku_id: &str, executor: &mut dyn Executor) -> Result<Option<Sku>> {
+        self.db.skus().find_by_id(sku_id, executor).await
+    }
+
+    /// 读取一个商品下的全部未删除 SKU。
+    ///
+    /// # 参数
+    /// * `product_id` - 商品稳定 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该商品的全部 SKU，包含启用和历史停用身份。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn skus_for_product(
+        &self,
+        product_id: &ProductId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Sku>> {
+        self.db
+            .skus()
+            .find_by_product_ids(std::slice::from_ref(product_id), executor)
+            .await
+    }
+
+    /// 读取指定 SKU 的历史最大修订序号。
+    ///
+    /// # 参数
+    /// * `sku_id` - SKU 稳定 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回历史最大修订号；无修订时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn latest_sku_revision_no(
+        &self,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let revisions = self
+            .db
+            .sku_revisions()
+            .find_by_sku_ids(std::slice::from_ref(sku_id), executor)
+            .await?;
+        Ok(revisions
+            .iter()
+            .map(|revision| revision.revision.revision_no)
+            .max())
+    }
+
+    /// 返回当前启用修订中占用规范化条码的 SKU 身份。
+    ///
+    /// # 参数
+    /// * `barcode` - 条码原值，Repository 按实体 trim 规则规范化
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重后的条码占用 SKU ID 集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn barcode_owner_sku_ids(
+        &self,
+        barcode: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<HashSet<String>> {
+        Ok(self
+            .db
+            .sku_revisions()
+            .find_active_by_barcode(barcode, executor)
+            .await?
+            .into_iter()
+            .map(|revision| revision.sku_id.to_string())
+            .collect())
+    }
+
+    /// 批量解析一组 SKU 的当前修订。
+    ///
+    /// 优先使用稳定主表当前修订指针；指针缺失或失效时回退到该 SKU 最大修订号。
+    ///
+    /// # 参数
+    /// * `skus` - 待解析的 SKU 稳定实体
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回 `sku_id -> 当前 SKU 修订` 映射；没有修订的 SKU 不出现在映射中。
+    ///
+    /// # 错误
+    /// MongoDB 批量查询或反序列化失败时返回错误。
+    pub async fn current_sku_revisions(
+        &self,
+        skus: &[Sku],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, SkuRevision>> {
+        let sku_ids = skus
+            .iter()
+            .map(|sku| SkuId::new(sku.base.id.clone()))
+            .collect::<Vec<_>>();
+        let revisions = self
+            .db
+            .sku_revisions()
+            .find_by_sku_ids(&sku_ids, executor)
+            .await?;
+        Ok(select_current_sku_revisions(skus, revisions))
+    }
+
+    /// 解析单个 SKU 的当前修订。
+    ///
+    /// # 参数
+    /// * `sku` - 已加载的 SKU 稳定实体
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前指针命中或最大修订号对应的修订；无修订时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn current_sku_revision(
+        &self,
+        sku: &Sku,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SkuRevision>> {
+        Ok(self
+            .current_sku_revisions(std::slice::from_ref(sku), executor)
+            .await?
+            .remove(&sku.base.id))
+    }
+
+    /// 批量装配 SKU 列表投影的当前修订名称。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页 SKU 投影
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 成功时原位填充每行 `name` 字段。
+    ///
+    /// # 错误
+    /// MongoDB 批量查询或反序列化失败时返回错误。
+    async fn attach_current_sku_names(&self, rows: &mut [SkuRow], executor: &mut dyn Executor) -> Result<()> {
+        let revision_ids = rows
+            .iter()
+            .filter_map(|row| row.current_revision_id.clone())
+            .collect::<Vec<_>>();
+        if revision_ids.is_empty() {
+            return Ok(());
+        }
+        let revisions = self
+            .db
+            .sku_revisions()
+            .find_many(in_filter("id", revision_ids), executor)
+            .await?;
+        let names = revisions
+            .into_iter()
+            .map(|revision| (revision.base.id, revision.name))
+            .collect::<HashMap<_, _>>();
+        for row in rows {
+            row.name = row
+                .current_revision_id
+                .as_ref()
+                .and_then(|revision_id| names.get(revision_id).cloned());
+        }
+        Ok(())
+    }
+
     /// 建立「稳定 SKU + 首个 SKU 修订 + 修订规格属性值」（跨集合多步骤写入）。
     ///
     /// 依次写入 `skus`、`sku_revisions`、`sku_revision_attribute_values`，
@@ -402,6 +787,58 @@ impl<'a> CatalogRepository<'a> {
         .await?;
         Ok(())
     }
+}
+
+/// 从同一 SKU 的修订集合解析当前修订。
+///
+/// # 参数
+/// * `sku` - SKU 稳定实体
+/// * `revisions` - 该 SKU 的全部修订
+///
+/// # 返回
+/// 优先返回当前指针命中的修订；否则返回最大修订号；无修订时返回 `None`。
+///
+/// # 错误
+/// 无。
+fn select_current_sku_revision<'a>(sku: &Sku, revisions: &'a [SkuRevision]) -> Option<&'a SkuRevision> {
+    sku.stable
+        .current_revision_id
+        .as_deref()
+        .and_then(|current_id| revisions.iter().find(|revision| revision.base.id == current_id))
+        .or_else(|| {
+            revisions
+                .iter()
+                .max_by_key(|revision| revision.revision.revision_no)
+        })
+}
+
+/// 批量解析 SKU 当前修订映射。
+///
+/// # 参数
+/// * `skus` - SKU 稳定实体集合
+/// * `revisions` - 这些 SKU 的全部修订
+///
+/// # 返回
+/// 返回 `sku_id -> 当前修订` 映射，没有修订的 SKU 被忽略。
+///
+/// # 错误
+/// 无。
+fn select_current_sku_revisions(skus: &[Sku], revisions: Vec<SkuRevision>) -> HashMap<String, SkuRevision> {
+    let mut grouped: HashMap<String, Vec<SkuRevision>> = HashMap::new();
+    for revision in revisions {
+        grouped
+            .entry(revision.sku_id.to_string())
+            .or_default()
+            .push(revision);
+    }
+    skus.iter()
+        .filter_map(|sku| {
+            let revisions = grouped.get(&sku.base.id)?;
+            select_current_sku_revision(sku, revisions)
+                .cloned()
+                .map(|revision| (sku.base.id.clone(), revision))
+        })
+        .collect()
 }
 
 /// 按实体构造时的 trim 规则规范化条码（与 `SkuRevision::new` 一致）。

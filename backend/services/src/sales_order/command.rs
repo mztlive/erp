@@ -17,7 +17,7 @@ use entities::ids::{
     SalesOrderWorkingCopyId, WorkflowActionId,
 };
 use entities::sales_order::{
-    BusinessType, LineType, SalesOrder, SalesOrderData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
+    ExternalIdentityResolution, SalesOrder, SalesOrderData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
     SalesOrderWorkingCopyUpdate, WorkingPurpose,
 };
 use entities::source_registry::{ExternalObjectType, SourceSystemType};
@@ -661,10 +661,7 @@ impl SalesOrderService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        if order.contract_id.as_ref() != Some(&req.contract_id)
-            || order.customer_id != customer_id
-            || order.settlement_party_id != settlement_party_id
-        {
+        if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
             return Err(Error::ConflictError(
                 "销售单合同归属已变化，请刷新后重试".to_string(),
             ));
@@ -802,10 +799,7 @@ impl SalesOrderService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         Self::assert_draft_allows_working_copy(&order)?;
-        if order.contract_id.as_ref() != Some(&req.contract_id)
-            || order.customer_id != customer_id
-            || order.settlement_party_id != settlement_party_id
-        {
+        if !order.matches_contract_context(&req.contract_id, &customer_id, &settlement_party_id) {
             return Err(Error::ConflictError(
                 "销售单合同归属已变化，请刷新后重试".to_string(),
             ));
@@ -822,7 +816,7 @@ impl SalesOrderService {
             .await?;
         let (mut working_copy, copy_lines, working_copy_plan) = match active_working_copy {
             Some(mut working_copy) => {
-                if working_copy.base.version != req.version {
+                if !working_copy.matches_version(req.version) {
                     return Err(Error::ConflictError(
                         "数据已被其他请求修改，请刷新后重试".to_string(),
                     ));
@@ -887,9 +881,8 @@ impl SalesOrderService {
         if let Some(existing) = self
             .db
             .sales_order_submissions()
-            .find_one_by_field(
-                "working_copy_id",
-                working_copy.base.id.as_str(),
+            .find_by_working_copy(
+                &SalesOrderWorkingCopyId::new(working_copy.base.id.clone()),
                 &mut NoTransaction,
             )
             .await?
@@ -905,17 +898,15 @@ impl SalesOrderService {
         self.ensure_sellable_working_copy_lines(&copy_lines).await?;
         self.ensure_procurement_responsibility_before_submit(&order, &copy_lines)
             .await?;
-        let existing_submissions = self
+        let latest_submission_no = self
             .db
             .sales_order_submissions()
-            .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
-            .await?;
-        let submission_no = existing_submissions
-            .iter()
+            .find_latest_by_order(&order_id, &mut NoTransaction)
+            .await?
             .map(|submission| submission.submission_no)
-            .max()
-            .unwrap_or(0)
-            + 1;
+            .unwrap_or(0);
+        let submission_no =
+            entities::sales_order::SalesOrderSubmission::next_submission_no(latest_submission_no)?;
         let resolved_identities = self
             .resolve_card_external_identities(&working_copy, &mut NoTransaction)
             .await?;
@@ -1109,7 +1100,7 @@ impl SalesOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if order.base.version != req.expected_version {
+        if !order.matches_version(req.expected_version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
@@ -1180,7 +1171,7 @@ impl SalesOrderService {
             .find_by_id(submission_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::Internal("销售提交幂等收据对应快照缺失".to_string()))?;
-        if submission.sales_order_id.as_ref() != sales_order_id || submission.submitted_by != actor_id {
+        if !submission.matches_receipt_identity(sales_order_id, actor_id) {
             return Err(Error::Internal("销售提交幂等收据与业务对象不一致".to_string()));
         }
         let submission_id = SalesOrderSubmissionId::new(submission.base.id.clone());
@@ -1198,25 +1189,12 @@ impl SalesOrderService {
         working_copy: &SalesOrderWorkingCopy,
         executor: &mut dyn Executor,
     ) -> Result<Option<ResolvedCardExternalIdentities>> {
-        if working_copy.business_type != BusinessType::Voucher {
+        let Some((target_mall_id, voucher_category_id)) = working_copy
+            .voucher_submission_identity_refs(BusinessDate::today())
+            .map_err(|error| Error::ValidationError(error.to_string()))?
+        else {
             return Ok(None);
-        }
-        let target_mall_id = working_copy
-            .target_mall_id
-            .as_ref()
-            .ok_or_else(|| Error::ValidationError("卡券销售提交前必须选择目标商城".to_string()))?;
-        let receivable_due_date = working_copy
-            .receivable_due_date
-            .ok_or_else(|| Error::ValidationError("卡券销售提交前必须填写应收到期日".to_string()))?;
-        if receivable_due_date < BusinessDate::today() {
-            return Err(Error::ValidationError(
-                "应收到期日不得早于服务端提交日".to_string(),
-            ));
-        }
-        let voucher_category_id = working_copy
-            .voucher_category_sku_id
-            .as_ref()
-            .ok_or_else(|| Error::ValidationError("卡券销售提交前必须选择卡券类目".to_string()))?;
+        };
         let mall = self
             .db
             .source_systems()
@@ -1326,22 +1304,14 @@ impl SalesOrderService {
     pub(super) fn sellable_working_copy_refs(
         lines: &[SalesOrderWorkingCopyLine],
     ) -> Result<Vec<(String, String)>> {
-        let refs = lines
+        lines
             .iter()
-            .filter(|line| line.line_type == LineType::GoodsService)
-            .map(|line| {
-                let sku_id = line
-                    .sku_id
-                    .as_ref()
-                    .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU", line.line_no)))?;
-                let revision_id = line
-                    .sku_revision_id
-                    .as_ref()
-                    .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU 修订", line.line_no)))?;
-                Ok((sku_id.to_string(), revision_id.to_string()))
+            .filter_map(|line| match line.sellable_sku_ref() {
+                Ok(Some((sku_id, revision_id))) => Some(Ok((sku_id.to_string(), revision_id.to_string()))),
+                Ok(None) => None,
+                Err(error) => Some(Err(Error::ValidationError(error.to_string()))),
             })
-            .collect::<Result<Vec<_>>>()?;
-        Ok(refs)
+            .collect()
     }
 
     /// 批量执行公司商品池资格校验并对缺失引用 fail-closed。
@@ -1410,7 +1380,7 @@ impl SalesOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if order.base.version != req.version {
+        if !order.matches_version(req.version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
@@ -1465,28 +1435,21 @@ fn ensure_unified_start_command(start: &super::adapter::SalesOrderStartCommand) 
 /// # 错误
 /// 没有提交时返回冲突。
 async fn latest_submission_no(db: &mongodb::Database, sales_order_id: &str) -> Result<u32> {
-    let submissions = db
-        .sales_order_submissions()
-        .find_many(
-            mongodb::bson::doc! { "sales_order_id": sales_order_id },
-            &mut NoTransaction,
-        )
-        .await?;
-    submissions
-        .iter()
-        .map(|item| item.submission_no)
-        .max()
+    db.sales_order_submissions()
+        .find_latest_by_order(&SalesOrderId::new(sales_order_id), &mut NoTransaction)
+        .await?
+        .map(|submission| submission.submission_no)
         .ok_or_else(|| Error::ConflictError("销售单没有可撤回的提交版本".to_string()))
 }
 
 /// 将仓储的全部活动映射命中收敛为提交允许的精确唯一身份。
 fn require_unique_card_external_identity(matches: Vec<String>, object_label: &str) -> Result<String> {
-    match matches.as_slice() {
-        [external_id] => Ok(external_id.clone()),
-        [] => Err(Error::BusinessLogicError(format!(
+    match ExternalIdentityResolution::from_matches(matches) {
+        ExternalIdentityResolution::Resolved(external_id) => Ok(external_id),
+        ExternalIdentityResolution::Missing => Err(Error::BusinessLogicError(format!(
             "目标商城缺少已确认的{object_label}外部身份映射，禁止提交"
         ))),
-        _ => Err(Error::ConflictError(format!(
+        ExternalIdentityResolution::Ambiguous => Err(Error::ConflictError(format!(
             "目标商城存在多个有效{object_label}外部身份映射，禁止提交"
         ))),
     }

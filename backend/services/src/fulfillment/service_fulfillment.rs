@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, PurchaseOrderExt, Transactional};
+use database::{
+    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, PurchaseOrderExt,
+    Transactional,
+};
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::fulfillment::{ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentState};
+use entities::fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
 use entities::ids::ServiceFulfillmentId;
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
@@ -19,7 +20,7 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
 use crate::audit::AuditActor;
-use crate::document_registry::{new_registered_document, persist_registered_document};
+use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
@@ -66,7 +67,11 @@ impl FulfillmentService {
             .service_fulfillments()
             .search_service_fulfillments(&filter, &mut NoTransaction)
             .await?;
-        let page_ids: Vec<String> = page.items.iter().map(|row| row.id.clone()).collect();
+        let page_ids: Vec<ServiceFulfillmentId> = page
+            .items
+            .iter()
+            .map(|row| ServiceFulfillmentId::new(row.id.clone()))
+            .collect();
         let allocation_ids = load_service_allocation_ids(&self.db, &page_ids).await?;
         let items = page
             .items
@@ -155,11 +160,9 @@ impl FulfillmentService {
                         .find_by_id(record_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("服务履约记录不存在".to_string()))?;
-                    if record.status != ServiceFulfillmentState::Draft {
-                        return Err(Error::ConflictError(
-                            "只有草稿状态的服务履约记录可以确认".to_string(),
-                        ));
-                    }
+                    record
+                        .ensure_confirmable()
+                        .map_err(|error| Error::ConflictError(error.to_string()))?;
                     let po = db
                         .purchase_orders()
                         .find_by_id(record.purchase_order_id.as_ref(), session)
@@ -204,23 +207,21 @@ impl FulfillmentService {
 /// 批量查询失败时返回 `RepositoryError`。
 async fn load_service_allocation_ids(
     db: &Database,
-    record_ids: &[String],
+    record_ids: &[ServiceFulfillmentId],
 ) -> Result<HashMap<String, String>> {
-    if record_ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let mut map = HashMap::new();
-    for record in db
-        .service_fulfillments()
-        .find_many(doc! { "id": { "$in": record_ids } }, &mut NoTransaction)
-        .await?
-    {
-        map.insert(
-            record.base.id.clone(),
-            record.purchase_line_sales_allocation_id.to_string(),
-        );
-    }
-    Ok(map)
+    let records = db
+        .fulfillment()
+        .list_service_fulfillments_by_ids(record_ids, &mut NoTransaction)
+        .await?;
+    Ok(records
+        .into_iter()
+        .map(|record| {
+            (
+                record.base.id,
+                record.purchase_line_sales_allocation_id.to_string(),
+            )
+        })
+        .collect())
 }
 
 impl From<ServiceFulfillment> for ServiceFulfillmentView {
@@ -343,26 +344,6 @@ fn ensure_service_fulfillment_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 服务履约所属销售明细作为绑定上下文组织，不得用空串补位。
-///
-/// # 参数
-/// * `record` - 待登记服务履约
-///
-/// # 返回
-/// 返回非空销售明细标识。
-///
-/// # 错误
-/// 销售明细为空时返回校验错误。
-fn service_fulfillment_binding_organization_id(record: &ServiceFulfillment) -> Result<String> {
-    let org = record.sales_order_line_id.to_string();
-    if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "服务履约缺少销售明细，无法构造绑定上下文".to_string(),
-        ));
-    }
-    Ok(org)
-}
-
 /// 构造服务履约创建绑定命令。客户端不得提交定义 ID。
 ///
 /// # 参数
@@ -380,41 +361,13 @@ fn service_fulfillment_bind_command(
         business_object_id: record.base.id.clone(),
         business_object_version: record.base.version,
         context: BindingRevalidationContext {
-            organization_id: service_fulfillment_binding_organization_id(record)?,
+            organization_id: record
+                .registration_context_id()
+                .map_err(|error| Error::ValidationError(error.to_string()))?
+                .to_string(),
             creator_id: creator_id.to_string(),
         },
     })
-}
-
-/// 将绑定端口返回值落实为服务履约注册行：空绑定保持未绑定。
-///
-/// # 参数
-/// * `document` - 服务履约注册行
-/// * `binding` - 统一绑定端口返回值
-///
-/// # 返回
-/// 固定返回 `None`。
-///
-/// # 错误
-/// 端口返回绑定或注册行已预置绑定时返回错误。
-fn apply_service_fulfillment_create_binding(
-    document: &mut BusinessDocument,
-    binding: Option<ApprovalDefinitionBinding>,
-) -> Result<Option<ApprovalDefinitionBinding>> {
-    if binding.is_some() {
-        return Err(Error::Internal(
-            "服务履约为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
-    }
-    if document.approval_binding.is_some() {
-        return Err(Error::Internal("服务履约注册行不得预置审批绑定".to_string()));
-    }
-    if document.document_type != DocumentType::ServiceFulfillment {
-        return Err(Error::Internal(
-            "服务履约创建只能注册 ServiceFulfillment 单据".to_string(),
-        ));
-    }
-    Ok(None)
 }
 
 /// 在调用方事务内登记服务履约单据并证明空绑定。
@@ -426,7 +379,7 @@ fn apply_service_fulfillment_create_binding(
 async fn persist_unbound_service_fulfillment_document(
     db: &Database,
     rbac: &SharedRbacService,
-    mut document: BusinessDocument,
+    document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -435,8 +388,13 @@ async fn persist_unbound_service_fulfillment_document(
     ensure_service_fulfillment_has_no_adapter()?;
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
-    apply_service_fulfillment_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor).await
+    document
+        .ensure_no_approval_registration(DocumentType::ServiceFulfillment, binding.as_ref())
+        .map_err(|error| Error::Internal(error.to_string()))?;
+    db.business_documents()
+        .register_no_approval_document(&document, executor)
+        .await?;
+    Ok(())
 }
 
 /// 为已构造服务履约登记 `BusinessDocument` 并调用统一绑定端口。
@@ -492,10 +450,9 @@ async fn persist_created_service_fulfillment(
 #[cfg(test)]
 mod service_fulfillment_no_approval_tests {
     use super::{
-        apply_service_fulfillment_create_binding, ensure_service_fulfillment_has_no_adapter,
-        ensure_service_fulfillment_skips_approval_binding, policy_of, service_fulfillment_bind_command,
-        service_fulfillment_create_binding_decision, BindingDecision, DocumentApprovalPolicy, DocumentType,
-        ServiceFulfillment, ServiceFulfillmentData,
+        ensure_service_fulfillment_has_no_adapter, ensure_service_fulfillment_skips_approval_binding,
+        policy_of, service_fulfillment_bind_command, service_fulfillment_create_binding_decision,
+        BindingDecision, DocumentApprovalPolicy, DocumentType, ServiceFulfillment, ServiceFulfillmentData,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
@@ -576,15 +533,16 @@ mod service_fulfillment_no_approval_tests {
         assert_eq!(command.business_object_id, record.base.id);
         assert_eq!(command.context.organization_id, "so-line-1");
 
-        let mut document = new_registered_document(
+        let document = new_registered_document(
             &record.base.id,
             DocumentType::ServiceFulfillment,
             record.fulfillment_no.clone(),
         )
         .expect("可注册");
         assert!(document.approval_binding.is_none());
-        let empty = apply_service_fulfillment_create_binding(&mut document, None).expect("空绑定");
-        assert!(empty.is_none());
+        document
+            .ensure_no_approval_registration(DocumentType::ServiceFulfillment, None)
+            .expect("空绑定");
         assert!(document.approval_binding.is_none());
 
         let forged = binding_from_published(
@@ -593,7 +551,9 @@ mod service_fulfillment_no_approval_tests {
             Instant::from_unix_secs(10),
         )
         .expect("测试绑定");
-        assert!(apply_service_fulfillment_create_binding(&mut document, Some(forged)).is_err());
+        assert!(document
+            .ensure_no_approval_registration(DocumentType::ServiceFulfillment, Some(&forged))
+            .is_err());
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。

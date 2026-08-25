@@ -5,7 +5,6 @@ use entities::document_registry::DocumentType;
 use serde::{Deserialize, Serialize};
 
 use super::definition::ApprovalDefinitionService;
-use super::execution::runtime_query::definition_assignee_matches;
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
 use crate::audit::AuditActor;
@@ -36,7 +35,10 @@ impl ApprovalDefinitionService {
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
-    /// * `query` - 类型与检索
+    /// * `query` - 类型、检索串与页大小
+    ///
+    /// # 返回
+    /// 返回 Repository 已按有效后台账号范围过滤的候选人页。
     ///
     /// # 错误
     /// 无定义管理权或类型不适用时返回错误。
@@ -50,16 +52,10 @@ impl ApprovalDefinitionService {
         let accounts = self
             .db()
             .accounts()
-            .find_many(
-                mongodb::bson::doc! { "status": "active", "kind": "admin" },
-                &mut NoTransaction,
-            )
+            .list_active_approval_candidates(query.search.as_deref(), query.limit, &mut NoTransaction)
             .await?;
-        let search = query.search.unwrap_or_default();
         let items = accounts
             .into_iter()
-            .filter(|account| definition_assignee_matches(&account.name, account.secret.account(), &search))
-            .take(query.limit as usize)
             .map(|account| RuntimeAssigneeCandidate {
                 user_id: account.base.id,
                 name: account.name,

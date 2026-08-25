@@ -25,7 +25,7 @@ pub use crate::ids::{
 };
 pub use stock_adjustment::{
     AdjustmentReasonType, StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData,
-    StockAdjustmentState, StockAdjustmentUpdate,
+    StockAdjustmentLineUpdate, StockAdjustmentState, StockAdjustmentUpdate,
 };
 pub use stock_balance::{StockBalance, StockBalanceData, StockBalanceUpdate};
 pub use stock_movement::{MovementDirection, MovementType, StockMovement, StockMovementData};

@@ -9,6 +9,7 @@ use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::WorkItemId;
 use crate::validation::{normalize_optional_text, normalize_required_text};
+use crate::{AccountCore, AccountKind};
 
 use bpm::ApprovalNodeExecutionId;
 
@@ -60,6 +61,395 @@ pub enum WorkItemType {
     DocumentApproval,
 }
 
+/// 工作项简报关联的权威业务对象种类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WorkItemBriefObjectKind {
+    /// 销售单。
+    SalesOrder,
+    /// 采购确认。
+    ProcurementConfirmation,
+    /// 采购单。
+    PurchaseOrder,
+    /// 采购变更单。
+    PurchaseChangeOrder,
+    /// 销售变更单。
+    SalesChangeOrder,
+    /// 应收子账。
+    ReceivableAccount,
+    /// 客户回款。
+    CustomerReceipt,
+    /// 客户退款。
+    CustomerRefund,
+    /// 回款冲正。
+    ReceiptReversal,
+    /// 供应商付款。
+    SupplierPayment,
+    /// 供应商退款。
+    SupplierRefund,
+    /// 付款冲正。
+    PaymentReversal,
+    /// 库存调整。
+    StockAdjustment,
+    /// 供应商结算。
+    SupplierSettlement,
+    /// 旧数据导入批次。
+    LegacyImportBatch,
+    /// 集成异常任务。
+    IntegrationErrorTask,
+    /// 对账差异。
+    ReconciliationDifference,
+    /// 主数据映射任务。
+    MasterMappingTask,
+    /// 供应商履约订单。
+    SupplierFulfillmentOrder,
+    /// 供应商供给。
+    SupplierOffering,
+}
+
+/// 工作项类型、业务对象类型与简报读取权限的固定关系。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkItemBriefRelation {
+    /// 工作项类型。
+    pub work_item_type: WorkItemType,
+    /// 权威业务对象种类。
+    pub object_kind: WorkItemBriefObjectKind,
+    /// 持久化业务对象类型。
+    pub business_object_type: &'static str,
+    /// 读取该对象所需的权限。
+    pub read_permission: &'static str,
+}
+
+/// 工作项责任形成时采用的岗位分离策略。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkItemAssignmentSeparationPolicy {
+    /// 由审批运行时历史决定，通用责任入口失败关闭。
+    ApprovalHistory,
+    /// 排除领域提交人、经办人和既往决定人。
+    DomainActors,
+    /// 只要求具体角色、权限与对象参与关系。
+    RoleAndParticipation,
+    /// 尚无可证明策略，必须失败关闭。
+    FailClosed,
+}
+
+/// 已验证可参与工作项授权计算的账号身份。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AvailableWorkItemAccount {
+    account_id: String,
+    kind: AccountKind,
+}
+
+impl AvailableWorkItemAccount {
+    /// 从统一账号主数据形成可用工作项账号。
+    ///
+    /// # 参数
+    /// * `account` - 当前统一账号事实
+    ///
+    /// # 返回
+    /// 账号处于可登录状态时返回稳定身份与账号类型。
+    ///
+    /// # 错误
+    /// 账号已停用或归档时返回错误。
+    pub fn from_account(account: &AccountCore) -> Result<Self> {
+        if !account.can_login() {
+            return Err(Error::from("工作项账号不可登录"));
+        }
+        Ok(Self {
+            account_id: account.base.id.clone(),
+            kind: account.kind,
+        })
+    }
+
+    /// 从统一账号主数据形成指定类型的可用工作项账号。
+    ///
+    /// # 参数
+    /// * `account` - 当前统一账号事实
+    /// * `expected_kind` - 授权快照冻结的账号类型
+    ///
+    /// # 返回
+    /// 账号可登录且类型未变化时返回稳定身份。
+    ///
+    /// # 错误
+    /// 账号不可登录或类型已变化时返回错误。
+    pub fn from_account_kind(account: &AccountCore, expected_kind: AccountKind) -> Result<Self> {
+        let available = Self::from_account(account)?;
+        if available.kind != expected_kind {
+            return Err(Error::from("工作项账号类型已变化"));
+        }
+        Ok(available)
+    }
+
+    /// 返回稳定账号 ID。
+    ///
+    /// # 返回
+    /// 返回统一账号主键。
+    pub fn account_id(&self) -> &str {
+        &self.account_id
+    }
+
+    /// 返回账号类型。
+    ///
+    /// # 返回
+    /// 返回当前已验证账号类型。
+    pub fn kind(&self) -> AccountKind {
+        self.kind
+    }
+}
+
+/// 业务对象允许工作项引用的权威版本集合。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkItemSubjectVersions {
+    values: Vec<String>,
+}
+
+impl WorkItemSubjectVersions {
+    /// 创建不限制对象版本的关系。
+    ///
+    /// # 返回
+    /// 返回接受任意任务对象版本的空约束。
+    pub fn unrestricted() -> Self {
+        Self::default()
+    }
+
+    /// 创建只接受指定权威版本的关系。
+    ///
+    /// # 参数
+    /// * `values` - 业务对象生产者允许的版本集合
+    ///
+    /// # 返回
+    /// 返回已规范化、排序并去重的版本约束。
+    ///
+    /// # 错误
+    /// 集合为空、任一版本为空或过长时返回错误。
+    pub fn constrained(values: Vec<String>) -> Result<Self> {
+        if values.is_empty() {
+            return Err(Error::from("受约束的工作项对象版本不能为空"));
+        }
+        let mut normalized = values
+            .into_iter()
+            .map(|value| {
+                normalize_required_text(
+                    value,
+                    "工作项对象版本不能为空",
+                    SUBJECT_VERSION_MAX_LEN,
+                    "工作项对象版本过长",
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        normalized.sort();
+        normalized.dedup();
+        Ok(Self { values: normalized })
+    }
+
+    /// 判断任务对象版本是否被当前关系接受。
+    ///
+    /// # 参数
+    /// * `actual` - 工作项冻结的对象版本
+    ///
+    /// # 返回
+    /// 无约束或命中权威版本集合时返回 `true`。
+    pub fn accepts(&self, actual: &str) -> bool {
+        self.values.is_empty() || self.values.iter().any(|expected| expected == actual)
+    }
+
+    /// 返回已规范化的权威版本集合。
+    ///
+    /// # 返回
+    /// 无约束时返回空切片，否则返回排序去重后的版本。
+    pub fn as_slice(&self) -> &[String] {
+        &self.values
+    }
+}
+
+const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ProcurementOrderCreation,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "sales_order",
+        read_permission: "purchase_order:create",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ImportBusinessConfirmation,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "sales_order",
+        read_permission: "sales_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ImportBusinessConfirmation,
+        object_kind: WorkItemBriefObjectKind::ProcurementConfirmation,
+        business_object_type: "procurement_confirmation",
+        read_permission: "procurement_confirmation:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::PurchaseOrderReview,
+        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
+        business_object_type: "purchase_order",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::SalesChangeImpactReview,
+        object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
+        business_object_type: "sales_change_review",
+        read_permission: "sales_change_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::SalesChangeFinanceReview,
+        object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
+        business_object_type: "sales_change_review",
+        read_permission: "sales_change_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "sales_order",
+        read_permission: "sales_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::CardFundsReview,
+        object_kind: WorkItemBriefObjectKind::ReceivableAccount,
+        business_object_type: "receivable_account",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::CardFundsDeltaReview,
+        object_kind: WorkItemBriefObjectKind::ReceivableAccount,
+        business_object_type: "receivable_account",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::InventoryAdjustmentReview,
+        object_kind: WorkItemBriefObjectKind::StockAdjustment,
+        business_object_type: "stock_adjustment",
+        read_permission: "stock_adjustment:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::SupplierSettlementReview,
+        object_kind: WorkItemBriefObjectKind::SupplierSettlement,
+        business_object_type: "supplier_settlement_statement",
+        read_permission: "supplier_settlement_statement:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::ImportBusinessConfirmation,
+        object_kind: WorkItemBriefObjectKind::LegacyImportBatch,
+        business_object_type: "LEGACY_IMPORT_BATCH",
+        read_permission: "legacy_import_batch:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::IntegrationResultUnknown,
+        object_kind: WorkItemBriefObjectKind::IntegrationErrorTask,
+        business_object_type: "integration_error_task",
+        read_permission: "integration_error_task:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::BusinessException,
+        object_kind: WorkItemBriefObjectKind::IntegrationErrorTask,
+        business_object_type: "integration_error_task",
+        read_permission: "integration_error_task:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::BusinessException,
+        object_kind: WorkItemBriefObjectKind::ReconciliationDifference,
+        business_object_type: "reconciliation_difference",
+        read_permission: "reconciliation_difference:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::IntegrationResultUnknown,
+        object_kind: WorkItemBriefObjectKind::ReconciliationDifference,
+        business_object_type: "reconciliation_difference",
+        read_permission: "reconciliation_difference:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::BusinessException,
+        object_kind: WorkItemBriefObjectKind::MasterMappingTask,
+        business_object_type: "MASTER_MAPPING_TASK",
+        read_permission: "master_mapping_task:list",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::IntegrationResultUnknown,
+        object_kind: WorkItemBriefObjectKind::SupplierFulfillmentOrder,
+        business_object_type: "SUPPLIER_FULFILLMENT_ORDER",
+        read_permission: "supplier_fulfillment_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::BusinessException,
+        object_kind: WorkItemBriefObjectKind::SupplierFulfillmentOrder,
+        business_object_type: "SUPPLIER_FULFILLMENT_ORDER",
+        read_permission: "supplier_fulfillment_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::BusinessException,
+        object_kind: WorkItemBriefObjectKind::SupplierOffering,
+        business_object_type: "SUPPLIER_OFFERING",
+        read_permission: "supplier_offering:list",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "voucher_sales_order",
+        read_permission: "sales_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
+        business_object_type: "sales_change_order",
+        read_permission: "sales_change_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
+        business_object_type: "purchase_order",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::PurchaseChangeOrder,
+        business_object_type: "purchase_change_order",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::StockAdjustment,
+        business_object_type: "stock_adjustment",
+        read_permission: "stock_adjustment:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::CustomerReceipt,
+        business_object_type: "customer_receipt",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::CustomerRefund,
+        business_object_type: "customer_refund",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::ReceiptReversal,
+        business_object_type: "receipt_reversal",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::SupplierPayment,
+        business_object_type: "supplier_payment",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::SupplierRefund,
+        business_object_type: "supplier_refund",
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::PaymentReversal,
+        business_object_type: "payment_reversal",
+        read_permission: "purchase_order:detail",
+    },
+];
+
 impl WorkItemType {
     /// 返回面向用户的任务类型标签。
     ///
@@ -107,6 +497,87 @@ impl WorkItemType {
             Self::BusinessException => "BUSINESS_EXCEPTION",
             Self::DocumentApproval => "DOCUMENT_APPROVAL",
         }
+    }
+
+    /// 按业务对象类型解析固定简报关系。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 工作项持久化的业务对象类型
+    ///
+    /// # 返回
+    /// 已注册组合返回对象种类与读取权限；未注册组合返回 `None`。
+    pub fn brief_relation(self, business_object_type: &str) -> Option<&'static WorkItemBriefRelation> {
+        WORK_ITEM_BRIEF_RELATIONS.iter().find(|relation| {
+            relation.work_item_type == self && relation.business_object_type == business_object_type
+        })
+    }
+
+    /// 返回全部固定工作项简报关系。
+    ///
+    /// # 返回
+    /// 返回只读静态关系表，供授权查询形成安全对象形状。
+    pub fn registered_brief_relations() -> &'static [WorkItemBriefRelation] {
+        WORK_ITEM_BRIEF_RELATIONS
+    }
+
+    /// 返回当前任务类型的岗位分离策略。
+    ///
+    /// # 返回
+    /// 返回审批历史、领域参与人、角色参与或失败关闭策略。
+    pub fn assignment_separation_policy(self) -> WorkItemAssignmentSeparationPolicy {
+        match self {
+            Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
+            Self::ProcurementOrderCreation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
+            Self::ImportBusinessConfirmation
+            | Self::PurchaseOrderReview
+            | Self::SalesChangeImpactReview
+            | Self::SalesChangeFinanceReview
+            | Self::CardFundsReview
+            | Self::CardFundsDeltaReview
+            | Self::InventoryAdjustmentReview
+            | Self::SupplierSettlementReview => WorkItemAssignmentSeparationPolicy::DomainActors,
+            Self::IntegrationResultUnknown | Self::BusinessException => {
+                WorkItemAssignmentSeparationPolicy::RoleAndParticipation
+            }
+            Self::OwnershipMigrationSalesConfirmation
+            | Self::OwnershipMigrationFinanceConfirmation
+            | Self::FinanceCorrectionReview => WorkItemAssignmentSeparationPolicy::FailClosed,
+        }
+    }
+
+    /// 判断任务是否为采购建单责任。
+    ///
+    /// # 返回
+    /// 采购建单任务返回 `true`。
+    pub fn is_procurement_order_creation(self) -> bool {
+        self == Self::ProcurementOrderCreation
+    }
+
+    /// 判断任务是否为通用单据审批。
+    ///
+    /// # 返回
+    /// 单据审批任务返回 `true`。
+    pub fn is_document_approval(self) -> bool {
+        self == Self::DocumentApproval
+    }
+
+    /// 判断任务类型与对象类型是否属于 W29 可受控关闭关系。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 任务业务对象类型
+    /// * `has_approval_step` - 是否绑定审批节点执行
+    ///
+    /// # 返回
+    /// 仅非审批的集成异常或对账差异任务返回 `true`。
+    pub fn is_w29_closable(self, business_object_type: &str, has_approval_step: bool) -> bool {
+        !has_approval_step
+            && matches!(
+                (self, business_object_type),
+                (
+                    Self::IntegrationResultUnknown | Self::BusinessException,
+                    "integration_error_task" | "reconciliation_difference"
+                )
+            )
     }
 }
 
@@ -156,6 +627,26 @@ impl DocumentState for WorkItemStatus {
             Self::Completed | Self::Closed => &[],
         }
     }
+}
+
+/// 单据审批任务进入决定编排前的纯领域校验失败原因。
+#[derive(Debug, thiserror::Error, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalDecisionTaskError {
+    /// 当前任务不是单据审批任务。
+    #[error("不是单据审批任务")]
+    NotDocumentApproval,
+    /// 操作人不是当前个人责任人。
+    #[error("无权执行该审批动作")]
+    NotCurrentOwner,
+    /// 任务已经完成或关闭。
+    #[error("APPROVAL_TASK_NOT_OPEN")]
+    NotOpen,
+    /// 调用方持有的任务版本已经过期。
+    #[error("任务版本已变化，请刷新后重试")]
+    VersionConflict,
+    /// 审批任务缺少节点执行引用。
+    #[error("APPROVAL_TASK_NOT_OPEN")]
+    MissingExecution,
 }
 
 /// 当前个人责任的已注册形成来源。
@@ -677,6 +1168,42 @@ impl WorkItem {
         self.complete_open(completed_by, at)
     }
 
+    /// 校验单据审批任务可由当前操作人按给定版本进入决定编排。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前已认证操作人 ID
+    /// * `expected_version` - 调用方期望的任务乐观锁版本
+    ///
+    /// # 返回
+    /// 返回任务绑定的审批节点执行 ID。
+    ///
+    /// # 错误
+    /// 任务类型、责任人、开放状态、版本或执行引用不满足时返回对应错误。
+    ///
+    /// # 关键业务约束
+    /// 校验顺序固定为任务类型、当前责任人、开放状态、版本和执行引用，避免 Service 重复状态判断。
+    pub fn approval_execution_for_decision(
+        &self,
+        actor_id: &str,
+        expected_version: u64,
+    ) -> std::result::Result<ApprovalNodeExecutionId, ApprovalDecisionTaskError> {
+        if self.work_item_type != WorkItemType::DocumentApproval {
+            return Err(ApprovalDecisionTaskError::NotDocumentApproval);
+        }
+        if self.owner_user_id.as_deref() != Some(actor_id) {
+            return Err(ApprovalDecisionTaskError::NotCurrentOwner);
+        }
+        if self.status != WorkItemStatus::Open {
+            return Err(ApprovalDecisionTaskError::NotOpen);
+        }
+        if self.base.version != expected_version {
+            return Err(ApprovalDecisionTaskError::VersionConflict);
+        }
+        self.approval_node_execution_id
+            .clone()
+            .ok_or(ApprovalDecisionTaskError::MissingExecution)
+    }
+
     /// 由审批运行时完成当前开放的单据审批任务。
     ///
     /// # 错误
@@ -720,6 +1247,81 @@ impl WorkItem {
         self.close_open(closed_by, data, at)
     }
 
+    /// 随审批实例取消关闭当前开放任务。
+    ///
+    /// 只有带节点执行引用的单据审批任务可以使用本入口；返回实体保持原持久化
+    /// 版本，供仓储以 `OPEN + version + execution_id` 执行 CAS。
+    ///
+    /// # 参数
+    /// * `closed_by` - 撤回审批的操作人
+    /// * `reason` - 不可为空的撤回原因
+    /// * `at` - 取消发生时间
+    ///
+    /// # 返回
+    /// 返回已进入 `CLOSED` 的任务快照。
+    ///
+    /// # 错误
+    /// 任务类型错误、缺少节点执行、任务非开放或关闭字段非法时返回错误。
+    pub fn close_for_approval_cancellation(
+        mut self,
+        closed_by: impl Into<String>,
+        reason: impl Into<String>,
+        at: Instant,
+    ) -> Result<Self> {
+        self.ensure_document_approval()?;
+        if self.approval_node_execution_id.is_none() {
+            return Err(Error::from("单据审批任务缺少节点执行引用"));
+        }
+        self.close_open(
+            closed_by,
+            WorkItemCloseData {
+                close_reason: reason.into(),
+            },
+            at,
+        )?;
+        Ok(self)
+    }
+
+    /// 批量形成审批取消所需的已关闭任务快照。
+    ///
+    /// 任一任务不满足关闭规则时整体返回错误，不产生部分持久化结果；空集合用于
+    /// 已受阻且没有开放任务的合法取消路径。
+    ///
+    /// # 参数
+    /// * `items` - 当前节点执行关联的开放审批任务
+    /// * `closed_by` - 撤回审批的操作人
+    /// * `reason` - 不可为空的撤回原因
+    /// * `at` - 取消发生时间
+    ///
+    /// # 返回
+    /// 返回与输入顺序一致的已关闭任务快照。
+    ///
+    /// # 错误
+    /// 任一任务不满足 [`Self::close_for_approval_cancellation`] 规则时返回错误。
+    pub fn close_all_for_approval_cancellation(
+        items: Vec<Self>,
+        closed_by: &str,
+        reason: &str,
+        at: Instant,
+    ) -> Result<Vec<Self>> {
+        items
+            .into_iter()
+            .map(|item| item.close_for_approval_cancellation(closed_by, reason, at))
+            .collect()
+    }
+
+    /// 应用开放任务的受控关闭字段。
+    ///
+    /// # 参数
+    /// * `closed_by` - 关闭操作人
+    /// * `data` - 已选择的关闭原因
+    /// * `at` - 关闭时间
+    ///
+    /// # 返回
+    /// 成功时无返回值。
+    ///
+    /// # 错误
+    /// 任务非开放、操作人或关闭原因非法时返回错误。
     fn close_open(
         &mut self,
         closed_by: impl Into<String>,
@@ -762,6 +1364,69 @@ impl WorkItem {
         self.status == WorkItemStatus::Open && self.owner_user_id.as_deref() == Some(user_id)
     }
 
+    /// 校验任务可以进入通用责任变更或关闭入口。
+    ///
+    /// # 返回
+    /// 非单据审批任务返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 单据审批任务或带审批节点执行引用时返回固定禁止错误。
+    pub fn ensure_generic_responsibility_mutation(&self) -> Result<()> {
+        if self.approval_node_execution_id.is_some() || self.work_item_type.is_document_approval() {
+            return Err(Error::from("APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN"));
+        }
+        Ok(())
+    }
+
+    /// 判断任务是否绑定指定业务对象身份。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 期望业务对象类型
+    /// * `business_object_id` - 期望业务对象 ID
+    ///
+    /// # 返回
+    /// 类型与稳定 ID 均匹配时返回 `true`。
+    pub fn matches_business_object(&self, business_object_type: &str, business_object_id: &str) -> bool {
+        self.business_object_type == business_object_type && self.business_object_id == business_object_id
+    }
+
+    /// 判断任务是否冻结指定业务对象版本。
+    ///
+    /// # 参数
+    /// * `subject_version` - 权威对象版本
+    ///
+    /// # 返回
+    /// 与任务冻结版本一致时返回 `true`。
+    pub fn matches_subject_version(&self, subject_version: &str) -> bool {
+        self.subject_version == subject_version
+    }
+
+    /// 判断任务是否属于 W29 可受控关闭关系。
+    ///
+    /// # 返回
+    /// 非审批的集成异常或对账差异任务返回 `true`。
+    pub fn is_w29_closable(&self) -> bool {
+        self.work_item_type.is_w29_closable(
+            &self.business_object_type,
+            self.approval_node_execution_id.is_some(),
+        )
+    }
+
+    /// 判断本任务可否作为另一 W29 任务的正式替代任务。
+    ///
+    /// # 参数
+    /// * `current` - 待关闭的当前任务
+    ///
+    /// # 返回
+    /// 本任务不同于当前任务、仍开放、同任务类型且同对象类别时返回 `true`。
+    pub fn is_w29_replacement_for(&self, current: &Self) -> bool {
+        self.base.id != current.base.id
+            && self.status == WorkItemStatus::Open
+            && self.is_w29_closable()
+            && self.work_item_type == current.work_item_type
+            && self.business_object_type == current.business_object_type
+    }
+
     fn complete_open(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         let completed_by = normalize_required_text(
             completed_by.into(),
@@ -778,10 +1443,7 @@ impl WorkItem {
     }
 
     fn ensure_generic_mutation(&self) -> Result<()> {
-        if self.work_item_type == WorkItemType::DocumentApproval {
-            return Err(Error::from("APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN"));
-        }
-        Ok(())
+        self.ensure_generic_responsibility_mutation()
     }
 
     fn ensure_document_approval(&self) -> Result<()> {
@@ -953,11 +1615,20 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType};
+    use super::{
+        ApprovalDecisionTaskError, AssignmentSource, AvailableWorkItemAccount, WorkItem,
+        WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemData, WorkItemPriority,
+        WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+    };
     use crate::common::state::ensure_transition;
     use crate::common::time::Instant;
     use crate::ids::WorkItemId;
+    use crate::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
 
+    /// 构造独立任务的最小测试数据。
+    ///
+    /// # 返回
+    /// 返回带可规范化空白和固定责任人的输入。
     fn direct_data() -> WorkItemData {
         WorkItemData {
             work_item_type: WorkItemType::ImportBusinessConfirmation,
@@ -973,6 +1644,84 @@ mod tests {
             reason_code: Some("IMPORT_READY".to_string()),
             impact_summary: Some(" 待确认导入范围 ".to_string()),
         }
+    }
+
+    /// 构造绑定固定节点执行的开放审批任务。
+    ///
+    /// # 返回
+    /// 返回责任人为 `alice`、执行为 `exec-1` 的任务。
+    fn approval_item(id: &str) -> WorkItem {
+        WorkItem::new_document_approval(
+            WorkItemId::new(id),
+            super::DocumentApprovalWorkItemData {
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
+                business_object_type: "stock_adjustment".into(),
+                business_object_id: "adj-1".into(),
+                subject_version: "1".into(),
+                owner_role: "stock_adjustment_approver".into(),
+                owner_organization_id: "org-1".into(),
+                owner_user_id: " alice ".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(100),
+        )
+        .unwrap()
+    }
+
+    fn account(status: AccountStatus) -> AccountCore {
+        AccountCore::new(
+            "account-1".to_string(),
+            AccountCoreData {
+                secret: Secret::new(LoginAccount::new("worker").unwrap(), "password123").unwrap(),
+                name: "处理人".to_string(),
+                kind: AccountKind::Admin,
+                status,
+                email: None,
+                phone: None,
+                avatar: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn account_and_subject_version_value_objects_fail_closed() {
+        let active = account(AccountStatus::Active);
+        let available = AvailableWorkItemAccount::from_account_kind(&active, AccountKind::Admin).unwrap();
+        assert_eq!(available.account_id(), "account-1");
+        assert_eq!(available.kind(), AccountKind::Admin);
+        assert!(AvailableWorkItemAccount::from_account(&account(AccountStatus::Suspended)).is_err());
+
+        let versions = WorkItemSubjectVersions::constrained(vec![
+            "v2".to_string(),
+            " v1 ".to_string(),
+            "v2".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(versions.as_slice(), &["v1".to_string(), "v2".to_string()]);
+        assert!(versions.accepts("v1"));
+        assert!(!versions.accepts("v3"));
+        assert!(WorkItemSubjectVersions::constrained(vec![" ".to_string()]).is_err());
+        assert!(WorkItemSubjectVersions::unrestricted().accepts("any"));
+    }
+
+    #[test]
+    fn brief_relations_and_assignment_policies_are_entity_owned() {
+        let relation = WorkItemType::DocumentApproval
+            .brief_relation("stock_adjustment")
+            .unwrap();
+        assert_eq!(relation.object_kind, WorkItemBriefObjectKind::StockAdjustment);
+        assert_eq!(relation.read_permission, "stock_adjustment:detail");
+        assert!(WorkItemType::DocumentApproval.brief_relation("unknown").is_none());
+        assert_eq!(
+            WorkItemType::PurchaseOrderReview.assignment_separation_policy(),
+            WorkItemAssignmentSeparationPolicy::DomainActors
+        );
+        assert_eq!(
+            WorkItemType::DocumentApproval.assignment_separation_policy(),
+            WorkItemAssignmentSeparationPolicy::ApprovalHistory
+        );
     }
 
     #[test]
@@ -1113,30 +1862,133 @@ mod tests {
         assert_eq!(roundtrip, item);
     }
 
+    /// 单据审批任务固定带个人责任与节点执行，且禁止通用改派。
+    ///
+    /// 审批运行时完成后任务进入不可逆终态。
     #[test]
     fn document_approval_requires_owner_and_execution() {
-        let at = Instant::from_unix_secs(100);
-        let mut item = WorkItem::new_document_approval(
-            WorkItemId::new("wi-approval"),
-            super::DocumentApprovalWorkItemData {
-                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
-                business_object_type: "stock_adjustment".into(),
-                business_object_id: "adj-1".into(),
-                subject_version: "1".into(),
-                owner_role: "stock_adjustment_approver".into(),
-                owner_organization_id: "org-1".into(),
-                owner_user_id: " alice ".into(),
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-            },
-            at,
-        )
-        .unwrap();
+        let mut item = approval_item("wi-approval");
         assert_eq!(item.work_item_type, WorkItemType::DocumentApproval);
         assert!(item.reassign("bob", Instant::from_unix_secs(110)).is_err());
         item.complete_by_approval_runtime("alice", Instant::from_unix_secs(110))
             .unwrap();
         assert_eq!(item.status, WorkItemStatus::Completed);
         assert!(ensure_transition(WorkItemStatus::Open, WorkItemStatus::Completed).is_ok());
+    }
+
+    /// 决定前置规则直接返回执行引用，并区分责任、状态、版本与引用失败。
+    #[test]
+    fn approval_decision_preconditions_are_owned_by_work_item() {
+        let item = approval_item("wi-decision");
+        let version = item.base.version;
+        assert_eq!(
+            item.approval_execution_for_decision("alice", version)
+                .unwrap()
+                .as_ref(),
+            "exec-1"
+        );
+        assert_eq!(
+            item.approval_execution_for_decision("bob", version),
+            Err(ApprovalDecisionTaskError::NotCurrentOwner)
+        );
+        assert_eq!(
+            item.approval_execution_for_decision("alice", version + 1),
+            Err(ApprovalDecisionTaskError::VersionConflict)
+        );
+
+        let mut closed = item.clone();
+        closed
+            .close_by_approval_runtime(
+                "alice",
+                super::WorkItemCloseData {
+                    close_reason: "运行时关闭".to_string(),
+                },
+                Instant::from_unix_secs(110),
+            )
+            .unwrap();
+        assert_eq!(
+            closed.approval_execution_for_decision("alice", version),
+            Err(ApprovalDecisionTaskError::NotOpen)
+        );
+
+        let mut missing = item;
+        missing.approval_node_execution_id = None;
+        assert_eq!(
+            missing.approval_execution_for_decision("alice", version),
+            Err(ApprovalDecisionTaskError::MissingExecution)
+        );
+    }
+
+    /// 审批取消关闭任务时保留 CAS 版本并写入受控关闭事实。
+    ///
+    /// 批量入口保持输入顺序，受阻取消的空任务集合也是合法结果。
+    #[test]
+    fn approval_cancellation_closes_open_tasks_without_advancing_version() {
+        let item = approval_item("wi-cancel");
+        let expected_version = item.base.version;
+        let closed = WorkItem::close_all_for_approval_cancellation(
+            vec![item],
+            "submitter",
+            "撤回重改",
+            Instant::from_unix_secs(120),
+        )
+        .unwrap();
+
+        assert_eq!(closed.len(), 1);
+        assert_eq!(closed[0].base.version, expected_version);
+        assert_eq!(closed[0].status, WorkItemStatus::Closed);
+        assert_eq!(closed[0].closed_by.as_deref(), Some("submitter"));
+        assert_eq!(closed[0].close_reason.as_deref(), Some("撤回重改"));
+        assert_eq!(
+            closed[0].approval_node_execution_id.as_ref().map(AsRef::as_ref),
+            Some("exec-1")
+        );
+        assert!(WorkItem::close_all_for_approval_cancellation(
+            Vec::new(),
+            "submitter",
+            "受阻取消",
+            Instant::from_unix_secs(121),
+        )
+        .unwrap()
+        .is_empty());
+    }
+
+    /// 审批取消不得关闭独立任务、缺失执行引用或已终态任务。
+    ///
+    /// 任一非法任务都会使批量规则整体失败关闭。
+    #[test]
+    fn approval_cancellation_rejects_invalid_task_facts() {
+        let generic = WorkItem::new_at(
+            WorkItemId::new("wi-generic"),
+            direct_data(),
+            Instant::from_unix_secs(100),
+        )
+        .unwrap();
+        assert!(generic
+            .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
+            .is_err());
+
+        let mut missing_execution = approval_item("wi-missing-execution");
+        missing_execution.approval_node_execution_id = None;
+        assert!(missing_execution
+            .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
+            .is_err());
+
+        let completed = approval_item("wi-completed");
+        let mut completed = completed;
+        completed
+            .complete_by_approval_runtime("alice", Instant::from_unix_secs(110))
+            .unwrap();
+        assert!(completed
+            .close_for_approval_cancellation("submitter", "撤回", Instant::from_unix_secs(120))
+            .is_err());
+
+        assert!(WorkItem::close_all_for_approval_cancellation(
+            vec![approval_item("wi-valid"), approval_item("wi-invalid")],
+            "",
+            "撤回",
+            Instant::from_unix_secs(120),
+        )
+        .is_err());
     }
 }

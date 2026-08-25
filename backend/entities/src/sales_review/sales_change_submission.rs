@@ -139,6 +139,91 @@ pub struct SalesChangeSubmissionData {
     pub lines: Vec<SalesChangeSubmissionLineData>,
 }
 
+impl SalesChangeSubmissionData {
+    /// 从销售变更工作副本构建不可变变更提交数据。
+    ///
+    /// # 参数
+    /// * `change_order` - 当前销售变更单
+    /// * `working_copy` - 该变更单冻结的销售工作副本
+    /// * `lines` - 工作副本的全部冻结明细
+    /// * `submission_no` - 本次严格递增的提交序号
+    /// * `submitted_at` - 提交时间
+    /// * `submitted_by` - 提交人
+    ///
+    /// # 返回
+    /// 返回完成 D13 → D14 类型映射、快照复制与金额汇总后的提交数据。
+    ///
+    /// # 错误
+    /// 工作副本与变更单关系不一致、明细不属于工作副本或字段组非法时返回错误。
+    pub fn from_sales_working_copy(
+        change_order: &super::SalesChangeOrder,
+        working_copy: &crate::sales_order::SalesOrderWorkingCopy,
+        lines: &[crate::sales_order::SalesOrderWorkingCopyLine],
+        submission_no: u32,
+        submitted_at: Instant,
+        submitted_by: impl Into<String>,
+    ) -> Result<Self> {
+        let change_order_id = SalesChangeOrderId::new(change_order.base.id.clone());
+        if working_copy.working_purpose != crate::sales_order::WorkingPurpose::SalesChange
+            || working_copy.sales_change_order_id.as_ref() != Some(&change_order_id)
+            || working_copy.sales_order_id != change_order.sales_order_id
+            || working_copy.base_revision_id.as_ref() != Some(&change_order.base_revision_id)
+        {
+            return Err(Error::from("变更工作副本与销售变更单关系不一致"));
+        }
+        let working_copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
+        if lines
+            .iter()
+            .any(|line| !line.belongs_to_working_copy(&working_copy_id))
+        {
+            return Err(Error::from("变更工作副本明细归属不一致"));
+        }
+        let line_data = lines
+            .iter()
+            .map(SalesChangeSubmissionLineData::from_sales_working_copy)
+            .collect::<Result<Vec<_>>>()?;
+        let (gross_amount, net_amount, tax_amount) =
+            crate::sales_order::SalesOrderWorkingCopyLine::amount_totals(lines);
+        Ok(Self {
+            sales_change_order_id: change_order_id,
+            submission_no,
+            base_revision_id: change_order.base_revision_id.clone(),
+            sales_order_id: change_order.sales_order_id.clone(),
+            working_copy_id,
+            working_copy_version: working_copy.draft_version,
+            business_type: working_copy.business_type.into(),
+            customer_id: working_copy.customer_id.clone(),
+            contract_revision_id: working_copy.contract_revision_id.clone(),
+            settlement_party_id: working_copy.settlement_party_id.clone(),
+            snapshot: super::snapshot::HeaderSnapshotData {
+                customer_name: working_copy.customer_snapshot.customer_name.clone(),
+                contract_no: working_copy
+                    .contract_snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.contract_no.clone()),
+                settlement_party_name: working_copy
+                    .settlement_party_snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.settlement_party_name.clone()),
+                payment_term_code: working_copy.payment_term_snapshot.payment_term_code.clone(),
+                payment_term_name: working_copy.payment_term_snapshot.payment_term_name.clone(),
+                invoice_type: working_copy.invoice_requirement_snapshot.invoice_type.clone(),
+                tax_point: working_copy.invoice_requirement_snapshot.tax_point.clone(),
+            },
+            project_name: working_copy.project_name.clone(),
+            business_remark: working_copy.business_remark.clone(),
+            voucher_category_sku_id: working_copy.voucher_category_sku_id.clone(),
+            voucher_expiry_at: working_copy.voucher_expiry_at,
+            gross_amount,
+            net_amount,
+            tax_amount,
+            submitted_at,
+            submitted_by: submitted_by.into(),
+            lines: line_data,
+        })
+    }
+}
+
 /// 变更提交实体（不可变目标快照，数据模型 §6.5）。
 ///
 /// `StableBase` 是 P0 冻结基元且未派生 `PartialEq`，因此本实体手工实现
@@ -331,6 +416,22 @@ impl SalesChangeSubmission {
         Err(Error::from("变更提交形成后不可更新"))
     }
 
+    /// 由当前最大提交序号计算下一次变更提交序号。
+    ///
+    /// # 参数
+    /// * `current_max` - 当前已冻结提交中的最大序号；尚无提交时为 `0`
+    ///
+    /// # 返回
+    /// 返回严格递增的下一提交序号。
+    ///
+    /// # 错误
+    /// 当前序号达到 `u32::MAX` 时返回错误。
+    pub fn next_submission_no(current_max: u32) -> Result<u32> {
+        current_max
+            .checked_add(1)
+            .ok_or_else(|| Error::from("变更提交序号溢出"))
+    }
+
     /// 通过变更提交（`InReview → Approved`）。
     ///
     /// # 参数
@@ -414,6 +515,94 @@ pub struct SalesChangeSubmissionLineData {
     pub goods: Option<GoodsLineFields>,
     /// 卡券字段组。
     pub voucher: Option<VoucherLineDraft>,
+}
+
+impl SalesChangeSubmissionLineData {
+    /// 从销售工作副本行映射变更提交行数据。
+    ///
+    /// # 参数
+    /// * `line` - D13 销售工作副本冻结行
+    ///
+    /// # 返回
+    /// 返回 D14 变更提交所需的同形字段组与公共快照。
+    ///
+    /// # 错误
+    /// 行类型与字段组不一致，或任一必填字段缺失时返回错误。
+    pub fn from_sales_working_copy(line: &crate::sales_order::SalesOrderWorkingCopyLine) -> Result<Self> {
+        let goods = if line.line_type == crate::sales_order::LineType::GoodsService {
+            Some(GoodsLineFields {
+                sku_id: line
+                    .sku_id
+                    .clone()
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", line.line_no)))?,
+                sku_revision_id: line
+                    .sku_revision_id
+                    .clone()
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", line.line_no)))?,
+                welfare_scenario: line.welfare_scenario.map(Into::into),
+                service_region: line.service_region.clone(),
+                fulfillment_mode: line
+                    .fulfillment_mode
+                    .map(Into::into)
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少履约方式", line.line_no)))?,
+                fulfillment_due_at: line
+                    .fulfillment_due_at
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", line.line_no)))?,
+                quantity: line
+                    .quantity
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", line.line_no)))?,
+                base_unit_code: line
+                    .base_unit_code
+                    .clone()
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", line.line_no)))?,
+                unit_price_gross: line
+                    .unit_price_gross
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", line.line_no)))?,
+            })
+        } else {
+            None
+        };
+        let voucher = if line.line_type == crate::sales_order::LineType::Voucher {
+            Some(VoucherLineDraft {
+                face_value: line
+                    .face_value
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", line.line_no)))?,
+                card_count: line
+                    .card_count
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", line.line_no)))?,
+                unit_price_gross: line
+                    .unit_price_gross
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", line.line_no)))?,
+                face_value_total: line
+                    .face_value_total
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", line.line_no)))?,
+                transaction_amount: line
+                    .transaction_amount
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", line.line_no)))?,
+                gift_amount: line
+                    .gift_amount
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", line.line_no)))?,
+                gift_rate: line.gift_rate,
+                card_form: line
+                    .card_form
+                    .map(Into::into)
+                    .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", line.line_no)))?,
+            })
+        } else {
+            None
+        };
+        Ok(Self {
+            sales_order_line_id: line.sales_order_line_id.clone(),
+            line_no: line.line_no,
+            line_type: line.line_type.into(),
+            sales_tax_rate: line.sales_tax_rate,
+            item_name_snapshot: line.item_name_snapshot.clone(),
+            spec_snapshot: line.spec_snapshot.clone(),
+            unit_snapshot: line.unit_snapshot.clone(),
+            goods,
+            voucher,
+        })
+    }
 }
 
 /// 变更提交行实体（不可变目标明细，数据模型 §6.5）。
@@ -698,6 +887,128 @@ mod tests {
             ..header_data()
         };
         assert!(SalesChangeSubmission::new(SalesChangeSubmissionId::new("cs-1"), duplicated).is_err());
+    }
+
+    #[test]
+    fn change_submission_sequence_and_sales_line_mapping_are_entity_owned() {
+        assert_eq!(SalesChangeSubmission::next_submission_no(0).unwrap(), 1);
+        assert_eq!(SalesChangeSubmission::next_submission_no(2).unwrap(), 3);
+        assert!(SalesChangeSubmission::next_submission_no(u32::MAX).is_err());
+
+        let line = crate::sales_order::SalesOrderWorkingCopyLine {
+            base: BaseModel::new("wcl-1".to_string()),
+            working_copy_id: crate::ids::SalesOrderWorkingCopyId::new("wc-1"),
+            sales_order_line_id: SalesOrderLineId::new("line-1"),
+            line_no: 1,
+            line_type: crate::sales_order::LineType::GoodsService,
+            gross_amount: amt("29.97"),
+            net_amount: amt("26.07"),
+            tax_amount: amt("3.90"),
+            sales_tax_rate: rate("0.130000"),
+            item_name_snapshot: "商品".to_string(),
+            spec_snapshot: None,
+            unit_snapshot: Some("件".to_string()),
+            sku_id: Some(SkuId::new("sku-1")),
+            sku_revision_id: Some(crate::ids::SkuRevisionId::new("skurev-1")),
+            welfare_scenario: Some(crate::sales_order::WelfareScenario::MealSubsidy),
+            service_region: None,
+            fulfillment_mode: Some(crate::sales_order::FulfillmentMode::SupplierDirect),
+            fulfillment_due_at: Some(Instant::from_unix_secs(1_800_000_000)),
+            quantity: Some(qty("3.000000")),
+            base_unit_code: Some("件".to_string()),
+            unit_price_gross: Some(price("9.9900")),
+            face_value: None,
+            card_count: None,
+            face_value_total: None,
+            transaction_amount: None,
+            gift_amount: None,
+            gift_rate: None,
+            card_form: None,
+        };
+        let mapped = SalesChangeSubmissionLineData::from_sales_working_copy(&line).unwrap();
+        assert_eq!(mapped.line_type, LineType::GoodsService);
+        let goods = mapped.goods.unwrap();
+        assert_eq!(goods.sku_id.as_ref(), "sku-1");
+        assert_eq!(goods.welfare_scenario, Some(WelfareScenario::MealSubsidy));
+        assert_eq!(goods.fulfillment_mode, FulfillmentMode::SupplierDirect);
+
+        let change_order = super::super::SalesChangeOrder::new(
+            SalesChangeOrderId::new("co-1"),
+            super::super::SalesChangeOrderData {
+                sales_order_id: SalesOrderId::new("o-1"),
+                base_revision_id: SalesOrderRevisionId::new("rev-1"),
+                change_type: super::super::SalesChangeType::Quantity,
+                reason: "调整数量".to_string(),
+            },
+            "sales-1",
+        )
+        .unwrap();
+        let working_copy = crate::sales_order::SalesOrderWorkingCopy {
+            base: BaseModel::new("wc-1".to_string()),
+            stable: StableBase::new(crate::sales_order::WorkingCopyStatus::Editing, "sales-1"),
+            sales_order_id: SalesOrderId::new("o-1"),
+            working_purpose: crate::sales_order::WorkingPurpose::SalesChange,
+            sales_change_order_id: Some(SalesChangeOrderId::new("co-1")),
+            base_revision_id: Some(SalesOrderRevisionId::new("rev-1")),
+            draft_version: 2,
+            content_hash: "hash-1".to_string(),
+            editor_user_id: "sales-1".to_string(),
+            business_type: crate::sales_order::BusinessType::GoodsService,
+            customer_id: CustomerAccountId::new("cust-1"),
+            contract_id: Some(crate::ids::ContractId::new("contract-1")),
+            contract_revision_id: Some(ContractRevisionId::new("contract-rev-1")),
+            settlement_party_id: PartyId::new("party-1"),
+            customer_snapshot: crate::sales_order::CustomerSnapshot {
+                customer_name: "东方企业".to_string(),
+            },
+            contract_snapshot: Some(crate::sales_order::ContractSnapshot {
+                contract_no: "HT-1".to_string(),
+            }),
+            settlement_party_snapshot: Some(crate::sales_order::SettlementPartySnapshot {
+                settlement_party_name: "结算中心".to_string(),
+            }),
+            payment_term_snapshot: crate::sales_order::PaymentTermSnapshot {
+                payment_term_code: "NET30".to_string(),
+                payment_term_name: "月结30天".to_string(),
+            },
+            invoice_requirement_snapshot: crate::sales_order::InvoiceRequirementSnapshot {
+                invoice_type: "专票".to_string(),
+                tax_point: "6".to_string(),
+            },
+            project_name: None,
+            business_remark: None,
+            voucher_category_sku_id: None,
+            voucher_expiry_at: None,
+            target_mall_id: None,
+            receivable_due_date: None,
+            gross_amount: amt("29.97"),
+            net_amount: amt("26.07"),
+            tax_amount: amt("3.90"),
+        };
+        let data = SalesChangeSubmissionData::from_sales_working_copy(
+            &change_order,
+            &working_copy,
+            std::slice::from_ref(&line),
+            3,
+            Instant::from_unix_secs(1_800_000_000),
+            "sales-1",
+        )
+        .unwrap();
+        assert_eq!(data.submission_no, 3);
+        assert_eq!(data.working_copy_version, 2);
+        assert_eq!(data.gross_amount, amt("29.97"));
+
+        let mut unrelated_copy = working_copy;
+        unrelated_copy.base.id = "wc-2".to_string();
+        assert!(SalesChangeSubmissionData::from_sales_working_copy(
+            &change_order,
+            &unrelated_copy,
+            std::slice::from_ref(&line),
+            3,
+            Instant::from_unix_secs(1_800_000_000),
+            "sales-1",
+        )
+        .is_err());
     }
 
     #[test]

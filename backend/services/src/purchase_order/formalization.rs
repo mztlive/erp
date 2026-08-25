@@ -6,8 +6,7 @@ use entities::ids::{PayableEntryId, PurchaseOrderRevisionId, PurchaseOrderRevisi
 use entities::money::Amount;
 use entities::purchase_order::{
     PurchaseChangeSubmission, PurchaseChangeSubmissionLine, PurchaseOrder, PurchaseOrderRevision,
-    PurchaseOrderRevisionData, PurchaseOrderRevisionLine, PurchaseOrderRevisionLineData,
-    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    PurchaseOrderRevisionLine, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use id_generator::next_id;
 
@@ -20,18 +19,10 @@ impl PurchaseOrderService {
     pub(super) async fn next_revision_no(&self, order: &PurchaseOrder) -> Result<u32> {
         let existing = self
             .db
-            .purchase_order_revisions()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_id": order.base.id.clone() },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_revisions_by_order(&order.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        Ok(existing
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0)
-            + 1)
+        PurchaseOrderRevision::next_revision_no(&existing).map_err(Into::into)
     }
 
     /// 形成生效版本与版本行（§8.1.4 复制已通过提交）。
@@ -46,48 +37,28 @@ impl PurchaseOrderService {
         submission_lines: &[PurchaseOrderSubmissionLine],
         revision_no: u32,
     ) -> Result<(PurchaseOrderRevision, Vec<PurchaseOrderRevisionLine>)> {
-        let _ = submission_lines;
-        let revision = PurchaseOrderRevision::new(
-            PurchaseOrderRevisionId::new(next_id()),
-            PurchaseOrderRevisionData {
-                purchase_order_id: order.base.id.clone().into(),
-                revision_no,
-                supplier_revision_id: submission.supplier_revision_id.clone(),
-                supplier_snapshot: submission.supplier_snapshot.clone(),
-                payment_term_snapshot: submission.payment_term_snapshot.clone(),
-                gross_amount: submission.gross_amount,
-                net_amount: submission.net_amount,
-                tax_amount: submission.tax_amount,
-                effective_at: Instant::now(),
-            },
-        )?;
-        let mut revision_lines = Vec::with_capacity(submission_lines.len());
-        for line in submission_lines {
-            revision_lines.push(PurchaseOrderRevisionLine::new(
-                PurchaseOrderRevisionLineId::new(next_id()),
-                PurchaseOrderRevisionLineData {
-                    purchase_order_revision_id: revision.base.id.clone().into(),
-                    line_no: line.line_no,
-                    line_type: line.line_type,
-                    procurement_confirmation_line_id: line.procurement_confirmation_line_id.clone(),
-                    sku_id: line.sku_id.clone(),
-                    sku_revision_id: line.sku_revision_id.clone(),
-                    product_name_snapshot: line.product_name_snapshot.clone(),
-                    specification_snapshot: line.specification_snapshot.clone(),
-                    quantity: line.quantity,
-                    base_unit_code: line.base_unit_code.clone(),
-                    unit_cost_gross: line.unit_cost_gross,
-                    gross_amount: line.gross_amount,
-                    net_amount: line.net_amount,
-                    tax_amount: line.tax_amount,
-                    input_tax_rate: line.input_tax_rate,
-                    expected_delivery_date: line.expected_delivery_date,
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
-                    allocated_quantity: line.allocated_quantity,
-                },
-            )?);
+        if submission.purchase_order_id.as_ref() != order.base.id {
+            return Err(crate::errors::Error::BusinessLogicError(
+                "采购提交不属于当前采购单".to_string(),
+            ));
         }
+        let revision = PurchaseOrderRevision::from_submission(
+            PurchaseOrderRevisionId::new(next_id()),
+            revision_no,
+            submission,
+            Instant::now(),
+        )?;
+        let revision_id = PurchaseOrderRevisionId::new(revision.base.id.clone());
+        let revision_lines = submission_lines
+            .iter()
+            .map(|line| {
+                PurchaseOrderRevisionLine::from_submission_line(
+                    PurchaseOrderRevisionLineId::new(next_id()),
+                    revision_id.clone(),
+                    line,
+                )
+            })
+            .collect::<entities::Result<Vec<_>>>()?;
         Ok((revision, revision_lines))
     }
 
@@ -99,47 +70,24 @@ impl PurchaseOrderService {
         lines: &[PurchaseChangeSubmissionLine],
         revision_no: u32,
     ) -> Result<(PurchaseOrderRevision, Vec<PurchaseOrderRevisionLine>)> {
-        let revision = PurchaseOrderRevision::new(
+        let revision = PurchaseOrderRevision::from_change_submission(
             PurchaseOrderRevisionId::new(next_id()),
-            PurchaseOrderRevisionData {
-                purchase_order_id: order.base.id.clone().into(),
-                revision_no,
-                supplier_revision_id: submission.supplier_revision_id.clone(),
-                supplier_snapshot: submission.supplier_snapshot.clone(),
-                payment_term_snapshot: submission.payment_term_snapshot.clone(),
-                gross_amount: submission.gross_amount,
-                net_amount: submission.net_amount,
-                tax_amount: submission.tax_amount,
-                effective_at: Instant::now(),
-            },
+            order.base.id.clone().into(),
+            revision_no,
+            submission,
+            Instant::now(),
         )?;
-        let mut revision_lines = Vec::with_capacity(lines.len());
-        for line in lines {
-            revision_lines.push(PurchaseOrderRevisionLine::new(
-                PurchaseOrderRevisionLineId::new(next_id()),
-                PurchaseOrderRevisionLineData {
-                    purchase_order_revision_id: revision.base.id.clone().into(),
-                    line_no: line.line_no,
-                    line_type: line.line_type,
-                    procurement_confirmation_line_id: line.procurement_confirmation_line_id.clone(),
-                    sku_id: line.sku_id.clone(),
-                    sku_revision_id: line.sku_revision_id.clone(),
-                    product_name_snapshot: line.product_name_snapshot.clone(),
-                    specification_snapshot: line.specification_snapshot.clone(),
-                    quantity: line.quantity,
-                    base_unit_code: line.base_unit_code.clone(),
-                    unit_cost_gross: line.unit_cost_gross,
-                    gross_amount: line.gross_amount,
-                    net_amount: line.net_amount,
-                    tax_amount: line.tax_amount,
-                    input_tax_rate: line.input_tax_rate,
-                    expected_delivery_date: line.expected_delivery_date,
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
-                    allocated_quantity: line.allocated_quantity,
-                },
-            )?);
-        }
+        let revision_id = PurchaseOrderRevisionId::new(revision.base.id.clone());
+        let revision_lines = lines
+            .iter()
+            .map(|line| {
+                PurchaseOrderRevisionLine::from_change_submission_line(
+                    PurchaseOrderRevisionLineId::new(next_id()),
+                    revision_id.clone(),
+                    line,
+                )
+            })
+            .collect::<entities::Result<Vec<_>>>()?;
         Ok((revision, revision_lines))
     }
 

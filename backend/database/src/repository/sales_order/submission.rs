@@ -4,7 +4,8 @@
 //! 被驳回的提交永久保留但不进入经营台账（数据模型 §6.5）。
 
 use entities::sales_order::{
-    SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine, SubmissionStatus,
+    SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionId, SalesOrderSubmissionLine,
+    SalesOrderWorkingCopyId, SubmissionStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -58,6 +59,73 @@ impl Pagination for SubmissionFilter {
 }
 
 impl<'a> Repository<'a, SalesOrderSubmission> {
+    /// 按工作副本查找已冻结提交。
+    ///
+    /// # 参数
+    /// * `working_copy_id` - 形成提交的工作副本
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该工作副本形成的提交；尚未提交时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_working_copy(
+        &self,
+        working_copy_id: &SalesOrderWorkingCopyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderSubmission>> {
+        self.find_one(doc! { "working_copy_id": working_copy_id.to_string() }, executor)
+            .await
+    }
+
+    /// 列出销售单提交历史，新提交在前。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 稳定销售单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按提交序号倒序排列的全部提交。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_order_newest_first(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderSubmission>> {
+        self.find_many_sorted(
+            doc! { "sales_order_id": sales_order_id.to_string() },
+            doc! { "submission_no": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 读取销售单最新冻结提交。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 稳定销售单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回提交序号最大的提交；尚无提交时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_latest_by_order(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderSubmission>> {
+        Ok(self
+            .list_by_order_newest_first(sales_order_id, executor)
+            .await?
+            .into_iter()
+            .next())
+    }
+
     /// 按销售单与提交序号查找提交快照。
     ///
     /// 唯一性由 `uk_sales_order_submissions_order_submission_no` 唯一索引保证；

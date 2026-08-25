@@ -2,8 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use mongodb::bson::doc;
-
 use super::dto::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveLineView,
     ProcurementResponsibilityResolveRequest, ProcurementResponsibilityResolveView,
@@ -18,9 +16,10 @@ use database::{
     AccessControlExt, CatalogExt, Executor, NoTransaction, ProcurementResponsibilityExt,
     ProcurementResponsibilityRuleFilter,
 };
-use entities::ids::ProcurementResponsibilityRuleId;
+use entities::ids::{ProcurementResponsibilityRuleId, SkuRevisionId};
 use entities::procurement_responsibility::{
-    ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
+    ProcurementResponsibilityResolutionBatch, ProcurementResponsibilityRule,
+    ProcurementResponsibilityRuleData, ProcurementResponsibilitySelectorReference,
 };
 use entities::AuditLog;
 
@@ -207,7 +206,7 @@ impl ProcurementResponsibilityService {
                 load_owner_account(&db, data.owner_user_id.as_str(), session).await?;
                 let mut rule = db
                     .procurement_responsibility_rules()
-                    .find_by_id(&id, session)
+                    .find_procurement_responsibility_rule(&id, session)
                     .await?
                     .ok_or_else(|| Error::NotFound("采购责任规则不存在".to_string()))?;
                 if rule.base.version != version {
@@ -238,11 +237,18 @@ impl ProcurementResponsibilityService {
         &self,
         request: ProcurementResponsibilityResolveRequest,
     ) -> Result<ProcurementResponsibilityResolveView> {
-        let request = request.ensure_unique_line_keys()?;
-        let mut lines = Vec::with_capacity(request.lines.len());
-        for line in request.lines {
-            let line_key = line.line_key.clone();
-            let result = self.resolve_strict(&[ResolutionInput::from(line)]).await;
+        let inputs = request
+            .lines
+            .into_iter()
+            .map(|line| ResolutionInput::new(line.line_key, line.sku_id, line.service_region))
+            .collect::<entities::Result<Vec<_>>>()
+            .map_err(Error::Logic)?;
+        ProcurementResponsibilityResolutionBatch::new(&inputs).map_err(Error::Logic)?;
+
+        let mut lines = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            let line_key = input.line_key.clone();
+            let result = self.resolve_strict(std::slice::from_ref(&input)).await;
             lines.push(match result {
                 Ok(plan) => success_preview(plan.lines.into_iter().next().expect("单行解析必须返回单行")),
                 Err(error) => failed_preview(line_key, error),
@@ -270,13 +276,13 @@ impl ProcurementResponsibilityService {
             .collect::<Vec<_>>();
         let sku_ids = views
             .iter()
-            .filter_map(|view| view.sku_id.as_ref().map(ToString::to_string))
+            .filter_map(|view| view.sku_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
         let category_ids = views
             .iter()
-            .filter_map(|view| view.category_id.as_ref().map(ToString::to_string))
+            .filter_map(|view| view.category_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
@@ -284,7 +290,7 @@ impl ProcurementResponsibilityService {
         let owners = self
             .db
             .accounts()
-            .list_by_ids(&owner_ids, &mut NoTransaction)
+            .list_procurement_responsibility_owners(&owner_ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|account| (account.base.id, account.name))
@@ -292,16 +298,16 @@ impl ProcurementResponsibilityService {
         let skus = self
             .db
             .skus()
-            .find_many(doc! { "id": { "$in": sku_ids } }, &mut NoTransaction)
+            .list_procurement_responsibility_skus(&sku_ids, &mut NoTransaction)
             .await?;
         let sku_revision_ids = skus
             .iter()
-            .filter_map(|sku| sku.stable.current_revision_id.clone())
+            .filter_map(|sku| sku.stable.current_revision_id.as_deref().map(SkuRevisionId::new))
             .collect::<Vec<_>>();
         let sku_revisions = self
             .db
             .sku_revisions()
-            .find_many(doc! { "id": { "$in": sku_revision_ids } }, &mut NoTransaction)
+            .list_procurement_responsibility_sku_revisions(&sku_revision_ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|revision| (revision.base.id, revision.name))
@@ -321,7 +327,7 @@ impl ProcurementResponsibilityService {
         let categories = self
             .db
             .product_categories()
-            .find_many(doc! { "id": { "$in": category_ids } }, &mut NoTransaction)
+            .list_procurement_responsibility_categories(&category_ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|category| (category.base.id, category.name))
@@ -358,28 +364,27 @@ impl ProcurementResponsibilityService {
         data: &ProcurementResponsibilityRuleData,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        match data.rule_type {
-            ProcurementResponsibilityRuleType::Sku => {
-                let id = data.sku_id.as_ref().ok_or_else(selector_shape_error)?;
-                ensure_reference_exists(
-                    self.db.skus().find_by_id(id.as_ref(), executor).await?,
-                    "SKU不存在或已删除",
-                )
+        let exists = match data.selector_reference().map_err(Error::Logic)? {
+            ProcurementResponsibilitySelectorReference::Sku(id) => {
+                self.db
+                    .skus()
+                    .has_procurement_responsibility_sku(id, executor)
+                    .await?
             }
-            ProcurementResponsibilityRuleType::Category
-            | ProcurementResponsibilityRuleType::CategoryServiceRegion => {
-                let id = data.category_id.as_ref().ok_or_else(selector_shape_error)?;
-                ensure_reference_exists(
-                    self.db
-                        .product_categories()
-                        .find_by_id(id.as_ref(), executor)
-                        .await?,
-                    "商品分类不存在或已删除",
-                )
+            ProcurementResponsibilitySelectorReference::Category(id) => {
+                self.db
+                    .product_categories()
+                    .has_procurement_responsibility_category(id, executor)
+                    .await?
             }
-            ProcurementResponsibilityRuleType::ProductKind
-            | ProcurementResponsibilityRuleType::DefaultDispatcher => Ok(()),
+            ProcurementResponsibilitySelectorReference::None => return Ok(()),
+        };
+        if exists {
+            return Ok(());
         }
+        Err(Error::ValidationError(
+            "采购责任规则引用的目录实体不存在或已删除".to_string(),
+        ))
     }
 }
 
@@ -409,18 +414,6 @@ fn failed_preview(line_key: String, error: Error) -> ProcurementResponsibilityRe
         rule_type: None,
         error: Some(error.to_string()),
     }
-}
-
-/// 校验目录引用查询命中实体。
-fn ensure_reference_exists<T>(value: Option<T>, message: &str) -> Result<()> {
-    value
-        .map(|_| ())
-        .ok_or_else(|| Error::ValidationError(message.to_string()))
-}
-
-/// 返回选择器形状错误。
-fn selector_shape_error() -> Error {
-    Error::ValidationError("采购责任规则类型与选择器字段不一致".to_string())
 }
 
 #[cfg(test)]

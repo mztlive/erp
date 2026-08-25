@@ -25,7 +25,7 @@ const OWNER_USER_ID_MAX_LEN: usize = 128;
 const FULFILLMENT_NOTE_MAX_LEN: usize = 500;
 
 /// 能力代码（§6.2：实物、虚拟、线下服务、API、印刷；固定枚举）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityCode {
     /// 实物商品。

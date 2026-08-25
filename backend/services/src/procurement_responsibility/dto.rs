@@ -8,8 +8,6 @@ use entities::procurement_responsibility::{
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::{Error, Result};
-
 /// 规则列表查询参数。
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct ProcurementResponsibilityRuleListParams {
@@ -218,23 +216,6 @@ pub struct ProcurementResponsibilityResolveRequest {
     #[validate(length(min = 1, max = 200, message = "解析行数必须在1-200之间"))]
     #[validate(nested)]
     pub lines: Vec<ProcurementResponsibilityResolveLineRequest>,
-}
-
-impl ProcurementResponsibilityResolveRequest {
-    /// 校验行键唯一并返回原请求。
-    ///
-    /// # 返回
-    /// 行键唯一时返回自身。
-    ///
-    /// # 错误
-    /// 行键重复时返回校验错误。
-    pub(crate) fn ensure_unique_line_keys(self) -> Result<Self> {
-        let mut keys = std::collections::HashSet::with_capacity(self.lines.len());
-        if self.lines.iter().any(|line| !keys.insert(line.line_key.as_str())) {
-            return Err(Error::ValidationError("采购责任预览行键不能重复".to_string()));
-        }
-        Ok(self)
-    }
 }
 
 /// 单条解析成功视图。

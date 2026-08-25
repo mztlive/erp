@@ -4,8 +4,7 @@ use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SalesOrderExt}
 use entities::common::time::Instant;
 use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use entities::purchase_order::{
-    PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
-    PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, SubmissionStatus,
+    PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
 };
 use id_generator::next_id;
 use sha2::{Digest, Sha256};
@@ -77,35 +76,30 @@ impl PurchaseOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-        self.ensure_version(&order, req.expected_lock_version)?;
-        if order.stable.status != PurchaseOrderStatus::Draft {
-            return Err(Error::ConflictError(
-                "采购单已提交或已生效，请勿重复提交".to_string(),
-            ));
-        }
+        order
+            .ensure_expected_version(req.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+        order
+            .ensure_draft_for_submission()
+            .map_err(|_| Error::ConflictError("采购单已提交或已生效，请勿重复提交".to_string()))?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let draft_id = order
-            .current_submission_id
-            .as_ref()
-            .map(ToString::to_string)
-            .ok_or_else(|| Error::BusinessLogicError("采购单缺少草稿提交".to_string()))?;
+            .draft_submission_id()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let mut draft = self
             .db
             .purchase_order_submissions()
             .find_by_id(&draft_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("草稿提交不存在".to_string()))?;
-        if draft.status != SubmissionStatus::Draft {
-            return Err(Error::ConflictError("草稿提交已冻结".to_string()));
-        }
+        draft
+            .ensure_draft()
+            .map_err(|_| Error::ConflictError("草稿提交已冻结".to_string()))?;
         let mut draft_lines = self
             .db
-            .purchase_order_submission_lines()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_submission_id": draft_id },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_submission_lines(&draft_id, &mut NoTransaction)
             .await?;
         let sales_order = self
             .db
@@ -296,51 +290,22 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<PurchaseOrderSubmission> {
         let next_no = self.next_submission_no(order).await?;
-        let formal = PurchaseOrderSubmission::new(
+        let formal = PurchaseOrderSubmission::freeze_from_draft(
             PurchaseOrderSubmissionId::new(next_id()),
-            PurchaseOrderSubmissionData {
-                purchase_order_id: order.base.id.clone().into(),
-                submission_no: next_no.clone(),
-                supplier_id: draft.supplier_id.clone(),
-                purchase_type: draft.purchase_type,
-                fulfillment_responsibility: draft.fulfillment_responsibility,
-                supplier_revision_id: draft.supplier_revision_id.clone(),
-                supplier_snapshot: draft.supplier_snapshot.clone(),
-                payment_term_snapshot: draft.payment_term_snapshot.clone(),
-                gross_amount: draft.gross_amount,
-                net_amount: draft.net_amount,
-                tax_amount: draft.tax_amount,
-            },
+            next_no,
+            draft,
+            Instant::now(),
+            actor.id(),
         )?;
-        let mut formal = formal;
-        formal.submit(Instant::now(), actor.id())?;
+        let formal_id = PurchaseOrderSubmissionId::new(formal.base.id.clone());
         for line in draft_lines.iter_mut() {
-            *line = PurchaseOrderSubmissionLine::new(
+            *line = PurchaseOrderSubmissionLine::freeze_from_draft(
                 PurchaseOrderSubmissionLineId::new(next_id()),
-                PurchaseOrderSubmissionLineData {
-                    purchase_order_submission_id: formal.base.id.clone().into(),
-                    line_no: line.line_no,
-                    line_type: line.line_type,
-                    procurement_confirmation_line_id: line.procurement_confirmation_line_id.clone(),
-                    sku_id: line.sku_id.clone(),
-                    sku_revision_id: line.sku_revision_id.clone(),
-                    product_name_snapshot: line.product_name_snapshot.clone(),
-                    specification_snapshot: line.specification_snapshot.clone(),
-                    quantity: line.quantity,
-                    base_unit_code: line.base_unit_code.clone(),
-                    unit_cost_gross: line.unit_cost_gross,
-                    gross_amount: line.gross_amount,
-                    net_amount: line.net_amount,
-                    tax_amount: line.tax_amount,
-                    input_tax_rate: line.input_tax_rate,
-                    expected_delivery_date: line.expected_delivery_date,
-                    sales_order_line_id: line.sales_order_line_id.clone(),
-                    sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
-                    sales_order_submission_line_id: line.sales_order_submission_line_id.clone(),
-                    allocated_quantity: line.allocated_quantity,
-                },
+                formal_id.clone(),
+                line,
             )?;
         }
+        let _ = order;
         Ok(formal)
     }
 
@@ -381,23 +346,10 @@ impl PurchaseOrderService {
     async fn next_submission_no(&self, order: &PurchaseOrder) -> Result<String> {
         let existing = self
             .db
-            .purchase_order_submissions()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_id": order.base.id.clone() },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_submissions_by_order(&order.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        let max_no = existing
-            .iter()
-            .filter_map(|submission| {
-                submission
-                    .submission_no
-                    .strip_prefix("SUB-")
-                    .and_then(|value| value.parse::<u32>().ok())
-            })
-            .max()
-            .unwrap_or(0);
-        Ok(format!("SUB-{:06}", max_no + 1))
+        PurchaseOrderSubmission::next_submission_no(&existing).map_err(Into::into)
     }
 }
 

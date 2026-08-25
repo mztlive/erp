@@ -34,8 +34,9 @@ use entities::mall_sync::{
     MallSalesReconciliationItemData, MallSalesReconciliationJob, MallSalesReconciliationJobData,
     MallSalesSyncCursor, MallSalesSyncJob, MallSalesSyncJobData, MallSalesSyncJobStatus,
     MallSalesSyncJobType, MallSnapshotReapplyOperation, MallSnapshotReapplyOperationData,
-    MallSyncTriggerSource, MappingTaskStatus, MappingTaskType, MasterMappingTask, MasterMappingTaskData,
-    ReconciliationItemStatus, ReconciliationJobStatus,
+    MallSyncCommandIdentity, MallSyncTimeRange, MallSyncTriggerSource, MappingSourceIdentity,
+    MappingTaskStatus, MappingTaskType, MasterMappingTask, MasterMappingTaskData, ReconciliationJobStatus,
+    SyncJobCompletionDisposition,
 };
 use entities::source_registry::{
     ExternalIdentityMap, ExternalIdentityMapData, ExternalIdentityTarget, ExternalIdentityTargetData,
@@ -45,9 +46,8 @@ use entities::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use id_generator::next_id;
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -232,13 +232,15 @@ impl MallSyncService {
         actor: &AuditActor,
     ) -> Result<MallSalesSyncJobView> {
         ensure_trigger_command(&command)?;
-        let fingerprint = serialized_fingerprint(&command)?;
-        let audit_id = command_audit_id(
+        let identity = mall_command_identity(
             actor.id(),
             "trigger-sync",
             command.source_system_id().as_ref(),
             command.idempotency_key(),
-        );
+            &command,
+        )?;
+        let fingerprint = identity.fingerprint().to_string();
+        let audit_id = identity.audit_id().to_string();
         if let Some(view) = self.replay_sync_trigger(&audit_id, &fingerprint).await? {
             return Ok(view);
         }
@@ -264,7 +266,7 @@ impl MallSyncService {
             ));
         }
 
-        let job_id = sync_trigger_job_id(&audit_id);
+        let job_id = identity.sync_job_id();
         let job = MallSalesSyncJob::new(
             MallSalesSyncJobId::new(job_id.clone()),
             MallSalesSyncJobData {
@@ -331,24 +333,22 @@ impl MallSyncService {
                     .ok_or_else(|| {
                         Error::BusinessLogicError("来源商城尚未形成安全水位，不能执行增量同步".to_string())
                     })?;
-                ensure_optional_version(cursor.base.version, *base_cursor_version, "同步水位")?;
-                let range_start = Instant::from_unix_secs(
-                    cursor
-                        .high_water_updated_at
-                        .unix_secs()
-                        .saturating_sub(MALL_SYNC_OVERLAP_SECONDS),
-                );
-                if range_start > now {
+                if base_cursor_version.is_some_and(|expected| !cursor.has_version(expected)) {
                     return Err(Error::ConflictError(
-                        "同步水位晚于当前安全时间，禁止创建无效增量区间".to_string(),
+                        "同步水位版本已变化，请刷新后重试".to_string(),
                     ));
                 }
+                let range = MallSyncTimeRange::incremental(
+                    cursor.high_water_updated_at,
+                    now,
+                    MALL_SYNC_OVERLAP_SECONDS,
+                )?;
                 let (trigger_reason, triggered_by) =
                     trigger_actor_fields(*trigger_source, reason.as_deref(), actor.id())?;
                 Ok(TriggerJobSpec {
                     job_type: MallSalesSyncJobType::Incremental,
-                    range_start: Some(range_start),
-                    range_end: Some(now),
+                    range_start: Some(range.start),
+                    range_end: Some(range.end),
                     external_order_no: None,
                     trigger_source: *trigger_source,
                     trigger_reason,
@@ -398,10 +398,7 @@ impl MallSyncService {
                         "失败作业不属于命令指定的来源商城".to_string(),
                     ));
                 }
-                if !matches!(
-                    original.status,
-                    MallSalesSyncJobStatus::Failed | MallSalesSyncJobStatus::PartialFailure
-                ) {
+                if !original.is_retryable() {
                     return Err(Error::ConflictError(
                         "只有失败或部分失败的同步作业可以重试".to_string(),
                     ));
@@ -413,7 +410,11 @@ impl MallSyncService {
                         .find_by_source(source_system_id, &mut NoTransaction)
                         .await?
                         .ok_or_else(|| Error::NotFound("来源商城安全水位不存在".to_string()))?;
-                    ensure_version(cursor.base.version, *expected, "同步水位")?;
+                    if !cursor.has_version(*expected) {
+                        return Err(Error::ConflictError(
+                            "同步水位版本已变化，请刷新后重试".to_string(),
+                        ));
+                    }
                 }
                 Ok(TriggerJobSpec {
                     job_type: original.job_type,
@@ -583,7 +584,7 @@ impl MallSyncService {
             .find_by_id(req.sync_job_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("同步作业不存在".to_string()))?;
-        if job.status != MallSalesSyncJobStatus::Running {
+        if !job.accepts_snapshots() {
             return Err(Error::BusinessLogicError(
                 "同步作业不在运行中，禁止落盘快照".to_string(),
             ));
@@ -763,12 +764,15 @@ impl MallSyncService {
             .await?
             .ok_or_else(|| Error::NotFound("同步作业不存在".to_string()))?;
         let outcome = outcome_of(req.outcome);
-        if job.status != MallSalesSyncJobStatus::Running {
-            if job.status == outcome {
+        match job.completion_disposition(outcome) {
+            SyncJobCompletionDisposition::Apply => {}
+            SyncJobCompletionDisposition::AlreadyApplied => {
                 tracing::info!(job_id = id, status = ?job.status, "作业已终态，按幂等返回");
                 return Ok(job.into());
             }
-            return Err(Error::ConflictError("同步作业已终态，结果不一致".to_string()));
+            SyncJobCompletionDisposition::ConflictingTerminal => {
+                return Err(Error::ConflictError("同步作业已终态，结果不一致".to_string()));
+            }
         }
         job.finish(outcome, Instant::now())?;
         let cursor_action = if outcome == MallSalesSyncJobStatus::Success {
@@ -1080,10 +1084,7 @@ impl MallSyncService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("核对差异明细不存在".to_string()))?;
-        if matches!(
-            item.status,
-            ReconciliationItemStatus::Resolved | ReconciliationItemStatus::ConfirmedNoDifference
-        ) {
+        if item.status.is_terminal() {
             tracing::info!(item_id = id, status = ?item.status, "差异明细已终态，按幂等返回");
             return Ok(item.into());
         }
@@ -1229,7 +1230,7 @@ impl MallSyncService {
             Vec::new()
         };
         let (external_identity_map_id, current_targets, lineage_error) =
-            match mapping_external_id(&snapshot.normalized_snapshot, task.mapping_type) {
+            match mapping_external_identity(&snapshot.normalized_snapshot, task.mapping_type) {
                 Ok(external_id) => {
                     let (map_id, targets) = self
                         .mapping_lineage_view(&snapshot.source_system_id, task.mapping_type, &external_id)
@@ -1408,15 +1409,7 @@ impl MallSyncService {
         let mut items = self
             .db
             .work_items()
-            .find_many_sorted(
-                doc! {
-                    "work_item_type": WorkItemType::BusinessException.as_str(),
-                    "business_object_type": W17_OBJECT_TYPE,
-                    "business_object_id": &task.base.id,
-                },
-                doc! { "created_at": 1, "id": 1 },
-                &mut NoTransaction,
-            )
+            .list_for_master_mapping_task(&task.base.id, &mut NoTransaction)
             .await?;
         if items.len() > 1 {
             return Err(Error::Internal(
@@ -1452,11 +1445,7 @@ impl MallSyncService {
         let targets = self
             .db
             .external_identity_targets()
-            .find_many_sorted(
-                doc! { "external_identity_map_id": &mapping.base.id },
-                doc! { "valid_from": -1, "id": 1 },
-                &mut NoTransaction,
-            )
+            .list_for_external_identity_map(&mapping.base.id, &mut NoTransaction)
             .await?;
         Ok((
             Some(mapping.base.id),
@@ -1721,14 +1710,7 @@ impl MallSyncService {
         let audits = self
             .db
             .audit_logs()
-            .find_many_sorted(
-                doc! {
-                    "resource_type": W17_OBJECT_TYPE,
-                    "resource_id": &task.base.id,
-                },
-                doc! { "created_at": 1, "id": 1 },
-                &mut NoTransaction,
-            )
+            .list_master_mapping_task_history(&task.base.id, &mut NoTransaction)
             .await?;
         Ok(audits
             .into_iter()
@@ -1785,14 +1767,14 @@ impl MallSyncService {
             ));
         }
 
-        let owner_role = mapping_owner_role(req.mapping_type).map(str::to_string);
+        let owner_role = req.mapping_type.owner_role().map(str::to_string);
         let task = MasterMappingTask::new(
             MasterMappingTaskId::new(next_id()),
             MasterMappingTaskData {
                 source_snapshot_id: req.source_snapshot_id,
                 mapping_type: req.mapping_type,
                 owner_role: owner_role.clone(),
-                owner_user_id: Some(owner_user_id.clone()),
+                owner_user_id: owner_role.as_ref().map(|_| owner_user_id.clone()),
             },
         )?;
         let audit = actor.clone().resource_log(
@@ -1845,9 +1827,10 @@ impl MallSyncService {
         command.validate()?;
         ensure_path_id(id, &command.decision.mapping_task_id)?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "待办版本")?;
-        let fingerprint = serialized_fingerprint(&command)?;
-        let audit_id = command_audit_id(actor.id(), "confirm", id, &command.idempotency_key);
-        let (generated_map_id, target_id) = mapping_lineage_ids(&fingerprint);
+        let identity = mall_command_identity(actor.id(), "confirm", id, &command.idempotency_key, &command)?;
+        let fingerprint = identity.fingerprint().to_string();
+        let audit_id = identity.audit_id().to_string();
+        let (generated_map_id, target_id) = identity.mapping_lineage_ids();
         let map_id = command
             .decision
             .external_identity_map_id
@@ -1894,8 +1877,15 @@ impl MallSyncService {
         ensure_path_id(id, &command.action.mapping_task_id)?;
         ensure_evidence_list(&command.action.requested_evidence)?;
         let expected_task_version = parse_positive_version(&command.expected_task_version, "待办版本")?;
-        let fingerprint = serialized_fingerprint(&command)?;
-        let audit_id = command_audit_id(actor.id(), "request-source-fix", id, &command.idempotency_key);
+        let identity = mall_command_identity(
+            actor.id(),
+            "request-source-fix",
+            id,
+            &command.idempotency_key,
+            &command,
+        )?;
+        let fingerprint = identity.fingerprint().to_string();
+        let audit_id = identity.audit_id().to_string();
         if let Some(result) = self.replay_source_fix(&audit_id, &fingerprint, &command).await? {
             return Ok(result);
         }
@@ -1935,8 +1925,9 @@ impl MallSyncService {
         ensure_path_id(id, &command.mapping_task_id)?;
         required_trigger_text(&command.operation_id, "重新归集操作ID")?;
         required_trigger_text(&command.idempotency_key, "幂等键")?;
-        let idempotency_key_hash = sha256_hex(command.idempotency_key.trim());
-        let fingerprint = serialized_fingerprint(&command)?;
+        let identity = mall_command_identity(actor.id(), "reapply", id, &command.idempotency_key, &command)?;
+        let idempotency_key_hash = identity.idempotency_key_hash().to_string();
+        let fingerprint = identity.fingerprint().to_string();
         if let Some(operation) = self
             .replay_reapply_operation(id, &command.operation_id, &idempotency_key_hash, &fingerprint)
             .await?
@@ -1949,8 +1940,12 @@ impl MallSyncService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("映射任务不存在".to_string()))?;
-        ensure_version(task.base.version, command.expected_mapping_version, "映射任务")?;
-        if task.status != MappingTaskStatus::Resolved {
+        if !task.has_version(command.expected_mapping_version) {
+            return Err(Error::ConflictError(
+                "映射任务版本已变化，请刷新后重试".to_string(),
+            ));
+        }
+        if !task.can_reapply() {
             return Err(Error::ConflictError(
                 "只有已解决的映射任务可以重新归集".to_string(),
             ));
@@ -1998,10 +1993,7 @@ impl MallSyncService {
             let receivable = self
                 .db
                 .receivable_accounts()
-                .find_one(
-                    doc! { "source_sales_order_revision_id": revision_id.to_string() },
-                    &mut NoTransaction,
-                )
+                .find_by_source_sales_order_revision(&revision_id, &mut NoTransaction)
                 .await?;
             if let Some(receivable) = receivable {
                 operation.succeed(
@@ -2018,9 +2010,8 @@ impl MallSyncService {
                 )?;
             }
         }
-        let audit_id = command_audit_id(actor.id(), "reapply", id, &command.idempotency_key);
         let audit = actor.clone().resource_log_with_id(
-            audit_id,
+            identity.audit_id().to_string(),
             "master_mapping_task.reapply",
             W17_OBJECT_TYPE,
             task.base.id,
@@ -2083,7 +2074,13 @@ impl MallSyncService {
             .find_reapply_by_idempotency(mapping_task_id, idempotency_key_hash, &mut NoTransaction)
             .await?
         {
-            ensure_reapply_receipt(&operation, operation_id, fingerprint)?;
+            ensure_reapply_receipt(
+                &operation,
+                mapping_task_id,
+                operation_id,
+                idempotency_key_hash,
+                fingerprint,
+            )?;
             return Ok(Some(operation));
         }
         let Some(operation) = self
@@ -2094,12 +2091,13 @@ impl MallSyncService {
         else {
             return Ok(None);
         };
-        if operation.mapping_task_id.as_ref() != mapping_task_id
-            || operation.idempotency_key_hash != idempotency_key_hash
-            || operation.command_fingerprint != fingerprint
-        {
-            return Err(Error::ConflictError("重新归集操作ID已用于不同命令".to_string()));
-        }
+        ensure_reapply_receipt(
+            &operation,
+            mapping_task_id,
+            operation_id,
+            idempotency_key_hash,
+            fingerprint,
+        )?;
         Ok(Some(operation))
     }
 
@@ -2162,7 +2160,7 @@ impl MallSyncService {
                         session,
                     )
                     .await?;
-                    let external_id = mapping_external_id(
+                    let external_id = mapping_external_identity(
                         &context.snapshot.normalized_snapshot,
                         context.task.mapping_type,
                     )?;
@@ -2305,7 +2303,7 @@ impl MallSyncService {
             &mut NoTransaction,
         )
         .await?;
-        if context.task.status != MappingTaskStatus::Resolved
+        if !context.task.can_reapply()
             || context.work_item.status != WorkItemStatus::Completed
             || self
                 .db
@@ -2396,7 +2394,7 @@ impl MallSyncService {
             .mall_sales_order_snapshots()
             .find_latest_by_order(source_system_id, external_order_key, &mut NoTransaction)
             .await?;
-        Ok(latest.is_some_and(|snapshot| snapshot.source_updated_at > source_updated_at))
+        Ok(latest.is_some_and(|snapshot| snapshot.supersedes_candidate(source_updated_at)))
     }
 
     /// 从权威来源配置读取 W17 当前阶段；缺失、停用或非一期均失败关闭。
@@ -2624,9 +2622,13 @@ fn ensure_mapping_task_contract(
         context.task.source_snapshot_id.as_ref(),
         source_snapshot_id.as_ref(),
     )?;
-    ensure_version(context.task.base.version, expected_mapping_version, "映射任务")?;
+    if !context.task.has_version(expected_mapping_version) {
+        return Err(Error::ConflictError(
+            "映射任务版本已变化，请刷新后重试".to_string(),
+        ));
+    }
     ensure_version(context.work_item.base.version, expected_task_version, "待办")?;
-    if context.task.status != MappingTaskStatus::Pending || context.work_item.status != WorkItemStatus::Open {
+    if !context.task.is_pending() || context.work_item.status != WorkItemStatus::Open {
         return Err(Error::ConflictError(
             "映射任务或正式任务已离开开放状态".to_string(),
         ));
@@ -2652,7 +2654,7 @@ fn ensure_mapping_task_contract(
     }
     let expected_subject_version = expected_subject_version.trim();
     if expected_subject_version != context.work_item.subject_version
-        || context.work_item.subject_version != context.task.base.version.to_string()
+        || context.work_item.subject_version != context.task.subject_version()
     {
         return Err(Error::ConflictError(
             "映射对象版本已变化，请刷新后重试".to_string(),
@@ -2719,27 +2721,17 @@ fn mapping_source_evidence(
         let Some(value) = object.get(*field) else {
             continue;
         };
-        let Ok(value) = external_id_value(value) else {
+        let Ok(value) = mapping_source_identity(value) else {
             continue;
         };
         evidence.push(MappingSourceEvidenceView {
             field: (*field).to_string(),
-            label: source_identity_label(field).to_string(),
-            value,
+            label: MappingTaskType::source_identity_label(field).to_string(),
+            value: value.into_string(),
             sensitive: false,
         });
     }
     evidence
-}
-
-fn source_identity_label(field: &str) -> &'static str {
-    match field {
-        "customer_external_id" | "customer_id" | "company_id" => "来源客户身份",
-        "contract_external_id" | "contract_no" | "contract_id" => "来源合同身份",
-        "settlement_party_external_id" | "settlement_party_id" | "parent_company_id" => "来源结算主体身份",
-        "voucher_category_external_id" | "card_type_id" | "category_id" => "来源卡券类目身份",
-        _ => "来源身份",
-    }
 }
 
 async fn ensure_mapping_actor_eligible(
@@ -2853,14 +2845,7 @@ async fn ensure_mapping_target_access(
             }
             let contract = db
                 .contracts()
-                .find_one(
-                    doc! {
-                        "customer_id": { "$in": customer_ids },
-                        "settlement_party_id": target_id,
-                        "status": ContractStatus::Effective.as_str(),
-                    },
-                    executor,
-                )
+                .find_effective_for_settlement_party(&customer_ids, target_id, executor)
                 .await?;
             if contract.is_none() {
                 return Err(Error::Forbidden(
@@ -2882,13 +2867,7 @@ async fn ensure_mapping_target_access(
             }
             let active_profile = db
                 .voucher_category_profile_revisions()
-                .find_one(
-                    doc! {
-                        "sku_id": target_id,
-                        "status": EnableStatus::Active.as_str(),
-                    },
-                    executor,
-                )
+                .find_active_by_sku(target_id, executor)
                 .await?;
             if active_profile.is_none() {
                 return Err(Error::BusinessLogicError(
@@ -2905,27 +2884,18 @@ async fn ensure_mapping_target_access(
     Ok(())
 }
 
-fn ensure_mapping_resolution_shape(
-    mapping_type: MappingTaskType,
-    command: &ConfirmMappingCommand,
-) -> Result<()> {
-    let registration = mapping_type
-        .target_registration()
-        .ok_or_else(|| Error::BusinessLogicError("该差异类型没有独立 ERP 规范目标".to_string()))?;
-    if command.decision.resolution.object_type.trim() != registration.command_object_type
-        || command.decision.resolution.relation_role != registration.relation_role
-    {
-        return Err(Error::ValidationError(format!(
-            "{}映射只接受 {} + {} 规范目标",
-            mapping_type.label(),
-            registration.command_object_type,
-            registration.relation_role.as_str()
-        )));
-    }
-    Ok(())
-}
-
-fn mapping_external_id(snapshot: &str, mapping_type: MappingTaskType) -> Result<String> {
+/// 将规范化快照 JSON 适配为领域来源身份候选值。
+///
+/// # 参数
+/// * `snapshot` - 规范化商城快照 JSON
+/// * `mapping_type` - 当前映射差异类型
+///
+/// # 返回
+/// 返回由领域注册表判定的唯一来源身份。
+///
+/// # 错误
+/// 快照不是 JSON 对象、来源字段类型非法，或领域身份规则不满足时返回错误。
+fn mapping_external_identity(snapshot: &str, mapping_type: MappingTaskType) -> Result<String> {
     let registration = mapping_type
         .target_registration()
         .ok_or_else(|| Error::BusinessLogicError("该差异类型没有可注册的外部规范身份".to_string()))?;
@@ -2934,42 +2904,57 @@ fn mapping_external_id(snapshot: &str, mapping_type: MappingTaskType) -> Result<
     let object = value
         .as_object()
         .ok_or_else(|| Error::BusinessLogicError("规范化快照不是可验证的 JSON 对象".to_string()))?;
-    let values = registration
+    let candidates = registration
         .source_identity_fields
         .iter()
-        .filter_map(|key| object.get(*key))
-        .map(external_id_value)
+        .filter_map(|field| object.get(*field))
+        .map(mapping_source_identity)
         .collect::<Result<Vec<_>>>()?;
-    let Some(first) = values.first() else {
-        return Err(Error::BusinessLogicError(format!(
-            "规范化快照缺少 {}，无法建立{}谱系",
-            registration.source_identity_fields.join("/"),
-            mapping_type.label()
-        )));
-    };
-    if values.iter().any(|value| value != first) {
-        return Err(Error::ConflictError(format!(
-            "快照中的{}来源标识互相冲突",
-            mapping_type.label()
-        )));
-    }
-    Ok(first.clone())
+    Ok(mapping_type.external_identity(&candidates)?.into_string())
 }
 
-fn external_id_value(value: &serde_json::Value) -> Result<String> {
+/// 将 JSON 标量适配为来源身份值对象。
+///
+/// # 参数
+/// * `value` - 注册来源字段对应的 JSON 值
+///
+/// # 返回
+/// 返回规范化来源身份候选值。
+///
+/// # 错误
+/// 值不是字符串或整数，或字符串为空时返回错误。
+fn mapping_source_identity(value: &serde_json::Value) -> Result<MappingSourceIdentity> {
     let value = match value {
-        serde_json::Value::String(value) => value.trim().to_string(),
-        serde_json::Value::Number(value) => value.to_string(),
+        serde_json::Value::String(value) => value.clone(),
+        serde_json::Value::Number(value) if value.is_i64() || value.is_u64() => value.to_string(),
         _ => {
             return Err(Error::BusinessLogicError(
                 "快照来源标识必须是字符串或整数".to_string(),
             ));
         }
     };
-    if value.is_empty() {
-        return Err(Error::BusinessLogicError("快照来源标识不能为空".to_string()));
+    MappingSourceIdentity::new(value).map_err(Into::into)
+}
+
+fn ensure_mapping_resolution_shape(
+    mapping_type: MappingTaskType,
+    command: &ConfirmMappingCommand,
+) -> Result<()> {
+    let registration = mapping_type
+        .target_registration()
+        .ok_or_else(|| Error::BusinessLogicError("该差异类型没有独立 ERP 规范目标".to_string()))?;
+    if mapping_type.accepts_target(
+        &command.decision.resolution.object_type,
+        command.decision.resolution.relation_role,
+    ) {
+        return Ok(());
     }
-    Ok(value)
+    Err(Error::ValidationError(format!(
+        "{}映射只接受 {} + {} 规范目标",
+        mapping_type.label(),
+        registration.command_object_type,
+        registration.relation_role.as_str()
+    )))
 }
 
 /// 映射谱系准备所需的命令、上下文与标识。
@@ -3066,14 +3051,7 @@ async fn prepare_mapping_lineage(
             mapping.confirm_mapping(recorded_at, actor_id.to_string())?;
             let targets = db
                 .external_identity_targets()
-                .find_many_sorted(
-                    doc! {
-                        "external_identity_map_id": &mapping.base.id,
-                        "status": TargetStatus::Active.as_str(),
-                    },
-                    doc! { "valid_from": 1, "id": 1 },
-                    executor,
-                )
+                .list_active_for_external_identity_map(&mapping.base.id, executor)
                 .await?;
             (mapping, targets, false)
         }
@@ -3176,13 +3154,6 @@ fn ensure_version(actual: u64, expected: u64, object: &str) -> Result<()> {
     Err(Error::ConflictError(format!("{object}版本已变化，请刷新后重试")))
 }
 
-fn ensure_optional_version(actual: u64, expected: Option<u64>, object: &str) -> Result<()> {
-    if let Some(expected) = expected {
-        ensure_version(actual, expected, object)?;
-    }
-    Ok(())
-}
-
 fn ensure_trigger_command(command: &TriggerMallSyncCommand) -> Result<()> {
     required_trigger_text(command.idempotency_key(), "幂等键")?;
     if command.execution_stage() != MallSyncStage::FirstPhaseMallOwned {
@@ -3243,50 +3214,56 @@ fn ensure_evidence_list(values: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn serialized_fingerprint<T: Serialize>(value: &T) -> Result<String> {
-    let bytes =
-        serde_json::to_vec(value).map_err(|_| Error::Internal("无法形成 W17 命令指纹".to_string()))?;
-    Ok(hex::encode(Sha256::digest(bytes)))
-}
-
-fn sha256_hex(value: &str) -> String {
-    hex::encode(Sha256::digest(value.as_bytes()))
+/// 序列化 W17 强命令并构造领域幂等身份。
+///
+/// # 参数
+/// * `actor_id` - 当前操作人
+/// * `action` - 稳定命令动作
+/// * `resource_id` - 命令资源 ID
+/// * `idempotency_key` - 客户端幂等键
+/// * `command` - 完整命令载荷
+///
+/// # 返回
+/// 返回审计 ID、载荷指纹与幂等键摘要。
+///
+/// # 错误
+/// 命令无法序列化时返回内部错误。
+fn mall_command_identity<T: Serialize>(
+    actor_id: &str,
+    action: &str,
+    resource_id: &str,
+    idempotency_key: &str,
+    command: &T,
+) -> Result<MallSyncCommandIdentity> {
+    let payload =
+        serde_json::to_vec(command).map_err(|_| Error::Internal("无法形成 W17 命令指纹".to_string()))?;
+    Ok(MallSyncCommandIdentity::new(
+        W17_RECEIPT_PREFIX,
+        actor_id,
+        action,
+        resource_id,
+        idempotency_key,
+        &payload,
+    ))
 }
 
 fn ensure_reapply_receipt(
     operation: &MallSnapshotReapplyOperation,
+    mapping_task_id: &str,
     operation_id: &str,
+    idempotency_key_hash: &str,
     fingerprint: &str,
 ) -> Result<()> {
-    if operation.base.id != operation_id || operation.command_fingerprint != fingerprint {
-        return Err(Error::ConflictError(
-            "重新归集幂等键已用于不同操作或命令内容".to_string(),
-        ));
+    if operation.matches_replay(mapping_task_id, operation_id, idempotency_key_hash, fingerprint) {
+        return Ok(());
     }
-    Ok(())
-}
-
-fn command_audit_id(actor_id: &str, action: &str, resource_id: &str, key: &str) -> String {
-    let digest = Sha256::digest(format!("{actor_id}|{action}|{resource_id}|{}", key.trim()).as_bytes());
-    format!("{W17_RECEIPT_PREFIX}{}", hex::encode(digest))
+    Err(Error::ConflictError(
+        "重新归集幂等键已用于不同操作或命令内容".to_string(),
+    ))
 }
 
 fn command_audit_message(fingerprint: &str) -> String {
     format!("{COMMAND_FINGERPRINT_PREFIX}{fingerprint}")
-}
-
-fn sync_trigger_job_id(audit_id: &str) -> String {
-    let digest = hex::encode(Sha256::digest(format!("sync-job|{audit_id}").as_bytes()));
-    format!("w17-job-{}", &digest[..40])
-}
-
-fn mapping_lineage_ids(fingerprint: &str) -> (String, String) {
-    let map_digest = hex::encode(Sha256::digest(format!("map|{fingerprint}").as_bytes()));
-    let target_digest = hex::encode(Sha256::digest(format!("target|{fingerprint}").as_bytes()));
-    (
-        format!("w17-map-{}", &map_digest[..40]),
-        format!("w17-target-{}", &target_digest[..40]),
-    )
 }
 
 fn audit_command_fingerprint(message: &str) -> Option<&str> {
@@ -3324,34 +3301,16 @@ fn receipt_task_version(message: Option<&str>) -> Result<u64> {
         .map_err(|_| Error::Internal("来源修复回执任务版本非法".to_string()))
 }
 
-/// 按映射类型解析固定责任角色；结算主体没有唯一配置时返回空。
-fn mapping_owner_role(mapping_type: entities::mall_sync::MappingTaskType) -> Option<&'static str> {
-    use entities::mall_sync::MappingTaskType;
-
-    match mapping_type {
-        MappingTaskType::Customer | MappingTaskType::Contract => Some("role-sales"),
-        MappingTaskType::VoucherCategory | MappingTaskType::UniqueLineItem => Some("role-operations"),
-        MappingTaskType::AmountFormat => Some("role-finance"),
-        MappingTaskType::SettlementEntity => None,
-    }
-}
-
 /// 为已确定责任角色的映射差异构造唯一正式任务。
 fn mapping_work_item(task: &MasterMappingTask, owner_role: String, owner_user_id: &str) -> Result<WorkItem> {
-    let sla_seconds = match task.mapping_type {
-        MappingTaskType::VoucherCategory | MappingTaskType::UniqueLineItem => 4 * 60 * 60,
-        MappingTaskType::Customer
-        | MappingTaskType::Contract
-        | MappingTaskType::AmountFormat
-        | MappingTaskType::SettlementEntity => 24 * 60 * 60,
-    };
+    let sla_seconds = task.mapping_type.sla_seconds();
     Ok(WorkItem::new(
         WorkItemId::new(next_id()),
         WorkItemData {
             work_item_type: WorkItemType::BusinessException,
             business_object_type: "MASTER_MAPPING_TASK".to_string(),
             business_object_id: task.base.id.clone(),
-            subject_version: task.base.version.to_string(),
+            subject_version: task.subject_version(),
             owner_role,
             owner_organization_id: "company".to_string(),
             owner_user_id: owner_user_id.to_string(),
@@ -3400,8 +3359,8 @@ mod tests {
     use entities::source_registry::MallSyncStage;
 
     use super::{
-        ensure_mapping_resolution_shape, ensure_trigger_command, mapping_external_id, trigger_actor_fields,
-        ConfirmMappingCommand, Error, TriggerMallSyncCommand,
+        ensure_mapping_resolution_shape, ensure_trigger_command, mapping_external_identity,
+        trigger_actor_fields, ConfirmMappingCommand, Error, TriggerMallSyncCommand,
     };
 
     fn confirm_command(object_type: &str) -> ConfirmMappingCommand {
@@ -3429,29 +3388,6 @@ mod tests {
     }
 
     #[test]
-    fn external_identity_requires_one_consistent_registered_value() {
-        assert_eq!(
-            mapping_external_id(
-                r#"{"customer_external_id":" C-1 ","customer_id":"C-1"}"#,
-                MappingTaskType::Customer,
-            )
-            .unwrap(),
-            "C-1"
-        );
-        assert!(matches!(
-            mapping_external_id(
-                r#"{"contract_external_id":"CT-1","contract_id":"CT-2"}"#,
-                MappingTaskType::Contract,
-            ),
-            Err(Error::ConflictError(_))
-        ));
-        assert!(mapping_external_id("{}", MappingTaskType::VoucherCategory).is_err());
-        assert!(
-            mapping_external_id(r#"{"line_item_id":"line-1"}"#, MappingTaskType::UniqueLineItem,).is_err()
-        );
-    }
-
-    #[test]
     fn resolution_shape_is_fixed_by_mapping_type_registry() {
         assert!(
             ensure_mapping_resolution_shape(MappingTaskType::Customer, &confirm_command("CUSTOMER"),).is_ok()
@@ -3464,6 +3400,28 @@ mod tests {
             ensure_mapping_resolution_shape(MappingTaskType::UniqueLineItem, &confirm_command("SKU"),)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn snapshot_adapter_preserves_domain_identity_rules() {
+        assert_eq!(
+            mapping_external_identity(
+                r#"{"customer_external_id":" C-1 ","customer_id":"C-1"}"#,
+                MappingTaskType::Customer,
+            )
+            .unwrap(),
+            "C-1"
+        );
+        assert_eq!(
+            mapping_external_identity(r#"{"contract_id":42}"#, MappingTaskType::Contract).unwrap(),
+            "42"
+        );
+        assert!(mapping_external_identity(
+            r#"{"contract_external_id":"CT-1","contract_id":"CT-2"}"#,
+            MappingTaskType::Contract,
+        )
+        .is_err());
+        assert!(mapping_external_identity(r#"{"contract_id":1.5}"#, MappingTaskType::Contract).is_err());
     }
 
     #[test]

@@ -112,6 +112,156 @@ impl SettlementDifferenceStatus {
     }
 }
 
+/// 结算差异正式结论类别。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SettlementDifferenceConclusionKind {
+    /// 供应商接受 ERP 口径。
+    SupplierAccepted,
+    /// ERP 接受供应商账单口径。
+    ErpAccepted,
+    /// 已通过独立补偿事实处理。
+    Compensated,
+    /// 有正式证据证明无需金额调整并关闭。
+    ClosedNoAdjustment,
+}
+
+impl SettlementDifferenceConclusionKind {
+    /// 返回结论对应的持久化差异状态。
+    ///
+    /// # 返回
+    /// 返回供应商认可、ERP 认可、已补偿或已关闭状态。
+    pub fn status(self) -> SettlementDifferenceStatus {
+        match self {
+            Self::SupplierAccepted => SettlementDifferenceStatus::SupplierAcknowledged,
+            Self::ErpAccepted => SettlementDifferenceStatus::ErpAcknowledged,
+            Self::Compensated => SettlementDifferenceStatus::Compensated,
+            Self::ClosedNoAdjustment => SettlementDifferenceStatus::Closed,
+        }
+    }
+
+    /// 返回审计与命令摘要使用的稳定代码。
+    ///
+    /// # 返回
+    /// 返回大写稳定代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SupplierAccepted => "SUPPLIER_ACCEPTED",
+            Self::ErpAccepted => "ERP_ACCEPTED",
+            Self::Compensated => "COMPENSATED",
+            Self::ClosedNoAdjustment => "CLOSED_NO_ADJUSTMENT",
+        }
+    }
+
+    /// 返回该结论允许的受控原因代码。
+    fn allowed_reason_codes(self) -> &'static [&'static str] {
+        match self {
+            Self::SupplierAccepted => &["BILL_ALIGNED", "NO_BUSINESS_IMPACT", "OTHER"],
+            Self::ErpAccepted => &["ACCEPT_BILL", "AMOUNT_MISMATCH", "OTHER"],
+            Self::Compensated => &["COMPENSATED_ELSEWHERE", "OTHER"],
+            Self::ClosedNoAdjustment => &["NO_BUSINESS_IMPACT", "OTHER"],
+        }
+    }
+
+    /// 判断结论是否必须携带正式证据引用。
+    fn requires_evidence(self) -> bool {
+        matches!(self, Self::Compensated | Self::ClosedNoAdjustment)
+    }
+}
+
+/// 已规范化的差异正式结论、原因与证据组合。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettlementDifferenceConclusion {
+    kind: SettlementDifferenceConclusionKind,
+    reason_code: String,
+    evidence_reference_ids: Vec<String>,
+    encoded: String,
+}
+
+impl SettlementDifferenceConclusion {
+    /// 创建并校验差异正式结论。
+    ///
+    /// 原因代码按大写稳定格式规范化，并校验与结论类别的固定组合；证据引用去除
+    /// 首尾空白、排序去重，禁止分隔符注入。已补偿与无需调整关闭必须携带证据。
+    ///
+    /// # 参数
+    /// * `kind` - 正式结论类别
+    /// * `reason_code` - 受控原因代码
+    /// * `evidence_reference_ids` - 正式证据引用
+    ///
+    /// # 返回
+    /// 返回可直接用于差异状态推进与持久化的规范化结论。
+    ///
+    /// # 错误
+    /// 原因格式或组合非法、证据超限/非法/缺失，或编码结果超过 512 字节时返回错误。
+    pub fn new(
+        kind: SettlementDifferenceConclusionKind,
+        reason_code: impl Into<String>,
+        evidence_reference_ids: Vec<String>,
+    ) -> Result<Self> {
+        let reason_code = normalize_reason_code(reason_code.into())?;
+        if !kind.allowed_reason_codes().contains(&reason_code.as_str()) {
+            return Err(Error::from("差异结论与原因代码组合不受支持"));
+        }
+        let evidence_reference_ids = normalize_evidence_references(evidence_reference_ids)?;
+        if kind.requires_evidence() && evidence_reference_ids.is_empty() {
+            return Err(Error::from("已补偿或无需调整关闭必须提供正式证据引用"));
+        }
+        let encoded = format!(
+            "reason={reason_code};evidence={}",
+            evidence_reference_ids.join(",")
+        );
+        if encoded.len() > RESOLUTION_MAX_LEN {
+            return Err(Error::from("差异结论的原因与证据引用合计不能超过512字节"));
+        }
+        Ok(Self {
+            kind,
+            reason_code,
+            evidence_reference_ids,
+            encoded,
+        })
+    }
+
+    /// 返回结论对应的差异状态。
+    ///
+    /// # 返回
+    /// 返回正式持久化状态。
+    pub fn status(&self) -> SettlementDifferenceStatus {
+        self.kind.status()
+    }
+
+    /// 返回正式结论类别。
+    ///
+    /// # 返回
+    /// 返回构造时的强类型结论类别。
+    pub fn kind(&self) -> SettlementDifferenceConclusionKind {
+        self.kind
+    }
+
+    /// 返回规范化原因代码。
+    ///
+    /// # 返回
+    /// 返回大写受控原因代码。
+    pub fn reason_code(&self) -> &str {
+        &self.reason_code
+    }
+
+    /// 返回排序去重后的证据引用。
+    ///
+    /// # 返回
+    /// 返回只读证据引用切片。
+    pub fn evidence_reference_ids(&self) -> &[String] {
+        &self.evidence_reference_ids
+    }
+
+    /// 返回稳定持久化文本。
+    ///
+    /// # 返回
+    /// 返回 `reason=<code>;evidence=<refs>` 格式文本。
+    pub fn encoded(&self) -> &str {
+        &self.encoded
+    }
+}
+
 /// 结算差异创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierSettlementDifferenceData {
@@ -201,6 +351,74 @@ impl SupplierSettlementDifference {
         })
     }
 
+    /// 校验调用方持有的差异版本仍是当前版本。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取到的差异版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本不一致时返回领域错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        if self.base.version != expected {
+            return Err(Error::from("结算差异版本不一致"));
+        }
+        Ok(())
+    }
+
+    /// 判断差异是否属于指定结算明细。
+    ///
+    /// # 参数
+    /// * `item_id` - 结算明细主键
+    ///
+    /// # 返回
+    /// 归属一致时返回 `true`。
+    pub fn belongs_to_item(&self, item_id: &SupplierSettlementItemId) -> bool {
+        self.statement_item_id == *item_id
+    }
+
+    /// 判断差异是否仍等待正式结论。
+    ///
+    /// # 返回
+    /// 状态为 `PENDING` 时返回 `true`。
+    pub fn is_pending(&self) -> bool {
+        self.status == SettlementDifferenceStatus::Pending
+    }
+
+    /// 登记强类型正式结论。
+    ///
+    /// 只有待处理差异可以首次登记正式结论；状态、持久化文本、处理人和处理时间
+    /// 作为一个整体推进，调用方不能分别拼装。
+    ///
+    /// # 参数
+    /// * `conclusion` - 已规范化的原因与证据组合
+    /// * `resolved_by` - 处理人
+    /// * `resolved_at` - 处理时间
+    ///
+    /// # 返回
+    /// 登记成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 差异不是待处理状态，或处理字段校验失败时返回错误。
+    pub fn record_conclusion(
+        &mut self,
+        conclusion: &SettlementDifferenceConclusion,
+        resolved_by: impl Into<String>,
+        resolved_at: Instant,
+    ) -> Result<()> {
+        if self.status != SettlementDifferenceStatus::Pending {
+            return Err(Error::from("结算差异已有正式结论"));
+        }
+        self.update(SupplierSettlementDifferenceUpdate {
+            status: Some(conclusion.status()),
+            resolution: Some(conclusion.encoded().to_string()),
+            resolved_by: Some(resolved_by.into()),
+            resolved_at: Some(resolved_at),
+        })
+    }
+
     /// 更新结算差异。
     ///
     /// 复用 `new` 的校验规则；结算明细、差异类型与差异金额不可修改。
@@ -244,6 +462,42 @@ impl SupplierSettlementDifference {
         self.resolved_at = resolved_at;
         Ok(())
     }
+}
+
+/// 规范化受控原因代码。
+fn normalize_reason_code(value: String) -> Result<String> {
+    let value = value.trim().to_ascii_uppercase();
+    if value.is_empty() || value.len() > 64 {
+        return Err(Error::from("原因代码必须为1-64个字符"));
+    }
+    if !value
+        .bytes()
+        .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.'))
+    {
+        return Err(Error::from("原因代码只能包含大写字母、数字、下划线、连字符或点"));
+    }
+    Ok(value)
+}
+
+/// 规范化正式证据引用。
+fn normalize_evidence_references(mut values: Vec<String>) -> Result<Vec<String>> {
+    if values.len() > 20 {
+        return Err(Error::from("证据引用最多20项"));
+    }
+    for value in &mut values {
+        *value = value.trim().to_string();
+        if value.is_empty()
+            || value.len() > 128
+            || value
+                .chars()
+                .any(|character| matches!(character, '|' | ';' | ','))
+        {
+            return Err(Error::from("证据引用必须非空、长度不超过128且不得包含分隔符"));
+        }
+    }
+    values.sort();
+    values.dedup();
+    Ok(values)
 }
 
 /// 校验处理结果三元组与状态的成组约束。
@@ -380,6 +634,65 @@ mod tests {
             SupplierSettlementDifference::new(SupplierSettlementDifferenceId::new("difference-6"), data)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn conclusion_normalizes_reason_and_evidence_as_one_value() {
+        let conclusion = SettlementDifferenceConclusion::new(
+            SettlementDifferenceConclusionKind::ErpAccepted,
+            " accept_bill ",
+            vec![
+                " proof-2 ".to_string(),
+                "proof-1".to_string(),
+                "proof-1".to_string(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(conclusion.reason_code(), "ACCEPT_BILL");
+        assert_eq!(
+            conclusion.evidence_reference_ids(),
+            &["proof-1".to_string(), "proof-2".to_string()]
+        );
+        assert_eq!(conclusion.status(), SettlementDifferenceStatus::ErpAcknowledged);
+
+        assert!(SettlementDifferenceConclusion::new(
+            SettlementDifferenceConclusionKind::Compensated,
+            "COMPENSATED_ELSEWHERE",
+            Vec::new(),
+        )
+        .is_err());
+        assert!(SettlementDifferenceConclusion::new(
+            SettlementDifferenceConclusionKind::SupplierAccepted,
+            "ACCEPT_BILL",
+            vec!["proof-1".to_string()],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn record_conclusion_requires_pending_and_sets_resolution_trio() {
+        let mut difference = SupplierSettlementDifference::new(
+            SupplierSettlementDifferenceId::new("difference-1"),
+            sample_data(),
+        )
+        .unwrap();
+        let conclusion = SettlementDifferenceConclusion::new(
+            SettlementDifferenceConclusionKind::ClosedNoAdjustment,
+            "NO_BUSINESS_IMPACT",
+            vec!["proof-1".to_string()],
+        )
+        .unwrap();
+        difference
+            .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_000))
+            .unwrap();
+        assert_eq!(difference.status, SettlementDifferenceStatus::Closed);
+        assert_eq!(
+            difference.resolution.as_deref(),
+            Some("reason=NO_BUSINESS_IMPACT;evidence=proof-1")
+        );
+        assert!(difference
+            .record_conclusion(&conclusion, "finance-1", Instant::from_unix_secs(1_700_000_001))
+            .is_err());
     }
 
     #[test]

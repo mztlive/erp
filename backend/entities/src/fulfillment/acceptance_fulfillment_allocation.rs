@@ -4,9 +4,9 @@
 //! 事实覆盖，不得新增审批绑定字段、审批实例引用或任务归属。
 //!
 //! 同一验收行可以对应多批履约，同一履约事实可以分批验收；分配是正式事实，
-//! 纠错通过追加 `REVERSE` 分配表达（§6.7）。「每个履约事实的净验收数量不得
-//! 超过其净成功履约数量」与「验收行的通过、短少、拒收数量必须由其有效分配
-//! 覆盖且合计守恒」是跨聚合校验，由 P3 在验收过账事务中完成（§8.2 第 5 条）。
+//! 纠错通过追加 `REVERSE` 分配表达（§6.7）。Service 在验收事务内加载事实与
+//! 全部分配；净数量、剩余可验收量和追加上限由本实体执行确定性校验（§8.2
+//! 第 5 条）。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -107,8 +107,8 @@ pub struct AcceptanceFulfillmentAllocationData {
 
 /// 验收履约分配实体（数据模型 §6.7）。
 ///
-/// 分配是正式事实，不设业务软删除（§4.5.1）；同一履约事实的净验收数量不得
-/// 超过其净成功履约数量等跨聚合约束由 P3 校验。
+/// 分配是正式事实，不设业务软删除（§4.5.1）；Service 加载同一履约事实的
+/// 全部分配后，由本实体计算净验收数量并校验不超过净成功履约数量。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct AcceptanceFulfillmentAllocation {
     #[serde(flatten)]
@@ -171,6 +171,87 @@ impl AcceptanceFulfillmentAllocation {
             allocated_quantity: data.allocated_quantity,
             reverses_allocation_id: data.reverses_allocation_id,
         })
+    }
+
+    /// 计算指定履约事实的净验收分配数量。
+    ///
+    /// # 参数
+    /// * `allocations` - 已加载的验收分配集合
+    /// * `fulfillment_line_id` - 履约事实行主键
+    ///
+    /// # 返回
+    /// 返回 `APPLY - REVERSE` 的净数量。
+    ///
+    /// # 错误
+    /// 反向分配导致净数量为负，或结果超出统一数量精度范围时返回错误。
+    pub fn net_quantity_for_fact(
+        allocations: &[AcceptanceFulfillmentAllocation],
+        fulfillment_line_id: &str,
+    ) -> Result<Quantity> {
+        let net = allocations
+            .iter()
+            .filter(|allocation| allocation.fulfillment_line_id == fulfillment_line_id)
+            .fold(rust_decimal::Decimal::ZERO, |net, allocation| {
+                match allocation.allocation_action {
+                    AllocationAction::Apply => net + allocation.allocated_quantity.to_decimal(),
+                    AllocationAction::Reverse => net - allocation.allocated_quantity.to_decimal(),
+                }
+            });
+        if net < rust_decimal::Decimal::ZERO {
+            return Err(Error::from("履约事实的净验收数量不得为负"));
+        }
+        Quantity::try_from(net).map_err(|error| Error::from(error.to_string()))
+    }
+
+    /// 计算履约事实剩余可验收数量。
+    ///
+    /// # 参数
+    /// * `successful_quantity` - 履约事实的净成功数量
+    /// * `allocations` - 已加载的验收分配集合
+    /// * `fulfillment_line_id` - 履约事实行主键
+    ///
+    /// # 返回
+    /// 返回成功数量减净验收分配后的剩余数量。
+    ///
+    /// # 错误
+    /// 既有净验收已超过成功数量，或结果超出统一数量精度时返回错误。
+    pub fn eligible_quantity_for_fact(
+        successful_quantity: Quantity,
+        allocations: &[AcceptanceFulfillmentAllocation],
+        fulfillment_line_id: &str,
+    ) -> Result<Quantity> {
+        let net = Self::net_quantity_for_fact(allocations, fulfillment_line_id)?;
+        if net.to_decimal() > successful_quantity.to_decimal() {
+            return Err(Error::from("履约事实的净验收数量超过其净成功履约数量"));
+        }
+        Quantity::try_from(successful_quantity.to_decimal() - net.to_decimal())
+            .map_err(|error| Error::from(error.to_string()))
+    }
+
+    /// 校验追加应用分配不会超过履约事实的净成功数量。
+    ///
+    /// # 参数
+    /// * `successful_quantity` - 履约事实的净成功数量
+    /// * `existing` - 该履约事实的既有分配
+    /// * `fulfillment_line_id` - 履约事实行主键
+    /// * `applying_quantity` - 本次拟追加的应用数量
+    ///
+    /// # 返回
+    /// 追加后仍不超上限时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 净数量计算失败或追加后超过成功数量时返回错误。
+    pub fn ensure_apply_within_successful_quantity(
+        successful_quantity: Quantity,
+        existing: &[AcceptanceFulfillmentAllocation],
+        fulfillment_line_id: &str,
+        applying_quantity: Quantity,
+    ) -> Result<()> {
+        let net = Self::net_quantity_for_fact(existing, fulfillment_line_id)?;
+        if net.to_decimal() + applying_quantity.to_decimal() > successful_quantity.to_decimal() {
+            return Err(Error::from("履约事实的净验收数量超过其净成功履约数量"));
+        }
+        Ok(())
     }
 }
 
@@ -261,6 +342,72 @@ mod tests {
         assert!(AcceptanceFulfillmentAllocation::new(
             AcceptanceFulfillmentAllocationId::new("a4"),
             apply_with_reference
+        )
+        .is_err());
+    }
+
+    /// 净分配与剩余可验收数量按 APPLY - REVERSE 计算。
+    #[test]
+    fn net_and_eligible_quantities_are_conserved() {
+        let apply = AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("allocation-apply"),
+            AcceptanceFulfillmentAllocationData {
+                allocated_quantity: Quantity::from_str("4").unwrap(),
+                ..apply_data()
+            },
+        )
+        .unwrap();
+        let reverse = AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("allocation-reverse"),
+            AcceptanceFulfillmentAllocationData {
+                allocation_action: AllocationAction::Reverse,
+                allocated_quantity: Quantity::from_str("1.5").unwrap(),
+                reverses_allocation_id: Some(AcceptanceFulfillmentAllocationId::new("allocation-apply")),
+                ..apply_data()
+            },
+        )
+        .unwrap();
+        let allocations = vec![apply, reverse];
+        assert_eq!(
+            AcceptanceFulfillmentAllocation::net_quantity_for_fact(&allocations, "dl-1").unwrap(),
+            Quantity::from_str("2.5").unwrap()
+        );
+        assert_eq!(
+            AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+                Quantity::from_str("5").unwrap(),
+                &allocations,
+                "dl-1",
+            )
+            .unwrap(),
+            Quantity::from_str("2.5").unwrap()
+        );
+        assert!(
+            AcceptanceFulfillmentAllocation::ensure_apply_within_successful_quantity(
+                Quantity::from_str("5").unwrap(),
+                &allocations,
+                "dl-1",
+                Quantity::from_str("2.5").unwrap(),
+            )
+            .is_ok()
+        );
+        assert!(
+            AcceptanceFulfillmentAllocation::ensure_apply_within_successful_quantity(
+                Quantity::from_str("5").unwrap(),
+                &allocations,
+                "dl-1",
+                Quantity::from_str("2.6").unwrap(),
+            )
+            .is_err()
+        );
+        assert!(AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+            Quantity::from_str("2").unwrap(),
+            &allocations,
+            "dl-1",
+        )
+        .is_err());
+        assert!(AcceptanceFulfillmentAllocation::net_quantity_for_fact(
+            std::slice::from_ref(&allocations[1]),
+            "dl-1",
         )
         .is_err());
     }

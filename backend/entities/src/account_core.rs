@@ -231,6 +231,20 @@ impl AccountCore {
         self.status.is_active()
     }
 
+    /// 校验账号当前允许登录并参与业务操作。
+    ///
+    /// # 返回值
+    /// 账号处于启用状态时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 账号被冻结或归档时返回错误。
+    pub fn ensure_can_login(&self) -> Result<()> {
+        if self.can_login() {
+            return Ok(());
+        }
+        Err(Error::from("账号已停用，不能参与需要可登录身份的业务操作"))
+    }
+
     /// 判断账号类型是否匹配期望值。
     ///
     /// # 参数
@@ -240,6 +254,23 @@ impl AccountCore {
     /// 类型匹配时返回 `true`。
     pub fn is_kind(&self, expected: AccountKind) -> bool {
         self.kind == expected
+    }
+
+    /// 判断账号是否为当前可承担后台责任的有效账号。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回值
+    /// 账号类型为后台管理员且状态允许登录时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 审批责任人等后台职责必须同时满足身份类型与账号状态，不得只判断其中一项。
+    pub fn is_active_backoffice(&self) -> bool {
+        self.is_kind(AccountKind::Admin) && self.can_login()
     }
 
     /// 应用名称更新。
@@ -375,6 +406,31 @@ mod tests {
         let account = sample_account(AccountKind::Admin, AccountStatus::Active);
 
         assert!(account.is_kind(AccountKind::Admin));
+    }
+
+    /// 有效后台责任账号必须同时满足后台身份与可登录状态。
+    #[test]
+    fn active_backoffice_requires_login_eligibility() {
+        let active = sample_account(AccountKind::Admin, AccountStatus::Active);
+        let suspended = sample_account(AccountKind::Admin, AccountStatus::Suspended);
+        let archived = sample_account(AccountKind::Admin, AccountStatus::Archived);
+
+        assert!(active.is_active_backoffice());
+        assert!(!suspended.is_active_backoffice());
+        assert!(!archived.is_active_backoffice());
+    }
+
+    #[test]
+    fn login_eligibility_accepts_active_and_rejects_inactive_states() {
+        assert!(sample_account(AccountKind::Admin, AccountStatus::Active)
+            .ensure_can_login()
+            .is_ok());
+        assert!(sample_account(AccountKind::Admin, AccountStatus::Suspended)
+            .ensure_can_login()
+            .is_err());
+        assert!(sample_account(AccountKind::Admin, AccountStatus::Archived)
+            .ensure_can_login()
+            .is_err());
     }
 
     #[test]

@@ -53,6 +53,33 @@ pub struct PartyRevision {
 }
 
 impl PartyRevision {
+    /// 计算指定 Party 的下一修订号。
+    ///
+    /// 空修订链从 `1` 开始；非空链取最大修订号加一。输入修订必须全部
+    /// 属于指定 Party，且最大修订号不能溢出 `u32`。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定 Party ID
+    /// * `revisions` - 已加载的修订链
+    ///
+    /// # 返回
+    /// 返回下一修订号。
+    ///
+    /// # 错误
+    /// 修订属于其他 Party 或修订号已达到上限时返回错误。
+    pub fn next_revision_no(party_id: &PartyId, revisions: &[Self]) -> Result<u32> {
+        if revisions.iter().any(|revision| &revision.party_id != party_id) {
+            return Err(crate::errors::Error::from("主体修订归属不一致"));
+        }
+        revisions
+            .iter()
+            .map(|revision| revision.revision.revision_no)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| crate::errors::Error::from("主体修订号已达到上限"))
+    }
+
     /// 创建主体修订。
     ///
     /// 完成 legal_name / change_reason 的必填校验与规范化（去首尾空白、
@@ -96,6 +123,7 @@ impl PartyRevision {
 #[cfg(test)]
 mod tests {
     use super::{PartyRevision, PartyRevisionData};
+    use crate::common::revision::RevisionBase;
     use crate::ids::{PartyId, PartyRevisionId};
 
     fn revision_data() -> PartyRevisionData {
@@ -138,6 +166,35 @@ mod tests {
             ..revision_data()
         };
         assert!(PartyRevision::new(PartyRevisionId::new("r"), overlong_short).is_err());
+    }
+
+    /// 下一修订号覆盖空链、正常递增、归属错误与溢出边界。
+    #[test]
+    fn next_revision_no_enforces_chain_ownership_and_overflow() {
+        let party_id = PartyId::new("party-1");
+        assert_eq!(PartyRevision::next_revision_no(&party_id, &[]).unwrap(), 1);
+
+        let revision = PartyRevision::new(PartyRevisionId::new("rev-next"), revision_data()).unwrap();
+        assert_eq!(
+            PartyRevision::next_revision_no(&party_id, std::slice::from_ref(&revision)).unwrap(),
+            2
+        );
+
+        let foreign = PartyRevision::new(
+            PartyRevisionId::new("rev-foreign"),
+            PartyRevisionData {
+                party_id: PartyId::new("party-2"),
+                ..revision_data()
+            },
+        )
+        .unwrap();
+        assert!(PartyRevision::next_revision_no(&party_id, &[foreign]).is_err());
+
+        let overflow = PartyRevision {
+            revision: RevisionBase::new(u32::MAX),
+            ..revision
+        };
+        assert!(PartyRevision::next_revision_no(&party_id, &[overflow]).is_err());
     }
 
     /// 修订不可变：BSON 往返保持全字段一致。

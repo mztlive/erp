@@ -2,25 +2,24 @@
 //!
 //! 图算法只编排 `bpm::graph` 已交付原语，不在本模块复制或另立定义源。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use bpm::graph::{generate_linear_transitions, validate_entry_node, validate_transition};
+use bpm::graph::{
+    assignee_ids, copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NodeReplacementDraft,
+};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalNodeDefinitionId, ApprovalProcessDefinitionId,
     ApprovalTransitionDefinitionId,
 };
-use bpm::model::types::{ApprovalCommandKind, ModelError, NAME_MAX_LEN};
-use bpm::model::{
-    ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition,
-};
+use bpm::model::types::{ApprovalCommandKind, ModelError};
+use bpm::model::{ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition};
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
-use database::repository::bpm::{CasWriteOutcome, DefinitionGraph};
+use database::repository::bpm::CasWriteOutcome;
 use database::{AccessControlExt, BpmExt, Executor, NoTransaction, Transactional};
 use entities::document_registry::DocumentType;
-use entities::{AccountCore, AccountKind, Permission};
+use entities::{AccountCore, Permission};
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use sha2::{Digest, Sha256};
 
@@ -42,9 +41,6 @@ use super::policy::{
 use super::process_kind::{document_type_of, process_kind_of};
 
 pub use super::scope::{definition_management_visibility, DefinitionManagementVisibility};
-
-/// 定义内节点数量上限。
-const MAX_DEFINITION_NODES: usize = 20;
 
 /// 审批流程定义管理服务。
 pub struct ApprovalDefinitionService {
@@ -109,7 +105,8 @@ impl ApprovalDefinitionService {
     ) -> Result<DefinitionDetailView> {
         let policy = require_process_required(request.document_type)?;
         self.ensure_definition_admin(actor, &policy).await?;
-        let name = normalize_definition_name(&request.name)?;
+        let name =
+            ApprovalProcessDefinition::normalize_name(request.name.clone()).map_err(map_model_error)?;
         let digest = create_draft_digest(request.document_type, &name, request.draft_source, actor.id());
         if let Some(view) = self
             .replay_if_receipt(
@@ -831,9 +828,9 @@ async fn publish_tx(
     )
     .await?;
     let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
-        validate_publish_graph(&current),
-        validate_required_purposes(&policy, &purpose_refs(&current.nodes)),
-        validate_assignees(db, rbac, &policy, &assignee_ids(&current.nodes), session).await,
+        current.validate_linear().map_err(map_model_error),
+        validate_required_purposes(&policy, &current.purpose_refs()),
+        validate_assignees(db, rbac, &policy, &current.assignee_ids(), session).await,
         ensure_actions_registered(&policy),
     )?;
     current = refresh_and_replace_for_publish(db, current, request.expected_definition_lock_version, session)
@@ -957,6 +954,24 @@ fn empty_draft(
 }
 
 /// 从当前发布定义复制节点到新草稿。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `policy` - 当前单据类型必须审批政策
+/// * `name` - 已由 BPM 规范化的草稿名称
+/// * `version` - 新草稿业务版本
+/// * `actor` - 已认证定义管理员
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回 BPM 构造并校验的新草稿图。
+///
+/// # 错误
+/// 缺少发布源、审批人失效或 BPM 构图失败时返回错误。
+///
+/// # 关键业务约束
+/// Service 只生成新 ID 与查询账号，节点复制、用途清理、入口和连线规则全部由 BPM 提供。
 async fn copy_published_draft(
     db: &Database,
     rbac: &SharedRbacService,
@@ -979,78 +994,24 @@ async fn copy_published_draft(
         )
         .await?
         .ok_or_else(definition_not_found)?;
-    let nodes = copy_nodes(&source.nodes, next_id())?;
-    validate_assignees(db, rbac, policy, &assignee_ids(&nodes), session).await?;
-    finish_graph(policy.process_kind, version, name, actor, nodes)
-}
-
-/// 复制节点并生成新主键与不可预测 `node_key`，不复制历史用途。
-///
-/// # 参数
-/// * `source` - 被复制的已发布节点
-/// * `definition_id` - 新草稿定义 ID
-///
-/// # 返回
-/// 返回新草稿节点。
-///
-/// # 错误
-/// 节点构造失败时返回错误。
-fn copy_nodes(
-    source: &[ApprovalNodeDefinition],
-    definition_id: String,
-) -> Result<Vec<ApprovalNodeDefinition>> {
-    let process_id = ApprovalProcessDefinitionId::new(definition_id);
+    let definition_id = ApprovalProcessDefinitionId::new(next_id());
     let at = now()?;
-    let mut nodes = Vec::with_capacity(source.len());
-    for node in sorted_nodes(source)? {
-        nodes.push(
-            ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
-                id: ApprovalNodeDefinitionId::new(next_id()),
-                process_definition_id: process_id.clone(),
-                node_key: next_id(),
-                node_name: node.node_name.clone(),
-                node_purpose: None,
-                display_order: node.display_order,
-                assignee_participant_id: node.assignee_participant_id.clone(),
-                assignee_label_snapshot: node.assignee_label_snapshot.clone(),
-                at,
-            })
-            .map_err(map_model_error)?,
-        );
-    }
-    Ok(nodes)
-}
-
-/// 由节点生成入口、连线并构造草稿图。
-fn finish_graph(
-    process_kind: bpm::ProcessKind,
-    version: u32,
-    name: &str,
-    actor: &AuditActor,
-    nodes: Vec<ApprovalNodeDefinition>,
-) -> Result<DefinitionGraph> {
-    let keys = node_keys(&nodes);
-    let entry = keys
-        .first()
-        .cloned()
-        .ok_or_else(|| Error::ValidationError("已发布定义没有可复制的节点".to_string()))?;
-    let definition_id = nodes[0].process_definition_id.clone();
-    let definition = ApprovalProcessDefinition::new_draft(
-        definition_id.clone(),
-        process_kind,
+    let identities = next_copied_node_identities(source.nodes.len());
+    let nodes = copy_nodes_for_definition(&source.nodes, definition_id.clone(), &identities, at)
+        .map_err(map_model_error)?;
+    validate_assignees(db, rbac, policy, &assignee_ids(&nodes), session).await?;
+    let transition_ids = next_transition_ids(nodes.len());
+    DefinitionGraph::new_populated_draft(
+        definition_id,
+        policy.process_kind,
         version,
         name,
-        entry,
         participant(actor)?,
-        now()?,
-    )
-    .map_err(map_model_error)?;
-    let transitions = transitions_from_nodes(&definition_id, &nodes)?;
-    Ok(DefinitionGraph {
-        definition,
         nodes,
-        transitions,
-    })
+        transition_ids,
+        at,
+    )
+    .map_err(map_model_error)
 }
 
 /// 持久化新建草稿及其图。
@@ -1090,6 +1051,24 @@ async fn reload_draft_for_cas(
 }
 
 /// 按请求构造替换后的草稿图。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `graph` - 当前草稿图
+/// * `policy` - 当前单据类型必须审批政策
+/// * `requests` - 客户端整组节点请求
+/// * `actor` - 已认证定义管理员
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回已刷新审批人快照并由 BPM 重建的草稿图。
+///
+/// # 错误
+/// 审批人、权限、节点请求或 BPM 图规则失败时返回错误。
+///
+/// # 关键业务约束
+/// Service 只转换 DTO、加载账号并编排校验，节点身份与图规则由 BPM 决定。
 async fn prepare_replacement(
     db: &Database,
     rbac: &SharedRbacService,
@@ -1100,29 +1079,66 @@ async fn prepare_replacement(
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let _ = actor;
-    let planned = plan_nodes(graph, policy, requests)?;
-    let snapshots = load_assignee_snapshots(db, &assignee_ids(&planned), session).await?;
-    let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph = allow_replace_after_assignees(
-        validate_assignees(db, rbac, policy, &assignee_ids(&planned), session).await,
-    )?;
+    let drafts = node_replacement_drafts(requests)?;
+    let planned = graph
+        .plan_replacement_nodes(&drafts, now()?)
+        .map_err(map_model_error)?;
+    let assignee_ids = assignee_ids(&planned);
+    let snapshots = load_assignee_snapshots(db, &assignee_ids, session).await?;
+    let ReplaceAssigneesWriteStep::ApplySnapshotsAndReplaceGraph =
+        allow_replace_after_assignees(validate_assignees(db, rbac, policy, &assignee_ids, session).await)?;
     let nodes = apply_snapshots(planned, &snapshots)?;
-    finish_existing_draft(&graph.definition, nodes)
+    rebuild_draft_graph(&graph.definition, nodes)
 }
 
 /// 刷新快照后写回草稿图，供发布重验使用。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `graph` - 已完成发布前校验的草稿图
+/// * `expected` - 草稿定义锁版本
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回 Repository CAS 写回后的完整草稿图。
+///
+/// # 错误
+/// 账号快照缺失、BPM 重建或 Repository CAS 失败时返回错误。
+///
+/// # 关键业务约束
+/// 发布前必须以当前账号显示名刷新全部节点快照，再整组替换图。
 async fn refresh_and_replace_for_publish(
     db: &Database,
     graph: DefinitionGraph,
     expected: u64,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
-    let snapshots = load_assignee_snapshots(db, &assignee_ids(&graph.nodes), session).await?;
+    let assignee_ids = graph.assignee_ids();
+    let snapshots = load_assignee_snapshots(db, &assignee_ids, session).await?;
     let nodes = apply_snapshots(graph.nodes, &snapshots)?;
-    let prepared = finish_existing_draft(&graph.definition, nodes)?;
+    let prepared = rebuild_draft_graph(&graph.definition, nodes)?;
     replace_graph(db, prepared, expected, session).await
 }
 
 /// 发布已重验的草稿并退役旧版本。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `graph` - 已刷新快照的草稿图
+/// * `policy` - 当前单据类型必须审批政策
+/// * `request` - 发布请求与幂等键
+/// * `actor` - 已认证定义管理员
+/// * `digest` - 规范化命令摘要
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回事务内发布后的定义详情。
+///
+/// # 错误
+/// BPM 状态切换、CAS、收据或审计写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 新旧定义状态由 BPM 同步计算，Repository 在同一事务中退役旧版本并发布新版本。
 async fn publish_and_store(
     db: &Database,
     mut graph: DefinitionGraph,
@@ -1138,8 +1154,10 @@ async fn publish_and_store(
         .await?;
     let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
     let expected = graph.definition.definition_lock_version();
-    let (published, previous) =
-        orchestrate_publish_definitions(graph.definition, previous, participant(actor)?, now()?)?;
+    let (published, previous) = graph
+        .definition
+        .publish_replacing(previous, participant(actor)?, now()?)
+        .map_err(map_model_error)?;
     graph.definition = published;
     let outcome = db
         .bpm_workflow()
@@ -1223,107 +1241,59 @@ async fn replace_graph(
     })
 }
 
-/// 规划替换后的节点：校验请求、保持或生成 `node_key`，并清除节点用途。
+/// 将 Service 节点请求转换为 BPM 整组替换输入。
 ///
 /// # 参数
-/// * `graph` - 当前草稿图
-/// * `policy` - 单据类型政策，节点规划不再按用途分支
-/// * `requests` - 整组替换节点请求
+/// * `requests` - 客户端提交的完整节点列表
 ///
 /// # 返回
-/// 返回按显示顺序规划后的节点。
+/// 返回携带调用方生成新身份与 BPM 参与人引用的替换输入。
 ///
 /// # 错误
-/// 数量、顺序、名称、节点身份不合法时返回校验错误。
-fn plan_nodes(
-    graph: &DefinitionGraph,
-    _policy: &ProcessRequiredApprovalPolicy,
-    requests: &[DefinitionNodeRequest],
-) -> Result<Vec<ApprovalNodeDefinition>> {
-    ensure_node_count(requests.len())?;
-    let existing = existing_nodes_by_id(&graph.nodes);
-    let mut seen_ids = HashSet::new();
-    let mut planned = Vec::with_capacity(requests.len());
-    for request in sorted_requests(requests)? {
-        planned.push(plan_one_node(
-            &graph.definition.base.id,
-            &existing,
-            &mut seen_ids,
-            request,
-        )?);
-    }
-    Ok(clear_node_purposes(planned))
-}
-
-/// 规划单个节点。
-fn plan_one_node(
-    definition_id: &str,
-    existing: &HashMap<String, ApprovalNodeDefinition>,
-    seen_ids: &mut HashSet<String>,
-    request: &DefinitionNodeRequest,
-) -> Result<ApprovalNodeDefinition> {
-    let name = normalize_node_name(&request.node_name)?;
-    let assignee = ParticipantId::new(request.assignee_user_id.trim()).map_err(map_bpm_error)?;
-    let (node_id, node_key, purpose) = resolve_node_identity(existing, seen_ids, request)?;
-    ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
-        id: node_id,
-        process_definition_id: ApprovalProcessDefinitionId::new(definition_id.to_string()),
-        node_key,
-        node_name: name,
-        node_purpose: purpose,
-        display_order: request.display_order,
-        assignee_participant_id: assignee,
-        assignee_label_snapshot: "pending".to_string(),
-        at: now()?,
-    })
-    .map_err(map_model_error)
-}
-
-/// 解析已有节点身份或为新节点生成不可预测键。
-fn resolve_node_identity(
-    existing: &HashMap<String, ApprovalNodeDefinition>,
-    seen_ids: &mut HashSet<String>,
-    request: &DefinitionNodeRequest,
-) -> Result<(ApprovalNodeDefinitionId, String, Option<String>)> {
-    let Some(node_id) = request
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
-        return Ok((ApprovalNodeDefinitionId::new(next_id()), next_id(), None));
-    };
-    if !seen_ids.insert(node_id.to_string()) {
-        return Err(Error::ValidationError("节点ID不能重复".to_string()));
-    }
-    let existing = existing.get(node_id).ok_or_else(|| {
-        Error::ValidationError("节点不属于当前草稿，不能跨定义引用或改写已删除节点".to_string())
-    })?;
-    Ok((
-        ApprovalNodeDefinitionId::new(existing.base.id.clone()),
-        existing.node_key.clone(),
-        existing.node_purpose.clone(),
-    ))
-}
-
-/// 保存与复制时清除节点用途。销售单不再盖章或强制保留采购确认用途。
+/// 审批人引用无效时返回校验错误。
 ///
-/// # 参数
-/// * `nodes` - 规划或复制后的节点
-///
-/// # 返回
-/// 返回已清除用途的节点列表。
-///
-/// # 错误
-/// 无。
-fn clear_node_purposes(mut nodes: Vec<ApprovalNodeDefinition>) -> Vec<ApprovalNodeDefinition> {
-    for node in &mut nodes {
-        node.node_purpose = None;
-    }
-    nodes
+/// # 关键业务约束
+/// Service 只提供 ID，不判断节点顺序、已有身份归属或用途清理规则。
+fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<NodeReplacementDraft>> {
+    requests
+        .iter()
+        .map(|request| {
+            let existing_node_id = request
+                .node_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(ApprovalNodeDefinitionId::new);
+            Ok(NodeReplacementDraft {
+                existing_node_id,
+                new_node_id: ApprovalNodeDefinitionId::new(next_id()),
+                new_node_key: next_id(),
+                node_name: request.node_name.clone(),
+                display_order: request.display_order,
+                assignee_participant_id: ParticipantId::new(request.assignee_user_id.trim())
+                    .map_err(map_bpm_error)?,
+            })
+        })
+        .collect()
 }
 
 /// 批量读取审批人并校验账号、静态权限与可静态判断的岗位分离。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `policy` - 当前单据类型必须审批政策
+/// * `user_ids` - BPM 确定性提取的审批人 ID
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 全部审批人通过定义期静态资格校验时返回 `Ok(())`。
+///
+/// # 错误
+/// 账号缺失、后台有效性、静态权限或岗位分离失败时返回错误。
+///
+/// # 关键业务约束
+/// 定义期不读取具体实例 DataScope，运行时对象访问资格由绑定与执行阶段重验。
 async fn validate_assignees(
     db: &Database,
     rbac: &SharedRbacService,
@@ -1333,20 +1303,27 @@ async fn validate_assignees(
 ) -> Result<()> {
     let accounts = load_assignee_snapshots(db, user_ids, session).await?;
     for user_id in user_ids {
-        let account = accounts.get(user_id);
-        ensure_assignee_account_ready(
-            account.is_some(),
-            account.is_some_and(|item| item.is_kind(AccountKind::Admin)),
-            account.is_some_and(AccountCore::can_login),
-        )?;
-        if let Some(account) = account {
-            ensure_static_eligibility(rbac, policy, account).await?;
-        }
+        let account = require_active_backoffice_assignee(accounts.get(user_id))?;
+        ensure_static_eligibility(rbac, policy, account).await?;
     }
     validate_static_separation(policy.separation_of_duties_policy, user_ids)
 }
 
 /// 批量读取账号快照。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `user_ids` - 去重后的审批人账号 ID
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回按账号 ID 索引的账号快照；空输入直接返回空映射。
+///
+/// # 错误
+/// Repository 批量查询失败时返回错误。
+///
+/// # 关键业务约束
+/// 查询条件由账号 Repository 的 `list_by_ids` 封装，禁止 Service 拼装 MongoDB 条件。
 async fn load_assignee_snapshots(
     db: &Database,
     user_ids: &[String],
@@ -1355,10 +1332,7 @@ async fn load_assignee_snapshots(
     if user_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let accounts = db
-        .accounts()
-        .find_many(doc! { "id": { "$in": user_ids } }, session)
-        .await?;
+    let accounts = db.accounts().list_by_ids(user_ids, session).await?;
     Ok(accounts
         .into_iter()
         .map(|account| (account.base.id.clone(), account))
@@ -1366,6 +1340,20 @@ async fn load_assignee_snapshots(
 }
 
 /// 校验后台有效账号与静态审批权限，不伪造实例 DataScope。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务
+/// * `policy` - 当前单据类型审批人资格政策
+/// * `account` - Repository 返回的账号快照
+///
+/// # 返回
+/// 账号当前有效且具有静态审批权限时返回 `Ok(())`。
+///
+/// # 错误
+/// 后台有效性、权限常量解析或 RBAC 查询失败时返回错误。
+///
+/// # 关键业务约束
+/// 账号类型与状态组合由实体判断；本方法只编排 RBAC 权限重验。
 async fn ensure_static_eligibility(
     rbac: &SharedRbacService,
     policy: &ProcessRequiredApprovalPolicy,
@@ -1374,7 +1362,7 @@ async fn ensure_static_eligibility(
     match policy.approver_eligibility_policy {
         ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {}
     }
-    ensure_assignee_account_ready(true, account.is_kind(AccountKind::Admin), account.can_login())?;
+    require_active_backoffice_assignee(Some(account))?;
     let permission = Permission::parse(STATIC_APPROVE_PERMISSION)
         .map_err(|error| Error::Internal(format!("静态审批权限不变量损坏: {error}")))?;
     let allowed = rbac
@@ -1391,6 +1379,19 @@ fn validate_static_separation(policy: SeparationOfDutiesPolicy, _user_ids: &[Str
 }
 
 /// 把账号显示名写入节点快照。
+///
+/// # 参数
+/// * `nodes` - BPM 已规划的节点集合
+/// * `accounts` - Repository 返回的账号 ID 到快照映射
+///
+/// # 返回
+/// 返回由 BPM 节点方法刷新显示名后的节点集合。
+///
+/// # 错误
+/// 账号快照缺失或 BPM 拒绝显示名时返回错误。
+///
+/// # 关键业务约束
+/// Service 只把仓储快照与节点关联，不复制节点重建或名称规范化规则。
 fn apply_snapshots(
     nodes: Vec<ApprovalNodeDefinition>,
     accounts: &HashMap<String, AccountCore>,
@@ -1402,135 +1403,91 @@ fn apply_snapshots(
             .get(node.assignee_participant_id.as_str())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
         refreshed.push(
-            ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
-                id: ApprovalNodeDefinitionId::new(node.base.id.clone()),
-                process_definition_id: node.process_definition_id.clone(),
-                node_key: node.node_key.clone(),
-                node_name: node.node_name.clone(),
-                node_purpose: node.node_purpose.clone(),
-                display_order: node.display_order,
-                assignee_participant_id: node.assignee_participant_id.clone(),
-                assignee_label_snapshot: account.name.clone(),
-                at,
-            })
-            .map_err(map_model_error)?,
+            node.with_assignee_label_snapshot(account.name.clone(), at)
+                .map_err(map_model_error)?,
         );
     }
     Ok(refreshed)
 }
 
-/// 保持草稿主键与版本，重写入口和连线。
-fn finish_existing_draft(
+/// 由节点快照重建草稿入口与线性连线。
+///
+/// # 参数
+/// * `definition` - 需要保持身份与业务版本的草稿定义
+/// * `nodes` - 已完成账号快照刷新的完整节点集合
+///
+/// # 返回
+/// 返回 BPM 已校验的完整草稿图。
+///
+/// # 错误
+/// 节点、入口或线性连线模型非法时返回校验错误。
+///
+/// # 关键业务约束
+/// Service 只提供连线 ID 与时间，不实现节点顺序或图完整性规则。
+fn rebuild_draft_graph(
     definition: &ApprovalProcessDefinition,
     nodes: Vec<ApprovalNodeDefinition>,
 ) -> Result<DefinitionGraph> {
-    let mut definition = definition.clone();
-    let keys = node_keys(&nodes);
-    let entry = keys
-        .first()
-        .cloned()
-        .ok_or_else(|| Error::ValidationError("草稿至少需要一个节点".to_string()))?;
-    definition
-        .set_entry_node_draft(entry, now()?)
-        .map_err(map_model_error)?;
-    let transitions = transitions_from_nodes(
-        &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
-        &nodes,
-    )?;
-    Ok(DefinitionGraph {
-        definition,
-        nodes,
-        transitions,
-    })
+    let transition_ids = next_transition_ids(nodes.len());
+    DefinitionGraph::rebuild_draft(definition, nodes, transition_ids, now()?).map_err(map_model_error)
 }
 
-/// 编排已交付图原语，核验发布图完整性。
-fn validate_publish_graph(graph: &DefinitionGraph) -> Result<()> {
-    let nodes = sorted_nodes(&graph.nodes)?;
-    ensure_node_count(nodes.len())?;
-    let keys = node_keys(&nodes);
-    validate_entry_node(&graph.definition.entry_node_key, &keys).map_err(map_model_error)?;
-    if graph.definition.entry_node_key.trim() != keys[0] {
-        return Err(Error::ValidationError("入口必须是顺序第一节点".to_string()));
-    }
-    let expected = generate_linear_transitions(&keys).map_err(map_model_error)?;
-    ensure_transitions_match(&graph.transitions, &expected)?;
-    for transition in &graph.transitions {
-        validate_transition(transition).map_err(map_model_error)?;
-    }
-    Ok(())
-}
-
-/// 由有序节点生成 APPROVE/REJECT 连线实体。
-fn transitions_from_nodes(
-    definition_id: &ApprovalProcessDefinitionId,
-    nodes: &[ApprovalNodeDefinition],
-) -> Result<Vec<ApprovalTransitionDefinition>> {
-    let drafts = generate_linear_transitions(&node_keys(nodes)).map_err(map_model_error)?;
-    let at = now()?;
-    let mut transitions = Vec::with_capacity(drafts.len());
-    for draft in drafts {
-        transitions.push(transition_from_draft(definition_id, draft, at)?);
-    }
-    Ok(transitions)
-}
-
-/// 把线性连线草稿转为实体。
-fn transition_from_draft(
-    definition_id: &ApprovalProcessDefinitionId,
-    draft: bpm::graph::LinearTransitionDraft,
-    at: Timestamp,
-) -> Result<ApprovalTransitionDefinition> {
-    if let Some(to) = draft.to_node_key {
-        return ApprovalTransitionDefinition::to_node(
-            ApprovalTransitionDefinitionId::new(next_id()),
-            definition_id.clone(),
-            draft.from_node_key,
-            draft.event,
-            to,
-            at,
-        )
-        .map_err(map_model_error);
-    }
-    ApprovalTransitionDefinition::to_approved(
-        ApprovalTransitionDefinitionId::new(next_id()),
-        definition_id.clone(),
-        draft.from_node_key,
-        draft.event,
-        at,
-    )
-    .map_err(map_model_error)
-}
-
-/// 比较已存连线与生成器输出，证明可达、单线无环、唯一终点和驳回回入口。
-fn ensure_transitions_match(
-    actual: &[ApprovalTransitionDefinition],
-    expected: &[bpm::graph::LinearTransitionDraft],
-) -> Result<()> {
-    if actual.len() != expected.len() {
-        return Err(Error::ValidationError("连线与线性生成器结果不一致".to_string()));
-    }
-    let mut actual_keys = actual.iter().map(transition_key).collect::<Vec<_>>();
-    let mut expected_keys = expected
-        .iter()
-        .map(|draft| {
-            (
-                draft.from_node_key.clone(),
-                draft.event.as_str(),
-                draft.to_node_key.clone(),
-                draft.terminal_result.map(|item| item.as_str()),
-            )
+/// 为复制节点生成调用方负责的新身份。
+///
+/// # 参数
+/// * `count` - 需要复制的节点数量
+///
+/// # 返回
+/// 返回与源节点一一对应的新节点 ID 与不可预测节点键。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// BPM 禁止自行生成 ID，因此身份生成保留在 Service 编排边界。
+fn next_copied_node_identities(count: usize) -> Vec<CopiedNodeIdentity> {
+    (0..count)
+        .map(|_| CopiedNodeIdentity {
+            node_id: ApprovalNodeDefinitionId::new(next_id()),
+            node_key: next_id(),
         })
-        .collect::<Vec<_>>();
-    actual_keys.sort();
-    expected_keys.sort();
-    if actual_keys == expected_keys {
-        return Ok(());
-    }
-    Err(Error::ValidationError("连线与线性生成器结果不一致".to_string()))
+        .collect()
 }
 
-/// 读取下一业务版本。
+/// 为线性定义图生成调用方负责的连线 ID。
+///
+/// # 参数
+/// * `node_count` - 定义节点数量
+///
+/// # 返回
+/// 返回每节点两条连线所需的 ID 集合。
+///
+/// # 错误
+/// 无；节点数量合法性由 BPM 构图方法校验。
+///
+/// # 关键业务约束
+/// 只生成身份，不在 Service 推导连线来源、事件或目标。
+fn next_transition_ids(node_count: usize) -> Vec<ApprovalTransitionDefinitionId> {
+    (0..node_count.saturating_mul(2))
+        .map(|_| ApprovalTransitionDefinitionId::new(next_id()))
+        .collect()
+}
+
+/// 读取并计算下一业务版本。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `process_kind` - BPM 流程种类
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 返回历史最高版本之后的单调递增业务版本。
+///
+/// # 错误
+/// Repository 查询或 BPM 版本溢出校验失败时返回错误。
+///
+/// # 关键业务约束
+/// Service 只聚合历史版本，递增与溢出规则由 `ApprovalProcessDefinition` 提供。
 async fn next_definition_version(
     db: &Database,
     process_kind: bpm::ProcessKind,
@@ -1545,26 +1502,7 @@ async fn next_definition_version(
         .map(|item| item.definition_version)
         .max()
         .unwrap_or(0);
-    next_version_from_max(current)
-}
-
-/// 由历史最高版本 checked add 得到下一 `definition_version`。
-///
-/// # 参数
-/// * `current` - 历史最高版本；无历史时传入 `0`
-///
-/// # 返回
-/// 返回 `current + 1`。
-///
-/// # 错误
-/// `u32` 溢出时返回业务错误，失败关闭。
-///
-/// # 约束
-/// 必须在 `persist_new_draft` 之前调用，不得回绕版本号。
-fn next_version_from_max(current: u32) -> Result<u32> {
-    current
-        .checked_add(1)
-        .ok_or_else(|| Error::BusinessLogicError("定义版本溢出".to_string()))
+    ApprovalProcessDefinition::next_version_after(current).map_err(map_model_error)
 }
 
 /// 事务内若已有同载荷收据则回读原结果。
@@ -1665,7 +1603,20 @@ fn applied_definition(
     }
 }
 
-/// 校验草稿且锁版本匹配。
+/// 校验定义仍为草稿且锁版本匹配。
+///
+/// # 参数
+/// * `definition` - 当前定义快照
+/// * `expected` - 调用方期望的定义锁版本
+///
+/// # 返回
+/// 定义可修改且锁版本一致时返回 `Ok(())`。
+///
+/// # 错误
+/// 已发布、已退役或锁版本陈旧时返回冲突错误。
+///
+/// # 关键业务约束
+/// 可变状态与锁版本规则由 BPM 定义实体提供，本层只映射稳定错误语义。
 fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
     definition
         .ensure_mutable()
@@ -1673,12 +1624,24 @@ fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected: u64) -> R
     ensure_lock(definition, expected)
 }
 
-/// 校验锁版本。
+/// 校验定义锁版本并映射陈旧锁错误。
+///
+/// # 参数
+/// * `definition` - 当前定义快照
+/// * `expected` - 调用方期望的锁版本
+///
+/// # 返回
+/// 锁版本一致时返回 `Ok(())`。
+///
+/// # 错误
+/// 锁版本不一致时返回“未写入任何节点”的稳定冲突错误。
+///
+/// # 关键业务约束
+/// 不得使用业务版本替代 `definition_lock_version`。
 fn ensure_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
-    if definition.definition_lock_version() == expected {
-        return Ok(());
-    }
-    Err(stale_lock_error())
+    definition
+        .ensure_lock_version(expected)
+        .map_err(|_| stale_lock_error())
 }
 
 /// 由定义的流程种类读取必须审批政策。
@@ -1708,77 +1671,6 @@ fn ensure_can_read_detail(
     Err(definition_not_found())
 }
 
-/// 校验节点数量。
-fn ensure_node_count(count: usize) -> Result<()> {
-    if (1..=MAX_DEFINITION_NODES).contains(&count) {
-        return Ok(());
-    }
-    Err(Error::ValidationError(
-        "审批节点数量必须在 1 到 20 之间".to_string(),
-    ))
-}
-
-/// 按展示顺序排序并要求从 1 连续。
-fn sorted_nodes(nodes: &[ApprovalNodeDefinition]) -> Result<Vec<ApprovalNodeDefinition>> {
-    let mut nodes = nodes.to_vec();
-    nodes.sort_by_key(|node| node.display_order);
-    for (index, node) in nodes.iter().enumerate() {
-        let expected =
-            u32::try_from(index + 1).map_err(|_| Error::ValidationError("节点顺序溢出".to_string()))?;
-        if node.display_order != expected {
-            return Err(Error::ValidationError(
-                "节点顺序必须从 1 连续且无重复".to_string(),
-            ));
-        }
-    }
-    Ok(nodes)
-}
-
-/// 按展示顺序排序请求。
-fn sorted_requests(requests: &[DefinitionNodeRequest]) -> Result<Vec<&DefinitionNodeRequest>> {
-    let mut requests = requests.iter().collect::<Vec<_>>();
-    requests.sort_by_key(|item| item.display_order);
-    for (index, request) in requests.iter().enumerate() {
-        let expected =
-            u32::try_from(index + 1).map_err(|_| Error::ValidationError("节点顺序溢出".to_string()))?;
-        if request.display_order != expected {
-            return Err(Error::ValidationError(
-                "节点顺序必须从 1 连续且无重复".to_string(),
-            ));
-        }
-    }
-    Ok(requests)
-}
-
-/// 提取有序节点键。
-fn node_keys(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
-    nodes.iter().map(|node| node.node_key.clone()).collect()
-}
-
-/// 提取审批人 ID。
-fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
-    let mut ids = nodes
-        .iter()
-        .map(|node| node.assignee_participant_id.as_str().to_string())
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    ids
-}
-
-/// 提取用途引用。
-fn purpose_refs(nodes: &[ApprovalNodeDefinition]) -> Vec<Option<&str>> {
-    nodes.iter().map(|node| node.node_purpose.as_deref()).collect()
-}
-
-/// 按主键索引已有节点。
-fn existing_nodes_by_id(nodes: &[ApprovalNodeDefinition]) -> HashMap<String, ApprovalNodeDefinition> {
-    nodes
-        .iter()
-        .map(|node| (node.base.id.clone(), node.clone()))
-        .collect()
-}
-
 /// 节点摘要，供审计使用。
 fn node_summary(nodes: &[ApprovalNodeDefinition]) -> String {
     nodes
@@ -1786,42 +1678,6 @@ fn node_summary(nodes: &[ApprovalNodeDefinition]) -> String {
         .map(|node| format!("{}:{}", node.display_order, node.node_key))
         .collect::<Vec<_>>()
         .join(",")
-}
-
-/// 连线比较键。
-fn transition_key(
-    transition: &ApprovalTransitionDefinition,
-) -> (String, &'static str, Option<String>, Option<&'static str>) {
-    (
-        transition.from_node_key.clone(),
-        transition.event.as_str(),
-        transition.to_node_key.clone(),
-        transition.terminal_result.map(|item| item.as_str()),
-    )
-}
-
-/// 规范化定义名称。
-fn normalize_definition_name(name: &str) -> Result<String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err(Error::ValidationError("定义名称不能为空".to_string()));
-    }
-    if trimmed.len() > NAME_MAX_LEN {
-        return Err(Error::ValidationError("定义名称过长".to_string()));
-    }
-    Ok(trimmed.to_string())
-}
-
-/// 规范化节点名称。
-fn normalize_node_name(name: &str) -> Result<String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err(Error::ValidationError("节点名称不能为空".to_string()));
-    }
-    if trimmed.len() > NAME_MAX_LEN {
-        return Err(Error::ValidationError("节点名称过长".to_string()));
-    }
-    Ok(trimmed.to_string())
 }
 
 /// 创建草稿 canonical payload。
@@ -2020,7 +1876,7 @@ enum ReplaceNodesWriteStep {
 /// 账号/静态权限校验通过后才允许写替换图。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReplaceAssigneesWriteStep {
-    /// 允许 apply_snapshots 与 finish_existing_draft。
+    /// 允许刷新账号快照并调用 BPM 重建草稿图。
     ApplySnapshotsAndReplaceGraph,
 }
 
@@ -2135,27 +1991,6 @@ fn decide_publish_write(
     Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
 }
 
-/// 先退役旧 `PUBLISHED`，再把草稿置为 `PUBLISHED`。
-///
-/// # 错误
-/// 状态机拒绝退役或发布时返回错误。
-fn orchestrate_publish_definitions(
-    mut draft: ApprovalProcessDefinition,
-    previous: Option<ApprovalProcessDefinition>,
-    actor: ParticipantId,
-    at: Timestamp,
-) -> Result<(ApprovalProcessDefinition, Option<ApprovalProcessDefinition>)> {
-    let previous = match previous {
-        Some(mut previous) => {
-            previous.retire(actor.clone(), at).map_err(map_model_error)?;
-            Some(previous)
-        }
-        None => None,
-    };
-    draft.publish(actor, at).map_err(map_model_error)?;
-    Ok((draft, previous))
-}
-
 /// 写端口类型级定义管理权闸门。
 ///
 /// # 错误
@@ -2167,17 +2002,23 @@ fn ensure_definition_admin_allowed(allowed: bool) -> Result<()> {
     Err(Error::Forbidden("没有该单据类型的流程定义管理权限".to_string()))
 }
 
-/// 定义期账号资格：必须存在、后台且可登录。不读实例 DataScope。
+/// 收敛定义期审批人账号存在性与后台有效性。
+///
+/// # 参数
+/// * `account` - 仓储按审批人 ID 返回的可选账号
+///
+/// # 返回
+/// 返回可承担后台责任的有效账号引用。
 ///
 /// # 错误
-/// 账号缺失、不可登录或非后台时返回校验错误。
-fn ensure_assignee_account_ready(exists: bool, is_backoffice: bool, can_login: bool) -> Result<()> {
-    if exists && is_backoffice && can_login {
-        return Ok(());
-    }
-    Err(Error::ValidationError(
-        "指定审批人账号不存在、已停用或任职失效".to_string(),
-    ))
+/// 账号缺失、已停用或不满足后台责任身份时返回校验错误。
+///
+/// # 关键业务约束
+/// 账号类型与状态规则由 `AccountCore::is_active_backoffice` 唯一提供，本层只映射错误语义。
+fn require_active_backoffice_assignee(account: Option<&AccountCore>) -> Result<&AccountCore> {
+    account
+        .filter(|item| item.is_active_backoffice())
+        .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))
 }
 
 /// 定义期静态 `approval_instance:decide` 闸门。
@@ -2210,13 +2051,9 @@ fn definition_not_found() -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::super::policy::SALES_ORDER_PROCUREMENT_CONFIRMATION;
     use super::*;
-    use bpm::graph::LinearTransitionDraft;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use bpm::model::types::{ApprovalDefinitionStatus, ApprovalTerminalResult, ApprovalTransitionEvent};
     use bpm::ProcessKind;
-    use entities::{AccountCoreData, AccountStatus, LoginAccount, Secret};
 
     fn draft_definition(process_kind: ProcessKind, entry: &str) -> ApprovalProcessDefinition {
         ApprovalProcessDefinition::new_draft(
@@ -2246,36 +2083,16 @@ mod tests {
         .unwrap()
     }
 
-    fn request(node_id: Option<&str>, name: &str, display_order: u32, user: &str) -> DefinitionNodeRequest {
-        DefinitionNodeRequest {
-            node_id: node_id.map(ToOwned::to_owned),
-            node_name: name.to_string(),
-            display_order,
-            assignee_user_id: user.to_string(),
-        }
-    }
-
-    fn empty_graph(process_kind: ProcessKind) -> DefinitionGraph {
-        DefinitionGraph {
-            definition: draft_definition(process_kind, "pending"),
-            nodes: Vec::new(),
-            transitions: Vec::new(),
-        }
-    }
-
     fn two_node_publish_graph() -> DefinitionGraph {
         let nodes = vec![node("id1", "n1", 1, None, "u1"), node("id2", "n2", 2, None, "u2")];
         let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
-        let transitions = transitions_from_nodes(
-            &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
-            &nodes,
-        )
-        .unwrap();
-        DefinitionGraph {
-            definition,
+        DefinitionGraph::rebuild_draft(
+            &definition,
             nodes,
-            transitions,
-        }
+            next_transition_ids(2),
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
     }
 
     fn production_source() -> &'static str {
@@ -2361,314 +2178,6 @@ mod tests {
             .unwrap();
         assert!(ensure_draft_lock(&definition, 1).is_err());
     }
-
-    /// 新节点 key 仅服务端生成；跨定义 node_id 拒绝。
-    #[test]
-    fn node_keys_are_server_generated_and_not_cross_referenced() {
-        let existing = node("n1", "server-key", 1, None, "u1");
-        let graph = DefinitionGraph {
-            definition: draft_definition(ProcessKind::StockAdjustment, "server-key"),
-            nodes: vec![existing],
-            transitions: Vec::new(),
-        };
-        let policy = require_process_required(DocumentType::StockAdjustment).unwrap();
-        let planned = plan_nodes(
-            &graph,
-            &policy,
-            &[
-                DefinitionNodeRequest {
-                    node_id: Some("n1".to_string()),
-                    node_name: "仓储".to_string(),
-                    display_order: 1,
-                    assignee_user_id: "u1".to_string(),
-                },
-                DefinitionNodeRequest {
-                    node_id: None,
-                    node_name: "财务".to_string(),
-                    display_order: 2,
-                    assignee_user_id: "u2".to_string(),
-                },
-            ],
-        )
-        .unwrap();
-        assert_eq!(planned[0].node_key, "server-key");
-        assert_ne!(planned[1].node_key, "server-key");
-        assert_ne!(planned[1].base.id, "n1");
-        let foreign = plan_nodes(
-            &graph,
-            &policy,
-            &[DefinitionNodeRequest {
-                node_id: Some("other-def-node".to_string()),
-                node_name: "仓储".to_string(),
-                display_order: 1,
-                assignee_user_id: "u1".to_string(),
-            }],
-        )
-        .unwrap_err();
-        assert!(matches!(foreign, Error::ValidationError(message) if message.contains("跨定义")));
-    }
-
-    /// 销售单首次保存不再盖章采购确认用途，其它类型同样为零。
-    #[test]
-    fn sales_order_does_not_stamp_procurement_purpose() {
-        let empty = DefinitionGraph {
-            definition: draft_definition(ProcessKind::SalesOrder, "pending"),
-            nodes: Vec::new(),
-            transitions: Vec::new(),
-        };
-        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
-        let first = plan_nodes(
-            &empty,
-            &sales,
-            &[
-                DefinitionNodeRequest {
-                    node_id: None,
-                    node_name: "采购确认".to_string(),
-                    display_order: 1,
-                    assignee_user_id: "u1".to_string(),
-                },
-                DefinitionNodeRequest {
-                    node_id: None,
-                    node_name: "财务".to_string(),
-                    display_order: 2,
-                    assignee_user_id: "u2".to_string(),
-                },
-            ],
-        )
-        .unwrap();
-        assert!(first[0].node_purpose.is_none());
-        assert!(first[1].node_purpose.is_none());
-        let kept = plan_nodes(
-            &DefinitionGraph {
-                definition: empty.definition.clone(),
-                nodes: first.clone(),
-                transitions: Vec::new(),
-            },
-            &sales,
-            &[
-                DefinitionNodeRequest {
-                    node_id: Some(first[1].base.id.clone()),
-                    node_name: "财务".to_string(),
-                    display_order: 1,
-                    assignee_user_id: "u2".to_string(),
-                },
-                DefinitionNodeRequest {
-                    node_id: Some(first[0].base.id.clone()),
-                    node_name: "采购确认".to_string(),
-                    display_order: 2,
-                    assignee_user_id: "u1".to_string(),
-                },
-            ],
-        )
-        .unwrap();
-        let purpose_node = kept.iter().find(|node| node.base.id == first[0].base.id).unwrap();
-        assert!(purpose_node.node_purpose.is_none());
-        let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
-        let other = plan_nodes(
-            &DefinitionGraph {
-                definition: draft_definition(ProcessKind::StockAdjustment, "pending"),
-                nodes: Vec::new(),
-                transitions: Vec::new(),
-            },
-            &stock,
-            &[DefinitionNodeRequest {
-                node_id: None,
-                node_name: "仓储".to_string(),
-                display_order: 1,
-                assignee_user_id: "u1".to_string(),
-            }],
-        )
-        .unwrap();
-        assert!(other[0].node_purpose.is_none());
-    }
-
-    /// 1/2/20 节点生成器结果确定。
-    #[test]
-    fn linear_generator_is_deterministic_for_1_2_and_20_nodes() {
-        let one = generate_linear_transitions(&["n1".to_string()]).unwrap();
-        assert_eq!(one.len(), 2);
-        assert_eq!(one[0].terminal_result, Some(ApprovalTerminalResult::Approved));
-        assert_eq!(one[1].to_node_key.as_deref(), Some("n1"));
-
-        let two = generate_linear_transitions(&["n1".to_string(), "n2".to_string()]).unwrap();
-        assert_eq!(two.len(), 4);
-        assert_eq!(two[0].to_node_key.as_deref(), Some("n2"));
-        assert_eq!(two[2].terminal_result, Some(ApprovalTerminalResult::Approved));
-        assert!(two
-            .iter()
-            .filter(|item| item.event == ApprovalTransitionEvent::Reject)
-            .all(|item| item.to_node_key.as_deref() == Some("n1")));
-
-        let keys = (1..=20).map(|index| format!("n{index}")).collect::<Vec<_>>();
-        let twenty = generate_linear_transitions(&keys).unwrap();
-        assert_eq!(twenty.len(), 40);
-        assert_eq!(
-            twenty[38],
-            LinearTransitionDraft {
-                from_node_key: "n20".to_string(),
-                event: ApprovalTransitionEvent::Approve,
-                to_node_key: None,
-                terminal_result: Some(ApprovalTerminalResult::Approved),
-            }
-        );
-        assert!(twenty
-            .iter()
-            .filter(|item| item.event == ApprovalTransitionEvent::Reject)
-            .all(|item| item.to_node_key.as_deref() == Some("n1")));
-        assert_eq!(
-            generate_linear_transitions(&keys).unwrap(),
-            twenty,
-            "同一输入必须得到同一结果"
-        );
-    }
-
-    /// 发布图重验编排已交付原语，不另立图算法。
-    #[test]
-    fn publish_revalidates_with_delivered_graph_primitives() {
-        let graph = two_node_publish_graph();
-        validate_publish_graph(&graph).unwrap();
-        let mut wrong_entry = graph.clone();
-        wrong_entry.definition.entry_node_key = "n2".to_string();
-        assert!(validate_publish_graph(&wrong_entry).is_err());
-
-        let mut missing_reject = graph.clone();
-        missing_reject
-            .transitions
-            .retain(|item| item.event != ApprovalTransitionEvent::Reject);
-        assert!(validate_publish_graph(&missing_reject).is_err());
-
-        let mut extra = graph.clone();
-        extra.transitions.push(extra.transitions[0].clone());
-        assert!(validate_publish_graph(&extra).is_err());
-
-        assert!(validate_publish_graph(&empty_graph(ProcessKind::StockAdjustment)).is_err());
-        let twenty_one: Vec<_> = (1..=21)
-            .map(|index| {
-                node(
-                    &format!("id{index}"),
-                    &format!("n{index}"),
-                    index as u32,
-                    None,
-                    "u1",
-                )
-            })
-            .collect();
-        let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
-        let transitions = transitions_from_nodes(
-            &ApprovalProcessDefinitionId::new(definition.base.id.clone()),
-            &twenty_one,
-        )
-        .unwrap();
-        assert!(validate_publish_graph(&DefinitionGraph {
-            definition,
-            nodes: twenty_one,
-            transitions,
-        })
-        .is_err());
-
-        let one_nodes = vec![node("id1", "n1", 1, None, "u1")];
-        let one_def = draft_definition(ProcessKind::StockAdjustment, "n1");
-        let one_transitions = transitions_from_nodes(
-            &ApprovalProcessDefinitionId::new(one_def.base.id.clone()),
-            &one_nodes,
-        )
-        .unwrap();
-        validate_publish_graph(&DefinitionGraph {
-            definition: one_def,
-            nodes: one_nodes,
-            transitions: one_transitions,
-        })
-        .unwrap();
-
-        let twenty_nodes: Vec<_> = (1..=20)
-            .map(|index| {
-                node(
-                    &format!("id{index}"),
-                    &format!("n{index}"),
-                    index as u32,
-                    None,
-                    "u1",
-                )
-            })
-            .collect();
-        let twenty_def = draft_definition(ProcessKind::StockAdjustment, "n1");
-        let twenty_transitions = transitions_from_nodes(
-            &ApprovalProcessDefinitionId::new(twenty_def.base.id.clone()),
-            &twenty_nodes,
-        )
-        .unwrap();
-        validate_publish_graph(&DefinitionGraph {
-            definition: twenty_def,
-            nodes: twenty_nodes,
-            transitions: twenty_transitions,
-        })
-        .unwrap();
-    }
-
-    /// 发布事务编排：成功时新 PUBLISHED + 旧 RETIRED；校验失败不得进入写库。
-    #[test]
-    fn publish_retires_previous_and_fails_closed() {
-        let actor = ParticipantId::new("admin").unwrap();
-        let at = Timestamp::from_unix_secs(4).unwrap();
-        let draft = draft_definition(ProcessKind::StockAdjustment, "n1");
-        let (published, none) =
-            orchestrate_publish_definitions(draft.clone(), None, actor.clone(), at).unwrap();
-        assert_eq!(published.status, ApprovalDefinitionStatus::Published);
-        assert!(none.is_none());
-
-        let mut previous = draft_definition(ProcessKind::StockAdjustment, "n1");
-        previous.base.id = "def-old".to_string();
-        previous
-            .publish(actor.clone(), Timestamp::from_unix_secs(2).unwrap())
-            .unwrap();
-        let (published, retired) = orchestrate_publish_definitions(draft, Some(previous), actor, at).unwrap();
-        assert_eq!(published.status, ApprovalDefinitionStatus::Published);
-        assert_eq!(retired.unwrap().status, ApprovalDefinitionStatus::Retired);
-
-        assert!(decide_publish_write(
-            Err(Error::ValidationError("连线与线性生成器结果不一致".into())),
-            Ok(()),
-            Ok(()),
-            Ok(()),
-        )
-        .is_err());
-        assert!(decide_publish_write(Ok(()), Ok(()), Ok(()), Err(Error::Internal("动作".into()))).is_err());
-        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
-        for purposes in [
-            validate_required_purposes(&sales, &[]),
-            validate_required_purposes(&sales, &[None, None]),
-            validate_required_purposes(
-                &sales,
-                &[
-                    Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
-                    Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
-                ],
-            ),
-        ] {
-            assert!(purposes.is_ok());
-        }
-        let unknown = validate_required_purposes(&sales, &[Some("WRONG_PURPOSE")]);
-        assert!(unknown.is_err());
-        assert!(!matches!(
-            decide_publish_write(Ok(()), unknown, Ok(()), Ok(())),
-            Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
-        ));
-        assert!(matches!(
-            decide_publish_write(Ok(()), Ok(()), Ok(()), Ok(())),
-            Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
-        ));
-        let publish_store = source_fn(
-            production_source(),
-            "async fn publish_and_store",
-            "async fn apply_draft_graph",
-        );
-        assert!(publish_store.contains("orchestrate_publish_definitions"));
-        assert!(publish_store.contains("publish_and_retire_previous"));
-        let publish_tx = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
-        let gate = publish_tx.find("decide_publish_write").expect("发布闸门");
-        assert!(gate < publish_tx.find("publish_and_store").expect("写库"));
-    }
-
     /// 政策与 ProcessKind 映射穷尽，Service 无 BPM 第二定义源。
     #[test]
     fn policy_mapping_is_exhaustive_and_service_has_no_second_bpm_source() {
@@ -2681,9 +2190,11 @@ mod tests {
             .split("mod tests {")
             .next()
             .expect("必须存在生产代码");
-        assert!(production.contains("generate_linear_transitions"));
-        assert!(production.contains("validate_transition"));
-        assert!(production.contains("validate_entry_node"));
+        assert!(production.contains("validate_linear"));
+        assert!(production.contains("plan_replacement_nodes"));
+        assert!(!production.contains("generate_linear_transitions"));
+        assert!(!production.contains("validate_transition"));
+        assert!(!production.contains("validate_entry_node"));
         assert!(!production.contains("entities::approval::"));
         assert!(!production.contains(&format!("{}{}", "CARD_", "SALES_APPROVAL")));
         assert!(!production.contains("validate_definition("));
@@ -2711,16 +2222,9 @@ mod tests {
         assert!(gate < publish_tx.find("publish_and_store").expect("写库"));
     }
 
-    /// 账号不存在/不可登录/非后台/缺 decide 时发布不得写库。
+    /// 账号或静态权限重验失败时发布不得进入写库步骤。
     #[test]
-    fn publish_revalidates_account_and_static_permission() {
-        let missing = ensure_assignee_account_ready(false, true, true).unwrap_err();
-        assert!(matches!(missing, Error::ValidationError(message) if message.contains("不存在")));
-        let inactive = ensure_assignee_account_ready(true, true, false).unwrap_err();
-        assert!(matches!(inactive, Error::ValidationError(_)));
-        let not_backoffice = ensure_assignee_account_ready(true, false, true).unwrap_err();
-        assert!(matches!(not_backoffice, Error::ValidationError(_)));
-        ensure_assignee_account_ready(true, true, true).unwrap();
+    fn publish_revalidation_failure_blocks_write_step() {
         let no_decide = ensure_static_decide_permission(false).unwrap_err();
         assert!(matches!(
             no_decide,
@@ -2987,110 +2491,6 @@ mod tests {
         assert!(replay.contains("reconcile"));
         assert!(replay.contains("map_model_error"));
     }
-
-    /// replace/plan_nodes 边界：0/21、空名、顺序、重复 ID、允许删除原采购确认节点。
-    #[test]
-    fn plan_nodes_rejects_invalid_replacements() {
-        let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
-        let empty = empty_graph(ProcessKind::StockAdjustment);
-        assert!(plan_nodes(&empty, &stock, &[]).is_err());
-        let twenty_one: Vec<_> = (1..=21)
-            .map(|index| request(None, &format!("节点{index}"), index as u32, "u1"))
-            .collect();
-        assert!(plan_nodes(&empty, &stock, &twenty_one).is_err());
-        assert!(plan_nodes(&empty, &stock, &[request(None, "   ", 1, "u1")]).is_err());
-        assert!(plan_nodes(
-            &empty,
-            &stock,
-            &[request(None, "一", 1, "u1"), request(None, "三", 3, "u2")]
-        )
-        .is_err());
-        assert!(plan_nodes(
-            &empty,
-            &stock,
-            &[request(None, "一", 1, "u1"), request(None, "又一", 1, "u2")]
-        )
-        .is_err());
-
-        let existing = node("n1", "server-key", 1, None, "u1");
-        let graph = DefinitionGraph {
-            definition: draft_definition(ProcessKind::StockAdjustment, "server-key"),
-            nodes: vec![existing],
-            transitions: Vec::new(),
-        };
-        assert!(plan_nodes(
-            &graph,
-            &stock,
-            &[
-                request(Some("n1"), "一", 1, "u1"),
-                request(Some("n1"), "二", 2, "u2")
-            ]
-        )
-        .is_err());
-
-        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
-        let first = plan_nodes(
-            &empty_graph(ProcessKind::SalesOrder),
-            &sales,
-            &[request(None, "采购确认", 1, "u1"), request(None, "财务", 2, "u2")],
-        )
-        .unwrap();
-        let dropped = plan_nodes(
-            &DefinitionGraph {
-                definition: draft_definition(ProcessKind::SalesOrder, "pending"),
-                nodes: first.clone(),
-                transitions: Vec::new(),
-            },
-            &sales,
-            &[request(Some(&first[1].base.id), "财务", 1, "u2")],
-        )
-        .unwrap();
-        assert_eq!(dropped.len(), 1);
-        assert_eq!(dropped[0].node_name, "财务");
-        assert!(dropped[0].node_purpose.is_none());
-    }
-
-    /// EMPTY 零节点草稿允许持续到第一次 replace；copy 生成新主键与不可预测 node_key。
-    #[test]
-    fn empty_draft_and_copy_nodes_generate_new_identities() {
-        let actor = AuditActor::new("admin".into(), "admin".into(), AccountKind::Admin);
-        let sales = require_process_required(DocumentType::SalesOrder).unwrap();
-        let draft = empty_draft(&sales, "销售单草稿", 1, &actor).unwrap();
-        assert!(draft.nodes.is_empty());
-        assert!(draft.transitions.is_empty());
-        assert_ne!(draft.definition.base.id, "def-1");
-        assert!(plan_nodes(&draft, &sales, &[]).is_err());
-        assert!(
-            plan_nodes(&draft, &sales, &[request(None, "采购确认", 1, "u1")]).unwrap()[0]
-                .node_purpose
-                .is_none()
-        );
-
-        let source = vec![
-            node(
-                "old-1",
-                "old-key-1",
-                1,
-                Some(SALES_ORDER_PROCUREMENT_CONFIRMATION),
-                "buyer",
-            ),
-            node("old-2", "old-key-2", 2, None, "cfo"),
-        ];
-        let copied = copy_nodes(&source, "new-def".to_string()).unwrap();
-        let again = copy_nodes(&source, "new-def-2".to_string()).unwrap();
-        assert_eq!(copied.len(), 2);
-        assert_eq!(copied[0].process_definition_id.as_ref(), "new-def");
-        assert_ne!(copied[0].base.id, source[0].base.id);
-        assert_ne!(copied[1].base.id, source[1].base.id);
-        assert_ne!(copied[0].node_key, source[0].node_key);
-        assert_ne!(copied[1].node_key, source[1].node_key);
-        assert_ne!(copied[0].node_key, again[0].node_key);
-        assert!(copied[0].node_purpose.is_none());
-        assert_eq!(copied[0].assignee_participant_id.as_str(), "buyer");
-        assert_eq!(copied[1].assignee_participant_id.as_str(), "cfo");
-        assert!(copied[1].node_purpose.is_none());
-    }
-
     /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
     #[test]
     fn retire_only_current_published() {
@@ -3154,51 +2554,10 @@ mod tests {
         let copy_src = source_fn(
             production_source(),
             "async fn copy_published_draft",
-            "fn copy_nodes",
+            "async fn persist_new_draft",
         );
         assert!(copy_src.contains("require_current_published"));
     }
-
-    /// 入口固定为 display_order=1 的节点键。
-    #[test]
-    fn replace_entry_is_first_display_order_node() {
-        let stock = require_process_required(DocumentType::StockAdjustment).unwrap();
-        let empty = empty_graph(ProcessKind::StockAdjustment);
-        let planned = plan_nodes(
-            &empty,
-            &stock,
-            &[request(None, "第二", 2, "u2"), request(None, "第一", 1, "u1")],
-        )
-        .unwrap();
-        assert_eq!(planned[0].display_order, 1);
-        let finished = finish_existing_draft(&empty.definition, planned.clone()).unwrap();
-        assert_eq!(finished.definition.entry_node_key, planned[0].node_key);
-        assert_eq!(
-            finished
-                .nodes
-                .iter()
-                .find(|node| node.display_order == 1)
-                .map(|node| node.node_key.as_str()),
-            Some(finished.definition.entry_node_key.as_str())
-        );
-    }
-
-    fn test_account(id: &str, name: &str) -> AccountCore {
-        AccountCore::new(
-            id.to_string(),
-            AccountCoreData {
-                secret: Secret::new(LoginAccount::new(format!("login{id}")).unwrap(), "password123").unwrap(),
-                name: name.to_string(),
-                kind: AccountKind::Admin,
-                status: AccountStatus::Active,
-                email: None,
-                phone: None,
-                avatar: None,
-            },
-        )
-        .unwrap()
-    }
-
     /// 详情按 display_order 排序；版本摘要带状态、名称和锁。
     #[test]
     fn detail_and_version_views_assemble_sorted_nodes_and_audit() {
@@ -3255,112 +2614,6 @@ mod tests {
         );
         assert_eq!(node_view(&graph.nodes[1]).node_id, "id1");
     }
-
-    /// 名称必须 trim；空名与超长失败，trim 后摘要与字段顺序一致。
-    #[test]
-    fn normalize_definition_name_trims_before_digest() {
-        assert!(matches!(
-            normalize_definition_name(""),
-            Err(Error::ValidationError(message)) if message.contains("不能为空")
-        ));
-        assert!(matches!(
-            normalize_definition_name("   "),
-            Err(Error::ValidationError(message)) if message.contains("不能为空")
-        ));
-        assert!(matches!(
-            normalize_definition_name(&"x".repeat(NAME_MAX_LEN + 1)),
-            Err(Error::ValidationError(message)) if message.contains("过长")
-        ));
-        assert_eq!(normalize_definition_name(" 库存调整 ").unwrap(), "库存调整");
-        let trimmed = normalize_definition_name(" 库存调整 ").unwrap();
-        assert_eq!(
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                &trimmed,
-                DraftSource::Empty,
-                "admin-1",
-            ),
-            payload_digest(&[
-                DocumentType::StockAdjustment.as_str(),
-                "库存调整",
-                DraftSource::Empty.as_str(),
-                "admin-1",
-            ])
-        );
-        assert_ne!(
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                " 库存调整 ",
-                DraftSource::Empty,
-                "admin-1",
-            ),
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                &trimmed,
-                DraftSource::Empty,
-                "admin-1",
-            )
-        );
-        let create = source_fn(
-            production_source(),
-            "pub async fn create_definition_draft",
-            "pub async fn replace_definition_nodes",
-        );
-        let normalize = create.find("normalize_definition_name").expect("先规范化");
-        assert!(normalize < create.find("create_draft_digest").expect("再哈希"));
-    }
-
-    /// 历史最高版本 checked add；0→1，溢出失败关闭。
-    #[test]
-    fn next_version_from_max_fails_closed_on_overflow() {
-        assert_eq!(next_version_from_max(0).unwrap(), 1);
-        assert_eq!(next_version_from_max(7).unwrap(), 8);
-        assert!(matches!(
-            next_version_from_max(u32::MAX),
-            Err(Error::BusinessLogicError(message)) if message.contains("定义版本溢出")
-        ));
-        let create_tx = source_fn(
-            production_source(),
-            "async fn create_draft_tx",
-            "async fn replace_nodes_tx",
-        );
-        let build = create_tx.find("build_new_draft").expect("先构造草稿");
-        assert!(build < create_tx.find("persist_new_draft").expect("persist"));
-        let build_src = source_fn(production_source(), "async fn build_new_draft", "fn empty_draft");
-        assert!(build_src.contains("next_definition_version"));
-        let version_src = source_fn(
-            production_source(),
-            "async fn next_definition_version",
-            "async fn replay_existing_receipt",
-        );
-        assert!(version_src.contains("next_version_from_max"));
-    }
-
-    /// 发布刷新审批人名称快照；账号缺失不得进入发布写库。
-    #[test]
-    fn apply_snapshots_freezes_assignee_name_or_fails() {
-        let mut accounts = HashMap::new();
-        accounts.insert("u1".to_string(), test_account("u1", "李四"));
-        let frozen = apply_snapshots(vec![node("id1", "n1", 1, None, "u1")], &accounts).unwrap();
-        assert_eq!(frozen[0].assignee_label_snapshot, "李四");
-        assert_eq!(frozen[0].assignee_participant_id.as_str(), "u1");
-
-        let missing = apply_snapshots(vec![node("id1", "n1", 1, None, "missing")], &accounts);
-        assert!(matches!(
-            missing,
-            Err(Error::ValidationError(message)) if message.contains("账号不存在")
-        ));
-        assert!(!matches!(
-            decide_publish_write(
-                Ok(()),
-                Ok(()),
-                apply_snapshots(vec![node("id2", "n2", 1, None, "missing")], &accounts).map(|_| ()),
-                Ok(()),
-            ),
-            Ok(PublishWriteStep::RefreshSnapshotsAndRetirePrevious)
-        ));
-    }
-
     /// 替换路径账号/权限失败不得写图。
     #[test]
     fn replace_assignee_failure_does_not_write_graph() {
@@ -3387,6 +2640,6 @@ mod tests {
             .find("allow_replace_after_assignees")
             .expect("替换账号闸门");
         assert!(gate < prepare.find("apply_snapshots").expect("快照"));
-        assert!(gate < prepare.find("finish_existing_draft").expect("写图规划"));
+        assert!(gate < prepare.find("rebuild_draft_graph").expect("写图规划"));
     }
 }

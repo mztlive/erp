@@ -15,7 +15,7 @@ use crate::ids::{
     SupplierCommercialProfileRevisionId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
 use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
-use crate::supplier_offering::{OfferingSourceType, OfferingStatus};
+use crate::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
 const SUPPLIER_CODE_MAX_LEN: usize = 128;
@@ -138,6 +138,63 @@ impl SupplierOffering {
         self.stable.touch(updated_by);
         Ok(())
     }
+
+    /// 校验供给可用于指定供应商与供应商连接下单。
+    ///
+    /// API 来源供给必须使用登记时的连接；手工和 Excel 来源不绑定连接，但供应商
+    /// 必须始终一致。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 下单供应商
+    /// * `connection_id` - 本次下单连接
+    ///
+    /// # 返回
+    /// 关系一致时返回 `true`。
+    pub fn belongs_to_ordering_source(
+        &self,
+        supplier_id: &SupplierAccountId,
+        connection_id: &SupplierApiConnectionId,
+    ) -> bool {
+        self.supplier_id == *supplier_id
+            && self
+                .source_connection_id
+                .as_ref()
+                .is_none_or(|source_connection_id| source_connection_id == connection_id)
+    }
+
+    /// 校验当前修订号并计算下一修订号。
+    ///
+    /// # 参数
+    /// * `current_revision_no` - 仓储读取到的当前最大修订号
+    /// * `expected_revision_no` - 调用方持有的期望修订号
+    ///
+    /// # 返回
+    /// 版本一致时返回下一修订号。
+    ///
+    /// # 错误
+    /// 修订号不一致或已达到 `u32` 上限时返回领域错误。
+    pub fn next_revision_no(&self, current_revision_no: u32, expected_revision_no: u32) -> Result<u32> {
+        if current_revision_no != expected_revision_no {
+            return Err(Error::from("供给修订号不一致"));
+        }
+        current_revision_no
+            .checked_add(1)
+            .ok_or_else(|| Error::from("供给修订号已达到上限"))
+    }
+
+    /// 返回下一次成功持久化后的实体版本。
+    ///
+    /// # 返回
+    /// 返回当前乐观锁版本加一。
+    ///
+    /// # 错误
+    /// 当前版本已达到 `u64` 上限时返回领域错误。
+    pub fn next_persisted_version(&self) -> Result<u64> {
+        self.base
+            .version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("供给版本已达到上限"))
+    }
 }
 
 /// 供给修订的预填依据。
@@ -190,6 +247,68 @@ pub struct SupplierOfferingRevisionData {
     pub valid_to: Option<BusinessDate>,
     /// 预填依据。
     pub prefill_source_refs: PrefillSourceRefs,
+}
+
+impl SupplierOfferingRevisionData {
+    /// 由含税价格和税率构造完整商业条款数据。
+    ///
+    /// 不含税价格统一按合同规则从含税价格扣除按分舍入的税额，调用方不得重复
+    /// 实现价格换算。
+    ///
+    /// # 参数
+    /// * `supplier_offering_id` - 所属供给
+    /// * `revision_no` - 修订号
+    /// * `dropship_supply_price_gross` - 一件代发含税价
+    /// * `bulk_supply_price_gross` - 集采含税价
+    /// * `input_tax_rate` - 进项税率
+    /// * `dropship_express` - 一件代发快递说明
+    /// * `freight_amount` - 运费
+    /// * `service_fee_amount` - 服务费
+    /// * `bulk_minimum_order_quantity` - 集采起订量
+    /// * `supply_region` - 可供区域
+    /// * `product_capabilities` - 商品级能力
+    /// * `valid_from` - 生效日期
+    /// * `valid_to` - 失效日期
+    /// * `prefill_source_refs` - 预填依据
+    ///
+    /// # 返回
+    /// 返回已派生两组不含税价格的商业条款数据。
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_gross_prices(
+        supplier_offering_id: SupplierOfferingId,
+        revision_no: u32,
+        dropship_supply_price_gross: UnitPrice,
+        bulk_supply_price_gross: UnitPrice,
+        input_tax_rate: Rate,
+        dropship_express: Option<String>,
+        freight_amount: Option<Amount>,
+        service_fee_amount: Option<Amount>,
+        bulk_minimum_order_quantity: Quantity,
+        supply_region: Vec<String>,
+        product_capabilities: Vec<String>,
+        valid_from: BusinessDate,
+        valid_to: Option<BusinessDate>,
+        prefill_source_refs: PrefillSourceRefs,
+    ) -> Self {
+        Self {
+            supplier_offering_id,
+            revision_no,
+            dropship_supply_price_gross,
+            dropship_supply_price_net: net_price(dropship_supply_price_gross, input_tax_rate),
+            bulk_supply_price_gross,
+            bulk_supply_price_net: net_price(bulk_supply_price_gross, input_tax_rate),
+            input_tax_rate,
+            dropship_express,
+            freight_amount,
+            service_fee_amount,
+            bulk_minimum_order_quantity,
+            supply_region,
+            product_capabilities,
+            valid_from,
+            valid_to,
+            prefill_source_refs,
+        }
+    }
 }
 
 /// 不可变供给商业条款修订。
@@ -279,6 +398,46 @@ impl SupplierOfferingRevision {
             prefill_source_refs,
         })
     }
+
+    /// 比较上一版商业条款并分类销售安全影响。
+    ///
+    /// 关键供给条件优先于成本变化；同一修订同时改变关键条件和成本时返回
+    /// [`OfferingRevisionImpact::CriticalSupplyChanged`]。
+    ///
+    /// # 参数
+    /// * `prior` - 上一版商业条款
+    ///
+    /// # 返回
+    /// 返回无影响、成本变化或关键供给变化。
+    pub fn impact_from(&self, prior: &Self) -> OfferingRevisionImpact {
+        let critical_changed = prior.bulk_minimum_order_quantity != self.bulk_minimum_order_quantity
+            || prior.supply_region != self.supply_region
+            || prior.product_capabilities != self.product_capabilities
+            || prior.dropship_express != self.dropship_express
+            || prior.valid_from != self.valid_from
+            || prior.valid_to != self.valid_to;
+        if critical_changed {
+            return OfferingRevisionImpact::CriticalSupplyChanged;
+        }
+        let cost_changed = prior.dropship_supply_price_gross != self.dropship_supply_price_gross
+            || prior.dropship_supply_price_net != self.dropship_supply_price_net
+            || prior.bulk_supply_price_gross != self.bulk_supply_price_gross
+            || prior.bulk_supply_price_net != self.bulk_supply_price_net
+            || prior.input_tax_rate != self.input_tax_rate
+            || prior.freight_amount != self.freight_amount
+            || prior.service_fee_amount != self.service_fee_amount;
+        if cost_changed {
+            OfferingRevisionImpact::CostChanged
+        } else {
+            OfferingRevisionImpact::None
+        }
+    }
+}
+
+/// 按合同规则由含税价派生不含税价。
+fn net_price(gross: UnitPrice, rate: Rate) -> UnitPrice {
+    UnitPrice::try_from(gross.to_decimal() - round_to_cent(gross.to_decimal() * rate.to_decimal()))
+        .expect("合法含税价与税率必须生成合法不含税价")
 }
 
 fn ensure_source_connection(source_type: OfferingSourceType, has_connection: bool) -> Result<()> {
@@ -415,7 +574,7 @@ mod tests {
         SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId, SupplierOfferingRevisionId,
     };
     use crate::money::{Amount, Quantity, Rate, UnitPrice};
-    use crate::supplier_offering::OfferingSourceType;
+    use crate::supplier_offering::{OfferingRevisionImpact, OfferingSourceType};
 
     fn offering_data() -> SupplierOfferingData {
         SupplierOfferingData {
@@ -468,7 +627,22 @@ mod tests {
             source_connection_id: Some(SupplierApiConnectionId::new("connection-1")),
             ..offering_data()
         };
-        assert!(SupplierOffering::new(SupplierOfferingId::new("offering-3"), valid_api, "admin").is_ok());
+        let offering =
+            SupplierOffering::new(SupplierOfferingId::new("offering-3"), valid_api, "admin").unwrap();
+        assert!(offering.belongs_to_ordering_source(
+            &SupplierAccountId::new("supplier-1"),
+            &SupplierApiConnectionId::new("connection-1")
+        ));
+        assert!(!offering.belongs_to_ordering_source(
+            &SupplierAccountId::new("supplier-2"),
+            &SupplierApiConnectionId::new("connection-1")
+        ));
+        assert_eq!(offering.next_revision_no(1, 1).unwrap(), 2);
+        assert!(offering.next_revision_no(2, 1).is_err());
+        assert_eq!(
+            offering.next_persisted_version().unwrap(),
+            offering.base.version + 1
+        );
     }
 
     #[test]
@@ -485,6 +659,63 @@ mod tests {
         };
         assert!(
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-2"), zero_moq).is_err()
+        );
+    }
+
+    #[test]
+    fn gross_price_factory_and_revision_impact_are_domain_rules() {
+        let data = SupplierOfferingRevisionData::from_gross_prices(
+            SupplierOfferingId::new("offering-1"),
+            1,
+            UnitPrice::from_str("11.30").unwrap(),
+            UnitPrice::from_str("9.04").unwrap(),
+            Rate::from_str("0.13").unwrap(),
+            None,
+            None,
+            None,
+            Quantity::from_str("10").unwrap(),
+            vec!["CN".to_string()],
+            vec!["REFUND".to_string()],
+            BusinessDate::from_str("2026-08-08").unwrap(),
+            None,
+            PrefillSourceRefs::default(),
+        );
+        assert_eq!(data.dropship_supply_price_net.to_string(), "9.83");
+        let prior =
+            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), data.clone())
+                .unwrap();
+
+        let cost = SupplierOfferingRevision::new(
+            SupplierOfferingRevisionId::new("revision-2"),
+            SupplierOfferingRevisionData::from_gross_prices(
+                SupplierOfferingId::new("offering-1"),
+                2,
+                UnitPrice::from_str("12.00").unwrap(),
+                data.bulk_supply_price_gross,
+                data.input_tax_rate,
+                None,
+                None,
+                None,
+                data.bulk_minimum_order_quantity,
+                data.supply_region.clone(),
+                data.product_capabilities.clone(),
+                data.valid_from,
+                data.valid_to,
+                PrefillSourceRefs::default(),
+            ),
+        )
+        .unwrap();
+        assert_eq!(cost.impact_from(&prior), OfferingRevisionImpact::CostChanged);
+
+        let mut critical_data = data;
+        critical_data.revision_no = 2;
+        critical_data.supply_region.push("HK".to_string());
+        let critical =
+            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-3"), critical_data)
+                .unwrap();
+        assert_eq!(
+            critical.impact_from(&prior),
+            OfferingRevisionImpact::CriticalSupplyChanged
         );
     }
 }

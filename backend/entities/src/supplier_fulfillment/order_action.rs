@@ -153,6 +153,131 @@ pub struct SupplierOrderActionData {
     pub next_attempt_at: Option<Instant>,
 }
 
+impl SupplierOrderActionData {
+    /// 构造首个供应商下单动作数据。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单
+    /// * `idempotency_key` - 与 ERP 供应商子订单号一致的幂等键
+    /// * `line_count` - 本次下单明细数
+    ///
+    /// # 返回
+    /// 返回待发送的 `PLACE` 动作数据。
+    pub fn place(
+        order_id: SupplierFulfillmentOrderId,
+        idempotency_key: impl Into<String>,
+        line_count: usize,
+    ) -> Self {
+        let idempotency_key = idempotency_key.into();
+        Self {
+            supplier_fulfillment_order_id: order_id,
+            action_type: SupplierOrderActionType::Place,
+            after_sales_request_id: None,
+            request_summary: Some(format!("下单 {idempotency_key} 明细 {line_count} 行")),
+            idempotency_key,
+            status: SupplierOrderActionStatus::Pending,
+            external_request_id: None,
+            response_summary: None,
+            attempt_count: 0,
+            next_attempt_at: None,
+        }
+    }
+
+    /// 构造取消或退款动作数据。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单
+    /// * `action_type` - 取消或退款
+    /// * `request_id` - 商城售后申请
+    /// * `idempotency_key` - 供应商动作幂等键
+    /// * `reason_code` - 可选原因代码
+    ///
+    /// # 返回
+    /// 返回待发送的售后动作数据。
+    pub fn after_sales(
+        order_id: SupplierFulfillmentOrderId,
+        action_type: SupplierOrderActionType,
+        request_id: MallAfterSalesRequestId,
+        idempotency_key: impl Into<String>,
+        reason_code: Option<&str>,
+    ) -> Self {
+        let request_summary = reason_code.map_or_else(
+            || format!("{} 售后申请 {}", action_type.label(), request_id),
+            |code| format!("{} 售后申请 {} 原因 {code}", action_type.label(), request_id),
+        );
+        Self {
+            supplier_fulfillment_order_id: order_id,
+            action_type,
+            after_sales_request_id: Some(request_id),
+            idempotency_key: idempotency_key.into(),
+            status: SupplierOrderActionStatus::Pending,
+            external_request_id: None,
+            request_summary: Some(request_summary),
+            response_summary: None,
+            attempt_count: 0,
+            next_attempt_at: None,
+        }
+    }
+
+    /// 构造已进入发送中的供应商结果查询意图。
+    ///
+    /// # 参数
+    /// * `order_id` - 待调查供应商履约订单
+    /// * `idempotency_key` - 查询意图的稳定幂等键
+    /// * `request_summary` - 已脱敏调查意图摘要
+    ///
+    /// # 返回
+    /// 返回 `QUERY/SENDING` 且首次尝试计数为一的动作数据。
+    pub fn query_intent(
+        order_id: SupplierFulfillmentOrderId,
+        idempotency_key: impl Into<String>,
+        request_summary: impl Into<String>,
+    ) -> Self {
+        Self {
+            supplier_fulfillment_order_id: order_id,
+            action_type: SupplierOrderActionType::Query,
+            after_sales_request_id: None,
+            idempotency_key: idempotency_key.into(),
+            status: SupplierOrderActionStatus::Sending,
+            external_request_id: None,
+            request_summary: Some(request_summary.into()),
+            response_summary: None,
+            attempt_count: 1,
+            next_attempt_at: None,
+        }
+    }
+
+    /// 构造已验证并持久化结果的供应商查询证据。
+    ///
+    /// # 参数
+    /// * `order_id` - 已验证供应商履约订单
+    /// * `idempotency_key` - 完成证据的稳定幂等键
+    /// * `request_summary` - 已脱敏证据来源摘要
+    /// * `response_summary` - 已序列化的正式验证结果
+    ///
+    /// # 返回
+    /// 返回 `QUERY/SUCCEEDED` 且首次尝试计数为一的动作数据。
+    pub fn query_result(
+        order_id: SupplierFulfillmentOrderId,
+        idempotency_key: impl Into<String>,
+        request_summary: impl Into<String>,
+        response_summary: impl Into<String>,
+    ) -> Self {
+        Self {
+            supplier_fulfillment_order_id: order_id,
+            action_type: SupplierOrderActionType::Query,
+            after_sales_request_id: None,
+            idempotency_key: idempotency_key.into(),
+            status: SupplierOrderActionStatus::Succeeded,
+            external_request_id: None,
+            request_summary: Some(request_summary.into()),
+            response_summary: Some(response_summary.into()),
+            attempt_count: 1,
+            next_attempt_at: None,
+        }
+    }
+}
+
 /// 供应商动作更新数据（不含系统字段与关键字段）。
 ///
 /// 子订单、动作类型、售后申请与幂等键创建后不可修改；重试计数走 [`SupplierOrderAction::record_attempt`]。
@@ -286,6 +411,28 @@ impl SupplierOrderAction {
         self.next_attempt_at = next_attempt_at;
     }
 
+    /// 校验当前动作是指定订单的原业务动作。
+    ///
+    /// 调查目标只允许原下单、取消或退款动作；查询证据不能再次作为调查目标。
+    ///
+    /// # 参数
+    /// * `order_id` - 当前供应商履约订单主键
+    ///
+    /// # 返回
+    /// 归属一致且不是查询动作时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 动作属于其他订单或动作类型为查询时返回领域错误。
+    pub fn ensure_original_for_order(&self, order_id: &str) -> Result<()> {
+        if self.supplier_fulfillment_order_id.as_ref() != order_id {
+            return Err(Error::from("供应商原动作不属于当前履约订单"));
+        }
+        if self.action_type == SupplierOrderActionType::Query {
+            return Err(Error::from("调查目标必须是原下单、取消或退款动作"));
+        }
+        Ok(())
+    }
+
     /// 应用供应商请求号更新。
     ///
     /// # 参数
@@ -362,6 +509,38 @@ pub struct SupplierOrderActionLineData {
     pub quantity: Quantity,
     /// 本动作提交金额。
     pub amount: Amount,
+}
+
+impl SupplierOrderActionLineData {
+    /// 构造按请求顺序编号的供应商动作行数据。
+    ///
+    /// # 参数
+    /// * `action_id` - 所属供应商动作
+    /// * `index` - 请求中的零基序号
+    /// * `after_sales_request_line_id` - 商城售后申请行
+    /// * `supplier_fulfillment_item_id` - 供应商履约明细
+    /// * `quantity` - 提交数量
+    /// * `amount` - 提交金额
+    ///
+    /// # 返回
+    /// 返回行号从 1 起的动作行数据。
+    pub fn from_request_index(
+        action_id: SupplierOrderActionId,
+        index: usize,
+        after_sales_request_line_id: MallAfterSalesRequestLineId,
+        supplier_fulfillment_item_id: SupplierFulfillmentItemId,
+        quantity: Quantity,
+        amount: Amount,
+    ) -> Self {
+        Self {
+            supplier_order_action_id: action_id,
+            line_no: u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1),
+            after_sales_request_line_id,
+            supplier_fulfillment_item_id,
+            quantity,
+            amount,
+        }
+    }
 }
 
 /// 供应商动作行实体（数据模型 §6.19，冻结一次取消或退款实际提交给该供应商的范围）。
@@ -461,6 +640,8 @@ mod tests {
         assert!(action.after_sales_request_id.is_none());
         assert_eq!(action.status, SupplierOrderActionStatus::Pending);
         assert_eq!(action.attempt_count, 0);
+        assert!(action.ensure_original_for_order("order-1").is_ok());
+        assert!(action.ensure_original_for_order("order-2").is_err());
 
         let query = SupplierOrderActionData {
             action_type: SupplierOrderActionType::Query,
@@ -468,6 +649,58 @@ mod tests {
             ..sample_data()
         };
         assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-2"), query).is_ok());
+    }
+
+    #[test]
+    fn data_factories_freeze_action_types_and_line_sequence() {
+        let place = SupplierOrderActionData::place(SupplierFulfillmentOrderId::new("order-1"), "FO-1", 2);
+        assert_eq!(place.action_type, SupplierOrderActionType::Place);
+        assert_eq!(place.status, SupplierOrderActionStatus::Pending);
+        assert!(place.request_summary.unwrap().contains("2 行"));
+
+        let after_sales = SupplierOrderActionData::after_sales(
+            SupplierFulfillmentOrderId::new("order-1"),
+            SupplierOrderActionType::Cancel,
+            MallAfterSalesRequestId::new("request-1"),
+            "cancel-key",
+            Some("CUSTOMER_REQUEST"),
+        );
+        assert_eq!(after_sales.action_type, SupplierOrderActionType::Cancel);
+        assert_eq!(
+            after_sales.after_sales_request_id,
+            Some(MallAfterSalesRequestId::new("request-1"))
+        );
+
+        let query_intent = SupplierOrderActionData::query_intent(
+            SupplierFulfillmentOrderId::new("order-1"),
+            "query-key",
+            "query intent",
+        );
+        assert_eq!(query_intent.action_type, SupplierOrderActionType::Query);
+        assert_eq!(query_intent.status, SupplierOrderActionStatus::Sending);
+        assert_eq!(query_intent.attempt_count, 1);
+
+        let query_result = SupplierOrderActionData::query_result(
+            SupplierFulfillmentOrderId::new("order-1"),
+            "result-key",
+            "result evidence",
+            "{\"result\":\"accepted\"}",
+        );
+        assert_eq!(query_result.status, SupplierOrderActionStatus::Succeeded);
+        assert_eq!(
+            query_result.response_summary.as_deref(),
+            Some("{\"result\":\"accepted\"}")
+        );
+
+        let line = SupplierOrderActionLineData::from_request_index(
+            SupplierOrderActionId::new("action-1"),
+            0,
+            MallAfterSalesRequestLineId::new("request-line-1"),
+            SupplierFulfillmentItemId::new("item-1"),
+            Quantity::from_str("1").unwrap(),
+            Amount::from_str("1").unwrap(),
+        );
+        assert_eq!(line.line_no, 1);
     }
 
     #[test]

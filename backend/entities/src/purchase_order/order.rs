@@ -8,7 +8,10 @@ use entity_macros::Entity;
 use crate::common::stable::StableBase;
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::errors::{Error, Result};
-use crate::ids::{PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId};
+use crate::ids::{
+    PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SalesOrderRevisionId,
+    SupplierAccountId,
+};
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
@@ -77,6 +80,14 @@ impl PurchaseOrderStatus {
             Self::Voided => "VOIDED",
             Self::InApproval => "IN_APPROVAL",
         }
+    }
+
+    /// 判断当前状态是否允许发起采购变更。
+    ///
+    /// # 返回
+    /// 已生效或部分执行时返回 `true`，其余状态返回 `false`。
+    pub fn allows_change(self) -> bool {
+        matches!(self, Self::Effective | Self::PartiallyExecuted)
     }
 }
 
@@ -323,6 +334,148 @@ impl PurchaseOrder {
         })
     }
 
+    /// 校验调用方持有的乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取到的期望版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 期望版本与实体当前版本不一致时返回领域错误。
+    pub fn ensure_expected_version(&self, expected: u64) -> Result<()> {
+        if self.base.version != expected {
+            return Err(Error::from("采购单版本已变化"));
+        }
+        Ok(())
+    }
+
+    /// 校验采购单仍可冻结新的审批提交。
+    ///
+    /// # 返回
+    /// 草稿状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非草稿状态返回领域错误。
+    pub fn ensure_draft_for_submission(&self) -> Result<()> {
+        self.ensure_draft()
+    }
+
+    /// 取得可提交审批的当前草稿提交。
+    ///
+    /// # 返回
+    /// 采购单处于草稿且已挂接草稿提交时，返回类型化提交 ID。
+    ///
+    /// # 错误
+    /// 采购单不是草稿，或缺少当前草稿提交时返回领域错误。
+    pub fn draft_submission_id(&self) -> Result<PurchaseOrderSubmissionId> {
+        self.ensure_draft()?;
+        self.current_submission_id
+            .as_ref()
+            .map(|id| PurchaseOrderSubmissionId::new(id.clone()))
+            .ok_or_else(|| Error::from("采购单缺少草稿提交"))
+    }
+
+    /// 取得可正式化的冻结提交。
+    ///
+    /// # 返回
+    /// 采购单处于审批中且已冻结提交时，返回类型化提交 ID。
+    ///
+    /// # 错误
+    /// 采购单不是审批中，或缺少冻结提交时返回领域错误。
+    pub fn submission_id_for_formalization(&self) -> Result<PurchaseOrderSubmissionId> {
+        if self.stable.status != PurchaseOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购单可以正式化"));
+        }
+        self.current_submission_id
+            .as_ref()
+            .map(|id| PurchaseOrderSubmissionId::new(id.clone()))
+            .ok_or_else(|| Error::from("采购单缺少待生效提交"))
+    }
+
+    /// 取得发起采购变更所需的当前生效版本。
+    ///
+    /// # 返回
+    /// 采购单已生效或部分执行且存在当前版本时，返回类型化版本 ID。
+    ///
+    /// # 错误
+    /// 主状态不允许变更，或缺少当前生效版本时返回领域错误。
+    pub fn revision_id_for_change(&self) -> Result<PurchaseOrderRevisionId> {
+        if !self.stable.status.allows_change() {
+            return Err(Error::from("只有已生效或部分执行的采购单可以发起变更"));
+        }
+        self.stable
+            .current_revision_id
+            .as_ref()
+            .map(|id| PurchaseOrderRevisionId::new(id.clone()))
+            .ok_or_else(|| Error::from("采购单没有生效版本，不能发起变更"))
+    }
+
+    /// 挂接创建采购单时形成的首个草稿提交。
+    ///
+    /// # 参数
+    /// * `submission_id` - 新建草稿提交稳定身份
+    ///
+    /// # 返回
+    /// 挂接成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 采购单不是草稿，或已经挂接提交时返回领域错误。
+    pub fn attach_draft_submission(&mut self, submission_id: PurchaseOrderSubmissionId) -> Result<()> {
+        self.ensure_draft()?;
+        if self.current_submission_id.is_some() {
+            return Err(Error::from("采购单已经挂接当前提交"));
+        }
+        self.current_submission_id = Some(submission_id.to_string());
+        Ok(())
+    }
+
+    /// 最终通过并切换当前生效版本。
+    ///
+    /// # 参数
+    /// * `revision_id` - 本次正式化形成的采购版本
+    /// * `updated_by` - 最终通过执行人
+    ///
+    /// # 返回
+    /// 状态和版本指针更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 采购单不是审批中时返回领域错误。
+    pub fn formalize_with_revision(
+        &mut self,
+        revision_id: PurchaseOrderRevisionId,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        self.formalize_approved(updated_by)?;
+        self.stable.current_revision_id = Some(revision_id.to_string());
+        Ok(())
+    }
+
+    /// 在采购变更生效后切换当前版本。
+    ///
+    /// # 参数
+    /// * `revision_id` - 采购变更形成的新生效版本
+    /// * `updated_by` - 最终通过执行人
+    ///
+    /// # 返回
+    /// 当前版本指针更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 采购单主状态不允许发起变更时返回领域错误。
+    pub fn apply_change_revision(
+        &mut self,
+        revision_id: PurchaseOrderRevisionId,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if !self.stable.status.allows_change() {
+            return Err(Error::from("只有已生效或部分执行的采购单可以应用变更版本"));
+        }
+        self.stable.current_revision_id = Some(revision_id.to_string());
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 一次性分配不可复用正式采购单号。
     ///
     /// 仅允许空号草稿调用；成功后不得再改写。
@@ -557,7 +710,10 @@ mod tests {
         PurchaseReviewStatus,
     };
     use crate::common::state::ensure_transition;
-    use crate::ids::{PurchaseOrderId, SalesOrderId, SalesOrderRevisionId, SupplierAccountId};
+    use crate::ids::{
+        PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId,
+        SalesOrderRevisionId, SupplierAccountId,
+    };
     use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 
     fn order_data() -> PurchaseOrderData {
@@ -619,6 +775,41 @@ mod tests {
         order.assign_purchase_no(" PO-1 ").unwrap();
         assert_eq!(order.purchase_no, "PO-1");
         assert!(order.assign_purchase_no("PO-2").is_err());
+    }
+
+    #[test]
+    fn draft_submission_and_change_revision_guards_are_derived_by_entity() {
+        let mut order = new_order();
+        assert!(order.draft_submission_id().is_err());
+        order
+            .attach_draft_submission(PurchaseOrderSubmissionId::new("sub-1"))
+            .unwrap();
+        assert_eq!(order.draft_submission_id().unwrap().as_ref(), "sub-1");
+        assert!(order
+            .attach_draft_submission(PurchaseOrderSubmissionId::new("sub-2"))
+            .is_err());
+        assert!(order.revision_id_for_change().is_err());
+
+        order.start_approval("sub-1", "admin-1").unwrap();
+        assert_eq!(order.submission_id_for_formalization().unwrap().as_ref(), "sub-1");
+        order
+            .formalize_with_revision(PurchaseOrderRevisionId::new("por-1"), "fin-1")
+            .unwrap();
+        assert_eq!(order.revision_id_for_change().unwrap().as_ref(), "por-1");
+        order
+            .apply_change_revision(PurchaseOrderRevisionId::new("por-2"), "approver-1")
+            .unwrap();
+        assert_eq!(order.revision_id_for_change().unwrap().as_ref(), "por-2");
+        assert_eq!(order.stable.updated_by, "approver-1");
+    }
+
+    #[test]
+    fn expected_version_guard_accepts_current_and_rejects_stale() {
+        let order = new_order();
+        order.ensure_expected_version(order.base.version).unwrap();
+        assert!(order
+            .ensure_expected_version(order.base.version.saturating_add(1))
+            .is_err());
     }
 
     #[test]

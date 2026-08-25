@@ -27,11 +27,9 @@ use entities::purchase_order::{
 use entities::sales_order::types::FulfillmentMode;
 use entities::sales_order::{CommercialStatus, SalesOrder, SalesOrderRevision};
 use entities::supplier_offering::{
-    AvailabilityStatus, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
-    SupplierOfferingRevision,
+    AvailabilityStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::ClientSession;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -207,20 +205,14 @@ impl PurchaseOrderService {
         }
         let order_ids = tasks
             .iter()
-            .map(|task| task.business_object_id.clone())
+            .map(|task| SalesOrderId::new(task.business_object_id.clone()))
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
         let orders = self
             .db
-            .sales_orders()
-            .find_many(
-                doc! {
-                    "id": { "$in": order_ids },
-                    "commercial_status": CommercialStatus::Effective.as_str(),
-                },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .find_effective_sales_orders_by_ids(&order_ids, &mut NoTransaction)
             .await?;
         let owner_names = self
             .resolve_account_names(
@@ -591,20 +583,10 @@ async fn qualified_supplies_for_line(
     line: &SalesProcurementCoverageLine,
     executor: &mut dyn Executor,
 ) -> Result<Vec<LineSupply>> {
-    let mut offerings = db
-        .supplier_offerings()
-        .find_many(
-            doc! {
-                "sku_id": line.goods_line.sku_id.to_string(),
-                "status": OfferingStatus::Active.as_str(),
-            },
-            executor,
-        )
+    let offerings = db
+        .purchase_order()
+        .list_active_offerings_by_sku(&line.goods_line.sku_id, executor)
         .await?;
-    offerings.sort_by(|left, right| {
-        (left.supplier_id.to_string(), left.base.id.clone())
-            .cmp(&(right.supplier_id.to_string(), right.base.id.clone()))
-    });
     let mut seen_suppliers = HashSet::new();
     let mut supplies = Vec::new();
     for offering in offerings {
@@ -656,10 +638,7 @@ async fn qualified_supply(
     }
     let Some(availability) = db
         .supplier_offering_availabilities()
-        .find_one(
-            doc! { "supplier_offering_id": offering.base.id.clone() },
-            executor,
-        )
+        .find_by_offering_id(&offering.base.id.clone().into(), executor)
         .await?
     else {
         return Ok(None);
@@ -851,7 +830,7 @@ async fn persist_basis_draft(
     for (index, line) in computed.lines.iter().enumerate() {
         submission_lines.push(build_submission_line(&submission_id, (index + 1) as u32, line)?);
     }
-    order.current_submission_id = Some(submission.base.id.clone());
+    order.attach_draft_submission(submission.base.id.clone().into())?;
     let receipt = CreationReceipt {
         purchase_order_id: order.base.id.clone(),
         purchase_no: order.purchase_no.clone(),

@@ -4,6 +4,7 @@
 //! 有效工作副本」由部分唯一索引 `uk_sales_order_working_copies_active_per_purpose`
 //! 保证（理由与回滚方式见 `indexes::sales_order`）。
 
+use entities::ids::SalesChangeOrderId;
 use entities::sales_order::{
     SalesOrderId, SalesOrderSubmission, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine, WorkingCopyStatus, WorkingPurpose,
@@ -103,6 +104,63 @@ impl<'a> Repository<'a, SalesOrderWorkingCopy> {
             executor,
         )
         .await
+    }
+
+    /// 按销售变更单查找其绑定的工作副本。
+    ///
+    /// # 参数
+    /// * `sales_change_order_id` - 销售变更单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回绑定的销售变更工作副本；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_sales_change_order(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderWorkingCopy>> {
+        self.find_one(
+            doc! {
+                "sales_change_order_id": sales_change_order_id.to_string(),
+                "working_purpose": WorkingPurpose::SalesChange.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查找销售变更再次提交时可使用的工作副本。
+    ///
+    /// 优先返回仍处于有效编辑态的副本；撤回后无有效副本时回退到该变更单已绑定的
+    /// 已提交副本，以保持提交序号递增而不复制草稿。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 原销售单
+    /// * `sales_change_order_id` - 销售变更单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回可再次提交的工作副本；两种来源均不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_resubmittable_sales_change_copy(
+        &self,
+        sales_order_id: &SalesOrderId,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderWorkingCopy>> {
+        let active = self
+            .find_active_by_order_and_purpose(sales_order_id, WorkingPurpose::SalesChange, executor)
+            .await?;
+        if active.is_some() {
+            return Ok(active);
+        }
+        self.find_by_sales_change_order(sales_change_order_id, executor)
+            .await
     }
 }
 

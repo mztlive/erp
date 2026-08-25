@@ -42,7 +42,7 @@ use entities::receivable::{
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entities::Permission;
 use id_generator::next_id;
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -739,12 +739,14 @@ impl ReceivableService {
                     }
                     let (account, snapshot) = load_card_funds_registration_context(
                         &db,
-                        rbac.clone(),
-                        &req_for_tx.work_item_id,
-                        expected_task_version,
-                        &req_for_tx.expected_subject_version,
-                        &req_for_tx.expected_funds_fact_version,
-                        &actor_owned,
+                        CardFundsRegistrationContextInput {
+                            rbac: rbac.clone(),
+                            work_item_id: &req_for_tx.work_item_id,
+                            expected_task_version,
+                            expected_subject_version: &req_for_tx.expected_subject_version,
+                            expected_funds_fact_version: &req_for_tx.expected_funds_fact_version,
+                            actor: &actor_owned,
+                        },
                         session,
                     )
                     .await?;
@@ -908,12 +910,14 @@ impl ReceivableService {
                     }
                     let (account, _snapshot) = load_card_funds_registration_context(
                         &db,
-                        rbac.clone(),
-                        &req_for_tx.work_item_id,
-                        expected_task_version,
-                        &req_for_tx.expected_subject_version,
-                        &req_for_tx.expected_funds_fact_version,
-                        &actor_owned,
+                        CardFundsRegistrationContextInput {
+                            rbac: rbac.clone(),
+                            work_item_id: &req_for_tx.work_item_id,
+                            expected_task_version,
+                            expected_subject_version: &req_for_tx.expected_subject_version,
+                            expected_funds_fact_version: &req_for_tx.expected_funds_fact_version,
+                            actor: &actor_owned,
+                        },
                         session,
                     )
                     .await?;
@@ -2430,7 +2434,7 @@ impl ReceivableService {
                         let mut sales_order_ids = Vec::new();
                         for account in db
                             .receivable_accounts()
-                            .find_many(doc! { "id": { "$in": sales_order_account_ids } }, session)
+                            .find_accounts_by_ids(&sales_order_account_ids, session)
                             .await?
                         {
                             sales_order_ids.push(account.sales_order_id.to_string());
@@ -2743,28 +2747,36 @@ struct CardFundsSnapshot {
     invoices: Vec<Invoice>,
 }
 
+/// 加载 W13 历史票款登记上下文所需的任务版本与责任人事实。
+struct CardFundsRegistrationContextInput<'a> {
+    rbac: SharedRbacService,
+    work_item_id: &'a entities::ids::WorkItemId,
+    expected_task_version: u64,
+    expected_subject_version: &'a str,
+    expected_funds_fact_version: &'a str,
+    actor: &'a AuditActor,
+}
+
 /// 在事务内加载并校验 W13 历史票款登记的任务、责任、账户与事实版本。
+///
+/// # 错误
+/// 任务、账户或事实不存在，责任校验失败，或任一并发版本变化时返回错误。
 async fn load_card_funds_registration_context(
     db: &Database,
-    rbac: SharedRbacService,
-    work_item_id: &entities::ids::WorkItemId,
-    expected_task_version: u64,
-    expected_subject_version: &str,
-    expected_funds_fact_version: &str,
-    actor: &AuditActor,
+    input: CardFundsRegistrationContextInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<(ReceivableAccount, CardFundsSnapshot)> {
     let work_item = db
         .work_items()
-        .find_by_id(work_item_id, executor)
+        .find_by_id(input.work_item_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("卡券票款复核任务不存在".to_string()))?;
-    if work_item.base.version != expected_task_version {
+    if work_item.base.version != input.expected_task_version {
         return Err(Error::ConflictError(
             "复核任务版本已变化，请刷新后重试".to_string(),
         ));
     }
-    if work_item.subject_version != expected_subject_version.trim() {
+    if work_item.subject_version != input.expected_subject_version.trim() {
         return Err(Error::ConflictError(
             "复核任务对象版本已变化，请刷新后重试".to_string(),
         ));
@@ -2779,11 +2791,11 @@ async fn load_card_funds_registration_context(
             "当前任务不是应收账户卡券票款复核任务".to_string(),
         ));
     }
-    if !work_item.is_owned_by(actor.id()) {
+    if !work_item.is_owned_by(input.actor.id()) {
         return Err(Error::Forbidden("当前账号不是开放任务的当前责任人".to_string()));
     }
-    WorkItemService::new(db.clone(), rbac)
-        .ensure_domain_decision_access(actor, &work_item, executor)
+    WorkItemService::new(db.clone(), input.rbac)
+        .ensure_domain_decision_access(input.actor, &work_item, executor)
         .await?;
 
     let account = db
@@ -2816,7 +2828,7 @@ async fn load_card_funds_registration_context(
             "当前销售版本缺少收款或开票往来主体名称".to_string(),
         ));
     }
-    if funds_fact_version(&account, &snapshot) != expected_funds_fact_version.trim() {
+    if funds_fact_version(&account, &snapshot) != input.expected_funds_fact_version.trim() {
         return Err(Error::ConflictError("票款事实已变化，请刷新后重试".to_string()));
     }
     Ok((account, snapshot))
@@ -3130,13 +3142,10 @@ async fn load_card_funds_snapshot(
         .into_iter()
         .collect::<Vec<_>>();
     let expected_receipts = receipt_ids.len();
-    let receipts = if receipt_ids.is_empty() {
-        Vec::new()
-    } else {
-        db.customer_receipts()
-            .find_many(doc! { "id": { "$in": receipt_ids } }, executor)
-            .await?
-    };
+    let receipts = db
+        .customer_receipts()
+        .find_receipts_by_ids(&receipt_ids, executor)
+        .await?;
     if receipts.len() != expected_receipts {
         return Err(Error::NotFound("应收账户引用的回款单不存在".to_string()));
     }
@@ -3147,13 +3156,7 @@ async fn load_card_funds_snapshot(
         .into_iter()
         .collect::<Vec<_>>();
     let expected_invoices = invoice_ids.len();
-    let invoices = if invoice_ids.is_empty() {
-        Vec::new()
-    } else {
-        db.invoices()
-            .find_many(doc! { "id": { "$in": invoice_ids } }, executor)
-            .await?
-    };
+    let invoices = db.invoices().find_invoices_by_ids(&invoice_ids, executor).await?;
     if invoices.len() != expected_invoices {
         return Err(Error::NotFound("应收账户引用的发票不存在".to_string()));
     }
@@ -3597,14 +3600,7 @@ async fn ensure_fact_separation(
 ) -> Result<()> {
     let audits = db
         .audit_logs()
-        .find_many(
-            doc! {
-                "resource_type": resource_type,
-                "resource_id": resource_id,
-                "success": true,
-            },
-            executor,
-        )
+        .list_successful_by_resource(resource_type, resource_id, executor)
         .await?;
     let matches_action =
         |action: &str, prefixes: &[&str]| prefixes.iter().any(|prefix| action.starts_with(prefix));

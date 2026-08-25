@@ -11,18 +11,20 @@ use entities::{
     customer::{
         AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
         CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
-        CustomerProfileCommand, CustomerProfileCommandData,
+        CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileFactInput,
+        CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation,
+        CustomerProfileRequestShape,
     },
     field_update::FieldUpdate,
     ids::{PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId},
     party::{
         EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyAddressUpdate, PartyBankAccount,
         PartyBankAccountData, PartyBankAccountUpdate, PartyContact, PartyContactData, PartyContactUpdate,
-        PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus, PartyUpdate,
+        PartyData, PartyKind, PartyOwned, PartyRevision, PartyRevisionData, PartyStatus, PartyUpdate,
     },
 };
 use id_generator::next_id;
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -38,6 +40,103 @@ use super::{
     CustomerProfileMutationView, CustomerSensitiveFieldView, CustomerSensitiveRevealView, CustomerView,
     RevealCustomerSensitiveRequest, SaveCustomerProfileRequest,
 };
+
+impl CustomerProfileFactInput for CustomerProfileContactInput {
+    fn existing_id(&self) -> Option<&str> {
+        self.existing_id.as_deref()
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+
+    fn required_value(&self) -> Option<&str> {
+        self.mobile.as_deref()
+    }
+}
+
+impl CustomerProfileFactInput for CustomerProfileAddressInput {
+    fn existing_id(&self) -> Option<&str> {
+        self.existing_id.as_deref()
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+
+    fn required_value(&self) -> Option<&str> {
+        self.address.as_deref()
+    }
+}
+
+impl CustomerProfileFactInput for CustomerProfileBankAccountInput {
+    fn existing_id(&self) -> Option<&str> {
+        self.existing_id.as_deref()
+    }
+
+    fn is_default(&self) -> bool {
+        self.is_default
+    }
+
+    fn required_value(&self) -> Option<&str> {
+        self.account_number.as_deref()
+    }
+}
+
+impl SaveCustomerProfileRequest {
+    /// 校验 DTO 字段格式与嵌套输入协议。
+    ///
+    /// 只保留 `validator` 注解表达的协议校验；默认项、既有 ID、版本与
+    /// 创建/修订结构组合由 entities 值对象校验。
+    ///
+    /// # 返回
+    /// DTO 协议合法时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 根请求或任一嵌套输入违反 DTO 注解时返回校验错误。
+    fn validate_protocol(&self) -> Result<()> {
+        self.validate()?;
+        for contact in self.contacts.as_deref().unwrap_or_default() {
+            contact.validate()?;
+        }
+        for address in self.addresses.as_deref().unwrap_or_default() {
+            address.validate()?;
+        }
+        for account in self.bank_accounts.as_deref().unwrap_or_default() {
+            account.validate()?;
+        }
+        Ok(())
+    }
+
+    /// 将 DTO 字段适配为 entities 客户资料结构值对象并执行领域校验。
+    ///
+    /// # 参数
+    /// * `operation` - 创建或修订操作
+    ///
+    /// # 返回
+    /// 纯结构规则全部满足时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本/负责人组合、默认项、既有 ID 或新增事实必填值非法时返回错误。
+    fn validate_structure(&self, operation: CustomerProfileOperation) -> Result<()> {
+        let shape = CustomerProfileRequestShape::new(
+            operation,
+            self.expected_party_version,
+            self.expected_customer_version,
+            self.owner_user_id.is_some(),
+        )?;
+        CustomerProfileFactSet::new(CustomerProfileFactKind::Contact, self.contacts.as_deref())
+            .validate(shape.operation())?;
+        CustomerProfileFactSet::new(CustomerProfileFactKind::Address, self.addresses.as_deref())
+            .validate(shape.operation())?;
+        CustomerProfileFactSet::new(
+            CustomerProfileFactKind::BankAccount,
+            self.bank_accounts.as_deref(),
+        )
+        .validate(shape.operation())?;
+        Ok(())
+    }
+}
 
 /// 事务失败后核对幂等命令所需的请求上下文。
 #[derive(Clone, Copy)]
@@ -86,7 +185,8 @@ impl CustomerProfileService {
         req: SaveCustomerProfileRequest,
         actor: &AuditActor,
     ) -> Result<CustomerProfileMutationView> {
-        self.validate_request(&req, true)?;
+        req.validate_protocol()?;
+        req.validate_structure(CustomerProfileOperation::Create)?;
         let fingerprint = request_fingerprint(&req)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
             return replay_command(command, "create", None, actor.id(), &fingerprint);
@@ -125,7 +225,8 @@ impl CustomerProfileService {
         req: SaveCustomerProfileRequest,
         actor: &AuditActor,
     ) -> Result<CustomerProfileMutationView> {
-        self.validate_request(&req, false)?;
+        req.validate_protocol()?;
+        req.validate_structure(CustomerProfileOperation::Update)?;
         let fingerprint = request_fingerprint(&req)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
             return replay_command(command, "update", Some(customer_id), actor.id(), &fingerprint);
@@ -166,11 +267,29 @@ impl CustomerProfileService {
             .party_revisions()
             .list_revision_history(&account.party_id, &mut NoTransaction)
             .await?;
-        let current_revision = current_revision(&party, &revisions)?;
-        let assignments = self.assignments(customer_id).await?;
-        let account_names = self.assignment_account_names(&assignments).await?;
-        let (contacts, addresses, tax_profiles, bank_accounts) =
-            self.current_party_facts(&account.party_id).await?;
+        let current_revision = party
+            .current_revision(&revisions)
+            .map_err(|error| Error::Internal(error.to_string()))?
+            .clone();
+        let assignments = self
+            .db
+            .customer_assignments()
+            .list_history_for_customer(&CustomerAccountId::new(customer_id), &mut NoTransaction)
+            .await?;
+        let account_ids: Vec<String> = assignments
+            .iter()
+            .map(|assignment| assignment.user_id.clone())
+            .collect();
+        let account_names = self
+            .db
+            .accounts()
+            .names_by_ids(&account_ids, &mut NoTransaction)
+            .await?;
+        let (contacts, addresses, tax_profiles, bank_accounts) = self
+            .db
+            .party()
+            .load_current_facts(&account.party_id, BusinessDate::today(), &mut NoTransaction)
+            .await?;
         let sensitive_fields = self.sensitive_fields(customer_id, &contacts, &addresses, &bank_accounts)?;
         let mut detail = build_detail(ProfileDetailParts {
             account,
@@ -226,25 +345,6 @@ impl CustomerProfileService {
                 .resource_log("customer_sensitive.reveal", "customer_sensitive", scope.record_id)?;
         self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
         Ok(CustomerSensitiveRevealView { value })
-    }
-
-    /// 验证根命令及其嵌套资料输入。
-    fn validate_request(&self, req: &SaveCustomerProfileRequest, create: bool) -> Result<()> {
-        req.validate()?;
-        validate_default_count(req.contacts.as_deref(), |item| item.is_default, "联系人")?;
-        validate_default_count(req.addresses.as_deref(), |item| item.is_default, "地址")?;
-        validate_default_count(req.bank_accounts.as_deref(), |item| item.is_default, "银行账户")?;
-        validate_unique_existing_ids(req)?;
-        for contact in req.contacts.as_deref().unwrap_or_default() {
-            validate_contact_input(contact, create)?;
-        }
-        for address in req.addresses.as_deref().unwrap_or_default() {
-            validate_address_input(address, create)?;
-        }
-        for account in req.bank_accounts.as_deref().unwrap_or_default() {
-            validate_bank_input(account, create)?;
-        }
-        validate_create_or_update_shape(req, create)
     }
 
     /// 加载已成功命令记录。
@@ -320,16 +420,18 @@ impl CustomerProfileService {
         actor: &AuditActor,
     ) -> Result<PreparedUpdate> {
         let mut account = self.load_customer(customer_id).await?;
-        ensure_version(
-            account.base.version,
-            required_version(req.expected_customer_version, "客户")?,
-        )?;
+        account
+            .ensure_version(req.expected_customer_version.unwrap_or_default())
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
         let mut party = self.load_party(&account.party_id).await?;
-        ensure_version(
-            party.base.version,
-            required_version(req.expected_party_version, "主体")?,
-        )?;
-        let revision_no = self.next_revision_no(&account.party_id).await?;
+        party
+            .ensure_version(req.expected_party_version.unwrap_or_default())
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        let revision_no = self
+            .db
+            .party_revisions()
+            .next_revision_no(&account.party_id, &mut NoTransaction)
+            .await?;
         let revision = update_roots(&mut party, &mut account, &req, revision_no, actor.id())?;
         let facts = self
             .prepare_fact_changes(&account.party_id, &req, actor.id())
@@ -381,15 +483,27 @@ impl CustomerProfileService {
     ) -> Result<PartyFactChanges> {
         let mut changes = PartyFactChanges::default();
         if let Some(inputs) = &req.contacts {
-            let existing = self.current_contacts(party_id, req.effective_from).await?;
+            let existing = self
+                .db
+                .party_contacts()
+                .list_active_on(party_id, req.effective_from, &mut NoTransaction)
+                .await?;
             changes.contacts = self.diff_contacts(existing, inputs, party_id, req.effective_from, actor)?;
         }
         if let Some(inputs) = &req.addresses {
-            let existing = self.current_addresses(party_id, req.effective_from).await?;
+            let existing = self
+                .db
+                .party_addresses()
+                .list_active_on(party_id, req.effective_from, &mut NoTransaction)
+                .await?;
             changes.addresses = self.diff_addresses(existing, inputs, party_id, req.effective_from, actor)?;
         }
         if let Some(inputs) = &req.bank_accounts {
-            let existing = self.current_bank_accounts(party_id, req.effective_from).await?;
+            let existing = self
+                .db
+                .party_bank_accounts()
+                .list_active_on(party_id, req.effective_from, &mut NoTransaction)
+                .await?;
             changes.bank_accounts =
                 self.diff_bank_accounts(existing, inputs, party_id, req.effective_from, actor)?;
         }
@@ -596,111 +710,6 @@ impl CustomerProfileService {
         Ok(changes)
     }
 
-    /// 查询指定日期当前有效联系人。
-    async fn current_contacts(&self, party_id: &PartyId, as_of: BusinessDate) -> Result<Vec<PartyContact>> {
-        self.db
-            .party_contacts()
-            .find_many(current_fact_filter(party_id, as_of), &mut NoTransaction)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// 查询指定日期当前有效地址。
-    async fn current_addresses(&self, party_id: &PartyId, as_of: BusinessDate) -> Result<Vec<PartyAddress>> {
-        self.db
-            .party_addresses()
-            .find_many(current_fact_filter(party_id, as_of), &mut NoTransaction)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// 查询指定日期当前有效银行账户。
-    async fn current_bank_accounts(
-        &self,
-        party_id: &PartyId,
-        as_of: BusinessDate,
-    ) -> Result<Vec<PartyBankAccount>> {
-        self.db
-            .party_bank_accounts()
-            .find_many(current_fact_filter(party_id, as_of), &mut NoTransaction)
-            .await
-            .map_err(Into::into)
-    }
-
-    /// 查询对象中心所需的当前有效 Party 从属事实。
-    async fn current_party_facts(&self, party_id: &PartyId) -> Result<CurrentPartyFacts> {
-        let filter = current_fact_filter(party_id, BusinessDate::today());
-        let contacts = self
-            .db
-            .party_contacts()
-            .find_many_sorted(
-                filter.clone(),
-                doc! { "is_default": -1, "created_at": -1 },
-                &mut NoTransaction,
-            )
-            .await?;
-        let addresses = self
-            .db
-            .party_addresses()
-            .find_many_sorted(
-                filter.clone(),
-                doc! { "is_default": -1, "created_at": -1 },
-                &mut NoTransaction,
-            )
-            .await?;
-        let tax_profiles = self
-            .db
-            .party_tax_profiles()
-            .find_many_sorted(
-                filter.clone(),
-                doc! { "is_default": -1, "created_at": -1 },
-                &mut NoTransaction,
-            )
-            .await?;
-        let bank_accounts = self
-            .db
-            .party_bank_accounts()
-            .find_many_sorted(
-                filter,
-                doc! { "is_default": -1, "created_at": -1 },
-                &mut NoTransaction,
-            )
-            .await?;
-        Ok((contacts, addresses, tax_profiles, bank_accounts))
-    }
-
-    /// 查询客户全部归属历史。
-    async fn assignments(&self, customer_id: &str) -> Result<Vec<CustomerAssignment>> {
-        Ok(self
-            .db
-            .customer_assignments()
-            .find_many_sorted(
-                doc! { "customer_id": customer_id },
-                doc! { "valid_from": -1, "created_at": -1 },
-                &mut NoTransaction,
-            )
-            .await?)
-    }
-
-    /// 批量查询归属账号展示名。
-    async fn assignment_account_names(
-        &self,
-        assignments: &[CustomerAssignment],
-    ) -> Result<HashMap<String, String>> {
-        let account_ids: Vec<String> = assignments
-            .iter()
-            .map(|assignment| assignment.user_id.clone())
-            .collect();
-        Ok(self
-            .db
-            .accounts()
-            .find_many(doc! { "id": { "$in": account_ids } }, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .map(|account| (account.base.id, account.name))
-            .collect())
-    }
-
     /// 为每条当前敏感事实签发一分钟有效的字段级令牌。
     fn sensitive_fields(
         &self,
@@ -774,30 +783,36 @@ impl CustomerProfileService {
                 let record = self
                     .db
                     .party_contacts()
-                    .find_by_id(record_id, &mut NoTransaction)
+                    .find_contact(record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
-                ensure_party(&record.party_id, party_id)?;
+                record
+                    .ensure_party(party_id)
+                    .map_err(|error| Error::Forbidden(error.to_string()))?;
                 Ok(record.mobile_ciphertext)
             }
             SensitiveFieldKind::Address => {
                 let record = self
                     .db
                     .party_addresses()
-                    .find_by_id(record_id, &mut NoTransaction)
+                    .find_address(record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
-                ensure_party(&record.party_id, party_id)?;
+                record
+                    .ensure_party(party_id)
+                    .map_err(|error| Error::Forbidden(error.to_string()))?;
                 Ok(record.address_ciphertext)
             }
             SensitiveFieldKind::BankAccountNumber => {
                 let record = self
                     .db
                     .party_bank_accounts()
-                    .find_by_id(record_id, &mut NoTransaction)
+                    .find_bank_account(record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
-                ensure_party(&record.party_id, party_id)?;
+                record
+                    .ensure_party(party_id)
+                    .map_err(|error| Error::Forbidden(error.to_string()))?;
                 Ok(record.account_number_ciphertext)
             }
         }
@@ -807,7 +822,7 @@ impl CustomerProfileService {
     async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
         self.db
             .customer_accounts()
-            .find_by_id(id, &mut NoTransaction)
+            .find_customer(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))
     }
@@ -816,7 +831,7 @@ impl CustomerProfileService {
     async fn load_party(&self, party_id: &PartyId) -> Result<Party> {
         self.db
             .parties()
-            .find_by_id(party_id, &mut NoTransaction)
+            .find_party(party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户关联主体不存在".to_string()))
     }
@@ -826,30 +841,12 @@ impl CustomerProfileService {
         let account = self
             .db
             .accounts()
-            .find_by_id(user_id, &mut NoTransaction)
+            .find_account(user_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("负责销售账号不存在".to_string()))?;
-        if !account.status.is_active() {
-            return Err(Error::BusinessLogicError(
-                "负责销售账号已停用，不能建立客户归属".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    /// 返回 Party 的下一修订号。
-    async fn next_revision_no(&self, party_id: &PartyId) -> Result<u32> {
-        let revisions = self
-            .db
-            .party_revisions()
-            .list_revision_history(party_id, &mut NoTransaction)
-            .await?;
-        Ok(revisions
-            .iter()
-            .map(|item| item.revision.revision_no)
-            .max()
-            .unwrap_or(0)
-            + 1)
+        account
+            .ensure_can_login()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))
     }
 }
 
@@ -1074,14 +1071,6 @@ impl PartyFactChanges {
         Ok(())
     }
 }
-
-/// 当前 Party 事实查询结果。
-type CurrentPartyFacts = (
-    Vec<PartyContact>,
-    Vec<PartyAddress>,
-    Vec<entities::party::PartyTaxProfile>,
-    Vec<PartyBankAccount>,
-);
 
 /// 创建 Party 与首个名称修订。
 fn create_party(
@@ -1315,20 +1304,6 @@ fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<CustomerAction
         .collect()
 }
 
-/// 查找 Party 当前修订；缺失视为聚合损坏。
-fn current_revision(party: &Party, revisions: &[PartyRevision]) -> Result<PartyRevision> {
-    let revision_id = party
-        .stable
-        .current_revision_id
-        .as_deref()
-        .ok_or_else(|| Error::Internal("客户主体缺少当前名称修订".to_string()))?;
-    revisions
-        .iter()
-        .find(|item| item.base.id == revision_id)
-        .cloned()
-        .ok_or_else(|| Error::Internal("客户主体当前名称修订不存在".to_string()))
-}
-
 /// 把实体集合转成按 ID 索引的当前集合。
 fn by_id<T>(items: Vec<T>, id: impl Fn(&T) -> String) -> HashMap<String, T> {
     items.into_iter().map(|item| (id(&item), item)).collect()
@@ -1529,20 +1504,6 @@ fn close_date(valid_from: BusinessDate, effective_from: BusinessDate) -> FieldUp
     }
 }
 
-/// 构造当前有效事实过滤条件。
-fn current_fact_filter(party_id: &PartyId, as_of: BusinessDate) -> mongodb::bson::Document {
-    let as_of = as_of.to_string();
-    doc! {
-        "party_id": party_id.to_string(),
-        "status": EffectiveRecordStatus::Active.as_str(),
-        "valid_from": { "$lte": &as_of },
-        "$or": [
-            { "valid_to": null },
-            { "valid_to": { "$gt": &as_of } },
-        ],
-    }
-}
-
 /// 生成服务端业务编号。
 fn business_no(prefix: &str) -> String {
     format!("{prefix}-{}", next_id())
@@ -1562,23 +1523,6 @@ fn party_id(party: &Party) -> PartyId {
     PartyId::new(party.base.id.clone())
 }
 
-/// 校验请求版本存在且大于零。
-fn required_version(value: Option<u64>, label: &str) -> Result<u64> {
-    value
-        .filter(|version| *version > 0)
-        .ok_or_else(|| Error::ValidationError(format!("修订时必须提供{label}版本")))
-}
-
-/// 校验乐观锁版本。
-fn ensure_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
-}
-
 /// 校验必填文本并返回去空白值。
 fn required_text(value: Option<&str>, label: &str) -> Result<String> {
     value
@@ -1588,134 +1532,9 @@ fn required_text(value: Option<&str>, label: &str) -> Result<String> {
         .ok_or_else(|| Error::ValidationError(format!("{label}不能为空")))
 }
 
-/// 校验创建/修订专属字段。
-///
-/// # 参数
-/// * `req` - 客户资料根命令
-/// * `create` - `true` 表示创建，`false` 表示修订
-///
-/// # 返回
-/// 形状合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 创建时携带既有版本，或修订时提交负责人 / 缺少乐观锁版本时返回校验错误。
-///
-/// # 约束
-/// 创建时负责人由服务端按创建人写入，不要求也不使用请求体中的 `owner_user_id`。
-fn validate_create_or_update_shape(req: &SaveCustomerProfileRequest, create: bool) -> Result<()> {
-    if create {
-        if req.expected_party_version.is_some() || req.expected_customer_version.is_some() {
-            return Err(Error::ValidationError("创建客户时不能提交既有版本".to_string()));
-        }
-        return Ok(());
-    }
-    if req.owner_user_id.is_some() {
-        return Err(Error::ValidationError(
-            "负责人变更必须通过客户归属操作提交".to_string(),
-        ));
-    }
-    required_version(req.expected_party_version, "主体")?;
-    required_version(req.expected_customer_version, "客户")?;
-    Ok(())
-}
-
-/// 校验联系人输入；新事实必须携带手机号明文。
-fn validate_contact_input(input: &CustomerProfileContactInput, create: bool) -> Result<()> {
-    input.validate()?;
-    if create && input.existing_id.is_some() {
-        return Err(Error::ValidationError("创建客户时不能引用既有联系人".to_string()));
-    }
-    if input.existing_id.is_none() {
-        required_text(input.mobile.as_deref(), "手机号")?;
-    }
-    Ok(())
-}
-
-/// 校验地址输入；新事实必须携带地址明文。
-fn validate_address_input(input: &CustomerProfileAddressInput, create: bool) -> Result<()> {
-    input.validate()?;
-    if create && input.existing_id.is_some() {
-        return Err(Error::ValidationError("创建客户时不能引用既有地址".to_string()));
-    }
-    if input.existing_id.is_none() {
-        required_text(input.address.as_deref(), "地址")?;
-    }
-    Ok(())
-}
-
-/// 校验银行账户输入；新稳定账户必须携带账号明文。
-fn validate_bank_input(input: &CustomerProfileBankAccountInput, create: bool) -> Result<()> {
-    input.validate()?;
-    if create && input.existing_id.is_some() {
-        return Err(Error::ValidationError(
-            "创建客户时不能引用既有银行账户".to_string(),
-        ));
-    }
-    if input.existing_id.is_none() {
-        required_text(input.account_number.as_deref(), "银行账号")?;
-    }
-    Ok(())
-}
-
-/// 校验一类事实最多一个默认项。
-fn validate_default_count<T>(
-    items: Option<&[T]>,
-    is_default: impl Fn(&T) -> bool,
-    label: &str,
-) -> Result<()> {
-    let count = items
-        .unwrap_or_default()
-        .iter()
-        .filter(|item| is_default(item))
-        .count();
-    if count <= 1 {
-        return Ok(());
-    }
-    Err(Error::ValidationError(format!("同一时间只能有一个默认{label}")))
-}
-
-/// 校验每类事实中既有 ID 不重复。
-fn validate_unique_existing_ids(req: &SaveCustomerProfileRequest) -> Result<()> {
-    let groups = [
-        req.contacts.as_ref().map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.existing_id.as_deref())
-                .collect::<Vec<_>>()
-        }),
-        req.addresses.as_ref().map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.existing_id.as_deref())
-                .collect::<Vec<_>>()
-        }),
-        req.bank_accounts.as_ref().map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.existing_id.as_deref())
-                .collect::<Vec<_>>()
-        }),
-    ];
-    for ids in groups.into_iter().flatten() {
-        let unique = ids.iter().collect::<std::collections::HashSet<_>>();
-        if unique.len() != ids.len() {
-            return Err(Error::ValidationError("同一资料事实不能重复提交".to_string()));
-        }
-    }
-    Ok(())
-}
-
 /// 规范化可选文本供内容比较。
 fn normalized_optional(value: &Option<String>) -> Option<&str> {
     value.as_deref().map(str::trim).filter(|value| !value.is_empty())
-}
-
-/// 校验敏感事实属于客户 Party。
-fn ensure_party(actual: &PartyId, expected: &PartyId) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::Forbidden("敏感字段不属于当前客户".to_string()))
 }
 
 /// 返回当前 Unix 秒。
@@ -1782,39 +1601,7 @@ mod tests {
         customer::{CustomerProfileCommand, CustomerProfileCommandData},
     };
 
-    use super::{
-        customer_status_blockers, replay_command, validate_create_or_update_shape, validate_default_count,
-        CustomerAccountStatus, SaveCustomerProfileRequest,
-    };
-
-    /// 构造最小合法的客户资料请求，供创建/修订形状校验用例复用。
-    ///
-    /// # 返回
-    /// 返回不含负责销售与乐观锁版本的创建形态请求。
-    fn sample_profile_request() -> SaveCustomerProfileRequest {
-        SaveCustomerProfileRequest {
-            idempotency_key: "key-1".to_string(),
-            expected_party_version: None,
-            expected_customer_version: None,
-            legal_name: "主太帅".to_string(),
-            short_name: None,
-            unified_credit_code: None,
-            default_payment_term_id: None,
-            status: None,
-            owner_user_id: None,
-            contacts: None,
-            addresses: None,
-            bank_accounts: None,
-            effective_from: BusinessDate::from_ymd(2026, 8, 8).unwrap(),
-            change_reason: "首版建档".to_string(),
-        }
-    }
-
-    #[test]
-    fn default_fact_validation_accepts_zero_or_one_and_rejects_multiple() {
-        assert!(validate_default_count(Some(&[false, true]), |value| *value, "联系人").is_ok());
-        assert!(validate_default_count(Some(&[true, true]), |value| *value, "联系人").is_err());
-    }
+    use super::{customer_status_blockers, replay_command, CustomerAccountStatus};
 
     #[test]
     fn disabled_customer_blocks_new_business_actions() {
@@ -1854,24 +1641,5 @@ mod tests {
         )
         .is_ok());
         assert!(replay_command(command, "update", Some("customer-2"), "admin-1", "fingerprint-1").is_err());
-    }
-
-    #[test]
-    fn create_shape_does_not_require_client_owner() {
-        let request = sample_profile_request();
-        assert!(validate_create_or_update_shape(&request, true).is_ok());
-
-        let mut with_legacy_owner = sample_profile_request();
-        with_legacy_owner.owner_user_id = Some("legacy-owner".to_string());
-        assert!(validate_create_or_update_shape(&with_legacy_owner, true).is_ok());
-    }
-
-    #[test]
-    fn update_shape_still_rejects_owner_field() {
-        let mut request = sample_profile_request();
-        request.expected_party_version = Some(1);
-        request.expected_customer_version = Some(1);
-        request.owner_user_id = Some("someone-else".to_string());
-        assert!(validate_create_or_update_shape(&request, false).is_err());
     }
 }

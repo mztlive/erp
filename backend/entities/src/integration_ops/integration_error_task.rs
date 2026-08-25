@@ -95,6 +95,17 @@ impl ErrorClass {
     pub fn can_auto_retry(&self) -> bool {
         matches!(self, Self::TransientFailure | Self::RateLimited)
     }
+
+    /// 判断服务端确认原动作无结果后是否允许人工重放。
+    ///
+    /// 结果未知必须先查询原结果；确认不存在后可安全重放。临时故障与限流
+    /// 同样允许沿原业务事实键重放，其余分类失败关闭。
+    ///
+    /// # 返回
+    /// 允许在无结果结论后重放时返回 `true`。
+    pub fn allows_replay_after_no_result(self) -> bool {
+        self.can_auto_retry() || self == Self::ResultUnknown
+    }
 }
 
 /// 错误任务状态（数据模型 §6.21、§7.7：待处理、自动重试中、待人工、已解决、已关闭）。
@@ -209,6 +220,26 @@ impl ResolutionType {
             Self::Replay => "replay",
             Self::Compensate => "compensate",
             Self::Close => "close",
+        }
+    }
+
+    /// 根据已验证终态证据的领域含义选择解决方式。
+    ///
+    /// 补偿结果优先于业务对象核验；两者均无时使用查询确认。
+    ///
+    /// # 参数
+    /// * `has_compensation` - 是否含正式补偿结果
+    /// * `has_business_verification` - 是否含业务对象核验证据
+    ///
+    /// # 返回
+    /// 返回唯一解决方式。
+    pub fn from_verified_evidence(has_compensation: bool, has_business_verification: bool) -> Self {
+        if has_compensation {
+            Self::Compensate
+        } else if has_business_verification {
+            Self::FixMapping
+        } else {
+            Self::QueryConfirm
         }
     }
 }
@@ -400,6 +431,38 @@ impl IntegrationErrorTask {
     /// 状态为已解决或已关闭时返回 `true`。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, ErrorTaskStatus::Resolved | ErrorTaskStatus::Closed)
+    }
+
+    /// 判断最近一次动作是否已由服务端确认原动作无结果。
+    ///
+    /// # 返回
+    /// 最近摘要同时包含查询原结果动作与无结果结论时返回 `true`。
+    pub fn prior_query_confirmed_no_result(&self) -> bool {
+        self.last_attempt_summary.as_deref().is_some_and(|summary| {
+            summary.contains("w29_action=QUERY_ORIGINAL_RESULT")
+                && summary.contains("outcome=NoResultConfirmed")
+        })
+    }
+
+    /// 判断当前任务是否满足人工重放的全部纯领域前置条件。
+    ///
+    /// # 返回
+    /// 服务端已确认原动作无结果，且错误分类允许重放时返回 `true`。
+    pub fn can_replay_original(&self) -> bool {
+        !self.is_terminal()
+            && self.prior_query_confirmed_no_result()
+            && self.error_class.allows_replay_after_no_result()
+    }
+
+    /// 判断命令携带的业务主题版本是否仍与任务一致。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端冻结的十进制版本字符串
+    ///
+    /// # 返回
+    /// 去除首尾空白后与当前乐观锁版本一致时返回 `true`。
+    pub fn has_subject_version(&self, expected: &str) -> bool {
+        self.base.version.to_string() == expected.trim()
     }
 
     /// 判断任务当前是否允许自动重试。
@@ -834,6 +897,36 @@ mod tests {
             .unwrap();
         assert!(!manual.can_auto_retry(), "转人工后不再自动重试");
         assert!(!task_with_class(ErrorClass::MappingError).can_auto_retry());
+    }
+
+    #[test]
+    fn replay_requires_server_confirmed_no_result_and_allowed_class() {
+        let mut retryable = task_with_class(ErrorClass::ResultUnknown);
+        retryable.last_attempt_summary =
+            Some("w29_action=QUERY_ORIGINAL_RESULT;outcome=NoResultConfirmed".to_string());
+        assert!(retryable.can_replay_original());
+        assert!(retryable.has_subject_version(" 1 "));
+
+        let mut mapping = task_with_class(ErrorClass::MappingError);
+        mapping.last_attempt_summary = retryable.last_attempt_summary.clone();
+        assert!(!mapping.can_replay_original());
+        assert!(!mapping.has_subject_version("2"));
+    }
+
+    #[test]
+    fn resolution_type_is_derived_from_verified_evidence() {
+        assert_eq!(
+            ResolutionType::from_verified_evidence(true, true),
+            ResolutionType::Compensate
+        );
+        assert_eq!(
+            ResolutionType::from_verified_evidence(false, true),
+            ResolutionType::FixMapping
+        );
+        assert_eq!(
+            ResolutionType::from_verified_evidence(false, false),
+            ResolutionType::QueryConfirm
+        );
     }
 
     #[test]

@@ -23,7 +23,7 @@ pub use status::EnableStatus;
 pub use warehouse_entity::Warehouse;
 pub use warehouse_revision::SensitiveText;
 pub use warehouse_revision::WarehouseRevision;
-pub use warehouse_sku_policy::WarehouseSkuPolicy;
+pub use warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyPeriod};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{WarehouseId, WarehouseRevisionId, WarehouseSkuPolicyId};

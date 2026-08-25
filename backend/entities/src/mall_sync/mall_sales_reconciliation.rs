@@ -300,6 +300,14 @@ impl ReconciliationItemStatus {
             Self::ConfirmedNoDifference => "confirmed_no_difference",
         }
     }
+
+    /// 判断差异明细是否已经形成不可逆结论。
+    ///
+    /// # 返回
+    /// 已解决或确认无差异时返回 `true`。
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Resolved | Self::ConfirmedNoDifference)
+    }
 }
 
 impl DocumentState for ReconciliationItemStatus {

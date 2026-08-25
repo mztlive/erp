@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 
 use database::{Executor, InventoryExt, SupplierSettlementExt};
 use entities::inventory::StockAdjustmentLine;
-use mongodb::bson::doc;
 
 use super::brief::{
     format_quantity, join_list_summary, non_empty, push_section, BriefLine, ObjectBriefSource,
@@ -40,7 +39,7 @@ impl WorkItemService {
         let adjustments = self
             .db
             .stock_adjustments()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         if adjustments.is_empty() {
             return Ok(());
@@ -119,7 +118,7 @@ impl WorkItemService {
         for statement in self
             .db
             .supplier_settlement_statements()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
             let period = format!("{} 至 {}", statement.period_start, statement.period_end);
@@ -193,10 +192,7 @@ impl WorkItemService {
         for line in self
             .db
             .stock_adjustment_lines()
-            .find_many(
-                doc! { "stock_adjustment_id": { "$in": adjustment_ids } },
-                executor,
-            )
+            .list_work_item_brief_lines_by_adjustments(adjustment_ids, executor)
             .await?
         {
             grouped

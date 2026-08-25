@@ -9,10 +9,11 @@ use database::{
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{SupplierFulfillmentOrderId, SupplierRefundFactId};
 use entities::money::{line_amounts, Amount};
-use entities::supplier_fulfillment::{AllocationAction, CancelStatus, FulfillmentStatus};
+use entities::supplier_fulfillment::AllocationAction;
 use entities::supplier_settlement::{
-    SettlementSourceFactType, SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
-    SupplierSettlementSourceEvidenceLine,
+    SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod, SettlementSourceFactType,
+    SupplierSettlementSourceEvidence, SupplierSettlementSourceEvidenceData,
+    SupplierSettlementSourceEvidenceLine, SupplierSettlementSourceEvidenceLineData, SETTLEMENT_TIMEZONE,
 };
 use id_generator::next_id;
 use validator::Validate;
@@ -29,19 +30,34 @@ impl SupplierSettlementService {
     /// 查询供应商与周期下最新的完整来源证据批次。
     ///
     /// 该读模型供创建表单取得服务端冻结的期间策略，不返回逐行金额。
+    ///
+    /// # 参数
+    /// * `query` - 供应商与结算期间查询条件
+    ///
+    /// # 返回
+    /// 返回最新不可变来源证据批次的概要视图。
+    ///
+    /// # 错误
+    /// 日期或期间非法、仓储查询失败或当前范围没有来源证据时返回错误。
     pub async fn latest_source_evidence(
         &self,
         query: &SupplierSettlementSourceEvidenceQuery,
     ) -> Result<SupplierSettlementSourceEvidenceView> {
         query.validate()?;
-        let period_start = parse_business_date(&query.period_start, "结算期间开始")?;
-        let period_end = parse_business_date(&query.period_end, "结算期间结束")?;
-        if period_end < period_start {
-            return Err(Error::ValidationError("结算期间结束不得早于开始".to_string()));
-        }
+        let period = SettlementPeriod::new(
+            parse_business_date(&query.period_start, "结算期间开始")?,
+            parse_business_date(&query.period_end, "结算期间结束")?,
+            SETTLEMENT_TIMEZONE,
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
         self.db
             .supplier_settlement_source_evidence()
-            .latest_for_scope(&query.supplier_id, period_start, period_end, &mut NoTransaction)
+            .latest_for_scope(
+                &query.supplier_id,
+                period.start(),
+                period.end(),
+                &mut NoTransaction,
+            )
             .await?
             .map(Into::into)
             .ok_or_else(|| {
@@ -53,6 +69,13 @@ impl SupplierSettlementService {
     ///
     /// 订单成本和退款三元组只从 D32 正式事实派生；客户端只能补充仓库尚无模型的
     /// 运费、服务费、取消时间与供应商账单行，并必须携带正式证据引用。
+    ///
+    /// # 参数
+    /// * `req` - 客户端来源证据命令
+    /// * `actor` - 已鉴权记录人
+    ///
+    /// # 返回
+    /// 返回新建或幂等恢复的不可变来源证据概要。
     ///
     /// # 错误
     /// 策略/周期非法、订单与行不精确配对、事实不在周期内、金额恒等失败或幂等键
@@ -70,7 +93,7 @@ impl SupplierSettlementService {
             .find_by_request_id(&req.request_id, &mut NoTransaction)
             .await?
         {
-            if existing.request_hash != request_hash {
+            if !existing.matches_request_hash(&request_hash) {
                 return Err(Error::ConflictError("来源证据请求ID已用于不同命令".to_string()));
             }
             return Ok(existing.into());
@@ -104,7 +127,7 @@ impl SupplierSettlementService {
                 .find_by_request_id(&req.request_id, &mut NoTransaction)
                 .await?
             {
-                if existing.request_hash != request_hash {
+                if !existing.matches_request_hash(&request_hash) {
                     return Err(Error::ConflictError("来源证据请求ID已用于不同命令".to_string()));
                 }
                 return Ok(existing.into());
@@ -114,42 +137,53 @@ impl SupplierSettlementService {
         Ok(evidence.into())
     }
 
+    /// 从已验证命令和正式履约/退款事实构建不可变来源证据批次。
+    ///
+    /// # 参数
+    /// * `req` - 来源证据命令
+    /// * `actor` - 已鉴权记录人
+    /// * `request_hash` - 当前命令的稳定幂等指纹
+    ///
+    /// # 返回
+    /// 返回可在事务中直接持久化的完整来源证据实体。
+    ///
+    /// # 错误
+    /// 周期/版本非法、跨域事实缺失、范围不完整、关系不一致或金额构造失败时返回错误。
     async fn build_source_evidence(
         &self,
         req: &RecordSettlementSourceEvidenceRequest,
         actor: &AuditActor,
         request_hash: String,
     ) -> Result<SupplierSettlementSourceEvidence> {
-        let period_start = parse_business_date(&req.period_start, "结算期间开始")?;
-        let period_end = parse_business_date(&req.period_end, "结算期间结束")?;
-        if period_end < period_start {
-            return Err(Error::ValidationError("结算期间结束不得早于开始".to_string()));
-        }
-        if req.timezone.trim() != "Asia/Shanghai" {
-            return Err(Error::ValidationError(
-                "当前结算期间策略只支持 Asia/Shanghai 时区".to_string(),
-            ));
-        }
-        ensure_distinct_source_lines(&req.lines)?;
+        let period = SettlementPeriod::new(
+            parse_business_date(&req.period_start, "结算期间开始")?,
+            parse_business_date(&req.period_end, "结算期间结束")?,
+            &req.timezone,
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let input_item_ids = req
+            .lines
+            .iter()
+            .map(|line| line.supplier_fulfillment_item_id.clone())
+            .collect::<Vec<_>>();
+        SupplierSettlementSourceEvidence::ensure_unique_item_ids(&input_item_ids)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         if let Some(latest) = self
             .db
             .supplier_settlement_source_evidence()
             .latest_for_period(
                 &req.supplier_id,
-                period_start,
-                period_end,
+                period.start(),
+                period.end(),
                 req.period_policy_id.trim(),
                 req.period_policy_version.trim(),
                 &mut NoTransaction,
             )
             .await?
         {
-            if req.source_version <= latest.source_version {
-                return Err(Error::ConflictError(format!(
-                    "来源版本必须高于当前版本 {}",
-                    latest.source_version
-                )));
-            }
+            latest
+                .ensure_newer_source_version(req.source_version)
+                .map_err(|error| Error::ConflictError(error.to_string()))?;
         }
         let item_ids = req
             .lines
@@ -159,13 +193,7 @@ impl SupplierSettlementService {
         let orders = self
             .db
             .supplier_fulfillment_orders()
-            .find_many(
-                mongodb::bson::doc! {
-                    "supplier_id": req.supplier_id.to_string(),
-                    "deleted_at": 0_i64,
-                },
-                &mut NoTransaction,
-            )
+            .list_by_supplier_id(&req.supplier_id, &mut NoTransaction)
             .await?;
         let order_ids = orders
             .iter()
@@ -176,18 +204,14 @@ impl SupplierSettlementService {
                 "当前供应商没有可核验的供应商履约订单".to_string(),
             ));
         }
+        let typed_order_ids = order_ids
+            .iter()
+            .map(SupplierFulfillmentOrderId::new)
+            .collect::<Vec<_>>();
         let items = self
             .db
             .supplier_fulfillment_items()
-            .find_many(
-                mongodb::bson::doc! {
-                    "supplier_fulfillment_order_id": {
-                        "$in": order_ids.iter().cloned().collect::<Vec<_>>()
-                    },
-                    "deleted_at": 0_i64,
-                },
-                &mut NoTransaction,
-            )
+            .find_items_by_order_ids(&typed_order_ids, &mut NoTransaction)
             .await?;
         let order_map = orders
             .into_iter()
@@ -197,10 +221,6 @@ impl SupplierSettlementService {
             .into_iter()
             .map(|value| (value.base.id.clone(), value))
             .collect::<HashMap<_, _>>();
-        let typed_order_ids = order_ids
-            .iter()
-            .map(SupplierFulfillmentOrderId::new)
-            .collect::<Vec<_>>();
         let refund_facts = self
             .db
             .supplier_refund_facts()
@@ -226,8 +246,7 @@ impl SupplierSettlementService {
             item_map: &item_map,
             refund_allocations: &refund_allocations,
             refund_fact_map: &refund_fact_map,
-            period_start,
-            period_end,
+            period,
         })?;
         let mut lines = Vec::with_capacity(req.lines.len());
         for input in &req.lines {
@@ -237,13 +256,13 @@ impl SupplierSettlementService {
             let item = item_map
                 .get(input.supplier_fulfillment_item_id.as_ref())
                 .ok_or_else(|| Error::NotFound("供应商履约明细不存在".to_string()))?;
-            if item.supplier_fulfillment_order_id != input.supplier_fulfillment_order_id {
+            if !item.belongs_to_order(&input.supplier_fulfillment_order_id) {
                 return Err(Error::BusinessLogicError(format!(
                     "履约明细 {} 不属于订单 {}",
                     input.supplier_fulfillment_item_id, input.supplier_fulfillment_order_id
                 )));
             }
-            if order.supplier_id != req.supplier_id {
+            if !order.belongs_to_supplier(&req.supplier_id) {
                 return Err(Error::BusinessLogicError(
                     "来源证据包含其他供应商的订单".to_string(),
                 ));
@@ -254,57 +273,69 @@ impl SupplierSettlementService {
                 item,
                 &refund_allocations,
                 &refund_fact_map,
-                period_start,
-                period_end,
+                period,
             )?);
         }
-        let source_hash = source_evidence_hash(req, &lines);
-        SupplierSettlementSourceEvidence::new(
-            next_id(),
-            SupplierSettlementSourceEvidenceData {
-                request_id: req.request_id.clone(),
-                supplier_id: req.supplier_id.clone(),
-                period_start,
-                period_end,
-                period_policy_id: req.period_policy_id.clone(),
-                period_policy_version: req.period_policy_version.clone(),
-                timezone: req.timezone.clone(),
-                source_version: req.source_version,
-                external_bill_no: req.external_bill_no.clone(),
-                external_bill_version: req.external_bill_version.clone(),
-                external_bill_evidence_reference_id: req.external_bill_evidence_reference_id.clone(),
-                lines,
-                source_as_of: Instant::now(),
-                recorded_by: actor.id().to_string(),
-                source_hash,
-                request_hash,
-            },
-        )
-        .map_err(Into::into)
+        let mut data = SupplierSettlementSourceEvidenceData {
+            request_id: req.request_id.clone(),
+            supplier_id: req.supplier_id.clone(),
+            period_start: period.start(),
+            period_end: period.end(),
+            period_policy_id: req.period_policy_id.clone(),
+            period_policy_version: req.period_policy_version.clone(),
+            timezone: req.timezone.clone(),
+            source_version: req.source_version,
+            external_bill_no: req.external_bill_no.clone(),
+            external_bill_version: req.external_bill_version.clone(),
+            external_bill_evidence_reference_id: req.external_bill_evidence_reference_id.clone(),
+            lines,
+            source_as_of: Instant::now(),
+            recorded_by: actor.id().to_string(),
+            source_hash: String::new(),
+            request_hash,
+        };
+        data.source_hash = data.canonical_source_hash();
+        SupplierSettlementSourceEvidence::new(next_id(), data).map_err(Into::into)
     }
 }
 
+/// 由一条命令输入及已查询的正式事实构建冻结来源行。
+///
+/// # 参数
+/// * `input` - 当前来源命令行
+/// * `order` - 已加载的供应商履约订单
+/// * `item` - 已加载的供应商履约明细
+/// * `refund_allocations` - 供应商订单范围内的退款分配
+/// * `refund_fact_map` - 退款事实头索引
+/// * `period` - 当前结算期间
+///
+/// # 返回
+/// 返回由实体工厂派生 ERP 金额并规范化证据的冻结来源行。
+///
+/// # 错误
+/// 订单状态、取消证据、退款关系、期间归属或金额恒等不一致时返回错误。
 fn build_source_line(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
     order: &entities::supplier_fulfillment::SupplierFulfillmentOrder,
     item: &entities::supplier_fulfillment::SupplierFulfillmentItem,
     refund_allocations: &[entities::supplier_fulfillment::SupplierRefundAllocation],
     refund_fact_map: &HashMap<&str, &entities::supplier_fulfillment::SupplierRefundFact>,
-    period_start: BusinessDate,
-    period_end: BusinessDate,
+    period: SettlementPeriod,
 ) -> Result<SupplierSettlementSourceEvidenceLine> {
     let completion_in_period = order
-        .completed_at
-        .filter(|value| date_in_period(*value, period_start, period_end));
-    if completion_in_period.is_some() && order.fulfillment_status != FulfillmentStatus::Completed {
-        return Err(Error::BusinessLogicError(
-            "履约完成时间与正式订单状态不一致".to_string(),
-        ));
+        .confirmed_completed_at()?
+        .filter(|completed_at| period.contains(*completed_at));
+    let cancel_evidence = SettlementCancelEvidence::from_optional(
+        input.cancel_occurred_at.map(Instant::from_unix_secs),
+        input.cancel_evidence_reference_id.clone(),
+        period,
+    )?;
+    if cancel_evidence.is_some() {
+        order.ensure_canceled()?;
     }
-    let cancel_at = paired_cancel_evidence(input, order, period_start, period_end)?;
     let mut source_fact_types = Vec::new();
     let mut evidence_reference_ids = input.evidence_reference_ids.clone();
-    let (order_gross, order_net, order_tax) = if let Some(completed_at) = completion_in_period {
+    let order_amounts = if let Some(completed_at) = completion_in_period {
         source_fact_types.push(SettlementSourceFactType::FulfillmentCompleted);
         evidence_reference_ids.push(format!(
             "supplier-fulfillment://{}/{}/completed/{}",
@@ -312,51 +343,30 @@ fn build_source_line(
             item.base.id,
             completed_at.unix_secs()
         ));
-        line_amounts(item.unit_cost_snapshot_gross, item.quantity, item.input_tax_rate)
+        let (gross, net, tax) =
+            line_amounts(item.unit_cost_snapshot_gross, item.quantity, item.input_tax_rate);
+        SettlementAmountComponents::new(gross, net, tax, "订单金额")?
     } else {
-        (zero(), zero(), zero())
+        SettlementAmountComponents::zero()
     };
-    if let Some((cancel_at, reference)) = cancel_at {
+    if let Some(cancel_evidence) = cancel_evidence {
         source_fact_types.push(SettlementSourceFactType::CancelConfirmed);
-        evidence_reference_ids.push(reference);
+        evidence_reference_ids.push(cancel_evidence.reference_id().to_string());
         evidence_reference_ids.push(format!(
             "supplier-cancel://{}/{}/{}",
             order.base.id,
             item.base.id,
-            cancel_at.unix_secs()
+            cancel_evidence.occurred_at().unix_secs()
         ));
     }
-    let mut refund_gross = zero();
-    let mut refund_net = zero();
-    let mut refund_tax = zero();
-    for allocation in refund_allocations
-        .iter()
-        .filter(|allocation| allocation.supplier_fulfillment_item_id == input.supplier_fulfillment_item_id)
-    {
-        let fact = refund_fact_map
-            .get(allocation.supplier_refund_fact_id.as_ref())
-            .ok_or_else(|| Error::BusinessLogicError("退款分配缺少正式退款头".to_string()))?;
-        if !date_in_period(fact.refunded_at, period_start, period_end) {
-            continue;
-        }
-        match allocation.allocation_action {
-            AllocationAction::Apply => {
-                refund_gross = refund_gross.checked_add(allocation.gross_amount);
-                refund_net = refund_net.checked_add(allocation.net_amount);
-                refund_tax = refund_tax.checked_add(allocation.tax_amount);
-            }
-            AllocationAction::Reverse => {
-                refund_gross = refund_gross.checked_sub(allocation.gross_amount);
-                refund_net = refund_net.checked_sub(allocation.net_amount);
-                refund_tax = refund_tax.checked_sub(allocation.tax_amount);
-            }
-        }
-        evidence_reference_ids.push(format!(
-            "supplier-refund://{}/allocation/{}",
-            fact.base.id, allocation.base.id
-        ));
-    }
-    if refund_gross != zero() || refund_net != zero() || refund_tax != zero() {
+    let refund = refund_amounts(
+        input,
+        refund_allocations,
+        refund_fact_map,
+        period,
+        &mut evidence_reference_ids,
+    )?;
+    if refund != SettlementAmountComponents::zero() {
         source_fact_types.push(SettlementSourceFactType::RefundConfirmed);
     }
     if source_fact_types.is_empty() {
@@ -365,90 +375,88 @@ fn build_source_line(
             item.base.id
         )));
     }
-    let erp_gross = order_gross
-        .checked_add(input.freight_gross)
-        .checked_add(input.service_fee_gross)
-        .checked_sub(refund_gross);
-    let erp_net = order_net
-        .checked_add(input.freight_net)
-        .checked_add(input.service_fee_net)
-        .checked_sub(refund_net);
-    let erp_tax = order_tax
-        .checked_add(input.freight_tax)
-        .checked_add(input.service_fee_tax)
-        .checked_sub(refund_tax);
-    let mut line = SupplierSettlementSourceEvidenceLine {
+    SupplierSettlementSourceEvidenceLine::from_components(SupplierSettlementSourceEvidenceLineData {
         supplier_fulfillment_order_id: input.supplier_fulfillment_order_id.clone(),
         supplier_fulfillment_item_id: input.supplier_fulfillment_item_id.clone(),
         quantity: item.quantity,
         source_fact_types,
         evidence_reference_ids,
-        order_gross,
-        order_net,
-        order_tax,
-        freight_gross: input.freight_gross,
-        freight_net: input.freight_net,
-        freight_tax: input.freight_tax,
-        service_fee_gross: input.service_fee_gross,
-        service_fee_net: input.service_fee_net,
-        service_fee_tax: input.service_fee_tax,
-        refund_gross,
-        refund_net,
-        refund_tax,
-        erp_gross,
-        erp_net,
-        erp_tax,
-        supplier_billed_gross: input.supplier_billed_gross,
-        supplier_billed_net: input.supplier_billed_net,
-        supplier_billed_tax: input.supplier_billed_tax,
-    };
-    line.validate()?;
-    Ok(line)
+        order: order_amounts,
+        freight: SettlementAmountComponents::new(
+            input.freight_gross,
+            input.freight_net,
+            input.freight_tax,
+            "运费金额",
+        )?,
+        service_fee: SettlementAmountComponents::new(
+            input.service_fee_gross,
+            input.service_fee_net,
+            input.service_fee_tax,
+            "服务费金额",
+        )?,
+        refund,
+        supplier_billed: SettlementAmountComponents::new(
+            input.supplier_billed_gross,
+            input.supplier_billed_net,
+            input.supplier_billed_tax,
+            "供应商账单金额",
+        )?,
+    })
+    .map_err(Into::into)
 }
 
-fn paired_cancel_evidence(
+/// 汇总当前履约明细在结算期间内的退款分配金额与证据。
+///
+/// # 参数
+/// * `input` - 当前来源命令行
+/// * `refund_allocations` - 供应商订单范围内的全部退款分配
+/// * `refund_fact_map` - 退款事实头索引
+/// * `period` - 当前结算期间
+/// * `evidence_reference_ids` - 待追加退款证据引用的集合
+///
+/// # 返回
+/// 返回 APPLY 减 REVERSE 后的非负退款金额三元组。
+///
+/// # 错误
+/// 分配缺少退款头、净退款为负或金额三元组不一致时返回错误。
+fn refund_amounts(
     input: &super::RecordSettlementSourceEvidenceLineRequest,
-    order: &entities::supplier_fulfillment::SupplierFulfillmentOrder,
-    period_start: BusinessDate,
-    period_end: BusinessDate,
-) -> Result<Option<(Instant, String)>> {
-    match (
-        input.cancel_occurred_at,
-        input.cancel_evidence_reference_id.as_deref(),
-    ) {
-        (None, None) => Ok(None),
-        (Some(at), Some(reference)) => {
-            if order.cancel_status != CancelStatus::Canceled {
-                return Err(Error::BusinessLogicError(
-                    "取消补证与供应商订单取消终态不一致".to_string(),
-                ));
-            }
-            let at = Instant::from_unix_secs(at);
-            if !date_in_period(at, period_start, period_end) {
-                return Err(Error::ValidationError("取消补证发生时间不在结算期间".to_string()));
-            }
-            let reference = reference.trim();
-            if reference.is_empty() {
-                return Err(Error::ValidationError("取消证据引用不能为空".to_string()));
-            }
-            Ok(Some((at, reference.to_string())))
+    refund_allocations: &[entities::supplier_fulfillment::SupplierRefundAllocation],
+    refund_fact_map: &HashMap<&str, &entities::supplier_fulfillment::SupplierRefundFact>,
+    period: SettlementPeriod,
+    evidence_reference_ids: &mut Vec<String>,
+) -> Result<SettlementAmountComponents> {
+    let mut gross = zero();
+    let mut net = zero();
+    let mut tax = zero();
+    for allocation in refund_allocations
+        .iter()
+        .filter(|allocation| allocation.supplier_fulfillment_item_id == input.supplier_fulfillment_item_id)
+    {
+        let fact = refund_fact_map
+            .get(allocation.supplier_refund_fact_id.as_ref())
+            .ok_or_else(|| Error::BusinessLogicError("退款分配缺少正式退款头".to_string()))?;
+        if !period.contains(fact.refunded_at) {
+            continue;
         }
-        _ => Err(Error::ValidationError(
-            "取消发生时间与取消证据引用必须同时提供或同时省略".to_string(),
-        )),
-    }
-}
-
-fn ensure_distinct_source_lines(lines: &[super::RecordSettlementSourceEvidenceLineRequest]) -> Result<()> {
-    let mut item_ids = HashSet::with_capacity(lines.len());
-    for line in lines {
-        if !item_ids.insert(line.supplier_fulfillment_item_id.to_string()) {
-            return Err(Error::ValidationError(
-                "来源证据不得重复同一供应商履约明细".to_string(),
-            ));
+        match allocation.allocation_action {
+            AllocationAction::Apply => {
+                gross = gross.checked_add(allocation.gross_amount);
+                net = net.checked_add(allocation.net_amount);
+                tax = tax.checked_add(allocation.tax_amount);
+            }
+            AllocationAction::Reverse => {
+                gross = gross.checked_sub(allocation.gross_amount);
+                net = net.checked_sub(allocation.net_amount);
+                tax = tax.checked_sub(allocation.tax_amount);
+            }
         }
+        evidence_reference_ids.push(format!(
+            "supplier-refund://{}/allocation/{}",
+            fact.base.id, allocation.base.id
+        ));
     }
-    Ok(())
+    SettlementAmountComponents::new(gross, net, tax, "退款金额").map_err(Into::into)
 }
 
 /// 校验服务端可枚举的完成与退款事实没有被来源命令漏行。
@@ -462,10 +470,19 @@ struct CompleteSourceScope<'a> {
     item_map: &'a HashMap<String, entities::supplier_fulfillment::SupplierFulfillmentItem>,
     refund_allocations: &'a [entities::supplier_fulfillment::SupplierRefundAllocation],
     refund_fact_map: &'a HashMap<&'a str, &'a entities::supplier_fulfillment::SupplierRefundFact>,
-    period_start: BusinessDate,
-    period_end: BusinessDate,
+    period: SettlementPeriod,
 }
 
+/// 校验来源命令完整覆盖服务端可枚举的期间内正式事实。
+///
+/// # 参数
+/// * `scope` - 命令输入、履约事实、退款事实与结算期间的只读集合
+///
+/// # 返回
+/// 所有期间内完成、退款和显式取消明细均被命令覆盖时返回 `Ok(())`。
+///
+/// # 错误
+/// 明细缺少订单头、退款分配缺少事实头或命令漏行时返回错误。
 fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
     let CompleteSourceScope {
         inputs,
@@ -474,8 +491,7 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
         item_map,
         refund_allocations,
         refund_fact_map,
-        period_start,
-        period_end,
+        period,
     } = scope;
     let mut required_item_ids = HashSet::new();
     for item in item_map.values() {
@@ -483,8 +499,8 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
             .get(item.supplier_fulfillment_order_id.as_ref())
             .ok_or_else(|| Error::BusinessLogicError("履约明细缺少供应商订单头".to_string()))?;
         if order
-            .completed_at
-            .is_some_and(|at| date_in_period(at, period_start, period_end))
+            .confirmed_completed_at()?
+            .is_some_and(|at| period.contains(at))
         {
             required_item_ids.insert(item.base.id.clone());
         }
@@ -493,7 +509,7 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
         let fact = refund_fact_map
             .get(allocation.supplier_refund_fact_id.as_ref())
             .ok_or_else(|| Error::BusinessLogicError("退款分配缺少正式退款头".to_string()))?;
-        if date_in_period(fact.refunded_at, period_start, period_end) {
+        if period.contains(fact.refunded_at) {
             required_item_ids.insert(allocation.supplier_fulfillment_item_id.to_string());
         }
     }
@@ -514,21 +530,37 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
     Ok(())
 }
 
-fn date_in_period(value: Instant, period_start: BusinessDate, period_end: BusinessDate) -> bool {
-    let offset = chrono::FixedOffset::east_opt(8 * 60 * 60).expect("上海时区偏移合法");
-    let date = value.as_utc().with_timezone(&offset).date_naive();
-    date >= period_start.as_naive_date() && date <= period_end.as_naive_date()
-}
-
+/// 解析客户端业务日期文本。
+///
+/// # 参数
+/// * `value` - ISO 业务日期文本
+/// * `field` - 参数校验错误使用的字段名称
+///
+/// # 返回
+/// 返回强类型业务日期。
+///
+/// # 错误
+/// 日期格式非法时返回 `ValidationError`。
 fn parse_business_date(value: &str, field: &str) -> Result<BusinessDate> {
     BusinessDate::from_str(value.trim())
         .map_err(|_| Error::ValidationError(format!("{field}不是合法业务日期")))
 }
 
+/// 返回来源金额汇总使用的零金额。
+///
+/// # 返回
+/// 返回精确到分的零金额。
 fn zero() -> Amount {
     Amount::from_str("0.00").expect("零是合法金额")
 }
 
+/// 计算来源证据命令的稳定幂等指纹。
+///
+/// # 参数
+/// * `req` - 客户端来源证据命令
+///
+/// # 返回
+/// 返回对行和证据输入顺序稳定的 SHA-256 指纹。
 fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> String {
     let mut parts = vec![
         "supplier-settlement-source-evidence-command-v1".to_string(),
@@ -572,63 +604,6 @@ fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> String {
         let mut references = line.evidence_reference_ids.clone();
         references.sort();
         parts.push(references.join(","));
-    }
-    digest_parts(&parts)
-}
-
-fn source_evidence_hash(
-    req: &RecordSettlementSourceEvidenceRequest,
-    lines: &[SupplierSettlementSourceEvidenceLine],
-) -> String {
-    let mut parts = vec![
-        "supplier-settlement-authoritative-source-v1".to_string(),
-        req.supplier_id.to_string(),
-        req.period_start.trim().to_string(),
-        req.period_end.trim().to_string(),
-        req.period_policy_id.trim().to_string(),
-        req.period_policy_version.trim().to_string(),
-        req.timezone.trim().to_string(),
-        req.source_version.to_string(),
-        req.external_bill_no.trim().to_string(),
-        req.external_bill_version.trim().to_string(),
-        req.external_bill_evidence_reference_id.trim().to_string(),
-    ];
-    let mut lines = lines.iter().collect::<Vec<_>>();
-    lines.sort_by(|left, right| {
-        left.supplier_fulfillment_item_id
-            .as_ref()
-            .cmp(right.supplier_fulfillment_item_id.as_ref())
-    });
-    for line in lines {
-        parts.extend([
-            line.supplier_fulfillment_order_id.to_string(),
-            line.supplier_fulfillment_item_id.to_string(),
-            line.quantity.to_string(),
-            line.source_fact_types
-                .iter()
-                .map(|value| value.as_str())
-                .collect::<Vec<_>>()
-                .join(","),
-            line.evidence_reference_ids.join(","),
-            line.order_gross.to_string(),
-            line.order_net.to_string(),
-            line.order_tax.to_string(),
-            line.freight_gross.to_string(),
-            line.freight_net.to_string(),
-            line.freight_tax.to_string(),
-            line.service_fee_gross.to_string(),
-            line.service_fee_net.to_string(),
-            line.service_fee_tax.to_string(),
-            line.refund_gross.to_string(),
-            line.refund_net.to_string(),
-            line.refund_tax.to_string(),
-            line.erp_gross.to_string(),
-            line.erp_net.to_string(),
-            line.erp_tax.to_string(),
-            line.supplier_billed_gross.to_string(),
-            line.supplier_billed_net.to_string(),
-            line.supplier_billed_tax.to_string(),
-        ]);
     }
     digest_parts(&parts)
 }

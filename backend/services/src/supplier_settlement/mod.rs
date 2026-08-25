@@ -28,9 +28,9 @@ use entities::payable::{
     PayableSourceType,
 };
 use entities::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementReviewDecision, SettlementReviewResult, SettlementStatus,
-    SupplierSettlementDifference, SupplierSettlementDifferenceUpdate, SupplierSettlementItem,
-    SupplierSettlementStatement, SupplierSettlementStatementUpdate,
+    SettlementCostDelta, SettlementDifferenceConclusion, SettlementDifferenceConclusionKind,
+    SettlementReviewDecision, SettlementReviewResult, SettlementStatus, SupplierSettlementDifference,
+    SupplierSettlementItem, SupplierSettlementStatement, SupplierSettlementStatementUpdate,
 };
 use entities::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
@@ -212,21 +212,16 @@ impl SupplierSettlementService {
         let items = self
             .db
             .supplier_settlement_items()
-            .find_many_sorted(
-                mongodb::bson::doc! { "statement_id": id },
-                mongodb::bson::doc! { "created_at": 1 },
-                &mut NoTransaction,
-            )
+            .list_by_statement(id, &mut NoTransaction)
             .await?;
-        let item_id_list: Vec<String> = items.iter().map(|item| item.base.id.clone()).collect();
+        let item_ids = items
+            .iter()
+            .map(|item| entities::ids::SupplierSettlementItemId::new(item.base.id.as_str()))
+            .collect::<Vec<_>>();
         let differences = self
             .db
             .supplier_settlement_differences()
-            .find_many_sorted(
-                mongodb::bson::doc! { "statement_item_id": { "$in": item_id_list } },
-                mongodb::bson::doc! { "created_at": 1 },
-                &mut NoTransaction,
-            )
+            .list_by_statement_item_ids(&item_ids, &mut NoTransaction)
             .await?;
         let difference_ids = differences
             .iter()
@@ -247,7 +242,7 @@ impl SupplierSettlementService {
         let evidenced_difference_count = evidence_by_difference.len();
         let pending_difference_count = differences
             .iter()
-            .filter(|difference| difference.status == SettlementDifferenceStatus::Pending)
+            .filter(|difference| difference.is_pending())
             .count();
         let (mut allowed_actions, mut action_blockers, processing_state) =
             settlement_object_actions(&statement, &differences, actor);
@@ -268,10 +263,8 @@ impl SupplierSettlementService {
         let erp_amount = statement.erp_amount;
         let supplier_amount = statement.supplier_amount;
         let difference_amount = statement.difference_amount;
-        let cost_delta = accepted_cost_delta(&items, &differences)?;
-        let cost_adjustment_ready = cost_delta.gross == zero_amount()
-            && cost_delta.net == zero_amount()
-            && cost_delta.tax == zero_amount();
+        let cost_delta = statement.accepted_cost_delta(&items, &differences)?;
+        let cost_adjustment_ready = cost_delta.is_zero();
         let difference_views = differences
             .into_iter()
             .map(|difference| {
@@ -356,10 +349,12 @@ impl SupplierSettlementService {
             return Ok(result);
         }
         let statement = self.load_statement(id).await?;
-        if statement.prepared_by != actor.id() {
+        if !statement.is_prepared_by(actor.id()) {
             return Err(Error::Forbidden("只有当前结算经办人可以提交财务复核".to_string()));
         }
-        self.ensure_version(&statement, req.expected_lock_version)?;
+        statement
+            .ensure_version(req.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         validate_review_submission_snapshot(&statement, &req)?;
         let work_item = WorkItem::new(
             WorkItemId::new(next_id()),
@@ -475,7 +470,9 @@ impl SupplierSettlementService {
             return Ok(result);
         }
         let mut statement = self.load_statement(id).await?;
-        self.ensure_version(&statement, req.decision.expected_lock_version)?;
+        statement
+            .ensure_version(req.decision.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         let mut work_item = self
             .db
             .work_items()
@@ -497,8 +494,7 @@ impl SupplierSettlementService {
         let now = Instant::now();
         let (payable, payable_entry, cost_entries, cost_delta, result_status) = match req.decision.action {
             dto::SettlementReviewAction::Confirm => {
-                ensure_confirmable_external_bill(&statement)?;
-                let cost_delta = accepted_cost_delta(&items, &differences)?;
+                let cost_delta = statement.ensure_confirmable(&items, &differences)?;
                 let payable_amount = statement.erp_amount.checked_add(cost_delta.gross);
                 let (account, entry) = build_settlement_payable(&statement, payable_amount, actor, now)?;
                 let cost_entries = build_settlement_cost_delta(&statement, &cost_delta, now)?;
@@ -646,26 +642,18 @@ impl SupplierSettlementService {
     ) -> Result<SupplierSettlementStatementView> {
         req.validate()?;
         let mut statement = self.load_statement(id).await?;
-        if statement.status == SettlementStatus::Voided {
+        if statement.is_voided() {
             return Ok(statement.into());
         }
-        if statement.prepared_by != actor.id()
-            || !matches!(
-                statement.status,
-                SettlementStatus::Draft
-                    | SettlementStatus::PendingReconciliation
-                    | SettlementStatus::HasDifference
-            )
-        {
+        if !statement.is_prepared_by(actor.id()) || !statement.is_editable() {
             return Err(Error::BusinessLogicError(
                 "只有经办人可以作废尚未提交复核的结算草稿".to_string(),
             ));
         }
-        self.ensure_version(&statement, req.version)?;
-        statement.update(SupplierSettlementStatementUpdate {
-            status: Some(SettlementStatus::Voided),
-            ..Default::default()
-        })?;
+        statement
+            .ensure_version(req.version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+        statement.void_draft()?;
         let audit = actor.clone().resource_log(
             "supplier_settlement.void",
             "supplier_settlement_statement",
@@ -806,10 +794,13 @@ impl SupplierSettlementService {
     ) -> Result<SettlementDifferenceDecisionResult> {
         req.validate()?;
         ensure_same_id(id, &req.difference_id, "结算差异")?;
-        let evidence_reference_ids =
-            normalized_evidence_references(&req.evidence_reference_ids, req.resolution)?;
-        let reason_code = normalized_difference_reason_code(&req.reason_code, req.resolution)?;
-        let fingerprint = difference_decision_fingerprint(&req, &reason_code, &evidence_reference_ids);
+        let conclusion = SettlementDifferenceConclusion::new(
+            difference_conclusion_kind(req.resolution),
+            req.reason_code.clone(),
+            req.evidence_reference_ids.clone(),
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let fingerprint = difference_decision_fingerprint(&req, &conclusion);
         let audit_id = command_audit_id(
             actor.id(),
             "supplier_settlement.difference_decision",
@@ -828,37 +819,32 @@ impl SupplierSettlementService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("结算差异不存在".to_string()))?;
-        if difference.base.version != req.expected_difference_version {
-            return Err(Error::ConflictError(
-                "结算差异版本已变化，请刷新后重试".to_string(),
-            ));
-        }
-        if difference.status != SettlementDifferenceStatus::Pending {
-            return Err(Error::ConflictError("结算差异已有正式结论".to_string()));
-        }
+        difference
+            .ensure_version(req.expected_difference_version)
+            .map_err(|_| Error::ConflictError("结算差异版本已变化，请刷新后重试".to_string()))?;
         let item = self
             .db
             .supplier_settlement_items()
             .find_by_id(&difference.statement_item_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("结算差异所属明细不存在".to_string()))?;
-        ensure_same_id(&req.statement_id, item.statement_id.as_ref(), "结算单")?;
+        let statement_id = entities::ids::SupplierSettlementStatementId::new(&req.statement_id);
+        if !item.belongs_to_statement(&statement_id) {
+            return Err(Error::ConflictError("结算差异已不属于当前结算单".to_string()));
+        }
         let mut statement = self.load_statement(&req.statement_id).await?;
-        self.ensure_version(&statement, req.expected_lock_version)?;
-        if statement.prepared_by != actor.id() {
+        statement
+            .ensure_version(req.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+        if !statement.is_prepared_by(actor.id()) {
             return Err(Error::Forbidden(
                 "只有当前结算经办人可以登记正式差异结论".to_string(),
             ));
         }
-        if !matches!(
-            statement.status,
-            SettlementStatus::Draft
-                | SettlementStatus::PendingReconciliation
-                | SettlementStatus::HasDifference
-        ) {
+        if !statement.is_editable() {
             return Err(Error::BusinessLogicError("当前结算状态禁止处理差异".to_string()));
         }
-        if !evidence_reference_ids.is_empty() {
+        if !conclusion.evidence_reference_ids().is_empty() {
             let stored_evidence = self
                 .db
                 .supplier_settlement_difference_evidence()
@@ -869,7 +855,8 @@ impl SupplierSettlementService {
                 .flat_map(|evidence| evidence.evidence_reference_ids.iter())
                 .map(String::as_str)
                 .collect::<std::collections::HashSet<_>>();
-            if evidence_reference_ids
+            if conclusion
+                .evidence_reference_ids()
                 .iter()
                 .any(|reference| !stored_references.contains(reference.as_str()))
             {
@@ -878,14 +865,8 @@ impl SupplierSettlementService {
                 ));
             }
         }
-        let resolution = formal_difference_resolution(&reason_code, &evidence_reference_ids)?;
         let now = Instant::now();
-        difference.update(SupplierSettlementDifferenceUpdate {
-            status: Some(req.resolution.status()),
-            resolution: Some(resolution),
-            resolved_by: Some(actor.id().to_string()),
-            resolved_at: Some(now),
-        })?;
+        difference.record_conclusion(&conclusion, actor.id(), now)?;
         let items = self
             .load_statement_items(&statement.base.id, &mut NoTransaction)
             .await?;
@@ -901,7 +882,7 @@ impl SupplierSettlementService {
             status: Some(SettlementStatus::HasDifference),
             ..Default::default()
         })?;
-        statement.update_subject_hash(settlement_subject_hash(&statement, &differences))?;
+        statement.update_subject_hash(statement.review_subject_hash(&differences))?;
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_actor = actor.clone();
@@ -993,11 +974,7 @@ async fn load_statement_items(
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierSettlementItem>> {
     db.supplier_settlement_items()
-        .find_many_sorted(
-            mongodb::bson::doc! { "statement_id": statement_id },
-            mongodb::bson::doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
+        .list_by_statement(statement_id, executor)
         .await
         .map_err(Into::into)
 }
@@ -1007,16 +984,12 @@ async fn load_statement_differences(
     items: &[SupplierSettlementItem],
     executor: &mut dyn Executor,
 ) -> Result<Vec<SupplierSettlementDifference>> {
-    let item_ids = items.iter().map(|item| item.base.id.clone()).collect::<Vec<_>>();
-    if item_ids.is_empty() {
-        return Ok(Vec::new());
-    }
+    let item_ids = items
+        .iter()
+        .map(|item| entities::ids::SupplierSettlementItemId::new(item.base.id.as_str()))
+        .collect::<Vec<_>>();
     db.supplier_settlement_differences()
-        .find_many_sorted(
-            mongodb::bson::doc! { "statement_item_id": { "$in": item_ids } },
-            mongodb::bson::doc! { "created_at": 1, "id": 1 },
-            executor,
-        )
+        .list_by_statement_item_ids(&item_ids, executor)
         .await
         .map_err(Into::into)
 }
@@ -1027,14 +1000,7 @@ async fn ensure_review_submission_ready(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if statement.prepared_by != actor_id
-        || !matches!(
-            statement.status,
-            SettlementStatus::Draft
-                | SettlementStatus::PendingReconciliation
-                | SettlementStatus::HasDifference
-        )
-    {
+    if !statement.is_prepared_by(actor_id) || !statement.is_editable() {
         return Err(Error::ConflictError(
             "结算单责任或状态已变化，请刷新后重试".to_string(),
         ));
@@ -1051,16 +1017,16 @@ fn validate_review_submission_snapshot(
     statement: &SupplierSettlementStatement,
     req: &SubmitSettlementReviewRequest,
 ) -> Result<()> {
-    if !matches!(req.action, dto::SettlementObjectAction::SubmitReview)
-        || req.subject_hash != statement.subject_hash
-        || req.refresh_cutoff_policy_id != statement.refresh_cutoff_policy_id
-        || req.expected_refresh_cutoff_policy_version != statement.refresh_cutoff_policy_version
-    {
-        return Err(Error::ConflictError(
-            "结算主题或刷新截止策略已变化，请刷新后重试".to_string(),
-        ));
+    if !matches!(req.action, dto::SettlementObjectAction::SubmitReview) {
+        return Err(Error::ValidationError("结算对象动作不受支持".to_string()));
     }
-    Ok(())
+    statement
+        .ensure_review_snapshot(
+            &req.subject_hash,
+            &req.refresh_cutoff_policy_id,
+            &req.expected_refresh_cutoff_policy_version,
+        )
+        .map_err(|_| Error::ConflictError("结算主题或刷新截止策略已变化，请刷新后重试".to_string()))
 }
 
 fn validate_settlement_review_work_item(
@@ -1080,7 +1046,7 @@ fn validate_settlement_review_work_item(
             "结算复核主题已变化，请刷新后重试".to_string(),
         ));
     }
-    if statement.status != SettlementStatus::PendingReview
+    if !statement.is_pending_review()
         || item.work_item_type != WorkItemType::SupplierSettlementReview
         || item.business_object_type != "supplier_settlement_statement"
         || item.business_object_id != statement.base.id
@@ -1107,7 +1073,7 @@ async fn ensure_settlement_reviewer_eligible(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let _ = (db, item, executor);
-    if statement.prepared_by == actor_id {
+    if statement.is_prepared_by(actor_id) {
         return Err(Error::Forbidden("结算经办人不得复核自己的结算单".to_string()));
     }
     Ok(())
@@ -1117,20 +1083,13 @@ fn ensure_current_subject_and_resolved_differences(
     statement: &SupplierSettlementStatement,
     differences: &[SupplierSettlementDifference],
 ) -> Result<()> {
-    if differences
-        .iter()
-        .any(|difference| difference.status == SettlementDifferenceStatus::Pending)
-    {
-        return Err(Error::BusinessLogicError(
-            "存在未解决差异，禁止提交或确认结算".to_string(),
-        ));
-    }
-    if statement.subject_hash != settlement_subject_hash(statement, differences) {
-        return Err(Error::ConflictError(
-            "结算主题摘要与当前差异结论不一致，请刷新后重试".to_string(),
-        ));
-    }
-    Ok(())
+    statement.ensure_resolved_subject(differences).map_err(|error| {
+        if differences.iter().any(SupplierSettlementDifference::is_pending) {
+            Error::BusinessLogicError(error.to_string())
+        } else {
+            Error::ConflictError("结算主题摘要与当前差异结论不一致，请刷新后重试".to_string())
+        }
+    })
 }
 
 fn settlement_review_access(
@@ -1186,13 +1145,10 @@ fn settlement_object_actions(
     differences: &[SupplierSettlementDifference],
     actor: &AuditActor,
 ) -> (Vec<String>, Vec<dto::SettlementReviewActionBlockerView>, String) {
-    let editable = matches!(
-        statement.status,
-        SettlementStatus::Draft | SettlementStatus::PendingReconciliation | SettlementStatus::HasDifference
-    );
+    let editable = statement.is_editable();
     let pending = differences
         .iter()
-        .filter(|difference| difference.status == SettlementDifferenceStatus::Pending)
+        .filter(|difference| difference.is_pending())
         .count();
     let processing_state = if editable && pending == 0 {
         "READY_FOR_REVIEW"
@@ -1212,7 +1168,7 @@ fn settlement_object_actions(
     if editable {
         actions.push("APPEND_EVIDENCE".to_string());
     }
-    if editable && statement.prepared_by == actor.id() {
+    if editable && statement.is_prepared_by(actor.id()) {
         actions.extend([
             "REFRESH_TRIAL".to_string(),
             "RESOLVE_DIFFERENCE".to_string(),
@@ -1264,97 +1220,6 @@ fn validate_review_decision_reason(req: &SettlementReviewCommand) -> Result<()> 
         dto::SettlementReviewAction::Confirm => {}
     }
     Ok(())
-}
-
-fn ensure_confirmable_external_bill(statement: &SupplierSettlementStatement) -> Result<()> {
-    if statement.external_bill_no.is_none() || statement.external_bill_version.is_none() {
-        return Err(Error::BusinessLogicError(
-            "供应商账单身份未完整冻结，禁止确认结算".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SettlementCostDelta {
-    gross: Amount,
-    net: Amount,
-    tax: Amount,
-}
-
-/// 从 ERP 接受的正式差异结论计算逐明细成本差额。
-///
-/// 差异记录当前只冻结有符号含税金额，因此同一明细的全部 `ERP_ACCEPTED`
-/// 差异含税合计必须精确等于该明细供应商侧与 ERP 侧的含税差。各分量差只从
-/// 明细已冻结的两侧 `gross/net/tax` 三元组计算，禁止按含税金额猜税额。
-fn accepted_cost_delta(
-    items: &[SupplierSettlementItem],
-    differences: &[SupplierSettlementDifference],
-) -> Result<SettlementCostDelta> {
-    let mut item_by_id = HashMap::with_capacity(items.len());
-    for item in items {
-        if item_by_id.insert(item.base.id.as_str(), item).is_some() {
-            return Err(Error::BusinessLogicError(
-                "结算快照包含重复明细，禁止确认".to_string(),
-            ));
-        }
-    }
-
-    let mut accepted_gross_by_item: HashMap<&str, Amount> = HashMap::new();
-    for difference in differences
-        .iter()
-        .filter(|difference| difference.status == SettlementDifferenceStatus::ErpAcknowledged)
-    {
-        let item_id = difference.statement_item_id.as_ref();
-        if !item_by_id.contains_key(item_id) {
-            return Err(Error::BusinessLogicError(
-                "ERP接受差异未指向当前结算快照明细，禁止确认".to_string(),
-            ));
-        }
-        accepted_gross_by_item
-            .entry(item_id)
-            .and_modify(|amount| *amount = amount.checked_add(difference.difference_amount))
-            .or_insert(difference.difference_amount);
-    }
-
-    let mut gross_total = zero_amount();
-    let mut net_total = zero_amount();
-    let mut tax_total = zero_amount();
-    for (item_id, accepted_gross) in accepted_gross_by_item {
-        let item = item_by_id[item_id];
-        let gross = item
-            .supplier_billed_amount
-            .checked_sub(item.erp_calculated_amount);
-        if accepted_gross != gross {
-            return Err(Error::BusinessLogicError(format!(
-                "结算明细 {item_id} 的 ERP_ACCEPTED 含税差异合计与冻结双方金额不一致"
-            )));
-        }
-        let net = item
-            .supplier_billed_net_amount
-            .checked_sub(item.erp_calculated_net_amount);
-        let tax = item
-            .supplier_billed_tax_amount
-            .checked_sub(item.erp_calculated_tax_amount);
-        if net.checked_add(tax) != gross {
-            return Err(Error::BusinessLogicError(format!(
-                "结算明细 {item_id} 的冻结差额不满足 gross = net + tax"
-            )));
-        }
-        gross_total = gross_total.checked_add(gross);
-        net_total = net_total.checked_add(net);
-        tax_total = tax_total.checked_add(tax);
-    }
-    if net_total.checked_add(tax_total) != gross_total {
-        return Err(Error::BusinessLogicError(
-            "结算成本差额汇总不满足 gross = net + tax".to_string(),
-        ));
-    }
-    Ok(SettlementCostDelta {
-        gross: gross_total,
-        net: net_total,
-        tax: tax_total,
-    })
 }
 
 fn build_settlement_payable(
@@ -1449,78 +1314,26 @@ fn normalized_reason_code(value: &str) -> Result<String> {
     Ok(value)
 }
 
-/// 校验差异结论与受控原因代码的固定组合。
-fn normalized_difference_reason_code(
-    value: &str,
+/// 将 API 差异决定适配为领域结论类别。
+///
+/// # 参数
+/// * `resolution` - 客户端提交的强类型差异决定
+///
+/// # 返回
+/// 返回实体层用于校验原因、证据和状态推进的结论类别。
+fn difference_conclusion_kind(
     resolution: dto::SettlementDifferenceResolution,
-) -> Result<String> {
-    let value = normalized_reason_code(value)?;
-    let allowed: &[&str] = match resolution {
+) -> SettlementDifferenceConclusionKind {
+    match resolution {
         dto::SettlementDifferenceResolution::SupplierAccepted => {
-            &["BILL_ALIGNED", "NO_BUSINESS_IMPACT", "OTHER"]
+            SettlementDifferenceConclusionKind::SupplierAccepted
         }
-        dto::SettlementDifferenceResolution::ErpAccepted => &["ACCEPT_BILL", "AMOUNT_MISMATCH", "OTHER"],
-        dto::SettlementDifferenceResolution::Compensated => &["COMPENSATED_ELSEWHERE", "OTHER"],
-        dto::SettlementDifferenceResolution::ClosedNoAdjustment => &["NO_BUSINESS_IMPACT", "OTHER"],
-    };
-    if !allowed.contains(&value.as_str()) {
-        return Err(Error::ValidationError(
-            "差异结论与原因代码组合不受支持".to_string(),
-        ));
+        dto::SettlementDifferenceResolution::ErpAccepted => SettlementDifferenceConclusionKind::ErpAccepted,
+        dto::SettlementDifferenceResolution::Compensated => SettlementDifferenceConclusionKind::Compensated,
+        dto::SettlementDifferenceResolution::ClosedNoAdjustment => {
+            SettlementDifferenceConclusionKind::ClosedNoAdjustment
+        }
     }
-    Ok(value)
-}
-
-/// 规范化正式证据引用并强制需要证据的结论完整。
-fn normalized_evidence_references(
-    values: &[String],
-    resolution: dto::SettlementDifferenceResolution,
-) -> Result<Vec<String>> {
-    if values.len() > 20 {
-        return Err(Error::ValidationError("证据引用最多20项".to_string()));
-    }
-    let mut values = values
-        .iter()
-        .map(|value| value.trim().to_string())
-        .collect::<Vec<_>>();
-    if values.iter().any(|value| {
-        value.is_empty()
-            || value.len() > 128
-            || value
-                .chars()
-                .any(|character| matches!(character, '|' | ';' | ','))
-    }) {
-        return Err(Error::ValidationError(
-            "证据引用必须非空、长度不超过128且不得包含分隔符".to_string(),
-        ));
-    }
-    values.sort();
-    values.dedup();
-    if matches!(
-        resolution,
-        dto::SettlementDifferenceResolution::Compensated
-            | dto::SettlementDifferenceResolution::ClosedNoAdjustment
-    ) && values.is_empty()
-    {
-        return Err(Error::ValidationError(
-            "已补偿或无需调整关闭必须提供正式证据引用".to_string(),
-        ));
-    }
-    Ok(values)
-}
-
-/// 编码差异正式结论的受控原因与证据引用。
-fn formal_difference_resolution(reason_code: &str, evidence_reference_ids: &[String]) -> Result<String> {
-    let value = format!(
-        "reason={reason_code};evidence={}",
-        evidence_reference_ids.join(",")
-    );
-    if value.len() > 512 {
-        return Err(Error::ValidationError(
-            "差异结论的原因与证据引用合计不能超过512字节".to_string(),
-        ));
-    }
-    Ok(value)
 }
 
 /// 对字段逐项加入长度前缀后计算稳定摘要，消除拼接歧义。
@@ -1531,56 +1344,6 @@ fn digest_parts(parts: &[String]) -> String {
         digest.update(part.as_bytes());
     }
     hex::encode(digest.finalize())
-}
-
-/// 计算不可变结算来源快照摘要。
-/// 计算提交复核的正式主题摘要。
-///
-/// 摘要只覆盖冻结业务事实，不覆盖可变状态、实体元数据版本或复核结果，因此同一
-/// 主题在 `PENDING_REVIEW` 与正式决定事务内保持不变。
-fn settlement_subject_hash(
-    statement: &SupplierSettlementStatement,
-    differences: &[SupplierSettlementDifference],
-) -> String {
-    let mut parts = vec![
-        "supplier-settlement-review-subject-v1".to_string(),
-        statement.base.id.clone(),
-        statement.statement_no.clone(),
-        statement.supplier_id.to_string(),
-        statement.period_start.to_string(),
-        statement.period_end.to_string(),
-        statement.period_policy_id.clone(),
-        statement.period_policy_version.clone(),
-        statement.period_timezone.clone(),
-        statement.external_bill_no.clone().unwrap_or_default(),
-        statement.external_bill_version.clone().unwrap_or_default(),
-        statement.erp_amount.to_string(),
-        statement.supplier_amount.to_string(),
-        statement.difference_amount.to_string(),
-        statement.source_as_of.unix_secs().to_string(),
-        statement.source_snapshot_at.unix_secs().to_string(),
-        statement.source_snapshot_hash.clone(),
-        statement.refresh_cutoff_policy_id.clone(),
-        statement.refresh_cutoff_policy_version.clone(),
-    ];
-    let mut differences = differences.iter().collect::<Vec<_>>();
-    differences.sort_by(|left, right| left.base.id.cmp(&right.base.id));
-    for difference in differences {
-        parts.extend([
-            difference.base.id.clone(),
-            difference.statement_item_id.to_string(),
-            difference.difference_type.as_str().to_string(),
-            difference.difference_amount.to_string(),
-            difference.status.as_str().to_string(),
-            difference.resolution.clone().unwrap_or_default(),
-            difference.resolved_by.clone().unwrap_or_default(),
-            difference
-                .resolved_at
-                .map(|value| value.unix_secs().to_string())
-                .unwrap_or_default(),
-        ]);
-    }
-    digest_parts(&parts)
 }
 
 /// 计算提交复核命令指纹。
@@ -1623,19 +1386,25 @@ fn review_decision_fingerprint(req: &SettlementReviewCommand) -> String {
 }
 
 /// 计算差异决定命令指纹。
+///
+/// # 参数
+/// * `req` - 原始差异决定请求
+/// * `conclusion` - 已由实体值对象规范化的正式结论
+///
+/// # 返回
+/// 返回不受证据输入顺序和重复项影响的稳定 SHA-256 指纹。
 fn difference_decision_fingerprint(
     req: &SettlementDifferenceDecisionRequest,
-    reason_code: &str,
-    evidence_reference_ids: &[String],
+    conclusion: &SettlementDifferenceConclusion,
 ) -> String {
     digest_parts(&[
         req.statement_id.clone(),
         req.difference_id.clone(),
         req.expected_lock_version.to_string(),
         req.expected_difference_version.to_string(),
-        req.resolution.as_str().to_string(),
-        reason_code.to_string(),
-        evidence_reference_ids.join(","),
+        conclusion.kind().as_str().to_string(),
+        conclusion.reason_code().to_string(),
+        conclusion.evidence_reference_ids().join(","),
         req.operation_id.clone(),
     ])
 }
@@ -1845,7 +1614,7 @@ impl SupplierSettlementService {
         Vec<dto::SettlementReviewActionBlockerView>,
         Vec<String>,
     )> {
-        if statement.status != SettlementStatus::PendingReview {
+        if !statement.is_pending_review() {
             return Ok((None, Vec::new(), Vec::new()));
         }
         let mut items = self
@@ -1891,7 +1660,7 @@ impl SupplierSettlementService {
             ));
         }
         let eligible = true;
-        let separation_satisfied = statement.prepared_by != actor.id();
+        let separation_satisfied = !statement.is_prepared_by(actor.id());
         let (domain_actions, action_blockers) =
             settlement_review_access(&item, actor.id(), eligible, separation_satisfied);
         Ok((
@@ -2064,7 +1833,7 @@ impl SupplierSettlementService {
             .ok_or_else(|| Error::Internal("差异决定收据引用的结算明细不存在".to_string()))?;
         if receipt.statement_id != item.statement_id.as_ref()
             || difference.base.version != receipt.difference_version
-            || difference.status == SettlementDifferenceStatus::Pending
+            || difference.is_pending()
         {
             return Err(Error::ConflictError(
                 "差异决定幂等收据与当前正式事实不一致".to_string(),
@@ -2084,23 +1853,6 @@ impl SupplierSettlementService {
             statement_lock_version: receipt.statement_version,
             difference: settlement_difference_view(difference),
         }))
-    }
-
-    /// 校验期望版本与当前版本一致（乐观锁前置校验）。
-    ///
-    /// # 参数
-    /// * `statement` - 结算单实体
-    /// * `expected` - 期望版本
-    ///
-    /// # 错误
-    /// 版本不一致时返回 `ConflictError`。
-    fn ensure_version(&self, statement: &SupplierSettlementStatement, expected: u64) -> Result<()> {
-        if statement.base.version != expected {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
-        Ok(())
     }
 
     /// 在同一事务更新结算单并写审计。
@@ -2235,14 +1987,8 @@ fn settlement_difference_view(difference: SupplierSettlementDifference) -> Suppl
 mod tests {
     use super::*;
     use entities::common::time::BusinessDate;
-    use entities::ids::{
-        PayableAccountId, SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
-        SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
-    };
-    use entities::supplier_settlement::{
-        SettlementDifferenceType, SupplierSettlementDifferenceData, SupplierSettlementItemData,
-        SupplierSettlementStatementData,
-    };
+    use entities::ids::{SupplierAccountId, SupplierSettlementStatementId};
+    use entities::supplier_settlement::SupplierSettlementStatementData;
     use entities::AccountKind;
 
     fn sample_statement() -> SupplierSettlementStatement {
@@ -2271,48 +2017,9 @@ mod tests {
         )
         .unwrap();
         statement
-            .update_subject_hash(settlement_subject_hash(&statement, &[]))
+            .update_subject_hash(statement.review_subject_hash(&[]))
             .unwrap();
         statement
-    }
-
-    fn sample_difference() -> SupplierSettlementDifference {
-        SupplierSettlementDifference::new(
-            SupplierSettlementDifferenceId::new("difference-1"),
-            SupplierSettlementDifferenceData {
-                statement_item_id: SupplierSettlementItemId::new("item-1"),
-                difference_type: SettlementDifferenceType::Amount,
-                difference_amount: Amount::from_str("1.00").unwrap(),
-                status: SettlementDifferenceStatus::Pending,
-                resolution: None,
-                resolved_by: None,
-                resolved_at: None,
-            },
-        )
-        .unwrap()
-    }
-
-    fn sample_settlement_item() -> SupplierSettlementItem {
-        SupplierSettlementItem::new(
-            SupplierSettlementItemId::new("item-1"),
-            SupplierSettlementItemData {
-                statement_id: SupplierSettlementStatementId::new("statement-1"),
-                supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
-                supplier_fulfillment_item_id: SupplierFulfillmentItemId::new("fulfillment-item-1"),
-                quantity: entities::money::Quantity::from_str("1").unwrap(),
-                order_amount: Amount::from_str("100.00").unwrap(),
-                freight_amount: zero_amount(),
-                service_fee_amount: zero_amount(),
-                refund_amount: zero_amount(),
-                erp_calculated_amount: Amount::from_str("100.00").unwrap(),
-                erp_calculated_net_amount: Amount::from_str("87.00").unwrap(),
-                erp_calculated_tax_amount: Amount::from_str("13.00").unwrap(),
-                supplier_billed_amount: Amount::from_str("101.00").unwrap(),
-                supplier_billed_net_amount: Amount::from_str("87.87").unwrap(),
-                supplier_billed_tax_amount: Amount::from_str("13.13").unwrap(),
-            },
-        )
-        .unwrap()
     }
 
     fn sample_work_item(statement: &SupplierSettlementStatement) -> WorkItem {
@@ -2335,36 +2042,6 @@ mod tests {
             Instant::from_unix_secs(1_700_000_000),
         )
         .unwrap()
-    }
-
-    #[test]
-    fn subject_hash_is_stable_across_review_state_and_covers_difference_conclusion() {
-        let mut statement = sample_statement();
-        let initial = settlement_subject_hash(&statement, &[]);
-        statement.submit_review().unwrap();
-        statement
-            .record_review(
-                SettlementReviewDecision::Confirm {
-                    payable_account_id: PayableAccountId::new("payable-1"),
-                    comment: Some("确认".to_string()),
-                },
-                "reviewer-1",
-                Instant::from_unix_secs(1_700_000_100),
-            )
-            .unwrap();
-        assert_eq!(settlement_subject_hash(&statement, &[]), initial);
-
-        let mut difference = sample_difference();
-        let pending = settlement_subject_hash(&statement, &[difference.clone()]);
-        difference
-            .update(SupplierSettlementDifferenceUpdate {
-                status: Some(SettlementDifferenceStatus::ErpAcknowledged),
-                resolution: Some("reason=ACCEPT_BILL;evidence=proof-1".to_string()),
-                resolved_by: Some("preparer-1".to_string()),
-                resolved_at: Some(Instant::from_unix_secs(1_700_000_200)),
-            })
-            .unwrap();
-        assert_ne!(settlement_subject_hash(&statement, &[difference]), pending);
     }
 
     #[test]
@@ -2477,23 +2154,7 @@ mod tests {
     }
 
     #[test]
-    fn difference_evidence_and_command_ids_are_bounded() {
-        assert!(
-            normalized_evidence_references(&[], dto::SettlementDifferenceResolution::ClosedNoAdjustment,)
-                .is_err()
-        );
-        assert_eq!(
-            normalized_evidence_references(
-                &[
-                    " proof-2 ".to_string(),
-                    "proof-1".to_string(),
-                    "proof-1".to_string()
-                ],
-                dto::SettlementDifferenceResolution::ErpAccepted,
-            )
-            .unwrap(),
-            vec!["proof-1".to_string(), "proof-2".to_string()]
-        );
+    fn command_ids_are_bounded() {
         let audit_id = command_audit_id(
             "actor-1",
             "supplier_settlement.review_confirm",
@@ -2505,66 +2166,29 @@ mod tests {
     }
 
     #[test]
-    fn erp_accepted_difference_calculates_components_but_blocks_unproven_cost_lineage() {
-        let statement = sample_statement();
-        let item = sample_settlement_item();
-        let mut difference = sample_difference();
-        difference
-            .update(SupplierSettlementDifferenceUpdate {
-                status: Some(SettlementDifferenceStatus::ErpAcknowledged),
-                resolution: Some("reason=ACCEPT_BILL;evidence=proof-1".to_string()),
-                resolved_by: Some("preparer-1".to_string()),
-                resolved_at: Some(Instant::from_unix_secs(1_700_000_200)),
-            })
-            .unwrap();
+    fn cost_delta_writer_blocks_nonzero_delta_without_authoritative_lineage() {
+        let delta = SettlementCostDelta {
+            gross: Amount::from_str("1.00").unwrap(),
+            net: Amount::from_str("0.87").unwrap(),
+            tax: Amount::from_str("0.13").unwrap(),
+        };
 
-        let delta = accepted_cost_delta(&[item], &[difference]).unwrap();
-        assert_eq!(delta.gross, Amount::from_str("1.00").unwrap());
-        assert_eq!(delta.net, Amount::from_str("0.87").unwrap());
-        assert_eq!(delta.tax, Amount::from_str("0.13").unwrap());
-        assert!(
-            build_settlement_cost_delta(&statement, &delta, Instant::from_unix_secs(1_700_000_300)).is_err()
-        );
-    }
-
-    #[test]
-    fn supplier_accepted_difference_does_not_change_erp_cost() {
-        let item = sample_settlement_item();
-        let mut difference = sample_difference();
-        difference
-            .update(SupplierSettlementDifferenceUpdate {
-                status: Some(SettlementDifferenceStatus::SupplierAcknowledged),
-                resolution: Some("reason=BILL_ALIGNED;evidence=proof-1".to_string()),
-                resolved_by: Some("preparer-1".to_string()),
-                resolved_at: Some(Instant::from_unix_secs(1_700_000_200)),
-            })
-            .unwrap();
-
-        let delta = accepted_cost_delta(&[item], &[difference]).unwrap();
-        assert_eq!(delta.gross, zero_amount());
         assert!(build_settlement_cost_delta(
             &sample_statement(),
             &delta,
             Instant::from_unix_secs(1_700_000_300),
         )
-        .unwrap()
-        .is_empty());
+        .is_err());
     }
 
     #[test]
-    fn erp_accepted_difference_requires_exact_frozen_gross_sum() {
-        let item = sample_settlement_item();
-        let mut difference = sample_difference();
-        difference.difference_amount = Amount::from_str("0.99").unwrap();
-        difference
-            .update(SupplierSettlementDifferenceUpdate {
-                status: Some(SettlementDifferenceStatus::ErpAcknowledged),
-                resolution: Some("reason=ACCEPT_BILL;evidence=proof-1".to_string()),
-                resolved_by: Some("preparer-1".to_string()),
-                resolved_at: Some(Instant::from_unix_secs(1_700_000_200)),
-            })
-            .unwrap();
-
-        assert!(accepted_cost_delta(&[item], &[difference]).is_err());
+    fn cost_delta_writer_skips_zero_delta() {
+        assert!(build_settlement_cost_delta(
+            &sample_statement(),
+            &SettlementCostDelta::zero(),
+            Instant::from_unix_secs(1_700_000_300),
+        )
+        .unwrap()
+        .is_empty());
     }
 }

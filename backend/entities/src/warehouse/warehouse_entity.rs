@@ -8,10 +8,12 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::common::stable::StableBase;
-use crate::errors::Result;
+use crate::common::state::ensure_transition;
+use crate::errors::{Error, Result};
 use crate::ids::WarehouseId;
 use crate::validation::normalize_required_text;
 use crate::warehouse::status::EnableStatus;
+use crate::warehouse::warehouse_revision::WarehouseRevision;
 
 /// 仓库代码最大长度。
 const WAREHOUSE_CODE_MAX_LEN: usize = 64;
@@ -103,10 +105,40 @@ impl Warehouse {
     /// 更新成功返回 `Ok(())`。
     pub fn update(&mut self, update: WarehouseUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
+            ensure_transition(self.stable.status, status)?;
             self.stable.status = status;
         }
         self.stable.touch(updated_by);
         Ok(())
+    }
+
+    /// 链接属于本仓库的当前修订。
+    ///
+    /// # 参数
+    /// * `revision` - 待设为当前版本的仓库修订
+    ///
+    /// # 返回
+    /// 修订归属一致时更新当前修订指针并返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 修订所属仓库与当前仓库不一致时返回错误。
+    pub fn apply_revision(&mut self, revision: &WarehouseRevision) -> Result<()> {
+        if revision.warehouse_id.as_ref() != self.base.id.as_str() {
+            return Err(Error::from("仓库修订不属于当前仓库"));
+        }
+        self.stable.current_revision_id = Some(revision.base.id.clone());
+        Ok(())
+    }
+
+    /// 判断当前乐观锁版本是否与期望版本一致。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取后携带的期望版本
+    ///
+    /// # 返回
+    /// 当前版本等于期望版本时返回 `true`。
+    pub fn matches_version(&self, expected: u64) -> bool {
+        self.base.version == expected
     }
 
     /// 判断仓库是否处于启用状态。
@@ -122,13 +154,32 @@ impl Warehouse {
 mod tests {
     use super::*;
     use crate::common::state::{assert_adjacency_closed, ensure_transition};
-    use crate::ids::WarehouseId;
+    use crate::common::time::BusinessDate;
+    use crate::ids::{WarehouseId, WarehouseRevisionId};
+    use crate::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
 
     fn data() -> WarehouseData {
         WarehouseData {
             warehouse_code: " WH-BJ-001 ".to_string(),
             status: EnableStatus::Active,
         }
+    }
+
+    fn revision(warehouse_id: &str) -> WarehouseRevision {
+        WarehouseRevision::new(
+            WarehouseRevisionId::new("rev-1"),
+            WarehouseRevisionData {
+                warehouse_id: WarehouseId::new(warehouse_id),
+                revision_no: 1,
+                name: "北京仓".to_string(),
+                address: SensitiveText::new("cipher-a".to_string(), "a".repeat(64)).unwrap(),
+                contact: SensitiveText::new("cipher-c".to_string(), "b".repeat(64)).unwrap(),
+                effective_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_to: None,
+                change_reason: "创建".to_string(),
+            },
+        )
+        .unwrap()
     }
 
     /// happy path：代码 trim 规范化，状态与审计人落位。
@@ -174,6 +225,24 @@ mod tests {
         assert!(!warehouse.is_active());
         assert_eq!(warehouse.warehouse_code, "WH-BJ-001");
         assert_eq!(warehouse.stable.updated_by, "admin-2");
+    }
+
+    /// 修订归属与乐观锁版本由仓库实体统一匹配。
+    #[test]
+    fn revision_and_version_matching_are_entity_rules() {
+        let mut warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
+        warehouse.base.version = 5;
+        assert!(warehouse.matches_version(5));
+        assert!(!warehouse.matches_version(4));
+
+        warehouse.apply_revision(&revision("wh-1")).unwrap();
+        assert_eq!(warehouse.stable.current_revision_id.as_deref(), Some("rev-1"));
+        assert!(warehouse.apply_revision(&revision("wh-2")).is_err());
+        assert_eq!(
+            warehouse.stable.current_revision_id.as_deref(),
+            Some("rev-1"),
+            "归属失败不得改变当前修订"
+        );
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

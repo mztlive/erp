@@ -121,6 +121,32 @@ impl RoleIdSet {
         Ok(role_ids)
     }
 
+    /// 从 Casbin 角色主体键提取确定性的角色 ID 集合。
+    ///
+    /// # 参数
+    /// * `role_keys` - Casbin 返回的主体键，只有 `role:` 前缀项属于角色
+    ///
+    /// # 返回值
+    /// 返回按角色 ID 排序并去重的集合；没有角色键时返回空集合。
+    ///
+    /// # 错误
+    /// 任一 `role:` 后缀不是合法角色 ID 时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 非角色主体键必须忽略，输出顺序不得依赖 Casbin 返回顺序。
+    pub fn from_casbin_role_keys<I, S>(role_keys: I) -> Result<Self>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut role_ids = role_keys
+            .into_iter()
+            .filter_map(|key| key.as_ref().strip_prefix("role:").map(ToOwned::to_owned))
+            .collect::<Vec<_>>();
+        role_ids.sort();
+        Self::parse(role_ids)
+    }
+
     /// 返回角色 ID 切片。
     ///
     /// # 返回值
@@ -405,6 +431,17 @@ mod tests {
     #[test]
     fn role_ids_should_reject_empty_required_collection() {
         assert!(RoleIdSet::parse_non_empty(Vec::<String>::new()).is_err());
+    }
+
+    /// Casbin 角色键过滤非角色主体，并按角色 ID 确定性排序去重。
+    #[test]
+    fn casbin_role_keys_are_filtered_and_sorted() {
+        let role_ids =
+            RoleIdSet::from_casbin_role_keys(["user:ignored", "role:role-b", "role:role-a", "role:role-b"])
+                .unwrap();
+
+        assert_eq!(role_ids.to_strings(), vec!["role-a", "role-b"]);
+        assert!(RoleIdSet::from_casbin_role_keys(["role:bad/id"]).is_err());
     }
 
     #[test]

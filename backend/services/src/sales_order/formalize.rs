@@ -3,8 +3,6 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use sha2::{Digest, Sha256};
-
 use database::{
     AccessControlExt, DocumentRegistryExt, NoTransaction, ProjectionExt, ReceivableExt, SalesOrderExt,
     Transactional, WorkItemExt,
@@ -26,15 +24,13 @@ use entities::receivable::{
     ReceivableEntryData, ReceivableEntryType,
 };
 use entities::sales_order::{
-    BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineType, ReviewStatus, RevisionSource,
-    SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
+    procurement_responsibility_key, BusinessType, CardForm, RevisionSource, SalesOrder,
+    SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
     SalesOrderGoodsServiceLineRevisionId, SalesOrderRevision, SalesOrderRevisionData, SalesOrderRevisionLine,
     SalesOrderRevisionLineData, SalesOrderSubmission, SalesOrderSubmissionLine,
-    SalesOrderVoucherLineRevision, SalesOrderVoucherLineRevisionData, VoucherLineDraft,
+    SalesOrderVoucherLineRevision, SalesOrderVoucherLineRevisionData,
 };
-use entities::work_item::{
-    AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
-};
+use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
 use mongodb::Database;
 
@@ -111,7 +107,7 @@ impl SalesOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if is_already_formalized(&order) {
+        if order.is_fully_formalized() {
             return self.sales_order_detail(id, None).await;
         }
         ensure_final_approve_formalize(&order)?;
@@ -146,7 +142,7 @@ impl SalesOrderService {
         order: &SalesOrder,
         lines: &[SalesOrderSubmissionLine],
     ) -> Result<Option<ProcurementFormalizationPlan>> {
-        if order.business_type != BusinessType::GoodsService {
+        if !order.business_type.is_goods_service() {
             return Ok(None);
         }
         let inputs = submission_procurement_inputs(lines)?;
@@ -157,20 +153,6 @@ impl SalesOrderService {
     }
 }
 
-/// 判断销售单已由最终通过动作完整形式化。
-///
-/// # 参数
-/// * `order` - 当前销售单
-///
-/// # 返回
-/// 商务状态已生效且审核状态已通过时返回 `true`。
-///
-/// # 错误
-/// 无。
-fn is_already_formalized(order: &SalesOrder) -> bool {
-    order.commercial_status == CommercialStatus::Effective && order.review_status == ReviewStatus::Approved
-}
-
 /// 读取该销售单最新提交及其明细。
 ///
 /// # 错误
@@ -179,16 +161,11 @@ async fn load_latest_submission(
     db: &Database,
     sales_order_id: &str,
 ) -> Result<(SalesOrderSubmission, Vec<SalesOrderSubmissionLine>)> {
-    let mut submissions = db
+    let order_id = SalesOrderId::new(sales_order_id);
+    let submission = db
         .sales_order_submissions()
-        .find_many(
-            mongodb::bson::doc! { "sales_order_id": sales_order_id },
-            &mut NoTransaction,
-        )
-        .await?;
-    submissions.sort_by_key(|item| item.submission_no);
-    let submission = submissions
-        .pop()
+        .find_latest_by_order(&order_id, &mut NoTransaction)
+        .await?
         .ok_or_else(|| Error::ConflictError("销售单没有可形式化的提交".to_string()))?;
     let submission_id = SalesOrderSubmissionId::new(submission.base.id.clone());
     let lines = db
@@ -395,28 +372,6 @@ fn build_procurement_work_items(
         .collect()
 }
 
-/// 为稳定销售行集合构造不含责任人的幂等责任键。
-///
-/// # 参数
-/// * `line_ids` - 已排序去重的稳定销售行 ID
-///
-/// # 返回
-/// 返回 `sales-lines:<sha256>` 责任键。
-///
-/// # 错误
-/// 行集合为空时返回校验错误。
-fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
-    if line_ids.is_empty() {
-        return Err(Error::ValidationError("采购建单任务责任行不能为空".to_string()));
-    }
-    let mut digest = Sha256::new();
-    for line_id in line_ids {
-        digest.update((line_id.len() as u64).to_be_bytes());
-        digest.update(line_id.as_bytes());
-    }
-    Ok(format!("sales-lines:{}", hex::encode(digest.finalize())))
-}
-
 /// 幂等写入同一销售生效事务中的采购建单任务。
 ///
 /// # 参数
@@ -440,14 +395,9 @@ async fn persist_procurement_work_items(
             .ok_or_else(|| Error::Internal("采购建单任务缺少责任键".to_string()))?;
         let existing = db
             .work_items()
-            .find_many(
-                mongodb::bson::doc! {
-                    "business_object_type": item.business_object_type.as_str(),
-                    "business_object_id": item.business_object_id.as_str(),
-                    "work_item_type": WorkItemType::ProcurementOrderCreation.as_str(),
-                    "responsibility_key": responsibility_key,
-                    "status": WorkItemStatus::Open.as_str(),
-                },
+            .list_open_procurement_by_responsibility(
+                &SalesOrderId::new(item.business_object_id.clone()),
+                responsibility_key,
                 session,
             )
             .await?;
@@ -607,11 +557,6 @@ fn build_goods_service_revision(
     let mut revision_lines = Vec::with_capacity(submission_lines.len());
     let mut goods_lines = Vec::new();
     for sub_line in submission_lines {
-        if sub_line.line_type != LineType::GoodsService {
-            return Err(Error::ConflictError(
-                "实物及服务销售单不得形式化卡券行".to_string(),
-            ));
-        }
         let revision_line_id = SalesOrderRevisionLineId::new(next_id());
         revision_lines.push(SalesOrderRevisionLine::new(
             revision_line_id.clone(),
@@ -629,7 +574,7 @@ fn build_goods_service_revision(
                 unit_snapshot: sub_line.unit_snapshot.clone(),
             },
         )?);
-        let goods = submission_line_goods(sub_line)?;
+        let goods = sub_line.goods_fields()?;
         goods_lines.push(SalesOrderGoodsServiceLineRevision::new(
             SalesOrderGoodsServiceLineRevisionId::new(next_id()),
             SalesOrderGoodsServiceLineRevisionData {
@@ -654,48 +599,6 @@ fn build_goods_service_revision(
     })
 }
 
-/// 从提交行还原实物及服务字段组。
-///
-/// # 错误
-/// 实物行缺商品字段组时返回校验错误。
-fn submission_line_goods(line: &SalesOrderSubmissionLine) -> Result<GoodsLineFields> {
-    let sku_id = line
-        .sku_id
-        .clone()
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少商品字段组", line.line_no)))?;
-    let sku_revision_id = line
-        .sku_revision_id
-        .clone()
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU 修订", line.line_no)))?;
-    let fulfillment_mode = line
-        .fulfillment_mode
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约方式", line.line_no)))?;
-    let fulfillment_due_at = line
-        .fulfillment_due_at
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约期限", line.line_no)))?;
-    let quantity = line
-        .quantity
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少数量", line.line_no)))?;
-    let base_unit_code = line
-        .base_unit_code
-        .clone()
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少单位", line.line_no)))?;
-    let unit_price_gross = line
-        .unit_price_gross
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少含税单价", line.line_no)))?;
-    Ok(GoodsLineFields {
-        sku_id,
-        sku_revision_id,
-        welfare_scenario: line.welfare_scenario,
-        service_region: line.service_region.clone(),
-        fulfillment_mode,
-        fulfillment_due_at,
-        quantity,
-        base_unit_code,
-        unit_price_gross,
-    })
-}
-
 /// 由卡券提交构造正式版本。实物行失败关闭。
 ///
 /// # 错误
@@ -711,12 +614,9 @@ fn build_voucher_revision(
     let mut revision_lines = Vec::with_capacity(submission_lines.len());
     let mut voucher_lines = Vec::new();
     for sub_line in submission_lines {
-        if sub_line.line_type != LineType::Voucher {
-            return Err(Error::ConflictError("卡券销售单不得形式化实物行".to_string()));
-        }
         let revision_line_id = SalesOrderRevisionLineId::new(next_id());
         revision_lines.push(new_revision_line(&revision_id, &revision_line_id, sub_line)?);
-        let voucher = submission_line_voucher(sub_line)?;
+        let voucher = sub_line.voucher_fields()?;
         voucher_lines.push(SalesOrderVoucherLineRevision::new(
             SalesOrderVoucherLineRevisionId::new(next_id()),
             SalesOrderVoucherLineRevisionData {
@@ -815,44 +715,6 @@ fn new_revision_line(
             unit_snapshot: sub_line.unit_snapshot.clone(),
         },
     )?)
-}
-
-/// 从提交行还原卡券字段组。
-///
-/// # 错误
-/// 卡券行缺字段组时返回校验错误。
-fn submission_line_voucher(line: &SalesOrderSubmissionLine) -> Result<VoucherLineDraft> {
-    let face_value = line
-        .face_value
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡券字段组", line.line_no)))?;
-    let card_count = line
-        .card_count
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡张数", line.line_no)))?;
-    let unit_price_gross = line
-        .unit_price_gross
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡券成交单价", line.line_no)))?;
-    let face_value_total = line
-        .face_value_total
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少面额小计", line.line_no)))?;
-    let transaction_amount = line
-        .transaction_amount
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少成交金额", line.line_no)))?;
-    let gift_amount = line
-        .gift_amount
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少配赠金额", line.line_no)))?;
-    let card_form = line
-        .card_form
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡形态", line.line_no)))?;
-    Ok(VoucherLineDraft {
-        face_value,
-        card_count,
-        unit_price_gross,
-        face_value_total,
-        transaction_amount,
-        gift_amount,
-        gift_rate: None,
-        card_form,
-    })
 }
 
 /// 由已形式化卡券版本构造商城执行投影与待下发记录。
@@ -957,7 +819,7 @@ async fn persist_voucher_projection(
 /// 证明本模块只包装仓储 `formalize_submission`。
 #[cfg(test)]
 mod tests {
-    use super::{ensure_final_approve_formalize, is_already_formalized, procurement_responsibility_key};
+    use super::{ensure_final_approve_formalize, procurement_responsibility_key};
     use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
     use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData};
 
@@ -999,7 +861,7 @@ mod tests {
         assert!(ensure_final_approve_formalize(&order).is_ok());
         order.commercial_status = CommercialStatus::Effective;
         order.review_status = ReviewStatus::Approved;
-        assert!(is_already_formalized(&order));
+        assert!(order.is_fully_formalized());
         assert!(ensure_final_approve_formalize(&order).is_err());
     }
 

@@ -357,7 +357,7 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_one_by_field<V>(
+    pub(crate) async fn find_one_by_field<V>(
         &self,
         field: &str,
         value: V,
@@ -381,7 +381,7 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
+    pub(crate) async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
@@ -399,7 +399,7 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_many(&self, filter: Document, executor: &mut dyn Executor) -> Result<Vec<T>> {
+    pub(crate) async fn find_many(&self, filter: Document, executor: &mut dyn Executor) -> Result<Vec<T>> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
@@ -418,7 +418,7 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn find_many_sorted(
+    pub(crate) async fn find_many_sorted(
         &self,
         filter: Document,
         sort: Document,
@@ -450,7 +450,7 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn exists(&self, filter: Document, executor: &mut dyn Executor) -> Result<bool> {
+    pub(crate) async fn exists(&self, filter: Document, executor: &mut dyn Executor) -> Result<bool> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
@@ -473,7 +473,7 @@ where
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search<F>(&self, filter: &F, executor: &mut dyn Executor) -> Result<PageResult<T>>
+    pub(crate) async fn search<F>(&self, filter: &F, executor: &mut dyn Executor) -> Result<PageResult<T>>
     where
         F: QueryFilter + Pagination + Send + Sync,
     {

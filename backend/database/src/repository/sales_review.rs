@@ -148,6 +148,7 @@ impl<'a> Repository<'a, SalesChangeOrder> {
                 "status": {
                     "$in": [
                         SalesChangeOrderStatus::Draft.as_str(),
+                        SalesChangeOrderStatus::InApproval.as_str(),
                         SalesChangeOrderStatus::PendingImpactConfirmation.as_str(),
                         SalesChangeOrderStatus::PendingFinanceReview.as_str(),
                         SalesChangeOrderStatus::Rejected.as_str(),
@@ -158,9 +159,81 @@ impl<'a> Repository<'a, SalesChangeOrder> {
         )
         .await
     }
+
+    /// 判断同一销售单基准版本是否已有进行中变更。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 原销售单
+    /// * `base_revision_id` - 发起时当前版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 存在草稿、审批中或兼容历史进行中状态的变更单时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn has_in_progress_by_order_and_base(
+        &self,
+        sales_order_id: &SalesOrderId,
+        base_revision_id: &entities::sales_order::SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        Ok(self
+            .find_in_progress_by_order_and_base(sales_order_id, base_revision_id, executor)
+            .await?
+            .is_some())
+    }
 }
 
 impl<'a> Repository<'a, SalesChangeSubmission> {
+    /// 列出销售变更单提交历史，新提交在前。
+    ///
+    /// # 参数
+    /// * `sales_change_order_id` - 所属销售变更单
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按提交序号倒序排列的全部变更提交。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_change_order_newest_first(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmission>> {
+        self.find_many_sorted(
+            doc! { "sales_change_order_id": sales_change_order_id.to_string() },
+            doc! { "submission_no": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 读取销售变更单最新提交序号。
+    ///
+    /// # 参数
+    /// * `sales_change_order_id` - 所属销售变更单
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回最大的提交序号；尚无提交时返回 `0`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn latest_submission_no_by_change_order(
+        &self,
+        sales_change_order_id: &SalesChangeOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        Ok(self
+            .list_by_change_order_newest_first(sales_change_order_id, executor)
+            .await?
+            .first()
+            .map(|submission| submission.submission_no)
+            .unwrap_or(0))
+    }
+
     /// 按「变更单 + 提交序号」查找变更提交。
     ///
     /// # 参数

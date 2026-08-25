@@ -30,9 +30,8 @@ use std::sync::Arc;
 
 use database::{
     AccessControlExt, Executor, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, NoTransaction, PartyExt,
-    SupplierApiExt, SupplierExt, SupplierFulfillmentExt, SupplierOfferingExt, Transactional, WorkItemExt,
+    SupplierApiExt, SupplierExt, SupplierFulfillmentExt, Transactional, WorkItemExt,
 };
-use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::ids::{
     InboxMessageId, SourceSystemId, SupplierOrderActionId, SupplierOrderActionLineId,
@@ -42,7 +41,7 @@ use entities::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, IntegrationErrorTaskId, MessageType,
 };
-use entities::money::{round_to_cent, Amount, Quantity};
+use entities::money::{Amount, Quantity};
 use entities::supplier_api::{SupplierApiCapability, SupplierApiCapabilityCode, SupplierApiConnection};
 use entities::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData,
@@ -51,12 +50,13 @@ use entities::supplier_fulfillment::{
     SupplierOrderActionLine, SupplierOrderActionLineData, SupplierOrderActionStatus, SupplierOrderActionType,
     SupplierOrderActionUpdate, SupplierOrderStatusHistory, SupplierOrderStatusHistoryData,
     SupplierRefundAllocation, SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
+    VerifiedSupplierOrderResolution,
 };
 use entities::work_item::{
     AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use id_generator::next_id;
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::str::FromStr;
@@ -181,6 +181,19 @@ struct CompletionReceipt {
     order_version: u64,
     task_version: u64,
     resolution: SupplierOrderResolution,
+}
+
+impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
+    /// 将实体层已验证业务终态映射为服务契约枚举。
+    fn from(value: VerifiedSupplierOrderResolution) -> Self {
+        match value {
+            VerifiedSupplierOrderResolution::OrderAccepted => Self::OrderAccepted,
+            VerifiedSupplierOrderResolution::OrderRejected => Self::OrderRejected,
+            VerifiedSupplierOrderResolution::OrderCompleted => Self::OrderCompleted,
+            VerifiedSupplierOrderResolution::Canceled => Self::Canceled,
+            VerifiedSupplierOrderResolution::Refunded => Self::Refunded,
+        }
+    }
 }
 
 /// 履约订单列表筛选条件类型（经 `SupplierFulfillmentExt` 关联类型跨 crate 可达）。
@@ -345,20 +358,12 @@ impl SupplierFulfillmentService {
         let actions = self
             .db
             .supplier_order_actions()
-            .find_many_sorted(
-                doc! { "supplier_fulfillment_order_id": id },
-                doc! { "created_at": -1 },
-                &mut NoTransaction,
-            )
+            .list_by_order_newest(&order_id, &mut NoTransaction)
             .await?;
         let histories = self
             .db
             .supplier_order_status_histories()
-            .find_many_sorted(
-                doc! { "supplier_fulfillment_order_id": id },
-                doc! { "occurred_at": 1 },
-                &mut NoTransaction,
-            )
+            .list_by_order_chronological(&order_id, &mut NoTransaction)
             .await?;
         let refund_views = self.refund_views_for_order(&order_id).await?;
 
@@ -577,7 +582,7 @@ impl SupplierFulfillmentService {
             Vec::new()
         };
 
-        if verified_resolution(order, target).is_some()
+        if order.verified_resolution(target).is_some()
             || (connection_active
                 && ensure_capability(&capabilities, SupplierApiCapabilityCode::Query).is_ok())
         {
@@ -619,7 +624,7 @@ impl SupplierFulfillmentService {
         let terminal_evidence = latest_investigation.and_then(|(evidence, record)| {
             let resolution = record.verified_resolution?;
             (verified_terminal_evidence(evidence, order, resolution).is_ok()
-                && verified_resolution(order, target) == Some(resolution))
+                && order.verified_resolution(target).map(Into::into) == Some(resolution))
             .then_some(resolution)
         });
         if formal_entry && terminal_evidence.is_some() {
@@ -925,11 +930,11 @@ impl SupplierFulfillmentService {
                         .find_by_id(command_for_tx.decision.order_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    ensure_version(
-                        order.base.version,
-                        command_for_tx.decision.expected_order_lock_version,
-                        "供应商履约订单",
-                    )?;
+                    order
+                        .ensure_version(command_for_tx.decision.expected_order_lock_version)
+                        .map_err(|_| {
+                            Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
+                        })?;
                     ensure_task_subject_matches_order(
                         &work_item,
                         &command_for_tx.expected_subject_version,
@@ -953,8 +958,11 @@ impl SupplierFulfillmentService {
                         .find_by_id(&evidence_record.target_supplier_action_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("结果证据引用的原供应商动作不存在".to_string()))?;
-                    validate_target_action(&order, &target_action)?;
-                    if verified_resolution(&order, &target_action) != Some(command_for_tx.decision.resolution)
+                    target_action
+                        .ensure_original_for_order(&order.base.id)
+                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+                    if order.verified_resolution(&target_action).map(Into::into)
+                        != Some(command_for_tx.decision.resolution)
                     {
                         return Err(Error::ConflictError(
                             "供应商结果已变化，请刷新证据后重试".to_string(),
@@ -967,24 +975,16 @@ impl SupplierFulfillmentService {
                         verified_evidence_id: evidence.base.id.clone(),
                         resolution: command_for_tx.decision.resolution,
                     };
+                    let response_summary = serde_json::to_string(&completion_record)
+                        .map_err(|error| Error::Internal(format!("任务完成证据序列化失败: {error}")))?;
                     let terminal_action = SupplierOrderAction::new(
                         SupplierOrderActionId::new(terminal_action_id_for_tx.clone()),
-                        SupplierOrderActionData {
-                            supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new(
-                                order.base.id.as_str(),
-                            ),
-                            action_type: SupplierOrderActionType::Query,
-                            after_sales_request_id: None,
-                            idempotency_key: completion_idempotency_key,
-                            status: SupplierOrderActionStatus::Succeeded,
-                            external_request_id: None,
-                            request_summary: Some(format!("确认供应商结果证据 {}", evidence.base.id)),
-                            response_summary: Some(serde_json::to_string(&completion_record).map_err(
-                                |error| Error::Internal(format!("任务完成证据序列化失败: {error}")),
-                            )?),
-                            attempt_count: 0,
-                            next_attempt_at: None,
-                        },
+                        SupplierOrderActionData::query_result(
+                            SupplierFulfillmentOrderId::new(order.base.id.as_str()),
+                            completion_idempotency_key,
+                            format!("确认供应商结果证据 {}", evidence.base.id),
+                            response_summary,
+                        ),
                     )?;
                     let completed_at = Instant::now();
                     work_item.record_activity(&actor_id, completed_at)?;
@@ -1067,16 +1067,16 @@ impl SupplierFulfillmentService {
         order.advance_fulfillment(FulfillmentStatus::Rejected)?;
         let history = SupplierOrderStatusHistory::new(
             SupplierOrderStatusHistoryId::new(next_id()),
-            SupplierOrderStatusHistoryData {
+            SupplierOrderStatusHistoryData::supplier_callback(
+                SupplierFulfillmentOrderId::new(order.base.id.as_str()),
                 connection_id,
-                previous_status: previous,
-                new_status: FulfillmentStatus::Rejected,
-                supplier_status_version: req.supplier_status_version.clone(),
-                occurred_at: Instant::from_unix_secs(req.occurred_at),
-                received_at: Instant::now(),
-                external_event_id: req.external_event_id.clone(),
-                source_type: SourceType::SupplierCallback,
-            },
+                previous,
+                FulfillmentStatus::Rejected,
+                req.supplier_status_version.clone(),
+                Instant::from_unix_secs(req.occurred_at),
+                Instant::now(),
+                req.external_event_id.clone(),
+            ),
         )?;
         let mut action = self.latest_place_action(id).await?;
         action.update(SupplierOrderActionUpdate {
@@ -1384,17 +1384,19 @@ impl SupplierFulfillmentService {
                         .find_by_id(&context_for_tx.order_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    ensure_version(
-                        order.base.version,
-                        context_for_tx.expected_order_version,
-                        "供应商履约订单",
-                    )?;
+                    order
+                        .ensure_version(context_for_tx.expected_order_version)
+                        .map_err(|_| {
+                            Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
+                        })?;
                     let mut target_action = db
                         .supplier_order_actions()
                         .find_by_id(&context_for_tx.target_action_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
-                    validate_target_action(&order, &target_action)?;
+                    target_action
+                        .ensure_original_for_order(&order.base.id)
+                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
                     let investigated_order_version = order.base.version;
                     if context_for_tx.task.is_none() {
                         ensure_no_active_w26_task(&db, &order.base.id, session).await?;
@@ -1565,17 +1567,19 @@ impl SupplierFulfillmentService {
                         .find_by_id(&context.order_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("供应商履约订单不存在".to_string()))?;
-                    ensure_version(
-                        order.base.version,
-                        context.expected_order_version,
-                        "供应商履约订单",
-                    )?;
+                    order
+                        .ensure_version(context.expected_order_version)
+                        .map_err(|_| {
+                            Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string())
+                        })?;
                     let target_action = db
                         .supplier_order_actions()
                         .find_by_id(&context.target_action_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
-                    validate_target_action(&order, &target_action)?;
+                    target_action
+                        .ensure_original_for_order(&order.base.id)
+                        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
                     if let Some(task_context) = &context.task {
                         let work_item = db
                             .work_items()
@@ -1622,20 +1626,11 @@ impl SupplierFulfillmentService {
                         .map_err(|error| Error::Internal(format!("调查意图序列化失败: {error}")))?;
                     let intent = SupplierOrderAction::new(
                         SupplierOrderActionId::new(evidence_id),
-                        SupplierOrderActionData {
-                            supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new(
-                                order.base.id.as_str(),
-                            ),
-                            action_type: SupplierOrderActionType::Query,
-                            after_sales_request_id: None,
-                            idempotency_key: evidence_idempotency_key,
-                            status: SupplierOrderActionStatus::Sending,
-                            external_request_id: None,
-                            request_summary: Some(intent_summary),
-                            response_summary: None,
-                            attempt_count: 1,
-                            next_attempt_at: None,
-                        },
+                        SupplierOrderActionData::query_intent(
+                            SupplierFulfillmentOrderId::new(order.base.id.as_str()),
+                            evidence_idempotency_key,
+                            intent_summary,
+                        ),
                     )?;
                     db.supplier_order_actions().create(&intent, session).await?;
                     Ok(None)
@@ -1698,18 +1693,18 @@ impl SupplierFulfillmentService {
         actor: &AuditActor,
     ) -> Result<PreparedInvestigation> {
         let order = self.load_order(&context.order_id).await?;
-        ensure_version(
-            order.base.version,
-            context.expected_order_version,
-            "供应商履约订单",
-        )?;
+        order
+            .ensure_version(context.expected_order_version)
+            .map_err(|_| Error::ConflictError("供应商履约订单版本已变化，请刷新后重试".to_string()))?;
         let target_action = self
             .db
             .supplier_order_actions()
             .find_by_id(&context.target_action_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("被调查的供应商原动作不存在".to_string()))?;
-        validate_target_action(&order, &target_action)?;
+        target_action
+            .ensure_original_for_order(&order.base.id)
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         if let Some(task_context) = &context.task {
             let work_item = self
                 .db
@@ -1735,7 +1730,7 @@ impl SupplierFulfillmentService {
         }
 
         if context.action == SupplierOrderInvestigationAction::QueryResult {
-            if let Some(resolution) = verified_resolution(&order, &target_action) {
+            if let Some(resolution) = order.verified_resolution(&target_action).map(Into::into) {
                 return Ok(PreparedInvestigation::PersistedTerminal(resolution));
             }
         } else {
@@ -1922,52 +1917,27 @@ impl SupplierFulfillmentService {
             .await?
             .ok_or_else(|| Error::NotFound("来源商城订单不存在".to_string()))?;
         self.ensure_mall_items(req).await?;
-        let revision_ids = req
+        let mut revision_ids = req
             .items
             .iter()
-            .map(|item| item.supplier_offering_revision_id.to_string())
-            .collect::<std::collections::HashSet<_>>();
-        let revisions = self
+            .map(|item| item.supplier_offering_revision_id.clone())
+            .collect::<Vec<_>>();
+        revision_ids.sort_by(|left, right| left.as_ref().cmp(right.as_ref()));
+        revision_ids.dedup_by(|left, right| left.as_ref() == right.as_ref());
+        let by_revision = self
             .db
-            .supplier_offering_revisions()
-            .find_many(
-                doc! { "id": { "$in": revision_ids.iter().cloned().collect::<Vec<_>>() } },
-                &mut NoTransaction,
-            )
+            .supplier_fulfillment()
+            .load_offerings_by_revision_ids(&revision_ids, &mut NoTransaction)
             .await?;
-        if revisions.len() != revision_ids.len() {
-            return Err(Error::NotFound("供应商供给修订不存在".to_string()));
+        if by_revision.len() != revision_ids.len() {
+            return Err(Error::NotFound("供应商供给修订或供给不存在".to_string()));
         }
-        let offering_ids = revisions
-            .iter()
-            .map(|revision| revision.supplier_offering_id.to_string())
-            .collect::<std::collections::HashSet<_>>();
-        let offerings = self
-            .db
-            .supplier_offerings()
-            .find_many(
-                doc! { "id": { "$in": offering_ids.into_iter().collect::<Vec<_>>() } },
-                &mut NoTransaction,
-            )
-            .await?
-            .into_iter()
-            .map(|offering| (offering.base.id.clone(), offering))
-            .collect::<HashMap<_, _>>();
-        let mut by_revision = HashMap::with_capacity(revisions.len());
-        for revision in revisions {
-            let offering = offerings
-                .get(revision.supplier_offering_id.as_ref())
-                .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
-            let connection_matches = offering
-                .source_connection_id
-                .as_ref()
-                .is_none_or(|id| id == &req.connection_id);
-            if offering.supplier_id != req.supplier_id || !connection_matches {
+        for offering in by_revision.values() {
+            if !offering.belongs_to_ordering_source(&req.supplier_id, &req.connection_id) {
                 return Err(Error::BusinessLogicError(
                     "供给不属于下单供应商或供应商连接不匹配".to_string(),
                 ));
             }
-            by_revision.insert(revision.base.id, offering.clone());
         }
         Ok((connection, by_revision))
     }
@@ -1981,24 +1951,20 @@ impl SupplierFulfillmentService {
     /// * `NotFound` - 商城订单明细不存在
     /// * `BusinessLogicError` - 明细不属于该商城订单
     async fn ensure_mall_items(&self, req: &PlaceFulfillmentOrderRequest) -> Result<()> {
-        let item_ids: Vec<String> = req
+        let item_ids = req
             .items
             .iter()
-            .map(|item| item.mall_order_item_id.to_string())
-            .collect();
+            .map(|item| item.mall_order_item_id.clone())
+            .collect::<Vec<_>>();
         let items = self
             .db
             .mall_order_items()
-            .find_many(doc! { "id": { "$in": item_ids } }, &mut NoTransaction)
+            .list_by_ids(&item_ids, &mut NoTransaction)
             .await?;
-        if items.len() != req.items.len() {
+        if items.len() != item_ids.len() {
             return Err(Error::NotFound("商城订单明细不存在".to_string()));
         }
-        let expected = req.mall_order_id.to_string();
-        if items
-            .iter()
-            .any(|item| item.mall_order_id.to_string() != expected)
-        {
+        if items.iter().any(|item| item.mall_order_id != req.mall_order_id) {
             return Err(Error::BusinessLogicError(
                 "商城订单明细不属于该商城订单".to_string(),
             ));
@@ -2031,42 +1997,21 @@ impl SupplierFulfillmentService {
         let order_id = SupplierFulfillmentOrderId::new(next_id());
         let order = SupplierFulfillmentOrder::new(
             order_id.clone(),
-            SupplierFulfillmentOrderData {
-                fulfillment_order_no: req.fulfillment_order_no.clone(),
-                mall_order_id: req.mall_order_id.clone(),
-                supplier_id: req.supplier_id.clone(),
-                connection_id: req.connection_id.clone(),
-                split_no: req.split_no,
-                fulfillment_status: FulfillmentStatus::Submitting,
-                cancel_status: CancelStatus::None,
-                refund_status: RefundStatus::None,
-                external_order_no: None,
-                submitted_at: Some(Instant::now()),
-                accepted_at: None,
-                completed_at: None,
-                address_snapshot_encrypted: req.address_snapshot_encrypted.clone(),
-                address_snapshot_fingerprint: req.address_snapshot_fingerprint.clone(),
-            },
+            SupplierFulfillmentOrderData::submitting(
+                req.fulfillment_order_no.clone(),
+                req.mall_order_id.clone(),
+                req.supplier_id.clone(),
+                req.connection_id.clone(),
+                req.split_no,
+                Instant::now(),
+                req.address_snapshot_encrypted.clone(),
+                req.address_snapshot_fingerprint.clone(),
+            ),
         )?;
         let items = self.build_place_items(&order_id, req, offerings)?;
         let action = SupplierOrderAction::new(
             SupplierOrderActionId::new(next_id()),
-            SupplierOrderActionData {
-                supplier_fulfillment_order_id: order_id,
-                action_type: SupplierOrderActionType::Place,
-                after_sales_request_id: None,
-                idempotency_key: req.fulfillment_order_no.clone(),
-                status: SupplierOrderActionStatus::Pending,
-                external_request_id: None,
-                request_summary: Some(format!(
-                    "下单 {} 明细 {} 行",
-                    req.fulfillment_order_no,
-                    items.len()
-                )),
-                response_summary: None,
-                attempt_count: 0,
-                next_attempt_at: None,
-            },
+            SupplierOrderActionData::place(order_id, req.fulfillment_order_no.clone(), items.len()),
         )?;
         Ok((order, items, action))
     }
@@ -2094,25 +2039,18 @@ impl SupplierFulfillmentService {
                 let offering = offerings
                     .get(item.supplier_offering_revision_id.as_ref())
                     .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
-                let total = Amount::try_from(round_to_cent(
-                    item.unit_cost_snapshot_gross.to_decimal() * item.quantity.to_decimal(),
-                ))
-                .map_err(|_| Error::from(entities::Error::from("明细成本快照金额无效")))?;
-                SupplierFulfillmentItem::new(
-                    SupplierFulfillmentItemId::new(next_id()),
-                    SupplierFulfillmentItemData {
-                        supplier_fulfillment_order_id: order_id.clone(),
-                        mall_order_item_id: item.mall_order_item_id.clone(),
-                        supplier_offering_revision_id: item.supplier_offering_revision_id.clone(),
-                        supplier_sku_code_snapshot: offering.supplier_sku_code.clone(),
-                        supplier_product_code_snapshot: offering.supplier_product_code.clone(),
-                        quantity: item.quantity,
-                        unit_cost_snapshot_gross: item.unit_cost_snapshot_gross,
-                        cost_snapshot_total_gross: total,
-                        input_tax_rate: item.input_tax_rate,
-                    },
-                )
-                .map_err(Error::from)
+                let data = SupplierFulfillmentItemData::from_unit_cost(
+                    order_id.clone(),
+                    item.mall_order_item_id.clone(),
+                    item.supplier_offering_revision_id.clone(),
+                    offering.supplier_sku_code.clone(),
+                    offering.supplier_product_code.clone(),
+                    item.quantity,
+                    item.unit_cost_snapshot_gross,
+                    item.input_tax_rate,
+                )?;
+                SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new(next_id()), data)
+                    .map_err(Error::from)
             })
             .collect()
     }
@@ -2137,32 +2075,15 @@ impl SupplierFulfillmentService {
         idempotency_key: &str,
         action_type: SupplierOrderActionType,
     ) -> Result<SupplierOrderAction> {
-        let request_summary = req
-            .reason_code
-            .as_ref()
-            .map(|code| {
-                format!(
-                    "{} 售后申请 {} 原因 {}",
-                    action_type.label(),
-                    req.after_sales_request_id,
-                    code
-                )
-            })
-            .unwrap_or_else(|| format!("{} 售后申请 {}", action_type.label(), req.after_sales_request_id));
         SupplierOrderAction::new(
             SupplierOrderActionId::new(next_id()),
-            SupplierOrderActionData {
-                supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new(order.base.id.as_str()),
+            SupplierOrderActionData::after_sales(
+                SupplierFulfillmentOrderId::new(order.base.id.as_str()),
                 action_type,
-                after_sales_request_id: Some(req.after_sales_request_id.clone()),
-                idempotency_key: idempotency_key.to_string(),
-                status: SupplierOrderActionStatus::Pending,
-                external_request_id: None,
-                request_summary: Some(request_summary),
-                response_summary: None,
-                attempt_count: 0,
-                next_attempt_at: None,
-            },
+                req.after_sales_request_id.clone(),
+                idempotency_key,
+                req.reason_code.as_deref(),
+            ),
         )
         .map_err(Into::into)
     }
@@ -2189,14 +2110,14 @@ impl SupplierFulfillmentService {
             .map(|(index, line)| {
                 SupplierOrderActionLine::new(
                     SupplierOrderActionLineId::new(next_id()),
-                    SupplierOrderActionLineData {
-                        supplier_order_action_id: SupplierOrderActionId::new(action.base.id.as_str()),
-                        line_no: (index + 1) as u32,
-                        after_sales_request_line_id: line.after_sales_request_line_id.clone(),
-                        supplier_fulfillment_item_id: line.supplier_fulfillment_item_id.clone(),
-                        quantity: line.quantity,
-                        amount: line.amount,
-                    },
+                    SupplierOrderActionLineData::from_request_index(
+                        SupplierOrderActionId::new(action.base.id.as_str()),
+                        index,
+                        line.after_sales_request_line_id.clone(),
+                        line.supplier_fulfillment_item_id.clone(),
+                        line.quantity,
+                        line.amount,
+                    ),
                 )
             })
             .collect::<std::result::Result<Vec<_>, entities::Error>>()
@@ -2231,18 +2152,12 @@ impl SupplierFulfillmentService {
         let request_lines = self
             .db
             .mall_after_sales_request_lines()
-            .find_many(
-                doc! { "after_sales_request_id": req.after_sales_request_id.to_string() },
-                &mut NoTransaction,
-            )
+            .list_by_request_id(&req.after_sales_request_id, &mut NoTransaction)
             .await?;
         let prior_actions = self
             .db
             .supplier_order_actions()
-            .find_many(
-                doc! { "after_sales_request_id": req.after_sales_request_id.to_string() },
-                &mut NoTransaction,
-            )
+            .list_by_after_sales_request(&req.after_sales_request_id, &mut NoTransaction)
             .await?;
         let prior_action_ids: Vec<SupplierOrderActionId> = prior_actions
             .iter()
@@ -2723,20 +2638,14 @@ impl SupplierFulfillmentService {
     /// # 错误
     /// * `NotFound` - 不存在 `PLACE` 动作
     async fn latest_place_action(&self, id: &str) -> Result<SupplierOrderAction> {
-        let mut actions = self
-            .db
+        self.db
             .supplier_order_actions()
-            .find_many_sorted(
-                doc! {
-                    "supplier_fulfillment_order_id": id,
-                    "action_type": SupplierOrderActionType::Place.as_str(),
-                },
-                doc! { "created_at": -1 },
+            .latest_by_order_and_type(
+                &SupplierFulfillmentOrderId::new(id),
+                SupplierOrderActionType::Place,
                 &mut NoTransaction,
             )
-            .await?;
-        actions
-            .pop()
+            .await?
             .ok_or_else(|| Error::NotFound("该订单不存在下单动作".to_string()))
     }
 }
@@ -2834,23 +2743,6 @@ async fn ensure_no_active_w26_task(db: &Database, order_id: &str, executor: &mut
     Ok(())
 }
 
-fn validate_target_action(
-    order: &SupplierFulfillmentOrder,
-    target_action: &SupplierOrderAction,
-) -> Result<()> {
-    if target_action.supplier_fulfillment_order_id.as_ref() != order.base.id {
-        return Err(Error::BusinessLogicError(
-            "供应商原动作不属于当前履约订单".to_string(),
-        ));
-    }
-    if target_action.action_type == SupplierOrderActionType::Query {
-        return Err(Error::BusinessLogicError(
-            "调查目标必须是原下单、取消或退款动作".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn supplier_order_blocker(action: &str, code: &str, message: &str) -> SupplierOrderActionBlockerView {
     SupplierOrderActionBlockerView {
         action: action.to_string(),
@@ -2911,22 +2803,16 @@ async fn ensure_replay_safe(
     target_action: &SupplierOrderAction,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if target_action.action_type != SupplierOrderActionType::Place
-        || target_action.status != SupplierOrderActionStatus::ResultUnknown
-        || order.fulfillment_status != FulfillmentStatus::ResultUnknown
-    {
+    if !order.can_replay_place_action(target_action) {
         return Err(Error::BusinessLogicError(
             "仅结果未知的原下单请求可以在明确无结果后再次提交".to_string(),
         ));
     }
     let actions = db
         .supplier_order_actions()
-        .find_many_sorted(
-            doc! {
-                "supplier_fulfillment_order_id": order.base.id.clone(),
-                "action_type": SupplierOrderActionType::Query.as_str(),
-            },
-            doc! { "created_at": -1 },
+        .list_by_order_and_type_newest(
+            &SupplierFulfillmentOrderId::new(order.base.id.as_str()),
+            SupplierOrderActionType::Query,
             executor,
         )
         .await?;
@@ -3037,7 +2923,7 @@ fn apply_prepared_investigation(
     target_action: &mut SupplierOrderAction,
 ) -> Result<InvestigationFinding> {
     if context.action == SupplierOrderInvestigationAction::QueryResult {
-        if let Some(resolution) = verified_resolution(order, target_action) {
+        if let Some(resolution) = order.verified_resolution(target_action).map(Into::into) {
             return Ok(InvestigationFinding {
                 outcome: SupplierOrderInvestigationOutcome::VerifiedTerminal,
                 resolution: Some(resolution),
@@ -3047,7 +2933,7 @@ fn apply_prepared_investigation(
     }
     match prepared {
         PreparedInvestigation::PersistedTerminal(resolution) => {
-            if verified_resolution(order, target_action) != Some(*resolution) {
+            if order.verified_resolution(target_action).map(Into::into) != Some(*resolution) {
                 return Err(Error::ConflictError(
                     "供应商业务结果已变化，请刷新后重试".to_string(),
                 ));
@@ -3158,42 +3044,6 @@ fn apply_replay_outcome(
                 summary,
             })
         }
-    }
-}
-
-fn verified_resolution(
-    order: &SupplierFulfillmentOrder,
-    target_action: &SupplierOrderAction,
-) -> Option<SupplierOrderResolution> {
-    match target_action.action_type {
-        SupplierOrderActionType::Place => match (order.fulfillment_status, target_action.status) {
-            (FulfillmentStatus::Completed, SupplierOrderActionStatus::Succeeded) => {
-                Some(SupplierOrderResolution::OrderCompleted)
-            }
-            (FulfillmentStatus::Rejected, SupplierOrderActionStatus::Failed) => {
-                Some(SupplierOrderResolution::OrderRejected)
-            }
-            (
-                FulfillmentStatus::Accepted | FulfillmentStatus::Fulfilling | FulfillmentStatus::Shipped,
-                SupplierOrderActionStatus::Succeeded,
-            ) => Some(SupplierOrderResolution::OrderAccepted),
-            _ => None,
-        },
-        SupplierOrderActionType::Cancel
-            if order.cancel_status == CancelStatus::Canceled
-                && target_action.status == SupplierOrderActionStatus::Succeeded =>
-        {
-            Some(SupplierOrderResolution::Canceled)
-        }
-        SupplierOrderActionType::Refund
-            if order.refund_status == RefundStatus::Refunded
-                && target_action.status == SupplierOrderActionStatus::Succeeded =>
-        {
-            Some(SupplierOrderResolution::Refunded)
-        }
-        SupplierOrderActionType::Cancel
-        | SupplierOrderActionType::Refund
-        | SupplierOrderActionType::Query => None,
     }
 }
 

@@ -8,11 +8,12 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::sku_revision::SkuRevision;
 use crate::catalog::specification::validate_specification_signature;
 use crate::catalog::status::{EnableStatus, ListingStatus};
 use crate::common::stable::StableBase;
 use crate::errors::Result;
-use crate::ids::{ProductId, SkuId, UnitOfMeasureId};
+use crate::ids::{ProductId, SkuId, SkuRevisionId, UnitOfMeasureId};
 use crate::validation::normalize_required_text;
 
 /// SKU 编号最大长度。
@@ -45,6 +46,76 @@ pub struct SkuData {
 pub struct SkuUpdate {
     /// 启停状态；`None` 表示不修改。
     pub status: Option<EnableStatus>,
+}
+
+/// 规格编辑对 SKU 稳定身份的提交快照。
+#[derive(Debug, Clone, Copy)]
+pub struct SkuEditIdentity<'a> {
+    /// 客户端提交的稳定 SKU ID；新增规格必须为空。
+    pub sku_id: Option<&'a SkuId>,
+    /// 客户端读取时看到的当前 SKU 修订 ID；新增规格必须为空。
+    pub expected_revision_id: Option<&'a SkuRevisionId>,
+    /// 客户端提交的稳定 SKU 编号。
+    pub sku_no: &'a str,
+    /// 客户端提交的稳定基础单位。
+    pub base_unit_id: &'a UnitOfMeasureId,
+    /// 是否明确请求重新启用历史停用 SKU。
+    pub reenable: bool,
+    /// 重新启用原因；仅重新启用时必填。
+    pub change_reason: Option<&'a str>,
+}
+
+impl SkuEditIdentity<'_> {
+    /// 校验该身份快照可用于创建全新规格 SKU。
+    ///
+    /// # 参数
+    /// 无；使用值对象中携带的客户端提交字段。
+    ///
+    /// # 返回
+    /// 未指定既有身份、期望修订和重新启用意图时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 新规格猜测既有 SKU 身份或提交重新启用意图时返回身份规则错误。
+    pub fn ensure_new(&self) -> std::result::Result<(), SkuEditIdentityError> {
+        if self.sku_id.is_some() || self.expected_revision_id.is_some() || self.reenable {
+            return Err(SkuEditIdentityError::NewIdentitySpecified);
+        }
+        Ok(())
+    }
+}
+
+/// 规格编辑对单个 SKU 的生命周期动作。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkuEditAction {
+    /// 全新规格签名，创建新的稳定 SKU。
+    Create,
+    /// 保留当前启用 SKU 并追加修订。
+    Keep,
+    /// 复用历史停用 SKU 并重新启用。
+    Reactivate,
+}
+
+/// SKU 规格编辑身份规则错误。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SkuEditIdentityError {
+    /// 新规格不得携带任何既有身份信息。
+    #[error("新增规格签名不得指定或猜测既有 SKU 身份")]
+    NewIdentitySpecified,
+    /// 既有规格必须携带匹配的稳定身份。
+    #[error("既有规格行必须携带匹配的稳定 sku_id")]
+    SkuIdMismatch,
+    /// 当前修订已经变化。
+    #[error("SKU 修订已变化，请刷新商品后重试")]
+    RevisionConflict,
+    /// SKU 编号或基础单位被修改。
+    #[error("SKU 编码和基础单位为稳定身份字段，编辑时不得修改")]
+    StableIdentityChanged,
+    /// 历史停用 SKU 缺少明确重新启用意图或原因。
+    #[error("重新启用历史停用 SKU 必须明确 reenable=true 并填写 change_reason")]
+    ReactivationIntentRequired,
+    /// 当前启用 SKU 不接受重新启用意图。
+    #[error("当前启用 SKU 不得提交重新启用意图")]
+    UnexpectedReactivationIntent,
 }
 
 /// SKU 实体（稳定基础资料，数据模型 §6.3）。
@@ -181,6 +252,108 @@ impl Sku {
         self.listing_status = listing_status;
         self.stable.touch(updated_by);
         Ok(true)
+    }
+
+    /// 根据稳定身份、当前修订和重新启用意图分类既有 SKU 编辑动作。
+    ///
+    /// # 参数
+    /// * `identity` - 客户端提交的 SKU 稳定身份快照
+    ///
+    /// # 返回
+    /// 当前启用 SKU 返回 `Keep`，历史停用且明确重新启用返回 `Reactivate`。
+    ///
+    /// # 错误
+    /// SKU ID 或期望修订不匹配、稳定字段变化、重新启用意图缺失或多余时返回
+    /// [`SkuEditIdentityError`]。
+    pub fn classify_edit(
+        &self,
+        identity: &SkuEditIdentity<'_>,
+    ) -> std::result::Result<SkuEditAction, SkuEditIdentityError> {
+        if identity.sku_id.map(|id| id.as_ref()) != Some(self.base.id.as_str()) {
+            return Err(SkuEditIdentityError::SkuIdMismatch);
+        }
+        if identity.expected_revision_id.map(|id| id.as_ref()) != self.stable.current_revision_id.as_deref() {
+            return Err(SkuEditIdentityError::RevisionConflict);
+        }
+        if identity.sku_no.trim() != self.sku_no || identity.base_unit_id != &self.base_unit_id {
+            return Err(SkuEditIdentityError::StableIdentityChanged);
+        }
+        if self.is_active() {
+            if identity.reenable {
+                return Err(SkuEditIdentityError::UnexpectedReactivationIntent);
+            }
+            return Ok(SkuEditAction::Keep);
+        }
+        if !identity.reenable || identity.change_reason.map(str::trim).is_none_or(str::is_empty) {
+            return Err(SkuEditIdentityError::ReactivationIntentRequired);
+        }
+        Ok(SkuEditAction::Reactivate)
+    }
+
+    /// 关联一份属于本 SKU 的新当前修订。
+    ///
+    /// # 参数
+    /// * `revision` - 待设为当前版本的不可变 SKU 修订
+    /// * `updated_by` - 本次关联操作人
+    ///
+    /// # 返回
+    /// 关联成功返回 `Ok(())`，并同步启停状态、下架约束与当前修订指针。
+    ///
+    /// # 错误
+    /// 修订属于其他 SKU，或同步后的状态违反 SKU 不变式时返回领域错误。
+    pub fn attach_revision(&mut self, revision: &SkuRevision, updated_by: impl Into<String>) -> Result<()> {
+        if revision.sku_id.as_ref() != self.base.id.as_str() {
+            return Err("SKU 修订不属于目标 SKU".into());
+        }
+        self.update(
+            SkuUpdate {
+                status: Some(revision.status),
+            },
+            updated_by,
+        )?;
+        self.stable.current_revision_id = Some(revision.base.id.clone());
+        Ok(())
+    }
+
+    /// 停用 SKU 并自动下架。
+    ///
+    /// # 参数
+    /// * `updated_by` - 本次停用操作人
+    ///
+    /// # 返回
+    /// 返回 `Ok(())`；重复停用保持幂等状态并刷新操作人。
+    ///
+    /// # 错误
+    /// 当前更新规则失败时返回领域错误。
+    pub fn disable(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        self.update(
+            SkuUpdate {
+                status: Some(EnableStatus::Disabled),
+            },
+            updated_by,
+        )
+    }
+
+    /// 重新启用历史停用 SKU，保持下架状态等待显式上架。
+    ///
+    /// # 参数
+    /// * `updated_by` - 本次重新启用操作人
+    ///
+    /// # 返回
+    /// SKU 从停用切回启用时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// SKU 已经启用时返回领域错误，防止把普通编辑误标为重新启用。
+    pub fn reactivate(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.is_active() {
+            return Err("当前 SKU 已经启用".into());
+        }
+        self.update(
+            SkuUpdate {
+                status: Some(EnableStatus::Active),
+            },
+            updated_by,
+        )
     }
 
     /// 判断是否为无规格 SKU。
@@ -341,6 +514,131 @@ mod tests {
         let restored: Sku = serde_json::from_value(value).unwrap();
 
         assert_eq!(restored.listing_status, ListingStatus::Listed);
+    }
+
+    /// 新规格不得猜测既有身份，既有 SKU 按状态和意图分类编辑动作。
+    #[test]
+    fn edit_identity_rules_classify_keep_and_reactivate() {
+        let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
+        sku.stable.current_revision_id = Some("rev-1".to_string());
+        let sku_id = SkuId::new("sku-1");
+        let revision_id = SkuRevisionId::new("rev-1");
+        let base_unit_id = sku.base_unit_id.clone();
+        let identity = SkuEditIdentity {
+            sku_id: Some(&sku_id),
+            expected_revision_id: Some(&revision_id),
+            sku_no: " SKU-2025-001 ",
+            base_unit_id: &base_unit_id,
+            reenable: false,
+            change_reason: None,
+        };
+
+        assert_eq!(sku.classify_edit(&identity).unwrap(), SkuEditAction::Keep);
+        assert!(identity.ensure_new().is_err());
+        let new_identity = SkuEditIdentity {
+            sku_id: None,
+            expected_revision_id: None,
+            reenable: false,
+            ..identity
+        };
+        assert!(new_identity.ensure_new().is_ok());
+
+        sku.disable("admin-2").unwrap();
+        let reactivation = SkuEditIdentity {
+            reenable: true,
+            change_reason: Some(" 恢复销售 "),
+            ..identity
+        };
+        assert_eq!(
+            sku.classify_edit(&reactivation).unwrap(),
+            SkuEditAction::Reactivate
+        );
+    }
+
+    /// 既有 SKU 修订冲突与缺失重新启用原因均被拒绝。
+    #[test]
+    fn edit_identity_rules_reject_stale_or_ambiguous_intent() {
+        let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
+        sku.stable.current_revision_id = Some("rev-2".to_string());
+        let sku_id = SkuId::new("sku-1");
+        let stale_revision = SkuRevisionId::new("rev-1");
+        let sku_no = sku.sku_no.clone();
+        let base_unit_id = sku.base_unit_id.clone();
+        let stale = SkuEditIdentity {
+            sku_id: Some(&sku_id),
+            expected_revision_id: Some(&stale_revision),
+            sku_no: &sku_no,
+            base_unit_id: &base_unit_id,
+            reenable: false,
+            change_reason: None,
+        };
+        assert_eq!(
+            sku.classify_edit(&stale).unwrap_err(),
+            SkuEditIdentityError::RevisionConflict
+        );
+
+        sku.disable("admin-2").unwrap();
+        let current_revision = SkuRevisionId::new("rev-2");
+        let missing_reason = SkuEditIdentity {
+            expected_revision_id: Some(&current_revision),
+            reenable: true,
+            change_reason: Some("   "),
+            ..stale
+        };
+        assert_eq!(
+            sku.classify_edit(&missing_reason).unwrap_err(),
+            SkuEditIdentityError::ReactivationIntentRequired
+        );
+    }
+
+    /// SKU 只接受自身修订并同步当前修订指针。
+    #[test]
+    fn attach_revision_enforces_relationship() {
+        let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
+        let revision = SkuRevision::new(
+            SkuRevisionId::new("rev-1"),
+            crate::catalog::sku_revision::SkuRevisionData {
+                sku_id: SkuId::new("sku-1"),
+                revision_no: 1,
+                name: "SKU".to_string(),
+                description: None,
+                specification: None,
+                barcode: None,
+                source_main_image_asset_id: None,
+                weight_kg: None,
+                volume_m3: None,
+                sales_visible_price_gross: None,
+                market_price: None,
+                status: EnableStatus::Active,
+                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_to: None,
+            },
+        )
+        .unwrap();
+        sku.attach_revision(&revision, "admin-2").unwrap();
+        assert_eq!(sku.stable.current_revision_id.as_deref(), Some("rev-1"));
+
+        let foreign = SkuRevision::new(
+            SkuRevisionId::new("rev-2"),
+            crate::catalog::sku_revision::SkuRevisionData {
+                sku_id: SkuId::new("sku-2"),
+                revision_no: 1,
+                name: "SKU".to_string(),
+                description: None,
+                specification: None,
+                barcode: None,
+                source_main_image_asset_id: None,
+                weight_kg: None,
+                volume_m3: None,
+                sales_visible_price_gross: None,
+                market_price: None,
+                status: EnableStatus::Active,
+                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_to: None,
+            },
+        )
+        .unwrap();
+        assert!(sku.attach_revision(&foreign, "admin-3").is_err());
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

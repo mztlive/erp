@@ -11,7 +11,6 @@ use entities::money::Amount;
 #[cfg(test)]
 use entities::money::Quantity;
 use entities::sales_order::{SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine, SubmissionStatus};
-use mongodb::bson::doc;
 
 use super::brief::{
     format_instant_due_label, format_quantity, join_list_summary, line_title, non_empty, push_section,
@@ -49,7 +48,7 @@ impl WorkItemService {
         let orders = self
             .db
             .sales_orders()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         if orders.is_empty() {
             return Ok(());
@@ -86,7 +85,7 @@ impl WorkItemService {
         Ok(self
             .db
             .sales_order_submissions()
-            .find_many(doc! { "sales_order_id": { "$in": order_ids } }, executor)
+            .list_work_item_brief_submissions_by_orders(&order_ids, executor)
             .await?)
     }
 

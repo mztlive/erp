@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use database::{
     AccessControlExt, CostExt, Executor, FulfillmentExt, NoTransaction, PayableExt, PurchaseOrderExt,
-    Transactional, WarehouseExt,
+    Transactional,
 };
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
@@ -21,9 +21,8 @@ use entities::ids::{
 use entities::money::Quantity;
 use entities::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderReviewDecision,
-    PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
-use entities::warehouse::EnableStatus;
 use entities::work_item::WorkItemStatus;
 use id_generator::next_id;
 
@@ -80,34 +79,28 @@ impl PurchaseOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+        let submission_id = order
+            .submission_id_for_formalization()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         execute_purchase_order_domain_action(
             &mut order.clone(),
             adapter.on_final_approve,
-            order.current_submission_id.clone().unwrap_or_default().as_str(),
+            submission_id.as_ref(),
             actor.id(),
         )?;
-        let submission_id = order
-            .current_submission_id
-            .clone()
-            .ok_or_else(|| Error::BusinessLogicError("采购单缺少待生效提交".to_string()))?;
         let submission = self
             .db
             .purchase_order_submissions()
             .find_by_id(&submission_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("待审核提交不存在".to_string()))?;
-        if submission.status != SubmissionStatus::Pending {
-            return Err(Error::ConflictError(
-                "提交已审核或已失效，请勿重复生效".to_string(),
-            ));
-        }
+        submission
+            .ensure_pending()
+            .map_err(|_| Error::ConflictError("提交已审核或已失效，请勿重复生效".to_string()))?;
         let submission_lines = self
             .db
-            .purchase_order_submission_lines()
-            .find_many(
-                mongodb::bson::doc! { "purchase_order_submission_id": &submission_id },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_submission_lines(&submission_id, &mut NoTransaction)
             .await?;
         let revision_no = self.next_revision_no(&order).await?;
         let (revision, revision_lines) = self
@@ -313,8 +306,7 @@ async fn persist_formalized_order(
                     .await?;
                 persist_current_sales_allocations(&db, &allocations, session).await?;
                 let mut order_mut = order;
-                order_mut.formalize_approved(&actor_id)?;
-                order_mut.stable.current_revision_id = Some(revision.base.id.clone());
+                order_mut.formalize_with_revision(revision.base.id.clone().into(), &actor_id)?;
                 let mut submission_mut = submission;
                 submission_mut.record_review(
                     PurchaseOrderReviewDecision::Approved { comment: None },
@@ -376,11 +368,8 @@ async fn create_receipt_draft_for_order(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let warehouse = db
-        .warehouses()
-        .find_one(
-            mongodb::bson::doc! { "status": EnableStatus::Active.as_str() },
-            executor,
-        )
+        .purchase_order()
+        .find_first_active_warehouse(executor)
         .await?
         .ok_or_else(|| Error::BusinessLogicError("缺少启用仓库，无法生成采购入库草稿".to_string()))?;
     let receipt_id = PurchaseReceiptId::new(next_id());
@@ -573,21 +562,10 @@ async fn ensure_purchase_review_sources(
     lines: &[PurchaseOrderSubmissionLine],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut gross = zero_amount();
-    let mut net = zero_amount();
-    let mut tax = zero_amount();
-    for line in lines {
-        gross = gross.checked_add(line.gross_amount);
-        net = net.checked_add(line.net_amount);
-        tax = tax.checked_add(line.tax_amount);
-    }
     let _ = (db, executor, order);
-    if gross != submission.gross_amount || net != submission.net_amount || tax != submission.tax_amount {
-        return Err(Error::BusinessLogicError(
-            "采购提交表头金额与冻结明细汇总不一致".to_string(),
-        ));
-    }
-    Ok(())
+    submission
+        .ensure_line_totals(lines)
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
 #[cfg(test)]

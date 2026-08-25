@@ -16,7 +16,9 @@ use crate::ids::{
     SalesOrderLineId, SalesOrderRevisionLineId, SkuId, SkuRevisionId, SupplierCommercialProfileRevisionId,
 };
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
+use crate::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
 use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
+use crate::purchase_order::purchase_submission::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
 use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::purchase_order::types::PurchaseLineType;
 
@@ -103,6 +105,100 @@ impl PurchaseOrderRevision {
             tax_amount: data.tax_amount,
             effective_at: data.effective_at,
         })
+    }
+
+    /// 计算同一采购单的下一个生效版本号。
+    ///
+    /// # 参数
+    /// * `existing` - 同一采购单的既有生效版本
+    ///
+    /// # 返回
+    /// 返回当前最大版本号加一；没有历史版本时返回 `1`。
+    ///
+    /// # 错误
+    /// 最大版本号已经达到 `u32::MAX` 时返回领域错误。
+    pub fn next_revision_no(existing: &[Self]) -> Result<u32> {
+        existing
+            .iter()
+            .map(|revision| revision.revision.revision_no)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| Error::from("采购版本号溢出"))
+    }
+
+    /// 从采购正式提交派生生效版本头。
+    ///
+    /// # 参数
+    /// * `id` - 新生效版本稳定身份
+    /// * `revision_no` - 聚合内下一个版本号
+    /// * `submission` - 已冻结采购提交
+    /// * `effective_at` - 生效时间
+    ///
+    /// # 返回
+    /// 返回与提交头快照和金额完全一致的新生效版本。
+    ///
+    /// # 错误
+    /// 提交不是待审核状态、版本号非法或金额不守恒时返回领域错误。
+    pub fn from_submission(
+        id: PurchaseOrderRevisionId,
+        revision_no: u32,
+        submission: &PurchaseOrderSubmission,
+        effective_at: Instant,
+    ) -> Result<Self> {
+        submission.ensure_pending()?;
+        Self::new(
+            id,
+            PurchaseOrderRevisionData {
+                purchase_order_id: submission.purchase_order_id.clone(),
+                revision_no,
+                supplier_revision_id: submission.supplier_revision_id.clone(),
+                supplier_snapshot: submission.supplier_snapshot.clone(),
+                payment_term_snapshot: submission.payment_term_snapshot.clone(),
+                gross_amount: submission.gross_amount,
+                net_amount: submission.net_amount,
+                tax_amount: submission.tax_amount,
+                effective_at,
+            },
+        )
+    }
+
+    /// 从采购变更提交派生生效版本头。
+    ///
+    /// # 参数
+    /// * `id` - 新生效版本稳定身份
+    /// * `purchase_order_id` - 原采购单稳定身份
+    /// * `revision_no` - 聚合内下一个版本号
+    /// * `submission` - 已冻结采购变更提交
+    /// * `effective_at` - 生效时间
+    ///
+    /// # 返回
+    /// 返回与变更提交头快照和金额完全一致的新生效版本。
+    ///
+    /// # 错误
+    /// 变更提交不是待审核状态、版本号非法或金额不守恒时返回领域错误。
+    pub fn from_change_submission(
+        id: PurchaseOrderRevisionId,
+        purchase_order_id: PurchaseOrderId,
+        revision_no: u32,
+        submission: &PurchaseChangeSubmission,
+        effective_at: Instant,
+    ) -> Result<Self> {
+        submission.ensure_pending()?;
+        Self::new(
+            id,
+            PurchaseOrderRevisionData {
+                purchase_order_id,
+                revision_no,
+                supplier_revision_id: submission.supplier_revision_id.clone(),
+                supplier_snapshot: submission.supplier_snapshot.clone(),
+                payment_term_snapshot: submission.payment_term_snapshot.clone(),
+                gross_amount: submission.gross_amount,
+                net_amount: submission.net_amount,
+                tax_amount: submission.tax_amount,
+                effective_at,
+            },
+        )
     }
 }
 
@@ -309,6 +405,107 @@ impl PurchaseOrderRevisionLine {
             allocated_quantity: data.allocated_quantity,
         })
     }
+
+    /// 从采购正式提交行派生生效版本行。
+    ///
+    /// # 参数
+    /// * `id` - 新版本行稳定身份
+    /// * `revision_id` - 新生效版本稳定身份
+    /// * `submission_line` - 已冻结采购提交行
+    ///
+    /// # 返回
+    /// 返回业务内容与提交行一致、重新挂接到生效版本的新行。
+    ///
+    /// # 错误
+    /// 提交行不满足当前采购版本行不变式时返回领域错误。
+    pub fn from_submission_line(
+        id: PurchaseOrderRevisionLineId,
+        revision_id: PurchaseOrderRevisionId,
+        submission_line: &PurchaseOrderSubmissionLine,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            revision_line_data_from_submission(revision_id, submission_line),
+        )
+    }
+
+    /// 从采购变更提交行派生生效版本行。
+    ///
+    /// # 参数
+    /// * `id` - 新版本行稳定身份
+    /// * `revision_id` - 新生效版本稳定身份
+    /// * `submission_line` - 已冻结采购变更提交行
+    ///
+    /// # 返回
+    /// 返回业务内容与变更提交行一致、重新挂接到生效版本的新行。
+    ///
+    /// # 错误
+    /// 变更提交行不满足当前采购版本行不变式时返回领域错误。
+    pub fn from_change_submission_line(
+        id: PurchaseOrderRevisionLineId,
+        revision_id: PurchaseOrderRevisionId,
+        submission_line: &PurchaseChangeSubmissionLine,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            PurchaseOrderRevisionLineData {
+                purchase_order_revision_id: revision_id,
+                line_no: submission_line.line_no,
+                line_type: submission_line.line_type,
+                procurement_confirmation_line_id: submission_line.procurement_confirmation_line_id.clone(),
+                sku_id: submission_line.sku_id.clone(),
+                sku_revision_id: submission_line.sku_revision_id.clone(),
+                product_name_snapshot: submission_line.product_name_snapshot.clone(),
+                specification_snapshot: submission_line.specification_snapshot.clone(),
+                quantity: submission_line.quantity,
+                base_unit_code: submission_line.base_unit_code.clone(),
+                unit_cost_gross: submission_line.unit_cost_gross,
+                gross_amount: submission_line.gross_amount,
+                net_amount: submission_line.net_amount,
+                tax_amount: submission_line.tax_amount,
+                input_tax_rate: submission_line.input_tax_rate,
+                expected_delivery_date: submission_line.expected_delivery_date,
+                sales_order_line_id: submission_line.sales_order_line_id.clone(),
+                sales_order_revision_line_id: submission_line.sales_order_revision_line_id.clone(),
+                allocated_quantity: submission_line.allocated_quantity,
+            },
+        )
+    }
+}
+
+/// 把采购提交行映射为版本行创建数据。
+///
+/// # 参数
+/// * `revision_id` - 新生效版本稳定身份
+/// * `line` - 已冻结采购提交行
+///
+/// # 返回
+/// 返回保留全部业务字段的版本行创建数据。
+fn revision_line_data_from_submission(
+    revision_id: PurchaseOrderRevisionId,
+    line: &PurchaseOrderSubmissionLine,
+) -> PurchaseOrderRevisionLineData {
+    PurchaseOrderRevisionLineData {
+        purchase_order_revision_id: revision_id,
+        line_no: line.line_no,
+        line_type: line.line_type,
+        procurement_confirmation_line_id: line.procurement_confirmation_line_id.clone(),
+        sku_id: line.sku_id.clone(),
+        sku_revision_id: line.sku_revision_id.clone(),
+        product_name_snapshot: line.product_name_snapshot.clone(),
+        specification_snapshot: line.specification_snapshot.clone(),
+        quantity: line.quantity,
+        base_unit_code: line.base_unit_code.clone(),
+        unit_cost_gross: line.unit_cost_gross,
+        gross_amount: line.gross_amount,
+        net_amount: line.net_amount,
+        tax_amount: line.tax_amount,
+        input_tax_rate: line.input_tax_rate,
+        expected_delivery_date: line.expected_delivery_date,
+        sales_order_line_id: line.sales_order_line_id.clone(),
+        sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
+        allocated_quantity: line.allocated_quantity,
+    }
 }
 
 /// 校验版本号从 1 开始。
@@ -374,11 +571,16 @@ mod tests {
     use crate::common::time::{BusinessDate, Instant};
     use crate::ids::{
         ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId,
-        SalesOrderLineId, SalesOrderRevisionLineId, SkuId, SupplierCommercialProfileRevisionId,
+        PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+        SkuId, SupplierAccountId, SupplierCommercialProfileRevisionId,
     };
     use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
+    use crate::purchase_order::purchase_submission::{
+        PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
+        PurchaseOrderSubmissionLineData,
+    };
     use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
-    use crate::purchase_order::types::PurchaseLineType;
+    use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
     use std::str::FromStr;
 
     fn snapshot() -> SupplierSnapshot {
@@ -432,6 +634,60 @@ mod tests {
         }
     }
 
+    fn pending_submission() -> PurchaseOrderSubmission {
+        let mut submission = PurchaseOrderSubmission::new(
+            PurchaseOrderSubmissionId::new("sub-1"),
+            PurchaseOrderSubmissionData {
+                purchase_order_id: PurchaseOrderId::new("po-1"),
+                submission_no: "SUB-000001".to_string(),
+                supplier_id: SupplierAccountId::new("sup-1"),
+                purchase_type: PurchaseType::Physical,
+                fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                supplier_revision_id: SupplierCommercialProfileRevisionId::new("spr-1"),
+                supplier_snapshot: snapshot(),
+                payment_term_snapshot: payment_term(),
+                gross_amount: Amount::from_str("29.97").unwrap(),
+                net_amount: Amount::from_str("26.07").unwrap(),
+                tax_amount: Amount::from_str("3.90").unwrap(),
+            },
+        )
+        .unwrap();
+        submission
+            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
+            .unwrap();
+        submission
+    }
+
+    fn submission_line() -> PurchaseOrderSubmissionLine {
+        let line = line_data();
+        PurchaseOrderSubmissionLine::new(
+            PurchaseOrderSubmissionLineId::new("sub-line-1"),
+            PurchaseOrderSubmissionLineData {
+                purchase_order_submission_id: PurchaseOrderSubmissionId::new("sub-1"),
+                line_no: line.line_no,
+                line_type: line.line_type,
+                procurement_confirmation_line_id: line.procurement_confirmation_line_id,
+                sku_id: line.sku_id,
+                sku_revision_id: line.sku_revision_id,
+                product_name_snapshot: line.product_name_snapshot,
+                specification_snapshot: line.specification_snapshot,
+                quantity: line.quantity,
+                base_unit_code: line.base_unit_code,
+                unit_cost_gross: line.unit_cost_gross,
+                gross_amount: line.gross_amount,
+                net_amount: line.net_amount,
+                tax_amount: line.tax_amount,
+                input_tax_rate: line.input_tax_rate,
+                expected_delivery_date: line.expected_delivery_date,
+                sales_order_line_id: line.sales_order_line_id,
+                sales_order_revision_line_id: line.sales_order_revision_line_id,
+                sales_order_submission_line_id: None,
+                allocated_quantity: line.allocated_quantity,
+            },
+        )
+        .unwrap()
+    }
+
     #[test]
     fn revision_new_validates_revision_no_and_header_triple() {
         let revision =
@@ -450,6 +706,32 @@ mod tests {
             ..revision_data()
         };
         assert!(PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-3"), inconsistent).is_err());
+    }
+
+    #[test]
+    fn revision_sequence_and_formalization_are_derived_from_pending_submission() {
+        let existing =
+            PurchaseOrderRevision::new(PurchaseOrderRevisionId::new("por-1"), revision_data()).unwrap();
+        assert_eq!(
+            PurchaseOrderRevision::next_revision_no(std::slice::from_ref(&existing)).unwrap(),
+            2
+        );
+        let revision = PurchaseOrderRevision::from_submission(
+            PurchaseOrderRevisionId::new("por-2"),
+            2,
+            &pending_submission(),
+            Instant::from_unix_secs(1_700_000_100),
+        )
+        .unwrap();
+        let line = PurchaseOrderRevisionLine::from_submission_line(
+            PurchaseOrderRevisionLineId::new("porl-2"),
+            PurchaseOrderRevisionId::new("por-2"),
+            &submission_line(),
+        )
+        .unwrap();
+        assert_eq!(revision.revision.revision_no, 2);
+        assert_eq!(revision.gross_amount, line.gross_amount);
+        assert_eq!(line.purchase_order_revision_id.as_ref(), "por-2");
     }
 
     #[test]

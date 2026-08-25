@@ -10,6 +10,8 @@ use crate::errors::{Error, Result};
 use crate::field_update::FieldUpdate;
 use crate::validation::normalize_required_text;
 
+use super::{PartyOwned, PartyRevision};
+
 pub use crate::ids::PartyId;
 
 /// 主体编号最大长度。
@@ -221,6 +223,50 @@ impl Party {
         self.stable.status().is_active()
     }
 
+    /// 校验主体乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端期望版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前版本与期望版本不一致时返回错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        if self.base.version == expected {
+            return Ok(());
+        }
+        Err(Error::from("数据已被其他请求修改，请刷新后重试"))
+    }
+
+    /// 从已加载修订中解析当前生效修订。
+    ///
+    /// 当前指针必须存在、命中修订 ID，且修订必须属于当前 Party；这些
+    /// 条件共同保护稳定主体与不可变修订链的一致性。
+    ///
+    /// # 参数
+    /// * `revisions` - 已加载的主体修订集合
+    ///
+    /// # 返回
+    /// 返回当前生效修订引用。
+    ///
+    /// # 错误
+    /// 当前修订指针缺失、目标修订不存在或修订属于其他 Party 时返回错误。
+    pub fn current_revision<'a>(&self, revisions: &'a [PartyRevision]) -> Result<&'a PartyRevision> {
+        let revision_id = self
+            .stable
+            .current_revision_id
+            .as_deref()
+            .ok_or_else(|| Error::from("主体缺少当前名称修订"))?;
+        let revision = revisions
+            .iter()
+            .find(|revision| revision.base.id == revision_id)
+            .ok_or_else(|| Error::from("主体当前名称修订不存在"))?;
+        revision.ensure_party(&PartyId::new(self.base.id.clone()))?;
+        Ok(revision)
+    }
+
     /// 应用统一社会信用代码更新。
     ///
     /// # 参数
@@ -285,7 +331,8 @@ mod tests {
     use super::{normalize_credit_code, Party, PartyData, PartyKind, PartyStatus, PartyUpdate};
     use crate::common::state::assert_adjacency_closed;
     use crate::field_update::FieldUpdate;
-    use crate::ids::PartyId;
+    use crate::ids::{PartyId, PartyRevisionId};
+    use crate::party::{PartyRevision, PartyRevisionData};
 
     fn party_data() -> PartyData {
         PartyData {
@@ -397,6 +444,55 @@ mod tests {
             status: None,
         };
         assert!(party.update(invalid, "admin-4").is_err());
+    }
+
+    /// 版本校验接受当前版本并拒绝过期版本。
+    #[test]
+    fn version_check_rejects_stale_expected_version() {
+        let party = Party::new(PartyId::new("party-version"), party_data(), "admin-1").unwrap();
+        assert!(party.ensure_version(1).is_ok());
+        assert!(party.ensure_version(2).is_err());
+    }
+
+    /// 当前修订必须由指针命中且归属于当前 Party。
+    #[test]
+    fn current_revision_enforces_pointer_and_party_ownership() {
+        let mut party = Party::new(PartyId::new("party-1"), party_data(), "admin-1").unwrap();
+        let revision = PartyRevision::new(
+            PartyRevisionId::new("revision-1"),
+            PartyRevisionData {
+                party_id: PartyId::new("party-1"),
+                revision_no: 1,
+                legal_name: "示例企业".to_string(),
+                short_name: None,
+                change_reason: "首版".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(party.current_revision(std::slice::from_ref(&revision)).is_err());
+        party.stable.current_revision_id = Some("revision-1".to_string());
+        assert_eq!(
+            party
+                .current_revision(std::slice::from_ref(&revision))
+                .unwrap()
+                .base
+                .id,
+            "revision-1"
+        );
+
+        let foreign = PartyRevision::new(
+            PartyRevisionId::new("revision-1"),
+            PartyRevisionData {
+                party_id: PartyId::new("party-2"),
+                revision_no: 1,
+                legal_name: "其他企业".to_string(),
+                short_name: None,
+                change_reason: "首版".to_string(),
+            },
+        )
+        .unwrap();
+        assert!(party.current_revision(&[foreign]).is_err());
     }
 
     /// 实体 BSON 往返（含 ID 与 StableBase）。

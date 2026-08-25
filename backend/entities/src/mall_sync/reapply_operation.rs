@@ -144,6 +144,29 @@ impl MallSnapshotReapplyOperation {
         })
     }
 
+    /// 校验幂等重放是否与原操作完全一致。
+    ///
+    /// # 参数
+    /// * `mapping_task_id` - 路径映射任务 ID
+    /// * `operation_id` - 客户端操作 ID
+    /// * `idempotency_key_hash` - 幂等键摘要
+    /// * `command_fingerprint` - 完整命令指纹
+    ///
+    /// # 返回
+    /// 四项稳定身份全部一致时返回 `true`。
+    pub fn matches_replay(
+        &self,
+        mapping_task_id: &str,
+        operation_id: &str,
+        idempotency_key_hash: &str,
+        command_fingerprint: &str,
+    ) -> bool {
+        self.mapping_task_id.as_ref() == mapping_task_id
+            && self.base.id == operation_id
+            && self.idempotency_key_hash == idempotency_key_hash
+            && self.command_fingerprint == command_fingerprint
+    }
+
     /// 登记可验证的销售结果。
     ///
     /// # 错误
@@ -229,6 +252,13 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn operation_replay_requires_all_stable_identity_fields() {
+        let operation = operation();
+        assert!(operation.matches_replay("mapping-1", "op-1", &"a".repeat(64), &"b".repeat(64)));
+        assert!(!operation.matches_replay("mapping-1", "op-2", &"a".repeat(64), &"b".repeat(64)));
     }
 
     #[test]

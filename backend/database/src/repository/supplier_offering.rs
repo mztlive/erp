@@ -3,7 +3,12 @@
 //! 本域只持久化供给稳定身份、不可变商业条款修订、实时可供投影和幂等命令。
 //! 公司商品/SKU 由 D10 持有，不建立供应商商品主档或映射集合。
 
+use std::collections::HashMap;
+
+use entities::catalog::{Product, Sku, SkuRevision};
 use entities::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
+use entities::party::{Party, PartyRevision};
+use entities::supplier::SupplierAccount;
 use entities::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingCommand, SupplierOfferingRevision,
@@ -14,7 +19,7 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::SupplierOfferingExt;
+use super::extensions::{CatalogExt, PartyExt, SupplierExt, SupplierOfferingExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -23,6 +28,12 @@ use crate::{mongo_ops, Result};
 const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
 const OFFERING_AVAILABILITIES: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
+const SKUS: &str = <Database as CatalogExt>::SKUS;
+const SKU_REVISIONS: &str = <Database as CatalogExt>::SKU_REVISIONS;
+const PRODUCTS: &str = <Database as CatalogExt>::PRODUCTS;
+const SUPPLIER_ACCOUNTS: &str = <Database as SupplierExt>::SUPPLIER_ACCOUNTS;
+const PARTIES: &str = <Database as PartyExt>::PARTIES;
+const PARTY_REVISIONS: &str = <Database as PartyExt>::PARTY_REVISIONS;
 const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "status", "supplier_sku_code"];
 
 impl<'a> Repository<'a, SupplierOfferingCommand> {
@@ -192,6 +203,32 @@ impl<'a> Repository<'a, SupplierOffering> {
         })
     }
 
+    /// 按供给主键批量取回稳定身份。
+    ///
+    /// # 参数
+    /// * `offering_ids` - 供给主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除供给稳定身份。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn list_by_ids(
+        &self,
+        offering_ids: &[SupplierOfferingId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOffering>> {
+        if offering_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            in_filter("id", offering_ids.iter().map(ToString::to_string)),
+            executor,
+        )
+        .await
+    }
+
     /// 按公司 SKU 批量取回供给。
     ///
     /// # 参数
@@ -248,6 +285,64 @@ impl<'a> Repository<'a, SupplierOffering> {
 }
 
 impl<'a> Repository<'a, SupplierOfferingRevision> {
+    /// 按修订主键批量取回商业条款修订。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 商业条款修订主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn list_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOfferingRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", revision_ids.iter().cloned()), executor)
+            .await
+    }
+
+    /// 读取供给当前最大修订号。
+    ///
+    /// # 参数
+    /// * `offering_id` - 供给主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回当前最大修订号；尚无修订时返回 `0`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn current_revision_no(
+        &self,
+        offering_id: &SupplierOfferingId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        let options = FindOptions::builder()
+            .sort(doc! { "revision_no": -1, "id": -1 })
+            .limit(1)
+            .build();
+        let mut revisions = mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "supplier_offering_id": offering_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await?;
+        Ok(revisions
+            .pop()
+            .map_or(0, |revision| revision.revision.revision_no))
+    }
+
     /// 批量取回多个供给的全部商业条款修订。
     ///
     /// # 参数
@@ -368,6 +463,110 @@ impl<'a> SupplierOfferingRepository<'a> {
         Self { db }
     }
 
+    /// 批量加载列表行指向的当前商业条款修订。
+    ///
+    /// 查询只读取列表行已经冻结的当前修订指针，并按供给主键返回，避免 Service
+    /// 再次拼装 `$in` 或自行关联修订身份。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页供给投影行
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回以供给主键为键的当前修订映射；缺失指针或修订时不生成条目。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn load_current_revisions(
+        &self,
+        rows: &[SupplierOfferingRow],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, SupplierOfferingRevision>> {
+        let current_by_revision = rows
+            .iter()
+            .filter_map(|row| {
+                row.current_revision_id
+                    .as_ref()
+                    .map(|revision_id| (revision_id.clone(), row.id.clone()))
+            })
+            .collect::<HashMap<_, _>>();
+        let revision_ids = current_by_revision.keys().cloned().collect::<Vec<_>>();
+        let revisions = Repository::<SupplierOfferingRevision>::new(self.db, OFFERING_REVISIONS)
+            .list_by_ids(&revision_ids, executor)
+            .await?;
+        Ok(revisions
+            .into_iter()
+            .filter_map(|revision| {
+                current_by_revision
+                    .get(&revision.base.id)
+                    .cloned()
+                    .map(|offering_id| (offering_id, revision))
+            })
+            .collect())
+    }
+
+    /// 批量加载供给列表展示所需的跨域只读实体。
+    ///
+    /// 本方法封装公司 SKU/商品、供应商账户及主体当前修订的批量 `$in` 查询，
+    /// Service 只负责把返回实体组装为响应视图，不接触 BSON 查询细节。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页供给投影行
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 依次返回 SKU、SKU 当前修订、商品、供应商账户、主体、主体当前修订。
+    ///
+    /// # 错误
+    /// 任一 MongoDB 批量查询失败时返回错误。
+    #[allow(clippy::type_complexity)]
+    pub async fn load_display_entities(
+        &self,
+        rows: &[SupplierOfferingRow],
+        executor: &mut dyn Executor,
+    ) -> Result<(
+        Vec<Sku>,
+        Vec<SkuRevision>,
+        Vec<Product>,
+        Vec<SupplierAccount>,
+        Vec<Party>,
+        Vec<PartyRevision>,
+    )> {
+        let sku_ids = unique_strings(rows.iter().map(|row| row.sku_id.to_string()));
+        let skus = Repository::<Sku>::new(self.db, SKUS)
+            .find_many(in_filter("id", sku_ids), executor)
+            .await?;
+        let sku_revision_ids = unique_strings(
+            skus.iter()
+                .filter_map(|sku| sku.stable.current_revision_id.clone()),
+        );
+        let product_ids = unique_strings(skus.iter().map(|sku| sku.product_id.to_string()));
+        let sku_revisions = Repository::<SkuRevision>::new(self.db, SKU_REVISIONS)
+            .find_many(in_filter("id", sku_revision_ids), executor)
+            .await?;
+        let products = Repository::<Product>::new(self.db, PRODUCTS)
+            .find_many(in_filter("id", product_ids), executor)
+            .await?;
+
+        let supplier_ids = unique_strings(rows.iter().map(|row| row.supplier_id.to_string()));
+        let suppliers = Repository::<SupplierAccount>::new(self.db, SUPPLIER_ACCOUNTS)
+            .find_many(in_filter("id", supplier_ids), executor)
+            .await?;
+        let party_ids = unique_strings(suppliers.iter().map(|supplier| supplier.party_id.to_string()));
+        let parties = Repository::<Party>::new(self.db, PARTIES)
+            .find_many(in_filter("id", party_ids), executor)
+            .await?;
+        let party_revision_ids = unique_strings(
+            parties
+                .iter()
+                .filter_map(|party| party.stable.current_revision_id.clone()),
+        );
+        let party_revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+            .find_many(in_filter("id", party_revision_ids), executor)
+            .await?;
+        Ok((skus, sku_revisions, products, suppliers, parties, party_revisions))
+    }
+
     /// 原子创建供给、首版商业条款与初始可供投影。
     ///
     /// # 参数
@@ -450,6 +649,14 @@ fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending: bool) -> 
 fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
     let values = values.into_iter().map(Bson::String).collect::<Vec<_>>();
     doc! { field: { "$in": values } }
+}
+
+/// 对字符串集合排序去重，供跨域批量查询稳定生成 `$in` 候选。
+fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut values = values.into_iter().collect::<Vec<_>>();
+    values.sort();
+    values.dedup();
+    values
 }
 
 fn supplier_offering_projection() -> Document {

@@ -12,11 +12,12 @@
 //! 集合名常量统一从 `SupplierExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `SupplierExt` 的关联类型对外暴露。
 
-use entities::ids::{PartyId, SupplierAccountId, SupplierQualificationId};
+use entities::file_asset::FileAsset;
+use entities::ids::{FileAssetId, PartyId, SupplierAccountId, SupplierQualificationId};
 use entities::supplier::{
     CapabilityCode, CapabilityStatus, QualificationStatus, QualificationType, SupplierAccount,
     SupplierAccountStatus, SupplierCapability, SupplierCommercialProfileRevision, SupplierProfileCommand,
-    SupplierQualification, SupplierQualificationCapability,
+    SupplierQualification, SupplierQualificationCapability, SupplierRatingRevision,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -24,20 +25,33 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::extensions::SupplierExt;
+use super::extensions::{FileAssetExt, SupplierExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
-use crate::{mongo_ops, Result};
+use crate::{mongo_ops, Error, Result};
 
 /// `supplier_account` 集合名（单一来源：`SupplierExt` 关联常量）。
 const SUPPLIER_ACCOUNTS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_ACCOUNTS;
 /// `supplier_commercial_profile_revision` 集合名（单一来源：`SupplierExt` 关联常量）。
 const SUPPLIER_COMMERCIAL_PROFILE_REVISIONS: &str =
     <mongodb::Database as SupplierExt>::SUPPLIER_COMMERCIAL_PROFILE_REVISIONS;
+/// 供应商能力集合名。
+const SUPPLIER_CAPABILITIES: &str = <mongodb::Database as SupplierExt>::SUPPLIER_CAPABILITIES;
+/// 供应商能力修订集合名。
+const SUPPLIER_CAPABILITY_REVISIONS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_CAPABILITY_REVISIONS;
+/// 供应商资质集合名。
+const SUPPLIER_QUALIFICATIONS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_QUALIFICATIONS;
+/// 供应商资质修订集合名。
+const SUPPLIER_QUALIFICATION_REVISIONS: &str =
+    <mongodb::Database as SupplierExt>::SUPPLIER_QUALIFICATION_REVISIONS;
 /// 资质适用能力关联集合名。
 const SUPPLIER_QUALIFICATION_CAPABILITIES: &str =
     <mongodb::Database as SupplierExt>::SUPPLIER_QUALIFICATION_CAPABILITIES;
+/// 供应商评级修订集合名。
+const SUPPLIER_RATING_REVISIONS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_RATING_REVISIONS;
+/// 供应商资料幂等命令集合名。
+const SUPPLIER_PROFILE_COMMANDS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_PROFILE_COMMANDS;
 
 /// 供应商角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -124,6 +138,14 @@ impl QueryFilter for SupplierAccountFilter {
 }
 
 /// 将供应商候选与排除集合写入账户列表查询条件。
+///
+/// # 参数
+/// * `filter` - 待补充的 MongoDB 查询条件
+/// * `supplier_ids` - 必须命中的供应商候选集合；`None` 表示不限制
+/// * `excluded_supplier_ids` - 必须排除的供应商集合；`None` 表示不排除
+///
+/// # 返回
+/// 无返回值；查询条件在原地更新。
 fn insert_supplier_id_constraints(
     filter: &mut Document,
     supplier_ids: Option<&[SupplierAccountId]>,
@@ -143,6 +165,12 @@ fn insert_supplier_id_constraints(
 }
 
 /// 转换供应商角色 ID，供 MongoDB 集合条件使用。
+///
+/// # 参数
+/// * `ids` - 强类型供应商角色 ID 集合
+///
+/// # 返回
+/// 返回保持输入顺序的字符串 ID 集合。
 fn supplier_id_strings(ids: &[SupplierAccountId]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
@@ -405,7 +433,7 @@ impl<'a> Repository<'a, SupplierCapability> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_supplier_ids_by_active_capability_codes(
+    pub async fn list_supplier_ids_by_active_capability_codes(
         &self,
         capability_codes: &[CapabilityCode],
         as_of: &str,
@@ -513,7 +541,7 @@ impl<'a> Repository<'a, SupplierQualification> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_supplier_ids_by_qualification_types(
+    pub async fn list_supplier_ids_by_qualification_types(
         &self,
         qualification_types: &[QualificationType],
         executor: &mut dyn Executor,
@@ -533,7 +561,7 @@ impl<'a> Repository<'a, SupplierQualification> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_supplier_ids_by_valid_qualifications(
+    pub async fn list_supplier_ids_by_valid_qualifications(
         &self,
         qualification_types: &[QualificationType],
         as_of: &str,
@@ -562,7 +590,7 @@ impl<'a> Repository<'a, SupplierQualification> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_supplier_ids_by_expiring_qualifications(
+    pub async fn list_supplier_ids_by_expiring_qualifications(
         &self,
         qualification_types: &[QualificationType],
         as_of: &str,
@@ -588,7 +616,7 @@ impl<'a> Repository<'a, SupplierQualification> {
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_supplier_ids_by_expired_qualifications(
+    pub async fn list_supplier_ids_by_expired_qualifications(
         &self,
         qualification_types: &[QualificationType],
         as_of: &str,
@@ -650,6 +678,17 @@ struct SupplierIdRow {
 }
 
 /// 按供应商子集合条件读取去重后的供应商角色 ID。
+///
+/// # 参数
+/// * `repository` - 供应商能力或资质集合仓储
+/// * `filter` - 已按业务语义构造的集合查询条件
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回按字符串 ID 稳定排序并去重的供应商角色 ID。
+///
+/// # 错误
+/// 当 MongoDB 查询或反序列化失败时返回错误。
 async fn find_supplier_ids<T>(
     repository: &Repository<'_, T>,
     mut filter: Document,
@@ -671,6 +710,12 @@ where
 }
 
 /// 构建资质类型范围条件；空集合表示不限制类型。
+///
+/// # 参数
+/// * `qualification_types` - 允许命中的资质类型集合
+///
+/// # 返回
+/// 非空时返回 `$in` 条件，空集合时返回空文档。
 fn qualification_type_filter(qualification_types: &[QualificationType]) -> Document {
     if qualification_types.is_empty() {
         return Document::new();
@@ -682,10 +727,56 @@ fn qualification_type_filter(qualification_types: &[QualificationType]) -> Docum
     doc! { "qualification_type": { "$in": types } }
 }
 
-/// D09 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+/// 修订号最小投影行。
+#[derive(Debug, Deserialize)]
+struct RevisionNoRow {
+    revision_no: u32,
+}
+
+/// 查询当前最大修订号并返回下一号。
 ///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `SupplierExt::supplier()` 访问。
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库
+/// * `collection_name` - 追加式修订集合名称
+/// * `filter` - 修订序列的稳定业务身份条件
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 无历史时返回 `1`，否则返回当前最大修订号加一。
+///
+/// # 错误
+/// 当 MongoDB 查询失败、反序列化失败或修订号达到 `u32::MAX` 时返回错误。
+async fn next_revision_no(
+    db: &Database,
+    collection_name: &str,
+    mut filter: Document,
+    executor: &mut dyn Executor,
+) -> Result<u32> {
+    filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+    let options = FindOptions::builder()
+        .sort(doc! { "revision_no": -1 })
+        .limit(1)
+        .projection(doc! { "revision_no": 1, "_id": 0 })
+        .build();
+    let rows = mongo_ops::find_many(
+        &db.collection::<RevisionNoRow>(collection_name),
+        filter,
+        options,
+        executor,
+    )
+    .await?;
+    rows.into_iter()
+        .next()
+        .map(|row| row.revision_no)
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or(Error::EntityMetadataOutOfRange("supplier revision number"))
+}
+
+/// D09 域专用仓储：语义化聚合读取与跨集合事务写入。
+///
+/// 单一集合 CRUD 使用 [`Repository`] 基类；列表筛选、批量资料、当前修订号
+/// 和跨集合原子写入由本类型收敛，通过 `SupplierExt::supplier()` 访问。
 pub struct SupplierRepository<'a> {
     db: &'a Database,
 }
@@ -700,6 +791,421 @@ impl<'a> SupplierRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按稳定 ID 读取未删除供应商角色账号。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配供应商角色；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn account(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierAccount>> {
+        Repository::new(self.db, SUPPLIER_ACCOUNTS)
+            .find_by_id(supplier_id.as_ref(), executor)
+            .await
+    }
+
+    /// 按客户端幂等键读取供应商资料命令。
+    ///
+    /// # 参数
+    /// * `idempotency_key` - 客户端幂等键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已成功命令；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn profile_command(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierProfileCommand>> {
+        Repository::<SupplierProfileCommand>::new(self.db, SUPPLIER_PROFILE_COMMANDS)
+            .find_by_idempotency_key(idempotency_key, executor)
+            .await
+    }
+
+    /// 按文件 ID 读取供应商资质附件。
+    ///
+    /// # 参数
+    /// * `attachment_id` - 资质附件文件 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回未删除文件资产；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn qualification_attachment(
+        &self,
+        attachment_id: &FileAssetId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<FileAsset>> {
+        Repository::new(self.db, <Database as FileAssetExt>::FILE_ASSETS)
+            .find_by_id(attachment_id.as_ref(), executor)
+            .await
+    }
+
+    /// 查询命中任一当前有效能力的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `capability_codes` - 供应能力代码
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_supplier_ids_by_active_capability_codes(
+        &self,
+        capability_codes: &[CapabilityCode],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        Repository::new(self.db, SUPPLIER_CAPABILITIES)
+            .list_supplier_ids_by_active_capability_codes(capability_codes, as_of, executor)
+            .await
+    }
+
+    /// 查询已登记任一指定资质类型的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_supplier_ids_by_qualification_types(
+        &self,
+        qualification_types: &[QualificationType],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+            .list_supplier_ids_by_qualification_types(qualification_types, executor)
+            .await
+    }
+
+    /// 查询当前有效资质对应的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_supplier_ids_by_valid_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+            .list_supplier_ids_by_valid_qualifications(qualification_types, as_of, executor)
+            .await
+    }
+
+    /// 查询将在窗口内到期且当前仍有效的资质对应的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `expires_by` - 到期窗口结束业务日
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_supplier_ids_by_expiring_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        expires_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+            .list_supplier_ids_by_expiring_qualifications(qualification_types, as_of, expires_by, executor)
+            .await
+    }
+
+    /// 查询已失效资质对应的供应商角色 ID。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不限制类型
+    /// * `as_of` - 当前业务日，格式为 `YYYY-MM-DD`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_supplier_ids_by_expired_qualifications(
+        &self,
+        qualification_types: &[QualificationType],
+        as_of: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccountId>> {
+        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+            .list_supplier_ids_by_expired_qualifications(qualification_types, as_of, executor)
+            .await
+    }
+
+    /// 按创建时间升序读取供应商全部能力。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该供应商的全部未删除能力。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_capabilities(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierCapability>> {
+        Repository::new(self.db, SUPPLIER_CAPABILITIES)
+            .find_many_sorted(
+                doc! { "supplier_id": supplier_id.to_string() },
+                doc! { "created_at": 1 },
+                executor,
+            )
+            .await
+    }
+
+    /// 按创建时间倒序读取供应商全部资质。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该供应商的全部未删除资质。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_qualifications(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualification>> {
+        Repository::new(self.db, SUPPLIER_QUALIFICATIONS)
+            .find_many_sorted(
+                doc! { "supplier_id": supplier_id.to_string() },
+                doc! { "created_at": -1 },
+                executor,
+            )
+            .await
+    }
+
+    /// 按修订号倒序读取供应商商务资料历史。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新版本优先的商务资料修订。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_commercial_profiles_latest_first(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierCommercialProfileRevision>> {
+        Repository::new(self.db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
+            .find_many_sorted(
+                doc! { "supplier_id": supplier_id.to_string() },
+                doc! { "revision_no": -1 },
+                executor,
+            )
+            .await
+    }
+
+    /// 按修订 ID 集合批量读取商务资料版本。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 商务资料修订 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的商务资料版本。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_commercial_profiles_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierCommercialProfileRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Repository::new(self.db, SUPPLIER_COMMERCIAL_PROFILE_REVISIONS)
+            .find_many(doc! { "id": { "$in": revision_ids } }, executor)
+            .await
+    }
+
+    /// 按修订号倒序读取供应商评级历史。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新评级优先的修订历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_ratings_latest_first(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierRatingRevision>> {
+        Repository::new(self.db, SUPPLIER_RATING_REVISIONS)
+            .find_many_sorted(
+                doc! { "supplier_id": supplier_id.to_string() },
+                doc! { "revision_no": -1 },
+                executor,
+            )
+            .await
+    }
+
+    /// 按修订号升序读取供应商评级历史。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最早评级优先的修订历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_rating_history(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierRatingRevision>> {
+        Repository::new(self.db, SUPPLIER_RATING_REVISIONS)
+            .find_many_sorted(
+                doc! { "supplier_id": supplier_id.to_string() },
+                doc! { "revision_no": 1 },
+                executor,
+            )
+            .await
+    }
+
+    /// 返回下一商务资料修订序号。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 无历史时返回 `1`，否则返回当前最大修订号加一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn next_commercial_profile_revision_no(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        next_revision_no(
+            self.db,
+            SUPPLIER_COMMERCIAL_PROFILE_REVISIONS,
+            doc! { "supplier_id": supplier_id.to_string() },
+            executor,
+        )
+        .await
+    }
+
+    /// 返回下一能力修订序号。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `capability_code` - 稳定能力代码
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 无历史时返回 `1`，否则返回当前最大修订号加一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn next_capability_revision_no(
+        &self,
+        supplier_id: &SupplierAccountId,
+        capability_code: CapabilityCode,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        next_revision_no(
+            self.db,
+            SUPPLIER_CAPABILITY_REVISIONS,
+            doc! {
+                "supplier_id": supplier_id.to_string(),
+                "capability_code": capability_code.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 返回下一资质修订序号。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `qualification_type` - 稳定资质类型
+    /// * `certificate_no` - 稳定证书编号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 无历史时返回 `1`，否则返回当前最大修订号加一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn next_qualification_revision_no(
+        &self,
+        supplier_id: &SupplierAccountId,
+        qualification_type: QualificationType,
+        certificate_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<u32> {
+        next_revision_no(
+            self.db,
+            SUPPLIER_QUALIFICATION_REVISIONS,
+            doc! {
+                "supplier_id": supplier_id.to_string(),
+                "qualification_type": qualification_type.as_str(),
+                "certificate_no": certificate_no,
+            },
+            executor,
+        )
+        .await
     }
 
     /// 创建供应商角色并写入首个商务结算版本（跨集合多步骤写入）。

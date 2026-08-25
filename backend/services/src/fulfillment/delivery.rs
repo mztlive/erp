@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, Transactional};
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use database::{
+    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
+};
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use entities::ids::{DeliveryId, DeliveryLineId};
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
@@ -17,7 +17,7 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
 use crate::audit::AuditActor;
-use crate::document_registry::{new_registered_document, persist_registered_document};
+use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
@@ -60,11 +60,11 @@ impl FulfillmentService {
             .deliveries()
             .search_deliveries(&filter, &mut NoTransaction)
             .await?;
-        let direct_ids: Vec<String> = page
+        let direct_ids: Vec<DeliveryId> = page
             .items
             .iter()
             .filter(|row| row.delivery_type == DeliveryType::SupplierDirect)
-            .map(|row| row.id.clone())
+            .map(|row| DeliveryId::new(row.id.clone()))
             .collect();
         let direct_po_ids = load_direct_po_ids(&self.db, &direct_ids).await?;
         let items = page
@@ -233,23 +233,21 @@ impl FulfillmentService {
 /// 批量查询失败时返回 `RepositoryError`。
 async fn load_direct_po_ids(
     db: &Database,
-    delivery_ids: &[String],
+    delivery_ids: &[DeliveryId],
 ) -> Result<HashMap<String, Option<String>>> {
-    if delivery_ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let mut map = HashMap::new();
-    for delivery in db
-        .deliveries()
-        .find_many(doc! { "id": { "$in": delivery_ids } }, &mut NoTransaction)
-        .await?
-    {
-        map.insert(
-            delivery.base.id.clone(),
-            delivery.purchase_order_id.map(|id| id.to_string()),
-        );
-    }
-    Ok(map)
+    let deliveries = db
+        .fulfillment()
+        .list_deliveries_by_ids(delivery_ids, &mut NoTransaction)
+        .await?;
+    Ok(deliveries
+        .into_iter()
+        .map(|delivery| {
+            (
+                delivery.base.id,
+                delivery.purchase_order_id.map(|id| id.to_string()),
+            )
+        })
+        .collect())
 }
 
 /// 构建发货行实体集合（行号从 1 递增）。
@@ -371,26 +369,6 @@ fn ensure_delivery_has_no_adapter() -> Result<()> {
     Ok(())
 }
 
-/// 发货所属销售单作为绑定上下文组织，不得用空串补位。
-///
-/// # 参数
-/// * `delivery` - 待登记发货单
-///
-/// # 返回
-/// 返回非空销售单标识。
-///
-/// # 错误
-/// 销售单为空时返回校验错误。
-fn delivery_binding_organization_id(delivery: &Delivery) -> Result<String> {
-    let org = delivery.sales_order_id.to_string();
-    if org.trim().is_empty() {
-        return Err(Error::ValidationError(
-            "发货单缺少销售单，无法构造绑定上下文".to_string(),
-        ));
-    }
-    Ok(org)
-}
-
 /// 构造发货创建绑定命令。客户端不得提交定义 ID。
 ///
 /// # 参数
@@ -405,39 +383,13 @@ fn delivery_bind_command(delivery: &Delivery, creator_id: &str) -> Result<BindPu
         business_object_id: delivery.base.id.clone(),
         business_object_version: delivery.base.version,
         context: BindingRevalidationContext {
-            organization_id: delivery_binding_organization_id(delivery)?,
+            organization_id: delivery
+                .registration_context_id()
+                .map_err(|error| Error::ValidationError(error.to_string()))?
+                .to_string(),
             creator_id: creator_id.to_string(),
         },
     })
-}
-
-/// 将绑定端口返回值落实为发货注册行：空绑定保持未绑定。
-///
-/// # 参数
-/// * `document` - 发货注册行
-/// * `binding` - 统一绑定端口返回值
-///
-/// # 返回
-/// 固定返回 `None`。
-///
-/// # 错误
-/// 端口返回绑定或注册行已预置绑定时返回错误。
-fn apply_delivery_create_binding(
-    document: &mut BusinessDocument,
-    binding: Option<ApprovalDefinitionBinding>,
-) -> Result<Option<ApprovalDefinitionBinding>> {
-    if binding.is_some() {
-        return Err(Error::Internal(
-            "发货为 NO_APPROVAL，不得写入审批绑定".to_string(),
-        ));
-    }
-    if document.approval_binding.is_some() {
-        return Err(Error::Internal("发货注册行不得预置审批绑定".to_string()));
-    }
-    if document.document_type != DocumentType::Delivery {
-        return Err(Error::Internal("发货创建只能注册 Delivery 单据".to_string()));
-    }
-    Ok(None)
 }
 
 /// 在调用方事务内登记发货单据并证明空绑定。
@@ -449,7 +401,7 @@ fn apply_delivery_create_binding(
 async fn persist_unbound_delivery_document(
     db: &Database,
     rbac: &SharedRbacService,
-    mut document: BusinessDocument,
+    document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     executor: &mut dyn Executor,
@@ -458,8 +410,13 @@ async fn persist_unbound_delivery_document(
     ensure_delivery_has_no_adapter()?;
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, executor).await?;
-    apply_delivery_create_binding(&mut document, binding)?;
-    persist_registered_document(db, &document, executor).await
+    document
+        .ensure_no_approval_registration(DocumentType::Delivery, binding.as_ref())
+        .map_err(|error| Error::Internal(error.to_string()))?;
+    db.business_documents()
+        .register_no_approval_document(&document, executor)
+        .await?;
+    Ok(())
 }
 
 /// 为已构造发货登记 `BusinessDocument` 并调用统一绑定端口。
@@ -553,9 +510,9 @@ mod tests {
 #[cfg(test)]
 mod delivery_no_approval_tests {
     use super::{
-        apply_delivery_create_binding, delivery_bind_command, delivery_create_binding_decision,
-        ensure_delivery_has_no_adapter, ensure_delivery_skips_approval_binding, policy_of, BindingDecision,
-        Delivery, DeliveryData, DeliveryType, DocumentApprovalPolicy, DocumentType,
+        delivery_bind_command, delivery_create_binding_decision, ensure_delivery_has_no_adapter,
+        ensure_delivery_skips_approval_binding, policy_of, BindingDecision, Delivery, DeliveryData,
+        DeliveryType, DocumentApprovalPolicy, DocumentType,
     };
     use crate::approval::binding::binding_from_published;
     use crate::document_registry::new_registered_document;
@@ -611,15 +568,16 @@ mod delivery_no_approval_tests {
         assert_eq!(command.business_object_id, delivery.base.id);
         assert_eq!(command.context.organization_id, "so-1");
 
-        let mut document = new_registered_document(
+        let document = new_registered_document(
             &delivery.base.id,
             DocumentType::Delivery,
             delivery.delivery_no.clone(),
         )
         .expect("可注册");
         assert!(document.approval_binding.is_none());
-        let empty = apply_delivery_create_binding(&mut document, None).expect("空绑定");
-        assert!(empty.is_none());
+        document
+            .ensure_no_approval_registration(DocumentType::Delivery, None)
+            .expect("空绑定");
         assert!(document.approval_binding.is_none());
 
         let forged = binding_from_published(
@@ -628,7 +586,9 @@ mod delivery_no_approval_tests {
             Instant::from_unix_secs(10),
         )
         .expect("测试绑定");
-        assert!(apply_delivery_create_binding(&mut document, Some(forged)).is_err());
+        assert!(document
+            .ensure_no_approval_registration(DocumentType::Delivery, Some(&forged))
+            .is_err());
     }
 
     /// 创建路径调用统一绑定端口，不查询发布定义、不启动实例、不建任务。

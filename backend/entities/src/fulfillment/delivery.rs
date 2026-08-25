@@ -87,6 +87,22 @@ impl DeliveryState {
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
+
+    /// 返回可作为客户验收依据的发货状态集合。
+    ///
+    /// # 返回
+    /// 固定返回已发货与已签收状态。
+    pub fn acceptance_eligible_states() -> &'static [Self] {
+        &[Self::Shipped, Self::Signed]
+    }
+
+    /// 判断当前状态能否作为客户验收履约事实。
+    ///
+    /// # 返回
+    /// 已发货或已签收时返回 `true`。
+    pub fn is_acceptance_eligible(self) -> bool {
+        Self::acceptance_eligible_states().contains(&self)
+    }
 }
 
 impl DocumentState for DeliveryState {
@@ -311,6 +327,51 @@ impl Delivery {
             address_snapshot_encrypted,
             address_snapshot_fingerprint,
         })
+    }
+
+    /// 返回单据注册与无审批绑定重验使用的组织上下文。
+    ///
+    /// # 返回
+    /// 返回所属销售单稳定主键。
+    ///
+    /// # 错误
+    /// 销售单主键为空时返回错误。
+    pub fn registration_context_id(&self) -> Result<&str> {
+        let id = self.sales_order_id.as_ref();
+        if id.trim().is_empty() {
+            return Err(Error::from("发货单缺少销售单，无法构造绑定上下文"));
+        }
+        Ok(id)
+    }
+
+    /// 校验发货行可作为指定验收行的履约事实并返回成功数量。
+    ///
+    /// # 参数
+    /// * `line` - 已加载的发货行
+    /// * `sales_order_id` - 验收单所属销售单
+    /// * `sales_order_line_id` - 验收行所属销售稳定明细
+    ///
+    /// # 返回
+    /// 状态与两级关联一致时返回发货行数量。
+    ///
+    /// # 错误
+    /// 发货状态无效，或表头、发货行、销售单、销售明细关联不一致时返回错误。
+    pub fn acceptance_quantity(
+        &self,
+        line: &DeliveryLine,
+        sales_order_id: &SalesOrderId,
+        sales_order_line_id: &SalesOrderLineId,
+    ) -> Result<Quantity> {
+        if !self.status.is_acceptance_eligible() || self.sales_order_id != *sales_order_id {
+            return Err(Error::from("发货事实不属于本销售单或状态无效"));
+        }
+        if line.delivery_id.as_ref() != self.base.id.as_str() {
+            return Err(Error::from("发货行与发货单关联不一致"));
+        }
+        if line.sales_order_line_id != *sales_order_line_id {
+            return Err(Error::from("履约事实不属于本验收明细"));
+        }
+        Ok(line.quantity)
     }
 
     /// 更新履约发货单（仅草稿）。
@@ -671,6 +732,67 @@ mod tests {
             .is_ok());
         assert!(delivery.reverse().is_ok());
         assert!(delivery.mark_signed().is_err(), "REVERSED 是终态，不能签收");
+    }
+
+    /// 验收事实要求已发货状态且表头、行与销售归属一致。
+    #[test]
+    fn acceptance_fact_checks_status_and_associations() {
+        let mut delivery = Delivery::new(DeliveryId::new("delivery-1"), delivery_data()).unwrap();
+        let line = DeliveryLine::new(
+            DeliveryLineId::new("delivery-line-1"),
+            line_data(),
+            DeliveryType::WarehouseShip,
+        )
+        .unwrap();
+        assert!(delivery
+            .acceptance_quantity(
+                &line,
+                &SalesOrderId::new("so-1"),
+                &SalesOrderLineId::new("so-line-1"),
+            )
+            .is_err());
+        delivery
+            .mark_shipped(Instant::from_unix_secs(1_700_000_000))
+            .unwrap();
+        assert_eq!(
+            delivery
+                .acceptance_quantity(
+                    &line,
+                    &SalesOrderId::new("so-1"),
+                    &SalesOrderLineId::new("so-line-1"),
+                )
+                .unwrap(),
+            Quantity::from_str("3").unwrap()
+        );
+        assert!(delivery
+            .acceptance_quantity(
+                &line,
+                &SalesOrderId::new("other-order"),
+                &SalesOrderLineId::new("so-line-1"),
+            )
+            .is_err());
+        let mut foreign_delivery_line = line.clone();
+        foreign_delivery_line.delivery_id = DeliveryId::new("other-delivery");
+        assert!(delivery
+            .acceptance_quantity(
+                &foreign_delivery_line,
+                &SalesOrderId::new("so-1"),
+                &SalesOrderLineId::new("so-line-1"),
+            )
+            .is_err());
+        let mut foreign_sales_line = line.clone();
+        foreign_sales_line.sales_order_line_id = SalesOrderLineId::new("other-line");
+        assert!(delivery
+            .acceptance_quantity(
+                &foreign_sales_line,
+                &SalesOrderId::new("so-1"),
+                &SalesOrderLineId::new("so-line-1"),
+            )
+            .is_err());
+        assert_eq!(delivery.registration_context_id().unwrap(), "so-1");
+        let mut missing_context = delivery.clone();
+        missing_context.sales_order_id = SalesOrderId::new("   ");
+        assert!(missing_context.registration_context_id().is_err());
     }
 
     /// 状态机：固定邻接矩阵的合法/非法迁移（幂等合法）。

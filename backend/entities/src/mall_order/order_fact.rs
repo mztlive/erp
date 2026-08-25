@@ -207,6 +207,30 @@ impl MallOrderFact {
         self.processing_status = to;
         Ok(())
     }
+
+    /// 校验当前事实可作为指定商城订单的原支付事实。
+    ///
+    /// # 参数
+    /// * `mall_id` - 后续事实声明的来源商城
+    /// * `external_order_no` - 后续事实声明的商城订单号
+    ///
+    /// # 返回
+    /// 当前事实为同商城同订单且已正式归集的支付成功事实时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 事实类型、商城订单关系或处理状态不满足时返回错误。
+    pub fn ensure_attributed_payment_for(&self, mall_id: &str, external_order_no: &str) -> Result<()> {
+        if !self.fact_type.is_payment_succeeded() {
+            return Err(Error::from("原事实不是支付成功事实"));
+        }
+        if self.mall_id != mall_id || self.external_order_no != external_order_no {
+            return Err(Error::from("原支付事实与本次事实的商城或订单不一致"));
+        }
+        if self.processing_status != ProcessingStatus::Attributed {
+            return Err(Error::from("原支付事实尚未正式归集"));
+        }
+        Ok(())
+    }
 }
 
 /// 校验事实类型相关的引用完整性与时间顺序。
@@ -499,6 +523,20 @@ mod tests {
     }
 
     /// 处理状态状态机：合法/非法迁移与终态定向断言。
+    #[test]
+    fn attributed_payment_relationship_is_entity_owned() {
+        let mut fact = MallOrderFact::new(MallOrderFactId::new("fact-1"), fact_data()).unwrap();
+        assert!(fact.ensure_attributed_payment_for("mall-a", "SO-1").is_err());
+        fact.update_processing_status(ProcessingStatus::PendingAttribution)
+            .unwrap();
+        fact.update_processing_status(ProcessingStatus::Attributed)
+            .unwrap();
+        assert!(fact.ensure_attributed_payment_for("mall-a", "SO-1").is_ok());
+        assert!(fact.ensure_attributed_payment_for("mall-b", "SO-1").is_err());
+        fact.fact_type = FactType::OrderCanceled;
+        assert!(fact.ensure_attributed_payment_for("mall-a", "SO-1").is_err());
+    }
+
     #[test]
     fn processing_status_machine_directed_edges() {
         assert!(ensure_transition(ProcessingStatus::Saved, ProcessingStatus::PendingAttribution).is_ok());

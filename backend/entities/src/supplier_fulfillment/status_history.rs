@@ -13,7 +13,7 @@ use crate::common::source::SourceType;
 use crate::common::state::ensure_transition;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{SupplierApiConnectionId, SupplierOrderStatusHistoryId};
+use crate::ids::{SupplierApiConnectionId, SupplierFulfillmentOrderId, SupplierOrderStatusHistoryId};
 use crate::validation::normalize_required_text;
 
 use super::status::FulfillmentStatus;
@@ -26,6 +26,8 @@ const EXTERNAL_EVENT_ID_MAX_LEN: usize = 128;
 /// 供应商订单状态历史创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierOrderStatusHistoryData {
+    /// 所属供应商履约订单。
+    pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
     /// 供应商连接。
     pub connection_id: SupplierApiConnectionId,
     /// 原状态。
@@ -44,11 +46,56 @@ pub struct SupplierOrderStatusHistoryData {
     pub source_type: SourceType,
 }
 
+impl SupplierOrderStatusHistoryData {
+    /// 构造供应商回调形成的履约状态历史数据。
+    ///
+    /// 回调来源类型固定为 `SUPPLIER_CALLBACK`，调用方只提供订单关系、状态迁移和
+    /// 外部事件身份，不得自行组合其他来源。
+    ///
+    /// # 参数
+    /// * `order_id` - 所属供应商履约订单
+    /// * `connection_id` - 回调供应商连接
+    /// * `previous_status` - 回调前履约状态
+    /// * `new_status` - 回调确认的新状态
+    /// * `supplier_status_version` - 供应商状态版本
+    /// * `occurred_at` - 供应商侧业务发生时间
+    /// * `received_at` - ERP 接收时间
+    /// * `external_event_id` - 外部事件幂等身份
+    ///
+    /// # 返回
+    /// 返回来源已固定的状态历史创建数据。
+    #[allow(clippy::too_many_arguments)]
+    pub fn supplier_callback(
+        order_id: SupplierFulfillmentOrderId,
+        connection_id: SupplierApiConnectionId,
+        previous_status: FulfillmentStatus,
+        new_status: FulfillmentStatus,
+        supplier_status_version: impl Into<String>,
+        occurred_at: Instant,
+        received_at: Instant,
+        external_event_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            supplier_fulfillment_order_id: order_id,
+            connection_id,
+            previous_status,
+            new_status,
+            supplier_status_version: supplier_status_version.into(),
+            occurred_at,
+            received_at,
+            external_event_id: external_event_id.into(),
+            source_type: SourceType::SupplierCallback,
+        }
+    }
+}
+
 /// 供应商订单状态历史实体（数据模型 §6.19，不可变追加记录）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct SupplierOrderStatusHistory {
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 所属供应商履约订单。
+    pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
     /// 供应商连接。
     pub connection_id: SupplierApiConnectionId,
     /// 原状态。
@@ -105,6 +152,7 @@ impl SupplierOrderStatusHistory {
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
             connection_id: data.connection_id,
             previous_status: data.previous_status,
             new_status: data.new_status,
@@ -115,6 +163,17 @@ impl SupplierOrderStatusHistory {
             source_type: data.source_type,
         })
     }
+
+    /// 判断状态历史是否属于指定供应商履约订单。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单主键
+    ///
+    /// # 返回
+    /// 归属一致时返回 `true`。
+    pub fn belongs_to_order(&self, order_id: &SupplierFulfillmentOrderId) -> bool {
+        self.supplier_fulfillment_order_id == *order_id
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +183,7 @@ mod tests {
 
     fn sample_data() -> SupplierOrderStatusHistoryData {
         SupplierOrderStatusHistoryData {
+            supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
             connection_id: SupplierApiConnectionId::new("connection-1"),
             previous_status: FulfillmentStatus::Received,
             new_status: FulfillmentStatus::Submitting,
@@ -137,8 +197,19 @@ mod tests {
 
     #[test]
     fn new_accepts_valid_record_and_normalizes_fields() {
+        let callback = SupplierOrderStatusHistoryData::supplier_callback(
+            SupplierFulfillmentOrderId::new("order-1"),
+            SupplierApiConnectionId::new("connection-1"),
+            FulfillmentStatus::Received,
+            FulfillmentStatus::Submitting,
+            " v5 ",
+            Instant::from_unix_secs(1_700_000_000),
+            Instant::from_unix_secs(1_700_000_100),
+            " EVT-1001 ",
+        );
+        assert_eq!(callback.source_type, SourceType::SupplierCallback);
         let history =
-            SupplierOrderStatusHistory::new(SupplierOrderStatusHistoryId::new("history-1"), sample_data())
+            SupplierOrderStatusHistory::new(SupplierOrderStatusHistoryId::new("history-1"), callback)
                 .unwrap();
 
         assert_eq!(history.supplier_status_version, "v5");
@@ -146,6 +217,8 @@ mod tests {
         assert_eq!(history.previous_status, FulfillmentStatus::Received);
         assert_eq!(history.new_status, FulfillmentStatus::Submitting);
         assert_eq!(history.source_type, SourceType::SupplierCallback);
+        assert!(history.belongs_to_order(&SupplierFulfillmentOrderId::new("order-1")));
+        assert!(!history.belongs_to_order(&SupplierFulfillmentOrderId::new("order-2")));
     }
 
     #[test]

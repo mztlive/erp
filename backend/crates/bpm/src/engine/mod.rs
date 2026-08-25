@@ -12,6 +12,7 @@ mod resume;
 mod start;
 mod transition_plan;
 
+pub use crate::graph::DefinitionGraph;
 pub use cancel::{cancel, CancelCommand};
 pub use decision::{decide, DecideCommand};
 pub use enter_node::{plan_enter_node, EnterNodeInput};
@@ -23,9 +24,7 @@ pub use transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, Transitio
 
 use crate::error::{Error, Result};
 use crate::model::types::{ApprovalBlockerCode, ModelError};
-use crate::model::{
-    ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, ParticipantId,
-};
+use crate::model::{ApprovalNodeDefinition, ParticipantId};
 
 /// 引擎计算失败。不可提交的不变量错误不得被应用层改写为半结构终态。
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
@@ -115,30 +114,14 @@ impl Eligibility {
     }
 }
 
-/// 引擎使用的定义图。不引用 database 类型。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DefinitionGraph {
-    /// 流程定义。
-    pub definition: ApprovalProcessDefinition,
-    /// 节点。
-    pub nodes: Vec<ApprovalNodeDefinition>,
-    /// 连线。
-    pub transitions: Vec<ApprovalTransitionDefinition>,
-}
-
 impl DefinitionGraph {
-    /// 按节点键查找节点。
+    /// 返回入口节点。
     ///
     /// # 参数
-    /// * `node_key` - 节点键
+    /// 无。
     ///
     /// # 返回
-    /// 命中时返回节点。
-    pub fn node(&self, node_key: &str) -> Option<&ApprovalNodeDefinition> {
-        self.nodes.iter().find(|item| item.node_key == node_key)
-    }
-
-    /// 返回入口节点。
+    /// 返回定义入口键对应的节点引用。
     ///
     /// # 错误
     /// 入口不存在时返回图损坏。

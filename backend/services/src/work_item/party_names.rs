@@ -7,7 +7,6 @@
 use std::collections::HashMap;
 
 use database::{AccessControlExt, Executor, NoTransaction};
-use mongodb::bson::doc;
 
 use super::dto::WorkItemSummarySection;
 use super::presentation::resolve_owner_display_name;
@@ -81,7 +80,7 @@ impl WorkItemService {
         Ok(self
             .db
             .accounts()
-            .find_many(doc! { "id": { "$in": owner_ids } }, executor)
+            .list_work_item_party_accounts(owner_ids, executor)
             .await?
             .into_iter()
             .map(|account| (account.base.id, account.name))

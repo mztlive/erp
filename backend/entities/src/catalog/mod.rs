@@ -22,6 +22,7 @@ pub mod product_category_attribute;
 pub mod product_kind;
 pub mod product_revision;
 pub mod product_revision_media;
+pub mod revision;
 pub mod sku;
 pub mod sku_attribute;
 pub mod sku_attribute_value;
@@ -31,6 +32,7 @@ pub mod specification;
 pub mod status;
 pub mod unit_of_measure;
 pub mod voucher_category_profile_revision;
+pub mod voucher_defaults;
 
 pub use product::Product;
 pub use product_brand::ProductBrand;
@@ -38,16 +40,18 @@ pub use product_category::ProductCategory;
 pub use product_category_attribute::ProductCategoryAttribute;
 pub use product_kind::ProductKind;
 pub use product_revision::ProductRevision;
-pub use product_revision_media::ProductRevisionMedia;
+pub use product_revision_media::{ensure_unique_media_sort_orders, ProductRevisionMedia};
+pub use revision::next_revision_no;
 pub use sku::Sku;
 pub use sku_attribute::SkuAttribute;
 pub use sku_attribute_value::SkuAttributeValue;
 pub use sku_revision::SkuRevision;
 pub use sku_revision_attribute_value::SkuRevisionAttributeValue;
-pub use specification::{SpecSignatureEntry, EMPTY_SPEC_SIGNATURE};
+pub use specification::{SpecSignatureEntry, SpecificationSignatureSet, EMPTY_SPEC_SIGNATURE};
 pub use status::{EnableStatus, ListingStatus, ProductListingStatus, SkuCoverageStatus};
 pub use unit_of_measure::UnitOfMeasure;
 pub use voucher_category_profile_revision::VoucherCategoryProfileRevision;
+pub use voucher_defaults::{VoucherCatalogDefaults, VoucherCategorySelection};
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{

@@ -13,7 +13,10 @@ use crate::common::stable::StableBase;
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId};
+use crate::ids::{
+    ContractId, CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId,
+};
+use crate::money::{Amount, Quantity};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
 use super::types::{BusinessType, OriginSystem};
@@ -137,6 +140,14 @@ impl ReviewStatus {
             Self::InApproval => "IN_APPROVAL",
         }
     }
+
+    /// 判断当前审核轨是否应存在开放审批任务。
+    ///
+    /// # 返回
+    /// 统一审批中或兼容历史待审阶段返回 `true`；未提交、已通过和已驳回返回 `false`。
+    pub fn has_active_review_task(self) -> bool {
+        !matches!(self, Self::NotSubmitted | Self::Approved | Self::Rejected)
+    }
 }
 
 impl DocumentState for ReviewStatus {
@@ -240,6 +251,34 @@ impl CollectionProgress {
             Self::Settled => "SETTLED",
         }
     }
+
+    /// 从应收子账开放余额与已结清金额派生回款进度。
+    ///
+    /// # 参数
+    /// * `balances` - `(开放余额, 已结清金额)` 序列
+    ///
+    /// # 返回
+    /// 无子账或尚无结清金额时返回 `NotCollected`；部分结清返回
+    /// `PartiallyCollected`；全部子账开放余额清零且已有结清金额时返回 `Settled`。
+    pub fn from_receivable_balances<I>(balances: I) -> Self
+    where
+        I: IntoIterator<Item = (Amount, Amount)>,
+    {
+        let mut has_account = false;
+        let mut all_settled = true;
+        let mut any_settled = false;
+        for (open_total, settled_total) in balances {
+            has_account = true;
+            let settled = settled_total.to_decimal() > rust_decimal::Decimal::ZERO;
+            all_settled &= open_total.to_decimal() == rust_decimal::Decimal::ZERO && settled;
+            any_settled |= settled;
+        }
+        match (has_account, all_settled, any_settled) {
+            (true, true, _) => Self::Settled,
+            (_, _, true) => Self::PartiallyCollected,
+            _ => Self::NotCollected,
+        }
+    }
 }
 
 /// 开票进度（数据模型 §6.4：未开、部分开票、已完成）。
@@ -276,6 +315,34 @@ impl InvoiceProgress {
             Self::NotInvoiced => "NOT_INVOICED",
             Self::PartiallyInvoiced => "PARTIALLY_INVOICED",
             Self::Completed => "COMPLETED",
+        }
+    }
+
+    /// 从应收子账可开票余额与已开票金额派生开票进度。
+    ///
+    /// # 参数
+    /// * `balances` - `(剩余可开票余额, 已开票金额)` 序列
+    ///
+    /// # 返回
+    /// 无子账或尚无开票金额时返回 `NotInvoiced`；部分开票返回
+    /// `PartiallyInvoiced`；全部子账可开票余额清零且已有开票金额时返回 `Completed`。
+    pub fn from_receivable_balances<I>(balances: I) -> Self
+    where
+        I: IntoIterator<Item = (Amount, Amount)>,
+    {
+        let mut has_account = false;
+        let mut all_invoiced = true;
+        let mut any_invoiced = false;
+        for (open_invoiceable_total, invoiced_total) in balances {
+            has_account = true;
+            let invoiced = invoiced_total.to_decimal() > rust_decimal::Decimal::ZERO;
+            all_invoiced &= open_invoiceable_total.to_decimal() == rust_decimal::Decimal::ZERO && invoiced;
+            any_invoiced |= invoiced;
+        }
+        match (has_account, all_invoiced, any_invoiced) {
+            (true, true, _) => Self::Completed,
+            (_, _, true) => Self::PartiallyInvoiced,
+            _ => Self::NotInvoiced,
         }
     }
 }
@@ -315,6 +382,26 @@ impl CloseStatus {
             Self::NotSatisfied => "NOT_SATISFIED",
             Self::Closeable => "CLOSEABLE",
             Self::Closed => "CLOSED",
+        }
+    }
+
+    /// 从履约与回款进度派生关闭状态。
+    ///
+    /// # 参数
+    /// * `fulfillment` - 销售单履约进度
+    /// * `collection` - 销售单回款进度
+    ///
+    /// # 返回
+    /// 履约完成且回款结清返回 `Closed`；仅满足其一返回 `Closeable`；均未满足返回
+    /// `NotSatisfied`。开票进度不参与关闭判定。
+    pub fn from_progress(fulfillment: FulfillmentProgress, collection: CollectionProgress) -> Self {
+        match (
+            fulfillment == FulfillmentProgress::Completed,
+            collection == CollectionProgress::Settled,
+        ) {
+            (true, true) => Self::Closed,
+            (true, false) | (false, true) => Self::Closeable,
+            (false, false) => Self::NotSatisfied,
         }
     }
 }
@@ -482,6 +569,138 @@ impl SalesOrder {
             closed_at: None,
             procurement_guard_version: 0,
         })
+    }
+
+    /// 判断乐观锁版本是否与调用方期望一致。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方读取到的实体版本
+    ///
+    /// # 返回
+    /// 当前版本与期望版本一致时返回 `true`。
+    pub fn matches_version(&self, expected_version: u64) -> bool {
+        self.base.version == expected_version
+    }
+
+    /// 判断销售单是否已经完整形式化。
+    ///
+    /// # 返回
+    /// 商务状态为已生效且审核轨为已通过时返回 `true`。
+    pub fn is_fully_formalized(&self) -> bool {
+        self.commercial_status == CommercialStatus::Effective && self.review_status == ReviewStatus::Approved
+    }
+
+    /// 判断销售单是否仍绑定给定合同、客户与结算主体。
+    ///
+    /// # 参数
+    /// * `contract_id` - 当前命令选择的合同
+    /// * `customer_id` - 合同解析出的客户
+    /// * `settlement_party_id` - 合同解析出的结算主体
+    ///
+    /// # 返回
+    /// 三项关系与销售单稳定关系完全一致时返回 `true`。
+    pub fn matches_contract_context(
+        &self,
+        contract_id: &ContractId,
+        customer_id: &CustomerAccountId,
+        settlement_party_id: &PartyId,
+    ) -> bool {
+        self.contract_id.as_ref() == Some(contract_id)
+            && &self.customer_id == customer_id
+            && &self.settlement_party_id == settlement_party_id
+    }
+
+    /// 返回发起销售变更前的实体内阻塞原因。
+    ///
+    /// # 返回
+    /// 非生效、缺当前版本或卡券销售时返回稳定阻塞说明；实体状态允许时返回 `None`。
+    pub fn sales_change_start_blocker(&self) -> Option<&'static str> {
+        if self.commercial_status != CommercialStatus::Effective {
+            return Some("只有已生效的销售单才能发起变更");
+        }
+        if self.stable.current_revision_id.is_none() {
+            return Some("销售单缺少当前版本，无法发起变更");
+        }
+        self.business_type
+            .is_voucher()
+            .then_some("卡券销售变更缺少原正式版本冻结的目标商城或应收到期日，禁止创建变更单")
+    }
+
+    /// 返回当前生效版本身份。
+    ///
+    /// # 返回
+    /// 已形成正式版本时返回版本 ID 字符串；草稿尚无版本时返回 `None`。
+    pub fn current_revision_id(&self) -> Option<&str> {
+        self.stable.current_revision_id.as_deref()
+    }
+
+    /// 判断当前版本指针是否仍指向给定基准版本。
+    ///
+    /// # 参数
+    /// * `base_revision_id` - 销售变更发起时冻结的基准版本
+    ///
+    /// # 返回
+    /// 当前版本与基准版本一致时返回 `true`。
+    pub fn current_revision_matches(&self, base_revision_id: &SalesOrderRevisionId) -> bool {
+        self.stable.current_revision_id.as_deref() == Some(base_revision_id.as_ref())
+    }
+
+    /// 返回采购建单前的实体内阻塞原因。
+    ///
+    /// # 参数
+    /// * `remaining_quantity` - 当前销售版本尚未被采购覆盖的数量
+    ///
+    /// # 返回
+    /// 非实物服务、未生效或无剩余数量时返回稳定阻塞说明；实体状态允许时返回
+    /// `None`。权限与责任任务仍由 Service 校验。
+    pub fn procurement_creation_blocker(&self, remaining_quantity: Quantity) -> Option<&'static str> {
+        if !self.business_type.is_goods_service() {
+            return Some("非实物及服务销售单无需创建采购单");
+        }
+        if self.commercial_status != CommercialStatus::Effective {
+            return Some("销售单最终生效后才能创建采购单");
+        }
+        (remaining_quantity.to_decimal() <= rust_decimal::Decimal::ZERO)
+            .then_some("当前销售单待采购数量已全部覆盖")
+    }
+
+    /// 刷新履约、回款、开票与关闭进度。
+    ///
+    /// # 参数
+    /// * `fulfillment` - 可选外部履约进度；为空时沿用当前值
+    /// * `collection` - 从应收子账派生的回款进度
+    /// * `invoice` - 从应收子账派生的开票进度
+    /// * `changed_at` - 首次满足自动关闭条件的时间
+    /// * `updated_by` - 触发刷新的人或系统身份
+    ///
+    /// # 返回
+    /// 任一进度发生变化并已更新实体时返回 `true`；无变化返回 `false`。
+    pub fn refresh_progress(
+        &mut self,
+        fulfillment: Option<FulfillmentProgress>,
+        collection: CollectionProgress,
+        invoice: InvoiceProgress,
+        changed_at: Instant,
+        updated_by: impl Into<String>,
+    ) -> bool {
+        let next_fulfillment = fulfillment.unwrap_or(self.fulfillment_progress);
+        let close = CloseStatus::from_progress(next_fulfillment, collection);
+        if self.fulfillment_progress == next_fulfillment
+            && self.collection_progress == collection
+            && self.invoice_progress == invoice
+            && self.close_status == close
+        {
+            return false;
+        }
+        if close == CloseStatus::Closed && self.close_status != CloseStatus::Closed {
+            self.closed_at = Some(changed_at);
+        }
+        self.fulfillment_progress = next_fulfillment;
+        self.collection_progress = collection;
+        self.invoice_progress = invoice;
+        self.close_status = close;
+        self.stable.touch(updated_by);
+        true
     }
 
     /// 递增采购创建串行化版本。
@@ -819,6 +1038,8 @@ impl SalesOrderLine {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     fn data() -> SalesOrderData {
@@ -851,6 +1072,98 @@ mod tests {
         assert_eq!(order.stable.created_by, "admin-1");
         assert!(order.effective_at.is_none());
         assert!(order.closed_at.is_none());
+    }
+
+    #[test]
+    fn entity_rules_cover_versions_relations_and_operability() {
+        let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
+        assert!(order.matches_version(1));
+        assert!(!order.matches_version(0));
+        assert!(order.matches_contract_context(
+            &ContractId::new("contract-1"),
+            &CustomerAccountId::new("cust-1"),
+            &PartyId::new("party-1"),
+        ));
+        assert_eq!(
+            order.sales_change_start_blocker(),
+            Some("只有已生效的销售单才能发起变更")
+        );
+        assert_eq!(
+            order.procurement_creation_blocker(Quantity::from_str("1").unwrap()),
+            Some("销售单最终生效后才能创建采购单")
+        );
+
+        order.start_approval_submission("admin-1").unwrap();
+        order
+            .approve(Instant::from_unix_secs(1_800_000_000), "approver")
+            .unwrap();
+        order.attach_revision("rev-1", "approver");
+        assert!(order.is_fully_formalized());
+        assert!(order.current_revision_matches(&SalesOrderRevisionId::new("rev-1")));
+        assert!(order.sales_change_start_blocker().is_none());
+        assert!(order
+            .procurement_creation_blocker(Quantity::from_str("1").unwrap())
+            .is_none());
+        assert_eq!(
+            order.procurement_creation_blocker(Quantity::from_str("0").unwrap()),
+            Some("当前销售单待采购数量已全部覆盖")
+        );
+    }
+
+    #[test]
+    fn progress_derivation_and_refresh_are_entity_owned() {
+        let zero = Amount::from_str("0").unwrap();
+        let fifty = Amount::from_str("50").unwrap();
+        let hundred = Amount::from_str("100").unwrap();
+        assert_eq!(
+            CollectionProgress::from_receivable_balances([(hundred, zero)]),
+            CollectionProgress::NotCollected
+        );
+        assert_eq!(
+            CollectionProgress::from_receivable_balances([(fifty, fifty)]),
+            CollectionProgress::PartiallyCollected
+        );
+        assert_eq!(
+            CollectionProgress::from_receivable_balances([(zero, hundred)]),
+            CollectionProgress::Settled
+        );
+        assert_eq!(
+            InvoiceProgress::from_receivable_balances([(fifty, fifty)]),
+            InvoiceProgress::PartiallyInvoiced
+        );
+        assert_eq!(
+            InvoiceProgress::from_receivable_balances([(zero, hundred)]),
+            InvoiceProgress::Completed
+        );
+
+        let mut order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
+        let closed_at = Instant::from_unix_secs(1_800_000_000);
+        assert!(order.refresh_progress(
+            Some(FulfillmentProgress::Completed),
+            CollectionProgress::Settled,
+            InvoiceProgress::Completed,
+            closed_at,
+            "system",
+        ));
+        assert_eq!(order.close_status, CloseStatus::Closed);
+        assert_eq!(order.closed_at, Some(closed_at));
+        assert!(!order.refresh_progress(
+            None,
+            CollectionProgress::Settled,
+            InvoiceProgress::Completed,
+            Instant::from_unix_secs(1_900_000_000),
+            "system",
+        ));
+        assert_eq!(order.closed_at, Some(closed_at));
+    }
+
+    #[test]
+    fn review_status_exposes_active_task_rule() {
+        assert!(ReviewStatus::InApproval.has_active_review_task());
+        assert!(ReviewStatus::PendingOperations.has_active_review_task());
+        assert!(!ReviewStatus::NotSubmitted.has_active_review_task());
+        assert!(!ReviewStatus::Approved.has_active_review_task());
+        assert!(!ReviewStatus::Rejected.has_active_review_task());
     }
 
     #[test]

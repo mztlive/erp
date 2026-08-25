@@ -3,11 +3,18 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use entities::catalog::{EnableStatus, ProductBrand, UnitOfMeasure};
+use entities::catalog::voucher_defaults::{
+    VOUCHER_DEFAULT_BRAND_CODE, VOUCHER_DEFAULT_BRAND_NAME, VOUCHER_DEFAULT_UNIT_CODE,
+    VOUCHER_ROOT_CATEGORY_CODE,
+};
+use entities::catalog::{EnableStatus, ProductBrand, ProductCategory, UnitOfMeasure};
+use entities::ids::{ProductBrandId, ProductCategoryId, UnitOfMeasureId};
 
+use super::super::extensions::CatalogExt;
 use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use super::shared::sort_doc;
+use super::shared::{in_filter, sort_doc};
+use super::CatalogRepository;
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
@@ -222,6 +229,133 @@ impl<'a> Repository<'a, UnitOfMeasure> {
             items,
             total: total as i64,
         })
+    }
+}
+
+/// 商品创建或编辑时引用的分类、品牌与基础单位批量快照。
+#[derive(Debug, Clone)]
+pub struct CatalogReferenceData {
+    /// 可选分类；调用方未要求分类查询或分类不存在时为空。
+    pub category: Option<ProductCategory>,
+    /// 品牌；不存在时为空。
+    pub brand: Option<ProductBrand>,
+    /// 命中的基础单位集合。
+    pub units: Vec<UnitOfMeasure>,
+}
+
+impl<'a> CatalogRepository<'a> {
+    /// 批量读取商品创建或编辑引用的分类、品牌与基础单位。
+    ///
+    /// # 参数
+    /// * `category_id` - 可选分类稳定 ID；内联新建分类时传 `None`
+    /// * `brand_id` - 品牌稳定 ID
+    /// * `unit_ids` - SKU 基础单位稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回命中的字典实体快照；缺失项由 Service 映射为业务错误。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn catalog_reference_data(
+        &self,
+        category_id: Option<&ProductCategoryId>,
+        brand_id: &ProductBrandId,
+        unit_ids: &[UnitOfMeasureId],
+        executor: &mut dyn Executor,
+    ) -> Result<CatalogReferenceData> {
+        let category = match category_id {
+            Some(category_id) => {
+                self.db
+                    .product_categories()
+                    .find_by_id(category_id.as_ref(), executor)
+                    .await?
+            }
+            None => None,
+        };
+        let brand = self
+            .db
+            .product_brands()
+            .find_by_id(brand_id.as_ref(), executor)
+            .await?;
+        let units = if unit_ids.is_empty() {
+            Vec::new()
+        } else {
+            self.db
+                .unit_of_measures()
+                .find_many(
+                    in_filter("id", unit_ids.iter().map(ToString::to_string)),
+                    executor,
+                )
+                .await?
+        };
+        Ok(CatalogReferenceData {
+            category,
+            brand,
+            units,
+        })
+    }
+
+    /// 按卡券默认稳定代码读取共用根分类。
+    ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回代码为 `VOUCHER` 的未删除分类；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn voucher_root_category(
+        &self,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ProductCategory>> {
+        self.db
+            .product_categories()
+            .find_one_by_field("category_code", VOUCHER_ROOT_CATEGORY_CODE.to_string(), executor)
+            .await
+    }
+
+    /// 按稳定代码或兼容名称读取卡券默认品牌。
+    ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 优先返回代码 `FSY` 的品牌；无代码命中时兼容返回名称“福尚云”的品牌。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn voucher_default_brand(&self, executor: &mut dyn Executor) -> Result<Option<ProductBrand>> {
+        let by_code = self
+            .db
+            .product_brands()
+            .find_one_by_field("brand_code", VOUCHER_DEFAULT_BRAND_CODE.to_string(), executor)
+            .await?;
+        if by_code.is_some() {
+            return Ok(by_code);
+        }
+        self.db
+            .product_brands()
+            .find_one_by_field("name", VOUCHER_DEFAULT_BRAND_NAME.to_string(), executor)
+            .await
+    }
+
+    /// 按稳定代码读取卡券默认基础单位。
+    ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回代码为“张”的未删除计量单位；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn voucher_default_unit(&self, executor: &mut dyn Executor) -> Result<Option<UnitOfMeasure>> {
+        self.db
+            .unit_of_measures()
+            .find_one_by_field("unit_code", VOUCHER_DEFAULT_UNIT_CODE.to_string(), executor)
+            .await
     }
 }
 

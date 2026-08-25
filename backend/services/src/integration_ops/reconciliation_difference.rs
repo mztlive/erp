@@ -159,13 +159,7 @@ impl IntegrationOpsService {
         let items = self
             .db
             .work_items()
-            .find_many(
-                mongodb::bson::doc! {
-                    "business_object_type": "reconciliation_difference",
-                    "business_object_id": difference_id,
-                },
-                &mut NoTransaction,
-            )
+            .list_for_reconciliation_difference(difference_id, &mut NoTransaction)
             .await?;
         if items.len() > 1 {
             return Err(Error::ConflictError("对账差异存在多个正式责任关联".to_string()));

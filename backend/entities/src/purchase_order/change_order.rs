@@ -78,6 +78,14 @@ impl PurchaseChangeOrderStatus {
             Self::Voided => "VOIDED",
         }
     }
+
+    /// 判断状态是否代表尚未结束的采购变更。
+    ///
+    /// # 返回
+    /// 草稿或审批中返回 `true`，已生效或作废返回 `false`。
+    pub fn is_in_progress(self) -> bool {
+        matches!(self, Self::Draft | Self::InApproval)
+    }
 }
 
 /// 采购变更单创建数据（不含系统字段）。
@@ -189,6 +197,77 @@ impl PurchaseChangeOrder {
             effective_revision_id: None,
             approval_subject_version: 0,
         })
+    }
+
+    /// 校验调用方持有的乐观锁版本。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取到的期望版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 期望版本与实体当前版本不一致时返回领域错误。
+    pub fn ensure_expected_version(&self, expected: u64) -> Result<()> {
+        if self.base.version != expected {
+            return Err(Error::from("采购变更单版本已变化"));
+        }
+        Ok(())
+    }
+
+    /// 校验变更单仍可冻结新的审批提交。
+    ///
+    /// # 返回
+    /// 草稿状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非草稿状态返回领域错误。
+    pub fn ensure_draft_for_submission(&self) -> Result<()> {
+        if self.stable.status != PurchaseChangeOrderStatus::Draft {
+            return Err(Error::from("变更单已提交，请勿重复提交"));
+        }
+        Ok(())
+    }
+
+    /// 解析最终生效动作必须使用的当前冻结提交。
+    ///
+    /// # 参数
+    /// * `requested` - 可选的调用方提交 ID；空值表示直接采用当前冻结提交
+    ///
+    /// # 返回
+    /// 返回当前冻结提交的类型化稳定身份。
+    ///
+    /// # 错误
+    /// 变更单尚未提交，或请求提交与当前冻结提交不一致时返回领域错误。
+    pub fn submission_id_for_effect(&self, requested: Option<&str>) -> Result<PurchaseChangeSubmissionId> {
+        let current = self
+            .current_submission_id
+            .clone()
+            .ok_or_else(|| Error::from("变更单尚未提交审批"))?;
+        if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) {
+            if requested != current.as_ref() {
+                return Err(Error::from("生效提交必须是当前冻结提交，不得使用历史提交"));
+            }
+        }
+        Ok(current)
+    }
+
+    /// 校验变更基准版本仍是采购单当前生效版本。
+    ///
+    /// # 参数
+    /// * `current_revision_id` - 原采购单当前生效版本
+    ///
+    /// # 返回
+    /// 基准版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 原采购单缺少当前版本，或当前版本已偏离变更基准时返回领域错误。
+    pub fn ensure_base_revision_current(&self, current_revision_id: Option<&str>) -> Result<()> {
+        if current_revision_id != Some(self.base_revision_id.as_ref()) {
+            return Err(Error::from("基准版本已不是当前版本，变更不能生效"));
+        }
+        Ok(())
     }
 
     /// 更新采购变更单。
@@ -341,6 +420,18 @@ fn update_has_content(update: &PurchaseChangeOrderUpdate) -> bool {
         || update.effective_revision_id.is_some()
 }
 
+/// 解析带固定前缀的十进制序号。
+///
+/// # 参数
+/// * `value` - 完整编号
+/// * `prefix` - 固定编号前缀
+///
+/// # 返回
+/// 编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
+fn parse_sequence(value: &str, prefix: &str) -> Option<u32> {
+    value.strip_prefix(prefix)?.parse().ok()
+}
+
 /// 规范化提交序号。
 ///
 /// # 参数
@@ -472,6 +563,58 @@ impl PurchaseChangeSubmission {
             submitted_at: None,
             submitted_by: None,
         })
+    }
+
+    /// 计算同一变更单的下一个提交序号。
+    ///
+    /// 仅识别 `CS-{n}` 形态的历史提交，忽略草稿或旧格式编号；新编号固定为
+    /// 六位十进制序号。
+    ///
+    /// # 参数
+    /// * `existing` - 同一采购变更单的既有提交
+    ///
+    /// # 返回
+    /// 返回下一个 `CS-000001` 形态的提交序号。
+    ///
+    /// # 错误
+    /// 最大合法序号已经达到 `u32::MAX` 时返回领域错误。
+    pub fn next_submission_no(existing: &[Self]) -> Result<String> {
+        let max_no = existing
+            .iter()
+            .filter_map(|submission| parse_sequence(&submission.submission_no, "CS-"))
+            .max()
+            .unwrap_or(0);
+        let next = max_no
+            .checked_add(1)
+            .ok_or_else(|| Error::from("采购变更提交序号溢出"))?;
+        Ok(format!("CS-{next:06}"))
+    }
+
+    /// 校验变更提交仍处于待处理状态。
+    ///
+    /// # 返回
+    /// 待审核状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 提交已经处理、失效或仍是草稿时返回领域错误。
+    pub fn ensure_pending(&self) -> Result<()> {
+        if self.status != SubmissionStatus::Pending {
+            return Err(Error::from("变更提交已处理，请勿重复生效"));
+        }
+        Ok(())
+    }
+
+    /// 记录采购变更最终通过结论。
+    ///
+    /// # 返回
+    /// 待审核提交成功改为已通过时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 提交不是待审核状态时返回领域错误。
+    pub fn approve(&mut self) -> Result<()> {
+        self.ensure_pending()?;
+        self.status = SubmissionStatus::Approved;
+        Ok(())
     }
 
     /// 提交复核。
@@ -849,6 +992,28 @@ mod tests {
     }
 
     #[test]
+    fn change_order_version_submission_and_base_revision_guards_are_owned_by_entity() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
+        order.ensure_expected_version(order.base.version).unwrap();
+        assert!(order
+            .ensure_expected_version(order.base.version.saturating_add(1))
+            .is_err());
+        order.ensure_draft_for_submission().unwrap();
+        assert!(order.submission_id_for_effect(None).is_err());
+        order
+            .start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-1")
+            .unwrap();
+        assert_eq!(
+            order.submission_id_for_effect(Some("pcs-1")).unwrap().as_ref(),
+            "pcs-1"
+        );
+        assert!(order.submission_id_for_effect(Some("pcs-old")).is_err());
+        order.ensure_base_revision_current(Some("por-1")).unwrap();
+        assert!(order.ensure_base_revision_current(Some("por-2")).is_err());
+    }
+
+    #[test]
     fn change_order_update_gates_content_on_draft() {
         let mut order =
             PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
@@ -981,6 +1146,25 @@ mod tests {
         assert!(pending
             .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
             .is_err());
+    }
+
+    #[test]
+    fn change_submission_derives_next_number_and_approves_only_pending() {
+        let mut first =
+            PurchaseChangeSubmission::new(PurchaseChangeSubmissionId::new("pcs-1"), change_submission_data())
+                .unwrap();
+        first.submission_no = "CS-000009".to_string();
+        assert_eq!(
+            PurchaseChangeSubmission::next_submission_no(std::slice::from_ref(&first)).unwrap(),
+            "CS-000010"
+        );
+        assert!(first.approve().is_err());
+        first
+            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
+            .unwrap();
+        first.approve().unwrap();
+        assert_eq!(first.status, SubmissionStatus::Approved);
+        assert!(first.approve().is_err());
     }
 
     #[test]

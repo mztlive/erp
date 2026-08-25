@@ -32,3 +32,93 @@ pub use party_contact::{PartyContact, PartyContactData, PartyContactUpdate};
 pub use party_revision::{PartyRevision, PartyRevisionData};
 pub use party_tax_profile::{PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate};
 pub use status::EffectiveRecordStatus;
+
+use crate::errors::{Error, Result};
+
+/// 由单一 Party 拥有的从属实体。
+pub trait PartyOwned {
+    /// 返回实体所属 Party ID。
+    ///
+    /// # 返回
+    /// 返回稳定 Party ID 引用。
+    fn party_id(&self) -> &PartyId;
+
+    /// 校验实体属于指定 Party。
+    ///
+    /// # 参数
+    /// * `expected` - 期望的 Party ID
+    ///
+    /// # 返回
+    /// Party 归属一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 实体归属其他 Party 时返回错误。
+    fn ensure_party(&self, expected: &PartyId) -> Result<()> {
+        if self.party_id() == expected {
+            return Ok(());
+        }
+        Err(Error::from("资料事实不属于指定主体"))
+    }
+}
+
+impl PartyOwned for PartyRevision {
+    fn party_id(&self) -> &PartyId {
+        &self.party_id
+    }
+}
+
+impl PartyOwned for PartyContact {
+    fn party_id(&self) -> &PartyId {
+        &self.party_id
+    }
+}
+
+impl PartyOwned for PartyAddress {
+    fn party_id(&self) -> &PartyId {
+        &self.party_id
+    }
+}
+
+impl PartyOwned for PartyTaxProfile {
+    fn party_id(&self) -> &PartyId {
+        &self.party_id
+    }
+}
+
+impl PartyOwned for PartyBankAccount {
+    fn party_id(&self) -> &PartyId {
+        &self.party_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::common::time::BusinessDate;
+
+    use super::{EffectiveRecordStatus, PartyContact, PartyContactData, PartyContactId, PartyId, PartyOwned};
+
+    #[test]
+    fn party_owned_accepts_matching_party_and_rejects_other_party() {
+        let contact = PartyContact::new(
+            PartyContactId::new("contact-owned"),
+            PartyContactData {
+                party_id: PartyId::new("party-1"),
+                contact_name: "张三".to_string(),
+                title: None,
+                mobile: "13800138000".to_string(),
+                telephone: None,
+                email: None,
+                valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                valid_to: None,
+                is_default: false,
+                status: EffectiveRecordStatus::Active,
+            },
+            b"party-owned-test-key",
+            "admin-1",
+        )
+        .unwrap();
+
+        assert!(contact.ensure_party(&PartyId::new("party-1")).is_ok());
+        assert!(contact.ensure_party(&PartyId::new("party-2")).is_err());
+    }
+}

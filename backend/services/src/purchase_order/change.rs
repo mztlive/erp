@@ -9,9 +9,8 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::ids::{PurchaseChangeOrderId, PurchaseChangeSubmissionId};
 use entities::purchase_order::{
-    PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeSubmission,
-    PurchaseChangeSubmissionData, PurchaseOrder, PurchaseOrderRevision, PurchaseOrderStatus,
-    SubmissionStatus,
+    PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeSubmission, PurchaseChangeSubmissionData,
+    PurchaseOrder, PurchaseOrderRevision,
 };
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -178,7 +177,9 @@ impl PurchaseOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-        self.ensure_version(&change, req.expected_lock_version)?;
+        change
+            .ensure_expected_version(req.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         self.persist_cancelled_change(id, &mut change, &req, actor).await
     }
 
@@ -211,17 +212,19 @@ impl PurchaseOrderService {
             .find_by_id(change_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-        self.ensure_version(&change, req.expected_lock_version)?;
+        change
+            .ensure_expected_version(req.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         execute_purchase_change_domain_action(
             &mut change.clone(),
             ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
             actor.id(),
         )?;
-        let submission_id = resolve_effect_submission_id(
-            change.current_submission_id.as_ref(),
-            Some(req.submission_id.as_str()),
-        )?;
-        self.persist_effective_change(change, submission_id, actor).await
+        let submission_id = change
+            .submission_id_for_effect(Some(req.submission_id.as_str()))
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        self.persist_effective_change(change, submission_id.to_string(), actor)
+            .await
     }
 
     /// 客户端直接生效失败关闭。最终动作只能由审批运行时调用。
@@ -252,23 +255,27 @@ impl PurchaseOrderService {
         params: &PurchaseChangeOrderListParams,
     ) -> Result<PageView<PurchaseChangeOrderView>> {
         params.validate()?;
-        let (sort_by, sort_dir) =
-            super::dto::normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
+        let (_, sort_dir) = super::dto::normalize_sort(&params.sort_by, &params.sort_dir, &["created_at"])?;
         let page = params.page.unwrap_or(1);
         let page_size = params.page_size.unwrap_or(20).clamp(1, 100);
-        let filter = change_list_filter(params);
-        let sort_doc = mongodb::bson::doc! { sort_by: if matches!(sort_dir, super::dto::SortDir::Asc) { 1i32 } else { -1i32 } };
-        let items = self
+        let purchase_order_id = normalized_filter(params.purchase_order_id.as_deref());
+        let status = normalized_filter(params.status.as_deref());
+        let result = self
             .db
-            .purchase_change_orders()
-            .find_many_sorted(filter, sort_doc, &mut NoTransaction)
+            .purchase_order()
+            .search_change_orders(
+                purchase_order_id.as_deref(),
+                status.as_deref(),
+                page,
+                page_size,
+                matches!(sort_dir, super::dto::SortDir::Asc),
+                &mut NoTransaction,
+            )
             .await?;
-        let total = items.len() as i64;
-        let start = ((page - 1) * u64::from(page_size)) as usize;
-        let views = items
+        let total = result.total;
+        let views = result
+            .items
             .into_iter()
-            .skip(start)
-            .take(page_size as usize)
             .map(|change| change_list_view(change, None))
             .collect();
         Ok(PageView {
@@ -328,13 +335,12 @@ impl PurchaseOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-        self.ensure_version(&order, expected_lock_version)?;
-        ensure_order_allows_change(&order)?;
+        order
+            .ensure_expected_version(expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         let base_revision_id = order
-            .stable
-            .current_revision_id
-            .clone()
-            .ok_or_else(|| Error::BusinessLogicError("采购单没有生效版本，不能发起变更".to_string()))?;
+            .revision_id_for_change()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let base_revision = self
             .db
             .purchase_order_revisions()
@@ -351,17 +357,8 @@ impl PurchaseOrderService {
     async fn ensure_no_in_progress_change(&self, purchase_order_id: &str) -> Result<()> {
         let has_in_progress = self
             .db
-            .purchase_change_orders()
-            .exists(
-                mongodb::bson::doc! {
-                    "purchase_order_id": purchase_order_id,
-                    "status": { "$in": [
-                        PurchaseChangeOrderStatus::Draft.as_str(),
-                        PurchaseChangeOrderStatus::InApproval.as_str(),
-                    ]},
-                },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .has_in_progress_change(&purchase_order_id.to_string().into(), &mut NoTransaction)
             .await?;
         if has_in_progress {
             return Err(Error::ConflictError(
@@ -429,10 +426,12 @@ impl PurchaseOrderService {
             .find_by_id(change_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
-        self.ensure_version(&change, expected_lock_version)?;
-        if change.stable.status != PurchaseChangeOrderStatus::Draft {
-            return Err(Error::ConflictError("变更单已提交，请勿重复提交".to_string()));
-        }
+        change
+            .ensure_expected_version(expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
+        change
+            .ensure_draft_for_submission()
+            .map_err(|_| Error::ConflictError("变更单已提交，请勿重复提交".to_string()))?;
         Ok(change)
     }
 
@@ -839,7 +838,9 @@ impl PurchaseOrderService {
             .find_by_id(&change.purchase_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("原采购单不存在".to_string()))?;
-        ensure_base_revision_current(change, &order)?;
+        change
+            .ensure_base_revision_current(order.stable.current_revision_id.as_deref())
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let (submission, lines) = self.load_pending_change_submission(submission_id).await?;
         let revision_no = self.next_revision_no(&order).await?;
         let (revision, revision_lines) = self
@@ -910,16 +911,13 @@ impl PurchaseOrderService {
             .find_by_id(submission_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("变更提交不存在".to_string()))?;
-        if submission.status != SubmissionStatus::Pending {
-            return Err(Error::ConflictError("变更提交已处理，请勿重复生效".to_string()));
-        }
+        submission
+            .ensure_pending()
+            .map_err(|_| Error::ConflictError("变更提交已处理，请勿重复生效".to_string()))?;
         let lines = self
             .db
-            .purchase_change_submission_lines()
-            .find_many(
-                mongodb::bson::doc! { "purchase_change_submission_id": submission_id },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_change_submission_lines(&submission.base.id.clone().into(), &mut NoTransaction)
             .await?;
         Ok((submission, lines))
     }
@@ -964,23 +962,10 @@ impl PurchaseOrderService {
     async fn next_change_submission_no(&self, change: &PurchaseChangeOrder) -> Result<String> {
         let existing = self
             .db
-            .purchase_change_submissions()
-            .find_many(
-                mongodb::bson::doc! { "purchase_change_order_id": change.base.id.clone() },
-                &mut NoTransaction,
-            )
+            .purchase_order()
+            .list_change_submissions_by_order(&change.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        let max_no = existing
-            .iter()
-            .filter_map(|submission| {
-                submission
-                    .submission_no
-                    .strip_prefix("CS-")
-                    .and_then(|value| value.parse::<u32>().ok())
-            })
-            .max()
-            .unwrap_or(0);
-        Ok(format!("CS-{:06}", max_no + 1))
+        PurchaseChangeSubmission::next_submission_no(&existing).map_err(Into::into)
     }
 }
 
@@ -1071,63 +1056,6 @@ struct FrozenChangeSubmission {
     content_hash: String,
     /// 启动幂等键。
     idempotency_key: String,
-}
-
-/// 只有已生效或部分执行的采购单可以发起变更。
-///
-/// # 错误
-/// 状态不允许时返回业务错误。
-fn ensure_order_allows_change(order: &PurchaseOrder) -> Result<()> {
-    if order.stable.status != PurchaseOrderStatus::Effective
-        && order.stable.status != PurchaseOrderStatus::PartiallyExecuted
-    {
-        return Err(Error::BusinessLogicError(
-            "只有已生效的采购单可以发起变更".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-/// 生效只允许当前冻结提交；请求携带的提交必须与之一致。
-///
-/// # 参数
-/// * `current` - 变更单上的当前冻结提交
-/// * `requested` - 客户端或运行时给出的提交；空则只用当前提交
-///
-/// # 返回
-/// 返回当前冻结提交 ID。
-///
-/// # 错误
-/// 尚未提交，或请求提交与当前冻结提交不一致时返回错误。
-pub(super) fn resolve_effect_submission_id(
-    current: Option<&PurchaseChangeSubmissionId>,
-    requested: Option<&str>,
-) -> Result<String> {
-    let current = current
-        .ok_or_else(|| Error::BusinessLogicError("变更单尚未提交审批".to_string()))?
-        .to_string();
-    if let Some(requested) = requested.map(str::trim).filter(|value| !value.is_empty()) {
-        if requested != current {
-            return Err(Error::ConflictError(
-                "生效提交必须是当前冻结提交，不得使用历史提交".to_string(),
-            ));
-        }
-    }
-    Ok(current)
-}
-
-/// 基准版本必须仍是采购单当前版本。
-///
-/// # 错误
-/// 版本漂移时返回业务错误。
-fn ensure_base_revision_current(change: &PurchaseChangeOrder, order: &PurchaseOrder) -> Result<()> {
-    if change.base_revision_id.to_string() != order.stable.current_revision_id.as_deref().unwrap_or_default()
-    {
-        return Err(Error::BusinessLogicError(
-            "基准版本已不是当前版本，变更不能生效".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 /// 在创建事务内写入变更单、绑定发布定义并登记单据。
@@ -1333,11 +1261,11 @@ async fn persist_effective_writes(
         .create_effective_revision(&revision, &revision_lines, session)
         .await?;
     persist_current_sales_allocations(db, &allocations, session).await?;
-    order.stable.current_revision_id = Some(revision.base.id.clone());
+    order.apply_change_revision(revision.base.id.clone().into(), actor_id)?;
     db.purchase_orders().update(&mut order, session).await?;
     sync_procurement_tasks_for_sales_order(db, &order.sales_order_id, session).await?;
     persist_effective_change_delta(db, &delta, session).await?;
-    submission.status = SubmissionStatus::Approved;
+    submission.approve()?;
     db.purchase_change_submissions()
         .update(&mut submission, session)
         .await?;
@@ -1412,27 +1340,18 @@ async fn advance_source_sales_procurement_guard(
     Ok(())
 }
 
-/// 组装列表筛选。
+/// 规范化可选列表筛选文本。
 ///
 /// # 参数
-/// * `params` - 查询参数
+/// * `value` - 原始可选筛选值
 ///
 /// # 返回
-/// 返回 Mongo 过滤文档。
-fn change_list_filter(params: &PurchaseChangeOrderListParams) -> mongodb::bson::Document {
-    let mut filter = mongodb::bson::doc! {};
-    if let Some(purchase_order_id) = params
-        .purchase_order_id
-        .as_deref()
+/// 空白值返回 `None`，否则返回去除首尾空白后的字符串。
+fn normalized_filter(value: Option<&str>) -> Option<String> {
+    value
         .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
-        filter.insert("purchase_order_id", purchase_order_id);
-    }
-    if let Some(status) = params.status.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
-        filter.insert("status", status);
-    }
-    filter
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 /// 由变更单构造列表/详情视图。
@@ -1473,8 +1392,7 @@ fn content_fingerprint(lines: &[SavePurchaseOrderLine]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        execute_purchase_change_domain_action, resolve_effect_submission_id, start_purchase_change_approval,
-        PurchaseOrderService,
+        execute_purchase_change_domain_action, start_purchase_change_approval, PurchaseOrderService,
     };
     use crate::approval::policy::ApprovalDomainAction;
     use entities::ids::{
@@ -1509,8 +1427,7 @@ mod tests {
         assert!(source.contains("pub async fn apply_effective_change"));
         assert!(source.contains("change.apply_effective"));
         assert!(source.contains("PurchaseChangeOrderApplyEffectiveChange"));
-        assert!(source.contains("resolve_effect_submission_id"));
-        assert!(source.contains("current_submission_id"));
+        assert!(source.contains("submission_id_for_effect"));
     }
 
     /// 撤回必须调用统一 cancel 并回到草稿。
@@ -1567,8 +1484,8 @@ mod tests {
             .find("persist_current_sales_allocations")
             .expect("必须持久化当前销售分配");
         let pointer = body
-            .find("order.stable.current_revision_id")
-            .expect("必须切换采购当前版本");
+            .find("order.apply_change_revision")
+            .expect("必须通过实体切换采购当前版本");
         let order_update = body
             .find("db.purchase_orders().update")
             .expect("必须 CAS 更新采购单");
@@ -1653,18 +1570,28 @@ mod tests {
     /// 生效只接受当前冻结提交；错误提交或缺失提交失败关闭。
     #[test]
     fn effect_rejects_mismatched_or_missing_submission() {
-        let current = PurchaseChangeSubmissionId::new("pcs-current");
+        let mut change = PurchaseChangeOrder::new(
+            PurchaseChangeOrderId::new("pco-1"),
+            PurchaseChangeOrderData {
+                purchase_order_id: PurchaseOrderId::new("po-1"),
+                base_revision_id: PurchaseOrderRevisionId::new("por-1"),
+                reason: "成本上涨".into(),
+            },
+            "user-1",
+        )
+        .unwrap();
+        assert!(change.submission_id_for_effect(Some("pcs-current")).is_err());
+        change
+            .start_approval(PurchaseChangeSubmissionId::new("pcs-current"), "hash-1", "user-1")
+            .unwrap();
         assert_eq!(
-            resolve_effect_submission_id(Some(&current), Some("pcs-current")).unwrap(),
+            change
+                .submission_id_for_effect(Some("pcs-current"))
+                .unwrap()
+                .as_ref(),
             "pcs-current"
         );
-        assert_eq!(
-            resolve_effect_submission_id(Some(&current), None).unwrap(),
-            "pcs-current"
-        );
-        let mismatch = resolve_effect_submission_id(Some(&current), Some("pcs-old")).unwrap_err();
-        assert!(mismatch.to_string().contains("当前冻结提交"));
-        assert!(resolve_effect_submission_id(None, Some("pcs-current")).is_err());
+        assert!(change.submission_id_for_effect(Some("pcs-old")).is_err());
     }
 
     /// 非审批中不得走最终通过动作；撤回不回退 subject_version。

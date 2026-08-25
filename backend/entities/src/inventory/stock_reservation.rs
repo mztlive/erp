@@ -63,6 +63,22 @@ impl ReservationStatus {
             Self::Released => "RELEASED",
         }
     }
+
+    /// 返回仍允许消耗或释放的预占状态集合。
+    ///
+    /// # 返回
+    /// 返回有效与部分消耗两个可操作状态。
+    pub fn operable() -> &'static [Self] {
+        &[Self::Active, Self::PartiallyConsumed]
+    }
+
+    /// 判断当前预占状态是否仍可操作。
+    ///
+    /// # 返回
+    /// 有效或部分消耗状态返回 `true`。
+    pub fn is_operable(self) -> bool {
+        Self::operable().contains(&self)
+    }
 }
 
 /// 预占流水类型（数据模型 §6.7：建立、消耗、释放、冲正）。
@@ -230,29 +246,17 @@ impl StockReservation {
     /// # 错误
     /// 更新后数量为负或状态与数量不一致时返回错误。
     pub fn update(&mut self, update: StockReservationUpdate) -> Result<()> {
-        if let Some(reserved) = update.reserved_quantity {
-            self.reserved_quantity = reserved;
-        }
-        if let Some(consumed) = update.consumed_quantity {
-            self.consumed_quantity = consumed;
-        }
-        if let Some(released) = update.released_quantity {
-            self.released_quantity = released;
-        }
-        if let Some(status) = update.status {
-            self.status = status;
-        }
-        ensure_quantities_valid(
-            self.reserved_quantity,
-            self.consumed_quantity,
-            self.released_quantity,
-        )?;
-        ensure_status_coherent(
-            self.status,
-            self.reserved_quantity,
-            self.consumed_quantity,
-            self.released_quantity,
-        )
+        let reserved = update.reserved_quantity.unwrap_or(self.reserved_quantity);
+        let consumed = update.consumed_quantity.unwrap_or(self.consumed_quantity);
+        let released = update.released_quantity.unwrap_or(self.released_quantity);
+        let status = update.status.unwrap_or(self.status);
+        ensure_quantities_valid(reserved, consumed, released)?;
+        ensure_status_coherent(status, reserved, consumed, released)?;
+        self.reserved_quantity = reserved;
+        self.consumed_quantity = consumed;
+        self.released_quantity = released;
+        self.status = status;
+        Ok(())
     }
 }
 
@@ -503,6 +507,24 @@ mod tests {
                 .is_err(),
             "有消耗时不能回到有效状态"
         );
+        assert_eq!(
+            reservation.status,
+            ReservationStatus::PartiallyConsumed,
+            "失败更新不得破坏原状态"
+        );
+    }
+
+    /// 状态可操作性：只有有效与部分消耗允许继续消耗或释放。
+    #[test]
+    fn operable_statuses_are_owned_by_status_type() {
+        assert_eq!(
+            ReservationStatus::operable(),
+            &[ReservationStatus::Active, ReservationStatus::PartiallyConsumed]
+        );
+        assert!(ReservationStatus::Active.is_operable());
+        assert!(ReservationStatus::PartiallyConsumed.is_operable());
+        assert!(!ReservationStatus::Consumed.is_operable());
+        assert!(!ReservationStatus::Released.is_operable());
     }
 
     /// happy path：预占流水创建成功并规范化来源。

@@ -24,6 +24,35 @@ impl<'a> Repository<'a, AuditLog> {
     ) -> Result<PageResult<AuditLog>> {
         self.search(filter, executor).await
     }
+
+    /// 按资源读取全部成功审计事实。
+    ///
+    /// # 参数
+    /// * `resource_type` - 资源类型稳定代码
+    /// * `resource_id` - 资源业务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该资源全部成功且未删除的审计日志；调用方按业务动作判定所需事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_successful_by_resource(
+        &self,
+        resource_type: &str,
+        resource_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        self.find_many(
+            doc! {
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "success": true,
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 审计日志列表过滤条件。

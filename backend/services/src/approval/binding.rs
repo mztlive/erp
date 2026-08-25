@@ -2,17 +2,16 @@
 //!
 //! 端口接收调用方 `Executor`，不得自行开嵌套事务，也不得把执行器传入 BPM。
 
-use bpm::graph::{generate_linear_transitions, validate_entry_node, validate_transition};
 use bpm::ids::ApprovalProcessDefinitionId;
 use bpm::model::types::ModelError;
-use bpm::model::{ApprovalNodeDefinition, ApprovalTransitionDefinition};
 use database::repository::bpm::DefinitionGraph;
 use database::{AccessControlExt, BpmExt, DocumentRegistryExt, Executor, MongoCasbinAdapter};
 use entities::common::time::Instant;
-use entities::document_registry::business_document::ApprovalDefinitionBinding;
+use entities::document_registry::business_document::{
+    ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
+};
 use entities::document_registry::{BusinessDocument, DocumentType};
-use entities::AccountCore;
-use mongodb::bson::doc;
+use entities::{AccountCore, RoleIdSet};
 use mongodb::Database;
 
 use crate::audit::AuditActor;
@@ -20,7 +19,7 @@ use crate::errors::{Error, Result};
 use crate::iam::{subject, SharedRbacService};
 
 use super::business_adapter::{
-    adapter_spec_of, assignee_ids_of, ensure_published_status, ensure_separation_of_duties,
+    adapter_spec_of, ensure_published_status, ensure_separation_of_duties,
     revalidate_assignee_binding_access, subject_ref_for, BindingRevalidationContext,
 };
 use super::policy::{
@@ -37,8 +36,6 @@ pub const DEFINITION_BOUND_AUDIT_ACTION: &str = "approval.definition.bound";
 pub const DEFINITION_POLICY_AUDIT_ACTION: &str = "approval.definition.policy";
 /// 未提交升级审计动作。
 pub const DEFINITION_UPGRADED_AUDIT_ACTION: &str = "approval.definition.upgraded";
-
-const MAX_DEFINITION_NODES: usize = 20;
 
 /// 创建时绑定命令。客户端不得提交定义 ID。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,6 +144,16 @@ pub async fn bind_published_definition_on_document_create(
 /// 仅运行管理员可调用；目标固定当前 `PUBLISHED`，禁止客户端提交定义 ID。
 /// 使用单据版本与 `approval_binding_version` 双 CAS。
 ///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `command` - 单据、双 CAS、原因与重验上下文
+/// * `actor` - 已认证运行管理员
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回升级后完整审批绑定。
+///
 /// # 错误
 /// 权限、状态、版本或人员重验失败时返回错误。
 pub async fn upgrade_unsubmitted_document_definition(
@@ -163,18 +170,31 @@ pub async fn upgrade_unsubmitted_document_definition(
         .approval_binding
         .clone()
         .ok_or_else(|| Error::ValidationError("尚未绑定审批定义".to_string()))?;
-    ensure_upgrade_unsubmitted_allowed(
-        document.formalized_at.is_some(),
-        document_has_started_instance(db, document.document_type, &document.base.id, executor).await?,
-        document.base.version,
-        command.expected_document_version,
-        current.approval_binding_version,
-        command.expected_binding_version,
-        true,
-    )?;
+    let approval_started =
+        document_has_started_instance(db, document.document_type, &document.base.id, executor).await?;
+    document
+        .ensure_unsubmitted_approval_binding_upgrade(
+            approval_started,
+            command.expected_document_version,
+            command.expected_binding_version,
+            &command.reason,
+        )
+        .map_err(map_binding_upgrade_error)?;
     let published = load_published_graph(db, document.document_type, executor).await?;
     revalidate_binding_graph(db, rbac, &policy, &command.context, &published, executor).await?;
-    apply_upgrade(&mut document, &published, &command.reason, actor)?;
+    document
+        .upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
+            approval_process_definition_id: ApprovalProcessDefinitionId::new(
+                published.definition.base.id.clone(),
+            ),
+            approval_definition_version: published.definition.definition_version,
+            approval_started,
+            expected_document_version: command.expected_document_version,
+            expected_binding_version: command.expected_binding_version,
+            reason: &command.reason,
+            at: Instant::now(),
+        })
+        .map_err(map_binding_upgrade_error)?;
     persist_upgraded_document(db, &mut document, &current, actor, executor).await
 }
 
@@ -200,36 +220,6 @@ pub fn binding_from_published(
     bound_at: Instant,
 ) -> Result<ApprovalDefinitionBinding> {
     ApprovalDefinitionBinding::new(definition_id, definition_version, bound_at).map_err(Into::into)
-}
-
-/// 未提交升级的纯闸门。
-///
-/// # 错误
-/// 已提交、已启动、版本不匹配或非管理员时返回错误。
-pub fn ensure_upgrade_unsubmitted_allowed(
-    formalized: bool,
-    started: bool,
-    document_version: u64,
-    expected_document_version: u64,
-    binding_version: u64,
-    expected_binding_version: u64,
-    is_runtime_admin: bool,
-) -> Result<()> {
-    if !is_runtime_admin {
-        return Err(Error::Forbidden("没有该单据类型的审批运行管理权限".to_string()));
-    }
-    if formalized {
-        return Err(Error::ConflictError("已提交单据不能升级审批绑定".to_string()));
-    }
-    if started {
-        return Err(Error::ConflictError("已启动单据不能升级审批绑定".to_string()));
-    }
-    if document_version != expected_document_version || binding_version != expected_binding_version {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 /// 必须审批路径：查询发布定义、重验并写绑定审计。
@@ -276,25 +266,42 @@ async fn load_published_graph(
     Ok(graph)
 }
 
-/// 复用图原语重验发布结构；不得把 Executor 传入 BPM。
+/// 复用 BPM 图原语重验发布结构；不得把 Executor 传入 BPM。
+///
+/// # 参数
+/// * `graph` - Repository 一次性加载的发布定义图
+///
+/// # 返回
+/// 状态为已发布且线性图完整时返回 `Ok(())`。
+///
+/// # 错误
+/// 状态或 BPM 图结构损坏时返回稳定校验错误。
+///
+/// # 关键业务约束
+/// Service 不得复制节点顺序、入口或连线算法。
 fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> {
     ensure_published_status(graph.definition.status)?;
-    let nodes = sorted_nodes(&graph.nodes)?;
-    ensure_node_count(nodes.len())?;
-    let keys = nodes.iter().map(|node| node.node_key.clone()).collect::<Vec<_>>();
-    validate_entry_node(&graph.definition.entry_node_key, &keys).map_err(map_model_error)?;
-    if graph.definition.entry_node_key.trim() != keys[0] {
-        return Err(Error::ValidationError("入口必须是顺序第一节点".to_string()));
-    }
-    let expected = generate_linear_transitions(&keys).map_err(map_model_error)?;
-    ensure_transitions_match(&graph.transitions, &expected)?;
-    for transition in &graph.transitions {
-        validate_transition(transition).map_err(map_model_error)?;
-    }
-    Ok(())
+    graph.validate_linear().map_err(map_model_error)
 }
 
 /// Adapter 重验指定用户、权限、DataScope、读取权与岗位分离。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `policy` - 当前单据类型必须审批政策
+/// * `context` - 当前单据组织与创建人事实
+/// * `graph` - 已由 BPM 校验的定义图
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 全部定义审批人通过静态与对象访问重验时返回 `Ok(())`。
+///
+/// # 错误
+/// 岗位分离、账号、权限、数据范围或对象读取权失败时返回错误。
+///
+/// # 关键业务约束
+/// 审批人集合由 BPM 图确定性提取，Service 只编排外部资格判断。
 async fn revalidate_binding_graph(
     db: &Database,
     rbac: &SharedRbacService,
@@ -304,7 +311,7 @@ async fn revalidate_binding_graph(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let spec = adapter_spec_of(policy.document_type)?;
-    let assignee_ids = assignee_ids_of(graph);
+    let assignee_ids = graph.assignee_ids();
     ensure_separation_of_duties(
         policy.separation_of_duties_policy,
         &context.creator_id,
@@ -319,6 +326,21 @@ async fn revalidate_binding_graph(
 }
 
 /// 重验单个指定审批人的账号与静态权限。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `user_id` - 定义指定的审批人账号 ID
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回存在且当前可承担后台审批责任的账号。
+///
+/// # 错误
+/// 账号缺失、已停用、身份不符或缺少静态审批权限时返回错误。
+///
+/// # 关键业务约束
+/// Repository 只读取账号事实，后台有效性由实体判断，静态权限由 Service 查询 RBAC。
 async fn revalidate_one_assignee(
     db: &Database,
     rbac: &SharedRbacService,
@@ -327,7 +349,7 @@ async fn revalidate_one_assignee(
 ) -> Result<AccountCore> {
     let account = db
         .accounts()
-        .find_by_id(user_id, executor)
+        .find_approval_assignee_by_id(user_id, executor)
         .await?
         .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
     ensure_assignee_ready(&account)?;
@@ -378,16 +400,31 @@ async fn load_enabled_role_scopes(
 }
 
 /// 读取 Casbin 绑定且仍然启用的角色 ID。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `account` - 已重验的审批人账号
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回按 Casbin 角色键确定化并经角色仓储过滤后的启用角色 ID。
+///
+/// # 错误
+/// Casbin 查询、角色键解析或角色仓储查询失败时返回错误。
+///
+/// # 关键业务约束
+/// 角色键过滤、排序与去重由 `RoleIdSet` 统一实现，Service 不保留第二套解析规则。
 async fn load_enabled_role_ids(
     db: &Database,
     account: &AccountCore,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let role_ids = casbin_role_ids(
+    let role_ids = RoleIdSet::from_casbin_role_keys(
         MongoCasbinAdapter::new(db.clone())
             .subject_roles(&subject(account.kind, &account.base.id), executor)
             .await?,
-    );
+    )?
+    .to_strings();
     if role_ids.is_empty() {
         return Ok(role_ids);
     }
@@ -400,23 +437,24 @@ async fn load_enabled_role_ids(
         .collect())
 }
 
-/// 从 Casbin 角色键提取角色 ID。
-fn casbin_role_ids(role_keys: Vec<String>) -> Vec<String> {
-    let mut role_ids = role_keys
-        .into_iter()
-        .filter_map(|role_key| role_key.strip_prefix("role:").map(str::to_string))
-        .collect::<Vec<_>>();
-    role_ids.sort();
-    role_ids.dedup();
-    role_ids
-}
-
-/// 后台有效账号闸门。
+/// 将账号实体的后台有效性判断映射为绑定校验错误。
+///
+/// # 参数
+/// * `account` - Repository 返回的审批人账号
+///
+/// # 返回
+/// 账号可承担后台责任时返回 `Ok(())`。
+///
+/// # 错误
+/// 账号已停用或身份不满足后台责任时返回校验错误。
+///
+/// # 关键业务约束
+/// 类型与状态组合规则只由 `AccountCore::is_active_backoffice` 提供。
 fn ensure_assignee_ready(account: &AccountCore) -> Result<()> {
     match ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission {
         ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission => {}
     }
-    if account.is_kind(entities::AccountKind::Admin) && account.can_login() {
+    if account.is_active_backoffice() {
         return Ok(());
     }
     Err(Error::ValidationError(
@@ -508,31 +546,6 @@ async fn write_bound_audit(
     Ok(())
 }
 
-/// 应用升级值对象并写原因。
-fn apply_upgrade(
-    document: &mut BusinessDocument,
-    graph: &DefinitionGraph,
-    reason: &str,
-    actor: &AuditActor,
-) -> Result<()> {
-    if reason.trim().is_empty() {
-        return Err(Error::ValidationError("升级原因不能为空".to_string()));
-    }
-    let expected = document
-        .approval_binding
-        .as_ref()
-        .map(|binding| binding.approval_binding_version)
-        .ok_or_else(|| Error::ValidationError("尚未绑定审批定义".to_string()))?;
-    document.upgrade_approval_binding(
-        ApprovalProcessDefinitionId::new(graph.definition.base.id.clone()),
-        graph.definition.definition_version,
-        expected,
-        Instant::now(),
-    )?;
-    let _ = actor;
-    Ok(())
-}
-
 /// 持久化升级后的注册行并写升级审计。
 async fn persist_upgraded_document(
     db: &Database,
@@ -576,7 +589,22 @@ async fn load_registered_document(
         .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))
 }
 
-/// 是否已存在审批实例。
+/// 查询单据是否已经启动过审批实例。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `document_type` - ERP 单据类型
+/// * `document_id` - 业务单据注册 ID
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 任意未删除审批实例命中该主体时返回 `true`。
+///
+/// # 错误
+/// 主体引用构造或 Repository 查询失败时返回错误。
+///
+/// # 关键业务约束
+/// 查询条件由 BPM Repository 封装，终态实例仍证明单据已经启动过审批。
 async fn document_has_started_instance(
     db: &Database,
     document_type: DocumentType,
@@ -584,79 +612,40 @@ async fn document_has_started_instance(
     executor: &mut dyn Executor,
 ) -> Result<bool> {
     let subject = subject_ref_for(document_type, document_id)?;
-    let found = db
-        .approval_process_instances()
-        .find_one(
-            doc! {
-                "subject.subject_kind": subject.subject_kind(),
-                "subject.subject_id": subject.subject_id(),
-            },
-            executor,
-        )
-        .await?;
-    Ok(found.is_some())
+    db.bpm_workflow()
+        .has_started_instance_for_subject(&subject, executor)
+        .await
+        .map_err(Into::into)
 }
 
-/// 按展示顺序排序节点。
-fn sorted_nodes(nodes: &[ApprovalNodeDefinition]) -> Result<Vec<ApprovalNodeDefinition>> {
-    let mut nodes = nodes.to_vec();
-    nodes.sort_by_key(|node| node.display_order);
-    for (index, node) in nodes.iter().enumerate() {
-        let expected =
-            u32::try_from(index + 1).map_err(|_| Error::ValidationError("节点顺序溢出".to_string()))?;
-        if node.display_order != expected {
-            return Err(Error::ValidationError(
-                "节点顺序必须从 1 连续且无重复".to_string(),
-            ));
+/// 将 ERP 单据绑定升级错误映射为稳定的 Service 错误语义。
+///
+/// # 参数
+/// * `error` - 实体层返回的升级失败原因
+///
+/// # 返回
+/// 返回保持验证错误、冲突错误与实体不变量分类的 Service 错误。
+///
+/// # 错误
+/// 无；本方法只执行错误分类转换。
+///
+/// # 关键业务约束
+/// 已提交、已启动与双 CAS 失败必须保持冲突语义，缺失绑定和空原因保持校验语义。
+fn map_binding_upgrade_error(error: ApprovalBindingUpgradeError) -> Error {
+    match error {
+        ApprovalBindingUpgradeError::MissingBinding => Error::ValidationError("尚未绑定审批定义".to_string()),
+        ApprovalBindingUpgradeError::Formalized => {
+            Error::ConflictError("已提交单据不能升级审批绑定".to_string())
         }
+        ApprovalBindingUpgradeError::ApprovalStarted => {
+            Error::ConflictError("已启动单据不能升级审批绑定".to_string())
+        }
+        ApprovalBindingUpgradeError::VersionConflict => {
+            Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
+        }
+        ApprovalBindingUpgradeError::EmptyReason => Error::ValidationError("升级原因不能为空".to_string()),
+        ApprovalBindingUpgradeError::BindingInvariant(error) => Error::Logic(error),
     }
-    Ok(nodes)
-}
-
-/// 节点数量必须在 1..=20。
-fn ensure_node_count(count: usize) -> Result<()> {
-    if (1..=MAX_DEFINITION_NODES).contains(&count) {
-        return Ok(());
-    }
-    Err(Error::ValidationError("发布定义图节点数量非法".to_string()))
-}
-
-/// 比较已存连线与线性生成器。
-fn ensure_transitions_match(
-    actual: &[ApprovalTransitionDefinition],
-    expected: &[bpm::graph::LinearTransitionDraft],
-) -> Result<()> {
-    if actual.len() != expected.len() {
-        return Err(Error::ValidationError("连线与线性生成器结果不一致".to_string()));
-    }
-    let mut actual_keys = actual
-        .iter()
-        .map(|item| {
-            (
-                item.from_node_key.clone(),
-                item.event.as_str(),
-                item.to_node_key.clone(),
-                item.terminal_result.map(|value| value.as_str()),
-            )
-        })
-        .collect::<Vec<_>>();
-    let mut expected_keys = expected
-        .iter()
-        .map(|draft| {
-            (
-                draft.from_node_key.clone(),
-                draft.event.as_str(),
-                draft.to_node_key.clone(),
-                draft.terminal_result.map(|item| item.as_str()),
-            )
-        })
-        .collect::<Vec<_>>();
-    actual_keys.sort();
-    expected_keys.sort();
-    if actual_keys == expected_keys {
-        return Ok(());
-    }
-    Err(Error::ValidationError("连线与线性生成器结果不一致".to_string()))
 }
 
 /// 映射 BPM 模型错误。
@@ -677,7 +666,6 @@ mod tests {
     };
     use crate::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
     use crate::document_registry::new_registered_document;
-    use bpm::model::types::{ApprovalDefinitionStatus, ApprovalTransitionEvent};
     use entities::sales_order::BusinessType;
 
     /// 绑定政策：无审批跳过，必须审批要求发布定义。
@@ -713,50 +701,6 @@ mod tests {
         assert!(published_definition_or_not_configured(Some(1)).is_ok());
     }
 
-    /// 绑定必须整体写入，禁止半绑定。
-    #[test]
-    fn attach_binding_is_atomic() {
-        let mut document =
-            new_registered_document("doc-1", DocumentType::StockAdjustment, "").expect("草稿可空编号");
-        assert!(document.approval_binding.is_none());
-        let binding = binding_from_published(
-            ApprovalProcessDefinitionId::new("def-1"),
-            1,
-            Instant::from_unix_secs(10),
-        )
-        .unwrap();
-        attach_published_binding(&mut document, binding).unwrap();
-        assert_eq!(
-            document
-                .approval_binding
-                .as_ref()
-                .unwrap()
-                .approval_binding_version,
-            1
-        );
-        assert!(attach_published_binding(
-            &mut document,
-            binding_from_published(
-                ApprovalProcessDefinitionId::new("def-2"),
-                2,
-                Instant::from_unix_secs(11),
-            )
-            .unwrap()
-        )
-        .is_err());
-    }
-
-    /// 升级闸门：管理员、未提交、未启动、双 CAS。
-    #[test]
-    fn upgrade_unsubmitted_requires_admin_and_dual_cas() {
-        assert!(ensure_upgrade_unsubmitted_allowed(false, false, 1, 1, 1, 1, true).is_ok());
-        assert!(ensure_upgrade_unsubmitted_allowed(false, false, 1, 1, 1, 1, false).is_err());
-        assert!(ensure_upgrade_unsubmitted_allowed(true, false, 1, 1, 1, 1, true).is_err());
-        assert!(ensure_upgrade_unsubmitted_allowed(false, true, 1, 1, 1, 1, true).is_err());
-        assert!(ensure_upgrade_unsubmitted_allowed(false, false, 2, 1, 1, 1, true).is_err());
-        assert!(ensure_upgrade_unsubmitted_allowed(false, false, 1, 1, 2, 1, true).is_err());
-    }
-
     /// 全部必须审批类型进入目标运行时。
     #[test]
     fn process_required_types_are_cut_over() {
@@ -782,25 +726,6 @@ mod tests {
             let subject = subject_ref_for(document_type, "id-1").unwrap();
             assert_eq!(subject.subject_kind(), process_kind_of(document_type).as_str());
         }
-    }
-
-    /// 发布图节点数量非法时失败关闭。
-    #[test]
-    fn published_graph_node_count_fails_closed() {
-        assert!(ensure_node_count(0).is_err());
-        assert!(ensure_node_count(1).is_ok());
-        assert!(ensure_node_count(21).is_err());
-        assert!(ensure_published_status(ApprovalDefinitionStatus::Published).is_ok());
-        assert!(ensure_published_status(ApprovalDefinitionStatus::Draft).is_err());
-        assert!(ensure_published_status(ApprovalDefinitionStatus::Retired).is_err());
-    }
-
-    /// 连线与生成器不一致时失败关闭。
-    #[test]
-    fn transition_mismatch_fails_closed() {
-        let expected = generate_linear_transitions(&["n1".into(), "n2".into()]).unwrap();
-        assert!(ensure_transitions_match(&[], &expected).is_err());
-        assert_eq!(expected[0].event, ApprovalTransitionEvent::Approve);
     }
 
     /// 20 个 DocumentType 的 BusinessDocument 注册清点。

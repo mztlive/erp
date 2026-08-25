@@ -22,6 +22,8 @@ use entities::integration_ops::{
     MessageType, ReconciliationDifference, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
     ResolutionAction, ResolutionType, ResultingStatus, SourceSystemId,
 };
+use entities::supplier_fulfillment::SupplierRefundFact;
+use entities::work_item::WorkItem;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -516,6 +518,82 @@ impl<'a> Repository<'a, ReconciliationDifference> {
             items,
             total: total as i64,
         })
+    }
+}
+
+impl<'a> Repository<'a, WorkItem> {
+    /// 查询错误任务的正式责任关联。
+    ///
+    /// # 参数
+    /// * `task_id` - 集成错误任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的正式任务；调用方必须校验责任关联唯一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_for_integration_error_task(
+        &self,
+        task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many(
+            doc! {
+                "business_object_type": "integration_error_task",
+                "business_object_id": task_id,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询对账差异的正式责任关联。
+    ///
+    /// # 参数
+    /// * `difference_id` - 对账差异 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的正式任务；调用方必须校验责任关联唯一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_for_reconciliation_difference(
+        &self,
+        difference_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many(
+            doc! {
+                "business_object_type": "reconciliation_difference",
+                "business_object_id": difference_id,
+            },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, SupplierRefundFact> {
+    /// 判断指定入站消息是否已形成供应商退款正式事实。
+    ///
+    /// # 参数
+    /// * `message_id` - 入站消息 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 已存在正式退款事实时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn exists_by_inbox_message(
+        &self,
+        message_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(doc! { "inbox_message_id": message_id }, executor)
+            .await
     }
 }
 

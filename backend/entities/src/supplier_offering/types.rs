@@ -78,6 +78,30 @@ impl OfferingStatus {
     }
 }
 
+/// 商业条款修订对当前销售安全性的影响分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OfferingRevisionImpact {
+    /// 不影响销售安全确认。
+    None,
+    /// 供给成本发生变化，需要重新确认成本。
+    CostChanged,
+    /// MOQ、区域、能力、履约说明或有效期发生关键变化。
+    CriticalSupplyChanged,
+}
+
+/// 实时可供投影导致销售安全暂停的领域原因。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AvailabilityInterruptionReason {
+    /// 供应商明确停止供应。
+    SupplierStopped,
+    /// 当前不可供。
+    SupplyUnavailable,
+    /// 可供数据超过新鲜度阈值。
+    AvailabilityStale,
+    /// 状态可供但数量已经耗尽。
+    ZeroInventory,
+}
+
 /// 供给的实时可供状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]

@@ -4,47 +4,23 @@ use std::collections::{HashMap, HashSet};
 
 use database::{AccessControlExt, CatalogExt, Executor, NoTransaction, ProcurementResponsibilityExt};
 use entities::catalog::{Product, ProductCategory, ProductRevision, Sku};
-use entities::ids::{ProductCategoryId, SkuId};
+use entities::ids::{ProductCategoryId, ProductRevisionId};
 use entities::procurement_responsibility::{
-    ProcurementResponsibilityContext, ProcurementResponsibilityRuleSet, ProcurementResponsibilityRuleType,
+    EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
+    ProcurementResponsibilityResolutionIdentity, ProcurementResponsibilityResolutionLine,
+    ProcurementResponsibilityRuleSet, ProcurementResponsibilityRuleType,
 };
 use entities::{AccountCore, AccountKind, Permission};
-use mongodb::bson::doc;
 
-use super::dto::{ProcurementResponsibilityResolutionView, ProcurementResponsibilityResolveLineRequest};
+use super::dto::ProcurementResponsibilityResolutionView;
 use super::ProcurementResponsibilityService;
 use crate::errors::{Error, Result};
 use crate::iam::subject;
 
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 
-/// 内部批量解析输入。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ResolutionInput {
-    /// 稳定行键；销售生效时使用稳定销售行 ID。
-    pub line_key: String,
-    /// 精确 SKU。
-    pub sku_id: SkuId,
-    /// 可选服务区域。
-    pub service_region: Option<String>,
-}
-
-impl From<ProcurementResponsibilityResolveLineRequest> for ResolutionInput {
-    /// 将预览行请求转换为内部解析输入。
-    ///
-    /// # 参数
-    /// * `line` - API 预览行
-    ///
-    /// # 返回
-    /// 返回不信任客户端分类与商品类型的内部输入。
-    fn from(line: ProcurementResponsibilityResolveLineRequest) -> Self {
-        Self {
-            line_key: line.line_key,
-            sku_id: line.sku_id,
-            service_region: line.service_region,
-        }
-    }
-}
+/// 内部批量解析输入；实体负责行键与区域规范化。
+pub(crate) type ResolutionInput = ProcurementResponsibilityResolutionLine;
 
 /// 已授权的批量解析计划。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,12 +80,9 @@ impl ProcurementResponsibilityService {
     ) -> Result<()> {
         let candidates = self.resolve_candidates(inputs, executor).await?;
         let actual = candidates.into_iter().map(candidate_view).collect::<Vec<_>>();
-        let unchanged = actual.len() == expected.lines.len()
-            && actual
-                .iter()
-                .zip(&expected.lines)
-                .all(|(actual, expected)| same_resolution_identity(actual, expected));
-        if !unchanged {
+        let actual_identity = resolution_identities(&actual)?;
+        let expected_identity = resolution_identities(&expected.lines)?;
+        if actual_identity != expected_identity {
             return Err(Error::ConflictError(
                 "采购责任规则或目录事实已变化，请重新提交审批".to_string(),
             ));
@@ -136,8 +109,8 @@ impl ProcurementResponsibilityService {
     pub(crate) async fn authorize_owner_eligibility(&self, owner_user_id: &str) -> Result<u64> {
         for _ in 0..AUTHORIZATION_SNAPSHOT_ATTEMPTS {
             let before = self.rbac.current_policy_revision().await?;
-            let account = load_owner_account(&self.db, owner_user_id, &mut NoTransaction).await?;
-            ensure_purchase_create_permission(&self.rbac, &account).await?;
+            let owner = load_owner_account(&self.db, owner_user_id, &mut NoTransaction).await?;
+            ensure_purchase_create_permission(&self.rbac, &owner).await?;
             let after = self.rbac.current_policy_revision().await?;
             if before == after {
                 return Ok(before);
@@ -164,10 +137,9 @@ impl ProcurementResponsibilityService {
         inputs: &[ResolutionInput],
         executor: &mut dyn Executor,
     ) -> Result<Vec<CandidateResolution>> {
-        if inputs.is_empty() {
-            return Err(Error::ValidationError("采购责任解析行不能为空".to_string()));
-        }
-        ensure_unique_line_keys(inputs)?;
+        let inputs = ProcurementResponsibilityResolutionBatch::new(inputs)
+            .map_err(Error::Logic)?
+            .lines();
         let facts = load_catalog_facts(&self.db, inputs, executor).await?;
         let rules = self
             .db
@@ -252,32 +224,28 @@ async fn load_catalog_facts(
     inputs: &[ResolutionInput],
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, CatalogFact>> {
-    let sku_ids = unique_strings(inputs.iter().map(|line| line.sku_id.as_ref()));
+    let sku_ids = unique_values(inputs.iter().map(|line| line.sku_id.clone()));
     let skus = db
         .skus()
-        .find_many(doc! { "id": { "$in": &sku_ids } }, executor)
+        .list_procurement_responsibility_skus(&sku_ids, executor)
         .await?;
     let sku_map = by_id(skus);
-    ensure_all_ids_present("SKU", &sku_ids, &sku_map)?;
-    let product_ids = unique_strings(sku_map.values().map(|sku| sku.product_id.as_ref()));
+    ensure_all_ids_present("SKU", &ids_to_strings(&sku_ids), &sku_map)?;
+    let product_ids = unique_values(sku_map.values().map(|sku| sku.product_id.clone()));
     let products = db
         .products()
-        .find_many(doc! { "id": { "$in": &product_ids } }, executor)
+        .list_procurement_responsibility_products(&product_ids, executor)
         .await?;
     let product_map = by_id(products);
-    ensure_all_ids_present("商品", &product_ids, &product_map)?;
+    ensure_all_ids_present("商品", &ids_to_strings(&product_ids), &product_map)?;
     let revision_ids = current_revision_ids(&product_map)?;
     let revisions = db
         .product_revisions()
-        .find_many(doc! { "id": { "$in": &revision_ids } }, executor)
+        .list_procurement_responsibility_product_revisions(&revision_ids, executor)
         .await?;
     let revision_map = by_id(revisions);
-    ensure_all_ids_present("商品当前修订", &revision_ids, &revision_map)?;
-    let category_ids = unique_strings(
-        revision_map
-            .values()
-            .map(|revision| revision.category_id.as_ref()),
-    );
+    ensure_all_ids_present("商品当前修订", &ids_to_strings(&revision_ids), &revision_map)?;
+    let category_ids = unique_values(revision_map.values().map(|revision| revision.category_id.clone()));
     let categories = load_category_ancestors(db, category_ids, executor).await?;
     build_catalog_facts(inputs, &sku_map, &product_map, &revision_map, &categories)
 }
@@ -318,7 +286,16 @@ impl EntityId for AccountCore {
     }
 }
 
-/// 按实体 ID 构造映射。
+/// 按实体稳定 ID 构造批量目录映射。
+///
+/// # 参数
+/// * `items` - 仓储批量返回的同类实体
+///
+/// # 返回
+/// 返回实体 ID 到实体的映射。
+///
+/// # 错误
+/// 无；重复 ID 由后出现的实体覆盖，数据库唯一约束应防止该情况。
 fn by_id<T: EntityId>(items: Vec<T>) -> HashMap<String, T> {
     items
         .into_iter()
@@ -327,6 +304,15 @@ fn by_id<T: EntityId>(items: Vec<T>) -> HashMap<String, T> {
 }
 
 /// 对字符串迭代器去重并稳定排序。
+///
+/// # 参数
+/// * `values` - 待批量查询的字符串引用
+///
+/// # 返回
+/// 返回按字典序排序且无重复项的拥有型字符串。
+///
+/// # 错误
+/// 无。
 fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut values = values.map(ToOwned::to_owned).collect::<Vec<_>>();
     values.sort();
@@ -334,7 +320,52 @@ fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
     values
 }
 
+/// 对强类型目录 ID 去重并保持首次出现顺序。
+///
+/// # 参数
+/// * `values` - 待批量查询的强类型 ID
+///
+/// # 返回
+/// 返回按首次出现顺序排列的唯一值集合。
+///
+/// # 错误
+/// 无。
+fn unique_values<T: PartialEq>(values: impl Iterator<Item = T>) -> Vec<T> {
+    let mut unique = Vec::new();
+    for value in values {
+        if !unique.contains(&value) {
+            unique.push(value);
+        }
+    }
+    unique
+}
+
+/// 把强类型目录 ID 转换为完整性校验使用的稳定字符串。
+///
+/// # 参数
+/// * `ids` - 同类强类型目录 ID
+///
+/// # 返回
+/// 返回保持输入顺序的字符串 ID 集合。
+///
+/// # 错误
+/// 无。
+fn ids_to_strings<T: ToString>(ids: &[T]) -> Vec<String> {
+    ids.iter().map(ToString::to_string).collect()
+}
+
 /// 校验批量查询完整返回全部请求 ID。
+///
+/// # 参数
+/// * `label` - 缺失事实的业务名称
+/// * `ids` - 调用方请求的稳定 ID
+/// * `map` - 仓储实际返回的 ID 映射
+///
+/// # 返回
+/// 全部 ID 均存在时返回 `Ok(())`。
+///
+/// # 错误
+/// 任一目录事实缺失或已删除时返回校验错误。
 fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, T>) -> Result<()> {
     if let Some(missing) = ids.iter().find(|id| !map.contains_key(id.as_str())) {
         return Err(Error::ValidationError(format!(
@@ -345,25 +376,45 @@ fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, 
 }
 
 /// 提取全部商品当前修订 ID。
-fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<String>> {
-    let mut ids = Vec::with_capacity(products.len());
-    for product in products.values() {
-        let revision_id = product
-            .stable
-            .current_revision_id
-            .as_deref()
-            .ok_or_else(|| Error::ValidationError(format!("商品 {} 没有当前修订", product.base.id)))?;
-        ids.push(revision_id.to_string());
-    }
-    ids.sort();
-    ids.dedup();
-    Ok(ids)
+///
+/// # 参数
+/// * `products` - 商品稳定 ID 到商品实体的映射
+///
+/// # 返回
+/// 返回去重后的当前商品修订 ID。
+///
+/// # 错误
+/// 任一商品尚未形成当前修订时返回校验错误。
+fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<ProductRevisionId>> {
+    let ids = products
+        .values()
+        .map(|product| {
+            product
+                .stable
+                .current_revision_id
+                .as_deref()
+                .map(ProductRevisionId::new)
+                .ok_or_else(|| Error::ValidationError(format!("商品 {} 没有当前修订", product.base.id)))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(unique_values(ids.into_iter()))
 }
 
-/// 分层批量加载当前分类及全部父分类，并检测父级环。
+/// 分层批量加载当前分类及全部父分类。
+///
+/// # 参数
+/// * `db` - 当前应用数据库
+/// * `initial_ids` - 商品当前修订直接引用的分类 ID
+/// * `executor` - 数据库执行器，可加入销售形式化事务
+///
+/// # 返回
+/// 返回当前分类和全部可达父分类的 ID 映射。
+///
+/// # 错误
+/// 分类缺失或仓储查询失败时返回错误；分类环由后续链构造失败关闭。
 async fn load_category_ancestors(
     db: &mongodb::Database,
-    initial_ids: Vec<String>,
+    initial_ids: Vec<ProductCategoryId>,
     executor: &mut dyn Executor,
 ) -> Result<HashMap<String, ProductCategory>> {
     let mut categories = HashMap::new();
@@ -371,24 +422,35 @@ async fn load_category_ancestors(
     while !pending.is_empty() {
         let rows = db
             .product_categories()
-            .find_many(doc! { "id": { "$in": &pending } }, executor)
+            .list_procurement_responsibility_categories(&pending, executor)
             .await?;
         let row_map = by_id(rows);
-        ensure_all_ids_present("商品分类", &pending, &row_map)?;
-        pending = row_map
-            .values()
-            .filter_map(|category| category.parent_category_id.as_ref())
-            .map(ToString::to_string)
-            .filter(|id| !categories.contains_key(id))
-            .collect();
-        pending.sort();
-        pending.dedup();
+        ensure_all_ids_present("商品分类", &ids_to_strings(&pending), &row_map)?;
+        pending = unique_values(
+            row_map
+                .values()
+                .filter_map(|category| category.parent_category_id.clone())
+                .filter(|id| !categories.contains_key(id.as_ref())),
+        );
         categories.extend(row_map);
     }
     Ok(categories)
 }
 
 /// 由批量目录映射构造每行解析事实。
+///
+/// # 参数
+/// * `inputs` - 已校验的采购责任解析行
+/// * `skus` - SKU ID 到稳定 SKU 的映射
+/// * `products` - 商品 ID 到稳定商品的映射
+/// * `revisions` - 商品修订 ID 到当前修订的映射
+/// * `categories` - 当前分类与父分类的完整映射
+///
+/// # 返回
+/// 返回行键到分类链和商品类型事实的映射。
+///
+/// # 错误
+/// 分类链缺失或存在环时返回错误。
 fn build_catalog_facts(
     inputs: &[ResolutionInput],
     skus: &HashMap<String, Sku>,
@@ -419,6 +481,16 @@ fn build_catalog_facts(
 }
 
 /// 构造当前分类到根分类的有序链并检测环。
+///
+/// # 参数
+/// * `first` - 商品当前修订直接引用的分类
+/// * `categories` - 当前分类与全部父分类映射
+///
+/// # 返回
+/// 返回从当前分类到根分类的有序强类型 ID 链。
+///
+/// # 错误
+/// 分类缺失或父级关系成环时返回错误。
 fn category_chain(
     first: &ProductCategoryId,
     categories: &HashMap<String, ProductCategory>,
@@ -451,7 +523,7 @@ async fn attach_owner_accounts(
     let owner_ids = unique_strings(selected.iter().map(|(_, rule)| rule.owner_user_id.as_str()));
     let accounts = db
         .accounts()
-        .find_many(doc! { "id": { "$in": &owner_ids } }, executor)
+        .list_procurement_responsibility_owners(&owner_ids, executor)
         .await?;
     let account_map = by_id(accounts);
     ensure_all_ids_present("采购负责人账号", &owner_ids, &account_map)?;
@@ -461,11 +533,11 @@ async fn attach_owner_accounts(
             let account = account_map
                 .get(rule.owner_user_id.as_str())
                 .expect("完整性已校验");
-            ensure_account_ready(account)?;
+            let owner = eligible_owner(account)?;
             Ok(CandidateResolution {
                 line_key,
-                owner_user_id: account.base.id.clone(),
-                owner_name: account.name.clone(),
+                owner_user_id: owner.user_id().to_string(),
+                owner_name: owner.name().to_string(),
                 rule_id: rule.base.id.clone(),
                 rule_type: rule.rule_type,
             })
@@ -489,25 +561,28 @@ pub(super) async fn load_owner_account(
     db: &mongodb::Database,
     owner_user_id: &str,
     executor: &mut dyn Executor,
-) -> Result<AccountCore> {
+) -> Result<EligibleProcurementOwner> {
     let account = db
         .accounts()
-        .find_by_id(owner_user_id, executor)
+        .find_procurement_responsibility_owner(owner_user_id, executor)
         .await?
         .ok_or_else(|| Error::ValidationError("采购负责人账号不存在".to_string()))?;
-    ensure_account_ready(&account)?;
-    Ok(account)
+    eligible_owner(&account)
 }
 
-/// 校验账号为可登录的后台管理员。
-fn ensure_account_ready(account: &AccountCore) -> Result<()> {
-    if account.can_login() && account.is_kind(AccountKind::Admin) {
-        return Ok(());
-    }
-    Err(Error::ValidationError(format!(
-        "采购负责人 {} 必须为可登录后台账号",
-        account.base.id
-    )))
+/// 将账号事实转换为合格采购负责人。
+///
+/// # 参数
+/// * `account` - 仓储返回的统一账号事实
+///
+/// # 返回
+/// 返回已验证可登录且为后台管理员的负责人值对象。
+///
+/// # 错误
+/// 账号状态或类型不满足采购负责人约束时返回校验错误。
+fn eligible_owner(account: &AccountCore) -> Result<EligibleProcurementOwner> {
+    EligibleProcurementOwner::from_account(account)
+        .map_err(|_| Error::ValidationError(format!("采购负责人 {} 必须为可登录后台账号", account.base.id)))
 }
 
 /// 校验单个账号拥有采购建单权限。
@@ -523,47 +598,69 @@ fn ensure_account_ready(account: &AccountCore) -> Result<()> {
 /// 权限解析、Casbin 判定失败或账号缺少权限时返回错误。
 async fn ensure_purchase_create_permission(
     rbac: &crate::iam::SharedRbacService,
-    account: &AccountCore,
+    owner: &EligibleProcurementOwner,
 ) -> Result<()> {
     let permission = purchase_create_permission()?;
     if rbac
-        .enforce(&subject(account.kind, account.base.id.as_str()), &permission)
+        .enforce(&subject(AccountKind::Admin, owner.user_id()), &permission)
         .await?
     {
         return Ok(());
     }
     Err(Error::ValidationError(format!(
         "采购负责人 {} 缺少 purchase_order:create 权限",
-        account.base.id
+        owner.user_id()
     )))
 }
 
 /// 构造采购建单权限值对象。
+///
+/// # 返回
+/// 返回固定 `purchase_order:create` 权限。
+///
+/// # 错误
+/// 固定权限代码无法解析时返回实体错误。
 fn purchase_create_permission() -> Result<Permission> {
     Permission::parse("purchase_order:create").map_err(Error::Logic)
 }
 
-/// 校验内部行键唯一。
-fn ensure_unique_line_keys(inputs: &[ResolutionInput]) -> Result<()> {
-    let mut keys = HashSet::with_capacity(inputs.len());
-    if inputs.iter().any(|input| !keys.insert(input.line_key.as_str())) {
-        return Err(Error::ValidationError("采购责任解析行键不能重复".to_string()));
-    }
-    Ok(())
-}
-
-/// 比较两条解析结果的稳定责任身份，忽略可变展示名称。
-fn same_resolution_identity(
-    left: &ProcurementResponsibilityResolutionView,
-    right: &ProcurementResponsibilityResolutionView,
-) -> bool {
-    left.line_key == right.line_key
-        && left.owner_user_id == right.owner_user_id
-        && left.rule_id == right.rule_id
-        && left.rule_type == right.rule_type
+/// 把解析视图转换为忽略展示姓名的稳定责任身份。
+///
+/// # 参数
+/// * `views` - 待比对的采购责任解析视图
+///
+/// # 返回
+/// 返回保持输入顺序的稳定责任身份集合。
+///
+/// # 错误
+/// 任一视图缺少合法行键、负责人或规则 ID 时返回实体错误。
+fn resolution_identities(
+    views: &[ProcurementResponsibilityResolutionView],
+) -> Result<Vec<ProcurementResponsibilityResolutionIdentity>> {
+    views
+        .iter()
+        .map(|view| {
+            ProcurementResponsibilityResolutionIdentity::new(
+                view.line_key.clone(),
+                view.owner_user_id.clone(),
+                view.rule_id.clone(),
+                view.rule_type,
+            )
+            .map_err(Error::Logic)
+        })
+        .collect()
 }
 
 /// 将候选责任转换为稳定授权视图。
+///
+/// # 参数
+/// * `candidate` - 已完成目录与账号资格校验的候选责任
+///
+/// # 返回
+/// 返回用于授权计划和 API 预览的解析视图。
+///
+/// # 错误
+/// 无。
 fn candidate_view(candidate: CandidateResolution) -> ProcurementResponsibilityResolutionView {
     ProcurementResponsibilityResolutionView {
         line_key: candidate.line_key,

@@ -30,6 +30,49 @@ pub struct NewProcessInstance {
     pub at: Timestamp,
 }
 
+/// 取消实例时对当前节点开放任务的固定策略。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalCancellationTaskPolicy {
+    /// 运行中实例必须关闭唯一开放任务。
+    CloseOpenTask,
+    /// 受阻实例不得再持有开放任务。
+    NoOpenTask,
+}
+
+impl ApprovalCancellationTaskPolicy {
+    /// 判断取消计划是否必须关闭当前开放任务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// [`Self::CloseOpenTask`] 返回 `true`，[`Self::NoOpenTask`] 返回 `false`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn closes_open_task(self) -> bool {
+        self == Self::CloseOpenTask
+    }
+
+    /// 校验实际开放任务数量是否符合取消策略。
+    ///
+    /// # 参数
+    /// * `open_task_count` - 当前节点执行关联的开放审批任务数量
+    ///
+    /// # 返回
+    /// 运行中实例恰有一个任务，或受阻实例没有任务时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 开放任务数量与策略不一致时返回模型状态错误。
+    pub fn ensure_open_task_count(self, open_task_count: usize) -> ModelResult<()> {
+        match (self, open_task_count) {
+            (Self::CloseOpenTask, 1) | (Self::NoOpenTask, 0) => Ok(()),
+            (Self::CloseOpenTask, _) => Err(ModelError::InvalidStatus("运行中审批实例必须恰有一个开放任务")),
+            (Self::NoOpenTask, _) => Err(ModelError::InvalidStatus("受阻审批实例不得存在开放任务")),
+        }
+    }
+}
+
 /// 单据审批运行实例。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct ApprovalProcessInstance {
@@ -101,10 +144,47 @@ impl ApprovalProcessInstance {
 
     /// 返回实例乐观锁版本。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `base.version`。
+    ///
+    /// # 错误
+    /// 无。
     pub fn instance_version(&self) -> u64 {
         self.base.version
+    }
+
+    /// 校验实例状态与当前执行引用是否允许取消，并返回任务关闭策略。
+    ///
+    /// 运行中实例取消时必须关闭开放任务；受阻实例取消时不得再关闭任务。最终通过、
+    /// 已取消或缺少当前执行引用时失败关闭。实际任务数量由返回策略继续校验。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回取消时应关闭唯一开放任务，或证明无需关闭任务的固定策略。
+    ///
+    /// # 错误
+    /// 实例已终态或缺少当前执行引用时返回错误。
+    pub fn cancellation_task_policy(&self) -> ModelResult<ApprovalCancellationTaskPolicy> {
+        match (self.status, self.current_node_execution_id.is_some()) {
+            (ApprovalProcessInstanceStatus::Approved, _) => {
+                Err(ModelError::InvalidStatus("已最终通过的审批实例不得撤回"))
+            }
+            (ApprovalProcessInstanceStatus::Cancelled, _) => {
+                Err(ModelError::InvalidStatus("已取消的审批实例不得重复撤回"))
+            }
+            (ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked, false) => {
+                Err(ModelError::InvalidStatus("可撤回审批实例必须存在当前执行"))
+            }
+            (ApprovalProcessInstanceStatus::Running, true) => {
+                Ok(ApprovalCancellationTaskPolicy::CloseOpenTask)
+            }
+            (ApprovalProcessInstanceStatus::Blocked, true) => Ok(ApprovalCancellationTaskPolicy::NoOpenTask),
+        }
     }
 
     /// 设置当前节点执行引用。
@@ -242,11 +322,15 @@ impl ApprovalProcessInstance {
 
 #[cfg(test)]
 mod tests {
-    use super::ApprovalProcessInstance;
+    use super::{ApprovalCancellationTaskPolicy, ApprovalProcessInstance};
     use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use crate::model::types::{ApprovalBlockerCode, ApprovalProcessInstanceStatus, ModelError};
     use crate::model::{ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
+    /// 构造尚未进入节点的运行实例夹具。
+    ///
+    /// # 返回
+    /// 返回版本为一且不带当前执行的最小实例。
     fn instance() -> ApprovalProcessInstance {
         ApprovalProcessInstance::start_running(super::NewProcessInstance {
             id: ApprovalProcessInstanceId::new("inst"),
@@ -310,6 +394,80 @@ mod tests {
         assert_eq!(inst.status, ApprovalProcessInstanceStatus::Approved);
         assert!(inst.current_node_execution_id.is_none());
         assert!(inst.cancel(Timestamp::from_unix_secs(23).unwrap()).is_err());
+    }
+
+    /// 运行中实例只在存在当前执行和唯一开放任务时允许取消。
+    ///
+    /// 零任务或重复任务都表示运行事实不一致，必须失败关闭。
+    #[test]
+    fn running_cancellation_requires_exactly_one_open_task() {
+        let mut inst = instance();
+        inst.set_current_execution(
+            ApprovalNodeExecutionId::new("e1"),
+            Timestamp::from_unix_secs(25).unwrap(),
+        )
+        .unwrap();
+
+        let policy = inst.cancellation_task_policy().unwrap();
+        assert_eq!(policy, ApprovalCancellationTaskPolicy::CloseOpenTask);
+        assert!(policy.ensure_open_task_count(1).is_ok());
+        assert_eq!(
+            policy.ensure_open_task_count(0),
+            Err(ModelError::InvalidStatus("运行中审批实例必须恰有一个开放任务"))
+        );
+        assert_eq!(
+            policy.ensure_open_task_count(2),
+            Err(ModelError::InvalidStatus("运行中审批实例必须恰有一个开放任务"))
+        );
+    }
+
+    /// 受阻实例取消时必须证明当前执行不再关联开放任务。
+    ///
+    /// 已最终通过、已取消和缺少当前执行引用也不得形成取消策略。
+    #[test]
+    fn blocked_and_terminal_cancellation_facts_fail_closed() {
+        let mut blocked = instance();
+        blocked
+            .set_current_execution(
+                ApprovalNodeExecutionId::new("e1"),
+                Timestamp::from_unix_secs(26).unwrap(),
+            )
+            .unwrap();
+        blocked
+            .enter_blocked(
+                ApprovalBlockerCode::ApproverAccountInactive,
+                Timestamp::from_unix_secs(27).unwrap(),
+            )
+            .unwrap();
+        let policy = blocked.cancellation_task_policy().unwrap();
+        assert_eq!(policy, ApprovalCancellationTaskPolicy::NoOpenTask);
+        assert!(policy.ensure_open_task_count(0).is_ok());
+        assert_eq!(
+            policy.ensure_open_task_count(1),
+            Err(ModelError::InvalidStatus("受阻审批实例不得存在开放任务"))
+        );
+
+        let missing_execution = instance();
+        assert_eq!(
+            missing_execution.cancellation_task_policy(),
+            Err(ModelError::InvalidStatus("可撤回审批实例必须存在当前执行"))
+        );
+
+        let mut approved = instance();
+        approved
+            .complete_approved(Timestamp::from_unix_secs(28).unwrap())
+            .unwrap();
+        assert_eq!(
+            approved.cancellation_task_policy(),
+            Err(ModelError::InvalidStatus("已最终通过的审批实例不得撤回"))
+        );
+
+        let mut cancelled = instance();
+        cancelled.cancel(Timestamp::from_unix_secs(29).unwrap()).unwrap();
+        assert_eq!(
+            cancelled.cancellation_task_policy(),
+            Err(ModelError::InvalidStatus("已取消的审批实例不得重复撤回"))
+        );
     }
 
     /// 结构性阻塞不得走领域改派。

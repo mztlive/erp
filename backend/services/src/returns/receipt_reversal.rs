@@ -700,7 +700,7 @@ async fn apply_receipt_reversal_final_post(
     // 冲正后刷新销售单回款进度与关闭状态（已结清可能退回部分回款）
     let allocations = db
         .receipt_allocations()
-        .find_allocations_by_receipts(&[reversal.original_customer_receipt_id.clone().into()], session)
+        .find_allocations_by_receipts(&[reversal.original_customer_receipt_id.clone()], session)
         .await?;
     let mut sales_order_ids = Vec::new();
     for allocation in &allocations {

@@ -8,10 +8,11 @@ use std::{
     sync::Arc,
 };
 
-use database::{AccessControlExt, FileAssetExt, NoTransaction, PartyExt, SupplierExt, Transactional};
+use database::{AccessControlExt, NoTransaction, PartyExt, SupplierExt, Transactional};
 use entities::{
     common::time::Instant,
     field_update::FieldUpdate,
+    file_asset::SensitivityClass,
     ids::{
         PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
         SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
@@ -25,17 +26,19 @@ use entities::{
         PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate, PartyUpdate,
     },
     supplier::{
-        CapabilityStatus, QualificationStatus, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
-        SupplierAccountUpdate, SupplierCapability, SupplierCapabilityData, SupplierCapabilityRevision,
-        SupplierCapabilityRevisionData, SupplierCapabilityUpdate, SupplierCommercialProfileRevision,
-        SupplierCommercialProfileRevisionData, SupplierProfileCommand, SupplierProfileCommandData,
-        SupplierQualification, SupplierQualificationCapability, SupplierQualificationCapabilityData,
-        SupplierQualificationData, SupplierQualificationRevision, SupplierQualificationRevisionData,
+        next_supplier_revision_no, qualification_identity_key, validate_profile_selection, CapabilityStatus,
+        QualificationAttachmentSensitivity, QualificationStatus, SupplierAccount, SupplierAccountData,
+        SupplierAccountStatus, SupplierAccountUpdate, SupplierCapability, SupplierCapabilityData,
+        SupplierCapabilityRevision, SupplierCapabilityRevisionData, SupplierCapabilityUpdate,
+        SupplierCommercialProfileRevision, SupplierCommercialProfileRevisionData, SupplierProfileCommand,
+        SupplierProfileCommandData, SupplierProfileUpdateViolation, SupplierQualification,
+        SupplierQualificationCapability, SupplierQualificationCapabilityData, SupplierQualificationData,
+        SupplierQualificationRevision, SupplierQualificationRevisionData, SupplierQualificationSelection,
         SupplierQualificationUpdate, SupplierRatingRevision, SupplierRatingRevisionData,
     },
 };
 use id_generator::next_id;
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -223,11 +226,20 @@ impl SupplierProfileService {
     }
 
     /// 加载幂等命令实体，供请求一致性与并发恢复校验使用。
+    ///
+    /// # 参数
+    /// * `idempotency_key` - 客户端根资料命令幂等键
+    ///
+    /// # 返回
+    /// 返回已成功命令；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 仓储查询或反序列化失败时返回错误。
     async fn command_record(&self, idempotency_key: &str) -> Result<Option<SupplierProfileCommand>> {
         Ok(self
             .db
-            .supplier_profile_commands()
-            .find_by_idempotency_key(idempotency_key, &mut NoTransaction)
+            .supplier()
+            .profile_command(idempotency_key, &mut NoTransaction)
             .await?)
     }
 
@@ -274,16 +286,16 @@ impl SupplierProfileService {
         let scope = self.sensitive_data.verify_reveal_token(&req.reveal_token, now)?;
         let supplier = self
             .db
-            .supplier_accounts()
-            .find_by_id(&scope.supplier_id, &mut NoTransaction)
+            .supplier()
+            .account(&SupplierAccountId::new(&scope.supplier_id), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         let ciphertext = match scope.kind {
             SensitiveFieldKind::ContactMobile => {
                 let record = self
                     .db
-                    .party_contacts()
-                    .find_by_id(&scope.record_id, &mut NoTransaction)
+                    .party()
+                    .contact(&scope.record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
@@ -292,8 +304,8 @@ impl SupplierProfileService {
             SensitiveFieldKind::Address => {
                 let record = self
                     .db
-                    .party_addresses()
-                    .find_by_id(&scope.record_id, &mut NoTransaction)
+                    .party()
+                    .address(&scope.record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
@@ -302,8 +314,8 @@ impl SupplierProfileService {
             SensitiveFieldKind::BankAccountNumber => {
                 let record = self
                     .db
-                    .party_bank_accounts()
-                    .find_by_id(&scope.record_id, &mut NoTransaction)
+                    .party()
+                    .bank_account(&scope.record_id, &mut NoTransaction)
                     .await?
                     .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
                 ensure_sensitive_party(&record.party_id, &supplier.party_id)?;
@@ -354,12 +366,21 @@ impl SupplierProfileService {
         Ok(())
     }
 
-    /// 校验签约/付款主体存在且启用。
+    /// 校验签约或付款主体存在且启用。
+    ///
+    /// # 参数
+    /// * `party_id` - 待引用的企业主体 ID
+    ///
+    /// # 返回
+    /// 主体存在且启用时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 主体不存在、已停用或仓储查询失败时返回错误。
     async fn ensure_party_active(&self, party_id: &PartyId) -> Result<()> {
         let party = self
             .db
-            .parties()
-            .find_by_id(party_id, &mut NoTransaction)
+            .party()
+            .party(party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("签约或付款主体不存在".to_string()))?;
         if !party.is_active() {
@@ -369,6 +390,16 @@ impl SupplierProfileService {
     }
 
     /// 校验资质附件存在且敏感级别符合附件用途。
+    ///
+    /// # 参数
+    /// * `qualifications` - 根资料命令提交的资质集合
+    /// * `pending_assets` - 同命令待登记的文件资产
+    ///
+    /// # 返回
+    /// 全部附件存在且满足资质类型最低敏感级别时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 附件不存在、敏感级别不足或仓储查询失败时返回错误。
     async fn ensure_attachment_references(
         &self,
         qualifications: &[SupplierProfileQualificationInput],
@@ -382,54 +413,52 @@ impl SupplierProfileService {
                 Some(sensitivity) => sensitivity,
                 None => {
                     self.db
-                        .file_assets()
-                        .find_by_id(attachment_id, &mut NoTransaction)
+                        .supplier()
+                        .qualification_attachment(attachment_id, &mut NoTransaction)
                         .await?
                         .ok_or_else(|| Error::NotFound("资质附件不存在，请先上传文件".to_string()))?
                         .sensitivity_class
                 }
             };
-            ensure_qualification_sensitivity(qualification, sensitivity)?;
+            let sensitivity = match sensitivity {
+                SensitivityClass::General => QualificationAttachmentSensitivity::General,
+                SensitivityClass::Sensitive => QualificationAttachmentSensitivity::Sensitive,
+                SensitivityClass::HighlySensitive => QualificationAttachmentSensitivity::HighlySensitive,
+            };
+            if !qualification
+                .qualification_type
+                .accepts_attachment_sensitivity(sensitivity)
+            {
+                return Err(Error::ValidationError(
+                    "资质附件敏感级别不足，请按敏感资料重新上传".to_string(),
+                ));
+            }
         }
         Ok(())
     }
 
-    /// 拒绝重复能力代码、重复资质身份以及引用未勾选能力。
+    /// 校验根资料能力与资质选择关系。
+    ///
+    /// # 参数
+    /// * `req` - 已通过 DTO 格式校验的根资料命令
+    ///
+    /// # 返回
+    /// 能力、资质身份唯一且资质仅引用已勾选能力时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一纯领域选择规则不满足时返回校验错误。
     fn ensure_unique_inputs(&self, req: &SaveSupplierProfileRequest) -> Result<()> {
-        let mut capability_codes = req.capability_codes.clone();
-        capability_codes.sort_by_key(|code| code.as_str());
-        let before = capability_codes.len();
-        capability_codes.dedup();
-        if capability_codes.len() != before {
-            return Err(Error::ValidationError("供应商能力不能重复".to_string()));
-        }
-        let mut qualification_keys: Vec<String> = req
+        let qualifications: Vec<SupplierQualificationSelection<'_>> = req
             .qualifications
             .iter()
-            .map(|qualification| {
-                format!(
-                    "{}::{}",
-                    qualification.qualification_type.as_str(),
-                    qualification.certificate_no.trim()
-                )
+            .map(|qualification| SupplierQualificationSelection {
+                qualification_type: qualification.qualification_type,
+                certificate_no: &qualification.certificate_no,
+                capability_codes: &qualification.capability_codes,
             })
             .collect();
-        qualification_keys.sort();
-        let before = qualification_keys.len();
-        qualification_keys.dedup();
-        if qualification_keys.len() != before {
-            return Err(Error::ValidationError("同类资质编号不能重复".to_string()));
-        }
-        for code in req
-            .qualifications
-            .iter()
-            .flat_map(|qualification| &qualification.capability_codes)
-        {
-            if !capability_codes.contains(code) {
-                return Err(Error::ValidationError("资质引用了未启用的供应商能力".to_string()));
-            }
-        }
-        Ok(())
+        validate_profile_selection(&req.capability_codes, &qualifications)
+            .map_err(|error| Error::ValidationError(error.to_string()))
     }
 
     /// 从已校验创建命令构造全部待写实体。
@@ -643,7 +672,17 @@ impl SupplierProfileService {
         )
     }
 
-    /// 加载并校验供应商乐观锁。
+    /// 加载并校验供应商资料修订门禁。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 待修订供应商角色 ID
+    /// * `req` - 携带期望供应商版本的根资料命令
+    ///
+    /// # 返回
+    /// 版本一致且启用的供应商实体。
+    ///
+    /// # 错误
+    /// 供应商不存在、版本冲突、已停用或仓储查询失败时返回错误。
     async fn load_supplier_for_update(
         &self,
         supplier_id: &str,
@@ -651,21 +690,33 @@ impl SupplierProfileService {
     ) -> Result<SupplierAccount> {
         let supplier = self
             .db
-            .supplier_accounts()
-            .find_by_id(supplier_id, &mut NoTransaction)
+            .supplier()
+            .account(&SupplierAccountId::new(supplier_id), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         let expected = required_update_version(req.expected_supplier_version, "供应商")?;
-        ensure_version(supplier.base.version, expected)?;
-        if !supplier.is_active() {
-            return Err(Error::BusinessLogicError(
+        match supplier.profile_update_violation(expected) {
+            None => Ok(supplier),
+            Some(SupplierProfileUpdateViolation::VersionMismatch) => Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            )),
+            Some(SupplierProfileUpdateViolation::SupplierDisabled) => Err(Error::BusinessLogicError(
                 "供应商已停用，不能修订资料".to_string(),
-            ));
+            )),
         }
-        Ok(supplier)
     }
 
-    /// 加载并校验主体乐观锁。
+    /// 加载并校验供应商关联主体乐观锁与启停状态。
+    ///
+    /// # 参数
+    /// * `supplier` - 已通过修订门禁的供应商实体
+    /// * `req` - 携带期望主体版本的根资料命令
+    ///
+    /// # 返回
+    /// 版本一致且启用的关联主体实体。
+    ///
+    /// # 错误
+    /// 主体不存在、版本冲突、已停用或仓储查询失败时返回错误。
     async fn load_party_for_update(
         &self,
         supplier: &SupplierAccount,
@@ -673,8 +724,8 @@ impl SupplierProfileService {
     ) -> Result<Party> {
         let party = self
             .db
-            .parties()
-            .find_by_id(&supplier.party_id, &mut NoTransaction)
+            .party()
+            .party(&supplier.party_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商关联主体不存在".to_string()))?;
         let expected = required_update_version(req.expected_party_version, "主体")?;
@@ -685,44 +736,66 @@ impl SupplierProfileService {
         Ok(party)
     }
 
-    /// 返回下一主体修订号。
+    /// 查询下一主体修订号。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定主体 ID
+    ///
+    /// # 返回
+    /// 返回无历史时为一、否则为当前最大值加一的修订号。
+    ///
+    /// # 错误
+    /// 仓储查询、反序列化或修订号溢出时返回错误。
     async fn next_party_revision_no(&self, party_id: &PartyId) -> Result<u32> {
-        let history = self
+        Ok(self
             .db
             .party_revisions()
-            .list_revision_history(party_id, &mut NoTransaction)
-            .await?;
-        Ok(next_revision_no(
-            history.iter().map(|item| item.revision.revision_no),
-        ))
+            .next_revision_no(party_id, &mut NoTransaction)
+            .await?)
     }
 
-    /// 返回下一商务资料修订号。
+    /// 查询下一商务资料修订号。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    ///
+    /// # 返回
+    /// 返回无历史时为一、否则为当前最大值加一的修订号。
+    ///
+    /// # 错误
+    /// 仓储查询、反序列化或修订号溢出时返回错误。
     async fn next_profile_revision_no(&self, supplier_id: &SupplierAccountId) -> Result<u32> {
-        let history = self
+        Ok(self
             .db
-            .supplier_commercial_profile_revisions()
-            .list_revision_history(supplier_id, &mut NoTransaction)
-            .await?;
-        Ok(next_revision_no(
-            history.iter().map(|item| item.revision.revision_no),
-        ))
+            .supplier()
+            .next_commercial_profile_revision_no(supplier_id, &mut NoTransaction)
+            .await?)
     }
 
-    /// 构造联系人、地址、税务与银行账户事实的追加/停用变更。
+    /// 构造联系人、地址、税务与银行账户事实的追加或停用变更。
+    ///
+    /// # 参数
+    /// * `party_id` - 供应商关联主体 ID
+    /// * `req` - 根资料命令中的事实替换与清空意图
+    /// * `actor_id` - 执行变更的账号 ID
+    ///
+    /// # 返回
+    /// 返回待在同一事务中持久化的主体事实变更集合。
+    ///
+    /// # 错误
+    /// 仓储查询、事实状态迁移、加密或实体构造失败时返回错误。
     async fn prepare_party_facts(
         &self,
         party_id: &PartyId,
         req: &SaveSupplierProfileRequest,
         actor_id: &str,
     ) -> Result<PartyFactChanges> {
-        let party_filter = doc! { "party_id": party_id.to_string() };
         let mut changes = PartyFactChanges::default();
         if req.contact.is_some() || req.clear_contact {
             changes.contacts = self
                 .db
                 .party_contacts()
-                .find_many(party_filter.clone(), &mut NoTransaction)
+                .list_by_party(party_id, &mut NoTransaction)
                 .await?;
             disable_contacts(&mut changes.contacts, actor_id)?;
             changes.new_contact = self.create_contact(req, party_id, actor_id)?;
@@ -731,7 +804,7 @@ impl SupplierProfileService {
             changes.addresses = self
                 .db
                 .party_addresses()
-                .find_many(party_filter.clone(), &mut NoTransaction)
+                .list_by_party(party_id, &mut NoTransaction)
                 .await?;
             disable_addresses(&mut changes.addresses, actor_id)?;
             changes.new_address = self.create_address(req, party_id, actor_id)?;
@@ -745,7 +818,7 @@ impl SupplierProfileService {
             changes.tax_profiles = self
                 .db
                 .party_tax_profiles()
-                .find_many(party_filter.clone(), &mut NoTransaction)
+                .list_by_party(party_id, &mut NoTransaction)
                 .await?;
             disable_tax_profiles(&mut changes.tax_profiles, actor_id)?;
             changes.new_tax_profile = create_tax_profile(req, party_id, actor_id)?;
@@ -754,7 +827,7 @@ impl SupplierProfileService {
             changes.bank_accounts = self
                 .db
                 .party_bank_accounts()
-                .find_many(party_filter, &mut NoTransaction)
+                .list_by_party(party_id, &mut NoTransaction)
                 .await?;
             disable_bank_accounts(&mut changes.bank_accounts, actor_id)?;
             changes.new_bank_account = self.create_bank_account(req, party_id, actor_id)?;
@@ -763,6 +836,17 @@ impl SupplierProfileService {
     }
 
     /// 将能力代码集合解析为新增、启停与不可变快照。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `req` - 已校验的根资料命令
+    /// * `actor_id` - 执行变更的账号 ID
+    ///
+    /// # 返回
+    /// 返回待事务持久化的能力实体、修订和稳定 ID 映射。
+    ///
+    /// # 错误
+    /// 仓储查询、状态迁移、修订号生成或实体构造失败时返回错误。
     async fn prepare_capability_changes(
         &self,
         supplier_id: &SupplierAccountId,
@@ -771,11 +855,8 @@ impl SupplierProfileService {
     ) -> Result<CapabilityChanges> {
         let existing = self
             .db
-            .supplier_capabilities()
-            .find_many(
-                doc! { "supplier_id": supplier_id.to_string() },
-                &mut NoTransaction,
-            )
+            .supplier()
+            .list_capabilities(supplier_id, &mut NoTransaction)
             .await?;
         let mut changes = CapabilityChanges::default();
         let requested: HashMap<String, _> = req
@@ -827,18 +908,25 @@ impl SupplierProfileService {
     }
 
     /// 为能力状态变更创建下一不可变快照。
+    ///
+    /// # 参数
+    /// * `capability` - 已完成领域状态变更的能力实体
+    ///
+    /// # 返回
+    /// 返回下一修订快照，并原地推进能力当前修订指针。
+    ///
+    /// # 错误
+    /// 修订号查询、实体构造或版本范围校验失败时返回错误。
     async fn capability_revision(
         &self,
         capability: &mut SupplierCapability,
     ) -> Result<SupplierCapabilityRevision> {
-        let history: Vec<SupplierCapabilityRevision> = self
+        let revision_no = self
             .db
-            .supplier_capability_revisions()
-            .find_many(
-                doc! {
-                    "supplier_id": capability.supplier_id.to_string(),
-                    "capability_code": capability.capability_code.as_str(),
-                },
+            .supplier()
+            .next_capability_revision_no(
+                &capability.supplier_id,
+                capability.capability_code,
                 &mut NoTransaction,
             )
             .await?;
@@ -855,13 +943,25 @@ impl SupplierProfileService {
                 valid_from: capability.valid_from,
                 valid_to: capability.valid_to,
                 status: capability.stable.status,
-                revision_no: next_revision_no(history.iter().map(|item| item.revision.revision_no)),
+                revision_no,
             },
         )
         .map_err(Into::into)
     }
 
     /// 将资质集合解析为新增、更新、停用、快照及能力关联替换。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `req` - 已校验的根资料命令
+    /// * `capability_ids` - 当前命令能力代码到稳定能力 ID 的映射
+    /// * `actor_id` - 执行变更的账号 ID
+    ///
+    /// # 返回
+    /// 返回待事务持久化的资质、修订及关联替换集合。
+    ///
+    /// # 错误
+    /// 仓储查询、能力引用、领域更新或修订构造失败时返回错误。
     async fn prepare_qualification_changes(
         &self,
         supplier_id: &SupplierAccountId,
@@ -871,11 +971,8 @@ impl SupplierProfileService {
     ) -> Result<QualificationChanges> {
         let existing = self
             .db
-            .supplier_qualifications()
-            .find_many(
-                doc! { "supplier_id": supplier_id.to_string() },
-                &mut NoTransaction,
-            )
+            .supplier()
+            .list_qualifications(supplier_id, &mut NoTransaction)
             .await?;
         let qualification_ids: Vec<SupplierQualificationId> = existing
             .iter()
@@ -898,14 +995,14 @@ impl SupplierProfileService {
             .iter()
             .map(|input| {
                 (
-                    qualification_key(input.qualification_type, &input.certificate_no),
+                    qualification_identity_key(input.qualification_type, &input.certificate_no),
                     input,
                 )
             })
             .collect();
         let mut changes = QualificationChanges::default();
         for mut qualification in existing {
-            let key = qualification_key(qualification.qualification_type, &qualification.certificate_no);
+            let key = qualification.identity_key();
             if let Some(input) = requested.get(&key) {
                 let desired_links: HashSet<String> = input
                     .capability_codes
@@ -921,7 +1018,13 @@ impl SupplierProfileService {
                     .get(&qualification.base.id)
                     .cloned()
                     .unwrap_or_default();
-                if qualification_matches_input(&qualification, input) && current_links == desired_links {
+                if qualification.matches_profile_fields(
+                    input.issuer.as_deref(),
+                    input.valid_from,
+                    input.valid_to,
+                    input.attachment_id.as_ref(),
+                ) && current_links == desired_links
+                {
                     continue;
                 }
                 apply_qualification_input(&mut qualification, input, actor_id)?;
@@ -950,8 +1053,8 @@ impl SupplierProfileService {
         }
         for input in requested.into_values() {
             let exists = changes.updated.iter().any(|item| {
-                qualification_key(item.qualification_type, &item.certificate_no)
-                    == qualification_key(input.qualification_type, &input.certificate_no)
+                item.identity_key()
+                    == qualification_identity_key(input.qualification_type, &input.certificate_no)
             });
             if !exists {
                 let (qualification, revision, links) =
@@ -967,32 +1070,45 @@ impl SupplierProfileService {
     }
 
     /// 为资质变更创建下一不可变快照。
+    ///
+    /// # 参数
+    /// * `qualification` - 已完成领域状态或字段变更的资质实体
+    ///
+    /// # 返回
+    /// 返回下一修订快照，并原地推进资质当前修订指针。
+    ///
+    /// # 错误
+    /// 修订号查询、实体构造或版本范围校验失败时返回错误。
     async fn qualification_revision(
         &self,
         qualification: &mut SupplierQualification,
     ) -> Result<SupplierQualificationRevision> {
-        let history: Vec<SupplierQualificationRevision> = self
+        let revision_no = self
             .db
-            .supplier_qualification_revisions()
-            .find_many(
-                doc! {
-                    "supplier_id": qualification.supplier_id.to_string(),
-                    "qualification_type": qualification.qualification_type.as_str(),
-                    "certificate_no": &qualification.certificate_no,
-                },
+            .supplier()
+            .next_qualification_revision_no(
+                &qualification.supplier_id,
+                qualification.qualification_type,
+                &qualification.certificate_no,
                 &mut NoTransaction,
             )
             .await?;
         let revision_id = SupplierQualificationRevisionId::new(next_id());
         qualification.stable.current_revision_id = Some(revision_id.to_string());
-        qualification_snapshot(
-            revision_id,
-            qualification,
-            next_revision_no(history.iter().map(|item| item.revision.revision_no)),
-        )
+        qualification_snapshot(revision_id, qualification, revision_no)
     }
 
     /// 构造评级开放区间关闭与下一评级版本。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `req` - 可选携带评级输入的根资料命令
+    ///
+    /// # 返回
+    /// 无评级或评级未变化时返回空变更，否则返回待关闭版本与新版本。
+    ///
+    /// # 错误
+    /// 历史查询、修订号溢出、区间关闭或实体构造失败时返回错误。
     async fn prepare_rating_changes(
         &self,
         supplier_id: &SupplierAccountId,
@@ -1001,16 +1117,12 @@ impl SupplierProfileService {
         let Some(input) = &req.rating else {
             return Ok(RatingChanges::default());
         };
-        let mut history: Vec<SupplierRatingRevision> = self
+        let history = self
             .db
-            .supplier_rating_revisions()
-            .find_many(
-                doc! { "supplier_id": supplier_id.to_string() },
-                &mut NoTransaction,
-            )
+            .supplier()
+            .list_rating_history(supplier_id, &mut NoTransaction)
             .await?;
-        history.sort_by_key(|item| item.revision.revision_no);
-        let next_no = next_revision_no(history.iter().map(|item| item.revision.revision_no));
+        let next_no = next_supplier_revision_no(history.iter().map(|item| item.revision.revision_no))?;
         let mut current = history.last().cloned();
         if current.as_ref().is_some_and(|previous| {
             previous.rating == input.rating && previous.current_score == input.current_score
@@ -1669,39 +1781,9 @@ fn qualification_links(
         .collect()
 }
 
-/// 形成稳定资质身份键。
-fn qualification_key(
-    qualification_type: entities::supplier::QualificationType,
-    certificate_no: &str,
-) -> String {
-    format!("{}::{}", qualification_type.as_str(), certificate_no.trim())
-}
-
-/// 判断稳定资质当前字段是否已与根命令输入一致。
-fn qualification_matches_input(
-    qualification: &SupplierQualification,
-    input: &SupplierProfileQualificationInput,
-) -> bool {
-    let expected_issuer = input
-        .issuer
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    qualification.is_valid()
-        && qualification.issuer.as_deref() == expected_issuer
-        && qualification.valid_from == input.valid_from
-        && qualification.valid_to == input.valid_to
-        && qualification.attachment_id == input.attachment_id
-}
-
 /// 将当前集合中的可空字段映射为明确设置或清空意图。
 fn option_as_authoritative_update<T>(value: Option<T>) -> FieldUpdate<T> {
     value.map_or(FieldUpdate::Clear, FieldUpdate::Set)
-}
-
-/// 返回最大修订号的下一号。
-fn next_revision_no(values: impl Iterator<Item = u32>) -> u32 {
-    values.max().unwrap_or(0) + 1
 }
 
 /// 计算根命令稳定指纹，保证同一幂等键只能重放完全相同的请求。
@@ -1762,29 +1844,6 @@ fn ensure_version(actual: u64, expected: u64) -> Result<()> {
 fn ensure_sensitive_party(actual: &PartyId, expected: &PartyId) -> Result<()> {
     if actual != expected {
         return Err(Error::ValidationError("敏感字段令牌与供应商不匹配".to_string()));
-    }
-    Ok(())
-}
-
-/// 校验供应商资质附件的最低敏感级别。
-fn ensure_qualification_sensitivity(
-    qualification: &SupplierProfileQualificationInput,
-    actual: entities::file_asset::SensitivityClass,
-) -> Result<()> {
-    use entities::file_asset::SensitivityClass;
-
-    let valid = if qualification.qualification_type.as_str() == "legal_person_id" {
-        actual == SensitivityClass::HighlySensitive
-    } else {
-        matches!(
-            actual,
-            SensitivityClass::Sensitive | SensitivityClass::HighlySensitive
-        )
-    };
-    if !valid {
-        return Err(Error::ValidationError(
-            "资质附件敏感级别不足，请按敏感资料重新上传".to_string(),
-        ));
     }
     Ok(())
 }
@@ -2059,32 +2118,10 @@ fn command_view(command: SupplierProfileCommand) -> SupplierProfileMutationView 
 mod tests {
     use entities::{
         common::time::BusinessDate,
-        file_asset::SensitivityClass,
-        supplier::{QualificationType, SupplierProfileCommand, SupplierProfileCommandData},
+        supplier::{SupplierProfileCommand, SupplierProfileCommandData},
     };
 
-    use super::{
-        ensure_qualification_sensitivity, ensure_version, replay_command, SupplierProfileQualificationInput,
-    };
-
-    fn qualification(qualification_type: QualificationType) -> SupplierProfileQualificationInput {
-        SupplierProfileQualificationInput {
-            qualification_type,
-            certificate_no: "CERT-1".to_string(),
-            issuer: None,
-            valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
-            valid_to: None,
-            attachment_id: None,
-            capability_codes: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn legal_person_attachment_requires_highest_sensitivity() {
-        let input = qualification(QualificationType::LegalPersonId);
-        assert!(ensure_qualification_sensitivity(&input, SensitivityClass::Sensitive).is_err());
-        assert!(ensure_qualification_sensitivity(&input, SensitivityClass::HighlySensitive).is_ok());
-    }
+    use super::{ensure_version, replay_command};
 
     #[test]
     fn command_replay_is_bound_to_supplier() {

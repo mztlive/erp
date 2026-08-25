@@ -8,7 +8,7 @@ use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{AccessControlExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional, WorkItemExt};
 use entities::common::time::Instant;
 use entities::purchase_order::PurchaseChangeOrder;
-use entities::work_item::{WorkItem, WorkItemCloseData, WorkItemStatus};
+use entities::work_item::{WorkItem, WorkItemCloseData};
 use id_generator::next_id;
 use mongodb::Database;
 
@@ -64,14 +64,8 @@ pub(super) async fn load_cancel_runtime(
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db
-        .work_items()
-        .find_many(
-            mongodb::bson::doc! {
-                "approval_node_execution_id": &current.base.id,
-                "status": WorkItemStatus::Open.as_str(),
-            },
-            &mut NoTransaction,
-        )
+        .purchase_order()
+        .list_open_work_items_by_execution(&current.base.id, &mut NoTransaction)
         .await?;
     ensure_open_tasks_match_instance(&instance, open_tasks.len())?;
     Ok(LoadedCancelRuntime {

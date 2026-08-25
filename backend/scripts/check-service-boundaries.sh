@@ -18,8 +18,9 @@ baseline_path = Path(sys.argv[2])
 services = backend / "services" / "src"
 
 rules = {
-    "mongodb_bson": re.compile(r"mongodb::bson|bson::doc|bson::Document|bson::Bson"),
-    "doc_macro": re.compile(r"\bdoc!\s*\{"),
+    "mongodb_bson": re.compile(r"mongodb\s*::\s*bson|\bbson\s*::\s*(?:doc|Document|Bson|\{)"),
+    "mongodb_options": re.compile(r"mongodb\s*::\s*options|\boptions\s*::\s*(?:Find|Update|Replace|Delete|Aggregate)"),
+    "doc_macro": re.compile(r"\bdoc!\s*[({]"),
     "raw_document": re.compile(r"\bDocument\b"),
     "raw_bson": re.compile(r"\bBson\b"),
     "find_one": re.compile(r"\.find_one\s*\("),
@@ -27,10 +28,18 @@ rules = {
     "find_many_sorted": re.compile(r"\.find_many_sorted\s*\("),
     "find_one_by_field": re.compile(r"\.find_one_by_field\s*\("),
     "exists": re.compile(r"\.exists\s*\("),
+    "raw_collection": re.compile(r"\.collection(?:_with_type)?\s*(?:::<[^>]+>)?\s*\("),
+    "aggregate": re.compile(r"\.aggregate\s*\("),
+    "count_documents": re.compile(r"\.count_documents\s*\("),
+    "distinct": re.compile(r"\.distinct\s*\("),
+    "raw_write": re.compile(r"\.(?:insert_one|insert_many|update_one|update_many|replace_one|delete_one|delete_many|bulk_write)\s*\("),
+    "run_command": re.compile(r"\.run_command\s*\("),
+    "mongo_ops": re.compile(r"\b(?:database::)?mongo_ops\b"),
 }
 
 negative_samples = {
-    "mongodb_bson": "use mongodb::bson::Document;",
+    "mongodb_bson": "use mongodb::{bson::{doc, Document}, Database};",
+    "mongodb_options": "use mongodb::options::FindOptions;",
     "doc_macro": 'let filter = doc! { "id": id };',
     "raw_document": "fn filter() -> Document { todo!() }",
     "raw_bson": "let value: Bson = todo!();",
@@ -39,6 +48,13 @@ negative_samples = {
     "find_many_sorted": "repo.find_many_sorted(filter, sort, executor).await?;",
     "find_one_by_field": 'repo.find_one_by_field("id", id, executor).await?;',
     "exists": "repo.exists(filter, executor).await?;",
+    "raw_collection": 'db.collection::<Entity>("entities");',
+    "aggregate": "collection.aggregate(pipeline).await?;",
+    "count_documents": "collection.count_documents(filter).await?;",
+    "distinct": 'collection.distinct("status", filter).await?;',
+    "raw_write": "collection.update_one(filter, update).await?;",
+    "run_command": "db.run_command(command).await?;",
+    "mongo_ops": "database::mongo_ops::find_many(collection, filter, options, executor).await?;",
 }
 
 errors: list[str] = []

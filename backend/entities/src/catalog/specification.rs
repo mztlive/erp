@@ -6,6 +6,7 @@
 //! - `sku_revision_attribute_value.identity_position` 是规范化排序位置，跨行组合必须
 //!   构成 `0..n` 的完整排列（无重复、无越界），由 [`validate_identity_positions`] 判定。
 
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::errors::{Error, Result};
@@ -28,6 +29,75 @@ pub struct SpecSignatureEntry {
     pub attribute_code: String,
     /// SPU 局部规格值。
     pub value_code: String,
+}
+
+/// 一次商品规格编辑中的唯一签名集合。
+#[derive(Debug, Default)]
+pub struct SpecificationSignatureSet {
+    signatures: HashSet<String>,
+}
+
+impl SpecificationSignatureSet {
+    /// 创建空的规格签名集合。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回不包含任何签名的集合。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 规范化一组规格名值并登记其唯一签名。
+    ///
+    /// # 参数
+    /// * `entries` - 一个 SKU 的全部 SPU 局部规格名和值
+    ///
+    /// # 返回
+    /// 返回规范化签名，供 SKU 稳定身份和后续关系匹配使用。
+    ///
+    /// # 错误
+    /// 规格名值非法或同一商品编辑中已登记相同签名时返回领域错误。
+    pub fn register(&mut self, entries: &[SpecSignatureEntry]) -> Result<String> {
+        let signature = compute_specification_signature(entries)?;
+        self.register_signature(signature.clone())?;
+        Ok(signature)
+    }
+
+    /// 登记一个已规范化的规格签名。
+    ///
+    /// # 参数
+    /// * `signature` - 已由规格值对象计算出的规范化签名
+    ///
+    /// # 返回
+    /// 首次登记时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 同一商品编辑中已存在相同签名时返回领域错误。
+    pub fn register_signature(&mut self, signature: String) -> Result<()> {
+        if !self.signatures.insert(signature) {
+            return Err(Error::from("规格集合中存在重复签名"));
+        }
+        Ok(())
+    }
+
+    /// 判断集合是否已登记给定规范化签名。
+    ///
+    /// # 参数
+    /// * `signature` - 待查询的规范化签名
+    ///
+    /// # 返回
+    /// 已登记时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn contains(&self, signature: &str) -> bool {
+        self.signatures.contains(signature)
+    }
 }
 
 /// 计算规范化规格签名。
@@ -194,6 +264,20 @@ mod tests {
             compute_specification_signature(&entries).unwrap(),
             "尺码=L|颜色=红色"
         );
+    }
+
+    /// 编辑签名集合登记规范化结果并拒绝重复规格组合。
+    #[test]
+    fn signature_set_rejects_duplicate_combinations() {
+        let mut signatures = SpecificationSignatureSet::new();
+        let first = signatures
+            .register(&[entry("颜色", "红色"), entry("尺码", "L")])
+            .unwrap();
+
+        assert!(signatures.contains(&first));
+        assert!(signatures
+            .register(&[entry("尺码", "L"), entry("颜色", "红色")])
+            .is_err());
     }
 
     /// 同一属性出现两次（值不同）属于规格数据不一致，拒绝计算。

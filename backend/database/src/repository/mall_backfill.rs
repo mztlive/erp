@@ -214,6 +214,40 @@ impl<'a> Repository<'a, MallConsumptionBackfillJob> {
             total: total as i64,
         })
     }
+
+    /// 查询同一商城与指定半开范围重叠的回填作业。
+    ///
+    /// 仅封装范围相交的持久化查询；哪些作业状态会阻断新批次由
+    /// [`MallConsumptionBackfillJob::blocks_overlapping_batch`] 决定。
+    ///
+    /// # 参数
+    /// * `mall_id` - 来源商城
+    /// * `range_start` - 新范围起点（含）
+    /// * `range_end` - 新范围终点（不含）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回范围相交的未删除作业。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_overlapping_for_mall(
+        &self,
+        mall_id: &str,
+        range_start: Instant,
+        range_end: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<MallConsumptionBackfillJob>> {
+        self.find_many(
+            doc! {
+                "mall_id": mall_id,
+                "range_start": { "$lt": range_end.unix_secs() },
+                "range_end": { "$gt": range_start.unix_secs() },
+            },
+            executor,
+        )
+        .await
+    }
 }
 
 /// `mall_consumption_backfill_item` 只读追加仓储（回填明细是不可变执行结果，§4.5 不设软删除）。

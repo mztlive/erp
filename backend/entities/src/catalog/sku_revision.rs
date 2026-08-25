@@ -142,6 +142,53 @@ impl SkuRevision {
         })
     }
 
+    /// 从当前快照派生一份改名或改描述的后继修订。
+    ///
+    /// 规格、条码、主图、物流属性、价格与状态沿用当前不可变快照，只替换名称、
+    /// 描述和生效区间。
+    ///
+    /// # 参数
+    /// * `id` - 新修订主键
+    /// * `revision_no` - 同一 SKU 内的下一修订序号
+    /// * `name` - 新 SKU 名称
+    /// * `description` - 新 SKU 描述
+    /// * `effective_from` / `effective_to` - 新修订生效区间
+    ///
+    /// # 返回
+    /// 返回经完整实体校验的新 SKU 修订。
+    ///
+    /// # 错误
+    /// 名称、描述、修订序号或生效区间违反实体不变式时返回错误。
+    pub fn content_successor(
+        &self,
+        id: SkuRevisionId,
+        revision_no: u32,
+        name: String,
+        description: Option<String>,
+        effective_from: BusinessDate,
+        effective_to: Option<BusinessDate>,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            SkuRevisionData {
+                sku_id: self.sku_id.clone(),
+                revision_no,
+                name,
+                description,
+                specification: self.specification.clone(),
+                barcode: self.barcode.clone(),
+                source_main_image_asset_id: self.source_main_image_asset_id.clone(),
+                weight_kg: self.weight_kg,
+                volume_m3: self.volume_m3,
+                sales_visible_price_gross: self.sales_visible_price_gross,
+                market_price: self.market_price,
+                status: self.status,
+                effective_from,
+                effective_to,
+            },
+        )
+    }
+
     /// 判断修订是否处于启用状态。
     ///
     /// # 返回
@@ -324,6 +371,32 @@ mod tests {
             ..data()
         };
         assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), negative_weight).is_err());
+    }
+
+    /// 后继修订只替换文案与生效区间并保留价格、物流和条码快照。
+    #[test]
+    fn content_successor_preserves_commercial_snapshot() {
+        let current = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
+        let successor = current
+            .content_successor(
+                SkuRevisionId::new("rev-2"),
+                2,
+                "新 SKU 名称".to_string(),
+                Some("新描述".to_string()),
+                BusinessDate::from_ymd(2026, 2, 1).unwrap(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(successor.revision.revision_no, 2);
+        assert_eq!(successor.name, "新 SKU 名称");
+        assert_eq!(successor.barcode, current.barcode);
+        assert_eq!(successor.weight_kg, current.weight_kg);
+        assert_eq!(
+            successor.sales_visible_price_gross,
+            current.sales_visible_price_gross
+        );
+        assert_eq!(successor.status, current.status);
     }
 
     /// 金额三元组：销售可见价参与逐行舍入计算时满足 gross = net + tax 恒等。

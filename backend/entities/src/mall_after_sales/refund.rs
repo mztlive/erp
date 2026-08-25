@@ -131,6 +131,55 @@ impl MallRefund {
             refunded_at: data.refunded_at,
         })
     }
+
+    /// 判断退款是否属于给定售后案件。
+    ///
+    /// # 参数
+    /// * `after_sales_request_id` - 待校验的售后案件
+    ///
+    /// # 返回
+    /// 退款冻结的售后案件一致时返回 `true`。
+    pub fn belongs_to_after_sales_request(&self, after_sales_request_id: &MallAfterSalesRequestId) -> bool {
+        &self.after_sales_request_id == after_sales_request_id
+    }
+
+    /// 校验退款行归属、唯一性与头行金额守恒。
+    ///
+    /// # 参数
+    /// * `lines` - 本次退款形成的全部商品退款行
+    ///
+    /// # 返回
+    /// 行清单非空、均属于当前退款、行号和商品不重复且金额合计等于头金额时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一归属、唯一性或金额守恒规则不满足时返回错误。
+    pub fn ensure_line_total(&self, lines: &[MallRefundLine]) -> Result<()> {
+        if lines.is_empty() {
+            return Err(Error::from("退款必须包含至少一条商品明细"));
+        }
+        let mut line_nos = std::collections::HashSet::with_capacity(lines.len());
+        let mut item_ids = std::collections::HashSet::with_capacity(lines.len());
+        let mut total = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额必须合法");
+        for line in lines {
+            if !line.belongs_to_refund(&MallRefundId::new(self.base.id.clone())) {
+                return Err(Error::from("退款行不属于当前退款"));
+            }
+            if !line_nos.insert(line.line_no) {
+                return Err(Error::from(format!("退款行号重复: {}", line.line_no)));
+            }
+            if !item_ids.insert(line.mall_order_item_id.clone()) {
+                return Err(Error::from(format!(
+                    "同一退款不得重复引用商品明细: {}",
+                    line.mall_order_item_id
+                )));
+            }
+            total = total.checked_add(line.line_refund_amount);
+        }
+        if total != self.refund_amount {
+            return Err(Error::from("退款行金额合计与头金额不一致"));
+        }
+        Ok(())
+    }
 }
 
 /// 退款行创建数据。
@@ -202,6 +251,55 @@ impl MallRefundLine {
             line_refund_amount: data.line_refund_amount,
         })
     }
+
+    /// 判断退款行是否属于给定退款头。
+    ///
+    /// # 参数
+    /// * `mall_refund_id` - 待校验的退款头
+    ///
+    /// # 返回
+    /// 退款行所属退款一致时返回 `true`。
+    pub fn belongs_to_refund(&self, mall_refund_id: &MallRefundId) -> bool {
+        &self.mall_refund_id == mall_refund_id
+    }
+
+    /// 判断退款行是否指向给定商城订单明细。
+    ///
+    /// # 参数
+    /// * `mall_order_item_id` - 待校验的商城订单明细
+    ///
+    /// # 返回
+    /// 退款行目标明细一致时返回 `true`。
+    pub fn targets_item(&self, mall_order_item_id: &MallOrderItemId) -> bool {
+        &self.mall_order_item_id == mall_order_item_id
+    }
+
+    /// 校验当前退款行的净分配金额守恒。
+    ///
+    /// # 参数
+    /// * `allocations` - 当前退款的全部资金分配
+    ///
+    /// # 返回
+    /// 指向当前行的 `APPLY − REVERSE` 净额等于行退款金额时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前行没有等额净分配或净额不一致时返回错误。
+    pub fn ensure_allocation_total(&self, allocations: &[MallRefundAllocation]) -> Result<()> {
+        let mut net = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额必须合法");
+        for allocation in allocations
+            .iter()
+            .filter(|allocation| allocation.belongs_to_line(&MallRefundLineId::new(self.base.id.clone())))
+        {
+            net = allocation.apply_to_net(net);
+        }
+        if net != self.line_refund_amount {
+            return Err(Error::from(format!(
+                "退款行 {} 分配合计与行金额不一致",
+                self.line_no
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// 退款分配创建数据。
@@ -256,8 +354,8 @@ impl MallRefundAllocation {
     /// 创建退款分配。
     ///
     /// 强制单行不变式（§6.18）：`allocation_no` 从 1 起；分配金额非负；
-    /// `APPLY` 不得携带反向引用，`REVERSE` 必须同时携带原 `APPLY` 分配与同事务
-    /// 消费反向事实。
+    /// `APPLY` 不得携带反向分配引用，`REVERSE` 必须引用原 `APPLY`；两种动作
+    /// 都必须关联同事务形成的消费反向事实。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::MallRefundAllocationId`）
@@ -293,6 +391,50 @@ impl MallRefundAllocation {
             reversal_consumption_entry_id: data.reversal_consumption_entry_id,
         })
     }
+
+    /// 判断退款分配是否属于给定退款行。
+    ///
+    /// # 参数
+    /// * `mall_refund_line_id` - 待校验的退款行
+    ///
+    /// # 返回
+    /// 分配所属退款行一致时返回 `true`。
+    pub fn belongs_to_line(&self, mall_refund_line_id: &MallRefundLineId) -> bool {
+        &self.mall_refund_line_id == mall_refund_line_id
+    }
+
+    /// 判断退款分配是否是可供余额恢复引用的有效 `APPLY`。
+    ///
+    /// # 返回
+    /// 动作为 `Apply` 时返回 `true`。
+    pub fn is_restorable_apply(&self) -> bool {
+        self.allocation_action == AllocationAction::Apply
+    }
+
+    /// 将当前分配动作应用到退款净额。
+    ///
+    /// # 参数
+    /// * `current_net` - 应用当前分配前的累计净退款金额
+    ///
+    /// # 返回
+    /// `Apply` 增加金额，`Reverse` 扣减金额，返回新的累计净额。
+    pub fn apply_to_net(&self, current_net: Amount) -> Amount {
+        match self.allocation_action {
+            AllocationAction::Apply => current_net.checked_add(self.allocated_refund_amount),
+            AllocationAction::Reverse => current_net.checked_sub(self.allocated_refund_amount),
+        }
+    }
+
+    /// 判断累计余额恢复是否仍在当前有效退款分配范围内。
+    ///
+    /// # 参数
+    /// * `restored_total` - 含本次在内的累计恢复金额
+    ///
+    /// # 返回
+    /// 当前分配为有效 `APPLY` 且累计恢复不超过分配金额时返回 `true`。
+    pub fn allows_cumulative_restoration(&self, restored_total: Amount) -> bool {
+        self.is_restorable_apply() && restored_total <= self.allocated_refund_amount
+    }
 }
 
 /// 校验分配动作与引用字段一致性。
@@ -306,7 +448,8 @@ impl MallRefundAllocation {
 /// 动作与引用一致返回 `Ok(())`。
 ///
 /// # 错误
-/// `APPLY` 携带反向引用，或 `REVERSE` 缺失反向引用/消费反向事实时返回错误。
+/// `APPLY` 携带反向分配引用、`REVERSE` 缺原分配引用，或任一动作缺少同事务
+/// 消费反向事实时返回错误。
 fn validate_allocation_action(
     action: AllocationAction,
     reverses_allocation_id: Option<MallRefundAllocationId>,
@@ -317,10 +460,8 @@ fn validate_allocation_action(
             "REVERSE 分配必须引用原 APPLY 分配，APPLY 分配不得携带反向引用",
         ));
     }
-    if action.is_reverse() != reversal_consumption_entry_id.is_some() {
-        return Err(Error::from(
-            "REVERSE 分配必须携带同事务消费反向事实，APPLY 分配不得携带",
-        ));
+    if reversal_consumption_entry_id.is_none() {
+        return Err(Error::from("退款分配必须引用同事务消费反向事实"));
     }
     Ok(())
 }
@@ -339,6 +480,10 @@ mod tests {
     use crate::mall_after_sales::types::AllocationAction;
     use crate::money::{Amount, Quantity};
     use std::str::FromStr;
+
+    fn amt(value: &str) -> Amount {
+        Amount::from_str(value).unwrap()
+    }
 
     fn refund_data() -> MallRefundData {
         MallRefundData {
@@ -376,11 +521,7 @@ mod tests {
             } else {
                 None
             },
-            reversal_consumption_entry_id: if action == AllocationAction::Reverse {
-                Some(MallConsumptionEntryId::new("ce-2"))
-            } else {
-                None
-            },
+            reversal_consumption_entry_id: Some(MallConsumptionEntryId::new("ce-2")),
         }
     }
 
@@ -451,6 +592,58 @@ mod tests {
 
     /// 分配：APPLY 与 REVERSE 各自身份与引用完整性；happy path。
     #[test]
+    fn refund_relationship_and_net_rules_are_entity_owned() {
+        let refund = MallRefund::new(MallRefundId::new("refund-1"), refund_data()).unwrap();
+        assert!(refund.belongs_to_after_sales_request(&MallAfterSalesRequestId::new("asr-1")));
+        assert!(!refund.belongs_to_after_sales_request(&MallAfterSalesRequestId::new("asr-2")));
+        let line = MallRefundLine::new(MallRefundLineId::new("rl-1"), line_data()).unwrap();
+        assert!(line.belongs_to_refund(&MallRefundId::new("refund-1")));
+        assert!(line.targets_item(&MallOrderItemId::new("item-1")));
+        assert!(!line.targets_item(&MallOrderItemId::new("item-2")));
+        refund.ensure_line_total(std::slice::from_ref(&line)).unwrap();
+
+        let apply = MallRefundAllocation::new(
+            MallRefundAllocationId::new("ra-1"),
+            allocation_data(AllocationAction::Apply),
+        )
+        .unwrap();
+        assert!(apply.belongs_to_line(&MallRefundLineId::new("rl-1")));
+        assert!(apply.is_restorable_apply());
+        assert!(apply.allows_cumulative_restoration(amt("49.00")));
+        assert!(!apply.allows_cumulative_restoration(amt("49.01")));
+        assert_eq!(apply.apply_to_net(amt("10.00")), amt("59.00"));
+        line.ensure_allocation_total(std::slice::from_ref(&apply))
+            .unwrap();
+
+        let reverse = MallRefundAllocation::new(
+            MallRefundAllocationId::new("ra-2"),
+            MallRefundAllocationData {
+                allocation_action: AllocationAction::Reverse,
+                reverses_allocation_id: Some(MallRefundAllocationId::new("ra-1")),
+                reversal_consumption_entry_id: Some(MallConsumptionEntryId::new("ce-rev-1")),
+                ..allocation_data(AllocationAction::Apply)
+            },
+        )
+        .unwrap();
+        assert!(!reverse.is_restorable_apply());
+        assert!(!reverse.allows_cumulative_restoration(amt("1.00")));
+        assert_eq!(reverse.apply_to_net(amt("59.00")), amt("10.00"));
+        assert!(line.ensure_allocation_total(&[]).is_err());
+
+        let mismatched_line = MallRefundLine::new(
+            MallRefundLineId::new("rl-2"),
+            MallRefundLineData {
+                line_refund_amount: amt("48.00"),
+                ..line_data()
+            },
+        )
+        .unwrap();
+        assert!(refund
+            .ensure_line_total(std::slice::from_ref(&mismatched_line))
+            .is_err());
+    }
+
+    #[test]
     fn allocation_apply_and_reverse_keep_action_consistency() {
         let apply = MallRefundAllocation::new(
             MallRefundAllocationId::new("ra-1"),
@@ -459,7 +652,10 @@ mod tests {
         .unwrap();
         assert_eq!(apply.allocation_action, AllocationAction::Apply);
         assert!(apply.reverses_allocation_id.is_none());
-        assert!(apply.reversal_consumption_entry_id.is_none());
+        assert_eq!(
+            apply.reversal_consumption_entry_id,
+            Some(MallConsumptionEntryId::new("ce-2"))
+        );
 
         let reverse = MallRefundAllocation::new(
             MallRefundAllocationId::new("ra-2"),
@@ -513,6 +709,15 @@ mod tests {
             reverse_without_reversal_entry,
         )
         .is_err());
+
+        let apply_without_reversal_entry = MallRefundAllocationData {
+            reversal_consumption_entry_id: None,
+            ..allocation_data(AllocationAction::Apply)
+        };
+        assert!(
+            MallRefundAllocation::new(MallRefundAllocationId::new("ra-9"), apply_without_reversal_entry,)
+                .is_err()
+        );
     }
 
     /// 金额：分配金额非负（APPLY/REVERSE 均可为零金额校验通过，负值拒绝）。

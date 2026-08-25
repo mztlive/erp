@@ -446,6 +446,47 @@ impl<'a> MallOrderFactRepository<'a> {
         })
     }
 
+    /// 按商城与半开业务时间范围读取关键事实。
+    ///
+    /// 范围固定为 `[range_start, range_end)`，结果按发生时间与事实 ID 升序，
+    /// 供历史回填在 Repository 内完成时间边界筛选，Service 不再分页后内存过滤。
+    ///
+    /// # 参数
+    /// * `mall_id` - 来源商城
+    /// * `range_start` - 发生时间起点（含）
+    /// * `range_end` - 发生时间终点（不含）
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回范围内全部未删除关键事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_mall_and_occurred_range(
+        &self,
+        mall_id: &str,
+        range_start: Instant,
+        range_end: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<MallOrderFact>> {
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! {
+                "mall_id": mall_id,
+                "occurred_at": {
+                    "$gte": range_start.unix_secs(),
+                    "$lt": range_end.unix_secs(),
+                },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .sort(doc! { "occurred_at": 1, "id": 1 })
+                .build(),
+            executor,
+        )
+        .await
+    }
+
     /// 按商城售后请求取全部关键事实。
     ///
     /// 取消、退款、余额恢复必须携带售后请求 ID（§6.17）；本方法一次取回
@@ -872,6 +913,26 @@ impl<'a> MallConsumptionCostAssessmentRepository<'a> {
 }
 
 impl<'a> Repository<'a, MallOrder> {
+    /// 按支付成功事实查找商城订单追溯对象。
+    ///
+    /// # 参数
+    /// * `payment_fact_id` - 形成订单的支付成功事实
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该支付事实形成的商城订单；尚未形成时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_payment_fact(
+        &self,
+        payment_fact_id: &entities::ids::MallOrderFactId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<MallOrder>> {
+        self.find_one(doc! { "payment_fact_id": payment_fact_id.to_string() }, executor)
+            .await
+    }
+
     /// 分页检索商城订单列表（投影查询）。
     ///
     /// 只返回 [`MallOrderRow`] 所需的列表字段，不加载整文档

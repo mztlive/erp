@@ -62,6 +62,29 @@ impl ProductPublicationStatus {
             Self::Expired => "expired",
         }
     }
+
+    /// 返回安全暂停需要扫描的发布状态集合。
+    ///
+    /// # 返回
+    /// 返回商城已生效与待发布状态；其它状态不属于当前在售影响集。
+    pub fn safety_pause_candidates() -> &'static [Self] {
+        &[Self::MallEffective, Self::PendingPublish]
+    }
+
+    /// 计算形成新发布修订后的稳定发布状态。
+    ///
+    /// # 参数
+    /// * `has_safety_pause` - 是否已有不可逆安全暂停证据
+    ///
+    /// # 返回
+    /// 有安全暂停证据时保持暂停，否则进入待发布。
+    pub fn after_revision_submission(has_safety_pause: bool) -> Self {
+        if has_safety_pause {
+            Self::Paused
+        } else {
+            Self::PendingPublish
+        }
+    }
 }
 
 /// 商品发布创建数据。
@@ -166,6 +189,94 @@ impl ProductPublication {
     /// 状态为 `MallEffective` 时返回 `true`。
     pub fn is_mall_effective(&self) -> bool {
         self.stable.status() == ProductPublicationStatus::MallEffective
+    }
+
+    /// 返回当前商城生效版本 ID。
+    ///
+    /// # 返回
+    /// 已关联版本时返回其稳定 ID。
+    ///
+    /// # 错误
+    /// 当前发布缺少商城生效版本时返回错误。
+    pub fn current_revision_id(&self) -> Result<&str> {
+        self.stable
+            .current_revision_id
+            .as_deref()
+            .ok_or_else(|| Error::from("发布缺少商城当前生效版本"))
+    }
+
+    /// 校验安全暂停后的人工更新不会恢复可下单状态或改写生效版本。
+    ///
+    /// # 参数
+    /// * `update` - 待执行的发布更新
+    ///
+    /// # 返回
+    /// 更新保持暂停且不改写生效版本时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 尝试离开暂停状态或改写当前生效版本时返回固定恢复责任错误。
+    pub fn ensure_safety_pause_update_allowed(&self, update: &ProductPublicationUpdate) -> Result<()> {
+        if update
+            .status
+            .is_some_and(|status| status != ProductPublicationStatus::Paused)
+        {
+            return Err(Error::from(
+                "RECOVERY_RESPONSIBILITY_UNCONFIRMED：系统安全暂停发布禁止恢复为可下单状态",
+            ));
+        }
+        if update.current_revision_id.is_some() {
+            return Err(Error::from(
+                "RECOVERY_RESPONSIBILITY_UNCONFIRMED：系统安全暂停发布禁止改写商城当前生效版本",
+            ));
+        }
+        Ok(())
+    }
+
+    /// 把稳定发布推进为系统安全暂停状态。
+    ///
+    /// # 参数
+    /// * `updated_by` - 固定系统操作人
+    ///
+    /// # 返回
+    /// 状态更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 操作人或稳定发布数据非法时返回错误。
+    pub fn mark_safety_paused(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        self.update(
+            ProductPublicationUpdate {
+                status: Some(ProductPublicationStatus::Paused),
+                current_revision_id: None,
+            },
+            updated_by,
+        )
+    }
+
+    /// 在形成新发布修订后推进稳定发布状态。
+    ///
+    /// # 参数
+    /// * `has_safety_pause` - 是否已有系统安全暂停证据
+    /// * `updated_by` - 本次提交操作人
+    ///
+    /// # 返回
+    /// 安全暂停发布保持暂停，其余发布进入待发布。
+    ///
+    /// # 错误
+    /// 操作人或稳定发布数据非法时返回错误。
+    pub fn mark_revision_submitted(
+        &mut self,
+        has_safety_pause: bool,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        self.update(
+            ProductPublicationUpdate {
+                status: Some(ProductPublicationStatus::after_revision_submission(
+                    has_safety_pause,
+                )),
+                current_revision_id: None,
+            },
+            updated_by,
+        )
     }
 
     /// 应用当前生效版本更新。
@@ -317,5 +428,37 @@ mod tests {
             ProductPublicationStatus::PendingPublish.as_str(),
             "pending_publish"
         );
+        assert_eq!(
+            ProductPublicationStatus::safety_pause_candidates(),
+            &[
+                ProductPublicationStatus::MallEffective,
+                ProductPublicationStatus::PendingPublish,
+            ]
+        );
+        assert_eq!(
+            ProductPublicationStatus::after_revision_submission(true),
+            ProductPublicationStatus::Paused
+        );
+    }
+
+    #[test]
+    fn safety_pause_methods_keep_publication_paused_and_block_recovery() {
+        let mut publication =
+            ProductPublication::new(ProductPublicationId::new("pub-1"), publication_data(), "admin-1")
+                .unwrap();
+        publication.mark_safety_paused("system").unwrap();
+        assert_eq!(publication.stable.status(), ProductPublicationStatus::Paused);
+        assert!(publication
+            .ensure_safety_pause_update_allowed(&ProductPublicationUpdate {
+                status: Some(ProductPublicationStatus::PendingPublish),
+                current_revision_id: None,
+            })
+            .is_err());
+        assert!(publication
+            .ensure_safety_pause_update_allowed(&ProductPublicationUpdate::default())
+            .is_ok());
+
+        publication.mark_revision_submitted(true, "admin-2").unwrap();
+        assert_eq!(publication.stable.status(), ProductPublicationStatus::Paused);
     }
 }

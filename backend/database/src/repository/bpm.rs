@@ -2,6 +2,7 @@
 //!
 //! 本模块只读写 `bpm` 模型，不接收 ERP 实体，也不调用 BPM 决策函数。
 
+pub use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use bpm::model::types::{
     ApprovalCommandKind, ApprovalDefinitionStatus, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
@@ -61,17 +62,6 @@ pub enum AssignDocumentNoOutcome<T> {
     VersionConflict(T),
     /// 目标不存在或已删除。
     NotFound,
-}
-
-/// 定义及其节点、连线的一次批量读取结果。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DefinitionGraph {
-    /// 流程定义。
-    pub definition: ApprovalProcessDefinition,
-    /// 该定义的节点，最多 20 条。
-    pub nodes: Vec<ApprovalNodeDefinition>,
-    /// 该定义的连线，与节点同批读取。
-    pub transitions: Vec<ApprovalTransitionDefinition>,
 }
 
 /// 实例列表视图。排序字段必须与匹配索引一致。
@@ -212,6 +202,116 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// 返回不自行开事务的聚合仓储。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按主键读取审批流程实例。
+    ///
+    /// # 参数
+    /// * `instance_id` - 审批流程实例 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的实例；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法只读取实例身份，不放宽状态或主体约束。
+    pub async fn find_instance_by_id(
+        &self,
+        instance_id: &ApprovalProcessInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalProcessInstance>> {
+        self.instances().find_by_id(instance_id.as_ref(), executor).await
+    }
+
+    /// 按主键读取审批节点执行。
+    ///
+    /// # 参数
+    /// * `execution_id` - 审批节点执行 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的节点执行；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法不推断当前执行，调用方需要当前令牌时应使用 `find_current_execution`。
+    pub async fn find_execution_by_id(
+        &self,
+        execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalNodeExecution>> {
+        self.executions()
+            .find_by_id(execution_id.as_ref(), executor)
+            .await
+    }
+
+    /// 查询实例指定节点的当前审批人绑定。
+    ///
+    /// # 参数
+    /// * `instance_id` - 审批流程实例 ID
+    /// * `node_key` - 定义内节点键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的实例审批人绑定；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// `(process_instance_id, node_key)` 由唯一索引保证单值语义。
+    pub async fn find_assignee_for_node(
+        &self,
+        instance_id: &ApprovalProcessInstanceId,
+        node_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalInstanceAssignee>> {
+        mongo_ops::find_one(
+            &self.db.collection(ASSIGNEES),
+            doc! {
+                "process_instance_id": instance_id.as_ref(),
+                "node_key": node_key,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 判断业务主体是否已经启动过审批实例。
+    ///
+    /// # 参数
+    /// * `subject` - 业务对象稳定引用
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 任意未删除审批实例命中主体时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 终态实例仍证明单据已经启动过审批，因此本查询不附加状态条件。
+    pub async fn has_started_instance_for_subject(
+        &self,
+        subject: &SubjectRef,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        mongo_ops::exists(
+            &self.db.collection::<Document>(INSTANCES),
+            doc! {
+                "subject.subject_kind": subject.subject_kind(),
+                "subject.subject_id": subject.subject_id(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
     }
 
     /// 查询同一流程种类当前唯一已发布定义。
@@ -383,10 +483,42 @@ impl<'a> BpmWorkflowRepository<'a> {
             .await
     }
 
+    /// 读取同一主体与提交版本的可取消实例候选。
+    ///
+    /// 本查询按同一主体与提交版本读取最近实例，不预先过滤状态；实例是否可取消以及
+    /// 开放任务数量是否一致，统一由 BPM 模型在全部事实加载后判定。
+    ///
+    /// # 参数
+    /// * `subject` - 业务对象引用
+    /// * `subject_version` - 冻结提交版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回可供取消规则校验的实例候选；没有时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn cancellation_instance_by_subject(
+        &self,
+        subject: &SubjectRef,
+        subject_version: u32,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalProcessInstance>> {
+        let mut rows = find_limited(
+            &self.db.collection(INSTANCES),
+            cancellation_subject_filter(subject, subject_version),
+            doc! { "started_at": -1, "id": -1 },
+            1,
+            executor,
+        )
+        .await?;
+        Ok(rows.pop())
+    }
+
     /// 按主体读取最近一条审批实例，含已终态，供单据详情投影。
     ///
-    /// 命中 `idx_approval_process_instances_subject_history`。撤回等命令仍应使用
-    /// `find_non_terminal_by_subject`，不得用本方法替代状态校验。
+    /// 命中 `idx_approval_process_instances_subject_history`。撤回命令应使用
+    /// `cancellation_instance_by_subject`，不得用本方法替代提交版本与状态校验。
     ///
     /// # 参数
     /// * `subject` - 业务对象引用
@@ -418,6 +550,27 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_current_execution(
+        &self,
+        instance_id: &ApprovalProcessInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ApprovalNodeExecution>> {
+        self.executions()
+            .find_one(current_execution_filter(instance_id), executor)
+            .await
+    }
+
+    /// 读取取消用例所需的当前活动或受阻执行。
+    ///
+    /// # 参数
+    /// * `instance_id` - 可取消实例主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回该实例当前 `ACTIVE|BLOCKED` 执行；缺失时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn current_execution_for_cancellation(
         &self,
         instance_id: &ApprovalProcessInstanceId,
         executor: &mut dyn Executor,
@@ -520,6 +673,55 @@ impl<'a> BpmWorkflowRepository<'a> {
             .await
     }
 
+    /// 持久化已由引擎形成的取消实例、结束执行和命令收据。
+    ///
+    /// 本方法不创建事务；调用方必须传入与业务单据、任务关闭相同的事务执行器。
+    /// 实例和执行均按引擎自增后的版本反推加载版本，并以当前令牌和
+    /// `ACTIVE|BLOCKED` 状态执行 CAS。
+    ///
+    /// # 参数
+    /// * `instance` - 已进入 `CANCELLED` 的实例快照
+    /// * `updated_executions` - 已随实例取消结束的当前执行集合
+    /// * `receipt` - 本次取消命令收据
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 全部 BPM 运行事实写入成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 取消计划缺少执行、版本元数据非法、CAS 未命中或 MongoDB 写入失败时返回错误。
+    pub async fn persist_cancelled_runtime(
+        &self,
+        instance: &ApprovalProcessInstance,
+        updated_executions: &[ApprovalNodeExecution],
+        receipt: &ApprovalCommandReceipt,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let current = updated_executions
+            .first()
+            .ok_or(Error::EntityMetadataOutOfRange("cancelled_execution"))?;
+        let current_id = ApprovalNodeExecutionId::new(current.base.id.clone());
+        let expected_instance_version = previous_version(instance.base.version)?;
+        require_cas_applied(
+            self.advance_instance(
+                instance,
+                expected_instance_version,
+                &current_id,
+                &cancelled_instance_projection(instance),
+                executor,
+            )
+            .await?,
+        )?;
+        for execution in updated_executions {
+            let expected_execution_version = previous_version(execution.base.version)?;
+            require_cas_applied(
+                self.end_cancellable_execution(execution, expected_execution_version, executor)
+                    .await?,
+            )?;
+        }
+        self.insert_command_receipt(receipt, executor).await
+    }
+
     /// 以 `id + expected_instance_version + current_execution_id + RUNNING|BLOCKED` 推进实例。
     ///
     /// # 错误
@@ -570,6 +772,39 @@ impl<'a> BpmWorkflowRepository<'a> {
             execution,
             expected_execution_version,
             ApprovalNodeExecutionStatus::Active,
+            executor,
+        )
+        .await
+    }
+
+    /// 以 `id + expected_execution_version + ACTIVE|BLOCKED` 结束可取消执行。
+    ///
+    /// # 参数
+    /// * `execution` - 已由引擎置为 `CANCELLED` 的当前执行
+    /// * `expected_execution_version` - 引擎变更前的加载版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 写入失败时返回错误。
+    async fn end_cancellable_execution(
+        &self,
+        execution: &ApprovalNodeExecution,
+        expected_execution_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<CasWriteOutcome<ApprovalNodeExecution>> {
+        let filter = cancellable_execution_end_filter(&execution.base.id, expected_execution_version)?;
+        self.cas_replace(
+            CasReplaceSpec {
+                collection: EXECUTIONS,
+                filter,
+                entity: execution,
+                expected_version: expected_execution_version,
+                extra_set: None,
+            },
+            |current| current.status.is_current(),
             executor,
         )
         .await
@@ -882,6 +1117,26 @@ fn execution_history_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_EXECUTION_HISTORY)
 }
 
+/// 构造取消候选的主体与提交版本过滤条件，不预先判断实例状态。
+///
+/// # 参数
+/// * `subject` - 业务对象引用
+/// * `subject_version` - 冻结提交版本
+///
+/// # 返回
+/// 返回主体、提交版本和软删除约束，供 BPM 模型统一判定是否可取消。
+///
+/// # 错误
+/// 无。
+fn cancellation_subject_filter(subject: &SubjectRef, subject_version: u32) -> Document {
+    doc! {
+        "subject.subject_kind": subject.subject_kind(),
+        "subject.subject_id": subject.subject_id(),
+        "subject_version": i64::from(subject_version),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
 fn non_terminal_subject_filter(subject: &SubjectRef, subject_version: u32) -> Document {
     doc! {
         "subject.subject_kind": subject.subject_kind(),
@@ -989,6 +1244,53 @@ fn execution_end_filter(
         "status": required_status.as_str(),
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     })
+}
+
+/// 构造取消当前执行的 `ACTIVE|BLOCKED` CAS 过滤条件。
+///
+/// # 参数
+/// * `id` - 节点执行主键
+/// * `expected_version` - 引擎变更前的加载版本
+///
+/// # 返回
+/// 返回同时约束版本、当前状态和软删除标记的查询文档。
+///
+/// # 错误
+/// 版本无法表示为 BSON 整数时返回错误。
+fn cancellable_execution_end_filter(id: &str, expected_version: u64) -> Result<Document> {
+    Ok(doc! {
+        "id": id,
+        "version": i64_version(expected_version)?,
+        "status": {
+            "$in": [
+                ApprovalNodeExecutionStatus::Active.as_str(),
+                ApprovalNodeExecutionStatus::Blocked.as_str(),
+            ]
+        },
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    })
+}
+
+/// 构造取消后的实例列表投影。
+///
+/// # 参数
+/// * `instance` - 已由引擎置为 `CANCELLED` 的实例
+///
+/// # 返回
+/// 返回清空当前节点、审批人与驳回摘要并记录终态时间的有界投影。
+///
+/// # 错误
+/// 无。
+fn cancelled_instance_projection(instance: &ApprovalProcessInstance) -> ApprovalInstanceListProjection {
+    ApprovalInstanceListProjection {
+        current_node_key: None,
+        current_node_name: None,
+        current_assignee_participant_id: None,
+        current_assignee_name: None,
+        latest_rejected_execution_id: None,
+        latest_rejection_summary: None,
+        last_status_changed_at: instance.ended_at.map(|at| at.unix_secs()),
+    }
 }
 
 fn instance_insert_document(
@@ -1136,6 +1438,39 @@ fn i64_version(version: u64) -> Result<i64> {
     i64::try_from(version).map_err(|_| Error::EntityMetadataOutOfRange("version"))
 }
 
+/// 从引擎变更后的实体版本反推加载时版本。
+///
+/// # 参数
+/// * `current_version` - 引擎规则已经自增后的内存版本
+///
+/// # 返回
+/// 返回执行 CAS 时应匹配的持久化版本。
+///
+/// # 错误
+/// 当前版本为零时返回元数据越界错误。
+fn previous_version(current_version: u64) -> Result<u64> {
+    current_version
+        .checked_sub(1)
+        .ok_or(Error::EntityMetadataOutOfRange("version"))
+}
+
+/// 要求语义写入中的 CAS 已成功应用。
+///
+/// # 参数
+/// * `outcome` - 单次实例或执行 CAS 分类
+///
+/// # 返回
+/// 仅 [`CasWriteOutcome::Applied`] 返回 `Ok(())`。
+///
+/// # 错误
+/// 目标缺失、版本冲突或状态变化时返回乐观锁错误。
+fn require_cas_applied<T>(outcome: CasWriteOutcome<T>) -> Result<()> {
+    if matches!(outcome, CasWriteOutcome::Applied(_)) {
+        return Ok(());
+    }
+    Err(Error::OptimisticLockingError)
+}
+
 fn next_version_i64(expected_version: u64) -> Result<i64> {
     let next = expected_version
         .checked_add(1)
@@ -1204,15 +1539,16 @@ pub fn classify_assign_document_no_miss<T>(
 #[cfg(test)]
 mod tests {
     use super::{
-        approval_task_cas_filter, assign_document_no_filter, clamp_limit, classify_assign_document_no_miss,
-        classify_cas_miss, current_execution_filter, definition_child_filter,
-        definition_graph_transition_limit, execution_end_filter, execution_history_filter,
-        execution_history_limit, instance_advance_filter, instance_insert_document, instance_list_filter_doc,
-        instance_list_scope_empty, instance_list_sort, instance_summary_projection, latest_subject_filter,
-        merge_documents, non_terminal_subject_filter, receipt_key_filter, ApprovalInstanceListCursor,
-        ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
-        AssignDocumentNoOutcome, CasWriteOutcome, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY,
-        MAX_INSTANCE_PAGE,
+        approval_task_cas_filter, assign_document_no_filter, cancellable_execution_end_filter,
+        cancellation_subject_filter, cancelled_instance_projection, clamp_limit,
+        classify_assign_document_no_miss, classify_cas_miss, current_execution_filter,
+        definition_child_filter, definition_graph_transition_limit, execution_end_filter,
+        execution_history_filter, execution_history_limit, instance_advance_filter, instance_insert_document,
+        instance_list_filter_doc, instance_list_scope_empty, instance_list_sort, instance_summary_projection,
+        latest_subject_filter, merge_documents, non_terminal_subject_filter, previous_version,
+        receipt_key_filter, require_cas_applied, ApprovalInstanceListCursor, ApprovalInstanceListFilter,
+        ApprovalInstanceListProjection, ApprovalInstanceListView, AssignDocumentNoOutcome, CasWriteOutcome,
+        MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
     };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
@@ -1260,6 +1596,20 @@ mod tests {
         );
     }
 
+    /// 取消候选查询保留提交版本但不得预先过滤实例状态。
+    ///
+    /// 终态实例也必须交给 BPM 模型给出确定的不可取消结果。
+    #[test]
+    fn cancellation_subject_filter_defers_status_rule_to_model() {
+        let subject = SubjectRef::new("sales_order", "so-1").unwrap();
+        let filter = cancellation_subject_filter(&subject, 3);
+        assert_eq!(filter.get_str("subject.subject_kind").unwrap(), "sales_order");
+        assert_eq!(filter.get_str("subject.subject_id").unwrap(), "so-1");
+        assert_eq!(filter.get_i64("subject_version").unwrap(), 3);
+        assert!(!filter.contains_key("status"));
+        assert!(filter.contains_key("deleted_at"));
+    }
+
     /// 详情投影按主体查最近实例，不得附带状态或提交版本。
     #[test]
     fn latest_subject_filter_omits_status_and_version() {
@@ -1292,6 +1642,48 @@ mod tests {
             current.get_document("status").unwrap(),
             &doc! { "$in": ["ACTIVE", "BLOCKED"] }
         );
+    }
+
+    /// 取消执行 CAS 同时允许活动和受阻状态，并保持版本与软删除约束。
+    ///
+    /// 其他结束状态不得进入取消写入过滤条件。
+    #[test]
+    fn cancellable_execution_filter_accepts_current_states_only() {
+        let filter = cancellable_execution_end_filter("exec-1", 2).unwrap();
+        assert_eq!(filter.get_i64("version").unwrap(), 2);
+        assert_eq!(
+            filter.get_document("status").unwrap(),
+            &doc! { "$in": ["ACTIVE", "BLOCKED"] }
+        );
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), 0);
+    }
+
+    /// 取消投影清空当前节点与审批人，并使用实例终态时间。
+    ///
+    /// 版本反推和 CAS 分类在非应用结果上统一失败关闭。
+    #[test]
+    fn cancelled_projection_and_write_guards_are_deterministic() {
+        let mut instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-cancelled"),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            definition_version: 1,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("u1").unwrap(),
+            at: Timestamp::from_unix_secs(10).unwrap(),
+        })
+        .unwrap();
+        instance.cancel(Timestamp::from_unix_secs(20).unwrap()).unwrap();
+
+        let projection = cancelled_instance_projection(&instance);
+        assert_eq!(projection.last_status_changed_at, Some(20));
+        assert!(projection.current_node_key.is_none());
+        assert!(projection.current_assignee_participant_id.is_none());
+        assert_eq!(previous_version(instance.base.version).unwrap(), 1);
+        assert!(previous_version(0).is_err());
+        assert!(require_cas_applied(CasWriteOutcome::Applied(())).is_ok());
+        assert!(require_cas_applied(CasWriteOutcome::<()>::NotFound).is_err());
     }
 
     #[test]

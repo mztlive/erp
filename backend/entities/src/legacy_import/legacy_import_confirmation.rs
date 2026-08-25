@@ -1,5 +1,7 @@
 //! `legacy_import_confirmation`：旧数据导入业务确认事实（数据模型 §6.12）。
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
@@ -109,6 +111,117 @@ impl ConfirmationDecision {
             Self::ReturnForFix => "RETURN_FOR_FIX",
         }
     }
+}
+
+/// W18 固定业务确认范围。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ConfirmationScope {
+    /// 销售责任。
+    Sales,
+    /// 采购责任。
+    Procurement,
+    /// 运营责任。
+    Operations,
+    /// 仓储责任。
+    Warehouse,
+    /// 财务责任。
+    Finance,
+}
+
+impl ConfirmationScope {
+    /// 解析固定确认范围代码。
+    ///
+    /// # 参数
+    /// * `value` - 客户端或持久化范围代码
+    ///
+    /// # 返回
+    /// 返回已注册确认范围。
+    ///
+    /// # 错误
+    /// 范围未注册时返回错误。
+    pub fn parse(value: &str) -> Result<Self> {
+        match value.trim().to_ascii_uppercase().as_str() {
+            "SALES" => Ok(Self::Sales),
+            "PROCUREMENT" => Ok(Self::Procurement),
+            "OPERATIONS" => Ok(Self::Operations),
+            "WAREHOUSE" => Ok(Self::Warehouse),
+            "FINANCE" => Ok(Self::Finance),
+            _ => Err(Error::from("确认范围未在 W18 固定注册表中")),
+        }
+    }
+
+    /// 返回固定范围代码。
+    ///
+    /// # 返回
+    /// 返回用于确认矩阵与持久化的稳定大写代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sales => "SALES",
+            Self::Procurement => "PROCUREMENT",
+            Self::Operations => "OPERATIONS",
+            Self::Warehouse => "WAREHOUSE",
+            Self::Finance => "FINANCE",
+        }
+    }
+
+    /// 返回固定责任角色。
+    ///
+    /// # 返回
+    /// 返回该确认范围唯一对应的 RBAC 责任角色。
+    pub fn owner_role(self) -> &'static str {
+        match self {
+            Self::Sales => "role-sales",
+            Self::Procurement => "role-procurement",
+            Self::Operations => "role-operations",
+            Self::Warehouse => "role-warehouse",
+            Self::Finance => "role-finance",
+        }
+    }
+
+    /// 从批次对象集派生全部必要确认范围。
+    ///
+    /// # 参数
+    /// * `source_object_set` - 批次来源对象集合
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序的必要确认范围。
+    ///
+    /// # 错误
+    /// 对象类型未注册或集合为空时返回错误。
+    pub fn required_for_object_set(source_object_set: &str) -> Result<BTreeSet<Self>> {
+        let mut scopes = BTreeSet::new();
+        for raw in source_object_set.split([',', ';', '|', '/', '、']) {
+            let object = raw.trim().to_ascii_uppercase();
+            if object.is_empty() {
+                continue;
+            }
+            let scope = match object.as_str() {
+                "CUSTOMER" | "CONTRACT" | "CARD_SALES_ORDER" | "客户" | "合同" | "卡券销售"
+                | "卡券销售单" => Self::Sales,
+                "SUPPLIER" | "SKU" | "供应商" | "商品SKU" | "商品 SKU" => Self::Procurement,
+                "CARD_CATEGORY" | "卡券类目" => Self::Operations,
+                "WAREHOUSE" | "OPENING_STOCK" | "仓库" | "期初库存" => Self::Warehouse,
+                "CARD_OPENING_AR" | "卡券期初应收" | "期初应收" => Self::Finance,
+                _ => return Err(Error::from(format!("批次对象类型 {raw} 未配置 W18 确认责任"))),
+            };
+            scopes.insert(scope);
+        }
+        if scopes.is_empty() {
+            return Err(Error::from("批次对象集无法解析必要确认责任"));
+        }
+        Ok(scopes)
+    }
+}
+
+/// 确认矩阵完成一次决策后的唯一下一步。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmationMatrixDecision {
+    /// 等待其他责任范围确认。
+    AwaitOtherConfirmations,
+    /// 全部必要范围已确认，可进入待应用。
+    StartApply,
+    /// 当前试算被退回，必须修复并重新试算。
+    FixAndRevalidate,
 }
 
 /// 导入确认创建数据（数据模型 §6.12）。
@@ -223,6 +336,253 @@ impl LegacyImportConfirmation {
             invalidated_at: None,
             replacement_confirmation_id: None,
         })
+    }
+
+    /// 生成任务冻结的试算主题版本。
+    ///
+    /// # 参数
+    /// * `batch_version` - 批次业务版本
+    /// * `trial_version` - 试算版本
+    /// * `rule_version` - 导入规则版本
+    ///
+    /// # 返回
+    /// 返回稳定的 `batch/trial/rule` 组合版本。
+    pub fn subject_version(batch_version: u32, trial_version: u32, rule_version: &str) -> String {
+        format!(
+            "batch:{batch_version};trial:{trial_version};rule:{}",
+            rule_version.trim()
+        )
+    }
+
+    /// 判断确认事实是否属于指定试算快照。
+    ///
+    /// # 参数
+    /// * `batch_version` - 批次业务版本
+    /// * `trial_version` - 试算版本
+    /// * `rule_version` - 导入规则版本
+    ///
+    /// # 返回
+    /// 三项版本一致且确认未失效时返回 `true`。
+    pub fn belongs_to_snapshot(&self, batch_version: u32, trial_version: u32, rule_version: &str) -> bool {
+        self.batch_version == batch_version
+            && self.trial_version == trial_version
+            && self.import_rule_version == rule_version
+            && self.status != ConfirmationStatus::Invalidated
+    }
+
+    /// 判断确认事实是否仍等待责任人决策。
+    ///
+    /// # 返回
+    /// 状态为待确认时返回 `true`。
+    pub fn is_pending(&self) -> bool {
+        self.status == ConfirmationStatus::Pending
+    }
+
+    /// 返回指定规则版本下最新的有效试算版本。
+    ///
+    /// # 参数
+    /// * `confirmations` - 批次全部确认事实
+    /// * `rule_version` - 当前导入规则版本
+    ///
+    /// # 返回
+    /// 返回未失效确认中的最大试算版本；没有匹配事实时返回 `None`。
+    pub fn latest_active_trial(confirmations: &[Self], rule_version: &str) -> Option<u32> {
+        confirmations
+            .iter()
+            .filter(|item| {
+                item.status != ConfirmationStatus::Invalidated
+                    && item.import_rule_version == rule_version.trim()
+            })
+            .map(|item| item.trial_version)
+            .max()
+    }
+
+    /// 返回指定试算快照的确认矩阵。
+    ///
+    /// # 参数
+    /// * `confirmations` - 批次全部确认事实
+    /// * `batch_version` - 批次业务版本
+    /// * `trial_version` - 试算版本
+    /// * `rule_version` - 导入规则版本
+    ///
+    /// # 返回
+    /// 返回属于该快照且未失效的确认事实副本。
+    pub fn current_matrix(
+        confirmations: &[Self],
+        batch_version: u32,
+        trial_version: u32,
+        rule_version: &str,
+    ) -> Vec<Self> {
+        confirmations
+            .iter()
+            .filter(|item| item.belongs_to_snapshot(batch_version, trial_version, rule_version))
+            .cloned()
+            .collect()
+    }
+
+    /// 校验新确认事实对应试算版本的单调性与一致性。
+    ///
+    /// # 参数
+    /// * `confirmations` - 批次已有确认事实
+    /// * `batch_version` - 新确认冻结的批次版本
+    /// * `trial_version` - 新确认冻结的试算版本
+    /// * `rule_version` - 新确认冻结的规则版本
+    ///
+    /// # 返回
+    /// 试算快照合法时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本同时达到上限、新试算倒退、同一试算版本字段不一致或当前试算已退回时返回错误。
+    pub fn ensure_trial_snapshot(
+        confirmations: &[Self],
+        batch_version: u32,
+        trial_version: u32,
+        rule_version: &str,
+    ) -> Result<()> {
+        if batch_version == u32::MAX && trial_version == u32::MAX {
+            return Err(Error::from("批次与试算版本不能同时到达上限"));
+        }
+        if confirmations
+            .iter()
+            .map(|item| item.trial_version)
+            .max()
+            .is_some_and(|current| current > trial_version)
+        {
+            return Err(Error::from("新试算版本不得低于已有确认版本"));
+        }
+        let same_trial = confirmations
+            .iter()
+            .filter(|item| item.trial_version == trial_version)
+            .collect::<Vec<_>>();
+        if same_trial
+            .iter()
+            .any(|item| item.batch_version != batch_version || item.import_rule_version != rule_version)
+        {
+            return Err(Error::from("同一试算矩阵的批次或规则版本不一致"));
+        }
+        if same_trial
+            .iter()
+            .any(|item| item.status == ConfirmationStatus::Rejected)
+        {
+            return Err(Error::from("当前试算已被退回，必须修复并生成新试算版本"));
+        }
+        Ok(())
+    }
+
+    /// 计算确认决策后的唯一下一步。
+    ///
+    /// # 参数
+    /// * `decision` - 本次确认决策
+    /// * `confirmations` - 本试算当前确认矩阵
+    /// * `required_scopes` - 批次必要责任范围
+    ///
+    /// # 返回
+    /// 返回等待其他确认、开始应用或修复重验之一。
+    pub fn matrix_decision(
+        decision: ConfirmationDecision,
+        confirmations: &[Self],
+        required_scopes: &BTreeSet<ConfirmationScope>,
+    ) -> ConfirmationMatrixDecision {
+        if decision == ConfirmationDecision::ReturnForFix {
+            return ConfirmationMatrixDecision::FixAndRevalidate;
+        }
+        if Self::is_matrix_confirmed(confirmations, required_scopes) {
+            ConfirmationMatrixDecision::StartApply
+        } else {
+            ConfirmationMatrixDecision::AwaitOtherConfirmations
+        }
+    }
+
+    /// 判断试算矩阵是否已完成全部必要范围确认。
+    ///
+    /// 任一退回事实都会阻断应用；否则全部必要范围必须各有一条已确认事实。
+    /// 未注册范围不会被计入确认集合。
+    ///
+    /// # 参数
+    /// * `confirmations` - 本试算当前确认矩阵
+    /// * `required_scopes` - 批次必要责任范围
+    ///
+    /// # 返回
+    /// 无退回且全部必要范围均已确认时返回 `true`。
+    pub fn is_matrix_confirmed(
+        confirmations: &[Self],
+        required_scopes: &BTreeSet<ConfirmationScope>,
+    ) -> bool {
+        if confirmations
+            .iter()
+            .any(|item| item.status == ConfirmationStatus::Rejected)
+        {
+            return false;
+        }
+        let confirmed = confirmations
+            .iter()
+            .filter(|item| item.status == ConfirmationStatus::Confirmed)
+            .filter_map(|item| ConfirmationScope::parse(&item.confirmation_scope).ok())
+            .collect::<BTreeSet<_>>();
+        required_scopes.iter().all(|scope| confirmed.contains(scope))
+    }
+
+    /// 判断指定规则和试算版本是否完成全部必要确认。
+    ///
+    /// 仅纳入当前规则、当前试算且未失效的确认事实；任一退回或必要范围
+    /// 缺失都会阻断应用。
+    ///
+    /// # 参数
+    /// * `confirmations` - 批次全部确认事实
+    /// * `trial_version` - 待应用试算版本
+    /// * `rule_version` - 当前导入规则版本
+    /// * `required_scopes` - 批次必要责任范围
+    ///
+    /// # 返回
+    /// 当前试算矩阵完整且全部确认时返回 `true`。
+    pub fn is_trial_confirmed(
+        confirmations: &[Self],
+        trial_version: u32,
+        rule_version: &str,
+        required_scopes: &BTreeSet<ConfirmationScope>,
+    ) -> bool {
+        let current = confirmations
+            .iter()
+            .filter(|item| {
+                item.trial_version == trial_version
+                    && item.import_rule_version == rule_version.trim()
+                    && item.status != ConfirmationStatus::Invalidated
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        Self::is_matrix_confirmed(&current, required_scopes)
+    }
+
+    /// 生成不含个人身份的确认矩阵摘要。
+    ///
+    /// # 参数
+    /// * `trial_version` - 试算版本
+    /// * `confirmations` - 本试算确认事实
+    ///
+    /// # 返回
+    /// 返回按范围稳定排序的状态摘要。
+    pub fn matrix_summary(trial_version: u32, confirmations: &[Self]) -> String {
+        let states = confirmations
+            .iter()
+            .map(|item| (item.confirmation_scope.as_str(), item.status.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        let encoded = states
+            .into_iter()
+            .map(|(scope, status)| format!("{scope}={status}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("trial={trial_version};{encoded}")
+    }
+
+    /// 判断本确认是否应被更高试算版本取代。
+    ///
+    /// # 参数
+    /// * `replacement_trial_version` - 新确认事实的试算版本
+    ///
+    /// # 返回
+    /// 当前仍待确认且试算版本更低时返回 `true`。
+    pub fn is_replaced_by(&self, replacement_trial_version: u32) -> bool {
+        self.status == ConfirmationStatus::Pending && self.trial_version < replacement_trial_version
     }
 
     /// 完成一次业务确认或退回。
@@ -502,6 +862,133 @@ mod tests {
         );
         assert_eq!(ConfirmationStatus::Rejected.label(), "已退回");
         assert_eq!(ConfirmationDecision::ConfirmScope.label(), "确认本范围");
+    }
+
+    #[test]
+    fn scope_registry_derives_roles_and_required_matrix() {
+        assert_eq!(
+            ConfirmationScope::parse(" sales ").unwrap(),
+            ConfirmationScope::Sales
+        );
+        assert_eq!(ConfirmationScope::Finance.owner_role(), "role-finance");
+        let scopes = ConfirmationScope::required_for_object_set(
+            "CUSTOMER;SUPPLIER|CARD_CATEGORY/期初库存、CARD_OPENING_AR",
+        )
+        .unwrap();
+        assert_eq!(
+            scopes,
+            BTreeSet::from([
+                ConfirmationScope::Sales,
+                ConfirmationScope::Procurement,
+                ConfirmationScope::Operations,
+                ConfirmationScope::Warehouse,
+                ConfirmationScope::Finance,
+            ])
+        );
+        assert!(ConfirmationScope::required_for_object_set("UNKNOWN").is_err());
+    }
+
+    #[test]
+    fn matrix_rules_own_snapshot_version_and_next_decision() {
+        let mut sales = LegacyImportConfirmation::new(
+            LegacyImportConfirmationId::new("c-sales"),
+            LegacyImportConfirmationData {
+                confirmation_scope: "SALES".to_string(),
+                ..confirmation_data()
+            },
+        )
+        .unwrap();
+        assert!(sales.is_pending());
+        sales
+            .decide(
+                ConfirmationDecision::ConfirmScope,
+                "sales-user",
+                Instant::from_unix_secs(1_700_000_000),
+                None,
+                None,
+            )
+            .unwrap();
+        let required = BTreeSet::from([ConfirmationScope::Sales]);
+        assert_eq!(
+            LegacyImportConfirmation::matrix_decision(
+                ConfirmationDecision::ConfirmScope,
+                &[sales.clone()],
+                &required,
+            ),
+            ConfirmationMatrixDecision::StartApply
+        );
+        assert_eq!(
+            LegacyImportConfirmation::subject_version(1, 2, " rule-1 "),
+            "batch:1;trial:2;rule:rule-1"
+        );
+        assert!(sales.belongs_to_snapshot(1, 2, "v1"));
+        assert_eq!(
+            LegacyImportConfirmation::latest_active_trial(&[sales.clone()], " v1 "),
+            Some(2)
+        );
+        assert!(LegacyImportConfirmation::is_trial_confirmed(
+            &[sales.clone()],
+            2,
+            "v1",
+            &required,
+        ));
+        assert!(LegacyImportConfirmation::matrix_summary(2, &[sales]).contains("SALES=CONFIRMED"));
+        assert!(LegacyImportConfirmation::ensure_trial_snapshot(&[], u32::MAX, u32::MAX, "v1").is_err());
+    }
+
+    #[test]
+    fn matrix_confirmation_rejects_incomplete_or_returned_scopes() {
+        let mut sales = LegacyImportConfirmation::new(
+            LegacyImportConfirmationId::new("c-matrix-sales"),
+            LegacyImportConfirmationData {
+                confirmation_scope: "SALES".to_string(),
+                ..confirmation_data()
+            },
+        )
+        .unwrap();
+        sales
+            .decide(
+                ConfirmationDecision::ConfirmScope,
+                "sales-user",
+                Instant::from_unix_secs(1_700_000_000),
+                None,
+                None,
+            )
+            .unwrap();
+        let required = BTreeSet::from([ConfirmationScope::Sales, ConfirmationScope::Finance]);
+        assert!(!LegacyImportConfirmation::is_matrix_confirmed(
+            &[sales.clone()],
+            &required,
+        ));
+
+        let mut finance = LegacyImportConfirmation::new(
+            LegacyImportConfirmationId::new("c-matrix-finance"),
+            LegacyImportConfirmationData {
+                confirmation_scope: "FINANCE".to_string(),
+                work_item_id: WorkItemId::new("wi-finance"),
+                ..confirmation_data()
+            },
+        )
+        .unwrap();
+        finance
+            .decide(
+                ConfirmationDecision::ReturnForFix,
+                "finance-user",
+                Instant::from_unix_secs(1_700_000_001),
+                Some("AMOUNT_MISMATCH".to_string()),
+                None,
+            )
+            .unwrap();
+        assert!(!LegacyImportConfirmation::is_matrix_confirmed(
+            &[sales.clone(), finance.clone()],
+            &required,
+        ));
+        assert!(!LegacyImportConfirmation::is_trial_confirmed(
+            &[sales, finance],
+            2,
+            "v1",
+            &required,
+        ));
     }
 
     #[test]

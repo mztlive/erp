@@ -12,7 +12,6 @@ use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
 };
-use mongodb::bson::doc;
 
 use super::brief::{
     format_business_due_label, format_quantity, line_title, BriefLine, BriefSection, ObjectBriefSource,
@@ -81,7 +80,7 @@ impl WorkItemService {
         Ok(self
             .db
             .purchase_orders()
-            .find_many(doc! { "id": { "$in": ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?)
     }
 
@@ -142,7 +141,7 @@ impl WorkItemService {
         Ok(self
             .db
             .purchase_order_submissions()
-            .find_many(doc! { "purchase_order_id": { "$in": order_ids } }, executor)
+            .list_work_item_brief_submissions_by_orders(&order_ids, executor)
             .await?)
     }
 
@@ -172,7 +171,7 @@ impl WorkItemService {
         Ok(self
             .db
             .sales_orders()
-            .find_many(doc! { "id": { "$in": sales_order_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id.clone(), order.order_no))

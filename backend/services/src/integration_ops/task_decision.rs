@@ -3,19 +3,18 @@
 use database::{AccessControlExt, Executor, IntegrationOpsExt, NoTransaction, WorkItemExt};
 use entities::common::time::Instant;
 use entities::integration_ops::{
-    ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ReconciliationDifference, ReconciliationDifferenceId,
-    ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionData,
-    ReconciliationDifferenceResolutionId, ResolutionAction,
+    ErrorTaskStatus, IntegrationCommandIdentity, IntegrationErrorTask, ReconciliationDifference,
+    ReconciliationDifferenceId, ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionData,
+    ReconciliationDifferenceResolutionId, ResolutionAction, ResolutionType, ResolutionVersionCheck,
 };
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use super::evidence::{
     difference_evidence_policy, ensure_completion_policy, ensure_direct_reason, error_evidence_policy,
-    prior_query_confirmed_no_result, resolution_type, verified_reference, verify_evidence_refs,
-    EvidenceSubject, IntegrationEvidenceAuthority, OriginalResultFact,
+    verified_reference, verify_evidence_refs, EvidenceSubject, IntegrationEvidenceAuthority,
+    OriginalResultFact,
 };
 use super::producer::error_work_item_type;
 use super::{
@@ -44,7 +43,7 @@ impl IntegrationOpsService {
         actor: &AuditActor,
     ) -> Result<IntegrationTaskActionResult> {
         command.validate()?;
-        let receipt = CommandReceipt::new(
+        let receipt = command_identity(
             actor.id(),
             TASK_ACTION_AUDIT,
             "work_item",
@@ -71,7 +70,7 @@ impl IntegrationOpsService {
         actor: &AuditActor,
     ) -> Result<IntegrationTaskCompletionResult> {
         command.validate()?;
-        let receipt = CommandReceipt::new(
+        let receipt = command_identity(
             actor.id(),
             TASK_COMPLETION_AUDIT,
             "work_item",
@@ -103,7 +102,7 @@ impl IntegrationOpsService {
         if command.difference_id != path_id {
             return Err(Error::ValidationError("路径差异 ID 与命令不一致".to_string()));
         }
-        let receipt = CommandReceipt::new(
+        let receipt = command_identity(
             actor.id(),
             DIRECT_DECISION_AUDIT,
             "reconciliation_difference",
@@ -125,7 +124,7 @@ impl IntegrationOpsService {
         &self,
         command: IntegrationTaskActionCommand,
         actor: AuditActor,
-        receipt: CommandReceipt,
+        receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskActionResult> {
         let rbac = crate::iam::shared_rbac_service(self.db.clone());
         self.run_audited(move |db, session| {
@@ -143,13 +142,14 @@ impl IntegrationOpsService {
                 WorkItemService::new(db.clone(), rbac.clone())
                     .ensure_domain_decision_access(&actor, &work_item, session)
                     .await?;
-                let fact = execute_task_action(db, &command, &receipt.id, actor.id(), session).await?;
+                let fact =
+                    execute_task_action(db, &command, receipt.receipt_id(), actor.id(), session).await?;
                 if let Some(subject_version) = fact.next_subject_version.clone() {
                     work_item.subject_version = subject_version;
                 }
                 work_item.record_activity(actor.id(), Instant::now())?;
                 db.work_items().update(&mut work_item, session).await?;
-                let result = task_action_result(&command, &receipt.id, fact.clone());
+                let result = task_action_result(&command, receipt.receipt_id(), fact.clone());
                 store_action_receipt(db, &actor, &receipt, &fact, session).await?;
                 Ok(result)
             })
@@ -161,7 +161,7 @@ impl IntegrationOpsService {
         &self,
         command: IntegrationTaskCompletionCommand,
         actor: AuditActor,
-        receipt: CommandReceipt,
+        receipt: IntegrationCommandIdentity,
     ) -> Result<IntegrationTaskCompletionResult> {
         let rbac = crate::iam::shared_rbac_service(self.db.clone());
         self.run_audited(move |db, session| {
@@ -180,12 +180,17 @@ impl IntegrationOpsService {
                 WorkItemService::new(db.clone(), rbac.clone())
                     .ensure_domain_decision_access(&actor, &work_item, session)
                     .await?;
-                let terminal = complete_domain_item(db, &command, &receipt.id, actor.id(), session).await?;
+                let terminal =
+                    complete_domain_item(db, &command, receipt.receipt_id(), actor.id(), session).await?;
                 work_item.subject_version = terminal.next_subject_version;
                 work_item.complete_by_domain_command(actor.id(), Instant::now())?;
                 db.work_items().update(&mut work_item, session).await?;
                 store_completion_receipt(db, &actor, &receipt, &terminal.reference, session).await?;
-                Ok(completion_result(&command, &receipt.id, terminal.reference))
+                Ok(completion_result(
+                    &command,
+                    receipt.receipt_id(),
+                    terminal.reference,
+                ))
             })
         })
         .await
@@ -195,7 +200,7 @@ impl IntegrationOpsService {
         &self,
         command: DirectReconciliationCommand,
         actor: AuditActor,
-        receipt: CommandReceipt,
+        receipt: IntegrationCommandIdentity,
     ) -> Result<DirectReconciliationResult> {
         self.run_audited(move |db, session| {
             Box::pin(async move {
@@ -204,14 +209,27 @@ impl IntegrationOpsService {
                 let latest = latest_resolution(db, &command.difference_id, session).await?;
                 ensure_direct_version(&command.expected_difference_version, latest.as_ref())?;
                 ensure_difference_open(latest.as_ref())?;
-                let fact =
-                    direct_decision_fact(db, &difference, &command, &receipt.id, actor.id(), session).await?;
-                let record = build_resolution(&difference, latest.as_ref(), &fact, &receipt.id, actor.id())?;
+                let fact = direct_decision_fact(
+                    db,
+                    &difference,
+                    &command,
+                    receipt.receipt_id(),
+                    actor.id(),
+                    session,
+                )
+                .await?;
+                let record = build_resolution(
+                    &difference,
+                    latest.as_ref(),
+                    &fact,
+                    receipt.receipt_id(),
+                    actor.id(),
+                )?;
                 db.reconciliation_difference_resolutions()
                     .create(&record, session)
                     .await?;
                 store_direct_receipt(db, &actor, &receipt, &fact, session).await?;
-                Ok(direct_result(&command, &receipt.id, fact))
+                Ok(direct_result(&command, receipt.receipt_id(), fact))
             })
         })
         .await
@@ -219,7 +237,7 @@ impl IntegrationOpsService {
 
     async fn replay_task_action(
         &self,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         command: &IntegrationTaskActionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskActionResult>> {
@@ -235,12 +253,12 @@ impl IntegrationOpsService {
             next_subject_version: None,
             verified_evidence: message.verified_evidence,
         };
-        Ok(Some(task_action_result(command, &receipt.id, fact)))
+        Ok(Some(task_action_result(command, receipt.receipt_id(), fact)))
     }
 
     async fn replay_task_completion(
         &self,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         command: &IntegrationTaskCompletionCommand,
         actor: &AuditActor,
     ) -> Result<Option<IntegrationTaskCompletionResult>> {
@@ -252,14 +270,14 @@ impl IntegrationOpsService {
         };
         Ok(Some(completion_result(
             command,
-            &receipt.id,
+            receipt.receipt_id(),
             message.terminal_evidence_reference,
         )))
     }
 
     async fn replay_direct_decision(
         &self,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         command: &DirectReconciliationCommand,
         actor: &AuditActor,
     ) -> Result<Option<DirectReconciliationResult>> {
@@ -272,7 +290,7 @@ impl IntegrationOpsService {
         Ok(Some(DirectReconciliationResult {
             difference_id: command.difference_id.clone(),
             operation_id: command.operation_id.clone(),
-            resolution_record_id: receipt.id.clone(),
+            resolution_record_id: receipt.receipt_id().to_string(),
             resulting_status: message.resulting_status,
             is_terminal: message.is_terminal,
             outcome: message.outcome,
@@ -282,25 +300,33 @@ impl IntegrationOpsService {
 
     async fn replay_receipt<T: DeserializeOwned>(
         &self,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         actor: &AuditActor,
     ) -> Result<Option<T>> {
         let Some(audit) = self
             .db
             .audit_logs()
-            .find_by_id(&receipt.id, &mut NoTransaction)
+            .find_by_id(receipt.receipt_id(), &mut NoTransaction)
             .await?
         else {
             return Ok(None);
         };
-        receipt.ensure_audit(&audit, actor)?;
+        if !receipt.matches_receipt(
+            &audit.actor_id,
+            &audit.action,
+            &audit.resource_type,
+            audit.resource_id.as_deref(),
+        ) || actor.id() != audit.actor_id
+        {
+            return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
+        }
         let message = audit
             .message
             .as_deref()
             .ok_or_else(|| Error::Internal("W29 幂等收据缺少结果".to_string()))?;
         let envelope: ReceiptEnvelope<T> =
             serde_json::from_str(message).map_err(|_| Error::Internal("W29 幂等收据不可解析".to_string()))?;
-        if envelope.fingerprint != receipt.fingerprint {
+        if envelope.fingerprint != receipt.fingerprint() {
             return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
         }
         Ok(Some(envelope.result))
@@ -309,7 +335,7 @@ impl IntegrationOpsService {
     async fn recover_task_action(
         &self,
         result: Result<IntegrationTaskActionResult>,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         command: &IntegrationTaskActionCommand,
         actor: &AuditActor,
     ) -> Result<IntegrationTaskActionResult> {
@@ -325,7 +351,7 @@ impl IntegrationOpsService {
     async fn recover_task_completion(
         &self,
         result: Result<IntegrationTaskCompletionResult>,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         command: &IntegrationTaskCompletionCommand,
         actor: &AuditActor,
     ) -> Result<IntegrationTaskCompletionResult> {
@@ -341,7 +367,7 @@ impl IntegrationOpsService {
     async fn recover_direct_decision(
         &self,
         result: Result<DirectReconciliationResult>,
-        receipt: &CommandReceipt,
+        receipt: &IntegrationCommandIdentity,
         command: &DirectReconciliationCommand,
         actor: &AuditActor,
     ) -> Result<DirectReconciliationResult> {
@@ -355,48 +381,39 @@ impl IntegrationOpsService {
     }
 }
 
-#[derive(Debug, Clone)]
-struct CommandReceipt {
-    id: String,
-    action: &'static str,
-    resource_type: &'static str,
-    resource_id: String,
-    fingerprint: String,
-}
-
-impl CommandReceipt {
-    fn new<T: Serialize>(
-        actor_id: &str,
-        action: &'static str,
-        resource_type: &'static str,
-        resource_id: &str,
-        idempotency_key: &str,
-        command: &T,
-    ) -> Result<Self> {
-        let payload = serde_json::to_vec(command)
-            .map_err(|_| Error::Internal("W29 命令无法形成幂等指纹".to_string()))?;
-        let identity = stable_digest(
-            format!("{actor_id}|{action}|{resource_type}|{resource_id}|{idempotency_key}").as_bytes(),
-        );
-        Ok(Self {
-            id: format!("w29_{identity}"),
-            action,
-            resource_type,
-            resource_id: resource_id.to_string(),
-            fingerprint: stable_digest(&payload),
-        })
-    }
-
-    fn ensure_audit(&self, audit: &entities::AuditLog, actor: &AuditActor) -> Result<()> {
-        if audit.actor_id != actor.id()
-            || audit.action != self.action
-            || audit.resource_type != self.resource_type
-            || audit.resource_id.as_deref() != Some(self.resource_id.as_str())
-        {
-            return Err(Error::ConflictError("幂等键已用于不同命令".to_string()));
-        }
-        Ok(())
-    }
+/// 序列化 W29 命令并构造领域幂等身份。
+///
+/// # 参数
+/// * `actor_id` - 命令操作人
+/// * `action` - 稳定动作名
+/// * `resource_type` - 审计资源类型
+/// * `resource_id` - 审计资源 ID
+/// * `idempotency_key` - 客户端幂等键
+/// * `command` - 完整强命令载荷
+///
+/// # 返回
+/// 返回不暴露原始幂等键的领域命令身份。
+///
+/// # 错误
+/// 命令无法序列化时返回内部错误。
+fn command_identity<T: Serialize>(
+    actor_id: &str,
+    action: &str,
+    resource_type: &str,
+    resource_id: &str,
+    idempotency_key: &str,
+    command: &T,
+) -> Result<IntegrationCommandIdentity> {
+    let payload =
+        serde_json::to_vec(command).map_err(|_| Error::Internal("W29 命令无法形成幂等指纹".to_string()))?;
+    Ok(IntegrationCommandIdentity::new(
+        actor_id,
+        action,
+        resource_type,
+        resource_id,
+        idempotency_key,
+        &payload,
+    ))
 }
 
 #[derive(Debug, Clone)]
@@ -596,9 +613,7 @@ async fn error_action_fact(
             })
         }
         IntegrationTaskActionKind::ReplayOriginal => {
-            if !prior_query_confirmed_no_result(task)
-                || !(task.error_class.can_auto_retry() || task.error_class == ErrorClass::ResultUnknown)
-            {
+            if !task.can_replay_original() {
                 return Err(Error::BusinessLogicError(
                     "必须先由服务端查询并确认原动作无结果，且错误分类允许重放".to_string(),
                 ));
@@ -827,9 +842,17 @@ async fn complete_error_task(
         verify_evidence_refs(db, &subject, &command.decision.evidence_refs, actor_id, executor).await?;
     let reference = verified_reference(&verified)?;
     let resolution = completion_resolution(command, &reference, actor_id);
+    let resolution_type = ResolutionType::from_verified_evidence(
+        verified
+            .iter()
+            .any(|evidence| evidence.reference.kind == super::ControlledEvidenceKind::CompensationResult),
+        verified.iter().any(|evidence| {
+            evidence.reference.kind == super::ControlledEvidenceKind::BusinessObjectVerification
+        }),
+    );
     task.transition(
         ErrorTaskStatus::Resolved,
-        Some(resolution_type(&verified)),
+        Some(resolution_type),
         Some(resolution),
         Instant::now(),
     )?;
@@ -911,13 +934,7 @@ fn completion_as_action(command: &IntegrationTaskCompletionCommand) -> Integrati
 async fn ensure_no_work_item(db: &Database, difference_id: &str, executor: &mut dyn Executor) -> Result<()> {
     let items = db
         .work_items()
-        .find_many(
-            doc! {
-                "business_object_type": "reconciliation_difference",
-                "business_object_id": difference_id,
-            },
-            executor,
-        )
+        .list_for_reconciliation_difference(difference_id, executor)
         .await?;
     if items.is_empty() {
         return Ok(());
@@ -944,7 +961,7 @@ async fn load_error_task(
 }
 
 fn ensure_error_task_subject(task: &IntegrationErrorTask, expected: &str) -> Result<()> {
-    if task.base.version.to_string() != expected.trim() {
+    if !task.has_subject_version(expected) {
         return Err(Error::ConflictError("错误任务业务版本已变化".to_string()));
     }
     Ok(())
@@ -965,11 +982,12 @@ fn ensure_difference_subject(
     latest: Option<&ReconciliationDifferenceResolution>,
     expected: &str,
 ) -> Result<()> {
-    let current = latest.map_or(0, |record| u64::from(record.resolution_no));
-    if current.to_string() != expected.trim() {
-        return Err(Error::ConflictError("对账差异业务版本已变化".to_string()));
+    match ReconciliationDifferenceResolution::check_version(expected, latest) {
+        ResolutionVersionCheck::Current => Ok(()),
+        ResolutionVersionCheck::Invalid | ResolutionVersionCheck::Stale => {
+            Err(Error::ConflictError("对账差异业务版本已变化".to_string()))
+        }
     }
-    Ok(())
 }
 
 async fn latest_resolution(
@@ -984,24 +1002,22 @@ async fn latest_resolution(
 }
 
 fn ensure_difference_open(latest: Option<&ReconciliationDifferenceResolution>) -> Result<()> {
-    if latest.is_some_and(|record| record.resulting_status.is_terminal()) {
+    if !ReconciliationDifferenceResolution::is_open(latest) {
         return Err(Error::ConflictError("对账差异已形成正式结论".to_string()));
     }
     Ok(())
 }
 
 fn ensure_direct_version(expected: &str, latest: Option<&ReconciliationDifferenceResolution>) -> Result<()> {
-    let expected = expected
-        .trim()
-        .parse::<u64>()
-        .map_err(|_| Error::ValidationError("差异版本必须为十进制整数字符串".to_string()))?;
-    let current = u64::from(latest.map_or(0, |record| record.resolution_no));
-    if expected != current {
-        return Err(Error::ConflictError(
+    match ReconciliationDifferenceResolution::check_version(expected, latest) {
+        ResolutionVersionCheck::Current => Ok(()),
+        ResolutionVersionCheck::Invalid => Err(Error::ValidationError(
+            "差异版本必须为十进制整数字符串".to_string(),
+        )),
+        ResolutionVersionCheck::Stale => Err(Error::ConflictError(
             "差异决定版本已变化，请刷新后重试".to_string(),
-        ));
+        )),
     }
-    Ok(())
 }
 
 async fn direct_decision_fact(
@@ -1087,9 +1103,8 @@ fn build_resolution(
     record_id: &str,
     actor_id: &str,
 ) -> Result<ReconciliationDifferenceResolution> {
-    let resolution_no = latest
-        .map_or(Ok(1), |record| record.resolution_no.checked_add(1).ok_or(()))
-        .map_err(|()| Error::ConflictError("差异决定序号已达上限".to_string()))?;
+    let resolution_no = ReconciliationDifferenceResolution::next_resolution_no(latest)
+        .ok_or_else(|| Error::ConflictError("差异决定序号已达上限".to_string()))?;
     Ok(ReconciliationDifferenceResolution::new(
         ReconciliationDifferenceResolutionId::new(record_id.to_string()),
         ReconciliationDifferenceResolutionData {
@@ -1185,7 +1200,7 @@ fn compact_evidence(refs: &[ControlledEvidenceRef]) -> Result<Option<String>> {
 async fn store_action_receipt(
     db: &Database,
     actor: &AuditActor,
-    receipt: &CommandReceipt,
+    receipt: &IntegrationCommandIdentity,
     fact: &ActionFact,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -1200,7 +1215,7 @@ async fn store_action_receipt(
 async fn store_completion_receipt(
     db: &Database,
     actor: &AuditActor,
-    receipt: &CommandReceipt,
+    receipt: &IntegrationCommandIdentity,
     terminal_reference: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -1219,7 +1234,7 @@ async fn store_completion_receipt(
 async fn store_direct_receipt(
     db: &Database,
     actor: &AuditActor,
-    receipt: &CommandReceipt,
+    receipt: &IntegrationCommandIdentity,
     fact: &DirectFact,
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -1242,33 +1257,29 @@ async fn store_direct_receipt(
 async fn store_receipt<T: Serialize>(
     db: &Database,
     actor: &AuditActor,
-    receipt: &CommandReceipt,
+    receipt: &IntegrationCommandIdentity,
     result: T,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let message = serde_json::to_string(&ReceiptEnvelope {
-        fingerprint: receipt.fingerprint.clone(),
+        fingerprint: receipt.fingerprint().to_string(),
         result,
     })
     .map_err(|_| Error::Internal("W29 结果无法形成幂等收据".to_string()))?;
     let audit = actor.clone().resource_log_with_id(
-        receipt.id.clone(),
-        receipt.action,
-        receipt.resource_type,
-        receipt.resource_id.clone(),
+        receipt.receipt_id().to_string(),
+        receipt.action(),
+        receipt.resource_type(),
+        receipt.resource_id().to_string(),
         Some(message),
     )?;
     db.audit_logs().create(&audit, executor).await?;
     Ok(())
 }
 
-fn stable_digest(value: &[u8]) -> String {
-    hex::encode(Sha256::digest(value))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{next_allowed_actions, CommandReceipt};
+    use super::{command_identity, next_allowed_actions};
     use crate::integration_ops::{
         IntegrationActionOutcome, IntegrationItemType, IntegrationNonTerminalTaskAction,
         IntegrationTaskActionCommand, IntegrationTaskActionKind,
@@ -1295,7 +1306,7 @@ mod tests {
     #[test]
     fn receipt_never_contains_raw_idempotency_key() {
         let command = command("raw-secret-key", IntegrationTaskActionKind::QueryOriginalResult);
-        let receipt = CommandReceipt::new(
+        let receipt = command_identity(
             "actor-1",
             super::TASK_ACTION_AUDIT,
             "work_item",
@@ -1305,9 +1316,9 @@ mod tests {
         )
         .unwrap();
 
-        assert!(!receipt.id.contains("raw-secret-key"));
-        assert_eq!(receipt.resource_id, "wi-1");
-        assert_eq!(receipt.fingerprint.len(), 64);
+        assert!(!receipt.receipt_id().contains("raw-secret-key"));
+        assert_eq!(receipt.resource_id(), "wi-1");
+        assert_eq!(receipt.fingerprint().len(), 64);
     }
 
     #[test]

@@ -23,7 +23,8 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
-use super::types::{CardForm, FulfillmentMode, LineType, WelfareScenario};
+use super::types::{CardForm, FulfillmentMode, GoodsLineFields, LineType, WelfareScenario};
+use super::working_copy::SalesOrderWorkingCopyLineData;
 
 /// 内容指纹最大长度。
 const CONTENT_HASH_MAX_LEN: usize = 128;
@@ -249,6 +250,33 @@ impl SalesOrderRevision {
     pub fn update(&mut self, _data: SalesOrderRevisionData) -> Result<()> {
         Err(Error::from("正式销售版本业务字段不可更新"))
     }
+
+    /// 判断聚合内版本号是否与调用方期望一致。
+    ///
+    /// # 参数
+    /// * `expected_revision_no` - 调用方读取到的销售版本号
+    ///
+    /// # 返回
+    /// 当前版本号与期望版本号一致时返回 `true`。
+    pub fn matches_revision_no(&self, expected_revision_no: u32) -> bool {
+        self.revision.revision_no == expected_revision_no
+    }
+
+    /// 由当前最大版本号计算下一销售版本号。
+    ///
+    /// # 参数
+    /// * `current_max` - 当前销售单全部正式版本中的最大版本号；尚无版本时为 `0`
+    ///
+    /// # 返回
+    /// 返回严格递增的下一版本号。
+    ///
+    /// # 错误
+    /// 当前版本号达到 `u32::MAX` 时返回错误。
+    pub fn next_revision_no(current_max: u32) -> Result<u32> {
+        current_max
+            .checked_add(1)
+            .ok_or_else(|| Error::from("销售版本号溢出"))
+    }
 }
 
 /// 公共行版本创建数据。
@@ -352,6 +380,55 @@ impl SalesOrderRevisionLine {
             item_name_snapshot,
             spec_snapshot,
             unit_snapshot,
+        })
+    }
+
+    /// 将公共行与实物服务子行还原为销售变更工作副本行数据。
+    ///
+    /// # 参数
+    /// * `goods` - 与当前公共行一对一的实物服务子行
+    ///
+    /// # 返回
+    /// 返回可用于创建变更工作副本行的冻结数据。
+    ///
+    /// # 错误
+    /// 公共行不是实物服务类型，或子行未引用当前公共行时返回错误。
+    pub fn to_goods_working_copy_data(
+        &self,
+        goods: &SalesOrderGoodsServiceLineRevision,
+    ) -> Result<SalesOrderWorkingCopyLineData> {
+        if self.line_type != LineType::GoodsService {
+            return Err(Error::from(format!(
+                "销售单当前版本第 {} 行不是实物服务行",
+                self.line_no
+            )));
+        }
+        if goods.revision_line_id.as_ref() != self.base.id {
+            return Err(Error::from(format!(
+                "销售单当前版本第 {} 行与实物服务快照不匹配",
+                self.line_no
+            )));
+        }
+        Ok(SalesOrderWorkingCopyLineData {
+            sales_order_line_id: self.sales_order_line_id.clone(),
+            line_no: self.line_no,
+            line_type: self.line_type,
+            sales_tax_rate: self.sales_tax_rate,
+            item_name_snapshot: self.item_name_snapshot.clone(),
+            spec_snapshot: self.spec_snapshot.clone(),
+            unit_snapshot: self.unit_snapshot.clone(),
+            goods: Some(GoodsLineFields {
+                sku_id: goods.sku_id.clone(),
+                sku_revision_id: goods.sku_revision_id.clone(),
+                welfare_scenario: goods.welfare_scenario,
+                service_region: goods.service_region.clone(),
+                fulfillment_mode: goods.fulfillment_mode,
+                fulfillment_due_at: goods.fulfillment_due_at,
+                quantity: goods.quantity,
+                base_unit_code: goods.base_unit_code.clone(),
+                unit_price_gross: goods.unit_price_gross,
+            }),
+            voucher: None,
         })
     }
 }
@@ -626,6 +703,37 @@ mod tests {
             ..header_data()
         };
         assert!(SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), broken_amount).is_err());
+    }
+
+    #[test]
+    fn revision_number_and_change_copy_mapping_are_entity_owned() {
+        let revision = SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), header_data()).unwrap();
+        assert!(revision.matches_revision_no(1));
+        assert!(!revision.matches_revision_no(2));
+        assert_eq!(SalesOrderRevision::next_revision_no(0).unwrap(), 1);
+        assert_eq!(SalesOrderRevision::next_revision_no(1).unwrap(), 2);
+        assert!(SalesOrderRevision::next_revision_no(u32::MAX).is_err());
+
+        let line =
+            SalesOrderRevisionLine::new(SalesOrderRevisionLineId::new("rl-1"), revision_line_data()).unwrap();
+        let goods = SalesOrderGoodsServiceLineRevision::new(
+            SalesOrderGoodsServiceLineRevisionId::new("gs-1"),
+            data(),
+        )
+        .unwrap();
+        let mapped = line.to_goods_working_copy_data(&goods).unwrap();
+        assert_eq!(mapped.line_no, 1);
+        assert_eq!(mapped.goods.unwrap().sku_id.as_ref(), "sku-1");
+
+        let unrelated = SalesOrderGoodsServiceLineRevision::new(
+            SalesOrderGoodsServiceLineRevisionId::new("gs-2"),
+            SalesOrderGoodsServiceLineRevisionData {
+                revision_line_id: SalesOrderRevisionLineId::new("rl-2"),
+                ..data()
+            },
+        )
+        .unwrap();
+        assert!(line.to_goods_working_copy_data(&unrelated).is_err());
     }
 
     #[test]

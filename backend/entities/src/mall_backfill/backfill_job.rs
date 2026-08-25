@@ -20,6 +20,7 @@ use crate::ids::{
     FileAssetId, InboxMessageId, MallConsumptionBackfillItemId, MallConsumptionBackfillJobId,
     MallConsumptionCutoverId, MallOrderFactId,
 };
+use crate::mall_order::{FactType, ProcessingStatus};
 use crate::money::Amount;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
@@ -81,6 +82,30 @@ impl BackfillJobStatus {
             Self::Completed => "completed",
             Self::Failed => "failed",
         }
+    }
+
+    /// 判断状态是否阻断同一商城的重叠正式批次。
+    ///
+    /// # 返回
+    /// 待执行、运行中或部分完成时返回 `true`；完成与失败批次不阻断新批次。
+    pub fn blocks_overlapping_batch(self) -> bool {
+        matches!(self, Self::Pending | Self::Running | Self::PartiallyCompleted)
+    }
+
+    /// 判断当前状态是否接受 `START` 命令。
+    ///
+    /// # 返回
+    /// 仅待执行状态返回 `true`。
+    pub fn accepts_start(self) -> bool {
+        self == Self::Pending
+    }
+
+    /// 判断当前状态是否接受 `RESUME` 命令。
+    ///
+    /// # 返回
+    /// 部分完成或失败状态返回 `true`。
+    pub fn accepts_resume(self) -> bool {
+        matches!(self, Self::PartiallyCompleted | Self::Failed)
     }
 }
 
@@ -175,6 +200,113 @@ impl BackfillCostBasis {
             Self::Standard => "STANDARD",
             Self::None => "NONE",
         }
+    }
+}
+
+/// 关键事实进入历史回填明细时的确定性分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackfillItemClassification {
+    /// 回填结果。
+    pub result: BackfillItemResult,
+    /// 成本口径。
+    pub cost_basis: BackfillCostBasis,
+}
+
+impl BackfillItemClassification {
+    /// 根据不可变商城事实的类型与处理状态派生回填分类。
+    ///
+    /// 已归集事实记为新增；待归集或差异事实记为待归集；其他处理状态记为失败。
+    /// 仅已归集的支付成功事实使用实际成本口径，其余均不猜测成本。
+    ///
+    /// # 参数
+    /// * `fact_type` - 商城关键事实类型
+    /// * `processing_status` - 商城关键事实处理状态
+    ///
+    /// # 返回
+    /// 返回回填明细结果与成本口径。
+    pub fn from_mall_fact(fact_type: FactType, processing_status: ProcessingStatus) -> Self {
+        let result = match processing_status {
+            ProcessingStatus::Attributed => BackfillItemResult::New,
+            ProcessingStatus::PendingAttribution | ProcessingStatus::Difference => {
+                BackfillItemResult::PendingAttribution
+            }
+            _ => BackfillItemResult::Failed,
+        };
+        let cost_basis =
+            if fact_type == FactType::PaymentSucceeded && processing_status == ProcessingStatus::Attributed {
+                BackfillCostBasis::Actual
+            } else {
+                BackfillCostBasis::None
+            };
+        Self { result, cost_basis }
+    }
+}
+
+/// 历史回填的半开业务时间范围。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackfillWindow {
+    start: Instant,
+    end: Instant,
+}
+
+impl BackfillWindow {
+    /// 根据切换事实构造回填范围。
+    ///
+    /// # 参数
+    /// * `start` - 范围起点（含）
+    /// * `end` - 范围终点（不含）
+    /// * `cutover_enabled` - 切换是否已启用
+    /// * `cutover_enabled_at` - 切换启用时间 `T`
+    ///
+    /// # 返回
+    /// 返回经验证的半开范围。
+    ///
+    /// # 错误
+    /// 切换未启用、缺少 `T`、终点不等于 `T` 或范围为空时返回错误。
+    pub fn for_cutover(
+        start: Instant,
+        end: Instant,
+        cutover_enabled: bool,
+        cutover_enabled_at: Option<Instant>,
+    ) -> Result<Self> {
+        if !cutover_enabled {
+            return Err(Error::from("切换记录尚未启用，不能回填"));
+        }
+        let cutover = cutover_enabled_at.ok_or_else(|| Error::from("切换记录缺少启用时间"))?;
+        if end != cutover {
+            return Err(Error::from("回填范围终点必须等于切换启用时间 T"));
+        }
+        if end <= start {
+            return Err(Error::from("回填范围终点必须晚于起点"));
+        }
+        Ok(Self { start, end })
+    }
+
+    /// 返回范围起点（含）。
+    ///
+    /// # 返回
+    /// 返回半开区间的包含端点。
+    pub fn start(self) -> Instant {
+        self.start
+    }
+
+    /// 返回范围终点（不含）。
+    ///
+    /// # 返回
+    /// 返回半开区间的排除端点。
+    pub fn end(self) -> Instant {
+        self.end
+    }
+
+    /// 判断两个半开范围是否相交。
+    ///
+    /// # 参数
+    /// * `other` - 另一半开范围
+    ///
+    /// # 返回
+    /// 存在至少一个共同时间点时返回 `true`。
+    pub fn overlaps(self, other: Self) -> bool {
+        self.start < other.end && other.start < self.end
     }
 }
 
@@ -276,6 +408,73 @@ impl MallConsumptionBackfillJob {
             unattributed_count: 0,
             report_file_id: None,
         })
+    }
+
+    /// 返回作业锁定的半开回填范围。
+    ///
+    /// # 返回
+    /// 返回 `[range_start, range_end)` 值对象。
+    pub fn window(&self) -> BackfillWindow {
+        BackfillWindow {
+            start: self.range_start,
+            end: self.range_end,
+        }
+    }
+
+    /// 判断本作业是否阻断另一个重叠批次。
+    ///
+    /// # 参数
+    /// * `candidate` - 拟创建的新批次范围
+    ///
+    /// # 返回
+    /// 当前状态会阻断且范围相交时返回 `true`。
+    pub fn blocks_overlapping_batch(&self, candidate: BackfillWindow) -> bool {
+        self.status.blocks_overlapping_batch() && self.window().overlaps(candidate)
+    }
+
+    /// 判断乐观锁版本是否与命令期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 命令读取到的版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `true`。
+    pub fn has_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
+    /// 按 `START` 命令推进到运行中。
+    ///
+    /// # 返回
+    /// 推进成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不是待执行时返回错误。
+    pub fn start(&mut self) -> Result<()> {
+        if !self.status.accepts_start() {
+            return Err(Error::from(format!(
+                "当前状态 {} 不允许开始回填",
+                self.status.label()
+            )));
+        }
+        self.transition_to(BackfillJobStatus::Running)
+    }
+
+    /// 按 `RESUME` 命令沿原任务和原范围续跑。
+    ///
+    /// # 返回
+    /// 推进成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不是部分完成或失败时返回错误。
+    pub fn resume(&mut self) -> Result<()> {
+        if !self.status.accepts_resume() {
+            return Err(Error::from(format!(
+                "当前状态 {} 不允许续跑",
+                self.status.label()
+            )));
+        }
+        self.transition_to(BackfillJobStatus::Running)
     }
 
     /// 推进作业状态。
@@ -507,8 +706,9 @@ fn validate_item_result(
 #[cfg(test)]
 mod tests {
     use super::{
-        BackfillCostBasis, BackfillItemResult, BackfillJobStatus, MallConsumptionBackfillItem,
-        MallConsumptionBackfillItemData, MallConsumptionBackfillJob, MallConsumptionBackfillJobData,
+        BackfillCostBasis, BackfillItemClassification, BackfillItemResult, BackfillJobStatus, BackfillWindow,
+        MallConsumptionBackfillItem, MallConsumptionBackfillItemData, MallConsumptionBackfillJob,
+        MallConsumptionBackfillJobData,
     };
     use crate::common::state::{ensure_transition, DocumentState};
     use crate::common::time::Instant;
@@ -516,6 +716,7 @@ mod tests {
         FileAssetId, InboxMessageId, MallConsumptionBackfillItemId, MallConsumptionBackfillJobId,
         MallConsumptionCutoverId, MallOrderFactId,
     };
+    use crate::mall_order::{FactType, ProcessingStatus};
     use crate::money::Amount;
     use std::str::FromStr;
 
@@ -642,6 +843,52 @@ mod tests {
             "已完成禁止更新"
         );
         assert!(job.transition_to(BackfillJobStatus::Running).is_err());
+    }
+
+    #[test]
+    fn cutover_window_enforces_t_and_half_open_overlap() {
+        let start = Instant::from_unix_secs(100);
+        let cutover = Instant::from_unix_secs(200);
+        let window = BackfillWindow::for_cutover(start, cutover, true, Some(cutover)).unwrap();
+
+        assert!(window.overlaps(
+            BackfillWindow::for_cutover(Instant::from_unix_secs(150), cutover, true, Some(cutover),).unwrap()
+        ));
+        assert!(BackfillWindow::for_cutover(start, cutover, false, Some(cutover)).is_err());
+        assert!(
+            BackfillWindow::for_cutover(start, Instant::from_unix_secs(199), true, Some(cutover)).is_err()
+        );
+    }
+
+    #[test]
+    fn command_and_overlap_rules_follow_job_status() {
+        let mut job =
+            MallConsumptionBackfillJob::new(MallConsumptionBackfillJobId::new("job-command"), job_data())
+                .unwrap();
+        assert!(job.status.accepts_start());
+        assert!(job.blocks_overlapping_batch(job.window()));
+        job.start().unwrap();
+        assert!(!job.status.accepts_start());
+        job.transition_to(BackfillJobStatus::Failed).unwrap();
+        assert!(job.status.accepts_resume());
+        job.resume().unwrap();
+    }
+
+    #[test]
+    fn mall_fact_classification_is_deterministic() {
+        let attributed = BackfillItemClassification::from_mall_fact(
+            FactType::PaymentSucceeded,
+            ProcessingStatus::Attributed,
+        );
+        assert_eq!(attributed.result, BackfillItemResult::New);
+        assert_eq!(attributed.cost_basis, BackfillCostBasis::Actual);
+
+        let pending = BackfillItemClassification::from_mall_fact(
+            FactType::OrderCompleted,
+            ProcessingStatus::PendingAttribution,
+        );
+        assert_eq!(pending.result, BackfillItemResult::PendingAttribution);
+        assert_eq!(pending.cost_basis, BackfillCostBasis::None);
     }
 
     /// 明细：happy path（新增/重复/待归集/失败各形态规范化）。

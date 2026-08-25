@@ -53,11 +53,22 @@ impl MallSalesSyncCursor {
         }
     }
 
+    /// 判断乐观锁版本是否与命令期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端冻结版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `true`。
+    pub fn has_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
     /// 单调前移高水位。
     ///
     /// 只有全部分页安全持久化完成后才允许前移（§8.4 第 2 条）；新水位
-    /// 必须不早于当前水位，相等视为无进展的幂等操作。水位按重叠区间前移
-    /// （§6.13），重叠窗口语义由接口契约固定，不在实体层计算。
+    /// 必须不早于当前水位，相等视为无进展的幂等操作。增量重叠查询范围由
+    /// [`crate::mall_sync::MallSyncTimeRange`] 计算，本实体只负责水位单调性。
     ///
     /// # 参数
     /// * `new_water` - 新高水位（已安全处理的商城更新时间）
@@ -93,6 +104,8 @@ mod tests {
 
         assert_eq!(cursor.high_water_updated_at.unix_secs(), 1_700_000_000);
         assert!(cursor.last_success_job_id.is_none());
+        assert!(cursor.has_version(1));
+        assert!(!cursor.has_version(2));
     }
 
     #[test]

@@ -6,8 +6,12 @@
 mod resolution;
 mod rule;
 
-pub use resolution::{ProcurementResponsibilityContext, ProcurementResponsibilityRuleSet};
+pub use resolution::{
+    EligibleProcurementOwner, ProcurementResponsibilityContext, ProcurementResponsibilityResolutionBatch,
+    ProcurementResponsibilityResolutionIdentity, ProcurementResponsibilityResolutionLine,
+    ProcurementResponsibilityRuleSet,
+};
 pub use rule::{
     normalize_service_region, ProcurementResponsibilityRule, ProcurementResponsibilityRuleData,
-    ProcurementResponsibilityRuleType,
+    ProcurementResponsibilityRuleType, ProcurementResponsibilitySelectorReference,
 };

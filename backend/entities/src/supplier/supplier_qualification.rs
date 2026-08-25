@@ -22,6 +22,19 @@ const CERTIFICATE_NO_MAX_LEN: usize = 128;
 /// 发证机构最大长度。
 const ISSUER_MAX_LEN: usize = 128;
 
+/// 资质附件的领域敏感级别。
+///
+/// 该值对象隔离文件资产域的持久化类型，仅表达资质规则需要的级别。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QualificationAttachmentSensitivity {
+    /// 一般资料。
+    General,
+    /// 敏感资料。
+    Sensitive,
+    /// 高敏感资料。
+    HighlySensitive,
+}
+
 /// 资质类型（§6.2：资质证照、合同、授权书、食品经营许可证、法人身份证等）。
 ///
 /// 合同、授权书、食品经营许可证和法人身份证以受控 `qualification_type`
@@ -68,6 +81,26 @@ impl QualificationType {
             Self::FoodLicense => "food_license",
             Self::LegalPersonId => "legal_person_id",
         }
+    }
+
+    /// 判断附件敏感级别是否满足该资质类型的最低要求。
+    ///
+    /// 法人身份证必须为高敏感；其他资质允许敏感或高敏感。
+    ///
+    /// # 参数
+    /// * `actual` - 文件资产登记的实际敏感级别
+    ///
+    /// # 返回
+    /// 满足最低要求时返回 `true`。
+    pub fn accepts_attachment_sensitivity(self, actual: QualificationAttachmentSensitivity) -> bool {
+        if self == Self::LegalPersonId {
+            return actual == QualificationAttachmentSensitivity::HighlySensitive;
+        }
+        matches!(
+            actual,
+            QualificationAttachmentSensitivity::Sensitive
+                | QualificationAttachmentSensitivity::HighlySensitive
+        )
     }
 }
 
@@ -318,6 +351,63 @@ impl SupplierQualification {
         self.stable.status().is_valid()
     }
 
+    /// 计算资质到期预警窗口的结束业务日。
+    ///
+    /// # 参数
+    /// * `as_of` - 预警窗口起始业务日
+    /// * `days` - 窗口包含的自然日数
+    ///
+    /// # 返回
+    /// 返回 `as_of` 之后指定天数对应的业务日。
+    ///
+    /// # 错误
+    /// 日期超出可表示范围时返回业务错误。
+    pub fn expiry_cutoff(as_of: BusinessDate, days: u64) -> Result<BusinessDate> {
+        let date = as_of
+            .as_naive_date()
+            .checked_add_days(chrono::Days::new(days))
+            .ok_or_else(|| Error::from("无法计算资质到期筛选窗口"))?;
+        BusinessDate::from_ymd(
+            chrono::Datelike::year(&date),
+            chrono::Datelike::month(&date),
+            chrono::Datelike::day(&date),
+        )
+        .ok_or_else(|| Error::from("无法计算资质到期筛选窗口"))
+    }
+
+    /// 返回由资质类型和规范化证书编号组成的稳定身份键。
+    ///
+    /// # 返回
+    /// 返回可用于根资料差异计算的稳定字符串。
+    pub fn identity_key(&self) -> String {
+        qualification_identity_key(self.qualification_type, &self.certificate_no)
+    }
+
+    /// 判断当前资质是否与根资料命令中的可变字段一致。
+    ///
+    /// # 参数
+    /// * `issuer` - 发证机构输入
+    /// * `valid_from` - 生效日期输入
+    /// * `valid_to` - 失效日期输入
+    /// * `attachment_id` - 附件输入
+    ///
+    /// # 返回
+    /// 当前资质有效且全部可变字段一致时返回 `true`。
+    pub fn matches_profile_fields(
+        &self,
+        issuer: Option<&str>,
+        valid_from: BusinessDate,
+        valid_to: Option<BusinessDate>,
+        attachment_id: Option<&FileAssetId>,
+    ) -> bool {
+        let issuer = issuer.map(str::trim).filter(|value| !value.is_empty());
+        self.is_valid()
+            && self.issuer.as_deref() == issuer
+            && self.valid_from == valid_from
+            && self.valid_to == valid_to
+            && self.attachment_id.as_ref() == attachment_id
+    }
+
     /// 应用发证机构更新。
     ///
     /// # 参数
@@ -385,6 +475,18 @@ impl SupplierQualification {
     }
 }
 
+/// 构造由资质类型和规范化证书编号组成的稳定身份键。
+///
+/// # 参数
+/// * `qualification_type` - 资质类型
+/// * `certificate_no` - 原始证书编号
+///
+/// # 返回
+/// 返回用于去重和差异计算的稳定字符串。
+pub fn qualification_identity_key(qualification_type: QualificationType, certificate_no: &str) -> String {
+    format!("{}::{}", qualification_type.as_str(), certificate_no.trim())
+}
+
 /// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
 ///
 /// # 参数
@@ -408,8 +510,8 @@ fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>)
 #[cfg(test)]
 mod tests {
     use super::{
-        QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationData,
-        SupplierQualificationUpdate,
+        QualificationAttachmentSensitivity, QualificationStatus, QualificationType, SupplierQualification,
+        SupplierQualificationData, SupplierQualificationUpdate,
     };
     use crate::common::state::{assert_adjacency_closed, ensure_transition};
     use crate::common::time::BusinessDate;
@@ -568,6 +670,63 @@ mod tests {
             .unwrap();
         assert_eq!(qualification.valid_from, next_from);
         assert_eq!(qualification.valid_to, None);
+    }
+
+    /// 附件敏感级别由资质类型决定，法人身份证要求高敏感。
+    #[test]
+    fn attachment_sensitivity_is_qualification_specific() {
+        assert!(QualificationType::Contract
+            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive));
+        assert!(QualificationType::Contract
+            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::HighlySensitive));
+        assert!(!QualificationType::Contract
+            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::General));
+        assert!(!QualificationType::LegalPersonId
+            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::Sensitive));
+        assert!(QualificationType::LegalPersonId
+            .accepts_attachment_sensitivity(QualificationAttachmentSensitivity::HighlySensitive));
+    }
+
+    /// 稳定身份与可变字段比较统一执行规范化。
+    #[test]
+    fn profile_identity_and_field_matching_are_stable() {
+        let qualification = SupplierQualification::new(
+            SupplierQualificationId::new("qual-profile"),
+            qualification_data(),
+            "admin-1",
+        )
+        .unwrap();
+        assert_eq!(qualification.identity_key(), "contract::HT-2026-001");
+        assert!(qualification.matches_profile_fields(
+            Some(" 示例发证机构 "),
+            qualification.valid_from,
+            qualification.valid_to,
+            qualification.attachment_id.as_ref(),
+        ));
+        assert!(!qualification.matches_profile_fields(
+            None,
+            qualification.valid_from,
+            qualification.valid_to,
+            qualification.attachment_id.as_ref(),
+        ));
+    }
+
+    /// 到期预警窗口按自然日计算，日期溢出时失败关闭。
+    #[test]
+    fn expiry_cutoff_uses_business_date_bounds() {
+        let as_of = BusinessDate::from_ymd(2026, 1, 31).unwrap();
+        assert_eq!(
+            SupplierQualification::expiry_cutoff(as_of, 30).unwrap(),
+            BusinessDate::from_ymd(2026, 3, 2).unwrap()
+        );
+        let max = chrono::NaiveDate::MAX;
+        let max = BusinessDate::from_ymd(
+            chrono::Datelike::year(&max),
+            chrono::Datelike::month(&max),
+            chrono::Datelike::day(&max),
+        )
+        .unwrap();
+        assert!(SupplierQualification::expiry_cutoff(max, 1).is_err());
     }
 
     /// 实体 BSON 往返。

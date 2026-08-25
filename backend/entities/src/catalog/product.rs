@@ -8,6 +8,7 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::product_kind::ProductKind;
+use crate::catalog::product_revision::ProductRevision;
 use crate::catalog::status::EnableStatus;
 use crate::common::stable::StableBase;
 use crate::errors::Result;
@@ -127,10 +128,77 @@ impl Product {
 
     /// 返回商品的业务类型。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回创建时固定的 `ProductKind`。
+    ///
+    /// # 错误
+    /// 无。
     pub fn product_kind(&self) -> ProductKind {
         self.product_kind
+    }
+
+    /// 判断当前乐观锁版本是否与客户端期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端读取商品时看到的版本
+    ///
+    /// # 返回
+    /// 当前版本与期望版本完全一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 无；Service 根据 `false` 映射为稳定的并发冲突语义。
+    pub fn has_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
+    /// 关联一份属于本商品的新当前修订。
+    ///
+    /// # 参数
+    /// * `revision` - 待设为当前版本的不可变商品修订
+    /// * `updated_by` - 本次关联操作人
+    ///
+    /// # 返回
+    /// 关联成功返回 `Ok(())`，并同步商品状态与当前修订指针。
+    ///
+    /// # 错误
+    /// 修订属于其他商品时返回领域错误，阻止跨商品挂接修订。
+    pub fn attach_revision(
+        &mut self,
+        revision: &ProductRevision,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if revision.product_id.as_ref() != self.base.id.as_str() {
+            return Err("商品修订不属于目标商品".into());
+        }
+        self.stable.current_revision_id = Some(revision.base.id.clone());
+        self.stable.status = revision.status;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
+    /// 停用当前处于启用状态的商品。
+    ///
+    /// # 参数
+    /// * `updated_by` - 本次停用操作人
+    ///
+    /// # 返回
+    /// 状态由启用切换为停用时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 商品已经停用时返回领域错误，避免重复生成停用修订。
+    pub fn disable(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if !self.is_active() {
+            return Err("商品已经停用".into());
+        }
+        self.update(
+            ProductUpdate {
+                status: Some(EnableStatus::Disabled),
+            },
+            updated_by,
+        )
     }
 }
 
@@ -193,6 +261,60 @@ mod tests {
         assert_eq!(product.product_no, "P-2025-001");
         assert_eq!(product.product_kind(), ProductKind::Physical);
         assert_eq!(product.stable.updated_by, "admin-2");
+    }
+
+    /// 当前版本匹配、修订挂接和停用均由商品实体保护。
+    #[test]
+    fn version_revision_and_disable_rules_are_enforced() {
+        let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
+        let revision = ProductRevision::new(
+            crate::ids::ProductRevisionId::new("rev-1"),
+            crate::catalog::product_revision::ProductRevisionData {
+                product_id: ProductId::new("prod-1"),
+                revision_no: 1,
+                name: "商品".to_string(),
+                description: None,
+                specification: None,
+                category_id: crate::ids::ProductCategoryId::new("cat-1"),
+                brand_id: crate::ids::ProductBrandId::new("brand-1"),
+                status: EnableStatus::Active,
+                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_to: None,
+            },
+        )
+        .unwrap();
+
+        assert!(product.has_version(1));
+        assert!(!product.has_version(2));
+        product.attach_revision(&revision, "admin-2").unwrap();
+        assert_eq!(product.stable.current_revision_id.as_deref(), Some("rev-1"));
+        product.disable("admin-3").unwrap();
+        assert!(!product.is_active());
+        assert!(product.disable("admin-4").is_err());
+    }
+
+    /// 商品拒绝挂接属于其他稳定身份的修订。
+    #[test]
+    fn attach_revision_rejects_foreign_product_revision() {
+        let mut product = Product::new(ProductId::new("prod-1"), data(), "admin-1").unwrap();
+        let revision = ProductRevision::new(
+            crate::ids::ProductRevisionId::new("rev-1"),
+            crate::catalog::product_revision::ProductRevisionData {
+                product_id: ProductId::new("prod-2"),
+                revision_no: 1,
+                name: "商品".to_string(),
+                description: None,
+                specification: None,
+                category_id: crate::ids::ProductCategoryId::new("cat-1"),
+                brand_id: crate::ids::ProductBrandId::new("brand-1"),
+                status: EnableStatus::Active,
+                effective_from: crate::common::time::BusinessDate::from_ymd(2026, 1, 1).unwrap(),
+                effective_to: None,
+            },
+        )
+        .unwrap();
+
+        assert!(product.attach_revision(&revision, "admin-2").is_err());
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

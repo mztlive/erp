@@ -42,6 +42,52 @@ pub struct SupplierFulfillmentItemData {
     pub input_tax_rate: Rate,
 }
 
+impl SupplierFulfillmentItemData {
+    /// 由单位成本与数量构造含税成本快照数据。
+    ///
+    /// 明细含税总成本统一按分舍入，调用方不得自行重复计算。
+    ///
+    /// # 参数
+    /// * `supplier_fulfillment_order_id` - 所属供应商子订单
+    /// * `mall_order_item_id` - 来源商城订单明细
+    /// * `supplier_offering_revision_id` - 下单时固定供给修订
+    /// * `supplier_sku_code_snapshot` - 供应商 SKU 编码快照
+    /// * `supplier_product_code_snapshot` - 供应商商品编码快照
+    /// * `quantity` - 下单数量
+    /// * `unit_cost_snapshot_gross` - 含税单位成本
+    /// * `input_tax_rate` - 进项税率
+    ///
+    /// # 返回
+    /// 返回已派生含税总成本的创建数据。
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_unit_cost(
+        supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
+        mall_order_item_id: MallOrderItemId,
+        supplier_offering_revision_id: SupplierOfferingRevisionId,
+        supplier_sku_code_snapshot: impl Into<String>,
+        supplier_product_code_snapshot: Option<String>,
+        quantity: Quantity,
+        unit_cost_snapshot_gross: UnitPrice,
+        input_tax_rate: Rate,
+    ) -> Result<Self> {
+        let cost_snapshot_total_gross = Amount::try_from(round_to_cent(
+            unit_cost_snapshot_gross.to_decimal() * quantity.to_decimal(),
+        ))
+        .map_err(|_| Error::from("明细成本快照金额无效"))?;
+        Ok(Self {
+            supplier_fulfillment_order_id,
+            mall_order_item_id,
+            supplier_offering_revision_id,
+            supplier_sku_code_snapshot: supplier_sku_code_snapshot.into(),
+            supplier_product_code_snapshot,
+            quantity,
+            unit_cost_snapshot_gross,
+            cost_snapshot_total_gross,
+            input_tax_rate,
+        })
+    }
+}
+
 /// 供应商履约明细实体（数据模型 §6.19）。
 ///
 /// 随子订单同事务创建，创建后不可修改（后续供给关系变化不影响已支付订单）；
@@ -116,6 +162,17 @@ impl SupplierFulfillmentItem {
             input_tax_rate: data.input_tax_rate,
         })
     }
+
+    /// 判断明细是否属于指定供应商履约订单。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单主键
+    ///
+    /// # 返回
+    /// 归属一致时返回 `true`。
+    pub fn belongs_to_order(&self, order_id: &SupplierFulfillmentOrderId) -> bool {
+        self.supplier_fulfillment_order_id == *order_id
+    }
 }
 
 /// 校验数量大于零。
@@ -180,6 +237,24 @@ mod tests {
         assert_eq!(item.input_tax_rate, Rate::from_str("0.130000").unwrap());
         assert_eq!(item.supplier_sku_code_snapshot, "SUP-SKU-1");
         assert_eq!(item.supplier_product_code_snapshot.as_deref(), Some("SUP-SPU-1"));
+        assert!(item.belongs_to_order(&SupplierFulfillmentOrderId::new("order-1")));
+        assert!(!item.belongs_to_order(&SupplierFulfillmentOrderId::new("order-2")));
+    }
+
+    #[test]
+    fn data_factory_calculates_total_cost_snapshot() {
+        let data = SupplierFulfillmentItemData::from_unit_cost(
+            SupplierFulfillmentOrderId::new("order-1"),
+            MallOrderItemId::new("mall-item-1"),
+            SupplierOfferingRevisionId::new("offering-rev-1"),
+            "SUP-SKU-1",
+            None,
+            Quantity::from_str("3").unwrap(),
+            UnitPrice::from_str("9.99").unwrap(),
+            Rate::from_str("0.13").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(data.cost_snapshot_total_gross, Amount::from_str("29.97").unwrap());
     }
 
     #[test]

@@ -816,28 +816,6 @@ pub enum SettlementDifferenceResolution {
     ClosedNoAdjustment,
 }
 
-impl SettlementDifferenceResolution {
-    /// 映射为持久化差异状态。
-    pub(crate) fn status(self) -> SettlementDifferenceStatus {
-        match self {
-            Self::SupplierAccepted => SettlementDifferenceStatus::SupplierAcknowledged,
-            Self::ErpAccepted => SettlementDifferenceStatus::ErpAcknowledged,
-            Self::Compensated => SettlementDifferenceStatus::Compensated,
-            Self::ClosedNoAdjustment => SettlementDifferenceStatus::Closed,
-        }
-    }
-
-    /// 返回审计与收据使用的稳定代码。
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::SupplierAccepted => "SUPPLIER_ACCEPTED",
-            Self::ErpAccepted => "ERP_ACCEPTED",
-            Self::Compensated => "COMPENSATED",
-            Self::ClosedNoAdjustment => "CLOSED_NO_ADJUSTMENT",
-        }
-    }
-}
-
 /// 结算差异强类型决定请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SettlementDifferenceDecisionRequest {

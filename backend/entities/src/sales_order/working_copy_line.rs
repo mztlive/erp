@@ -179,6 +179,60 @@ impl SalesOrderWorkingCopyLine {
             card_form: built.voucher.as_ref().map(|v| v.card_form),
         })
     }
+
+    /// 判断明细是否属于给定工作副本。
+    ///
+    /// # 参数
+    /// * `working_copy_id` - 待校验的工作副本
+    ///
+    /// # 返回
+    /// 明细所属工作副本一致时返回 `true`。
+    pub fn belongs_to_working_copy(&self, working_copy_id: &SalesOrderWorkingCopyId) -> bool {
+        &self.working_copy_id == working_copy_id
+    }
+
+    /// 返回公司商品池可售校验所需的精确 SKU 引用。
+    ///
+    /// # 返回
+    /// 卡券行返回 `None`；实物及服务行返回 `(SKU, SKU 修订)`。
+    ///
+    /// # 错误
+    /// 实物及服务行缺少 SKU 或 SKU 修订时返回错误。
+    pub fn sellable_sku_ref(&self) -> Result<Option<(&SkuId, &crate::ids::SkuRevisionId)>> {
+        if self.line_type != LineType::GoodsService {
+            return Ok(None);
+        }
+        let sku_id = self
+            .sku_id
+            .as_ref()
+            .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU", self.line_no)))?;
+        let revision_id = self
+            .sku_revision_id
+            .as_ref()
+            .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?;
+        Ok(Some((sku_id, revision_id)))
+    }
+
+    /// 汇总工作副本行已经舍入的金额三元组。
+    ///
+    /// # 参数
+    /// * `lines` - 同一工作副本的冻结明细行
+    ///
+    /// # 返回
+    /// 返回 `(含税合计, 不含税合计, 税额合计)`。
+    ///
+    /// # 错误
+    /// 无；金额值对象负责保持精度和范围。
+    pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
+        let zero = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额必须合法");
+        lines.iter().fold((zero, zero, zero), |totals, line| {
+            (
+                totals.0.checked_add(line.gross_amount),
+                totals.1.checked_add(line.net_amount),
+                totals.2.checked_add(line.tax_amount),
+            )
+        })
+    }
 }
 
 #[cfg(test)]
@@ -208,6 +262,33 @@ mod tests {
         assert_eq!(line.unit_price_gross, Some(price("9.9900")));
         assert!(line.face_value.is_none());
         assert!(line.card_count.is_none());
+    }
+
+    #[test]
+    fn sellable_reference_mapping_is_owned_by_line_entity() {
+        let goods = SalesOrderWorkingCopyLine::new(
+            SalesOrderWorkingCopyLineId::new("wcl-1"),
+            SalesOrderWorkingCopyId::new("wc-1"),
+            line_data(1),
+        )
+        .unwrap();
+        assert!(goods.belongs_to_working_copy(&SalesOrderWorkingCopyId::new("wc-1")));
+        assert!(!goods.belongs_to_working_copy(&SalesOrderWorkingCopyId::new("wc-2")));
+        let (sku, revision) = goods.sellable_sku_ref().unwrap().unwrap();
+        assert_eq!(sku.as_ref(), "sku-1");
+        assert_eq!(revision.as_ref(), "skurev-1");
+        assert_eq!(
+            SalesOrderWorkingCopyLine::amount_totals(std::slice::from_ref(&goods)),
+            (amt("29.97"), amt("26.07"), amt("3.90"))
+        );
+        assert_eq!(
+            SalesOrderWorkingCopyLine::amount_totals(&[]),
+            (amt("0.00"), amt("0.00"), amt("0.00"))
+        );
+
+        let mut voucher = goods;
+        voucher.line_type = LineType::Voucher;
+        assert!(voucher.sellable_sku_ref().unwrap().is_none());
     }
 
     #[test]

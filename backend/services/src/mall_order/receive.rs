@@ -6,7 +6,7 @@ use entities::ids::{
     InboxMessageId, MallOrderCancelFactId, MallOrderCompletionFactId, MallOrderFactId, MallOrderId,
 };
 use entities::mall_order::{
-    FactType, MallOrder, MallOrderCancelFact, MallOrderCancelFactData, MallOrderCompletionFact,
+    FactType, MallOrderCancelFact, MallOrderCancelFactData, MallOrderCompletionFact,
     MallOrderCompletionFactData, MallOrderFact, MallOrderFactData, ProcessingStatus,
 };
 use entities::money::{Amount, Quantity};
@@ -47,10 +47,7 @@ impl MallOrderService {
         actor: &AuditActor,
     ) -> Result<ReceivedFactView> {
         req.validate()?;
-        if matches!(
-            req.fact_type,
-            FactType::RefundSucceeded | FactType::CardBalanceRestored
-        ) {
+        if req.fact_type.is_after_sales_result() {
             return Err(Error::BusinessLogicError(
                 "退款与余额恢复事实由售后域接口接收".to_string(),
             ));
@@ -349,18 +346,7 @@ impl MallOrderService {
             .find_by_id(&original_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::BusinessLogicError("原支付事实不存在".to_string()))?;
-        if original.fact_type != FactType::PaymentSucceeded {
-            return Err(Error::BusinessLogicError("原事实不是支付成功事实".to_string()));
-        }
-        if original.mall_id != req.mall_id || original.external_order_no != req.external_order_no {
-            return Err(Error::BusinessLogicError(
-                "原支付事实与本次事实的商城或订单不一致".to_string(),
-            ));
-        }
-        if original.processing_status != ProcessingStatus::Attributed {
-            return Err(Error::BusinessLogicError("原支付事实尚未正式归集".to_string()));
-        }
-        Ok(())
+        Ok(original.ensure_attributed_payment_for(&req.mall_id, &req.external_order_no)?)
     }
 
     /// 幂等命中：返回既有事实视图（含订单 ID 与命中标记）。
@@ -371,15 +357,12 @@ impl MallOrderService {
     /// # 返回
     /// 返回事实接收结果视图。
     async fn existing_received_view(&self, fact: MallOrderFact) -> Result<ReceivedFactView> {
-        let order_id = if fact.fact_type == FactType::PaymentSucceeded {
+        let order_id = if fact.fact_type.is_payment_succeeded() {
             self.db
                 .mall_orders()
-                .find_one(
-                    mongodb::bson::doc! { "payment_fact_id": fact.base.id.clone() },
-                    &mut NoTransaction,
-                )
+                .find_by_payment_fact(&MallOrderFactId::new(fact.base.id.clone()), &mut NoTransaction)
                 .await?
-                .map(|order: MallOrder| order.base.id)
+                .map(|order| order.base.id)
         } else {
             None
         };

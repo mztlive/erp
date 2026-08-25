@@ -120,6 +120,48 @@ impl DocumentState for MallSalesSyncJobStatus {
     }
 }
 
+/// 同步作业完成命令相对当前实体状态的幂等判定。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncJobCompletionDisposition {
+    /// 作业仍在运行，应提交本次终态。
+    Apply,
+    /// 作业已处于同一终态，可按幂等返回。
+    AlreadyApplied,
+    /// 作业已处于不同终态，命令冲突。
+    ConflictingTerminal,
+}
+
+/// 同步作业的闭区间查询范围。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MallSyncTimeRange {
+    /// 查询起点。
+    pub start: Instant,
+    /// 查询终点。
+    pub end: Instant,
+}
+
+impl MallSyncTimeRange {
+    /// 从安全水位与重叠窗口派生增量查询范围。
+    ///
+    /// # 参数
+    /// * `high_water` - 最近安全水位
+    /// * `now` - 当前安全时间
+    /// * `overlap_seconds` - 为吸收迟到数据向前重叠的秒数
+    ///
+    /// # 返回
+    /// 返回 `[high_water - overlap, now]` 查询范围。
+    ///
+    /// # 错误
+    /// 派生起点晚于当前安全时间时返回错误。
+    pub fn incremental(high_water: Instant, now: Instant, overlap_seconds: i64) -> Result<Self> {
+        let start = Instant::from_unix_secs(high_water.unix_secs().saturating_sub(overlap_seconds.max(0)));
+        if start > now {
+            return Err(Error::from("同步水位晚于当前安全时间，禁止创建无效增量区间"));
+        }
+        Ok(Self { start, end: now })
+    }
+}
+
 /// 同步作业创建数据（数据模型 §6.13）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MallSalesSyncJobData {
@@ -232,6 +274,53 @@ impl MallSalesSyncJob {
             item_count: 0,
             error_count: 0,
         })
+    }
+
+    /// 判断作业是否仍接受快照落盘。
+    ///
+    /// # 返回
+    /// 当前状态为运行中时返回 `true`。
+    pub fn accepts_snapshots(&self) -> bool {
+        self.status == MallSalesSyncJobStatus::Running
+    }
+
+    /// 判断失败作业是否允许沿原范围创建重试任务。
+    ///
+    /// # 返回
+    /// 失败或部分失败时返回 `true`。
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self.status,
+            MallSalesSyncJobStatus::Failed | MallSalesSyncJobStatus::PartialFailure
+        )
+    }
+
+    /// 判断乐观锁版本是否与命令期望一致。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端冻结版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `true`。
+    pub fn has_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
+    /// 判定完成命令应提交、幂等返回还是冲突。
+    ///
+    /// # 参数
+    /// * `outcome` - 命令请求的终态
+    ///
+    /// # 返回
+    /// 返回相对当前作业状态的幂等判定。
+    pub fn completion_disposition(&self, outcome: MallSalesSyncJobStatus) -> SyncJobCompletionDisposition {
+        if self.status == MallSalesSyncJobStatus::Running {
+            SyncJobCompletionDisposition::Apply
+        } else if self.status == outcome {
+            SyncJobCompletionDisposition::AlreadyApplied
+        } else {
+            SyncJobCompletionDisposition::ConflictingTerminal
+        }
     }
 
     /// 完成作业并登记结束时间。
@@ -436,6 +525,43 @@ mod tests {
     fn record_progress_rejects_errors_exceeding_items() {
         let mut job = MallSalesSyncJob::new(MallSalesSyncJobId::new("j-7"), job_data()).unwrap();
         assert!(job.record_progress(1, 10, 11).is_err());
+    }
+
+    #[test]
+    fn time_range_and_completion_disposition_are_deterministic() {
+        let range = MallSyncTimeRange::incremental(
+            Instant::from_unix_secs(1_000),
+            Instant::from_unix_secs(1_200),
+            300,
+        )
+        .unwrap();
+        assert_eq!(range.start, Instant::from_unix_secs(700));
+        assert_eq!(range.end, Instant::from_unix_secs(1_200));
+        assert!(MallSyncTimeRange::incremental(
+            Instant::from_unix_secs(2_000),
+            Instant::from_unix_secs(1_000),
+            100,
+        )
+        .is_err());
+
+        let mut job = MallSalesSyncJob::new(MallSalesSyncJobId::new("j-disposition"), job_data()).unwrap();
+        assert_eq!(
+            job.completion_disposition(MallSalesSyncJobStatus::Success),
+            SyncJobCompletionDisposition::Apply
+        );
+        job.finish(
+            MallSalesSyncJobStatus::Success,
+            Instant::from_unix_secs(1_700_000_200),
+        )
+        .unwrap();
+        assert_eq!(
+            job.completion_disposition(MallSalesSyncJobStatus::Success),
+            SyncJobCompletionDisposition::AlreadyApplied
+        );
+        assert_eq!(
+            job.completion_disposition(MallSalesSyncJobStatus::Failed),
+            SyncJobCompletionDisposition::ConflictingTerminal
+        );
     }
 
     #[test]

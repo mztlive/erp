@@ -9,6 +9,7 @@
 pub mod customer_account;
 pub mod customer_assignment;
 pub mod customer_profile_command;
+pub mod profile_validation;
 
 pub use crate::ids::{CustomerAccountId, CustomerAssignmentId};
 pub use customer_account::{
@@ -18,3 +19,7 @@ pub use customer_assignment::{
     AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentUpdate,
 };
 pub use customer_profile_command::{CustomerProfileCommand, CustomerProfileCommandData};
+pub use profile_validation::{
+    CustomerProfileFactInput, CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation,
+    CustomerProfileRequestShape,
+};

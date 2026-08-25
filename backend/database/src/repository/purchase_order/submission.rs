@@ -7,11 +7,13 @@ use entities::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountI
 use entities::purchase_order::{PurchaseOrderSubmission, PurchaseOrderSubmissionLine, SubmissionStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
+use mongodb::options::FindOptions;
 
 use super::common::in_filter;
+use super::{PurchaseOrderRepository, PURCHASE_ORDER_SUBMISSIONS, PURCHASE_ORDER_SUBMISSION_LINES};
 use crate::executor::Executor;
 use crate::repository::{Pagination, QueryFilter};
-use crate::{Repository, Result};
+use crate::{mongo_ops, Repository, Result};
 
 /// 采购提交列表筛选条件（财务审核队列）。
 #[derive(Debug, Clone)]
@@ -59,6 +61,99 @@ impl Pagination for PurchaseOrderSubmissionFilter {
     /// 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
+    }
+}
+
+impl<'a> PurchaseOrderRepository<'a> {
+    /// 按采购单读取全部提交，并按提交序号升序返回。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的采购提交。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_submissions_by_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderSubmission>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "submission_no": 1, "id": 1 })
+            .build();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
+            doc! { "purchase_order_id": purchase_order_id.to_string() },
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取采购提交头。
+    ///
+    /// # 参数
+    /// * `submission_ids` - 采购提交稳定身份集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已存在的采购提交头；空输入直接返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_submissions_by_ids(
+        &self,
+        submission_ids: &[PurchaseOrderSubmissionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderSubmission>> {
+        if submission_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let options = FindOptions::builder().sort(doc! { "id": 1 }).build();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderSubmission>(PURCHASE_ORDER_SUBMISSIONS),
+            in_filter("id", submission_ids.iter().map(ToString::to_string)),
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 按采购提交读取全部明细，并按行号升序返回。
+    ///
+    /// # 参数
+    /// * `submission_id` - 采购提交稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的采购提交行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_submission_lines(
+        &self,
+        submission_id: &PurchaseOrderSubmissionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrderSubmissionLine>> {
+        let options = FindOptions::builder()
+            .sort(doc! { "line_no": 1, "id": 1 })
+            .build();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseOrderSubmissionLine>(PURCHASE_ORDER_SUBMISSION_LINES),
+            doc! { "purchase_order_submission_id": submission_id.to_string() },
+            options,
+            executor,
+        )
+        .await
     }
 }
 

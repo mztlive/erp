@@ -12,7 +12,7 @@ use entities::integration_ops::{
 };
 use entities::mall_order::ProcessingStatus;
 use entities::returns::{CustomerRefundStatus, SupplierRefundStatus};
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 
 use super::{
     ControlledEvidenceKind, ControlledEvidenceRef, DifferenceReasonCode, DirectReconciliationConclusion,
@@ -577,7 +577,7 @@ pub(super) fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEv
 pub(super) fn difference_evidence_policy(
     difference: &ReconciliationDifference,
 ) -> ResolutionEvidencePolicyView {
-    let financial = has_financial_impact(&difference.difference_type);
+    let financial = difference.has_financial_impact();
     ResolutionEvidencePolicyView {
         evidence_policy_id: DIFFERENCE_POLICY_ID.to_string(),
         evidence_policy_version: EVIDENCE_POLICY_VERSION,
@@ -649,13 +649,6 @@ pub(super) fn evidence_satisfies_policy(
     ensure_required_kinds(refs, &policy.required_evidence_kinds).is_ok()
 }
 
-/// 判断错误任务最近一次动作是否已由服务端确认原动作无结果。
-pub(super) fn prior_query_confirmed_no_result(task: &IntegrationErrorTask) -> bool {
-    task.last_attempt_summary.as_deref().is_some_and(|summary| {
-        summary.contains("w29_action=QUERY_ORIGINAL_RESULT") && summary.contains("outcome=NoResultConfirmed")
-    })
-}
-
 /// 校验直接对账原因注册表身份、原因、结论与所需证据类型。
 pub(super) fn ensure_direct_reason(
     registry_id: &str,
@@ -720,23 +713,6 @@ pub(super) fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String
     Ok(reference)
 }
 
-/// 根据已验证证据选择错误任务解决方式。
-pub(super) fn resolution_type(verified: &[VerifiedEvidence]) -> entities::integration_ops::ResolutionType {
-    if verified
-        .iter()
-        .any(|evidence| evidence.reference.kind == ControlledEvidenceKind::CompensationResult)
-    {
-        entities::integration_ops::ResolutionType::Compensate
-    } else if verified
-        .iter()
-        .any(|evidence| evidence.reference.kind == ControlledEvidenceKind::BusinessObjectVerification)
-    {
-        entities::integration_ops::ResolutionType::FixMapping
-    } else {
-        entities::integration_ops::ResolutionType::QueryConfirm
-    }
-}
-
 fn ensure_required_kinds(
     submitted_refs: &[ControlledEvidenceRef],
     required: &[ControlledEvidenceKind],
@@ -767,21 +743,6 @@ fn reason_view(
     }
 }
 
-fn has_financial_impact(difference_type: &str) -> bool {
-    let value = difference_type.to_ascii_lowercase();
-    [
-        "amount",
-        "fund",
-        "payment",
-        "refund",
-        "balance",
-        "receivable",
-        "payable",
-    ]
-    .iter()
-    .any(|keyword| value.contains(keyword))
-}
-
 async fn known_result_exists(db: &Database, message_id: &str, executor: &mut dyn Executor) -> Result<bool> {
     if db
         .mall_order_facts()
@@ -794,11 +755,10 @@ async fn known_result_exists(db: &Database, message_id: &str, executor: &mut dyn
     {
         return Ok(true);
     }
-    Ok(!db
-        .supplier_refund_facts()
-        .find_many(doc! { "inbox_message_id": message_id }, executor)
-        .await?
-        .is_empty())
+    db.supplier_refund_facts()
+        .exists_by_inbox_message(message_id, executor)
+        .await
+        .map_err(Into::into)
 }
 
 fn replay_adapter_registered(message_type: MessageType, payload_reference: Option<&str>) -> bool {

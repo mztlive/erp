@@ -18,6 +18,7 @@ use entities::legacy_import::{
     ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchId,
     LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportRow, MappingStatus, ParseStatus,
 };
+use entities::work_item::WorkItem;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -529,6 +530,55 @@ impl<'a> Repository<'a, LegacyImportConfirmation> {
             executor,
         )
         .await
+    }
+
+    /// 按批次读取全部确认事实，按创建顺序稳定返回。
+    ///
+    /// # 参数
+    /// * `batch_id` - 所属导入批次
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该批次全部未删除确认事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_batch(
+        &self,
+        batch_id: &LegacyImportBatchId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<LegacyImportConfirmation>> {
+        self.find_many_sorted(
+            doc! { "batch_id": batch_id.to_string() },
+            doc! { "created_at": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, WorkItem> {
+    /// 批量读取导入确认引用的正式任务。
+    ///
+    /// # 参数
+    /// * `work_item_ids` - 正式任务 ID 列表
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除任务；输入为空时返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_legacy_import_confirmations_by_ids(
+        &self,
+        work_item_ids: &[entities::ids::WorkItemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        if work_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = work_item_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 }
 

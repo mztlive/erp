@@ -14,7 +14,6 @@ use entities::party::{
     PartyUpdate,
 };
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use serde::Serialize;
 use validator::Validate;
@@ -211,16 +210,19 @@ impl PartyService {
     /// # 错误
     /// * `NotFound` - 主体不存在
     pub async fn party_detail(&self, id: &str) -> Result<PartyDetailView> {
-        let party = self.load_party(id).await?;
-        let current_revision = match &party.stable.current_revision_id {
-            Some(revision_id) => self
-                .db
-                .party_revisions()
-                .find_by_id(revision_id, &mut NoTransaction)
-                .await?
-                .map(Into::into),
-            None => None,
-        };
+        let (party, revision) = self
+            .db
+            .party()
+            .find_with_current_revision(&PartyId::new(id), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("主体不存在".to_string()))?;
+        let current_revision = revision.and_then(|revision| {
+            party
+                .current_revision(std::slice::from_ref(&revision))
+                .ok()
+                .cloned()
+                .map(Into::into)
+        });
         Ok(PartyDetailView {
             party: party.into(),
             current_revision,
@@ -254,11 +256,9 @@ impl PartyService {
         req.validate()?;
         let party = self.load_party(id).await?;
         ensure_outside_supplier_profile(&self.db, &PartyId::new(id)).await?;
-        if party.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
+        party
+            .ensure_version(req.version)
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
 
         // 预校验信用代码冲突：与实体规范化规则一致，避免仅依赖唯一索引透出笼统冲突。
         if let Some(raw_code) = req.unified_credit_code.as_ref() {
@@ -284,7 +284,7 @@ impl PartyService {
             .resource_log("party.update", "party", party.base.id.clone())?;
         let updated_by = actor.id().to_string();
 
-        // 事务内重读修订历史：计算下一修订序号。
+        // 下一修订号必须在写事务快照内读取，避免并发复用序号。
         let db = self.db.clone();
         let client = db.client().clone();
         let mut party_for_tx = party.clone();
@@ -303,16 +303,10 @@ impl PartyService {
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let history = db
+                    let next_no = db
                         .party_revisions()
-                        .list_revision_history(&PartyId::new(party_for_tx.base.id.clone()), session)
+                        .next_revision_no(&PartyId::new(party_for_tx.base.id.clone()), session)
                         .await?;
-                    let next_no = history
-                        .iter()
-                        .map(|revision| revision.revision.revision_no)
-                        .max()
-                        .unwrap_or(0)
-                        + 1;
                     let revision = PartyRevision {
                         revision: RevisionBase::new(next_no),
                         ..revision_for_tx
@@ -433,7 +427,7 @@ impl PartyService {
     async fn load_party(&self, id: &str) -> Result<Party> {
         self.db
             .parties()
-            .find_by_id(id, &mut NoTransaction)
+            .find_party(&PartyId::new(id), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))
     }
@@ -561,15 +555,9 @@ fn credit_code_update(value: Option<String>) -> FieldUpdate<String> {
 macro_rules! clear_default_marks {
     ($db:expr, $accessor:ident, $party_id:expr, $exclude:expr, $executor:expr) => {{
         let exclude: Option<&::std::string::String> = $exclude;
-        let filter = ::mongodb::bson::doc! { "party_id": $party_id.to_string(), "is_default": true };
-        let rows = $db.$accessor().find_many(filter, $executor).await?;
-        for mut row in rows {
-            if exclude.is_some_and(|id| id.as_str() == row.base.id.as_str()) {
-                continue;
-            }
-            row.is_default = false;
-            $db.$accessor().update(&mut row, $executor).await?;
-        }
+        $db.$accessor()
+            .clear_other_default_marks(&$party_id, exclude.map(|id| id.as_str()), $executor)
+            .await?;
     }};
 }
 pub(crate) use clear_default_marks;

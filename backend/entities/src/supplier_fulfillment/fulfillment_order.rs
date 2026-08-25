@@ -18,7 +18,8 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 
 // 兼容既有深层导入路径：`supplier_fulfillment::fulfillment_order::{...}`。
 pub use super::fulfillment_item::{SupplierFulfillmentItem, SupplierFulfillmentItemData};
-pub use super::status::{CancelStatus, FulfillmentStatus, RefundStatus};
+use super::order_action::{SupplierOrderAction, SupplierOrderActionStatus, SupplierOrderActionType};
+pub use super::status::{CancelStatus, FulfillmentStatus, RefundStatus, VerifiedSupplierOrderResolution};
 
 /// 供应商子订单号（ERP 下单幂等键）最大长度。
 const ORDER_NO_MAX_LEN: usize = 64;
@@ -60,6 +61,54 @@ pub struct SupplierFulfillmentOrderData {
     pub address_snapshot_encrypted: String,
     /// 履约地址快照带密钥 HMAC 查询指纹（§4.5.5，禁止裸摘要）。
     pub address_snapshot_fingerprint: String,
+}
+
+impl SupplierFulfillmentOrderData {
+    /// 构造已进入提交中的供应商子订单数据。
+    ///
+    /// 初始三条状态与提交时间由领域规则统一设置，调用方只提供稳定身份和地址
+    /// 快照，不得自行组合不一致的初始状态。
+    ///
+    /// # 参数
+    /// * `fulfillment_order_no` - ERP 供应商子订单号
+    /// * `mall_order_id` - 来源商城订单
+    /// * `supplier_id` - 固定供应商
+    /// * `connection_id` - 供应商 API 连接
+    /// * `split_no` - 确定性拆单序号
+    /// * `submitted_at` - 提交供应商的时间
+    /// * `address_snapshot_encrypted` - 地址快照密文
+    /// * `address_snapshot_fingerprint` - 地址查询指纹
+    ///
+    /// # 返回
+    /// 返回主线为提交中、取消与退款均为无的创建数据。
+    #[allow(clippy::too_many_arguments)]
+    pub fn submitting(
+        fulfillment_order_no: impl Into<String>,
+        mall_order_id: MallOrderId,
+        supplier_id: SupplierAccountId,
+        connection_id: SupplierApiConnectionId,
+        split_no: u32,
+        submitted_at: Instant,
+        address_snapshot_encrypted: impl Into<String>,
+        address_snapshot_fingerprint: impl Into<String>,
+    ) -> Self {
+        Self {
+            fulfillment_order_no: fulfillment_order_no.into(),
+            mall_order_id,
+            supplier_id,
+            connection_id,
+            split_no,
+            fulfillment_status: FulfillmentStatus::Submitting,
+            cancel_status: CancelStatus::None,
+            refund_status: RefundStatus::None,
+            external_order_no: None,
+            submitted_at: Some(submitted_at),
+            accepted_at: None,
+            completed_at: None,
+            address_snapshot_encrypted: address_snapshot_encrypted.into(),
+            address_snapshot_fingerprint: address_snapshot_fingerprint.into(),
+        }
+    }
 }
 
 /// 供应商子订单更新数据（不含系统字段与关键字段）。
@@ -262,6 +311,124 @@ impl SupplierFulfillmentOrder {
         self.refund_status = to;
         Ok(())
     }
+
+    /// 校验调用方持有的订单版本仍是当前版本。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取到的订单版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本不一致时返回领域错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        if self.base.version != expected {
+            return Err(Error::from("供应商履约订单版本不一致"));
+        }
+        Ok(())
+    }
+
+    /// 判断订单是否属于指定供应商。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 待校验供应商
+    ///
+    /// # 返回
+    /// 供应商一致时返回 `true`。
+    pub fn belongs_to_supplier(&self, supplier_id: &SupplierAccountId) -> bool {
+        self.supplier_id == *supplier_id
+    }
+
+    /// 返回与履约完成状态一致的正式完成时间。
+    ///
+    /// # 返回
+    /// 已完成订单返回完成时间；尚未完成且没有完成时间时返回 `None`。
+    ///
+    /// # 错误
+    /// 完成状态缺少完成时间，或未完成状态携带完成时间时返回领域错误。
+    pub fn confirmed_completed_at(&self) -> Result<Option<Instant>> {
+        match (self.fulfillment_status, self.completed_at) {
+            (FulfillmentStatus::Completed, Some(completed_at)) => Ok(Some(completed_at)),
+            (FulfillmentStatus::Completed, None) => Err(Error::from("已完成订单缺少正式完成时间")),
+            (_, Some(_)) => Err(Error::from("未完成订单不得携带正式完成时间")),
+            (_, None) => Ok(None),
+        }
+    }
+
+    /// 校验订单已经到达取消完成终态。
+    ///
+    /// # 返回
+    /// 取消状态为 `CANCELED` 时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 订单尚未取消完成时返回领域错误。
+    pub fn ensure_canceled(&self) -> Result<()> {
+        if self.cancel_status != CancelStatus::Canceled {
+            return Err(Error::from("取消补证与供应商订单取消终态不一致"));
+        }
+        Ok(())
+    }
+
+    /// 根据订单状态与原供应商动作状态判定已验证业务终态。
+    ///
+    /// # 参数
+    /// * `action` - 与订单关联的原下单、取消或退款动作
+    ///
+    /// # 返回
+    /// 订单与动作共同证明终态时返回对应结果；关系或状态不足时返回 `None`。
+    pub fn verified_resolution(
+        &self,
+        action: &SupplierOrderAction,
+    ) -> Option<VerifiedSupplierOrderResolution> {
+        if action.supplier_fulfillment_order_id.as_ref() != self.base.id {
+            return None;
+        }
+        match action.action_type {
+            SupplierOrderActionType::Place => match (self.fulfillment_status, action.status) {
+                (FulfillmentStatus::Completed, SupplierOrderActionStatus::Succeeded) => {
+                    Some(VerifiedSupplierOrderResolution::OrderCompleted)
+                }
+                (FulfillmentStatus::Rejected, SupplierOrderActionStatus::Failed) => {
+                    Some(VerifiedSupplierOrderResolution::OrderRejected)
+                }
+                (
+                    FulfillmentStatus::Accepted | FulfillmentStatus::Fulfilling | FulfillmentStatus::Shipped,
+                    SupplierOrderActionStatus::Succeeded,
+                ) => Some(VerifiedSupplierOrderResolution::OrderAccepted),
+                _ => None,
+            },
+            SupplierOrderActionType::Cancel
+                if self.cancel_status == CancelStatus::Canceled
+                    && action.status == SupplierOrderActionStatus::Succeeded =>
+            {
+                Some(VerifiedSupplierOrderResolution::Canceled)
+            }
+            SupplierOrderActionType::Refund
+                if self.refund_status == RefundStatus::Refunded
+                    && action.status == SupplierOrderActionStatus::Succeeded =>
+            {
+                Some(VerifiedSupplierOrderResolution::Refunded)
+            }
+            SupplierOrderActionType::Cancel
+            | SupplierOrderActionType::Refund
+            | SupplierOrderActionType::Query => None,
+        }
+    }
+
+    /// 判断原下单动作是否处于可由明确无结果证据重放的状态。
+    ///
+    /// # 参数
+    /// * `action` - 待重放的原动作
+    ///
+    /// # 返回
+    /// 订单与动作均为结果未知的原下单请求时返回 `true`。
+    pub fn can_replay_place_action(&self, action: &SupplierOrderAction) -> bool {
+        action.supplier_fulfillment_order_id.as_ref() == self.base.id
+            && action.action_type == SupplierOrderActionType::Place
+            && action.status == SupplierOrderActionStatus::ResultUnknown
+            && self.fulfillment_status == FulfillmentStatus::ResultUnknown
+    }
 }
 
 impl fmt::Debug for SupplierFulfillmentOrder {
@@ -373,6 +540,25 @@ mod tests {
 
     fn sample_order() -> SupplierFulfillmentOrder {
         SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-1"), sample_data()).unwrap()
+    }
+
+    fn place_action(status: SupplierOrderActionStatus) -> SupplierOrderAction {
+        SupplierOrderAction::new(
+            crate::ids::SupplierOrderActionId::new("action-1"),
+            crate::supplier_fulfillment::SupplierOrderActionData {
+                supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
+                action_type: SupplierOrderActionType::Place,
+                after_sales_request_id: None,
+                idempotency_key: "order-1".to_string(),
+                status,
+                external_request_id: None,
+                request_summary: None,
+                response_summary: None,
+                attempt_count: 0,
+                next_attempt_at: None,
+            },
+        )
+        .unwrap()
     }
 
     #[test]
@@ -519,6 +705,62 @@ mod tests {
         after_partial.advance_refund(RefundStatus::Partial).unwrap();
         after_partial.advance_refund(RefundStatus::Manual).unwrap();
         assert_eq!(after_partial.refund_status, RefundStatus::Manual);
+    }
+
+    #[test]
+    fn submitting_factory_freezes_initial_states_and_version_guard() {
+        let data = SupplierFulfillmentOrderData::submitting(
+            "order-2",
+            MallOrderId::new("mall-order-1"),
+            SupplierAccountId::new("supplier-1"),
+            SupplierApiConnectionId::new("connection-1"),
+            1,
+            Instant::from_unix_secs(1_700_000_000),
+            "encrypted",
+            "fingerprint",
+        );
+        assert_eq!(data.fulfillment_status, FulfillmentStatus::Submitting);
+        assert_eq!(data.cancel_status, CancelStatus::None);
+        assert_eq!(data.refund_status, RefundStatus::None);
+        let order = SupplierFulfillmentOrder::new(SupplierFulfillmentOrderId::new("order-2"), data).unwrap();
+        assert!(order.ensure_version(order.base.version).is_ok());
+        assert!(order.ensure_version(order.base.version + 1).is_err());
+    }
+
+    #[test]
+    fn verified_resolution_requires_consistent_order_and_action_status() {
+        let mut order = sample_order();
+        order.advance_fulfillment(FulfillmentStatus::Submitting).unwrap();
+        order.advance_fulfillment(FulfillmentStatus::Accepted).unwrap();
+        let succeeded = place_action(SupplierOrderActionStatus::Succeeded);
+        assert_eq!(
+            order.verified_resolution(&succeeded),
+            Some(VerifiedSupplierOrderResolution::OrderAccepted)
+        );
+
+        let unknown = place_action(SupplierOrderActionStatus::ResultUnknown);
+        order.fulfillment_status = FulfillmentStatus::ResultUnknown;
+        assert!(order.can_replay_place_action(&unknown));
+        assert!(order.verified_resolution(&unknown).is_none());
+    }
+
+    #[test]
+    fn settlement_fact_access_requires_consistent_terminal_states() {
+        let mut order = sample_order();
+        assert_eq!(order.confirmed_completed_at().unwrap(), None);
+        assert!(order.ensure_canceled().is_err());
+
+        order.advance_cancel(CancelStatus::CancelPending).unwrap();
+        order.advance_cancel(CancelStatus::Canceled).unwrap();
+        order.ensure_canceled().unwrap();
+
+        order.completed_at = Some(Instant::from_unix_secs(1_700_000_200));
+        assert!(order.confirmed_completed_at().is_err());
+        order.fulfillment_status = FulfillmentStatus::Completed;
+        assert_eq!(
+            order.confirmed_completed_at().unwrap(),
+            Some(Instant::from_unix_secs(1_700_000_200))
+        );
     }
 
     #[test]

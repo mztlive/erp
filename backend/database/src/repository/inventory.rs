@@ -29,21 +29,45 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
+use entities::catalog::{Sku, SkuRevision};
 use entities::common::time::Instant;
+use entities::document_registry::BusinessDocument;
+use entities::fulfillment::PurchaseReceipt;
 use entities::ids::{SalesOrderLineId, SkuId, StockAdjustmentId, StockMovementId, WarehouseId};
 use entities::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustment,
     StockAdjustmentLine, StockAdjustmentState, StockBalance, StockMovement, StockReservation,
 };
 use entities::money::Quantity;
+use entities::warehouse::{Warehouse, WarehouseRevision};
 
-use super::extensions::InventoryExt;
+use super::extensions::{CatalogExt, DocumentRegistryExt, FulfillmentExt, InventoryExt, WarehouseExt};
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
 /// `stock_adjustment_line` 集合名（单一来源：`InventoryExt` 关联常量）。
 const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENT_LINES;
+/// `stock_balance` 集合名。
+const STOCK_BALANCES: &str = <mongodb::Database as InventoryExt>::STOCK_BALANCES;
+/// `stock_reservation` 集合名。
+const STOCK_RESERVATIONS: &str = <mongodb::Database as InventoryExt>::STOCK_RESERVATIONS;
+/// `stock_movement` 集合名。
+const STOCK_MOVEMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_MOVEMENTS;
+/// `stock_adjustment` 集合名。
+const STOCK_ADJUSTMENTS: &str = <mongodb::Database as InventoryExt>::STOCK_ADJUSTMENTS;
+/// `warehouse` 集合名。
+const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
+/// `warehouse_revision` 集合名。
+const WAREHOUSE_REVISIONS: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_REVISIONS;
+/// `sku` 集合名。
+const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
+/// `sku_revision` 集合名。
+const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_REVISIONS;
+/// `purchase_receipt` 集合名。
+const PURCHASE_RECEIPTS: &str = <mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS;
+/// `business_document` 集合名。
+const BUSINESS_DOCUMENTS: &str = <mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS;
 
 /// 库存流水列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -850,11 +874,10 @@ impl<'a> Repository<'a, StockAdjustment> {
     }
 }
 
-/// D17 域专用仓储：跨集合批量查询与多步骤事务写入。
+/// D17 域专用仓储：语义查询与多步骤事务写入。
 ///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型承载按表头批量取行（`$in`
-/// 一次取回，禁止 N+1）与依赖事务的跨集合原子写入入口，由
-/// `InventoryExt::inventory()` 访问。
+/// 本类型屏蔽库存域及页面投影所需跨域引用的 MongoDB 查询细节，并提供必须由
+/// Service 传入事务执行器的聚合写入入口，由 `InventoryExt::inventory()` 访问。
 pub struct InventoryRepository<'a> {
     db: &'a Database,
 }
@@ -869,6 +892,369 @@ impl<'a> InventoryRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按主键读取未删除的库存余额。
+    ///
+    /// # 参数
+    /// * `id` - 库存余额主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配余额；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn stock_balance(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<StockBalance>> {
+        active_entity_by_id(self.db, STOCK_BALANCES, id, executor).await
+    }
+
+    /// 按库存维度读取唯一余额。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 仓库主键
+    /// * `sku_id` - SKU 主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配余额；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn balance_for_dimensions(
+        &self,
+        warehouse_id: &WarehouseId,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<StockBalance>> {
+        mongo_ops::find_one(
+            &self.db.collection::<StockBalance>(STOCK_BALANCES),
+            doc! {
+                "warehouse_id": warehouse_id.to_string(),
+                "sku_id": sku_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键读取未删除的库存调整单。
+    ///
+    /// # 参数
+    /// * `id` - 调整单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配调整单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn stock_adjustment(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<StockAdjustment>> {
+        active_entity_by_id(self.db, STOCK_ADJUSTMENTS, id, executor).await
+    }
+
+    /// 按主键读取已注册业务单据。
+    ///
+    /// # 参数
+    /// * `id` - 业务单据主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配注册行；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn business_document(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>> {
+        active_entity_by_id(self.db, BUSINESS_DOCUMENTS, id, executor).await
+    }
+
+    /// 读取指定余额维度上的可操作预占。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 仓库主键
+    /// * `sku_id` - SKU 主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回有效或部分消耗的预占集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn operable_reservations_for_balance(
+        &self,
+        warehouse_id: &WarehouseId,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockReservation>> {
+        reservations_for_dimensions(
+            self.db,
+            doc! {
+                "warehouse_id": warehouse_id.to_string(),
+                "sku_id": sku_id.to_string(),
+            },
+            None,
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取页内库存维度上的可操作预占。
+    ///
+    /// # 参数
+    /// * `warehouse_ids` - 仓库主键集合
+    /// * `sku_ids` - SKU 主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回命中任一页内仓库与 SKU 的可操作预占。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn operable_reservations_for_dimensions(
+        &self,
+        warehouse_ids: &[String],
+        sku_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockReservation>> {
+        if warehouse_ids.is_empty() || sku_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        reservations_for_dimensions(
+            self.db,
+            doc! {
+                "warehouse_id": { "$in": warehouse_ids },
+                "sku_id": { "$in": sku_ids },
+            },
+            None,
+            executor,
+        )
+        .await
+    }
+
+    /// 按建立时间读取指定维度上的可操作预占。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 仓库主键
+    /// * `sku_id` - SKU 主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按 `created_at` 升序排列的可操作预占。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn oldest_operable_reservations(
+        &self,
+        warehouse_id: &WarehouseId,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockReservation>> {
+        reservations_for_dimensions(
+            self.db,
+            doc! {
+                "warehouse_id": warehouse_id.to_string(),
+                "sku_id": sku_id.to_string(),
+            },
+            Some(doc! { "created_at": 1 }),
+            executor,
+        )
+        .await
+    }
+
+    /// 读取指定仓库尚未过账的库存调整单。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 仓库主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回草稿与审批中的调整单。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn pending_adjustments_for_warehouse(
+        &self,
+        warehouse_id: &WarehouseId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockAdjustment>> {
+        let statuses = stock_adjustment_state_codes(StockAdjustmentState::pending_posting());
+        mongo_ops::find_many(
+            &self.db.collection::<StockAdjustment>(STOCK_ADJUSTMENTS),
+            doc! {
+                "warehouse_id": warehouse_id.to_string(),
+                "status": { "$in": statuses },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await
+    }
+
+    /// 按来源单据读取库存流水。
+    ///
+    /// # 参数
+    /// * `source_document_id` - 来源单据主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该来源单据产生的全部未删除流水。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn movements_for_source_document(
+        &self,
+        source_document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockMovement>> {
+        mongo_ops::find_many(
+            &self.db.collection::<StockMovement>(STOCK_MOVEMENTS),
+            doc! {
+                "source_document_id": source_document_id,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键集合批量读取库存调整单。
+    ///
+    /// # 参数
+    /// * `ids` - 调整单主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除调整单。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn stock_adjustments_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockAdjustment>> {
+        entities_by_ids(self.db, STOCK_ADJUSTMENTS, ids, executor).await
+    }
+
+    /// 按主键集合批量读取采购入库单。
+    ///
+    /// # 参数
+    /// * `ids` - 入库单主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除入库单。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn purchase_receipts_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseReceipt>> {
+        entities_by_ids(self.db, PURCHASE_RECEIPTS, ids, executor).await
+    }
+
+    /// 按主键集合批量读取仓库。
+    ///
+    /// # 参数
+    /// * `ids` - 仓库主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除仓库。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn warehouses_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Warehouse>> {
+        entities_by_ids(self.db, WAREHOUSES, ids, executor).await
+    }
+
+    /// 按主键集合批量读取仓库修订。
+    ///
+    /// # 参数
+    /// * `ids` - 仓库修订主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn warehouse_revisions_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WarehouseRevision>> {
+        entities_by_ids(self.db, WAREHOUSE_REVISIONS, ids, executor).await
+    }
+
+    /// 按主键集合批量读取 SKU。
+    ///
+    /// # 参数
+    /// * `ids` - SKU 主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除 SKU。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn skus_by_ids(&self, ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Sku>> {
+        entities_by_ids(self.db, SKUS, ids, executor).await
+    }
+
+    /// 按主键集合批量读取 SKU 修订。
+    ///
+    /// # 参数
+    /// * `ids` - SKU 修订主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除修订。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn sku_revisions_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SkuRevision>> {
+        entities_by_ids(self.db, SKU_REVISIONS, ids, executor).await
+    }
+
+    /// 按主键集合批量读取库存流水。
+    ///
+    /// # 参数
+    /// * `ids` - 流水主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部命中的未删除流水。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn movements_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockMovement>> {
+        entities_by_ids(self.db, STOCK_MOVEMENTS, ids, executor).await
     }
 
     /// 批量读取库存调整明细（`$in` 一次取回）。
@@ -984,6 +1370,149 @@ impl<'a> InventoryRepository<'a> {
         .await?;
         Ok(result.matched_count > 0)
     }
+
+    /// 持久化已通过实体规则校验的调整明细值。
+    ///
+    /// # 参数
+    /// * `line` - 已更新的调整明细实体
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 命中并更新返回 `true`；行不存在或已删除时返回 `false`。
+    ///
+    /// # 错误
+    /// MongoDB 写入或字段序列化失败时返回错误。
+    pub async fn persist_adjustment_line(
+        &self,
+        line: &StockAdjustmentLine,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), executor)
+            .await
+    }
+}
+
+/// 按主键读取未删除实体。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `collection_name` - 集合名
+/// * `id` - 实体主键
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回匹配实体；不存在时返回 `None`。
+///
+/// # 错误
+/// MongoDB 查询失败时返回错误。
+async fn active_entity_by_id<T>(
+    db: &Database,
+    collection_name: &str,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<T>>
+where
+    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    mongo_ops::find_one(
+        &db.collection::<T>(collection_name),
+        doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+        executor,
+    )
+    .await
+}
+
+/// 按主键集合批量读取未删除实体。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `collection_name` - 集合名
+/// * `ids` - 主键集合
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回全部命中实体；空主键集合直接返回空列表。
+///
+/// # 错误
+/// MongoDB 查询或游标读取失败时返回错误。
+async fn entities_by_ids<T>(
+    db: &Database,
+    collection_name: &str,
+    ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<T>>
+where
+    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    mongo_ops::find_many(
+        &db.collection::<T>(collection_name),
+        doc! {
+            "id": { "$in": ids },
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        },
+        FindOptions::default(),
+        executor,
+    )
+    .await
+}
+
+/// 按维度条件读取可操作预占。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `filter` - 仓库与 SKU 维度条件
+/// * `sort` - 可选排序条件
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回有效或部分消耗的预占。
+///
+/// # 错误
+/// MongoDB 查询或游标读取失败时返回错误。
+async fn reservations_for_dimensions(
+    db: &Database,
+    mut filter: Document,
+    sort: Option<Document>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<StockReservation>> {
+    filter.insert(
+        "status",
+        doc! { "$in": reservation_status_codes(ReservationStatus::operable()) },
+    );
+    filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
+    let options = FindOptions::builder().sort(sort).build();
+    mongo_ops::find_many(
+        &db.collection::<StockReservation>(STOCK_RESERVATIONS),
+        filter,
+        options,
+        executor,
+    )
+    .await
+}
+
+/// 把预占状态集合转换为持久化代码。
+///
+/// # 参数
+/// * `statuses` - 预占状态集合
+///
+/// # 返回
+/// 返回用于 MongoDB `$in` 的稳定代码集合。
+fn reservation_status_codes(statuses: &[ReservationStatus]) -> Vec<&'static str> {
+    statuses.iter().map(ReservationStatus::as_str).collect()
+}
+
+/// 把调整单状态集合转换为持久化代码。
+///
+/// # 参数
+/// * `statuses` - 调整单状态集合
+///
+/// # 返回
+/// 返回用于 MongoDB `$in` 的稳定代码集合。
+fn stock_adjustment_state_codes(statuses: &[StockAdjustmentState]) -> Vec<&'static str> {
+    statuses.iter().map(StockAdjustmentState::as_str).collect()
 }
 
 /// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。

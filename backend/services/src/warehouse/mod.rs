@@ -8,25 +8,24 @@
 //!   既有写法独立写入）。
 //!
 //! 业务规则来自 entities（`Warehouse::new`/`WarehouseRevision::new` 完成校验与
-//! 规范化，`SensitiveText` 封装敏感列），Service 只编排：字典存在性校验、
-//! 修订序号递增、生效区间重叠检测与事务写入。地址/联系人指纹复用
+//! 规范化，`WarehouseSkuPolicy` 封装生效区间与重叠规则，`SensitiveText` 封装
+//! 敏感列），Service 只编排字典存在性校验、修订序号查询与事务写入。地址/联系人指纹复用
 //! `entities::file_asset::content_fingerprint`（数据模型 §4.5.5 唯一实现）；
 //! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
 //! 写审计），禁止 Service 依赖 Service。
 
-use database::{AccessControlExt, CatalogExt, NoTransaction, Transactional, WarehouseExt};
+use database::{AccessControlExt, NoTransaction, Transactional, WarehouseExt};
 use entities::common::time::BusinessDate;
 use entities::file_asset::content_fingerprint;
-use entities::ids::{SkuId, WarehouseId};
+use entities::ids::WarehouseId;
 use entities::ids::{WarehouseRevisionId, WarehouseSkuPolicyId};
 use entities::warehouse::status::EnableStatus;
-use entities::warehouse::warehouse_entity::{Warehouse, WarehouseData};
+use entities::warehouse::warehouse_entity::{Warehouse, WarehouseData, WarehouseUpdate};
 use entities::warehouse::warehouse_revision::{SensitiveText, WarehouseRevision, WarehouseRevisionData};
 use entities::warehouse::warehouse_sku_policy::{
     WarehouseSkuPolicy, WarehouseSkuPolicyData, WarehouseSkuPolicyUpdate,
 };
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
@@ -208,12 +207,20 @@ impl WarehouseService {
         req.validate()?;
         let mut warehouse = self
             .db
-            .warehouses()
-            .find_by_id(id, &mut NoTransaction)
+            .warehouse()
+            .warehouse(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
-        ensure_version(warehouse.base.version, req.version)?;
-        let revision_no = self.next_warehouse_revision_no(id).await?;
+        if !warehouse.matches_version(req.version) {
+            return Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            ));
+        }
+        let revision_no = self
+            .db
+            .warehouse()
+            .next_revision_no(id, &mut NoTransaction)
+            .await?;
         let revision = build_warehouse_revision(
             WarehouseId::new(id.to_string()),
             WarehouseRevisionId::new(next_id()),
@@ -227,9 +234,13 @@ impl WarehouseService {
                 change_reason: req.change_reason,
             },
         )?;
-        warehouse.stable.current_revision_id = Some(revision.base.id.clone());
-        warehouse.stable.status = req.status;
-        warehouse.stable.touch(actor.id());
+        warehouse.update(
+            WarehouseUpdate {
+                status: Some(req.status),
+            },
+            actor.id(),
+        )?;
+        warehouse.apply_revision(&revision)?;
         let audit = actor
             .clone()
             .resource_log("warehouse.update", "warehouse", warehouse.base.id.clone())?;
@@ -376,22 +387,15 @@ impl WarehouseService {
     ) -> Result<WarehouseSkuPolicyView> {
         req.validate()?;
         self.db
-            .warehouses()
-            .find_by_id(req.warehouse_id.as_ref(), &mut NoTransaction)
+            .warehouse()
+            .warehouse(req.warehouse_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
         self.db
-            .skus()
-            .find_by_id(req.sku_id.as_ref(), &mut NoTransaction)
+            .warehouse()
+            .sku(req.sku_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
-        self.ensure_no_overlap(
-            &req.warehouse_id,
-            &req.sku_id,
-            req.effective_from,
-            req.effective_to,
-        )
-        .await?;
         let id = WarehouseSkuPolicyId::new(next_id());
         let policy = WarehouseSkuPolicy::new(
             id.clone(),
@@ -404,6 +408,14 @@ impl WarehouseService {
                 effective_to: req.effective_to,
             },
         )?;
+        let existing = self
+            .db
+            .warehouse()
+            .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, &mut NoTransaction)
+            .await?;
+        policy
+            .ensure_no_overlap(&existing)
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let audit = actor.clone().resource_log(
             "warehouse_sku_policy.create",
             "warehouse_sku_policy",
@@ -439,15 +451,27 @@ impl WarehouseService {
         req.validate()?;
         let mut policy = self
             .db
-            .warehouse_sku_policies()
-            .find_by_id(id, &mut NoTransaction)
+            .warehouse()
+            .sku_policy(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".to_string()))?;
-        ensure_version(policy.base.version, req.version)?;
+        if !policy.matches_version(req.version) {
+            return Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            ));
+        }
         policy.update(WarehouseSkuPolicyUpdate {
             minimum_available_quantity: req.minimum_available_quantity,
             status: req.status,
         })?;
+        let existing = self
+            .db
+            .warehouse()
+            .sku_policies_for_dimensions(&policy.warehouse_id, &policy.sku_id, &mut NoTransaction)
+            .await?;
+        policy
+            .ensure_no_overlap(&existing)
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         let audit = actor.clone().resource_log(
             "warehouse_sku_policy.update",
             "warehouse_sku_policy",
@@ -482,8 +506,8 @@ impl WarehouseService {
     pub async fn warehouse_sku_policy_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
         let mut policy = self
             .db
-            .warehouse_sku_policies()
-            .find_by_id(id, &mut NoTransaction)
+            .warehouse()
+            .sku_policy(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("预警策略不存在".to_string()))?;
         let audit = actor.clone().resource_log(
@@ -505,96 +529,6 @@ impl WarehouseService {
             })
             .await
     }
-
-    /// 计算某仓库已有修订的最大序号 + 1（唯一索引兜底并发）。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库 ID
-    ///
-    /// # 返回
-    /// 返回下一个修订序号。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn next_warehouse_revision_no(&self, warehouse_id: &str) -> Result<u32> {
-        let revisions = self
-            .db
-            .warehouse_revisions()
-            .find_many(doc! { "warehouse_id": warehouse_id }, &mut NoTransaction)
-            .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0)
-            + 1)
-    }
-
-    /// 校验新策略与同 (仓库, SKU) 既有策略的启用区间不重叠（半开区间）。
-    ///
-    /// # 参数
-    /// * `warehouse_id` - 仓库
-    /// * `sku_id` - SKU
-    /// * `effective_from` - 新策略生效开始日
-    /// * `effective_to` - 新策略生效结束日（空为无限期）
-    ///
-    /// # 返回
-    /// 不重叠时返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 与既有策略区间重叠时返回 `BusinessLogicError`。
-    async fn ensure_no_overlap(
-        &self,
-        warehouse_id: &WarehouseId,
-        sku_id: &SkuId,
-        effective_from: BusinessDate,
-        effective_to: Option<BusinessDate>,
-    ) -> Result<()> {
-        let existing = self
-            .db
-            .warehouse_sku_policies()
-            .find_many(
-                doc! {
-                    "warehouse_id": warehouse_id.to_string(),
-                    "sku_id": sku_id.to_string(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        if existing.iter().any(|policy| {
-            intervals_overlap(
-                effective_from,
-                effective_to,
-                policy.effective_from,
-                policy.effective_to,
-            )
-        }) {
-            return Err(Error::BusinessLogicError(
-                "同一仓库和SKU的启用区间不得重叠".to_string(),
-            ));
-        }
-        Ok(())
-    }
-}
-
-/// 校验期望版本与当前版本一致（乐观锁语义）。
-///
-/// # 参数
-/// * `current` - 当前版本
-/// * `expected` - 期望版本
-///
-/// # 返回
-/// 一致时返回 `Ok(())`。
-///
-/// # 错误
-/// 不一致时返回 `ConflictError`（HTTP 409）。
-fn ensure_version(current: u64, expected: u64) -> Result<()> {
-    if current != expected {
-        return Err(Error::ConflictError(
-            "数据已被其他请求修改，请刷新后重试".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 /// 仓库修订构建输入（名称/地址/联系人/生效区间/变更原因）。
@@ -655,52 +589,4 @@ fn build_warehouse_revision(
             change_reason: input.change_reason,
         },
     )?)
-}
-
-/// 判断两个半开生效区间 `[from, to)` 是否重叠（`None` 表示无限期）。
-///
-/// # 参数
-/// * `from_a` / `to_a` - 区间 A
-/// * `from_b` / `to_b` - 区间 B
-///
-/// # 返回
-/// 存在交集时返回 `true`。
-fn intervals_overlap(
-    from_a: BusinessDate,
-    to_a: Option<BusinessDate>,
-    from_b: BusinessDate,
-    to_b: Option<BusinessDate>,
-) -> bool {
-    let a_ends = to_a.unwrap_or(BusinessDate::from_ymd(9999, 12, 31).expect("远期末日"));
-    let b_ends = to_b.unwrap_or(BusinessDate::from_ymd(9999, 12, 31).expect("远期末日"));
-    from_a < b_ends && from_b < a_ends
-}
-
-#[cfg(test)]
-mod tests {
-    use super::intervals_overlap;
-    use entities::common::time::BusinessDate;
-
-    #[test]
-    fn half_open_intervals_overlap_correctly() {
-        let from_a = BusinessDate::from_ymd(2026, 1, 1).unwrap();
-        let to_a = BusinessDate::from_ymd(2026, 3, 1).unwrap();
-        let from_b = BusinessDate::from_ymd(2026, 2, 1).unwrap();
-        let to_b = BusinessDate::from_ymd(2026, 4, 1).unwrap();
-        // [2026-01-01, 2026-03-01) ∩ [2026-02-01, 2026-04-01) 有交集。
-        assert!(intervals_overlap(from_a, Some(to_a), from_b, Some(to_b)));
-
-        // 相邻半开区间：前一段结束日 = 后一段开始日，不重叠。
-        let adj_from = BusinessDate::from_ymd(2026, 3, 1).unwrap();
-        let adj_to = BusinessDate::from_ymd(2026, 5, 1).unwrap();
-        assert!(!intervals_overlap(from_a, Some(to_a), adj_from, Some(adj_to)));
-
-        // 无限期与有限区间重叠。
-        assert!(intervals_overlap(from_a, None, from_b, Some(to_b)));
-
-        // 完全分离的区间不重叠。
-        let from_c = BusinessDate::from_ymd(2026, 5, 1).unwrap();
-        let to_c = BusinessDate::from_ymd(2026, 6, 1).unwrap();
-        assert!(!intervals_overlap(from_a, Some(to_a), from_c, Some(to_c)));
-    }
 }

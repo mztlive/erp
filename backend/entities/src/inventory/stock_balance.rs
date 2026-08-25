@@ -14,6 +14,8 @@ use crate::errors::{Error, Result};
 use crate::ids::{SkuId, StockBalanceId, StockMovementId, WarehouseId};
 use crate::money::Quantity;
 
+use super::stock_adjustment::{StockAdjustment, StockAdjustmentLine};
+
 /// 库存余额创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StockBalanceData {
@@ -131,6 +133,36 @@ impl StockBalance {
         }
         Ok(())
     }
+
+    /// 判断当前乐观锁版本是否与期望版本一致。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取后携带的期望版本
+    ///
+    /// # 返回
+    /// 当前版本等于期望版本时返回 `true`。
+    pub fn matches_version(&self, expected: u64) -> bool {
+        self.base.version == expected
+    }
+
+    /// 判断库存余额与调整单及其明细是否属于同一库存维度。
+    ///
+    /// # 参数
+    /// * `adjustment` - 待创建或提交的调整单
+    /// * `lines` - 调整单全部明细
+    ///
+    /// # 返回
+    /// 仓库一致且所有明细 SKU 都等于余额 SKU 时返回 `true`。
+    pub fn matches_adjustment_dimensions(
+        &self,
+        adjustment: &StockAdjustment,
+        lines: &[StockAdjustmentLine],
+    ) -> bool {
+        self.warehouse_id == adjustment.warehouse_id
+            && lines.iter().all(|line| {
+                line.stock_adjustment_id.as_ref() == adjustment.base.id.as_str() && line.sku_id == self.sku_id
+            })
+    }
 }
 
 /// 校验三个数量均非负。
@@ -156,7 +188,7 @@ fn ensure_quantities_non_negative(on_hand: Quantity, reserved: Quantity, availab
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::StockBalanceId;
+    use crate::ids::{StockAdjustmentId, StockBalanceId};
     use crate::money::Quantity;
     use std::str::FromStr;
 
@@ -227,6 +259,43 @@ mod tests {
             Quantity::from_str("30").unwrap(),
             "失败不改变字段"
         );
+    }
+
+    /// 版本与调整维度匹配由余额实体统一判定。
+    #[test]
+    fn version_and_adjustment_dimensions_are_matched() {
+        let mut balance = StockBalance::new(StockBalanceId::new("b-6"), data()).unwrap();
+        balance.base.version = 4;
+        assert!(balance.matches_version(4));
+        assert!(!balance.matches_version(3));
+
+        let adjustment = StockAdjustment::new(
+            StockAdjustmentId::new("adj-1"),
+            crate::inventory::StockAdjustmentData {
+                adjustment_no: "ADJ-1".to_string(),
+                warehouse_id: WarehouseId::new("wh-1"),
+                reason_type: crate::inventory::AdjustmentReasonType::StockLoss,
+                prepared_by: "operator-1".to_string(),
+                note: None,
+                occurred_at: None,
+            },
+        )
+        .unwrap();
+        let line = StockAdjustmentLine::new_for_reason(
+            crate::ids::StockAdjustmentLineId::new("line-1"),
+            adjustment.reason_type,
+            crate::inventory::StockAdjustmentLineData {
+                stock_adjustment_id: StockAdjustmentId::new("adj-1"),
+                sku_id: SkuId::new("sku-1"),
+                quantity: Quantity::from_str("1").unwrap(),
+                direction: crate::inventory::MovementDirection::Decrease,
+            },
+        )
+        .unwrap();
+        assert!(balance.matches_adjustment_dimensions(&adjustment, std::slice::from_ref(&line)));
+
+        balance.sku_id = SkuId::new("sku-other");
+        assert!(!balance.matches_adjustment_dimensions(&adjustment, &[line]));
     }
 
     /// 序列化：实体 BSON 往返。

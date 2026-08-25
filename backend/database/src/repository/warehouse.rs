@@ -16,14 +16,15 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::WarehouseExt;
+use super::extensions::{CatalogExt, WarehouseExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+use entities::catalog::Sku;
 use entities::common::time::BusinessDate;
-use entities::ids::SkuId;
+use entities::ids::{SkuId, WarehouseId};
 use entities::money::Quantity;
 use entities::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseSkuPolicy};
 
@@ -31,6 +32,10 @@ use entities::warehouse::{EnableStatus, Warehouse, WarehouseRevision, WarehouseS
 const WAREHOUSES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSES;
 /// `warehouse_revision` 集合名（单一来源：`WarehouseExt` 关联常量）。
 const WAREHOUSE_REVISIONS: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_REVISIONS;
+/// `warehouse_sku_policy` 集合名。
+const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseExt>::WAREHOUSE_SKU_POLICIES;
+/// `sku` 集合名。
+const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
 
 /// 仓库列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -376,10 +381,10 @@ impl<'a> Repository<'a, WarehouseSkuPolicy> {
     }
 }
 
-/// D11 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+/// D11 域专用仓储：语义查询与跨集合聚合写入。
 ///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `WarehouseExt::warehouse()` 访问。
+/// 本类型屏蔽仓库域及其跨域引用的 MongoDB 查询细节，并提供必须由 Service
+/// 传入事务执行器的聚合写入入口，由 `WarehouseExt::warehouse()` 访问。
 pub struct WarehouseRepository<'a> {
     db: &'a Database,
 }
@@ -394,6 +399,118 @@ impl<'a> WarehouseRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按主键读取未删除仓库。
+    ///
+    /// # 参数
+    /// * `id` - 仓库主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配仓库；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn warehouse(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<Warehouse>> {
+        active_entity_by_id(self.db, WAREHOUSES, id, executor).await
+    }
+
+    /// 按主键读取未删除 SKU。
+    ///
+    /// # 参数
+    /// * `id` - SKU 主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配 SKU；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn sku(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<Sku>> {
+        active_entity_by_id(self.db, SKUS, id, executor).await
+    }
+
+    /// 按主键读取未删除仓库-SKU 策略。
+    ///
+    /// # 参数
+    /// * `id` - 策略主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配策略；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn sku_policy(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<WarehouseSkuPolicy>> {
+        active_entity_by_id(self.db, WAREHOUSE_SKU_POLICIES, id, executor).await
+    }
+
+    /// 计算仓库下一个修订序号。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 仓库主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已有最大修订序号加一；没有修订时返回 `1`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn next_revision_no(&self, warehouse_id: &str, executor: &mut dyn Executor) -> Result<u32> {
+        let revisions = mongo_ops::find_many(
+            &self.db.collection::<WarehouseRevision>(WAREHOUSE_REVISIONS),
+            doc! {
+                "warehouse_id": warehouse_id,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .sort(doc! { "revision_no": -1 })
+                .limit(1)
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(revisions
+            .first()
+            .map(|revision| revision.revision.revision_no)
+            .unwrap_or(0)
+            + 1)
+    }
+
+    /// 读取同一仓库与 SKU 的全部未删除策略。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 仓库主键
+    /// * `sku_id` - SKU 主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回同维度策略，供实体执行启用区间重叠校验。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn sku_policies_for_dimensions(
+        &self,
+        warehouse_id: &WarehouseId,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WarehouseSkuPolicy>> {
+        mongo_ops::find_many(
+            &self.db.collection::<WarehouseSkuPolicy>(WAREHOUSE_SKU_POLICIES),
+            doc! {
+                "warehouse_id": warehouse_id.to_string(),
+                "sku_id": sku_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await
     }
 
     /// 建立「仓库稳定身份 + 首个仓库修订」（跨集合多步骤写入）。
@@ -434,6 +551,36 @@ impl<'a> WarehouseRepository<'a> {
         .await?;
         Ok(())
     }
+}
+
+/// 按主键读取未删除实体。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `collection_name` - 集合名
+/// * `id` - 实体主键
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回匹配实体；不存在时返回 `None`。
+///
+/// # 错误
+/// MongoDB 查询失败时返回错误。
+async fn active_entity_by_id<T>(
+    db: &Database,
+    collection_name: &str,
+    id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<T>>
+where
+    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    mongo_ops::find_one(
+        &db.collection::<T>(collection_name),
+        doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+        executor,
+    )
+    .await
 }
 
 /// 构建排序文档。

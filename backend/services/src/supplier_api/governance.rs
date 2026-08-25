@@ -1,6 +1,5 @@
 //! W20 供应商连接治理强命令、动作投影与后台任务执行。
 
-use std::collections::{HashMap, HashSet};
 use std::time::Instant as MonotonicInstant;
 
 use database::{
@@ -14,16 +13,15 @@ use entities::ids::{
 };
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData};
 use entities::supplier_api::{
-    BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
-    CapabilityVersionSnapshot, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
-    SupplierApiCapabilityData, SupplierApiCapabilityStatus, SupplierApiConnection,
-    SupplierApiConnectionStatus, SupplierCommandOutcome, SupplierConnectionAction,
-    SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData, SupplierHealthCheckRun,
-    SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+    ensure_unique_capability_codes, BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData,
+    CapabilityVersionSnapshot, HealthCheckResult, SupplierApiCapability, SupplierApiCapabilityData,
+    SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionStatus, SupplierCommandOutcome,
+    SupplierConnectionAction, SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData,
+    SupplierConnectionGovernance, SupplierGovernanceBlocker, SupplierHealthCheckRun,
+    SupplierHealthCheckRunData, SupplierHealthCheckType,
 };
 use entities::Permission;
 use id_generator::next_id;
-use mongodb::bson::doc;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -144,13 +142,8 @@ impl SupplierApiService {
         let fingerprint = confirmation_fingerprint(id, &command);
         if let Some(existing) = self
             .db
-            .supplier_api_business_confirmations()
-            .find_business_confirmation_receipt(
-                &connection_id,
-                actor.id(),
-                &idempotency_hash,
-                &mut NoTransaction,
-            )
+            .supplier_api()
+            .business_confirmation_receipt(&connection_id, actor.id(), &idempotency_hash, &mut NoTransaction)
             .await?
         {
             return replay_confirmation(existing, &fingerprint);
@@ -165,18 +158,16 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut connection = db
-                        .supplier_api_connections()
-                        .find_by_id(&connection_id_value, session)
+                        .supplier_api()
+                        .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     ensure_version(connection.base.version, command.expected_connection_version)?;
                     let capability = db
-                        .supplier_api_capabilities()
-                        .find_one(
-                            doc! {
-                                "connection_id": &connection_id_value,
-                                "capability_code": command.capability_code.as_str(),
-                            },
+                        .supplier_api()
+                        .connection_capability(
+                            &SupplierApiConnectionId::new(&connection_id_value),
+                            command.capability_code,
                             session,
                         )
                         .await?
@@ -244,7 +235,8 @@ impl SupplierApiService {
         command.validate()?;
         self.ensure_permission(actor, "supplier_api_capability:update")
             .await?;
-        ensure_unique_capability_changes(&command)?;
+        ensure_unique_capability_codes(command.capability_changes.iter().map(|change| change.code))
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         let fingerprint = capability_update_fingerprint(id, &command);
         let audit_id = format!(
             "w20-cap-audit-{}",
@@ -252,8 +244,8 @@ impl SupplierApiService {
         );
         if let Some(audit) = self
             .db
-            .audit_logs()
-            .find_by_id(&audit_id, &mut NoTransaction)
+            .supplier_api()
+            .governance_audit(&audit_id, &mut NoTransaction)
             .await?
         {
             ensure_audit_fingerprint(audit.message.as_deref(), &fingerprint)?;
@@ -278,8 +270,8 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut connection = db
-                        .supplier_api_connections()
-                        .find_by_id(&connection_id_value, session)
+                        .supplier_api()
+                        .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     ensure_version(connection.base.version, command.expected_connection_version)?;
@@ -289,15 +281,15 @@ impl SupplierApiService {
                         ));
                     }
                     let mut capabilities = db
-                        .supplier_api_capabilities()
-                        .find_capabilities_by_connection(
+                        .supplier_api()
+                        .connection_capabilities(
                             &SupplierApiConnectionId::new(connection_id_value.clone()),
                             session,
                         )
                         .await?;
                     let confirmations = db
-                        .supplier_api_business_confirmations()
-                        .find_business_confirmations_by_connection(
+                        .supplier_api()
+                        .business_confirmations(
                             &SupplierApiConnectionId::new(connection_id_value.clone()),
                             session,
                         )
@@ -348,16 +340,14 @@ impl SupplierApiService {
     ) -> Result<SupplierConnectionJobView> {
         let job = self
             .db
-            .background_jobs()
-            .find_by_id(job_id, &mut NoTransaction)
+            .supplier_api()
+            .connection_job(
+                &SupplierApiConnectionId::new(connection_id),
+                job_id,
+                &[HEALTH_JOB_TYPE, CATALOG_JOB_TYPE],
+                &mut NoTransaction,
+            )
             .await?
-            .filter(|job| {
-                job.domain_job_id.as_deref() == Some(connection_id)
-                    && matches!(
-                        job.domain_job_type.as_deref(),
-                        Some(HEALTH_JOB_TYPE) | Some(CATALOG_JOB_TYPE)
-                    )
-            })
             .ok_or_else(|| Error::NotFound("连接后台任务不存在".to_string()))?;
         Ok(job_view(job))
     }
@@ -372,8 +362,8 @@ impl SupplierApiService {
     pub async fn process_connection_job(&self, job_id: &str, actor: &AuditActor) -> Result<()> {
         let job = self
             .db
-            .background_jobs()
-            .find_by_id(job_id, &mut NoTransaction)
+            .supplier_api()
+            .governance_job(job_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("连接后台任务不存在".to_string()))?;
         if job.is_terminal() {
@@ -432,8 +422,8 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut connection = db
-                        .supplier_api_connections()
-                        .find_by_id(&connection_id_value, session)
+                        .supplier_api()
+                        .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     ensure_version(connection.base.version, command.expected_version)?;
@@ -493,49 +483,22 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut connection = db
-                        .supplier_api_connections()
-                        .find_by_id(&connection_id_value, session)
+                        .supplier_api()
+                        .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     ensure_version(connection.base.version, command.expected_version)?;
-                    let capabilities = db
-                        .supplier_api_capabilities()
-                        .find_capabilities_by_connection(
-                            &SupplierApiConnectionId::new(connection_id_value.clone()),
-                            session,
-                        )
-                        .await?;
-                    let confirmations = db
-                        .supplier_api_business_confirmations()
-                        .find_business_confirmations_by_connection(
-                            &SupplierApiConnectionId::new(connection_id_value.clone()),
-                            session,
-                        )
-                        .await?;
-                    let health_runs = db
-                        .supplier_api_health_check_runs()
-                        .find_health_runs_by_connection(
-                            &SupplierApiConnectionId::new(connection_id_value.clone()),
-                            50,
-                            session,
-                        )
-                        .await?;
-                    let impact = db
+                    let context = db
                         .supplier_api()
-                        .connection_impact(
-                            &SupplierApiConnectionId::new(connection_id_value.clone()),
-                            session,
-                        )
+                        .governance_data(&SupplierApiConnectionId::new(&connection_id_value), 50, session)
                         .await?;
-                    let blockers = business_blockers(
-                        command.action,
-                        &connection,
-                        &capabilities,
-                        &confirmations,
-                        &health_runs,
-                        impact,
-                        true,
-                    );
+                    let governance = SupplierConnectionGovernance {
+                        connection: &connection,
+                        capabilities: &context.capabilities,
+                        confirmations: &context.confirmations,
+                        health_runs: &context.health_runs,
+                    };
+                    let blockers = governance.blockers(command.action, context.impact, true);
                     if let Some(blocker) = blockers.first() {
                         return Err(Error::BusinessLogicError(blocker.message.clone()));
                     }
@@ -583,22 +546,29 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let connection = db
-                        .supplier_api_connections()
-                        .find_by_id(&connection_id_value, session)
+                        .supplier_api()
+                        .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     ensure_version(connection.base.version, command.expected_version)?;
                     let capabilities = db
-                        .supplier_api_capabilities()
-                        .find_capabilities_by_connection(
+                        .supplier_api()
+                        .connection_capabilities(
                             &SupplierApiConnectionId::new(connection_id_value.clone()),
                             session,
                         )
                         .await?;
-                    if !connection.technical_references_ready() {
-                        return Err(Error::BusinessLogicError(
-                            "地址与密钥引用均绑定后才能执行健康检查".to_string(),
-                        ));
+                    let governance = SupplierConnectionGovernance {
+                        connection: &connection,
+                        capabilities: &capabilities,
+                        confirmations: &[],
+                        health_runs: &[],
+                    };
+                    if let Some(blocker) = governance
+                        .blockers(command.action, Default::default(), true)
+                        .first()
+                    {
+                        return Err(Error::BusinessLogicError(blocker.message.clone()));
                     }
                     let job = build_job(
                         &connection_id_value,
@@ -662,19 +632,25 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let connection = db
-                        .supplier_api_connections()
-                        .find_by_id(&connection_id_value, session)
+                        .supplier_api()
+                        .connection(&SupplierApiConnectionId::new(&connection_id_value), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     ensure_version(connection.base.version, command.expected_version)?;
                     let capabilities = db
-                        .supplier_api_capabilities()
-                        .find_capabilities_by_connection(
+                        .supplier_api()
+                        .connection_capabilities(
                             &SupplierApiConnectionId::new(connection_id_value.clone()),
                             session,
                         )
                         .await?;
-                    let blockers = catalog_sync_blockers(&connection, &capabilities);
+                    let governance = SupplierConnectionGovernance {
+                        connection: &connection,
+                        capabilities: &capabilities,
+                        confirmations: &[],
+                        health_runs: &[],
+                    };
+                    let blockers = governance.blockers(command.action, Default::default(), true);
                     if let Some(blocker) = blockers.first() {
                         return Err(Error::BusinessLogicError(blocker.message.clone()));
                     }
@@ -723,21 +699,21 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .background_jobs()
-                        .find_by_id(&job.base.id, session)
+                        .supplier_api()
+                        .governance_job(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查任务不存在".to_string()))?;
                     if job.status != JobStatus::Pending {
                         return Err(Error::ConflictError("健康检查任务已开始或已结束".to_string()));
                     }
                     let mut run = db
-                        .supplier_api_health_check_runs()
-                        .find_health_run_by_job(&job.base.id, session)
+                        .supplier_api()
+                        .health_run_for_job(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查运行记录不存在".to_string()))?;
                     let connection = db
-                        .supplier_api_connections()
-                        .find_by_id(run.connection_id.as_ref(), session)
+                        .supplier_api()
+                        .connection(&run.connection_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     let at = Instant::now();
@@ -768,18 +744,18 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .background_jobs()
-                        .find_by_id(&job.base.id, session)
+                        .supplier_api()
+                        .governance_job(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查任务不存在".to_string()))?;
                     let mut run = db
-                        .supplier_api_health_check_runs()
-                        .find_health_run_by_job(&job.base.id, session)
+                        .supplier_api()
+                        .health_run_for_job(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("健康检查运行记录不存在".to_string()))?;
                     let mut connection = db
-                        .supplier_api_connections()
-                        .find_by_id(run.connection_id.as_ref(), session)
+                        .supplier_api()
+                        .connection(&run.connection_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     let at = Instant::now();
@@ -847,8 +823,8 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .background_jobs()
-                        .find_by_id(&job.base.id, session)
+                        .supplier_api()
+                        .governance_job(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("后台任务不存在".to_string()))?;
                     if job.status != JobStatus::Pending {
@@ -876,8 +852,8 @@ impl SupplierApiService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut job = db
-                        .background_jobs()
-                        .find_by_id(&job.base.id, session)
+                        .supplier_api()
+                        .governance_job(&job.base.id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("目录同步任务不存在".to_string()))?;
                     let at = Instant::now();
@@ -910,8 +886,8 @@ impl SupplierApiService {
     ) -> Result<Option<SupplierConnectionCommandResult>> {
         let Some(receipt) = self
             .db
-            .supplier_api_command_receipts()
-            .find_command_receipt(
+            .supplier_api()
+            .command_receipt(
                 &SupplierApiConnectionId::new(&identity.connection_id),
                 identity.action,
                 &identity.actor_id,
@@ -928,8 +904,8 @@ impl SupplierApiService {
         let job_no = match receipt.job_id.as_deref() {
             Some(job_id) => self
                 .db
-                .background_jobs()
-                .find_by_id(job_id, &mut NoTransaction)
+                .supplier_api()
+                .governance_job(job_id, &mut NoTransaction)
                 .await?
                 .map(|job| job.job_no),
             None => None,
@@ -950,32 +926,16 @@ impl SupplierApiService {
         connection: &SupplierApiConnection,
         executor: &mut dyn database::Executor,
     ) -> Result<GovernanceContext> {
-        let connection_id = SupplierApiConnectionId::new(&connection.base.id);
-        let capabilities = self
-            .db
-            .supplier_api_capabilities()
-            .find_capabilities_by_connection(&connection_id, executor)
-            .await?;
-        let confirmations = self
-            .db
-            .supplier_api_business_confirmations()
-            .find_business_confirmations_by_connection(&connection_id, executor)
-            .await?;
-        let health_runs = self
-            .db
-            .supplier_api_health_check_runs()
-            .find_health_runs_by_connection(&connection_id, 50, executor)
-            .await?;
-        let impact = self
+        let data = self
             .db
             .supplier_api()
-            .connection_impact(&connection_id, executor)
+            .governance_data(&SupplierApiConnectionId::new(&connection.base.id), 50, executor)
             .await?;
         Ok(GovernanceContext {
-            capabilities,
-            confirmations,
-            health_runs,
-            impact,
+            capabilities: data.capabilities,
+            confirmations: data.confirmations,
+            health_runs: data.health_runs,
+            impact: data.impact,
         })
     }
 
@@ -988,11 +948,13 @@ impl SupplierApiService {
         let reference_visible = self
             .has_permission(actor, "supplier_api_connection:view_reference_metadata")
             .await?;
-        let latest_confirmations = latest_confirmation_map(&context.confirmations);
-        let latest_success = context
-            .health_runs
-            .iter()
-            .find(|run| run.status == SupplierHealthCheckStatus::Succeeded);
+        let governance = SupplierConnectionGovernance {
+            connection: &connection,
+            capabilities: &context.capabilities,
+            confirmations: &context.confirmations,
+            health_runs: &context.health_runs,
+        };
+        let latest_success = governance.latest_successful_health_run();
         let can_confirm = self
             .has_permission(actor, "supplier_api_capability:confirm_requirement")
             .await?;
@@ -1001,8 +963,8 @@ impl SupplierApiService {
             .await?;
         let mut capabilities = Vec::with_capacity(context.capabilities.len());
         for capability in &context.capabilities {
-            let confirmation = latest_confirmations.get(&capability.capability_code).copied();
-            let verified = latest_success.is_some_and(|run| health_run_verifies(run, capability));
+            let confirmation = governance.latest_confirmation(capability.capability_code);
+            let verified = latest_success.is_some_and(|run| run.verifies(capability));
             let mut allowed_actions = Vec::new();
             let mut action_blockers = Vec::new();
             if can_confirm {
@@ -1071,23 +1033,22 @@ impl SupplierApiService {
     ) -> Result<(Vec<String>, Vec<SupplierActionBlockerView>)> {
         let mut allowed = Vec::new();
         let mut blocked = Vec::new();
+        let governance = SupplierConnectionGovernance {
+            connection,
+            capabilities: &context.capabilities,
+            confirmations: &context.confirmations,
+            health_runs: &context.health_runs,
+        };
         for action in SupplierConnectionAction::all() {
             if !self.has_action_permission(actor, action).await? {
                 continue;
             }
-            let mut blockers = business_blockers(
-                action,
-                connection,
-                &context.capabilities,
-                &context.confirmations,
-                &context.health_runs,
-                context.impact,
-                self.reference_registry.is_available(),
-            );
+            let blockers =
+                governance.blockers(action, context.impact, self.reference_registry.is_available());
             if blockers.is_empty() {
                 allowed.push(action.as_str().to_string());
             } else {
-                blocked.append(&mut blockers);
+                blocked.extend(blockers.into_iter().map(governance_blocker_view));
             }
         }
         Ok((allowed, blocked))
@@ -1132,8 +1093,8 @@ impl SupplierApiService {
         executor: &mut dyn database::Executor,
     ) -> Result<SupplierApiConnection> {
         self.db
-            .supplier_api_connections()
-            .find_by_id(id, executor)
+            .supplier_api()
+            .connection(&SupplierApiConnectionId::new(id), executor)
             .await?
             .ok_or_else(|| Error::NotFound("连接不存在".to_string()))
     }
@@ -1220,8 +1181,8 @@ async fn persist_command_receipt(
     db.audit_logs().create(&audit, executor).await?;
     let job_no = match job_id.as_deref() {
         Some(job_id) => db
-            .background_jobs()
-            .find_by_id(job_id, executor)
+            .supplier_api()
+            .governance_job(job_id, executor)
             .await?
             .map(|job| job.job_no),
         None => None,
@@ -1275,7 +1236,6 @@ async fn apply_capability_changes(
     capabilities: &mut Vec<SupplierApiCapability>,
     executor: &mut dyn database::Executor,
 ) -> Result<()> {
-    let latest = latest_confirmation_map(confirmations);
     for change in &command.capability_changes {
         let key = change.code.as_str();
         let expected = command
@@ -1288,8 +1248,13 @@ async fn apply_capability_changes(
             .find(|capability| capability.capability_code == change.code)
         {
             ensure_version(capability.base.version, expected)?;
-            if change.enabled {
-                ensure_business_confirmation(capability, latest.get(&change.code).copied())?;
+            if change.enabled
+                && !BusinessCapabilityConfirmation::latest_for(confirmations, change.code)
+                    .is_some_and(|confirmation| confirmation.covers(capability))
+            {
+                return Err(Error::BusinessLogicError(
+                    "能力缺少与当前配置匹配的采购业务确认".to_string(),
+                ));
             }
             capability.update(entities::supplier_api::SupplierApiCapabilityUpdate {
                 status: Some(if change.enabled {
@@ -1329,228 +1294,6 @@ async fn apply_capability_changes(
     Ok(())
 }
 
-fn business_blockers(
-    action: SupplierConnectionAction,
-    connection: &SupplierApiConnection,
-    capabilities: &[SupplierApiCapability],
-    confirmations: &[BusinessCapabilityConfirmation],
-    health_runs: &[SupplierHealthCheckRun],
-    impact: SupplierConnectionImpact,
-    reference_registry_available: bool,
-) -> Vec<SupplierActionBlockerView> {
-    match action {
-        SupplierConnectionAction::UpdateBusinessProfile
-        | SupplierConnectionAction::BindEndpointReference
-        | SupplierConnectionAction::BindCredentialReference => {
-            let mut blockers = Vec::new();
-            if connection.stable.status == SupplierApiConnectionStatus::Active {
-                blockers.push(blocker(
-                    action.as_str(),
-                    "CONNECTION_ENABLED",
-                    "请先停用连接，再变更配置",
-                    None,
-                ));
-            }
-            if !reference_registry_available {
-                blockers.push(blocker(
-                    action.as_str(),
-                    "REFERENCE_REGISTRY_UNAVAILABLE",
-                    "权威引用注册表未接入，不能绑定或轮换引用",
-                    Some("W19"),
-                ));
-            }
-            blockers
-        }
-        SupplierConnectionAction::RunHealthCheck => {
-            if connection.technical_references_ready() {
-                Vec::new()
-            } else {
-                vec![blocker(
-                    action.as_str(),
-                    "TECHNICAL_REFERENCES_MISSING",
-                    "地址与密钥引用均绑定后才能执行健康检查",
-                    None,
-                )]
-            }
-        }
-        SupplierConnectionAction::Enable => {
-            enable_blockers(connection, capabilities, confirmations, health_runs)
-        }
-        SupplierConnectionAction::Disable => {
-            if connection.stable.status == SupplierApiConnectionStatus::Disabled {
-                return vec![blocker(action.as_str(), "ALREADY_DISABLED", "连接已经停用", None)];
-            }
-            if impact.has_blockers() {
-                return vec![blocker(
-                    action.as_str(),
-                    "ACTIVE_BUSINESS_IMPACT",
-                    &format!(
-                        "仍有{}条供给、{}条发布、{}张订单和{}个同步任务受影响",
-                        impact.active_offerings,
-                        impact.active_publications,
-                        impact.open_supplier_orders,
-                        impact.active_sync_jobs
-                    ),
-                    Some("W21"),
-                )];
-            }
-            Vec::new()
-        }
-        SupplierConnectionAction::StartCatalogSync => catalog_sync_blockers(connection, capabilities),
-    }
-}
-
-fn enable_blockers(
-    connection: &SupplierApiConnection,
-    capabilities: &[SupplierApiCapability],
-    confirmations: &[BusinessCapabilityConfirmation],
-    health_runs: &[SupplierHealthCheckRun],
-) -> Vec<SupplierActionBlockerView> {
-    let action = SupplierConnectionAction::Enable.as_str();
-    if connection.stable.status == SupplierApiConnectionStatus::Active {
-        return vec![blocker(action, "ALREADY_ENABLED", "连接已经启用", None)];
-    }
-    if !connection.technical_references_ready() {
-        return vec![blocker(
-            action,
-            "TECHNICAL_REFERENCES_MISSING",
-            "地址与密钥引用尚未全部绑定",
-            None,
-        )];
-    }
-    let active: Vec<_> = capabilities
-        .iter()
-        .filter(|capability| capability.status.is_active())
-        .collect();
-    if active.is_empty() {
-        return vec![blocker(
-            action,
-            "NO_ACTIVE_CAPABILITY",
-            "至少启用一项连接能力",
-            None,
-        )];
-    }
-    let latest = latest_confirmation_map(confirmations);
-    for capability in &active {
-        if ensure_business_confirmation(capability, latest.get(&capability.capability_code).copied()).is_err()
-        {
-            return vec![blocker(
-                action,
-                "BUSINESS_CONFIRMATION_MISSING",
-                "启用能力必须有与当前配置匹配的采购业务确认",
-                None,
-            )];
-        }
-    }
-    let Some(health) = health_runs
-        .iter()
-        .find(|run| run.status == SupplierHealthCheckStatus::Succeeded)
-    else {
-        return vec![blocker(
-            action,
-            "TECHNICAL_HEALTH_MISSING",
-            "当前技术配置尚无成功健康检查证据",
-            None,
-        )];
-    };
-    if health.technical_config_version != connection.technical_config_version
-        || active
-            .iter()
-            .any(|capability| !health_run_verifies(health, capability))
-    {
-        return vec![blocker(
-            action,
-            "TECHNICAL_HEALTH_STALE",
-            "技术配置或能力已变化，请重新执行健康检查",
-            None,
-        )];
-    }
-    if connection.environment == ConnectionEnvironment::Production
-        && active.iter().any(|capability| {
-            latest
-                .get(&capability.capability_code)
-                .is_some_and(|confirmation| confirmation.confirmed_by == health.requested_by)
-        })
-    {
-        return vec![blocker(
-            action,
-            "PRODUCTION_DUAL_ROLE_REQUIRED",
-            "生产环境必须由不同人员完成采购业务确认与技术健康检查",
-            None,
-        )];
-    }
-    Vec::new()
-}
-
-fn catalog_sync_blockers(
-    connection: &SupplierApiConnection,
-    capabilities: &[SupplierApiCapability],
-) -> Vec<SupplierActionBlockerView> {
-    let action = SupplierConnectionAction::StartCatalogSync.as_str();
-    if connection.stable.status != SupplierApiConnectionStatus::Active {
-        return vec![blocker(
-            action,
-            "CONNECTION_NOT_ENABLED",
-            "连接启用后才能同步目录",
-            None,
-        )];
-    }
-    if !connection.current_technical_config_is_healthy() {
-        return vec![blocker(
-            action,
-            "TECHNICAL_HEALTH_MISSING",
-            "当前技术配置健康后才能同步目录",
-            None,
-        )];
-    }
-    if !capabilities.iter().any(|capability| {
-        capability.capability_code == entities::supplier_api::SupplierApiCapabilityCode::Product
-            && capability.status.is_active()
-    }) {
-        return vec![blocker(
-            action,
-            "CATALOG_CAPABILITY_DISABLED",
-            "商品目录能力尚未启用",
-            None,
-        )];
-    }
-    Vec::new()
-}
-
-fn ensure_business_confirmation(
-    capability: &SupplierApiCapability,
-    confirmation: Option<&BusinessCapabilityConfirmation>,
-) -> Result<()> {
-    let Some(confirmation) = confirmation else {
-        return Err(Error::BusinessLogicError("能力缺少采购业务确认".to_string()));
-    };
-    if confirmation.requirement != BusinessCapabilityRequirement::Required {
-        return Err(Error::BusinessLogicError("采购尚未确认该能力为必需".to_string()));
-    }
-    let version_matches = confirmation.capability_version == capability.base.version
-        || confirmation.capability_version.checked_add(1) == Some(capability.base.version);
-    if !version_matches {
-        return Err(Error::BusinessLogicError("采购业务确认已过期".to_string()));
-    }
-    Ok(())
-}
-
-fn latest_confirmation_map(
-    confirmations: &[BusinessCapabilityConfirmation],
-) -> HashMap<entities::supplier_api::SupplierApiCapabilityCode, &BusinessCapabilityConfirmation> {
-    let mut latest = HashMap::new();
-    for confirmation in confirmations {
-        latest.entry(confirmation.capability_code).or_insert(confirmation);
-    }
-    latest
-}
-
-fn health_run_verifies(run: &SupplierHealthCheckRun, capability: &SupplierApiCapability) -> bool {
-    run.capability_versions.iter().any(|snapshot| {
-        snapshot.capability_code == capability.capability_code && snapshot.version == capability.base.version
-    })
-}
-
 fn action_permission(action: SupplierConnectionAction) -> &'static str {
     match action {
         SupplierConnectionAction::UpdateBusinessProfile => "supplier_api_connection:update_business_profile",
@@ -1571,6 +1314,16 @@ fn blocker(action: &str, code: &str, message: &str, destination: Option<&str>) -
         code: code.to_string(),
         message: message.to_string(),
         destination_workspace_id: destination.map(str::to_string),
+    }
+}
+
+/// 将实体层治理阻塞原因转换为服务响应视图。
+fn governance_blocker_view(blocker: SupplierGovernanceBlocker) -> SupplierActionBlockerView {
+    SupplierActionBlockerView {
+        action: blocker.action.as_str().to_string(),
+        code: blocker.code.to_string(),
+        message: blocker.message,
+        destination_workspace_id: blocker.destination_workspace_id.map(str::to_string),
     }
 }
 
@@ -1691,18 +1444,6 @@ fn replay_confirmation(
     })
 }
 
-fn ensure_unique_capability_changes(command: &UpdateSupplierCapabilitiesCommand) -> Result<()> {
-    let mut seen = HashSet::new();
-    if command
-        .capability_changes
-        .iter()
-        .any(|change| !seen.insert(change.code))
-    {
-        return Err(Error::ValidationError("能力变更代码不能重复".to_string()));
-    }
-    Ok(())
-}
-
 fn ensure_version(actual: u64, expected: u64) -> Result<()> {
     if actual == expected {
         return Ok(());
@@ -1778,62 +1519,6 @@ fn digest(parts: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use entities::ids::{SupplierAccountId, SupplierApiConnectionId};
-    use entities::supplier_api::{SupplierApiConnectionData, SupplierApiConnectionStatus};
-
-    fn connection(environment: ConnectionEnvironment) -> SupplierApiConnection {
-        SupplierApiConnection::new(
-            SupplierApiConnectionId::new("connection-1"),
-            SupplierApiConnectionData {
-                supplier_id: SupplierAccountId::new("supplier-1"),
-                connection_code: "SUP-1".to_string(),
-                environment,
-                endpoint_reference: "config://endpoint".to_string(),
-                credential_reference: Some("kms://credential".to_string()),
-                rate_limit_policy: None,
-                status: SupplierApiConnectionStatus::Disabled,
-            },
-            "creator-1",
-        )
-        .unwrap()
-    }
-
-    fn capability() -> SupplierApiCapability {
-        SupplierApiCapability::new(
-            SupplierApiCapabilityId::new("capability-1"),
-            SupplierApiCapabilityData {
-                connection_id: SupplierApiConnectionId::new("connection-1"),
-                capability_code: entities::supplier_api::SupplierApiCapabilityCode::Product,
-                status: SupplierApiCapabilityStatus::Active,
-                constraint_snapshot: None,
-            },
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn production_enable_requires_business_and_distinct_technical_facts() {
-        let connection = connection(ConnectionEnvironment::Production);
-        let capability = capability();
-        let no_facts = enable_blockers(&connection, std::slice::from_ref(&capability), &[], &[]);
-        assert_eq!(no_facts[0].code, "BUSINESS_CONFIRMATION_MISSING");
-    }
-
-    #[test]
-    fn default_reference_registry_is_reported_as_blocker() {
-        let blockers = business_blockers(
-            SupplierConnectionAction::BindCredentialReference,
-            &connection(ConnectionEnvironment::Testing),
-            &[],
-            &[],
-            &[],
-            Default::default(),
-            false,
-        );
-        assert!(blockers
-            .iter()
-            .any(|blocker| blocker.code == "REFERENCE_REGISTRY_UNAVAILABLE"));
-    }
 
     #[test]
     fn command_identity_hashes_raw_idempotency_key() {

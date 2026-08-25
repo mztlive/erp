@@ -8,11 +8,12 @@
 //! 筛选/行类型定义在本文件，经 `SupplierApiExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use entities::bulk_job::BackgroundJob;
 use entities::supplier_api::{
     BusinessCapabilityConfirmation, ConnectionEnvironment, HealthCheckResult, SupplierApiCapability,
     SupplierApiCapabilityCode, SupplierApiCapabilityStatus, SupplierApiConnection, SupplierApiConnectionId,
-    SupplierApiConnectionStatus, SupplierConnectionAction, SupplierConnectionCommandReceipt,
-    SupplierHealthCheckRun,
+    SupplierApiConnectionStatus, SupplierConnectionAction, SupplierConnectionBusinessImpact,
+    SupplierConnectionCommandReceipt, SupplierHealthCheckRun,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -20,7 +21,7 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::SupplierApiExt;
+use super::extensions::{AccessControlExt, SupplierApiExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -30,6 +31,15 @@ use crate::{mongo_ops, Result};
 const SUPPLIER_API_CONNECTIONS: &str = <mongodb::Database as SupplierApiExt>::SUPPLIER_API_CONNECTIONS;
 /// `supplier_api_capability` 集合名（单一来源：`SupplierApiExt` 关联常量）。
 const SUPPLIER_API_CAPABILITIES: &str = <mongodb::Database as SupplierApiExt>::SUPPLIER_API_CAPABILITIES;
+/// 采购业务确认集合名。
+const SUPPLIER_API_BUSINESS_CONFIRMATIONS: &str =
+    <mongodb::Database as SupplierApiExt>::SUPPLIER_API_BUSINESS_CONFIRMATIONS;
+/// 健康检查运行记录集合名。
+const SUPPLIER_API_HEALTH_CHECK_RUNS: &str =
+    <mongodb::Database as SupplierApiExt>::SUPPLIER_API_HEALTH_CHECK_RUNS;
+/// 连接治理命令回执集合名。
+const SUPPLIER_API_COMMAND_RECEIPTS: &str =
+    <mongodb::Database as SupplierApiExt>::SUPPLIER_API_COMMAND_RECEIPTS;
 
 /// 连接列表投影行（列表接口只取必要字段，禁止返回整文档；密钥引用
 /// `credential_reference` 属于敏感字段，不进入任何列表投影）。
@@ -377,28 +387,25 @@ impl<'a> Repository<'a, SupplierConnectionCommandReceipt> {
 }
 
 /// 停用连接前由服务端重验的关联业务影响。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct SupplierConnectionImpact {
-    pub active_offerings: u64,
-    pub active_publications: u64,
-    pub open_supplier_orders: u64,
-    pub active_sync_jobs: u64,
+pub type SupplierConnectionImpact = SupplierConnectionBusinessImpact;
+
+/// 连接详情和状态命令共用的治理查询结果。
+#[derive(Debug, Clone)]
+pub struct SupplierApiGovernanceData {
+    /// 当前连接能力。
+    pub capabilities: Vec<SupplierApiCapability>,
+    /// 最新优先的采购业务确认。
+    pub confirmations: Vec<BusinessCapabilityConfirmation>,
+    /// 最新优先的健康检查运行记录。
+    pub health_runs: Vec<SupplierHealthCheckRun>,
+    /// 停用前活动业务影响。
+    pub impact: SupplierConnectionImpact,
 }
 
-impl SupplierConnectionImpact {
-    /// 判断是否存在任何必须先处理的活动业务对象。
-    pub fn has_blockers(self) -> bool {
-        self.active_offerings > 0
-            || self.active_publications > 0
-            || self.open_supplier_orders > 0
-            || self.active_sync_jobs > 0
-    }
-}
-
-/// D25 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+/// D25 域专用仓储：连接治理读取与跨集合事务写入。
 ///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `SupplierApiExt::supplier_api()` 访问。
+/// 单一集合 CRUD 使用 [`Repository`] 基类；连接、能力、确认、健康记录、
+/// 后台任务和影响汇总等治理查询由本类型收敛，通过 `SupplierApiExt::supplier_api()` 访问。
 pub struct SupplierApiRepository<'a> {
     db: &'a Database,
 }
@@ -413,6 +420,307 @@ impl<'a> SupplierApiRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按 ID 读取未删除连接。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配连接；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn connection(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierApiConnection>> {
+        Repository::new(self.db, SUPPLIER_API_CONNECTIONS)
+            .find_by_id(connection_id.as_ref(), executor)
+            .await
+    }
+
+    /// 按连接和能力代码读取未删除能力声明。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `capability_code` - 固定能力代码
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配能力；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn connection_capability(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        capability_code: SupplierApiCapabilityCode,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierApiCapability>> {
+        Repository::new(self.db, SUPPLIER_API_CAPABILITIES)
+            .find_one(
+                doc! {
+                    "connection_id": connection_id.to_string(),
+                    "capability_code": capability_code.as_str(),
+                },
+                executor,
+            )
+            .await
+    }
+
+    /// 按连接读取全部能力声明。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按能力代码升序排列的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn connection_capabilities(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierApiCapability>> {
+        Repository::new(self.db, SUPPLIER_API_CAPABILITIES)
+            .find_capabilities_by_connection(connection_id, executor)
+            .await
+    }
+
+    /// 按幂等身份读取采购业务确认回执。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `confirmed_by` - 确认人账号 ID
+    /// * `idempotency_key_hash` - 客户端幂等键摘要
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回既有确认；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn business_confirmation_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        confirmed_by: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessCapabilityConfirmation>> {
+        Repository::new(self.db, SUPPLIER_API_BUSINESS_CONFIRMATIONS)
+            .find_business_confirmation_receipt(connection_id, confirmed_by, idempotency_key_hash, executor)
+            .await
+    }
+
+    /// 按连接读取最新优先的采购业务确认。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新确认优先的追加式历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn business_confirmations(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BusinessCapabilityConfirmation>> {
+        Repository::new(self.db, SUPPLIER_API_BUSINESS_CONFIRMATIONS)
+            .find_business_confirmations_by_connection(connection_id, executor)
+            .await
+    }
+
+    /// 按后台任务读取健康检查运行记录。
+    ///
+    /// # 参数
+    /// * `job_id` - 后台任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配运行记录；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn health_run_for_job(
+        &self,
+        job_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierHealthCheckRun>> {
+        Repository::new(self.db, SUPPLIER_API_HEALTH_CHECK_RUNS)
+            .find_health_run_by_job(job_id, executor)
+            .await
+    }
+
+    /// 按连接读取最新优先的健康检查运行记录。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `limit` - 最大返回条数，仓储收敛到 `1..=100`
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新运行优先的健康检查历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn recent_health_runs(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierHealthCheckRun>> {
+        Repository::new(self.db, SUPPLIER_API_HEALTH_CHECK_RUNS)
+            .find_health_runs_by_connection(connection_id, limit, executor)
+            .await
+    }
+
+    /// 按幂等身份读取连接治理命令回执。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `action` - 固定治理动作
+    /// * `actor_id` - 操作人账号 ID
+    /// * `idempotency_key_hash` - 客户端幂等键摘要
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回既有命令回执；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn command_receipt(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        action: SupplierConnectionAction,
+        actor_id: &str,
+        idempotency_key_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierConnectionCommandReceipt>> {
+        Repository::new(self.db, SUPPLIER_API_COMMAND_RECEIPTS)
+            .find_command_receipt(connection_id, action, actor_id, idempotency_key_hash, executor)
+            .await
+    }
+
+    /// 读取连接治理后台任务。
+    ///
+    /// # 参数
+    /// * `job_id` - 后台任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配后台任务；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn governance_job(
+        &self,
+        job_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BackgroundJob>> {
+        Repository::new(
+            self.db,
+            <Database as super::extensions::BulkJobExt>::BACKGROUND_JOBS,
+        )
+        .find_by_id(job_id, executor)
+        .await
+    }
+
+    /// 按稳定审计 ID 读取连接治理审计记录。
+    ///
+    /// # 参数
+    /// * `audit_id` - 审计记录 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配审计记录；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn governance_audit(
+        &self,
+        audit_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<entities::AuditLog>> {
+        self.db.audit_logs().find_by_id(audit_id, executor).await
+    }
+
+    /// 读取属于指定连接的治理后台任务。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `job_id` - 后台任务 ID
+    /// * `job_types` - 允许的治理任务类型
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 任务存在且归属、类型均匹配时返回任务，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn connection_job(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        job_id: &str,
+        job_types: &[&str],
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BackgroundJob>> {
+        if job_types.is_empty() {
+            return Ok(None);
+        }
+        Repository::new(
+            self.db,
+            <Database as super::extensions::BulkJobExt>::BACKGROUND_JOBS,
+        )
+        .find_one(
+            doc! {
+                "id": job_id,
+                "domain_job_id": connection_id.to_string(),
+                "domain_job_type": { "$in": job_types },
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取连接治理上下文与停用影响。
+    ///
+    /// # 参数
+    /// * `connection_id` - 连接 ID
+    /// * `health_limit` - 最大健康检查历史条数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回能力、采购确认、健康检查和活动业务影响。
+    ///
+    /// # 错误
+    /// 任一 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn governance_data(
+        &self,
+        connection_id: &SupplierApiConnectionId,
+        health_limit: i64,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierApiGovernanceData> {
+        let capabilities = self.connection_capabilities(connection_id, executor).await?;
+        let confirmations = self.business_confirmations(connection_id, executor).await?;
+        let health_runs = self
+            .recent_health_runs(connection_id, health_limit, executor)
+            .await?;
+        let impact = self.connection_impact(connection_id, executor).await?;
+        Ok(SupplierApiGovernanceData {
+            capabilities,
+            confirmations,
+            health_runs,
+            impact,
+        })
     }
 
     /// 建立连接及其能力声明（跨集合多步骤写入）。
@@ -461,6 +769,16 @@ impl<'a> SupplierApiRepository<'a> {
     ///
     /// 供给、发布、履约订单和目录同步任务都使用各自集合的正式状态；查询不读取
     /// 地址或密钥引用，也不返回业务对象明细。
+    ///
+    /// # 参数
+    /// * `connection_id` - 待评估的供应商连接 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回活动供给、发布、未完成订单和目录同步任务计数。
+    ///
+    /// # 错误
+    /// 任一 MongoDB 查询或反序列化失败时返回错误。
     pub async fn connection_impact(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -504,6 +822,17 @@ impl<'a> SupplierApiRepository<'a> {
         })
     }
 
+    /// 读取连接下活动供给数量及其当前修订 ID。
+    ///
+    /// # 参数
+    /// * `connection_id` - 供应商连接 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回活动供给数量和非空当前修订 ID 集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn active_offering_revisions(
         &self,
         connection_id: &SupplierApiConnectionId,
@@ -537,6 +866,17 @@ impl<'a> SupplierApiRepository<'a> {
         Ok((count, revision_ids))
     }
 
+    /// 统计指定供给修订关联的当前有效商品发布数量。
+    ///
+    /// # 参数
+    /// * `offering_revision_ids` - 活动供给当前修订 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回状态为商城生效的商品发布数量；输入为空时返回零。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
     async fn active_publication_count(
         &self,
         offering_revision_ids: &[String],

@@ -8,6 +8,7 @@ mod entity;
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::WorkItemId;
 pub use entity::{
-    AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemCloseData, WorkItemData,
-    WorkItemPriority, WorkItemStatus, WorkItemType,
+    ApprovalDecisionTaskError, AssignmentSource, AvailableWorkItemAccount, DocumentApprovalWorkItemData,
+    WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation,
+    WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
 };

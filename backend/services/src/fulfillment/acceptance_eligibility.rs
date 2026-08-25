@@ -3,13 +3,11 @@ use std::str::FromStr;
 
 use database::{FulfillmentExt, NoTransaction, SalesOrderExt};
 use entities::fulfillment::{
-    AcceptanceFulfillmentAllocation, AllocationAction, Delivery, DeliveryLine, DeliveryState,
-    ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType, ServiceFulfillment,
-    ServiceFulfillmentState,
+    AcceptanceFulfillmentAllocation, Delivery, DeliveryLine, ElectronicDelivery, FulfillmentFactType,
+    ServiceFulfillment,
 };
-use entities::ids::{DeliveryId, SalesOrderId, SalesOrderRevisionLineId};
+use entities::ids::{DeliveryId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId};
 use entities::money::Quantity;
-use mongodb::bson::doc;
 
 use crate::errors::{Error, Result};
 
@@ -70,14 +68,8 @@ impl FulfillmentService {
             .await?;
         let deliveries = self
             .db
-            .deliveries()
-            .find_many(
-                doc! {
-                    "sales_order_id": so_id.to_string(),
-                    "status": { "$in": vec![DeliveryState::Shipped.as_str(), DeliveryState::Signed.as_str()] },
-                },
-                &mut NoTransaction,
-            )
+            .fulfillment()
+            .list_acceptance_eligible_deliveries(&so_id, &mut NoTransaction)
             .await?;
         let delivery_ids: Vec<DeliveryId> = deliveries
             .iter()
@@ -88,27 +80,16 @@ impl FulfillmentService {
             .fulfillment()
             .delivery_lines_by_delivery_ids(&delivery_ids, &mut NoTransaction)
             .await?;
+        let sales_order_line_ids = so_line_ids(&revision_lines);
         let electronic = self
             .db
-            .electronic_deliveries()
-            .find_many(
-                doc! {
-                    "sales_order_line_id": { "$in": so_line_ids(&revision_lines) },
-                    "status": ElectronicDeliveryState::Confirmed.as_str(),
-                },
-                &mut NoTransaction,
-            )
+            .fulfillment()
+            .list_confirmed_electronic_deliveries(&sales_order_line_ids, &mut NoTransaction)
             .await?;
         let service = self
             .db
-            .service_fulfillments()
-            .find_many(
-                doc! {
-                    "sales_order_line_id": { "$in": so_line_ids(&revision_lines) },
-                    "status": ServiceFulfillmentState::Confirmed.as_str(),
-                },
-                &mut NoTransaction,
-            )
+            .fulfillment()
+            .list_confirmed_service_fulfillments(&sales_order_line_ids, &mut NoTransaction)
             .await?;
         let delivery_fact_ids: Vec<String> = delivery_lines.iter().map(|line| line.base.id.clone()).collect();
         let electronic_fact_ids: Vec<String> =
@@ -143,12 +124,8 @@ impl FulfillmentService {
             .await?;
         let history = self
             .db
-            .customer_acceptances()
-            .find_many_sorted(
-                doc! { "sales_order_id": so_id.to_string() },
-                doc! { "accepted_at": -1 },
-                &mut NoTransaction,
-            )
+            .fulfillment()
+            .list_customer_acceptance_history(&so_id, &mut NoTransaction)
             .await?;
         let groups = build_eligibility_groups(EligibilityGroupSources {
             revision_lines: &revision_lines,
@@ -160,7 +137,7 @@ impl FulfillmentService {
             delivery_allocations: &delivery_allocations,
             electronic_allocations: &electronic_allocations,
             service_allocations: &service_allocations,
-        });
+        })?;
         Ok(AcceptanceEligibilityView {
             sales_order_id: so_id.to_string(),
             sales_lines: groups,
@@ -175,11 +152,13 @@ impl FulfillmentService {
 /// * `revision_lines` - 销售版本公共行
 ///
 /// # 返回
-/// 返回销售稳定明细 ID 字符串集合。
-pub(super) fn so_line_ids(revision_lines: &[entities::sales_order::SalesOrderRevisionLine]) -> Vec<String> {
+/// 返回销售稳定明细 ID 集合。
+pub(super) fn so_line_ids(
+    revision_lines: &[entities::sales_order::SalesOrderRevisionLine],
+) -> Vec<SalesOrderLineId> {
     revision_lines
         .iter()
-        .map(|line| line.sales_order_line_id.to_string())
+        .map(|line| line.sales_order_line_id.clone())
         .collect()
 }
 
@@ -232,13 +211,13 @@ pub(super) struct EligibilityGroupSources<'a> {
 /// 返回按销售稳定明细分组的工作台视图。
 ///
 /// # 错误
-/// 无
+/// 既有净验收超过成功履约数量，或数量计算超出统一精度时返回错误。
 ///
 /// # 关键业务约束
 /// 事实/分配入参由数据模型 §6.7 固定为三类来源，字段不可压缩。
 pub(super) fn build_eligibility_groups(
     sources: EligibilityGroupSources<'_>,
-) -> Vec<AcceptanceSalesLineGroupView> {
+) -> Result<Vec<AcceptanceSalesLineGroupView>> {
     let EligibilityGroupSources {
         revision_lines,
         goods_service_lines,
@@ -276,11 +255,8 @@ pub(super) fn build_eligibility_groups(
         .collect();
     for line in delivery_lines {
         let delivery = delivery_by_id.get(line.delivery_id.as_ref());
-        let allocations = net_allocation_quantity(
-            delivery_allocations,
-            &line.base.id,
-            Quantity::from_str("0").unwrap(),
-        );
+        let allocations =
+            AcceptanceFulfillmentAllocation::net_quantity_for_fact(delivery_allocations, &line.base.id)?;
         let line_id = line.sales_order_line_id.to_string();
         let item_snapshot = group_item_snapshot(&groups, &line_id);
         let unit_code = group_unit_code(&groups, &line_id);
@@ -304,19 +280,19 @@ pub(super) fn build_eligibility_groups(
                     .unwrap_or_default(),
                 net_successful_quantity: line.quantity,
                 net_accepted_allocated_quantity: allocations,
-                eligible_quantity: Quantity::try_from(line.quantity.to_decimal() - allocations.to_decimal())
-                    .unwrap_or_else(|_| Quantity::from_str("0").unwrap()),
+                eligible_quantity: AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+                    line.quantity,
+                    delivery_allocations,
+                    &line.base.id,
+                )?,
                 carrier: delivery.and_then(|delivery| delivery.carrier.clone()),
                 tracking_no: delivery.and_then(|delivery| delivery.tracking_no.clone()),
             },
         );
     }
     for record in electronic {
-        let allocations = net_allocation_quantity(
-            electronic_allocations,
-            &record.base.id,
-            Quantity::from_str("0").unwrap(),
-        );
+        let allocations =
+            AcceptanceFulfillmentAllocation::net_quantity_for_fact(electronic_allocations, &record.base.id)?;
         let line_id = record.sales_order_line_id.to_string();
         let line_no = group_line_no(&groups, &line_id);
         let item_snapshot = group_item_snapshot(&groups, &line_id);
@@ -336,21 +312,19 @@ pub(super) fn build_eligibility_groups(
                 occurred_at: record.fact.occurred_at.unix_secs(),
                 net_successful_quantity: record.quantity,
                 net_accepted_allocated_quantity: allocations,
-                eligible_quantity: Quantity::try_from(
-                    record.quantity.to_decimal() - allocations.to_decimal(),
-                )
-                .unwrap_or_else(|_| Quantity::from_str("0").unwrap()),
+                eligible_quantity: AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+                    record.quantity,
+                    electronic_allocations,
+                    &record.base.id,
+                )?,
                 carrier: None,
                 tracking_no: None,
             },
         );
     }
     for record in service {
-        let allocations = net_allocation_quantity(
-            service_allocations,
-            &record.base.id,
-            Quantity::from_str("0").unwrap(),
-        );
+        let allocations =
+            AcceptanceFulfillmentAllocation::net_quantity_for_fact(service_allocations, &record.base.id)?;
         let line_id = record.sales_order_line_id.to_string();
         let line_no = group_line_no(&groups, &line_id);
         let item_snapshot = group_item_snapshot(&groups, &line_id);
@@ -370,10 +344,11 @@ pub(super) fn build_eligibility_groups(
                 occurred_at: record.fact.occurred_at.unix_secs(),
                 net_successful_quantity: record.quantity,
                 net_accepted_allocated_quantity: allocations,
-                eligible_quantity: Quantity::try_from(
-                    record.quantity.to_decimal() - allocations.to_decimal(),
-                )
-                .unwrap_or_else(|_| Quantity::from_str("0").unwrap()),
+                eligible_quantity: AcceptanceFulfillmentAllocation::eligible_quantity_for_fact(
+                    record.quantity,
+                    service_allocations,
+                    &record.base.id,
+                )?,
                 carrier: None,
                 tracking_no: None,
             },
@@ -381,40 +356,7 @@ pub(super) fn build_eligibility_groups(
     }
     let mut groups: Vec<AcceptanceSalesLineGroupView> = groups.into_values().collect();
     groups.sort_by_key(|group| group.line_no);
-    groups
-}
-
-/// 计算履约事实的净验收分配数量（`APPLY − REVERSE`，正数方向）。
-///
-/// # 参数
-/// * `allocations` - 该事实的全部验收分配
-/// * `fulfillment_line_id` - 履约事实行主键
-/// * `initial` - 初始值（零）
-///
-/// # 返回
-/// 返回净验收分配数量。
-fn net_allocation_quantity(
-    allocations: &[AcceptanceFulfillmentAllocation],
-    fulfillment_line_id: &str,
-    initial: Quantity,
-) -> Quantity {
-    let mut net = initial;
-    for allocation in allocations {
-        if allocation.fulfillment_line_id != fulfillment_line_id {
-            continue;
-        }
-        net = match allocation.allocation_action {
-            AllocationAction::Apply => {
-                Quantity::try_from(net.to_decimal() + allocation.allocated_quantity.to_decimal())
-                    .unwrap_or_else(|_| Quantity::from_str("0").unwrap())
-            }
-            AllocationAction::Reverse => {
-                Quantity::try_from(net.to_decimal() - allocation.allocated_quantity.to_decimal())
-                    .unwrap_or_else(|_| Quantity::from_str("0").unwrap())
-            }
-        };
-    }
-    net
+    Ok(groups)
 }
 
 /// 把可验收事实并入对应销售行分组（按销售稳定明细）。

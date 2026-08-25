@@ -93,6 +93,38 @@ impl ApprovalNodeDefinition {
             )?,
         })
     }
+
+    /// 以当前节点身份与流程字段刷新审批人显示名快照。
+    ///
+    /// # 参数
+    /// * `assignee_label_snapshot` - 当前账号显示名
+    /// * `at` - 调用方提供的快照时间
+    ///
+    /// # 返回
+    /// 返回保留节点 ID、键、顺序、用途与审批人引用的新节点快照。
+    ///
+    /// # 错误
+    /// 显示名为空、超长或当前节点字段已损坏时返回模型错误。
+    ///
+    /// # 关键业务约束
+    /// BPM 不查询账号；调用方必须先完成账号与权限重验，再把显示名传入本方法。
+    pub fn with_assignee_label_snapshot(
+        &self,
+        assignee_label_snapshot: impl Into<String>,
+        at: Timestamp,
+    ) -> ModelResult<Self> {
+        Self::new(NewNodeDefinition {
+            id: ApprovalNodeDefinitionId::new(self.base.id.clone()),
+            process_definition_id: self.process_definition_id.clone(),
+            node_key: self.node_key.clone(),
+            node_name: self.node_name.clone(),
+            node_purpose: self.node_purpose.clone(),
+            display_order: self.display_order,
+            assignee_participant_id: self.assignee_participant_id.clone(),
+            assignee_label_snapshot: assignee_label_snapshot.into(),
+            at,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -145,5 +177,15 @@ mod tests {
         .unwrap();
         assert_eq!(node.node_type, ApprovalNodeType::UserApproval);
         assert!(node.node_purpose.is_none());
+
+        let refreshed = node
+            .with_assignee_label_snapshot("李四", Timestamp::from_unix_secs(2).unwrap())
+            .unwrap();
+        assert_eq!(refreshed.base.id, node.base.id);
+        assert_eq!(refreshed.node_key, node.node_key);
+        assert_eq!(refreshed.assignee_label_snapshot, "李四");
+        assert!(node
+            .with_assignee_label_snapshot("   ", Timestamp::from_unix_secs(2).unwrap())
+            .is_err());
     }
 }

@@ -73,6 +73,22 @@ impl FactType {
     pub fn requires_original_payment(&self) -> bool {
         !matches!(self, Self::PaymentSucceeded)
     }
+
+    /// 判断事实是否必须由商城售后域接收。
+    ///
+    /// # 返回
+    /// 退款成功或卡券余额恢复返回 `true`，支付、取消与完成返回 `false`。
+    pub fn is_after_sales_result(self) -> bool {
+        matches!(self, Self::RefundSucceeded | Self::CardBalanceRestored)
+    }
+
+    /// 判断事实是否为支付成功事实。
+    ///
+    /// # 返回
+    /// `PaymentSucceeded` 返回 `true`。
+    pub fn is_payment_succeeded(self) -> bool {
+        self == Self::PaymentSucceeded
+    }
 }
 
 /// 关键事实数据来源（数据模型 §6.17：实时或历史回填）。
@@ -329,5 +345,19 @@ impl CostBasis {
             Self::Standard => "STANDARD",
             Self::None => "NONE",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FactType;
+
+    #[test]
+    fn fact_type_routes_after_sales_and_payment_semantics() {
+        assert!(FactType::RefundSucceeded.is_after_sales_result());
+        assert!(FactType::CardBalanceRestored.is_after_sales_result());
+        assert!(!FactType::OrderCanceled.is_after_sales_result());
+        assert!(FactType::PaymentSucceeded.is_payment_succeeded());
+        assert!(!FactType::OrderCompleted.is_payment_succeeded());
     }
 }

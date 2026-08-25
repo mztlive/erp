@@ -113,6 +113,25 @@ impl Pagination for CustomerAccountFilter {
 }
 
 impl<'a> Repository<'a, CustomerAccount> {
+    /// 按客户角色 ID 查找未删除客户。
+    ///
+    /// # 参数
+    /// * `id` - 客户角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除客户；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_customer(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAccount>> {
+        self.find_by_id(id, executor).await
+    }
+
     /// 分页检索客户角色列表（投影查询）。
     ///
     /// 只返回 [`CustomerAccountRow`] 所需的列表字段，不加载整文档；排序字段
@@ -248,6 +267,146 @@ impl Pagination for CustomerAssignmentFilter {
 }
 
 impl<'a> Repository<'a, CustomerAssignment> {
+    /// 按归属 ID 查找未删除客户归属。
+    ///
+    /// # 参数
+    /// * `id` - 客户归属 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除归属；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_assignment(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAssignment>> {
+        self.find_by_id(id, executor).await
+    }
+
+    /// 读取指定客户的全部归属行。
+    ///
+    /// 该查询供事务内执行归属换任冲突计算；领域冲突规则由
+    /// [`CustomerAssignment`] 自身判断。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该客户全部未删除归属。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_for_customer(
+        &self,
+        customer_id: &CustomerAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>> {
+        self.find_many(doc! { "customer_id": customer_id.to_string() }, executor)
+            .await
+    }
+
+    /// 按生效开始日与创建时间倒序读取客户归属历史。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最近生效的归属优先的完整历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_history_for_customer(
+        &self,
+        customer_id: &CustomerAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>> {
+        self.find_many_sorted(
+            doc! { "customer_id": customer_id.to_string() },
+            doc! { "valid_from": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取指定客户在业务日期生效的全部归属。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 客户角色 ID 集合；为空时直接返回空集合
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回指定日期生效的 OWNER 与 COLLABORATOR 归属。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_for_customers(
+        &self,
+        customer_ids: &[String],
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAssignment>> {
+        if customer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let as_of = as_of.to_string();
+        self.find_many(
+            doc! {
+                "customer_id": { "$in": customer_ids },
+                "valid_from": { "$lte": &as_of },
+                "$or": [
+                    { "valid_to": null },
+                    { "valid_to": { "$gt": &as_of } },
+                ],
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查找客户在指定日期生效的负责人归属。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前 OWNER；没有生效负责人时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_current_owner(
+        &self,
+        customer_id: &CustomerAccountId,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAssignment>> {
+        let as_of = as_of.to_string();
+        Ok(self
+            .find_many_sorted(
+                doc! {
+                    "customer_id": customer_id.to_string(),
+                    "assignment_role": AssignmentRole::Owner.as_str(),
+                    "valid_from": { "$lte": &as_of },
+                    "$or": [
+                        { "valid_to": null },
+                        { "valid_to": { "$gt": &as_of } },
+                    ],
+                },
+                doc! { "valid_from": -1, "created_at": -1 },
+                executor,
+            )
+            .await?
+            .into_iter()
+            .next())
+    }
+
     /// 分页检索客户归属列表（投影查询）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`valid_from`/`valid_to`），

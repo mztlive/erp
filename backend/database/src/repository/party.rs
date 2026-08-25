@@ -101,6 +101,21 @@ impl Pagination for PartyFilter {
 }
 
 impl<'a> Repository<'a, Party> {
+    /// 按主体 ID 查找未删除 Party。
+    ///
+    /// # 参数
+    /// * `id` - 稳定 Party ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除主体；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_party(&self, id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
+        self.find_by_id(id.as_ref(), executor).await
+    }
+
     /// 分页检索主体列表（投影查询）。
     ///
     /// 只返回 [`PartyRow`] 所需的列表字段，不加载整文档；排序字段经仓储
@@ -188,6 +203,29 @@ impl<'a> Repository<'a, Party> {
         )
         .await
     }
+
+    /// 按主体 ID 集合批量读取未删除主体。
+    ///
+    /// # 参数
+    /// * `party_ids` - 主体 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除主体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_ids(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Party>> {
+        if party_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = party_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
 }
 
 /// 主体修订列表投影行。
@@ -258,6 +296,25 @@ impl Pagination for PartyRevisionFilter {
 }
 
 impl<'a> Repository<'a, PartyRevision> {
+    /// 按修订 ID 查找主体修订。
+    ///
+    /// # 参数
+    /// * `id` - 主体修订 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的修订；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_revision(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PartyRevision>> {
+        self.find_by_id(id, executor).await
+    }
+
     /// 分页检索主体修订列表（投影查询）。
     ///
     /// 只返回 [`PartyRevisionRow`] 所需的列表字段；排序字段经仓储白名单
@@ -319,6 +376,80 @@ impl<'a> Repository<'a, PartyRevision> {
             executor,
         )
         .await
+    }
+
+    /// 按修订 ID 集合批量读取主体修订。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 修订 ID 集合；为空时直接返回空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的主体修订。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
+            .await
+    }
+
+    /// 按法定名称或简称字面量模糊匹配主体 ID。
+    ///
+    /// # 参数
+    /// * `keyword` - 名称关键词
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重并按稳定 ID 排序的主体 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn matching_party_ids_by_name(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyId>> {
+        let escaped = regex::escape(keyword);
+        let revisions = self
+            .find_many(
+                doc! {
+                    "$or": [
+                        { "legal_name": { "$regex": &escaped, "$options": "i" } },
+                        { "short_name": { "$regex": &escaped, "$options": "i" } },
+                    ]
+                },
+                executor,
+            )
+            .await?;
+        let mut ids: Vec<PartyId> = revisions.into_iter().map(|revision| revision.party_id).collect();
+        ids.sort_by_key(ToString::to_string);
+        ids.dedup();
+        Ok(ids)
+    }
+
+    /// 返回指定主体下一修订序号。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 无历史时返回 `1`，否则返回最大修订号加一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn next_revision_no(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<u32> {
+        let revisions = self.list_revision_history(party_id, executor).await?;
+        PartyRevision::next_revision_no(party_id, &revisions)
+            .map_err(|_| crate::Error::EntityMetadataOutOfRange("revision_no"))
     }
 }
 
@@ -453,6 +584,129 @@ impl<'a> Repository<'a, PartyContact> {
             total: total as i64,
         })
     }
+
+    /// 按联系人 ID 查找未删除联系人事实。
+    ///
+    /// # 参数
+    /// * `id` - 联系人事实 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配联系人；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_contact(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyContact>> {
+        self.find_by_id(id, executor).await
+    }
+
+    /// 读取指定日期生效的主体联系人。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的联系人。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyContact>> {
+        self.find_many(active_fact_filter(party_id, as_of), executor)
+            .await
+    }
+
+    /// 按默认标记与创建时间读取指定日期生效的主体联系人。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认联系人优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyContact>> {
+        self.find_many_sorted(
+            active_fact_filter(party_id, as_of),
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 清除同一 Party 其他联系人的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的联系人 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    pub async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let rows = self
+            .find_many(
+                doc! { "party_id": party_id.to_string(), "is_default": true },
+                executor,
+            )
+            .await?;
+        for mut row in rows {
+            if exclude_id.is_some_and(|id| id == row.base.id) {
+                continue;
+            }
+            row.is_default = false;
+            self.update(&mut row, executor).await?;
+        }
+        Ok(())
+    }
+
+    /// 按默认标记和创建时间读取主体联系人。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认联系人优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyContact>> {
+        self.find_many_sorted(
+            doc! { "party_id": party_id.to_string() },
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 地址列表投影行。
@@ -576,6 +830,129 @@ impl<'a> Repository<'a, PartyAddress> {
             total: total as i64,
         })
     }
+
+    /// 按地址 ID 查找未删除地址事实。
+    ///
+    /// # 参数
+    /// * `id` - 地址事实 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配地址；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_address(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<PartyAddress>> {
+        self.find_by_id(id, executor).await
+    }
+
+    /// 读取指定日期生效的主体地址。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的地址。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyAddress>> {
+        self.find_many(active_fact_filter(party_id, as_of), executor)
+            .await
+    }
+
+    /// 按默认标记与创建时间读取指定日期生效的主体地址。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认地址优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyAddress>> {
+        self.find_many_sorted(
+            active_fact_filter(party_id, as_of),
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 清除同一 Party 其他地址的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的地址 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    pub async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let rows = self
+            .find_many(
+                doc! { "party_id": party_id.to_string(), "is_default": true },
+                executor,
+            )
+            .await?;
+        for mut row in rows {
+            if exclude_id.is_some_and(|id| id == row.base.id) {
+                continue;
+            }
+            row.is_default = false;
+            self.update(&mut row, executor).await?;
+        }
+        Ok(())
+    }
+
+    /// 按默认标记和创建时间读取主体地址。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认地址优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyAddress>> {
+        self.find_many_sorted(
+            doc! { "party_id": party_id.to_string() },
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 税务资料列表投影行。
@@ -688,6 +1065,114 @@ impl<'a> Repository<'a, PartyTaxProfile> {
             items,
             total: total as i64,
         })
+    }
+
+    /// 读取指定日期生效的主体税务资料。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的税务资料。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>> {
+        self.find_many(active_fact_filter(party_id, as_of), executor)
+            .await
+    }
+
+    /// 按默认标记与创建时间读取指定日期生效的主体税务资料。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认税务资料优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>> {
+        self.find_many_sorted(
+            active_fact_filter(party_id, as_of),
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 清除同一 Party 其他税务资料的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的税务资料 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    pub async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let rows = self
+            .find_many(
+                doc! { "party_id": party_id.to_string(), "is_default": true },
+                executor,
+            )
+            .await?;
+        for mut row in rows {
+            if exclude_id.is_some_and(|id| id == row.base.id) {
+                continue;
+            }
+            row.is_default = false;
+            self.update(&mut row, executor).await?;
+        }
+        Ok(())
+    }
+
+    /// 按默认标记和创建时间读取主体税务资料。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认税务资料优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>> {
+        self.find_many_sorted(
+            doc! { "party_id": party_id.to_string() },
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
     }
 }
 
@@ -814,12 +1299,139 @@ impl<'a> Repository<'a, PartyBankAccount> {
             total: total as i64,
         })
     }
+
+    /// 按银行账户 ID 查找未删除账户事实。
+    ///
+    /// # 参数
+    /// * `id` - 银行账户事实 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配账户；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_bank_account(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PartyBankAccount>> {
+        self.find_by_id(id, executor).await
+    }
+
+    /// 读取指定日期生效的主体银行账户。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该日期处于启用有效期的银行账户。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>> {
+        self.find_many(active_fact_filter(party_id, as_of), executor)
+            .await
+    }
+
+    /// 按默认标记与创建时间读取指定日期生效的主体银行账户。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认账户优先、同组内最新创建优先的当前事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_current_on(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>> {
+        self.find_many_sorted(
+            active_fact_filter(party_id, as_of),
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 清除同一 Party 其他银行账户的默认标记。
+    ///
+    /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属 Party ID
+    /// * `exclude_id` - 保留默认标记的银行账户 ID
+    /// * `executor` - 数据访问执行器，必须位于调用方事务中
+    ///
+    /// # 返回
+    /// 全部冲突默认标记清除后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或 CAS 更新失败时返回错误。
+    pub async fn clear_other_default_marks(
+        &self,
+        party_id: &PartyId,
+        exclude_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let rows = self
+            .find_many(
+                doc! { "party_id": party_id.to_string(), "is_default": true },
+                executor,
+            )
+            .await?;
+        for mut row in rows {
+            if exclude_id.is_some_and(|id| id == row.base.id) {
+                continue;
+            }
+            row.is_default = false;
+            self.update(&mut row, executor).await?;
+        }
+        Ok(())
+    }
+
+    /// 按默认标记和创建时间读取主体银行账户。
+    ///
+    /// # 参数
+    /// * `party_id` - 所属主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回默认账户优先、同组内最新创建优先的完整实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_party(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccount>> {
+        self.find_many_sorted(
+            doc! { "party_id": party_id.to_string() },
+            doc! { "is_default": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
 }
 
-/// D07 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+/// D07 域专用仓储：主体当前资料读取与跨集合事务写入。
 ///
-/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `PartyExt::party()` 访问。
+/// 单一集合 CRUD 使用 [`Repository`] 基类；主体当前修订、从属事实和
+/// 跨集合原子写入由本类型收敛，通过 `PartyExt::party()` 访问。
 pub struct PartyRepository<'a> {
     db: &'a Database,
 }
@@ -834,6 +1446,248 @@ impl<'a> PartyRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按稳定 ID 读取未删除主体。
+    ///
+    /// # 参数
+    /// * `party_id` - 主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配主体；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或反序列化失败时返回错误。
+    pub async fn party(&self, party_id: &PartyId, executor: &mut dyn Executor) -> Result<Option<Party>> {
+        Repository::<Party>::new(self.db, PARTIES)
+            .find_party(party_id, executor)
+            .await
+    }
+
+    /// 按稳定 ID 读取联系人。
+    ///
+    /// # 参数
+    /// * `record_id` - 联系人 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配联系人；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn contact(
+        &self,
+        record_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PartyContact>> {
+        Repository::<PartyContact>::new(self.db, <Database as PartyExt>::PARTY_CONTACTS)
+            .find_contact(record_id, executor)
+            .await
+    }
+
+    /// 按稳定 ID 读取地址。
+    ///
+    /// # 参数
+    /// * `record_id` - 地址 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配地址；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn address(
+        &self,
+        record_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PartyAddress>> {
+        Repository::<PartyAddress>::new(self.db, <Database as PartyExt>::PARTY_ADDRESSES)
+            .find_address(record_id, executor)
+            .await
+    }
+
+    /// 按稳定 ID 读取银行账户。
+    ///
+    /// # 参数
+    /// * `record_id` - 银行账户 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配银行账户；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn bank_account(
+        &self,
+        record_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PartyBankAccount>> {
+        Repository::<PartyBankAccount>::new(self.db, <Database as PartyExt>::PARTY_BANK_ACCOUNTS)
+            .find_bank_account(record_id, executor)
+            .await
+    }
+
+    /// 批量读取主体及其当前修订。
+    ///
+    /// 先批量读取 Party，再按 `current_revision_id` 一次性读取当前修订，
+    /// 避免 Service 暴露修订指针查询或形成逐行 N+1。
+    ///
+    /// # 参数
+    /// * `party_ids` - 稳定 Party ID 集合；为空时直接返回两个空集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回主体集合与其命中的当前修订集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_with_current_revisions(
+        &self,
+        party_ids: &[PartyId],
+        executor: &mut dyn Executor,
+    ) -> Result<(Vec<Party>, Vec<PartyRevision>)> {
+        let parties = Repository::<Party>::new(self.db, PARTIES)
+            .list_by_ids(party_ids, executor)
+            .await?;
+        let revision_ids: Vec<String> = parties
+            .iter()
+            .filter_map(|party| party.stable.current_revision_id.clone())
+            .collect();
+        let revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+            .list_by_ids(&revision_ids, executor)
+            .await?;
+        Ok((parties, revisions))
+    }
+
+    /// 读取单个主体及其当前修订。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定 Party ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 主体不存在时返回 `None`；存在时返回主体与当前修订候选，修订指针
+    /// 缺失或目标不存在时第二项为 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_with_current_revision(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<(Party, Option<PartyRevision>)>> {
+        let Some(party) = Repository::<Party>::new(self.db, PARTIES)
+            .find_party(party_id, executor)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let revision = match party.stable.current_revision_id.as_deref() {
+            Some(revision_id) => {
+                Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+                    .find_revision(revision_id, executor)
+                    .await?
+            }
+            None => None,
+        };
+        Ok(Some((party, revision)))
+    }
+
+    /// 批量读取指定日期的当前 Party 从属事实。
+    ///
+    /// 联系人、地址、税务资料与银行账户分别执行一次按有效期筛选的排序
+    /// 查询，Service 只消费聚合结果，不接触 MongoDB 条件与排序细节。
+    ///
+    /// # 参数
+    /// * `party_id` - 稳定 Party ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回联系人、地址、税务资料与银行账户四类当前事实。
+    ///
+    /// # 错误
+    /// 当任一 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn load_current_facts(
+        &self,
+        party_id: &PartyId,
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<(
+        Vec<PartyContact>,
+        Vec<PartyAddress>,
+        Vec<PartyTaxProfile>,
+        Vec<PartyBankAccount>,
+    )> {
+        let contacts = self
+            .db
+            .party_contacts()
+            .list_current_on(party_id, as_of, executor)
+            .await?;
+        let addresses = self
+            .db
+            .party_addresses()
+            .list_current_on(party_id, as_of, executor)
+            .await?;
+        let tax_profiles = self
+            .db
+            .party_tax_profiles()
+            .list_current_on(party_id, as_of, executor)
+            .await?;
+        let bank_accounts = self
+            .db
+            .party_bank_accounts()
+            .list_current_on(party_id, as_of, executor)
+            .await?;
+        Ok((contacts, addresses, tax_profiles, bank_accounts))
+    }
+
+    /// 按当前法定名称或简称匹配主体 ID。
+    ///
+    /// 先匹配名称修订，再只保留 `parties.current_revision_id` 指向命中修订
+    /// 的主体，避免历史名称误命中当前客户搜索。
+    ///
+    /// # 参数
+    /// * `keyword` - 名称关键词，按字面量忽略大小写匹配
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重并按稳定 ID 排序的当前主体 ID。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn matching_current_party_ids_by_name(
+        &self,
+        keyword: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyId>> {
+        let escaped = regex::escape(keyword);
+        let revisions = Repository::<PartyRevision>::new(self.db, PARTY_REVISIONS)
+            .find_many(
+                doc! {
+                    "$or": [
+                        { "legal_name": { "$regex": &escaped, "$options": "i" } },
+                        { "short_name": { "$regex": &escaped, "$options": "i" } },
+                    ]
+                },
+                executor,
+            )
+            .await?;
+        if revisions.is_empty() {
+            return Ok(Vec::new());
+        }
+        let revision_ids: Vec<String> = revisions.into_iter().map(|revision| revision.base.id).collect();
+        let parties = Repository::<Party>::new(self.db, PARTIES)
+            .find_many(doc! { "current_revision_id": { "$in": revision_ids } }, executor)
+            .await?;
+        let mut party_ids: Vec<PartyId> = parties
+            .into_iter()
+            .map(|party| PartyId::new(party.base.id))
+            .collect();
+        party_ids.sort_by_key(ToString::to_string);
+        party_ids.dedup();
+        Ok(party_ids)
     }
 
     /// 追加主体修订并切换当前生效版本（跨集合多步骤写入）。
@@ -872,6 +1726,27 @@ impl<'a> PartyRepository<'a> {
         party.stable.current_revision_id = Some(revision.base.id.clone());
         party.stable.touch(updated_by);
         Repository::new(self.db, PARTIES).update(party, executor).await
+    }
+}
+
+/// 构造指定日期生效的 Party 从属事实过滤条件。
+///
+/// # 参数
+/// * `party_id` - 所属 Party ID
+/// * `as_of` - 业务日期
+///
+/// # 返回
+/// 返回启用状态且日期落在左闭右开有效期内的查询文档。
+fn active_fact_filter(party_id: &PartyId, as_of: entities::common::time::BusinessDate) -> Document {
+    let as_of = as_of.to_string();
+    doc! {
+        "party_id": party_id.to_string(),
+        "status": EffectiveRecordStatus::Active.as_str(),
+        "valid_from": { "$lte": &as_of },
+        "$or": [
+            { "valid_to": null },
+            { "valid_to": { "$gt": &as_of } },
+        ],
     }
 }
 

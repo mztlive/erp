@@ -227,6 +227,73 @@ impl PurchaseOrderSubmission {
         })
     }
 
+    /// 计算同一采购单的下一个正式提交序号。
+    ///
+    /// 仅识别 `SUB-{n}` 形态的历史提交，忽略草稿或旧格式编号；新编号固定为
+    /// 六位十进制序号。
+    ///
+    /// # 参数
+    /// * `existing` - 同一采购单的既有提交
+    ///
+    /// # 返回
+    /// 返回下一个 `SUB-000001` 形态的提交序号。
+    ///
+    /// # 错误
+    /// 最大合法序号已经达到 `u32::MAX` 时返回领域错误。
+    pub fn next_submission_no(existing: &[Self]) -> Result<String> {
+        let max_no = existing
+            .iter()
+            .filter_map(|submission| parse_sequence(&submission.submission_no, "SUB-"))
+            .max()
+            .unwrap_or(0);
+        let next = max_no
+            .checked_add(1)
+            .ok_or_else(|| Error::from("采购提交序号溢出"))?;
+        Ok(format!("SUB-{next:06}"))
+    }
+
+    /// 从可编辑草稿派生并冻结一个新的正式提交。
+    ///
+    /// # 参数
+    /// * `id` - 新正式提交稳定身份
+    /// * `submission_no` - 聚合内下一个正式提交序号
+    /// * `draft` - 当前可编辑草稿提交
+    /// * `submitted_at` - 冻结时间
+    /// * `submitted_by` - 提交人
+    ///
+    /// # 返回
+    /// 返回内容与草稿一致、状态为待审核的新提交。
+    ///
+    /// # 错误
+    /// 草稿状态非法、提交序号非法、金额不守恒或提交人非法时返回领域错误。
+    pub fn freeze_from_draft(
+        id: PurchaseOrderSubmissionId,
+        submission_no: String,
+        draft: &Self,
+        submitted_at: Instant,
+        submitted_by: impl Into<String>,
+    ) -> Result<Self> {
+        draft.ensure_draft()?;
+        let mut formal = Self::new(
+            id,
+            PurchaseOrderSubmissionData {
+                purchase_order_id: draft.purchase_order_id.clone(),
+                submission_no,
+                supplier_id: draft.supplier_id.clone(),
+                purchase_type: draft.purchase_type,
+                fulfillment_responsibility: draft.fulfillment_responsibility,
+                supplier_revision_id: draft.supplier_revision_id.clone(),
+                supplier_snapshot: draft.supplier_snapshot.clone(),
+                payment_term_snapshot: draft.payment_term_snapshot.clone(),
+                gross_amount: draft.gross_amount,
+                net_amount: draft.net_amount,
+                tax_amount: draft.tax_amount,
+            },
+        )?;
+        formal.submit(submitted_at, submitted_by)?;
+        Ok(formal)
+    }
+
     /// 更新提交内容。
     ///
     /// 只允许在 `Draft` 状态编辑（§6.6：进入待审核时头、行冻结）；
@@ -334,6 +401,71 @@ impl PurchaseOrderSubmission {
         Ok(())
     }
 
+    /// 校验提交仍处于待审核状态。
+    ///
+    /// # 返回
+    /// 待审核状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 提交已处理、失效或仍是草稿时返回领域错误。
+    pub fn ensure_pending(&self) -> Result<()> {
+        if self.status != SubmissionStatus::Pending {
+            return Err(Error::from("提交已审核或已失效，请勿重复生效"));
+        }
+        Ok(())
+    }
+
+    /// 判断审核人与提交人是否满足职责分离。
+    ///
+    /// # 参数
+    /// * `reviewer_id` - 当前审核人账号 ID
+    ///
+    /// # 返回
+    /// 审核人与已记录提交人不同时返回 `true`；未记录提交人也返回 `true`。
+    pub fn reviewer_is_separated(&self, reviewer_id: &str) -> bool {
+        self.submitted_by.as_deref() != Some(reviewer_id)
+    }
+
+    /// 返回当前提交在对象中心使用的内容来源代码。
+    ///
+    /// # 返回
+    /// 草稿返回 `DRAFT`，其他不可变提交状态返回 `SUBMISSION`。
+    pub fn content_source(&self) -> &'static str {
+        if self.status == SubmissionStatus::Draft {
+            "DRAFT"
+        } else {
+            "SUBMISSION"
+        }
+    }
+
+    /// 校验提交表头金额等于冻结明细汇总。
+    ///
+    /// # 参数
+    /// * `lines` - 属于本提交的冻结明细
+    ///
+    /// # 返回
+    /// 三项表头金额均与逐行汇总一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任一行不属于本提交，或含税、不含税、税额任一汇总不一致时返回领域错误。
+    pub fn ensure_line_totals(&self, lines: &[PurchaseOrderSubmissionLine]) -> Result<()> {
+        let mut gross = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额合法");
+        let mut net = gross;
+        let mut tax = gross;
+        for line in lines {
+            if line.purchase_order_submission_id.as_ref() != self.base.id {
+                return Err(Error::from("采购提交明细不属于当前提交"));
+            }
+            gross = gross.checked_add(line.gross_amount);
+            net = net.checked_add(line.net_amount);
+            tax = tax.checked_add(line.tax_amount);
+        }
+        if gross != self.gross_amount || net != self.net_amount || tax != self.tax_amount {
+            return Err(Error::from("采购提交表头金额与冻结明细汇总不一致"));
+        }
+        Ok(())
+    }
+
     /// 标记因重新提交失效（§6.6：修改内容必须新建提交并使旧复核失效）。
     ///
     /// # 返回
@@ -356,7 +488,7 @@ impl PurchaseOrderSubmission {
     ///
     /// # 错误
     /// 非草稿状态时返回错误。
-    fn ensure_draft(&self) -> Result<()> {
+    pub fn ensure_draft(&self) -> Result<()> {
         if self.status != SubmissionStatus::Draft {
             return Err(Error::from("只有草稿状态的提交可以编辑"));
         }
@@ -573,6 +705,62 @@ impl PurchaseOrderSubmissionLine {
             allocated_quantity: data.allocated_quantity,
         })
     }
+
+    /// 把草稿行复制到新的冻结提交。
+    ///
+    /// # 参数
+    /// * `id` - 新提交行稳定身份
+    /// * `submission_id` - 新正式提交稳定身份
+    /// * `draft_line` - 当前草稿行
+    ///
+    /// # 返回
+    /// 返回业务内容与草稿行一致、重新挂接到正式提交的新行。
+    ///
+    /// # 错误
+    /// 草稿行本身不满足当前采购行不变式时返回领域错误。
+    pub fn freeze_from_draft(
+        id: PurchaseOrderSubmissionLineId,
+        submission_id: PurchaseOrderSubmissionId,
+        draft_line: &Self,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            PurchaseOrderSubmissionLineData {
+                purchase_order_submission_id: submission_id,
+                line_no: draft_line.line_no,
+                line_type: draft_line.line_type,
+                procurement_confirmation_line_id: draft_line.procurement_confirmation_line_id.clone(),
+                sku_id: draft_line.sku_id.clone(),
+                sku_revision_id: draft_line.sku_revision_id.clone(),
+                product_name_snapshot: draft_line.product_name_snapshot.clone(),
+                specification_snapshot: draft_line.specification_snapshot.clone(),
+                quantity: draft_line.quantity,
+                base_unit_code: draft_line.base_unit_code.clone(),
+                unit_cost_gross: draft_line.unit_cost_gross,
+                gross_amount: draft_line.gross_amount,
+                net_amount: draft_line.net_amount,
+                tax_amount: draft_line.tax_amount,
+                input_tax_rate: draft_line.input_tax_rate,
+                expected_delivery_date: draft_line.expected_delivery_date,
+                sales_order_line_id: draft_line.sales_order_line_id.clone(),
+                sales_order_revision_line_id: draft_line.sales_order_revision_line_id.clone(),
+                sales_order_submission_line_id: draft_line.sales_order_submission_line_id.clone(),
+                allocated_quantity: draft_line.allocated_quantity,
+            },
+        )
+    }
+}
+
+/// 解析带固定前缀的十进制序号。
+///
+/// # 参数
+/// * `value` - 完整编号
+/// * `prefix` - 固定编号前缀
+///
+/// # 返回
+/// 编号匹配前缀且后缀可解析为 `u32` 时返回序号，否则返回 `None`。
+fn parse_sequence(value: &str, prefix: &str) -> Option<u32> {
+    value.strip_prefix(prefix)?.parse().ok()
 }
 
 /// 校验行号从 1 开始。
@@ -698,6 +886,57 @@ mod tests {
             ..submission_data()
         };
         assert!(PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-2"), inconsistent).is_err());
+    }
+
+    #[test]
+    fn submission_derives_sequence_freezes_draft_and_checks_review_invariants() {
+        let draft =
+            PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("draft-1"), submission_data())
+                .unwrap();
+        let mut numbered = draft.clone();
+        numbered.submission_no = "SUB-000009".to_string();
+        assert_eq!(
+            PurchaseOrderSubmission::next_submission_no(std::slice::from_ref(&numbered)).unwrap(),
+            "SUB-000010"
+        );
+        let formal = PurchaseOrderSubmission::freeze_from_draft(
+            PurchaseOrderSubmissionId::new("sub-10"),
+            "SUB-000010".to_string(),
+            &draft,
+            Instant::from_unix_secs(1_700_000_000),
+            "buyer-1",
+        )
+        .unwrap();
+        assert_eq!(formal.status, SubmissionStatus::Pending);
+        assert_eq!(formal.content_source(), "SUBMISSION");
+        assert!(!formal.reviewer_is_separated("buyer-1"));
+        assert!(formal.reviewer_is_separated("finance-1"));
+        formal.ensure_pending().unwrap();
+    }
+
+    #[test]
+    fn submission_line_freeze_and_header_totals_are_checked_together() {
+        let draft =
+            PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("draft-1"), submission_data())
+                .unwrap();
+        let source =
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("line-1"), goods_line_data())
+                .unwrap();
+        let frozen = PurchaseOrderSubmissionLine::freeze_from_draft(
+            PurchaseOrderSubmissionLineId::new("line-2"),
+            PurchaseOrderSubmissionId::new("draft-1"),
+            &source,
+        )
+        .unwrap();
+        draft.ensure_line_totals(&[frozen]).unwrap();
+
+        let foreign = PurchaseOrderSubmissionLine::freeze_from_draft(
+            PurchaseOrderSubmissionLineId::new("line-3"),
+            PurchaseOrderSubmissionId::new("other"),
+            &source,
+        )
+        .unwrap();
+        assert!(draft.ensure_line_totals(&[foreign]).is_err());
     }
 
     #[test]

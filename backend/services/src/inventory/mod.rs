@@ -15,21 +15,18 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{
-    AccessControlExt, CatalogExt, FulfillmentExt, InventoryExt, NoTransaction, Transactional, WarehouseExt,
-};
+use database::{AccessControlExt, Executor, InventoryExt, NoTransaction, Transactional};
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
 use entities::ids::{StockAdjustmentId, StockAdjustmentLineId, StockMovementId, StockReservationEntryId};
 use entities::inventory::{
-    AdjustmentReasonType, MovementDirection, MovementType, ReservationEntryType, ReservationStatus,
-    StockAdjustment, StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData, StockAdjustmentState,
+    AdjustmentReasonType, MovementDirection, MovementType, ReservationEntryType, StockAdjustment,
+    StockAdjustmentData, StockAdjustmentLine, StockAdjustmentLineData, StockAdjustmentLineUpdate,
     StockAdjustmentUpdate, StockBalance, StockMovement, StockMovementData, StockReservation,
     StockReservationEntry, StockReservationEntryData,
 };
 use entities::money::Quantity;
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use std::str::FromStr;
 use validator::Validate;
@@ -40,9 +37,10 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::prepare_start;
 use crate::audit::AuditActor;
-use crate::document_registry::{find_approval_binding, new_registered_document, persist_registered_document};
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 
 use self::adapter::{
@@ -213,8 +211,8 @@ impl InventoryService {
     pub async fn stock_balance_detail(&self, id: &str) -> Result<StockBalanceDetailView> {
         let balance = self
             .db
-            .stock_balances()
-            .find_by_id(id, &mut NoTransaction)
+            .inventory()
+            .stock_balance(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
         let filter = StockMovementFilter {
@@ -234,37 +232,15 @@ impl InventoryService {
             .stock_movements()
             .search_stock_movements(&filter, &mut NoTransaction)
             .await?;
-        let active = [
-            ReservationStatus::Active.as_str(),
-            ReservationStatus::PartiallyConsumed.as_str(),
-        ];
         let reservations = self
             .db
-            .stock_reservations()
-            .find_many(
-                doc! {
-                    "warehouse_id": balance.warehouse_id.to_string(),
-                    "sku_id": balance.sku_id.to_string(),
-                    "status": { "$in": active.as_slice() },
-                },
-                &mut NoTransaction,
-            )
+            .inventory()
+            .operable_reservations_for_balance(&balance.warehouse_id, &balance.sku_id, &mut NoTransaction)
             .await?;
         let pending = self
             .db
-            .stock_adjustments()
-            .find_many(
-                doc! {
-                    "warehouse_id": balance.warehouse_id.to_string(),
-                    "status": {
-                        "$in": vec![
-                            StockAdjustmentState::Draft.as_str(),
-                            StockAdjustmentState::InApproval.as_str(),
-                        ],
-                    },
-                },
-                &mut NoTransaction,
-            )
+            .inventory()
+            .pending_adjustments_for_warehouse(&balance.warehouse_id, &mut NoTransaction)
             .await?;
         let enrichments = self
             .load_enrichments(
@@ -493,8 +469,8 @@ impl InventoryService {
     pub async fn stock_adjustment_detail(&self, id: &str) -> Result<StockAdjustmentDetailView> {
         let adjustment = self
             .db
-            .stock_adjustments()
-            .find_by_id(id, &mut NoTransaction)
+            .inventory()
+            .stock_adjustment(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
         let lines = self
@@ -504,10 +480,10 @@ impl InventoryService {
             .await?;
         let movements = self
             .db
-            .stock_movements()
-            .find_by_source_document(id, &mut NoTransaction)
+            .inventory()
+            .movements_for_source_document(id, &mut NoTransaction)
             .await?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction)
+        let binding = load_approval_binding(&self.db, id, &mut NoTransaction)
             .await
             .ok()
             .flatten();
@@ -555,7 +531,7 @@ impl InventoryService {
                 occurred_at: req.occurred_at.map(Instant::from_unix_secs),
             },
         )?;
-        let lines = build_adjustment_lines(&id, &req.lines)?;
+        let lines = build_adjustment_lines(&id, adjustment.reason_type, &req.lines)?;
         let audit =
             actor
                 .clone()
@@ -615,15 +591,17 @@ impl InventoryService {
         req.validate()?;
         let mut adjustment = self
             .db
-            .stock_adjustments()
-            .find_by_id(id, &mut NoTransaction)
+            .inventory()
+            .stock_adjustment(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        if adjustment.base.version != req.version {
+        if !adjustment.matches_version(req.version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
+        let line_updates = build_adjustment_line_updates(req.lines.as_deref().unwrap_or_default())?;
+        let requires_line_validation = req.reason_type.is_some() || !line_updates.is_empty();
         adjustment.update(StockAdjustmentUpdate {
             reason_type: req.reason_type,
             reviewed_by: None,
@@ -638,55 +616,22 @@ impl InventoryService {
         let db = self.db.clone();
         let client = db.client().clone();
         let adjustment_id = StockAdjustmentId::new(id.to_string());
-        let line_updates = req.lines.unwrap_or_default();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.stock_adjustments().update(&mut adjustment, session).await?;
-                    if !line_updates.is_empty() {
-                        let existing = db
+                    if requires_line_validation {
+                        let mut existing = db
                             .inventory()
                             .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
                             .await?;
-                        let existing_ids: std::collections::HashSet<&str> =
-                            existing.iter().map(|line| line.base.id.as_str()).collect();
-                        for line_update in &line_updates {
-                            if !existing_ids.contains(line_update.line_id.as_str()) {
-                                return Err(Error::ValidationError("明细行不属于该调整单".to_string()));
-                            }
-                            let quantity = Quantity::from_str(&line_update.quantity).map_err(Error::Logic)?;
-                            if quantity <= Quantity::from_str("0").map_err(Error::Logic)? {
-                                return Err(Error::ValidationError("调整数量必须为正数".to_string()));
-                            }
-                            if line_update.direction.is_some() {
-                                let expected = match adjustment.reason_type {
-                                    AdjustmentReasonType::StockGain => MovementDirection::Increase,
-                                    AdjustmentReasonType::StockLoss | AdjustmentReasonType::Damage => {
-                                        MovementDirection::Decrease
-                                    }
-                                };
-                                if line_update.direction != Some(expected) {
-                                    return Err(Error::ValidationError(format!(
-                                        "调整原因 {} 的明细方向必须为 {}",
-                                        adjustment.reason_type.label(),
-                                        expected.as_str()
-                                    )));
-                                }
-                            }
-                            if !db
-                                .inventory()
-                                .update_adjustment_line(
-                                    &line_update.line_id,
-                                    quantity,
-                                    line_update.direction,
-                                    session,
-                                )
-                                .await?
-                            {
+                        let changed = adjustment.apply_line_updates(&mut existing, &line_updates, false)?;
+                        for line in &changed {
+                            if !db.inventory().persist_adjustment_line(line, session).await? {
                                 return Err(Error::NotFound("调整明细不存在".to_string()));
                             }
                         }
                     }
+                    db.stock_adjustments().update(&mut adjustment, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<StockAdjustment, crate::errors::Error>(adjustment)
                 })
@@ -721,7 +666,11 @@ impl InventoryService {
         let adapter = stock_adjustment_adapter()?;
         let subject = stock_adjustment_subject_ref(id)?;
         let mut adjustment = self.load_stock_adjustment(id).await?;
-        ensure_expected_version(adjustment.base.version, req.expected_version)?;
+        if !adjustment.matches_version(req.expected_version) {
+            return Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            ));
+        }
         adjustment.update(StockAdjustmentUpdate {
             reason_type: Some(req.reason_type),
             reviewed_by: None,
@@ -729,14 +678,15 @@ impl InventoryService {
             note: Some(req.note),
             occurred_at: Some(Instant::from_unix_secs(req.occurred_at)),
         })?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
+        let binding = load_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
         let mut lines = self
             .db
             .inventory()
             .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(id.to_string())], &mut NoTransaction)
             .await?;
-        apply_adjustment_line_updates(&adjustment, &mut lines, &req.lines, true)?;
+        let line_updates = build_adjustment_line_updates(&req.lines)?;
+        adjustment.apply_line_updates(&mut lines, &line_updates, true)?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;
         let now = Instant::now();
         let snapshot = build_stock_adjustment_snapshot(&adjustment, &lines, actor.id(), now)?;
@@ -811,7 +761,11 @@ impl InventoryService {
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
         let mut adjustment = self.load_stock_adjustment(id).await?;
-        ensure_expected_version(adjustment.base.version, req.expected_version)?;
+        if !adjustment.matches_version(req.expected_version) {
+            return Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            ));
+        }
         let adapter = stock_adjustment_adapter()?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.cancel_action)?;
         persist_adjustment_transition(
@@ -848,8 +802,8 @@ impl InventoryService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut adjustment = db
-                        .stock_adjustments()
-                        .find_by_id(adjustment_id.as_ref(), session)
+                        .inventory()
+                        .stock_adjustment(adjustment_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
                     ensure_final_approve_posting(&adjustment)?;
@@ -862,7 +816,7 @@ impl InventoryService {
                     }
                     let occurred_at = Instant::now();
                     for line in &lines {
-                        ensure_line_reason_coherent(&adjustment.reason_type, &line.direction)?;
+                        adjustment.reason_type.ensure_direction(line.direction)?;
                         post_adjustment_line(&db, session, &adjustment, line, &occurred_at, &actor).await?;
                     }
                     adjustment.mark_posted()?;
@@ -886,8 +840,8 @@ impl InventoryService {
     /// 不存在时返回 `NotFound`。
     async fn load_stock_adjustment(&self, id: &str) -> Result<StockAdjustment> {
         self.db
-            .stock_adjustments()
-            .find_by_id(id, &mut NoTransaction)
+            .inventory()
+            .stock_adjustment(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))
     }
@@ -912,11 +866,11 @@ impl InventoryService {
         sku_ids: &[String],
         movement_ids: &[String],
     ) -> Result<BalanceEnrichments> {
-        let warehouses = find_warehouses_by_ids(&self.db, warehouse_ids).await?;
-        let skus = find_skus_by_ids(&self.db, sku_ids).await?;
+        let warehouses = load_warehouses_by_ids(&self.db, warehouse_ids).await?;
+        let skus = load_skus_by_ids(&self.db, sku_ids).await?;
         let warehouse_revisions = load_warehouse_revisions(&self.db, &warehouses).await?;
         let sku_revisions = load_sku_revisions(&self.db, &skus).await?;
-        let movements = find_movements_by_ids(&self.db, movement_ids).await?;
+        let movements = load_movements_by_ids(&self.db, movement_ids).await?;
         Ok(BalanceEnrichments {
             warehouses,
             warehouse_revisions,
@@ -925,19 +879,6 @@ impl InventoryService {
             movements,
         })
     }
-}
-
-/// 校验乐观锁版本。
-///
-/// # 错误
-/// 不一致时返回冲突。
-fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
 }
 
 /// 库存调整单创建事务的单据、绑定与审计载荷。
@@ -1017,16 +958,14 @@ async fn persist_created_adjustment(
         .with_transaction(move |session| {
             Box::pin(async move {
                 let balance = db
-                    .stock_balances()
-                    .find_by_id(&balance_id, session)
+                    .inventory()
+                    .stock_balance(&balance_id, session)
                     .await?
                     .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
-                if balance.base.version != expected_balance_version {
+                if !balance.matches_version(expected_balance_version) {
                     return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
                 }
-                if balance.warehouse_id != adjustment.warehouse_id
-                    || !lines.iter().all(|line| line.sku_id == balance.sku_id)
-                {
+                if !balance.matches_adjustment_dimensions(&adjustment, &lines) {
                     return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
                 }
                 db.inventory()
@@ -1040,54 +979,51 @@ async fn persist_created_adjustment(
         .await
 }
 
-/// 校验并把提交命令中的最终值覆盖到内存明细。
+/// 把服务输入转换为已解析的调整明细更新值对象。
 ///
 /// # 参数
-/// * `adjustment` - 已应用最终表头值的调整单
-/// * `lines` - 当前持久化明细的内存副本
-/// * `updates` - 客户端提交的最终明细值
-/// * `require_all` - 是否要求每一条持久化明细都出现在命令中
+/// * `updates` - 客户端提交的明细更新
+///
+/// # 返回
+/// 返回完成主键规范化与数量解析的值对象集合。
 ///
 /// # 错误
-/// 行归属、重复行、数量、方向或完整性不符合约束时返回校验错误。
-fn apply_adjustment_line_updates(
-    adjustment: &StockAdjustment,
-    lines: &mut [StockAdjustmentLine],
+/// 行主键或数量非法时返回 `ValidationError`。
+fn build_adjustment_line_updates(
     updates: &[self::dto::StockAdjustmentLineUpdateInput],
-    require_all: bool,
-) -> Result<()> {
-    let expected_direction = match adjustment.reason_type {
-        AdjustmentReasonType::StockGain => MovementDirection::Increase,
-        AdjustmentReasonType::StockLoss | AdjustmentReasonType::Damage => MovementDirection::Decrease,
-    };
-    let mut seen = HashSet::with_capacity(updates.len());
-    for update in updates {
-        if !seen.insert(update.line_id.as_str()) {
-            return Err(Error::ValidationError("调整明细行不得重复".to_string()));
-        }
-        let line = lines
-            .iter_mut()
-            .find(|line| line.base.id == update.line_id)
-            .ok_or_else(|| Error::ValidationError("明细行不属于该调整单".to_string()))?;
-        let quantity = Quantity::from_str(&update.quantity).map_err(Error::Logic)?;
-        if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-            return Err(Error::ValidationError("调整数量必须为正数".to_string()));
-        }
-        let direction = update.direction.unwrap_or(line.direction);
-        if direction != expected_direction {
-            return Err(Error::ValidationError(format!(
-                "调整原因 {} 的明细方向必须为 {}",
-                adjustment.reason_type.label(),
-                expected_direction.as_str()
-            )));
-        }
-        line.quantity = quantity;
-        line.direction = direction;
-    }
-    if require_all && seen.len() != lines.len() {
-        return Err(Error::ValidationError("提交必须包含全部调整明细".to_string()));
-    }
-    Ok(())
+) -> Result<Vec<StockAdjustmentLineUpdate>> {
+    updates
+        .iter()
+        .map(|update| {
+            StockAdjustmentLineUpdate::new(update.line_id.clone(), &update.quantity, update.direction)
+                .map_err(|error| Error::ValidationError(error.to_string()))
+        })
+        .collect()
+}
+
+/// 按执行器加载库存调整单的审批绑定。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `document_id` - 库存调整单与注册单据共用的主键
+/// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
+///
+/// # 返回
+/// 返回已冻结审批绑定；单据尚未绑定时返回 `None`。
+///
+/// # 错误
+/// 单据未注册或仓储查询失败时返回错误。
+async fn load_approval_binding(
+    db: &Database,
+    document_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<ApprovalDefinitionBinding>> {
+    let document = db
+        .inventory()
+        .business_document(document_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
+    Ok(document.approval_binding)
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。
@@ -1175,20 +1111,9 @@ async fn active_reservation_dims(
     if warehouse_ids.is_empty() || sku_ids.is_empty() {
         return Ok(HashSet::new());
     }
-    let active = [
-        ReservationStatus::Active.as_str(),
-        ReservationStatus::PartiallyConsumed.as_str(),
-    ];
     let reservations = db
-        .stock_reservations()
-        .find_many(
-            doc! {
-                "warehouse_id": { "$in": warehouse_ids },
-                "sku_id": { "$in": sku_ids },
-                "status": { "$in": active.as_slice() },
-            },
-            &mut NoTransaction,
-        )
+        .inventory()
+        .operable_reservations_for_dimensions(warehouse_ids, sku_ids, &mut NoTransaction)
         .await?;
     Ok(reservations
         .into_iter()
@@ -1199,35 +1124,6 @@ async fn active_reservation_dims(
             )
         })
         .collect())
-}
-
-/// 校验调整明细方向与原因类型一致（§6.7：盘盈必增、盘亏/损坏必减）。
-///
-/// # 参数
-/// * `reason_type` - 调整原因类型
-/// * `direction` - 明细方向
-///
-/// # 返回
-/// 一致返回 `Ok(())`。
-///
-/// # 错误
-/// 方向与原因类型矛盾时返回 `ValidationError`。
-fn ensure_line_reason_coherent(
-    reason_type: &AdjustmentReasonType,
-    direction: &MovementDirection,
-) -> Result<()> {
-    let expected = match reason_type {
-        AdjustmentReasonType::StockGain => MovementDirection::Increase,
-        AdjustmentReasonType::StockLoss | AdjustmentReasonType::Damage => MovementDirection::Decrease,
-    };
-    if direction != &expected {
-        return Err(Error::ValidationError(format!(
-            "调整原因 {} 的明细方向必须为 {}",
-            reason_type.label(),
-            expected.as_str()
-        )));
-    }
-    Ok(())
 }
 
 /// 过账单条调整明细（流水 + 余额 + 适用预占释放，位于调用方事务内）。
@@ -1253,11 +1149,7 @@ async fn post_adjustment_line(
     occurred_at: &Instant,
     actor: &AuditActor,
 ) -> Result<()> {
-    let movement_type = match adjustment.reason_type {
-        AdjustmentReasonType::StockGain => MovementType::StockGain,
-        AdjustmentReasonType::StockLoss => MovementType::StockLoss,
-        AdjustmentReasonType::Damage => MovementType::Damage,
-    };
+    let movement_type = adjustment.reason_type.movement_type();
     let movement = StockMovement::new(
         StockMovementId::new(next_id()),
         StockMovementData {
@@ -1282,8 +1174,8 @@ async fn post_adjustment_line(
     db.stock_movements().create(&movement, session).await?;
 
     let balance = db
-        .stock_balances()
-        .find_by_dimensions(&adjustment.warehouse_id, &line.sku_id, session)
+        .inventory()
+        .balance_for_dimensions(&adjustment.warehouse_id, &line.sku_id, session)
         .await?
         .ok_or_else(|| {
             Error::BusinessLogicError(format!(
@@ -1360,21 +1252,9 @@ async fn release_applicable_reservations(
     balance_id: &str,
     line: &StockAdjustmentLine,
 ) -> Result<()> {
-    let active = [
-        ReservationStatus::Active.as_str(),
-        ReservationStatus::PartiallyConsumed.as_str(),
-    ];
     let reservations = db
-        .stock_reservations()
-        .find_many_sorted(
-            doc! {
-                "warehouse_id": warehouse_id.to_string(),
-                "sku_id": sku_id.to_string(),
-                "status": { "$in": active.as_slice() },
-            },
-            doc! { "created_at": 1 },
-            session,
-        )
+        .inventory()
+        .oldest_operable_reservations(warehouse_id, sku_id, session)
         .await?;
     let mut released_total = Quantity::from_str("0").unwrap();
     let target = line.quantity.to_decimal();
@@ -1443,7 +1323,7 @@ async fn load_movement_source_document_nos(
     movements: &[StockMovementView],
 ) -> Result<HashMap<String, String>> {
     let mut document_nos = HashMap::new();
-    let adjustment_ids: Vec<&str> = movements
+    let adjustment_ids: Vec<String> = movements
         .iter()
         .filter(|movement| {
             matches!(
@@ -1451,26 +1331,26 @@ async fn load_movement_source_document_nos(
                 MovementType::StockGain | MovementType::StockLoss | MovementType::Damage
             )
         })
-        .map(|movement| movement.source_document_id.as_str())
+        .map(|movement| movement.source_document_id.clone())
         .collect();
     if !adjustment_ids.is_empty() {
         let adjustments = db
-            .stock_adjustments()
-            .find_many(doc! { "id": { "$in": adjustment_ids } }, &mut NoTransaction)
+            .inventory()
+            .stock_adjustments_by_ids(&adjustment_ids, &mut NoTransaction)
             .await?;
         for adjustment in adjustments {
             document_nos.insert(adjustment.base.id.clone(), adjustment.adjustment_no.clone());
         }
     }
-    let receipt_ids: Vec<&str> = movements
+    let receipt_ids: Vec<String> = movements
         .iter()
         .filter(|movement| matches!(movement.movement_type, MovementType::PurchaseReceiptIn))
-        .map(|movement| movement.source_document_id.as_str())
+        .map(|movement| movement.source_document_id.clone())
         .collect();
     if !receipt_ids.is_empty() {
         let receipts = db
-            .purchase_receipts()
-            .find_many(doc! { "id": { "$in": receipt_ids } }, &mut NoTransaction)
+            .inventory()
+            .purchase_receipts_by_ids(&receipt_ids, &mut NoTransaction)
             .await?;
         for receipt in receipts {
             document_nos.insert(receipt.base.id.clone(), receipt.receipt_no.clone());
@@ -1490,17 +1370,14 @@ async fn load_movement_source_document_nos(
 ///
 /// # 错误
 /// 查询失败时返回 `RepositoryError`。
-async fn find_warehouses_by_ids(
+async fn load_warehouses_by_ids(
     db: &Database,
     ids: &[String],
 ) -> Result<HashMap<String, entities::warehouse::Warehouse>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let warehouses = db
-        .warehouses()
-        .find_many(doc! { "id": { "$in": ids } }, &mut NoTransaction)
-        .await?;
+    let warehouses = db.inventory().warehouses_by_ids(ids, &mut NoTransaction).await?;
     Ok(warehouses
         .into_iter()
         .map(|warehouse| (warehouse.base.id.clone(), warehouse))
@@ -1518,14 +1395,11 @@ async fn find_warehouses_by_ids(
 ///
 /// # 错误
 /// 查询失败时返回 `RepositoryError`。
-async fn find_skus_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, entities::catalog::Sku>> {
+async fn load_skus_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, entities::catalog::Sku>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let skus = db
-        .skus()
-        .find_many(doc! { "id": { "$in": ids } }, &mut NoTransaction)
-        .await?;
+    let skus = db.inventory().skus_by_ids(ids, &mut NoTransaction).await?;
     Ok(skus.into_iter().map(|sku| (sku.base.id.clone(), sku)).collect())
 }
 
@@ -1552,8 +1426,8 @@ async fn load_warehouse_revisions(
         return Ok(HashMap::new());
     }
     let revisions = db
-        .warehouse_revisions()
-        .find_many(doc! { "id": { "$in": revision_ids } }, &mut NoTransaction)
+        .inventory()
+        .warehouse_revisions_by_ids(&revision_ids, &mut NoTransaction)
         .await?;
     Ok(revisions
         .into_iter()
@@ -1584,8 +1458,8 @@ async fn load_sku_revisions(
         return Ok(HashMap::new());
     }
     let revisions = db
-        .sku_revisions()
-        .find_many(doc! { "id": { "$in": revision_ids } }, &mut NoTransaction)
+        .inventory()
+        .sku_revisions_by_ids(&revision_ids, &mut NoTransaction)
         .await?;
     Ok(revisions
         .into_iter()
@@ -1604,14 +1478,11 @@ async fn load_sku_revisions(
 ///
 /// # 错误
 /// 查询失败时返回 `RepositoryError`。
-async fn find_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, StockMovement>> {
+async fn load_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<String, StockMovement>> {
     if ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let movements = db
-        .stock_movements()
-        .find_many(doc! { "id": { "$in": ids } }, &mut NoTransaction)
-        .await?;
+    let movements = db.inventory().movements_by_ids(ids, &mut NoTransaction).await?;
     Ok(movements
         .into_iter()
         .map(|movement| (movement.base.id.clone(), movement))
@@ -1622,6 +1493,7 @@ async fn find_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<
 ///
 /// # 参数
 /// * `adjustment_id` - 调整单主键
+/// * `reason_type` - 调整原因，用于校验明细方向
 /// * `inputs` - 明细输入
 ///
 /// # 返回
@@ -1631,13 +1503,15 @@ async fn find_movements_by_ids(db: &Database, ids: &[String]) -> Result<HashMap<
 /// 明细数量非正时返回错误（实体构造）。
 fn build_adjustment_lines(
     adjustment_id: &StockAdjustmentId,
+    reason_type: AdjustmentReasonType,
     inputs: &[StockAdjustmentLineInput],
 ) -> Result<Vec<StockAdjustmentLine>> {
     let mut lines = Vec::with_capacity(inputs.len());
     for input in inputs {
         lines.push(
-            StockAdjustmentLine::new(
+            StockAdjustmentLine::new_for_reason(
                 StockAdjustmentLineId::new(next_id()),
+                reason_type,
                 StockAdjustmentLineData {
                     stock_adjustment_id: adjustment_id.clone(),
                     sku_id: input.sku_id.clone(),
@@ -1766,42 +1640,17 @@ impl From<StockAdjustmentLine> for StockAdjustmentLineView {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_adjustment_lines, ensure_line_reason_coherent, StockAdjustmentLineInput};
+    use super::{build_adjustment_lines, StockAdjustmentLineInput};
     use entities::ids::{SkuId, StockAdjustmentId};
     use entities::inventory::{AdjustmentReasonType, MovementDirection};
     use entities::money::Quantity;
     use std::str::FromStr;
 
     #[test]
-    fn reason_coherence_accepts_matching_direction() {
-        assert!(
-            ensure_line_reason_coherent(&AdjustmentReasonType::StockGain, &MovementDirection::Increase)
-                .is_ok()
-        );
-        assert!(
-            ensure_line_reason_coherent(&AdjustmentReasonType::StockLoss, &MovementDirection::Decrease)
-                .is_ok()
-        );
-        assert!(
-            ensure_line_reason_coherent(&AdjustmentReasonType::Damage, &MovementDirection::Decrease).is_ok()
-        );
-    }
-
-    #[test]
-    fn reason_coherence_rejects_contradictory_direction() {
-        assert!(
-            ensure_line_reason_coherent(&AdjustmentReasonType::StockGain, &MovementDirection::Decrease)
-                .is_err()
-        );
-        assert!(
-            ensure_line_reason_coherent(&AdjustmentReasonType::Damage, &MovementDirection::Increase).is_err()
-        );
-    }
-
-    #[test]
     fn adjustment_lines_are_built_with_entity_validation() {
         let lines = build_adjustment_lines(
             &StockAdjustmentId::new("adj-1"),
+            AdjustmentReasonType::StockGain,
             &[StockAdjustmentLineInput {
                 sku_id: SkuId::new("sku-1"),
                 quantity: Quantity::from_str("2").unwrap(),
@@ -1812,14 +1661,26 @@ mod tests {
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].quantity, Quantity::from_str("2").unwrap());
 
-        let negative = build_adjustment_lines(
+        let invalid_quantity = build_adjustment_lines(
             &StockAdjustmentId::new("adj-2"),
+            AdjustmentReasonType::StockGain,
             &[StockAdjustmentLineInput {
                 sku_id: SkuId::new("sku-1"),
                 quantity: Quantity::from_str("0").unwrap(),
                 direction: MovementDirection::Increase,
             }],
         );
-        assert!(negative.is_err(), "调整数量必须为正数");
+        assert!(invalid_quantity.is_err(), "调整数量必须为正数");
+
+        let invalid_direction = build_adjustment_lines(
+            &StockAdjustmentId::new("adj-3"),
+            AdjustmentReasonType::StockLoss,
+            &[StockAdjustmentLineInput {
+                sku_id: SkuId::new("sku-1"),
+                quantity: Quantity::from_str("1").unwrap(),
+                direction: MovementDirection::Increase,
+            }],
+        );
+        assert!(invalid_direction.is_err(), "盘亏明细必须为减少方向");
     }
 }

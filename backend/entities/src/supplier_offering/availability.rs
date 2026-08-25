@@ -8,7 +8,7 @@ use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
 use crate::money::Quantity;
-use crate::supplier_offering::AvailabilityStatus;
+use crate::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
 use crate::validation::normalize_optional_text;
 
 const SOURCE_REVISION_TOKEN_MAX_LEN: usize = 256;
@@ -118,6 +118,53 @@ impl SupplierOfferingAvailability {
         Ok(())
     }
 
+    /// 校验调用方持有的乐观锁版本仍是当前版本。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方读取到的投影版本
+    ///
+    /// # 返回
+    /// 版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 版本不一致时返回领域错误。
+    pub fn ensure_version(&self, expected: u64) -> Result<()> {
+        if self.base.version != expected {
+            return Err(Error::from("可供投影版本不一致"));
+        }
+        Ok(())
+    }
+
+    /// 返回下一次成功持久化后的投影版本。
+    ///
+    /// # 返回
+    /// 返回当前乐观锁版本加一。
+    ///
+    /// # 错误
+    /// 当前版本已达到 `u64` 上限时返回领域错误。
+    pub fn next_persisted_version(&self) -> Result<u64> {
+        self.base
+            .version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("可供投影版本已达到上限"))
+    }
+
+    /// 返回当前可供事实对应的销售安全中断原因。
+    ///
+    /// # 返回
+    /// 明确停止、不可供、过期或零库存时返回领域原因；正常可供时返回 `None`。
+    pub fn interruption_reason(&self) -> Option<AvailabilityInterruptionReason> {
+        match (self.availability_status, self.available_quantity) {
+            (AvailabilityStatus::Stopped, _) => Some(AvailabilityInterruptionReason::SupplierStopped),
+            (AvailabilityStatus::Unavailable, _) => Some(AvailabilityInterruptionReason::SupplyUnavailable),
+            (AvailabilityStatus::Stale, _) => Some(AvailabilityInterruptionReason::AvailabilityStale),
+            (AvailabilityStatus::Available, Some(quantity)) if quantity.to_decimal().is_zero() => {
+                Some(AvailabilityInterruptionReason::ZeroInventory)
+            }
+            _ => None,
+        }
+    }
+
     /// 判断当前投影是否可参与采购且数量未耗尽。
     ///
     /// # 返回
@@ -148,7 +195,7 @@ mod tests {
     use crate::common::time::Instant;
     use crate::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId};
     use crate::money::Quantity;
-    use crate::supplier_offering::AvailabilityStatus;
+    use crate::supplier_offering::{AvailabilityInterruptionReason, AvailabilityStatus};
 
     fn data(at: i64) -> SupplierOfferingAvailabilityData {
         SupplierOfferingAvailabilityData {
@@ -178,5 +225,37 @@ mod tests {
         };
         availability.apply(unavailable).unwrap();
         assert!(!availability.is_available());
+        assert_eq!(
+            availability.interruption_reason(),
+            Some(AvailabilityInterruptionReason::SupplyUnavailable)
+        );
+    }
+
+    #[test]
+    fn availability_classifies_zero_inventory_and_checks_version() {
+        let mut availability = SupplierOfferingAvailability::new(
+            SupplierOfferingAvailabilityId::new("availability-1"),
+            data(10),
+        )
+        .unwrap();
+        availability
+            .apply(SupplierOfferingAvailabilityData {
+                available_quantity: Some(Quantity::from_str("0").unwrap()),
+                ..data(11)
+            })
+            .unwrap();
+
+        assert_eq!(
+            availability.interruption_reason(),
+            Some(AvailabilityInterruptionReason::ZeroInventory)
+        );
+        assert!(availability.ensure_version(availability.base.version).is_ok());
+        assert!(availability
+            .ensure_version(availability.base.version.saturating_add(1))
+            .is_err());
+        assert_eq!(
+            availability.next_persisted_version().unwrap(),
+            availability.base.version + 1
+        );
     }
 }

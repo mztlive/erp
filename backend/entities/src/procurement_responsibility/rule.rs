@@ -90,6 +90,46 @@ pub struct ProcurementResponsibilityRuleData {
     pub status: EnableStatus,
 }
 
+/// 采购责任选择器需要存在性校验的目录引用。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcurementResponsibilitySelectorReference<'a> {
+    /// 精确 SKU 引用。
+    Sku(&'a SkuId),
+    /// 商品分类引用。
+    Category(&'a ProductCategoryId),
+    /// 该规则类型不引用目录实体。
+    None,
+}
+
+impl ProcurementResponsibilityRuleData {
+    /// 返回当前规则选择器需要校验的目录引用。
+    ///
+    /// # 返回
+    /// SKU 规则返回 SKU，分类规则返回分类，其余规则返回 `None`。
+    ///
+    /// # 错误
+    /// 规则类型与选择器字段形状不一致或服务区域过长时返回错误。
+    pub fn selector_reference(&self) -> Result<ProcurementResponsibilitySelectorReference<'_>> {
+        let service_region = normalize_service_region(self.service_region.clone())?;
+        ensure_selector_shape(self, service_region.as_deref())?;
+        Ok(match self.rule_type {
+            ProcurementResponsibilityRuleType::Sku => ProcurementResponsibilitySelectorReference::Sku(
+                self.sku_id.as_ref().expect("选择器形状已校验"),
+            ),
+            ProcurementResponsibilityRuleType::Category
+            | ProcurementResponsibilityRuleType::CategoryServiceRegion => {
+                ProcurementResponsibilitySelectorReference::Category(
+                    self.category_id.as_ref().expect("选择器形状已校验"),
+                )
+            }
+            ProcurementResponsibilityRuleType::ProductKind
+            | ProcurementResponsibilityRuleType::DefaultDispatcher => {
+                ProcurementResponsibilitySelectorReference::None
+            }
+        })
+    }
+}
+
 /// 可维护的采购责任规则。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct ProcurementResponsibilityRule {
@@ -400,5 +440,28 @@ mod tests {
             "admin-1"
         )
         .is_err());
+    }
+
+    #[test]
+    fn selector_reference_exposes_only_shape_validated_catalog_identity() {
+        let sku = ProcurementResponsibilityRuleData {
+            rule_type: ProcurementResponsibilityRuleType::Sku,
+            sku_id: Some(SkuId::new("sku-1")),
+            category_id: None,
+            service_region: None,
+            product_kind: None,
+            owner_user_id: "buyer-1".to_string(),
+            status: EnableStatus::Active,
+        };
+        assert!(matches!(
+            sku.selector_reference().unwrap(),
+            ProcurementResponsibilitySelectorReference::Sku(id) if id.as_ref() == "sku-1"
+        ));
+
+        let invalid = ProcurementResponsibilityRuleData {
+            category_id: Some(ProductCategoryId::new("cat-1")),
+            ..sku
+        };
+        assert!(invalid.selector_reference().is_err());
     }
 }

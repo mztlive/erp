@@ -213,6 +213,56 @@ impl CardForm {
     }
 }
 
+impl From<crate::sales_order::BusinessType> for BusinessType {
+    fn from(value: crate::sales_order::BusinessType) -> Self {
+        match value {
+            crate::sales_order::BusinessType::Voucher => Self::Voucher,
+            crate::sales_order::BusinessType::GoodsService => Self::GoodsService,
+        }
+    }
+}
+
+impl From<crate::sales_order::LineType> for LineType {
+    fn from(value: crate::sales_order::LineType) -> Self {
+        match value {
+            crate::sales_order::LineType::GoodsService => Self::GoodsService,
+            crate::sales_order::LineType::Voucher => Self::Voucher,
+        }
+    }
+}
+
+impl From<crate::sales_order::WelfareScenario> for WelfareScenario {
+    fn from(value: crate::sales_order::WelfareScenario) -> Self {
+        match value {
+            crate::sales_order::WelfareScenario::AnnualGiftBag => Self::AnnualGiftBag,
+            crate::sales_order::WelfareScenario::MealSubsidy => Self::MealSubsidy,
+            crate::sales_order::WelfareScenario::CondolenceGift => Self::CondolenceGift,
+            crate::sales_order::WelfareScenario::ConsumptionFund => Self::ConsumptionFund,
+            crate::sales_order::WelfareScenario::Other => Self::Other,
+        }
+    }
+}
+
+impl From<crate::sales_order::FulfillmentMode> for FulfillmentMode {
+    fn from(value: crate::sales_order::FulfillmentMode) -> Self {
+        match value {
+            crate::sales_order::FulfillmentMode::CompanyWarehouse => Self::CompanyWarehouse,
+            crate::sales_order::FulfillmentMode::SupplierDirect => Self::SupplierDirect,
+            crate::sales_order::FulfillmentMode::ElectronicDelivery => Self::ElectronicDelivery,
+            crate::sales_order::FulfillmentMode::OfflineService => Self::OfflineService,
+        }
+    }
+}
+
+impl From<crate::sales_order::CardForm> for CardForm {
+    fn from(value: crate::sales_order::CardForm) -> Self {
+        match value {
+            crate::sales_order::CardForm::Electronic => Self::Electronic,
+            crate::sales_order::CardForm::Physical => Self::Physical,
+        }
+    }
+}
+
 /// 实物及服务行字段组（数据模型 §6.4/§6.5「商品、数量、价格、履约字段组」）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoodsLineFields {
@@ -564,6 +614,30 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&CardForm::Electronic).unwrap(),
             "\"ELECTRONIC\""
+        );
+    }
+
+    #[test]
+    fn sales_order_types_map_without_service_switches() {
+        assert_eq!(
+            BusinessType::from(crate::sales_order::BusinessType::GoodsService),
+            BusinessType::GoodsService
+        );
+        assert_eq!(
+            LineType::from(crate::sales_order::LineType::Voucher),
+            LineType::Voucher
+        );
+        assert_eq!(
+            WelfareScenario::from(crate::sales_order::WelfareScenario::MealSubsidy),
+            WelfareScenario::MealSubsidy
+        );
+        assert_eq!(
+            FulfillmentMode::from(crate::sales_order::FulfillmentMode::SupplierDirect),
+            FulfillmentMode::SupplierDirect
+        );
+        assert_eq!(
+            CardForm::from(crate::sales_order::CardForm::Electronic),
+            CardForm::Electronic
         );
     }
 

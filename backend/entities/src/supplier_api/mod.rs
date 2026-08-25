@@ -34,10 +34,11 @@ pub use connection::{
     SupplierApiConnectionData, SupplierApiConnectionStatus, SupplierApiConnectionUpdate,
 };
 pub use governance::{
-    BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData, BusinessCapabilityRequirement,
-    CapabilityVersionSnapshot, SupplierCommandOutcome, SupplierConnectionAction,
-    SupplierConnectionCommandReceipt, SupplierConnectionCommandReceiptData, SupplierHealthCheckRun,
-    SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+    ensure_unique_capability_codes, BusinessCapabilityConfirmation, BusinessCapabilityConfirmationData,
+    BusinessCapabilityRequirement, CapabilityVersionSnapshot, SupplierCommandOutcome,
+    SupplierConnectionAction, SupplierConnectionBusinessImpact, SupplierConnectionCommandReceipt,
+    SupplierConnectionCommandReceiptData, SupplierConnectionGovernance, SupplierGovernanceBlocker,
+    SupplierHealthCheckRun, SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
 };
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。

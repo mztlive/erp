@@ -23,21 +23,20 @@ use database::{
 };
 use entities::ids::{
     ProductPublicationDeliveryId, ProductPublicationRevisionId, ProductPublicationRevisionMediaId,
-    SourceSystemId, WorkItemId,
+    SourceSystemId, SupplierOfferingId, SupplierOfferingRevisionId, WorkItemId,
 };
 use entities::integration_ops::ErrorClass;
 use entities::publication::{
     MediaRole, ProductPublication, ProductPublicationDelivery, ProductPublicationDeliveryData,
     ProductPublicationRevision, ProductPublicationRevisionData, ProductPublicationRevisionMedia,
-    ProductPublicationRevisionMediaData, ProductPublicationStatus, ProductPublicationUpdate,
-    PublicationDeliveryStatus, SafetyPauseAffectedPublication, SafetyPauseBlocker, SafetyPauseBlockerCode,
-    SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType, SafetyPauseWorkItemRef, SaleStatus,
-    SystemSafetyPauseOperation, SystemSafetyPauseOperationData,
+    ProductPublicationRevisionMediaData, ProductPublicationUpdate, PublicationDeliveryStatus,
+    SafetyPauseAffectedPublication, SafetyPauseBlocker, SafetyPauseCause, SafetyPauseFollowUp,
+    SafetyPauseSourceObjectType, SafetyPauseWorkItemRef, SystemSafetyPauseOperation,
+    SystemSafetyPauseOperationData,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus, SupplierOfferingRevision};
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
@@ -282,9 +281,10 @@ impl PublicationService {
         for affected_publication in publications {
             let mut publication = affected_publication.publication;
             let current_revision = affected_publication.current_revision;
-            let current_revision_id = publication.stable.current_revision_id.clone().ok_or_else(|| {
-                Error::BusinessLogicError("在售发布缺少商城当前生效版本，安全暂停失败关闭".to_string())
-            })?;
+            let current_revision_id = publication
+                .current_revision_id()
+                .map_err(|error| Error::BusinessLogicError(error.to_string()))?
+                .to_string();
             if current_revision.base.id != current_revision_id {
                 return Err(Error::BusinessLogicError(
                     "安全暂停影响集与当前生效供给修订不一致".to_string(),
@@ -293,34 +293,26 @@ impl PublicationService {
             let revision_no = self
                 .next_revision_no_in_transaction(&publication.base.id, executor)
                 .await?;
-            let mut pause_revision = clone_pause_revision(&current_revision, revision_no, committed_at)?;
+            let mut pause_revision = current_revision.safety_pause_copy(
+                ProductPublicationRevisionId::new(next_id()),
+                revision_no,
+                committed_at,
+            )?;
             pause_revision.content_hash = publication_content_hash(&pause_revision);
             let current_media = self
                 .db
                 .product_publication_revision_media()
                 .find_media_by_revision(&ProductPublicationRevisionId::new(current_revision_id), executor)
                 .await?;
-            if current_media.is_empty()
-                || !current_media
-                    .iter()
-                    .any(|item| item.media_role == MediaRole::Main)
-            {
-                return Err(Error::BusinessLogicError(
-                    "当前在售发布缺少完整主图证据，安全暂停失败关闭".to_string(),
-                ));
-            }
+            MediaRole::ensure_main_present(current_media.iter().map(|item| item.media_role))
+                .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+            let pause_revision_id = ProductPublicationRevisionId::new(&pause_revision.base.id);
             let pause_media = current_media
                 .into_iter()
                 .map(|item| {
-                    ProductPublicationRevisionMedia::new(
+                    item.copy_to_revision(
                         ProductPublicationRevisionMediaId::new(next_id()),
-                        pause_revision.base.id.clone().into(),
-                        ProductPublicationRevisionMediaData {
-                            file_asset_id: item.file_asset_id,
-                            media_role: item.media_role,
-                            sort_no: item.sort_no,
-                            alt_text: item.alt_text,
-                        },
+                        pause_revision_id.clone(),
                     )
                     .map_err(Into::into)
                 })
@@ -341,13 +333,7 @@ impl PublicationService {
                     error_summary: None,
                 },
             )?;
-            publication.update(
-                ProductPublicationUpdate {
-                    status: Some(ProductPublicationStatus::Paused),
-                    current_revision_id: None,
-                },
-                SAFETY_PAUSE_ACTOR,
-            )?;
+            publication.mark_safety_paused(SAFETY_PAUSE_ACTOR)?;
 
             self.db
                 .publication()
@@ -458,7 +444,7 @@ impl PublicationService {
         let publication = self
             .db
             .product_publications()
-            .find_by_id(id, &mut NoTransaction)
+            .find_product_publication(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("商品发布不存在".to_string()))?;
         Ok(publication.into())
@@ -488,7 +474,7 @@ impl PublicationService {
         let mut publication = self
             .db
             .product_publications()
-            .find_by_id(id, &mut NoTransaction)
+            .find_product_publication(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("商品发布不存在".to_string()))?;
         if publication.base.version != req.version {
@@ -501,29 +487,16 @@ impl PublicationService {
             .system_safety_pause_operations()
             .has_safety_pause_for_publication(id, &mut NoTransaction)
             .await?;
+        let update = ProductPublicationUpdate {
+            status: req.status,
+            current_revision_id: req.current_revision_id,
+        };
         if has_safety_pause {
-            if req
-                .status
-                .is_some_and(|status| status != ProductPublicationStatus::Paused)
-            {
-                return Err(Error::BusinessLogicError(
-                    "RECOVERY_RESPONSIBILITY_UNCONFIRMED：系统安全暂停发布禁止恢复为可下单状态".to_string(),
-                ));
-            }
-            if req.current_revision_id.is_some() {
-                return Err(Error::BusinessLogicError(
-                    "RECOVERY_RESPONSIBILITY_UNCONFIRMED：系统安全暂停发布禁止改写商城当前生效版本"
-                        .to_string(),
-                ));
-            }
+            publication
+                .ensure_safety_pause_update_allowed(&update)
+                .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         }
-        publication.update(
-            ProductPublicationUpdate {
-                status: req.status,
-                current_revision_id: req.current_revision_id,
-            },
-            actor.id(),
-        )?;
+        publication.update(update, actor.id())?;
         let audit = actor.clone().resource_log(
             "product_publication.update",
             "product_publication",
@@ -574,16 +547,15 @@ impl PublicationService {
         let mut publication = self
             .db
             .product_publications()
-            .find_by_id(publication_id, &mut NoTransaction)
+            .find_product_publication(publication_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("商品发布不存在".to_string()))?;
-        if req.sale_status == SaleStatus::OnSale
-            && self
-                .db
-                .system_safety_pause_operations()
-                .has_safety_pause_for_publication(publication_id, &mut NoTransaction)
-                .await?
-        {
+        let has_safety_pause = self
+            .db
+            .system_safety_pause_operations()
+            .has_safety_pause_for_publication(publication_id, &mut NoTransaction)
+            .await?;
+        if req.sale_status.is_on_sale() && has_safety_pause {
             return Err(Error::BusinessLogicError(
                 "RECOVERY_RESPONSIBILITY_UNCONFIRMED：系统安全暂停发布禁止提交 ON_SALE 修订".to_string(),
             ));
@@ -591,19 +563,20 @@ impl PublicationService {
         let offering_revision = self
             .db
             .supplier_offering_revisions()
-            .find_by_id(&req.supplier_offering_revision_id, &mut NoTransaction)
+            .find_publication_offering_revision(&req.supplier_offering_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给修订不存在".to_string()))?;
-        if req.sale_status == SaleStatus::OnSale {
+        if req.sale_status.is_on_sale() {
             self.ensure_offering_can_publish_on_sale(&offering_revision)
                 .await?;
         }
         self.db
             .sku_revisions()
-            .find_by_id(&req.sku_revision_id, &mut NoTransaction)
+            .find_publication_sku_revision(&req.sku_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("商品版本不存在".to_string()))?;
-        ensure_media_invariant(&req.media)?;
+        MediaRole::ensure_main_present(req.media.iter().map(|item| item.media_role))
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
 
         let revision_no = self.next_revision_no(publication_id).await?;
         let revision = ProductPublicationRevision::new(
@@ -666,22 +639,7 @@ impl PublicationService {
                 error_summary: None,
             },
         )?;
-        let has_safety_pause = self
-            .db
-            .system_safety_pause_operations()
-            .has_safety_pause_for_publication(publication_id, &mut NoTransaction)
-            .await?;
-        publication.update(
-            ProductPublicationUpdate {
-                status: Some(if has_safety_pause {
-                    ProductPublicationStatus::Paused
-                } else {
-                    ProductPublicationStatus::PendingPublish
-                }),
-                current_revision_id: None,
-            },
-            actor.id(),
-        )?;
+        publication.mark_revision_submitted(has_safety_pause, actor.id())?;
         let audit = actor.clone().resource_log(
             "product_publication_revision.submit",
             "product_publication_revision",
@@ -866,6 +824,17 @@ impl PublicationService {
         })
     }
 
+    /// 校验安全暂停触发与当前权威供给事实一致并加载全部供给修订。
+    ///
+    /// # 参数
+    /// * `trigger` - 已通过 DTO 契约校验的安全暂停触发
+    /// * `executor` - 可信来源事实所在事务的数据库执行器
+    ///
+    /// # 返回
+    /// 返回用于解析在售发布影响集的供给修订事实。
+    ///
+    /// # 错误
+    /// 来源类型、原因、版本或供给事实不匹配，或仓储查询失败时返回错误。
     async fn validate_safety_pause_source(
         &self,
         trigger: &SystemSafetyPauseTrigger,
@@ -876,19 +845,17 @@ impl PublicationService {
                 "系统安全暂停只接受权威供应关系来源".to_string(),
             ));
         }
+        let offering_id = SupplierOfferingId::new(trigger.source_object_id.trim());
         let offering = self
             .db
             .supplier_offerings()
-            .find_by_id(trigger.source_object_id.trim(), executor)
+            .find_publication_supplier_offering(&offering_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("安全暂停来源供给不存在".to_string()))?;
         let availability = self
             .db
             .supplier_offering_availabilities()
-            .find_by_offering_id(
-                &entities::ids::SupplierOfferingId::new(offering.base.id.clone()),
-                executor,
-            )
+            .find_by_offering_id(&offering_id, executor)
             .await?;
         let source_version = trigger.source_version.trim();
         let offering_version_matches = source_version == format!("offering:{}", offering.base.version);
@@ -941,10 +908,7 @@ impl PublicationService {
         let revisions = self
             .db
             .supplier_offering_revisions()
-            .find_many(
-                doc! { "supplier_offering_id": offering.base.id.clone() },
-                executor,
-            )
+            .list_publication_offering_revisions(&offering_id, executor)
             .await?;
         if revisions.is_empty() {
             return Err(Error::BusinessLogicError(
@@ -954,11 +918,21 @@ impl PublicationService {
         Ok(ValidatedSafetyPauseSource { revisions })
     }
 
+    /// 校验供给修订当前仍允许形成商城上架修订。
+    ///
+    /// # 参数
+    /// * `revision` - 待绑定的不可变供给修订
+    ///
+    /// # 返回
+    /// 稳定供给活跃、可供事实可用且没有安全暂停历史时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 供给或可供事实缺失、恢复责任未确认，或仓储查询失败时返回错误。
     async fn ensure_offering_can_publish_on_sale(&self, revision: &SupplierOfferingRevision) -> Result<()> {
         let offering = self
             .db
             .supplier_offerings()
-            .find_by_id(&revision.supplier_offering_id, &mut NoTransaction)
+            .find_publication_supplier_offering(&revision.supplier_offering_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
         let availability = self
@@ -987,6 +961,17 @@ impl PublicationService {
         Ok(())
     }
 
+    /// 解析指定供给修订当前影响的全部在售稳定发布。
+    ///
+    /// # 参数
+    /// * `offering_revisions` - 安全暂停来源供给的全部不可变修订
+    /// * `executor` - 可信来源事实所在事务的数据库执行器
+    ///
+    /// # 返回
+    /// 返回稳定发布与其当前在售修订的配对集合。
+    ///
+    /// # 错误
+    /// 发布缺少当前版本、发布与修订不一致，或仓储查询失败时返回错误。
     async fn affected_on_sale_publications(
         &self,
         offering_revisions: &[SupplierOfferingRevision],
@@ -994,43 +979,25 @@ impl PublicationService {
     ) -> Result<Vec<AffectedOnSalePublication>> {
         let offering_revision_ids = offering_revisions
             .iter()
-            .map(|revision| revision.base.id.clone())
+            .map(|revision| SupplierOfferingRevisionId::new(&revision.base.id))
             .collect::<Vec<_>>();
         let current_revisions = self
             .db
             .product_publication_revisions()
-            .find_many(
-                doc! {
-                    "supplier_offering_revision_id": { "$in": offering_revision_ids },
-                    "sale_status": SaleStatus::OnSale.as_str(),
-                },
-                executor,
-            )
+            .list_on_sale_by_offering_revisions(&offering_revision_ids, executor)
             .await?;
         if current_revisions.is_empty() {
             return Ok(Vec::new());
         }
         let revision_ids = current_revisions
             .iter()
-            .map(|revision| revision.base.id.clone())
+            .map(|revision| ProductPublicationRevisionId::new(&revision.base.id))
             .collect::<Vec<_>>();
         let publications = self
             .db
             .product_publications()
-            .find_many(
-                doc! {
-                    "status": {
-                        "$in": [
-                            ProductPublicationStatus::MallEffective.as_str(),
-                            ProductPublicationStatus::PendingPublish.as_str(),
-                        ]
-                    },
-                    "current_revision_id": { "$in": revision_ids },
-                },
-                executor,
-            )
-            .await
-            .map_err(Error::from)?;
+            .list_safety_pause_candidate_publications(&revision_ids, executor)
+            .await?;
         let revisions = current_revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision))
@@ -1052,6 +1019,19 @@ impl PublicationService {
             .collect()
     }
 
+    /// 形成与安全暂停原因严格匹配的后续任务或固定阻断证据。
+    ///
+    /// # 参数
+    /// * `trigger` - 当前安全暂停触发
+    /// * `operation_id` - 不可变安全暂停操作 ID
+    /// * `committed_at` - 本地事务统一业务时间
+    /// * `executor` - 可信来源事实所在事务的数据库执行器
+    ///
+    /// # 返回
+    /// 供应停止返回唯一开放任务引用，其它已注册原因返回固定 blocker。
+    ///
+    /// # 错误
+    /// 原因未知、工作项构造或仓储写入失败时返回错误。
     async fn safety_pause_follow_up(
         &self,
         trigger: &SystemSafetyPauseTrigger,
@@ -1060,20 +1040,10 @@ impl PublicationService {
         executor: &mut dyn Executor,
     ) -> Result<SafetyPauseFollowUp> {
         if trigger.cause != SafetyPauseCause::SupplierStopped {
-            let (code, message) = match trigger.cause {
-                SafetyPauseCause::ZeroInventory
-                | SafetyPauseCause::SupplyUnavailable
-                | SafetyPauseCause::AvailabilityStale => (
-                    SafetyPauseBlockerCode::NoManualFollowUpTaskByCurrentPolicy,
-                    "当前政策只记录安全暂停证据，不创建人工后续任务",
-                ),
-                SafetyPauseCause::CostChangeUnconfirmed
-                | SafetyPauseCause::CriticalSupplyChangeUnconfirmed => (
-                    SafetyPauseBlockerCode::NormalReviewWorkItemTypeUnregistered,
-                    "正常供给变化复核任务类型尚未注册，发布保持安全暂停",
-                ),
-                SafetyPauseCause::SupplierStopped | SafetyPauseCause::Unknown => unreachable!(),
-            };
+            let (code, message) = trigger
+                .cause
+                .follow_up_blocker()
+                .ok_or_else(|| Error::BusinessLogicError("未知安全暂停原因必须失败关闭".to_string()))?;
             return Ok(SafetyPauseFollowUp::Blocker(SafetyPauseBlocker {
                 code,
                 message: message.to_string(),
@@ -1085,13 +1055,9 @@ impl PublicationService {
         let mut work_item = self
             .db
             .work_items()
-            .find_one(
-                doc! {
-                    "work_item_type": WorkItemType::BusinessException.as_str(),
-                    "business_object_type": business_object_type,
-                    "business_object_id": trigger.source_object_id.trim(),
-                    "status": "OPEN",
-                },
+            .find_open_business_exception_for_object(
+                business_object_type,
+                trigger.source_object_id.trim(),
                 executor,
             )
             .await?;
@@ -1128,6 +1094,17 @@ impl PublicationService {
         }))
     }
 
+    /// 在调用方事务内计算发布的下一个修订序号。
+    ///
+    /// # 参数
+    /// * `publication_id` - 所属稳定发布 ID
+    /// * `executor` - 当前发布写事务的数据库执行器
+    ///
+    /// # 返回
+    /// 返回当前最大修订序号加一；没有修订时返回一。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回错误。
     async fn next_revision_no_in_transaction(
         &self,
         publication_id: &str,
@@ -1167,61 +1144,18 @@ impl PublicationService {
     }
 }
 
+/// 已通过来源版本校验的安全暂停供给事实。
 struct ValidatedSafetyPauseSource {
+    /// 来源稳定供给的全部不可变商业条款修订。
     revisions: Vec<SupplierOfferingRevision>,
 }
 
+/// 安全暂停影响集中的稳定发布与当前在售修订配对。
 struct AffectedOnSalePublication {
+    /// 待推进为暂停状态的稳定发布。
     publication: ProductPublication,
+    /// 当前商城生效且允许下单的发布修订。
     current_revision: ProductPublicationRevision,
-}
-
-/// 从商城当前生效版本复制形成不可变暂停修订。
-fn clone_pause_revision(
-    current: &ProductPublicationRevision,
-    revision_no: u32,
-    committed_at: entities::common::time::Instant,
-) -> Result<ProductPublicationRevision> {
-    ProductPublicationRevision::new(
-        ProductPublicationRevisionId::new(next_id()),
-        revision_no,
-        ProductPublicationRevisionData {
-            product_publication_id: current.product_publication_id.clone(),
-            sku_revision_id: current.sku_revision_id.clone(),
-            supplier_offering_revision_id: current.supplier_offering_revision_id.clone(),
-            category_id: current.category_id.clone(),
-            name: current.name.clone(),
-            specification: current.specification.clone(),
-            sales_description: current.sales_description.clone(),
-            minimum_purchase_quantity: current.minimum_purchase_quantity,
-            sales_price_gross: current.sales_price_gross,
-            sales_tax_rate: current.sales_tax_rate,
-            base_unit_code: current.base_unit_code.clone(),
-            sales_region: current.sales_region.clone(),
-            sale_status: SaleStatus::PauseOrder,
-            product_capabilities: current.product_capabilities.clone(),
-            valid_from: committed_at,
-            valid_to: None,
-            content_hash: "pending-safety-pause-hash".to_string(),
-        },
-    )
-    .map_err(Into::into)
-}
-
-/// 校验媒体行不变式：提交发布必须有至少一张主图（§6.15 跨行约束）。
-///
-/// # 参数
-/// * `media` - 媒体行请求
-///
-/// # 错误
-/// 缺少主图时返回 `ValidationError`。
-fn ensure_media_invariant(media: &[MediaItemRequest]) -> Result<()> {
-    if media.is_empty() || !media.iter().any(|item| item.media_role == MediaRole::Main) {
-        return Err(Error::ValidationError(
-            "提交发布必须包含至少一张主图媒体".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -1229,9 +1163,7 @@ mod tests {
 
     use entities::ids::{ProductPublicationId, SkuId, SourceSystemId};
     use entities::integration_ops::ErrorClass;
-    use entities::publication::{
-        MediaRole, ProductPublication, ProductPublicationData, ProductPublicationStatus,
-    };
+    use entities::publication::{ProductPublication, ProductPublicationData, ProductPublicationStatus};
 
     use super::{ClassifiedError, MallConnector, PublishAck, UnavailableMallConnector};
 
@@ -1303,17 +1235,6 @@ mod tests {
             .await
             .expect("mock 连接器必须成功");
         assert!(ack.mall_version.starts_with("v-rev-1"));
-    }
-
-    #[test]
-    fn media_invariant_requires_main_image() {
-        let media = vec![super::MediaItemRequest {
-            file_asset_id: entities::ids::FileAssetId::new("file-1"),
-            media_role: MediaRole::Detail,
-            sort_no: 1,
-            alt_text: None,
-        }];
-        assert!(super::ensure_media_invariant(&media).is_err());
     }
 
     #[test]

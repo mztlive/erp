@@ -128,6 +128,41 @@ impl MallBalanceRestoration {
             restored_at: data.restored_at,
         })
     }
+
+    /// 校验余额恢复分配归属与头行金额守恒。
+    ///
+    /// # 参数
+    /// * `allocations` - 本次余额恢复形成的全部分配
+    ///
+    /// # 返回
+    /// 分配非空、均属于当前恢复头且金额合计等于恢复头金额时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 分配为空、归属不一致、序号重复或金额合计不一致时返回错误。
+    pub fn ensure_allocation_total(&self, allocations: &[MallBalanceRestorationAllocation]) -> Result<()> {
+        if allocations.is_empty() {
+            return Err(Error::from("余额恢复必须包含至少一条分配"));
+        }
+        let restoration_id = MallBalanceRestorationId::new(self.base.id.clone());
+        let mut allocation_nos = std::collections::HashSet::with_capacity(allocations.len());
+        let mut total = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额必须合法");
+        for allocation in allocations {
+            if !allocation.belongs_to_restoration(&restoration_id) {
+                return Err(Error::from("余额恢复分配不属于当前恢复头"));
+            }
+            if !allocation_nos.insert(allocation.allocation_no) {
+                return Err(Error::from(format!(
+                    "余额恢复分配序号重复: {}",
+                    allocation.allocation_no
+                )));
+            }
+            total = allocation.add_to_total(total);
+        }
+        if total != self.restored_amount {
+            return Err(Error::from("恢复分配合计与恢复金额不一致"));
+        }
+        Ok(())
+    }
 }
 
 /// 余额恢复分配创建数据。
@@ -199,6 +234,28 @@ impl MallBalanceRestorationAllocation {
             mall_card_instance_id: data.mall_card_instance_id,
             restored_amount: data.restored_amount,
         })
+    }
+
+    /// 判断分配是否属于给定余额恢复头。
+    ///
+    /// # 参数
+    /// * `mall_balance_restoration_id` - 待校验的余额恢复头
+    ///
+    /// # 返回
+    /// 分配所属恢复头一致时返回 `true`。
+    pub fn belongs_to_restoration(&self, mall_balance_restoration_id: &MallBalanceRestorationId) -> bool {
+        &self.mall_balance_restoration_id == mall_balance_restoration_id
+    }
+
+    /// 将当前分配金额累加到余额恢复总额。
+    ///
+    /// # 参数
+    /// * `current_total` - 累加当前分配前的恢复金额
+    ///
+    /// # 返回
+    /// 返回包含当前分配后的恢复金额。
+    pub fn add_to_total(&self, current_total: Amount) -> Amount {
+        current_total.checked_add(self.restored_amount)
     }
 }
 
@@ -297,6 +354,17 @@ mod tests {
             MallRefundAllocationId::new("ra-1")
         );
         assert_eq!(allocation.restored_amount, Amount::from_str("49.00").unwrap());
+        assert!(allocation.belongs_to_restoration(&MallBalanceRestorationId::new("br-1")));
+        assert_eq!(
+            allocation.add_to_total(Amount::from_str("1.00").unwrap()),
+            Amount::from_str("50.00").unwrap()
+        );
+        let restoration =
+            MallBalanceRestoration::new(MallBalanceRestorationId::new("br-1"), restoration_data()).unwrap();
+        restoration
+            .ensure_allocation_total(std::slice::from_ref(&allocation))
+            .unwrap();
+        assert!(restoration.ensure_allocation_total(&[]).is_err());
 
         let zero_no = MallBalanceRestorationAllocationData {
             allocation_no: 0,

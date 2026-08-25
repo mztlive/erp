@@ -15,22 +15,27 @@
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
 use entities::common::time::Instant;
+use std::collections::HashMap;
+
 use entities::ids::{
-    MallOrderId, SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentOrderId,
-    SupplierOrderActionId, SupplierRefundFactId,
+    MallAfterSalesRequestId, MallOrderId, MallOrderItemId, SupplierAccountId, SupplierApiConnectionId,
+    SupplierFulfillmentOrderId, SupplierOfferingRevisionId, SupplierOrderActionId, SupplierRefundFactId,
 };
+use entities::mall_after_sales::MallAfterSalesRequestLine;
+use entities::mall_order::MallOrderItem;
 use entities::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentOrder,
     SupplierOrderAction, SupplierOrderActionLine, SupplierOrderStatusHistory, SupplierRefundAllocation,
     SupplierRefundFact,
 };
+use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::SupplierFulfillmentExt;
+use super::extensions::{SupplierFulfillmentExt, SupplierOfferingExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -44,6 +49,11 @@ const SUPPLIER_FULFILLMENT_ITEMS: &str =
     <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_FULFILLMENT_ITEMS;
 /// `supplier_order_action` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_ORDER_ACTIONS: &str = <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_ORDER_ACTIONS;
+/// `supplier_offering` 集合名。
+const SUPPLIER_OFFERINGS: &str = <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
+/// `supplier_offering_revision` 集合名。
+const SUPPLIER_OFFERING_REVISIONS: &str =
+    <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
 /// `supplier_refund_fact` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_REFUND_FACTS: &str = <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_REFUND_FACTS;
 /// `supplier_refund_allocation` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
@@ -183,6 +193,26 @@ impl<'a> Repository<'a, SupplierFulfillmentOrder> {
         })
     }
 
+    /// 按供应商批量读取全部未删除履约订单。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该供应商的履约订单集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_supplier_id(
+        &self,
+        supplier_id: &SupplierAccountId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierFulfillmentOrder>> {
+        self.find_many(doc! { "supplier_id": supplier_id.to_string() }, executor)
+            .await
+    }
+
     /// 按 ERP 供应商子订单号查找唯一履约订单。
     ///
     /// 唯一性由 `uk_supplier_fulfillment_orders_order_no` 唯一索引保证；该方法用于
@@ -242,7 +272,158 @@ impl<'a> Repository<'a, SupplierFulfillmentItem> {
     }
 }
 
+impl<'a> Repository<'a, MallOrderItem> {
+    /// 按商城订单明细主键批量读取明细。
+    ///
+    /// # 参数
+    /// * `item_ids` - 商城订单明细主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的未删除商城订单明细。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_ids(
+        &self,
+        item_ids: &[MallOrderItemId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<MallOrderItem>> {
+        if item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": ids_to_strings(item_ids) } }, executor)
+            .await
+    }
+}
+
+impl<'a> Repository<'a, MallAfterSalesRequestLine> {
+    /// 按商城售后申请读取全部申请行。
+    ///
+    /// # 参数
+    /// * `request_id` - 商城售后申请主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回关联该申请的未删除申请行。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_request_id(
+        &self,
+        request_id: &MallAfterSalesRequestId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<MallAfterSalesRequestLine>> {
+        self.find_many(
+            doc! { "after_sales_request_id": request_id.to_string() },
+            executor,
+        )
+        .await
+    }
+}
+
 impl<'a> Repository<'a, SupplierOrderAction> {
+    /// 按履约订单读取动作，按创建时间和主键倒序排列。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新动作在前的动作集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_order_newest(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOrderAction>> {
+        self.find_many_sorted(
+            doc! { "supplier_fulfillment_order_id": order_id.to_string() },
+            doc! { "created_at": -1, "id": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 按履约订单和动作类型读取动作，按创建时间和主键倒序排列。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单主键
+    /// * `action_type` - 供应商动作类型
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最新动作在前的动作集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_order_and_type_newest(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        action_type: entities::supplier_fulfillment::SupplierOrderActionType,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOrderAction>> {
+        self.find_many_sorted(
+            doc! {
+                "supplier_fulfillment_order_id": order_id.to_string(),
+                "action_type": action_type.as_str(),
+            },
+            doc! { "created_at": -1, "id": -1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 读取履约订单最近一次指定类型动作。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单主键
+    /// * `action_type` - 供应商动作类型
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最近动作；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn latest_by_order_and_type(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        action_type: entities::supplier_fulfillment::SupplierOrderActionType,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierOrderAction>> {
+        Ok(self
+            .list_by_order_and_type_newest(order_id, action_type, executor)
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    /// 按商城售后申请读取已提交供应商动作。
+    ///
+    /// # 参数
+    /// * `request_id` - 商城售后申请主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回关联该售后申请的动作集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_after_sales_request(
+        &self,
+        request_id: &MallAfterSalesRequestId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOrderAction>> {
+        self.find_many(
+            doc! { "after_sales_request_id": request_id.to_string() },
+            executor,
+        )
+        .await
+    }
+
     /// 按对供应商动作幂等键查找唯一动作。
     ///
     /// 唯一性由 `uk_supplier_order_actions_idempotency_key` 唯一索引保证；人工重放
@@ -303,6 +484,30 @@ impl<'a> Repository<'a, SupplierOrderActionLine> {
 }
 
 impl<'a> Repository<'a, SupplierOrderStatusHistory> {
+    /// 按履约订单读取状态历史，按发生时间和主键升序排列。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商履约订单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按业务发生顺序排列的状态历史。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_order_chronological(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOrderStatusHistory>> {
+        self.find_many_sorted(
+            doc! { "supplier_fulfillment_order_id": order_id.to_string() },
+            doc! { "occurred_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 按「连接 + 外部事件 ID」查找状态历史（回调幂等判定）。
     ///
     /// 唯一性由 `uk_supplier_order_status_histories_connection_event` 唯一索引保证
@@ -457,6 +662,53 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 按供给修订主键批量加载对应供给稳定身份。
+    ///
+    /// 仓储负责修订与稳定身份的两段 `$in` 查询及关联；Service 只校验请求中的
+    /// 供应商和连接关系，不接触 BSON 或通用查询方法。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 供给商业条款修订主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回以修订主键为键的供给稳定身份；缺失修订或供给时不生成对应条目。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn load_offerings_by_revision_ids(
+        &self,
+        revision_ids: &[SupplierOfferingRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, SupplierOffering>> {
+        if revision_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let revision_id_strings = revision_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let revisions = Repository::<SupplierOfferingRevision>::new(self.db, SUPPLIER_OFFERING_REVISIONS)
+            .list_by_ids(&revision_id_strings, executor)
+            .await?;
+        let offering_ids = revisions
+            .iter()
+            .map(|revision| revision.supplier_offering_id.clone())
+            .collect::<Vec<_>>();
+        let offerings = Repository::<SupplierOffering>::new(self.db, SUPPLIER_OFFERINGS)
+            .list_by_ids(&offering_ids, executor)
+            .await?
+            .into_iter()
+            .map(|offering| (offering.base.id.clone(), offering))
+            .collect::<HashMap<_, _>>();
+        Ok(revisions
+            .into_iter()
+            .filter_map(|revision| {
+                offerings
+                    .get(revision.supplier_offering_id.as_ref())
+                    .cloned()
+                    .map(|offering| (revision.base.id, offering))
+            })
+            .collect())
     }
 
     /// 原子创建履约子订单、全部明细与首个 `PLACE` 动作。

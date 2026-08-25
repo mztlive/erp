@@ -10,7 +10,6 @@ use database::{
 };
 use entities::party::Party;
 use entities::receivable::{CustomerReceipt, PendingReceiptAllocation, ReceivableAccount, ReceivableEntry};
-use mongodb::bson::doc;
 
 use super::brief::{
     format_instant_date, join_list_summary, non_empty, push_section, BriefLine, ObjectBriefSource,
@@ -42,18 +41,11 @@ impl WorkItemService {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
+        let resource_ids = ids.iter().cloned().collect::<Vec<_>>();
         let audits = self
             .db
             .audit_logs()
-            .find_many(
-                doc! {
-                    "resource_type": resource_type,
-                    "resource_id": { "$in": ids.iter().cloned().collect::<Vec<_>>() },
-                    "action": format!("{resource_type}.create"),
-                    "success": true,
-                },
-                executor,
-            )
+            .list_work_item_creation_audits(resource_type, &resource_ids, executor)
             .await?;
         let mut created_by = HashMap::new();
         for audit in audits {
@@ -94,7 +86,7 @@ impl WorkItemService {
         let receipts = self
             .db
             .customer_receipts()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         if receipts.is_empty() {
             return Ok(());
@@ -158,7 +150,7 @@ impl WorkItemService {
         let refunds = self
             .db
             .customer_refunds()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -212,7 +204,7 @@ impl WorkItemService {
         let reversals = self
             .db
             .receipt_reversals()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -270,7 +262,7 @@ impl WorkItemService {
         let payments = self
             .db
             .supplier_payments()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -359,7 +351,7 @@ impl WorkItemService {
         let refunds = self
             .db
             .supplier_refunds()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -421,7 +413,7 @@ impl WorkItemService {
         let reversals = self
             .db
             .payment_reversals()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         let created_by = self
             .load_created_by_from_audit(
@@ -479,7 +471,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .receivable_accounts()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         if accounts.is_empty() {
             return Ok(());
@@ -561,7 +553,7 @@ impl WorkItemService {
         let parties = self
             .db
             .parties()
-            .find_many(doc! { "id": { "$in": party_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(party_ids, executor)
             .await?;
         self.legal_names_for_parties(&parties, executor).await
     }
@@ -592,7 +584,7 @@ impl WorkItemService {
         let names_by_revision = self
             .db
             .party_revisions()
-            .find_many(doc! { "id": { "$in": revision_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&revision_ids, executor)
             .await?
             .into_iter()
             .map(|revision| (revision.base.id.clone(), revision.legal_name))
@@ -629,7 +621,7 @@ impl WorkItemService {
         let suppliers = self
             .db
             .supplier_accounts()
-            .find_many(doc! { "id": { "$in": supplier_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(supplier_ids, executor)
             .await?;
         let party_ids = suppliers
             .iter()
@@ -670,7 +662,7 @@ impl WorkItemService {
         Ok(self
             .db
             .sales_orders()
-            .find_many(doc! { "id": { "$in": sales_order_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -708,7 +700,7 @@ impl WorkItemService {
         let entries = self
             .db
             .receivable_entries()
-            .find_many(doc! { "id": { "$in": entry_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&entry_ids, executor)
             .await?;
         let account_ids = entries
             .iter()
@@ -717,7 +709,7 @@ impl WorkItemService {
         let accounts = self
             .db
             .receivable_accounts()
-            .find_many(doc! { "id": { "$in": account_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&account_ids, executor)
             .await?;
         let sales_order_ids = accounts
             .iter()

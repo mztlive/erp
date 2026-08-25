@@ -29,9 +29,10 @@ use entities::document_registry::{
 };
 use entities::ids::WorkItemId;
 use entities::legacy_import::{
-    ConfirmationDecision, ConfirmationStatus, ImportStatus, LegacyImportBatch, LegacyImportBatchId,
-    LegacyImportBatchStatus, LegacyImportConfirmation, LegacyImportConfirmationData,
-    LegacyImportConfirmationId, LegacyImportRow, LegacyImportRowData, LegacyImportRowId, ParseStatus,
+    ConfirmationDecision, ConfirmationMatrixDecision, ConfirmationScope, ConfirmationStatus, ImportStatus,
+    LegacyImportBatch, LegacyImportBatchId, LegacyImportBatchStatus, LegacyImportCommandIdentity,
+    LegacyImportConfirmation, LegacyImportConfirmationData, LegacyImportConfirmationId, LegacyImportRow,
+    LegacyImportRowData, LegacyImportRowId,
 };
 use entities::work_item::{
     AssignmentSource, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
@@ -40,7 +41,6 @@ use entities::work_item::{
 use entities::AuditLog;
 use id_generator::next_id;
 use mongodb::Database;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap};
 use validator::Validate;
 
@@ -358,15 +358,12 @@ impl LegacyImportService {
         let work_item_ids = page
             .items
             .iter()
-            .map(|row| row.work_item_id.to_string())
+            .map(|row| row.work_item_id.clone())
             .collect::<Vec<_>>();
         let work_items = self
             .db
             .work_items()
-            .find_many(
-                mongodb::bson::doc! { "id": { "$in": &work_item_ids } },
-                &mut NoTransaction,
-            )
+            .list_legacy_import_confirmations_by_ids(&work_item_ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|item| (item.base.id.clone(), item))
@@ -433,11 +430,15 @@ impl LegacyImportService {
         actor: &AuditActor,
     ) -> Result<LegacyImportConfirmationView> {
         req.validate()?;
-        let confirmation_scope = registered_confirmation_scope(&req.confirmation_scope)?.to_string();
-        let owner_role = confirmation_owner_role(&confirmation_scope)?.to_string();
+        let confirmation_scope = ConfirmationScope::parse(&req.confirmation_scope)?;
+        let owner_role = confirmation_scope.owner_role().to_string();
+        let confirmation_scope = confirmation_scope.as_str().to_string();
         let import_rule_version = required_text(&req.import_rule_version, "导入规则版本不能为空")?;
-        let subject_version =
-            confirmation_subject_version(req.batch_version, req.trial_version, &import_rule_version);
+        let subject_version = LegacyImportConfirmation::subject_version(
+            req.batch_version,
+            req.trial_version,
+            &import_rule_version,
+        );
         let confirmation_id = LegacyImportConfirmationId::new(next_id());
         let work_item_id = WorkItemId::new(next_id());
         let confirmation = LegacyImportConfirmation::new(
@@ -513,12 +514,8 @@ impl LegacyImportService {
                         .find_by_id(req_for_tx.batch_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-                    validate_confirmation_creation_batch(
-                        &batch,
-                        &req_for_tx,
-                        &scope_for_tx,
-                        &import_rule_for_tx,
-                    )?;
+                    validate_confirmation_creation_batch(&batch, &scope_for_tx, &import_rule_for_tx)?;
+                    batch.prepare_confirmation()?;
                     let enabled_roles = db
                         .roles()
                         .enabled_roles(std::slice::from_ref(&owner_role_for_tx), session)
@@ -530,11 +527,7 @@ impl LegacyImportService {
                     }
                     let mut confirmations = db
                         .legacy_import_confirmations()
-                        .find_many_sorted(
-                            mongodb::bson::doc! { "batch_id": req_for_tx.batch_id.to_string() },
-                            mongodb::bson::doc! { "created_at": 1 },
-                            session,
-                        )
+                        .list_by_batch(&req_for_tx.batch_id, session)
                         .await?;
                     validate_trial_snapshot(&batch, &confirmations, &req_for_tx, &import_rule_for_tx)?;
                     invalidate_replaced_confirmation(
@@ -545,8 +538,7 @@ impl LegacyImportService {
                         session,
                     )
                     .await?;
-                    Self::advance_batch_to_pending_confirmation(&mut batch)?;
-                    let mut current_matrix = current_confirmation_matrix(
+                    let mut current_matrix = LegacyImportConfirmation::current_matrix(
                         &confirmations,
                         req_for_tx.batch_version,
                         req_for_tx.trial_version,
@@ -555,7 +547,7 @@ impl LegacyImportService {
                     current_matrix.push(confirmation_for_tx.clone());
                     batch.update_summaries(
                         batch.failure_code_summary.clone(),
-                        Some(confirmation_matrix_summary(
+                        Some(LegacyImportConfirmation::matrix_summary(
                             req_for_tx.trial_version,
                             &current_matrix,
                         )),
@@ -617,13 +609,9 @@ impl LegacyImportService {
         req.validate()?;
         let prepared = PreparedConfirmationCompletion::try_from(req)?;
         let action = "legacy_import_confirmation.complete";
-        let fingerprint = confirmation_completion_fingerprint(&prepared);
-        let audit_id = confirmation_completion_audit_id(
-            actor.id(),
-            action,
-            prepared.work_item_id.as_ref(),
-            &prepared.idempotency_key,
-        );
+        let identity = confirmation_command_identity(actor.id(), action, &prepared);
+        let fingerprint = identity.fingerprint().to_string();
+        let audit_id = identity.audit_id().to_string();
         if let Some(result) = self
             .replay_confirmation_completion(&audit_id, &fingerprint, &prepared)
             .await?
@@ -671,11 +659,7 @@ impl LegacyImportService {
                     let _ = &work_item;
                     let mut matrix = db
                         .legacy_import_confirmations()
-                        .find_many_sorted(
-                            mongodb::bson::doc! { "batch_id": confirmation.batch_id.to_string() },
-                            mongodb::bson::doc! { "created_at": 1 },
-                            session,
-                        )
+                        .list_by_batch(&confirmation.batch_id, session)
                         .await?;
                     confirmation.decide(
                         prepared_for_tx.decision,
@@ -687,18 +671,21 @@ impl LegacyImportService {
                     work_item.record_activity(&actor_id, decided_at)?;
                     work_item.complete_by_domain_command(actor_id.clone(), decided_at)?;
                     replace_confirmation_in_matrix(&mut matrix, &confirmation);
-                    let current_matrix = current_confirmation_matrix(
+                    let current_matrix = LegacyImportConfirmation::current_matrix(
                         &matrix,
                         confirmation.batch_version,
                         confirmation.trial_version,
                         &confirmation.import_rule_version,
                     );
-                    let required_scopes = required_confirmation_scopes(&batch.source_object_set)?;
-                    let next_step =
-                        confirmation_next_step(prepared_for_tx.decision, &current_matrix, &required_scopes);
+                    let required_scopes = batch.required_confirmation_scopes()?;
+                    let next_step = confirmation_next_step(LegacyImportConfirmation::matrix_decision(
+                        prepared_for_tx.decision,
+                        &current_matrix,
+                        &required_scopes,
+                    ));
                     batch.update_summaries(
                         batch.failure_code_summary.clone(),
-                        Some(confirmation_matrix_summary(
+                        Some(LegacyImportConfirmation::matrix_summary(
                             confirmation.trial_version,
                             &current_matrix,
                         )),
@@ -874,13 +861,9 @@ impl LegacyImportService {
             return Err(Error::ValidationError("路径批次与执行命令批次不一致".to_string()));
         }
         let action_name = "legacy_import_batch.execute";
-        let fingerprint = import_execution_fingerprint(&prepared);
-        let audit_id = import_execution_audit_id(
-            actor.id(),
-            action_name,
-            prepared.batch_id.as_ref(),
-            &prepared.request_id,
-        );
+        let identity = import_execution_command_identity(actor.id(), action_name, &prepared);
+        let fingerprint = identity.fingerprint().to_string();
+        let audit_id = identity.audit_id().to_string();
         if let Some(result) = self
             .replay_import_execution(&audit_id, &fingerprint, &prepared)
             .await?
@@ -996,11 +979,11 @@ impl LegacyImportService {
             .find_by_id(batch_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-        if Self::batch_terminal(batch.status) {
+        if batch.is_terminal() {
             tracing::info!(batch_id, status = ?batch.status, "批次已终态，按幂等返回");
             return self.batch_view_of(batch).await;
         }
-        if batch.status != LegacyImportBatchStatus::Importing {
+        if !batch.is_importing() {
             return Err(Error::BusinessLogicError(
                 "批次尚未进入导入阶段，禁止应用".to_string(),
             ));
@@ -1040,7 +1023,7 @@ impl LegacyImportService {
             if row.import_status != ImportStatus::PendingImport {
                 continue;
             }
-            Self::advance_row_to_applicable(row, result)?;
+            row.prepare_for_import(result.external_identity_map_id.clone())?;
             match result.outcome {
                 ApplyRowOutcome::Imported => {
                     let target = result.target_document_id.clone().ok_or_else(|| {
@@ -1072,17 +1055,12 @@ impl LegacyImportService {
             }
         }
 
-        let success_rows = count_by_status(&rows, ImportStatus::Imported);
-        let failed_rows = count_by_status(&rows, ImportStatus::Failed);
+        let success_rows = LegacyImportRow::count_by_import_status(&rows, ImportStatus::Imported);
+        let failed_rows = LegacyImportRow::count_by_import_status(&rows, ImportStatus::Failed);
         batch.update_counts(batch.total_rows, success_rows, failed_rows)?;
-        let all_terminal = count_pending(&rows) == 0;
-        let outcome = if all_terminal && failed_rows == 0 {
-            LegacyImportBatchStatus::Completed
-        } else if all_terminal {
-            LegacyImportBatchStatus::PartialFailed
-        } else {
-            LegacyImportBatchStatus::Importing
-        };
+        let pending_rows = LegacyImportRow::pending_import_count(&rows);
+        let all_terminal = pending_rows == 0;
+        let outcome = LegacyImportBatch::application_outcome(pending_rows, failed_rows);
         batch.advance(outcome)?;
         let audit = actor.clone().resource_log(
             "legacy_import_batch.apply",
@@ -1166,34 +1144,6 @@ impl LegacyImportService {
         Ok(())
     }
 
-    /// 推进行到可导入状态（解析有效 + 映射完成）。
-    ///
-    /// 行处于待解析时标记有效；待映射时登记来源稳定身份（`external_identity_map_id`
-    /// 由试算阶段在 D01 建立，此处只登记）；已无效的行无法应用。
-    ///
-    /// # 参数
-    /// * `row` - 导入行（内存态）
-    /// * `result` - 行级结果请求
-    ///
-    /// # 错误
-    /// 行已无效，或映射身份缺失时返回错误。
-    fn advance_row_to_applicable(row: &mut LegacyImportRow, result: &ApplyRowResult) -> Result<()> {
-        if row.parse_status == ParseStatus::PendingParse {
-            row.mark_parse_result(ParseStatus::Valid, None, None)?;
-        }
-        if row.parse_status != ParseStatus::Valid {
-            return Err(Error::BusinessLogicError("无效行不能进入导入".to_string()));
-        }
-        if row.mapping_status == entities::legacy_import::MappingStatus::PendingMapping {
-            let identity = result
-                .external_identity_map_id
-                .clone()
-                .ok_or_else(|| Error::ValidationError("待映射行必须提供来源稳定身份".to_string()))?;
-            row.mark_mapped(identity)?;
-        }
-        Ok(())
-    }
-
     /// 校验客户行目标主体存在（D07 仓储读取）。
     ///
     /// 客户行（`CUSTOMER`）必须命中 D07 既有主体；未命中时行标记失败
@@ -1226,47 +1176,6 @@ impl LegacyImportService {
             Some(CUSTOMER_NOT_FOUND_ERROR_DETAIL.to_string()),
         )?;
         Ok(false)
-    }
-
-    /// 推进批次到待确认阶段（试算完成）。
-    ///
-    /// # 参数
-    /// * `batch` - 导入批次（内存态，成功后状态为 `PendingConfirmation`）
-    ///
-    /// # 错误
-    /// 批次已离开可确认阶段时返回错误。
-    fn advance_batch_to_pending_confirmation(batch: &mut LegacyImportBatch) -> Result<()> {
-        match batch.status {
-            LegacyImportBatchStatus::PendingValidation => {
-                batch.advance(LegacyImportBatchStatus::Validating)?;
-                batch.advance(LegacyImportBatchStatus::PendingConfirmation)?;
-                Ok(())
-            }
-            LegacyImportBatchStatus::Validating => {
-                batch.advance(LegacyImportBatchStatus::PendingConfirmation)?;
-                Ok(())
-            }
-            LegacyImportBatchStatus::PendingConfirmation => Ok(()),
-            _ => Err(Error::BusinessLogicError(
-                "批次已离开可确认阶段，禁止创建确认事实".to_string(),
-            )),
-        }
-    }
-
-    /// 判定批次状态是否终态。
-    ///
-    /// # 参数
-    /// * `status` - 批次状态
-    ///
-    /// # 返回
-    /// `Completed`/`PartialFailed`/`Failed` 时返回 `true`。
-    fn batch_terminal(status: LegacyImportBatchStatus) -> bool {
-        matches!(
-            status,
-            LegacyImportBatchStatus::Completed
-                | LegacyImportBatchStatus::PartialFailed
-                | LegacyImportBatchStatus::Failed
-        )
     }
 
     /// 构造导入批次列表筛选条件。
@@ -1480,7 +1389,7 @@ async fn execute_import_command_transaction(
         .find_by_id(prepared.batch_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::NotFound("导入批次不存在".to_string()))?;
-    if batch.base.version != prepared.expected_batch_version {
+    if !batch.has_version(prepared.expected_batch_version) {
         return Err(Error::ConflictError(
             "导入批次版本已变化，请刷新后重试".to_string(),
         ));
@@ -1493,11 +1402,7 @@ async fn execute_import_command_transaction(
     validate_import_background_job(&batch, &job)?;
     let confirmations = db
         .legacy_import_confirmations()
-        .find_many_sorted(
-            mongodb::bson::doc! { "batch_id": batch.base.id.clone() },
-            mongodb::bson::doc! { "created_at": 1 },
-            executor,
-        )
+        .list_by_batch(&prepared.batch_id, executor)
         .await?;
     let trial_version = validate_import_execution_trial(prepared, &batch, &confirmations)?;
     let mut rows = if prepared.action == ImportExecutionAction::RetryFailed {
@@ -1562,15 +1467,9 @@ fn validate_import_execution_trial(
     let Some(expected_trial) = prepared.expected_trial_version else {
         return Ok(None);
     };
-    let current_trial = confirmations
-        .iter()
-        .filter(|item| {
-            item.status != ConfirmationStatus::Invalidated
-                && item.import_rule_version == batch.import_rule_version
-        })
-        .map(|item| item.trial_version)
-        .max()
-        .ok_or_else(|| Error::BusinessLogicError("当前批次缺少有效试算确认".to_string()))?;
+    let current_trial =
+        LegacyImportConfirmation::latest_active_trial(confirmations, &batch.import_rule_version)
+            .ok_or_else(|| Error::BusinessLogicError("当前批次缺少有效试算确认".to_string()))?;
     if current_trial != expected_trial {
         return Err(Error::ConflictError(
             "导入试算版本已变化，请刷新后重试".to_string(),
@@ -1591,25 +1490,13 @@ fn ensure_import_trial_confirmed(
     confirmations: &[LegacyImportConfirmation],
     trial_version: u32,
 ) -> Result<()> {
-    let required = required_confirmation_scopes(&batch.source_object_set)?;
-    let current = confirmations
-        .iter()
-        .filter(|item| {
-            item.trial_version == trial_version
-                && item.import_rule_version == batch.import_rule_version
-                && item.status != ConfirmationStatus::Invalidated
-        })
-        .collect::<Vec<_>>();
-    let confirmed = current
-        .iter()
-        .filter(|item| item.status == ConfirmationStatus::Confirmed)
-        .map(|item| item.confirmation_scope.as_str())
-        .collect::<BTreeSet<_>>();
-    if current
-        .iter()
-        .any(|item| item.status == ConfirmationStatus::Rejected)
-        || !required.iter().all(|scope| confirmed.contains(scope))
-    {
+    let required = batch.required_confirmation_scopes()?;
+    if !LegacyImportConfirmation::is_trial_confirmed(
+        confirmations,
+        trial_version,
+        &batch.import_rule_version,
+        &required,
+    ) {
         return Err(Error::BusinessLogicError(
             "当前试算尚未完成全部必要责任确认".to_string(),
         ));
@@ -1636,7 +1523,7 @@ fn start_import_application(
     batch: &mut LegacyImportBatch,
     job: &mut BackgroundJob,
 ) -> Result<ImportExecutionActionOutcome> {
-    if batch.status != LegacyImportBatchStatus::ReadyToApply || job.status != JobStatus::Pending {
+    if !batch.is_ready_to_apply() || job.status != JobStatus::Pending {
         return Err(Error::BusinessLogicError(
             "只有待应用批次与等待执行任务可以提交应用".to_string(),
         ));
@@ -1663,13 +1550,12 @@ fn cancel_pending_import(
     batch: &mut LegacyImportBatch,
     job: &mut BackgroundJob,
 ) -> Result<ImportExecutionActionOutcome> {
-    if !matches!(
-        batch.status,
-        LegacyImportBatchStatus::ReadyToApply | LegacyImportBatchStatus::Importing
-    ) || !matches!(
-        job.status,
-        JobStatus::Pending | JobStatus::Running | JobStatus::PartiallySucceeded
-    ) {
+    if !batch.accepts_pending_cancellation()
+        || !matches!(
+            job.status,
+            JobStatus::Pending | JobStatus::Running | JobStatus::PartiallySucceeded
+        )
+    {
         return Err(Error::BusinessLogicError(
             "当前批次或后台任务状态不允许取消未应用项".to_string(),
         ));
@@ -1702,10 +1588,7 @@ fn prepare_failed_import_retry(
     job: &mut BackgroundJob,
     rows: &mut [LegacyImportRow],
 ) -> Result<ImportExecutionActionOutcome> {
-    if !matches!(
-        batch.status,
-        LegacyImportBatchStatus::PartialFailed | LegacyImportBatchStatus::Failed
-    ) {
+    if !batch.accepts_failed_retry() {
         return Err(Error::BusinessLogicError(
             "只有失败或部分失败批次可重新准备失败项".to_string(),
         ));
@@ -1727,8 +1610,8 @@ fn prepare_failed_import_retry(
     job.prepare_failed_retry(affected_items, Instant::now())?;
     batch.update_counts(
         batch.total_rows,
-        count_by_status(rows, ImportStatus::Imported),
-        count_by_status(rows, ImportStatus::Failed),
+        LegacyImportRow::count_by_import_status(rows, ImportStatus::Imported),
+        LegacyImportRow::count_by_import_status(rows, ImportStatus::Failed),
     )?;
     batch.advance(LegacyImportBatchStatus::ReadyToApply)?;
     Ok(ImportExecutionActionOutcome {
@@ -1759,7 +1642,9 @@ impl TryFrom<CompleteImportBusinessConfirmationCommand> for PreparedConfirmation
 
     fn try_from(command: CompleteImportBusinessConfirmationCommand) -> Result<Self> {
         let decision = command.decision;
-        let confirmation_scope = registered_confirmation_scope(&decision.confirmation_scope)?.to_string();
+        let confirmation_scope = ConfirmationScope::parse(&decision.confirmation_scope)?
+            .as_str()
+            .to_string();
         let reason_code = optional_text(decision.reason_code);
         if decision.action == ConfirmationDecision::ReturnForFix && reason_code.is_none() {
             return Err(Error::ValidationError("退回修复必须提供原因代码".to_string()));
@@ -1800,32 +1685,6 @@ struct ConfirmationCompletionTransactionResult {
     receipt: ConfirmationCompletionReceipt,
 }
 
-/// 返回经编译期固定的确认范围代码。
-fn registered_confirmation_scope(scope: &str) -> Result<&'static str> {
-    match scope.trim().to_ascii_uppercase().as_str() {
-        "SALES" => Ok("SALES"),
-        "PROCUREMENT" => Ok("PROCUREMENT"),
-        "OPERATIONS" => Ok("OPERATIONS"),
-        "WAREHOUSE" => Ok("WAREHOUSE"),
-        "FINANCE" => Ok("FINANCE"),
-        _ => Err(Error::ValidationError(
-            "确认范围未在 W18 固定注册表中".to_string(),
-        )),
-    }
-}
-
-/// 按 W18 固定注册表解析责任角色。
-fn confirmation_owner_role(scope: &str) -> Result<&'static str> {
-    match registered_confirmation_scope(scope)? {
-        "SALES" => Ok("role-sales"),
-        "PROCUREMENT" => Ok("role-procurement"),
-        "OPERATIONS" => Ok("role-operations"),
-        "WAREHOUSE" => Ok("role-warehouse"),
-        "FINANCE" => Ok("role-finance"),
-        _ => unreachable!("已经过固定范围注册表校验"),
-    }
-}
-
 /// 构造采用固定责任范围维度的 W18 正常导入确认任务。
 ///
 /// 开放任务必须在创建时指定唯一个人责任人，责任角色仍由已注册
@@ -1850,8 +1709,9 @@ fn import_confirmation_work_item(
     confirmation_scope: &str,
     owner_user_id: &str,
 ) -> Result<WorkItem> {
-    let confirmation_scope = registered_confirmation_scope(confirmation_scope)?;
-    let owner_role = confirmation_owner_role(confirmation_scope)?;
+    let confirmation_scope = ConfirmationScope::parse(confirmation_scope)?;
+    let owner_role = confirmation_scope.owner_role();
+    let confirmation_scope = confirmation_scope.as_str();
     Ok(WorkItem::new_with_responsibility_key(
         work_item_id,
         WorkItemData {
@@ -1872,79 +1732,19 @@ fn import_confirmation_work_item(
     )?)
 }
 
-/// 从批次对象集解析当前试算的必要责任范围。
-fn required_confirmation_scopes(source_object_set: &str) -> Result<BTreeSet<&'static str>> {
-    let mut scopes = BTreeSet::new();
-    for raw in source_object_set.split([',', ';', '|', '/', '、']) {
-        let object = raw.trim().to_ascii_uppercase();
-        if object.is_empty() {
-            continue;
-        }
-        match object.as_str() {
-            "CUSTOMER" | "CONTRACT" | "CARD_SALES_ORDER" | "客户" | "合同" | "卡券销售" | "卡券销售单" =>
-            {
-                scopes.insert("SALES");
-            }
-            "SUPPLIER" | "SKU" | "供应商" | "商品SKU" | "商品 SKU" => {
-                scopes.insert("PROCUREMENT");
-            }
-            "CARD_CATEGORY" | "卡券类目" => {
-                scopes.insert("OPERATIONS");
-            }
-            "WAREHOUSE" | "OPENING_STOCK" | "仓库" | "期初库存" => {
-                scopes.insert("WAREHOUSE");
-            }
-            "CARD_OPENING_AR" | "卡券期初应收" | "期初应收" => {
-                scopes.insert("FINANCE");
-            }
-            _ => {
-                return Err(Error::BusinessLogicError(format!(
-                    "批次对象类型 {raw} 未配置 W18 确认责任"
-                )));
-            }
-        }
-    }
-    if scopes.is_empty() {
-        return Err(Error::BusinessLogicError(
-            "批次对象集无法解析必要确认责任".to_string(),
-        ));
-    }
-    Ok(scopes)
-}
-
-/// 生成任务冻结的试算主体版本。
-fn confirmation_subject_version(batch_version: u32, trial_version: u32, rule_version: &str) -> String {
-    format!("batch:{batch_version};trial:{trial_version};rule:{rule_version}")
-}
-
 /// 校验创建确认任务时的批次与责任范围。
 fn validate_confirmation_creation_batch(
     batch: &LegacyImportBatch,
-    req: &CreateLegacyImportConfirmationRequest,
     scope: &str,
     import_rule_version: &str,
 ) -> Result<()> {
-    if !matches!(
-        batch.status,
-        LegacyImportBatchStatus::PendingValidation
-            | LegacyImportBatchStatus::Validating
-            | LegacyImportBatchStatus::PendingConfirmation
-    ) {
-        return Err(Error::BusinessLogicError(
-            "批次已离开可确认阶段，禁止创建确认任务".to_string(),
-        ));
-    }
-    if batch.import_rule_version != import_rule_version {
+    if !batch.has_rule_version(import_rule_version) {
         return Err(Error::ConflictError("导入规则版本已变化，请重新试算".to_string()));
     }
-    if !required_confirmation_scopes(&batch.source_object_set)?.contains(scope) {
+    let scope = ConfirmationScope::parse(scope)?;
+    if !batch.required_confirmation_scopes()?.contains(&scope) {
         return Err(Error::BusinessLogicError(
             "该责任范围不属于当前批次的必要确认矩阵".to_string(),
-        ));
-    }
-    if req.batch_version == u32::MAX && req.trial_version == u32::MAX {
-        return Err(Error::ValidationError(
-            "批次与试算版本不能同时到达上限".to_string(),
         ));
     }
     Ok(())
@@ -1957,30 +1757,13 @@ fn validate_trial_snapshot(
     req: &CreateLegacyImportConfirmationRequest,
     import_rule_version: &str,
 ) -> Result<()> {
-    let max_trial = confirmations.iter().map(|item| item.trial_version).max();
-    if max_trial.is_some_and(|trial| trial > req.trial_version) {
-        return Err(Error::ConflictError("新试算版本不得低于已有确认版本".to_string()));
-    }
-    let same_trial = confirmations
-        .iter()
-        .filter(|item| item.trial_version == req.trial_version)
-        .collect::<Vec<_>>();
-    if same_trial.iter().any(|item| {
-        item.batch_version != req.batch_version || item.import_rule_version != import_rule_version
-    }) {
-        return Err(Error::ConflictError(
-            "同一试算矩阵的批次或规则版本不一致".to_string(),
-        ));
-    }
-    if same_trial
-        .iter()
-        .any(|item| item.status == ConfirmationStatus::Rejected)
-    {
-        return Err(Error::ConflictError(
-            "当前试算已被退回，必须修复并生成新试算版本".to_string(),
-        ));
-    }
-    if batch.import_rule_version != import_rule_version {
+    LegacyImportConfirmation::ensure_trial_snapshot(
+        confirmations,
+        req.batch_version,
+        req.trial_version,
+        import_rule_version,
+    )?;
+    if !batch.has_rule_version(import_rule_version) {
         return Err(Error::ConflictError("导入规则版本已变化".to_string()));
     }
     Ok(())
@@ -2026,9 +1809,10 @@ async fn invalidate_replaced_confirmation(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    for confirmation in confirmations.iter_mut().filter(|item| {
-        item.status == ConfirmationStatus::Pending && item.trial_version < replacement.trial_version
-    }) {
+    for confirmation in confirmations
+        .iter_mut()
+        .filter(|item| item.is_replaced_by(replacement.trial_version))
+    {
         confirmation.invalidate(
             LegacyImportConfirmationId::new(replacement.base.id.clone()),
             Instant::now(),
@@ -2055,25 +1839,6 @@ async fn invalidate_replaced_confirmation(
     Ok(())
 }
 
-/// 返回当前试算快照中的确认矩阵。
-fn current_confirmation_matrix(
-    confirmations: &[LegacyImportConfirmation],
-    batch_version: u32,
-    trial_version: u32,
-    import_rule_version: &str,
-) -> Vec<LegacyImportConfirmation> {
-    confirmations
-        .iter()
-        .filter(|item| {
-            item.batch_version == batch_version
-                && item.trial_version == trial_version
-                && item.import_rule_version == import_rule_version
-                && item.status != ConfirmationStatus::Invalidated
-        })
-        .cloned()
-        .collect()
-}
-
 /// 将本次决策后的事实替换进内存矩阵。
 fn replace_confirmation_in_matrix(
     confirmations: &mut [LegacyImportConfirmation],
@@ -2087,42 +1852,21 @@ fn replace_confirmation_in_matrix(
     }
 }
 
-/// 计算强类型决策后的唯一下一步。
-fn confirmation_next_step(
-    decision: ConfirmationDecision,
-    confirmations: &[LegacyImportConfirmation],
-    required_scopes: &BTreeSet<&'static str>,
-) -> ImportBusinessConfirmationNextStep {
-    if decision == ConfirmationDecision::ReturnForFix {
-        return ImportBusinessConfirmationNextStep::FixAndRevalidate;
+/// 将领域确认矩阵决策映射为服务契约下一步。
+///
+/// # 参数
+/// * `decision` - 领域层确定的唯一矩阵决策
+///
+/// # 返回
+/// 返回 HTTP 契约使用的下一步枚举。
+fn confirmation_next_step(decision: ConfirmationMatrixDecision) -> ImportBusinessConfirmationNextStep {
+    match decision {
+        ConfirmationMatrixDecision::AwaitOtherConfirmations => {
+            ImportBusinessConfirmationNextStep::AwaitOtherConfirmations
+        }
+        ConfirmationMatrixDecision::StartApply => ImportBusinessConfirmationNextStep::StartApply,
+        ConfirmationMatrixDecision::FixAndRevalidate => ImportBusinessConfirmationNextStep::FixAndRevalidate,
     }
-    let confirmed_scopes = confirmations
-        .iter()
-        .filter(|item| item.status == ConfirmationStatus::Confirmed)
-        .map(|item| item.confirmation_scope.as_str())
-        .collect::<BTreeSet<_>>();
-    if required_scopes
-        .iter()
-        .all(|scope| confirmed_scopes.contains(scope))
-    {
-        ImportBusinessConfirmationNextStep::StartApply
-    } else {
-        ImportBusinessConfirmationNextStep::AwaitOtherConfirmations
-    }
-}
-
-/// 生成不含个人身份的批次确认派生摘要。
-fn confirmation_matrix_summary(trial_version: u32, confirmations: &[LegacyImportConfirmation]) -> String {
-    let states = confirmations
-        .iter()
-        .map(|item| (item.confirmation_scope.as_str(), item.status.as_str()))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let encoded = states
-        .into_iter()
-        .map(|(scope, status)| format!("{scope}={status}"))
-        .collect::<Vec<_>>()
-        .join(",");
-    format!("trial={trial_version};{encoded}")
 }
 
 /// 校验完成命令锁定的任务、事实、批次和当前责任。
@@ -2134,13 +1878,13 @@ fn validate_confirmation_completion(
     actor_id: &str,
 ) -> Result<()> {
     if work_item.base.version != command.expected_task_version
-        || batch.base.version != command.expected_batch_version
+        || !batch.has_version(command.expected_batch_version)
     {
         return Err(Error::ConflictError(
             "导入确认任务或批次版本已变化，请刷新后重试".to_string(),
         ));
     }
-    let expected_subject = confirmation_subject_version(
+    let expected_subject = LegacyImportConfirmation::subject_version(
         confirmation.batch_version,
         confirmation.trial_version,
         &confirmation.import_rule_version,
@@ -2151,7 +1895,7 @@ fn validate_confirmation_completion(
     {
         return Err(Error::ConflictError("导入确认的批次或试算快照已变化".to_string()));
     }
-    let owner_role = confirmation_owner_role(&command.confirmation_scope)?;
+    let owner_role = ConfirmationScope::parse(&command.confirmation_scope)?.owner_role();
     let task_matches = work_item.work_item_type == WorkItemType::ImportBusinessConfirmation
         && work_item.business_object_type == IMPORT_CONFIRMATION_OBJECT_TYPE
         && work_item.business_object_id == confirmation.batch_id.to_string()
@@ -2162,17 +1906,17 @@ fn validate_confirmation_completion(
         && confirmation.batch_id == command.batch_id
         && confirmation.confirmation_scope == command.confirmation_scope
         && confirmation.owner_role == owner_role
-        && confirmation.status == ConfirmationStatus::Pending
+        && confirmation.is_pending()
         && batch.base.id == confirmation.batch_id.to_string()
-        && batch.status == LegacyImportBatchStatus::PendingConfirmation
+        && batch.accepts_confirmation_decision()
         && batch.import_rule_version == confirmation.import_rule_version;
     if !task_matches || !fact_matches {
         return Err(Error::BusinessLogicError(
             "导入确认任务、责任范围或批次不匹配".to_string(),
         ));
     }
-    if !required_confirmation_scopes(&batch.source_object_set)?.contains(command.confirmation_scope.as_str())
-    {
+    let command_scope = ConfirmationScope::parse(&command.confirmation_scope)?;
+    if !batch.required_confirmation_scopes()?.contains(&command_scope) {
         return Err(Error::BusinessLogicError(
             "当前确认范围已不属于批次必要矩阵".to_string(),
         ));
@@ -2349,33 +2093,42 @@ fn confirmation_result_status(decision: ConfirmationDecision) -> ImportBusinessC
     }
 }
 
-/// 生成不暴露原始幂等键的稳定审计主键。
-fn confirmation_completion_audit_id(
+/// 构造导入确认命令的领域幂等身份。
+///
+/// # 参数
+/// * `actor_id` - 当前确认人
+/// * `action` - 稳定审计动作
+/// * `command` - 已解析并规范化的确认命令
+///
+/// # 返回
+/// 返回不暴露原始幂等键的审计 ID 与完整命令指纹。
+fn confirmation_command_identity(
     actor_id: &str,
     action: &str,
-    work_item_id: &str,
-    idempotency_key: &str,
-) -> String {
-    format!(
-        "{IMPORT_CONFIRMATION_AUDIT_PREFIX}{}",
-        stable_digest(&format!("{actor_id}|{action}|{work_item_id}|{idempotency_key}"))
-    )
-}
-
-/// 对命令全部版本锁与业务载荷生成无歧义指纹。
-fn confirmation_completion_fingerprint(command: &PreparedConfirmationCompletion) -> String {
-    command_fingerprint(&[
+    command: &PreparedConfirmationCompletion,
+) -> LegacyImportCommandIdentity {
+    let task_version = command.expected_task_version.to_string();
+    let batch_version = command.expected_batch_version.to_string();
+    let trial_version = command.expected_trial_version.to_string();
+    LegacyImportCommandIdentity::new(
+        IMPORT_CONFIRMATION_AUDIT_PREFIX,
+        actor_id,
+        action,
         command.work_item_id.as_ref(),
-        command.batch_id.as_ref(),
-        &command.expected_task_version.to_string(),
-        &command.expected_subject_version,
-        &command.expected_batch_version.to_string(),
-        &command.expected_trial_version.to_string(),
-        &command.confirmation_scope,
-        command.decision.as_str(),
-        command.reason_code.as_deref().unwrap_or_default(),
-        command.comment.as_deref().unwrap_or_default(),
-    ])
+        &command.idempotency_key,
+        &[
+            command.work_item_id.as_ref(),
+            command.batch_id.as_ref(),
+            &task_version,
+            &command.expected_subject_version,
+            &batch_version,
+            &trial_version,
+            &command.confirmation_scope,
+            command.decision.as_str(),
+            command.reason_code.as_deref().unwrap_or_default(),
+            command.comment.as_deref().unwrap_or_default(),
+        ],
+    )
 }
 
 /// 将导入确认的最小结果收据编码到审计消息。
@@ -2456,27 +2209,40 @@ fn import_execution_result(
     }
 }
 
-/// 生成不暴露原始 `request_id` 的导入执行收据主键。
-fn import_execution_audit_id(actor_id: &str, action: &str, batch_id: &str, request_id: &str) -> String {
-    format!(
-        "{IMPORT_EXECUTION_AUDIT_PREFIX}{}",
-        stable_digest(&format!("{actor_id}|{action}|{batch_id}|{request_id}"))
-    )
-}
-
-/// 对导入执行命令全部版本锁与载荷生成无歧义指纹。
-fn import_execution_fingerprint(command: &PreparedImportExecution) -> String {
-    command_fingerprint(&[
+/// 构造导入执行命令的领域幂等身份。
+///
+/// # 参数
+/// * `actor_id` - 当前操作人
+/// * `action` - 稳定审计动作
+/// * `command` - 已解析并规范化的执行命令
+///
+/// # 返回
+/// 返回不暴露原始请求 ID 的审计 ID 与完整命令指纹。
+fn import_execution_command_identity(
+    actor_id: &str,
+    action: &str,
+    command: &PreparedImportExecution,
+) -> LegacyImportCommandIdentity {
+    let batch_version = command.expected_batch_version.to_string();
+    let trial_version = command
+        .expected_trial_version
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    LegacyImportCommandIdentity::new(
+        IMPORT_EXECUTION_AUDIT_PREFIX,
+        actor_id,
+        action,
         command.batch_id.as_ref(),
-        &command.expected_batch_version.to_string(),
-        &command
-            .expected_trial_version
-            .map(|value| value.to_string())
-            .unwrap_or_default(),
-        command.action.as_str(),
-        command.reason_code.as_deref().unwrap_or_default(),
-        command.comment.as_deref().unwrap_or_default(),
-    ])
+        &command.request_id,
+        &[
+            command.batch_id.as_ref(),
+            &batch_version,
+            &trial_version,
+            command.action.as_str(),
+            command.reason_code.as_deref().unwrap_or_default(),
+            command.comment.as_deref().unwrap_or_default(),
+        ],
+    )
 }
 
 /// 将导入执行最小结果收据编码到审计消息。
@@ -2626,21 +2392,6 @@ fn parse_background_job_status(value: &str) -> Result<JobStatus> {
     }
 }
 
-/// 对各字段分别加长度前缀后计算命令摘要。
-fn command_fingerprint(parts: &[&str]) -> String {
-    let mut digest = Sha256::new();
-    for part in parts {
-        digest.update((part.len() as u64).to_be_bytes());
-        digest.update(part.as_bytes());
-    }
-    hex::encode(digest.finalize())
-}
-
-/// 计算稳定 SHA-256 十六进制摘要。
-fn stable_digest(value: &str) -> String {
-    hex::encode(Sha256::digest(value.as_bytes()))
-}
-
 /// 解析收据中的整数版本。
 fn parse_receipt_number<T>(value: &str, field: &str) -> Result<T>
 where
@@ -2683,29 +2434,6 @@ fn optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
-/// 统计指定导入状态的行数。
-///
-/// # 参数
-/// * `rows` - 导入行
-/// * `status` - 目标导入状态
-///
-/// # 返回
-/// 返回匹配行数。
-fn count_by_status(rows: &[LegacyImportRow], status: ImportStatus) -> u64 {
-    rows.iter().filter(|row| row.import_status == status).count() as u64
-}
-
-/// 统计仍处于待导入状态的行数。
-///
-/// # 参数
-/// * `rows` - 导入行
-///
-/// # 返回
-/// 返回待导入行数。
-fn count_pending(rows: &[LegacyImportRow]) -> u64 {
-    count_by_status(rows, ImportStatus::PendingImport)
-}
-
 #[cfg(test)]
 mod tests {
     use entities::common::time::BusinessDate;
@@ -2713,7 +2441,9 @@ mod tests {
         ExternalIdentityMapId, LegacyImportBatchId, LegacyImportConfirmationId, LegacyImportRowId,
         SourceSystemId, WorkItemId,
     };
-    use entities::legacy_import::{LegacyImportBatchData, LegacyImportConfirmationData, LegacyImportRowData};
+    use entities::legacy_import::{
+        LegacyImportBatchData, LegacyImportConfirmationData, LegacyImportRowData, ParseStatus,
+    };
 
     use super::*;
 
@@ -2760,7 +2490,7 @@ mod tests {
         let mut item = import_confirmation_work_item(
             WorkItemId::new("work-item-1"),
             &LegacyImportBatchId::new("batch-1"),
-            confirmation_subject_version(1, 2, "rule-1"),
+            LegacyImportConfirmation::subject_version(1, 2, "rule-1"),
             "SALES",
             "user-1",
         )
@@ -2774,7 +2504,7 @@ mod tests {
             work_item_id: WorkItemId::new("work-item-1"),
             batch_id: LegacyImportBatchId::new("batch-1"),
             expected_task_version: 3,
-            expected_subject_version: confirmation_subject_version(1, 2, "rule-1"),
+            expected_subject_version: LegacyImportConfirmation::subject_version(1, 2, "rule-1"),
             expected_batch_version: 4,
             expected_trial_version: 2,
             confirmation_scope: "SALES".to_string(),
@@ -2816,26 +2546,6 @@ mod tests {
     }
 
     #[test]
-    fn scope_registry_fixes_role_and_rejects_unknown_values() {
-        assert_eq!(confirmation_owner_role("sales").unwrap(), "role-sales");
-        assert_eq!(confirmation_owner_role("FINANCE").unwrap(), "role-finance");
-        assert!(confirmation_owner_role("SYSADMIN").is_err());
-    }
-
-    #[test]
-    fn object_set_derives_only_registered_required_scopes() {
-        let scopes =
-            required_confirmation_scopes("CUSTOMER;SUPPLIER|CARD_CATEGORY/期初库存、CARD_OPENING_AR")
-                .unwrap();
-
-        assert_eq!(
-            scopes,
-            BTreeSet::from(["FINANCE", "OPERATIONS", "PROCUREMENT", "SALES", "WAREHOUSE"])
-        );
-        assert!(required_confirmation_scopes("UNREGISTERED_OBJECT").is_err());
-    }
-
-    #[test]
     fn create_command_rejects_client_owned_task_fields() {
         let payload = serde_json::json!({
             "batch_id": "batch-1",
@@ -2853,7 +2563,7 @@ mod tests {
     #[test]
     fn same_batch_confirmation_scopes_use_distinct_server_responsibility_keys() {
         let batch_id = LegacyImportBatchId::new("batch-1");
-        let subject_version = confirmation_subject_version(1, 2, "rule-1");
+        let subject_version = LegacyImportConfirmation::subject_version(1, 2, "rule-1");
         let sales = import_confirmation_work_item(
             WorkItemId::new("work-item-sales"),
             &batch_id,
@@ -2933,11 +2643,7 @@ mod tests {
 
     #[test]
     fn return_for_fix_is_rejected_without_successor() {
-        let next = confirmation_next_step(
-            ConfirmationDecision::ReturnForFix,
-            &[confirmation()],
-            &BTreeSet::from(["SALES"]),
-        );
+        let next = confirmation_next_step(ConfirmationMatrixDecision::FixAndRevalidate);
 
         assert_eq!(next, ImportBusinessConfirmationNextStep::FixAndRevalidate);
         assert_eq!(
@@ -2948,21 +2654,7 @@ mod tests {
 
     #[test]
     fn last_confirmation_prepares_batch_without_starting_application() {
-        let mut sales = confirmation();
-        sales
-            .decide(
-                ConfirmationDecision::ConfirmScope,
-                "sales-user".to_string(),
-                Instant::from_unix_secs(1_700_000_000),
-                None,
-                None,
-            )
-            .unwrap();
-        let next = confirmation_next_step(
-            ConfirmationDecision::ConfirmScope,
-            &[sales],
-            &BTreeSet::from(["SALES"]),
-        );
+        let next = confirmation_next_step(ConfirmationMatrixDecision::StartApply);
         let mut import_batch = batch();
         if next == ImportBusinessConfirmationNextStep::StartApply {
             import_batch
@@ -3049,7 +2741,8 @@ mod tests {
     #[test]
     fn execution_receipt_is_stable_and_rejects_request_reuse() {
         let command = execution_command(ImportExecutionAction::StartApply);
-        let fingerprint = import_execution_fingerprint(&command);
+        let identity = import_execution_command_identity("user-1", "execute", &command);
+        let fingerprint = identity.fingerprint().to_string();
         let receipt = ImportExecutionReceipt {
             action: ImportExecutionAction::StartApply,
             result_status: ImportExecutionResultStatus::Started,
@@ -3068,10 +2761,7 @@ mod tests {
             receipt
         );
         assert!(parse_import_execution_receipt(&message, &"0".repeat(64)).is_err());
-        assert!(
-            !import_execution_audit_id("user-1", "execute", "batch-1", "secret-request")
-                .contains("secret-request")
-        );
+        assert!(!identity.audit_id().contains("execution-1"));
     }
 
     #[test]
@@ -3119,7 +2809,8 @@ mod tests {
 
     #[test]
     fn idempotency_receipt_rejects_same_key_with_different_command() {
-        let fingerprint = confirmation_completion_fingerprint(&completion_command());
+        let identity = confirmation_command_identity("user-1", "complete", &completion_command());
+        let fingerprint = identity.fingerprint().to_string();
         let receipt = ConfirmationCompletionReceipt {
             result_status: ImportBusinessConfirmationResultStatus::Confirmed,
             task_version: 4,
@@ -3133,9 +2824,6 @@ mod tests {
             receipt
         );
         assert!(parse_confirmation_completion_receipt(&message, &"0".repeat(64)).is_err());
-        assert!(
-            !confirmation_completion_audit_id("user-1", "complete", "work-item-1", "secret-key")
-                .contains("secret-key")
-        );
+        assert!(!identity.audit_id().contains("request-1"));
     }
 }

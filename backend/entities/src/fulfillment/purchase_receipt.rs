@@ -4,8 +4,11 @@
 //! 或审批状态机。
 //!
 //! 状态机按 §7.5（库存入库 DRAFT → POSTED → REVERSED，含终态 REVERSED）；
-//! `POSTED` 后不可编辑，纠错只能冲正或采购退货（§6.7，跨聚合部分标注 P3）。
+//! `POSTED` 后不可编辑，纠错只能冲正或采购退货。Service 加载采购版本、付款和
+//! 分配数据，本模块校验过账资格、超收上限、预占分摊与履约进度。
 //! 公共字段按 §6.7 字典精确建模（`posted_at`/`posted_by`），组合 `BaseModel`。
+
+use std::collections::HashMap;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -15,15 +18,120 @@ use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
-    PurchaseOrderId, PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, WarehouseId,
+    PurchaseOrderId, PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
+    SalesOrderRevisionLineId, WarehouseId,
 };
-use crate::money::Quantity;
+use crate::money::{round_to_cent, Amount, Quantity};
+use crate::purchase_order::{
+    PaymentTermSnapshot, ProgressStatus, PurchaseLineSalesAllocation, PurchaseOrderRevisionLine,
+    PurchaseOrderStatus,
+};
 use crate::validation::normalize_required_text;
 
 /// 入库单号最大长度。
 const RECEIPT_NO_MAX_LEN: usize = 64;
 /// 经办人标识最大长度。
 const ACTOR_MAX_LEN: usize = 128;
+
+/// 采购来源履约的纯资格规则。
+///
+/// Service 负责加载采购单、当前修订、付款净额和分配两端记录；本类型只校验
+/// 已完整加载数据中的状态、先款门槛与关联一致性，不访问数据库。
+pub struct PurchaseFulfillmentEligibility;
+
+impl PurchaseFulfillmentEligibility {
+    /// 校验采购单状态允许形成收货、电子交付或服务履约事实。
+    ///
+    /// # 参数
+    /// * `status` - 当前采购单状态
+    ///
+    /// # 返回
+    /// 生效或部分执行时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 其它状态返回业务规则错误。
+    pub fn ensure_order_fulfillable(status: PurchaseOrderStatus) -> Result<()> {
+        if matches!(
+            status,
+            PurchaseOrderStatus::Effective | PurchaseOrderStatus::PartiallyExecuted
+        ) {
+            return Ok(());
+        }
+        Err(Error::from("采购单不在可履约状态，无法过账"))
+    }
+
+    /// 校验冻结的先款后货门槛。
+    ///
+    /// # 参数
+    /// * `snapshot` - 当前生效采购版本的付款条件快照
+    /// * `gross_amount` - 当前生效采购版本含税总额
+    /// * `effective_paid` - 有效已过账付款净核销金额
+    ///
+    /// # 返回
+    /// 未启用门槛或已达到全部门槛时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 有效付款低于冻结金额或比例门槛时返回业务规则错误。
+    pub fn ensure_prepayment_satisfied(
+        snapshot: &PaymentTermSnapshot,
+        gross_amount: Amount,
+        effective_paid: Amount,
+    ) -> Result<()> {
+        if !snapshot.prepay_gate {
+            return Ok(());
+        }
+        if snapshot
+            .prepay_minimum_amount
+            .is_some_and(|minimum| effective_paid.to_decimal() < minimum.to_decimal())
+        {
+            return Err(Error::from(
+                "该采购单为先款后货，有效付款未达金额门槛，请先完成付款",
+            ));
+        }
+        if let Some(minimum_ratio) = snapshot.prepay_minimum_ratio {
+            let required = round_to_cent(gross_amount.to_decimal() * minimum_ratio.to_decimal());
+            if effective_paid.to_decimal() < required {
+                return Err(Error::from(
+                    "该采购单为先款后货，有效付款未达比例门槛，请先完成付款",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// 校验采购销售分配属于当前采购版本和目标销售稳定明细。
+    ///
+    /// # 参数
+    /// * `allocation` - 已加载的采购销售分配
+    /// * `current_purchase_line_ids` - 当前生效采购版本行主键集合
+    /// * `sales_revision_line` - 已加载销售版本行的「版本行主键、稳定行主键」
+    /// * `expected_sales_order_line_id` - 本次履约声明的销售稳定明细
+    ///
+    /// # 返回
+    /// 两端关联一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 分配不属于当前采购版本，或销售版本行与声明明细不一致时返回错误。
+    pub fn ensure_allocation_consistent(
+        allocation: &PurchaseLineSalesAllocation,
+        current_purchase_line_ids: &[PurchaseOrderRevisionLineId],
+        sales_revision_line: Option<(&SalesOrderRevisionLineId, &SalesOrderLineId)>,
+        expected_sales_order_line_id: &SalesOrderLineId,
+    ) -> Result<()> {
+        if !current_purchase_line_ids.contains(&allocation.purchase_order_revision_line_id) {
+            return Err(Error::from("采购销售分配不属于当前生效版本"));
+        }
+        let Some((revision_line_id, sales_order_line_id)) = sales_revision_line else {
+            return Err(Error::from("采购销售分配与销售明细不一致"));
+        };
+        if revision_line_id != &allocation.sales_order_revision_line_id
+            || sales_order_line_id != expected_sales_order_line_id
+        {
+            return Err(Error::from("采购销售分配与销售明细不一致"));
+        }
+        Ok(())
+    }
+}
 
 /// 采购入库单状态（数据模型 §6.7/§7.5：草稿、已过账、已冲正）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,6 +321,78 @@ impl PurchaseReceipt {
         Ok(())
     }
 
+    /// 校验入库单仍为调用方看到的草稿版本。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方提交的乐观锁版本
+    ///
+    /// # 返回
+    /// 草稿且版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态或版本不满足时返回错误。
+    pub fn ensure_draft_version(&self, expected_version: u64) -> Result<()> {
+        if self.status != PurchaseReceiptState::Draft {
+            return Err(Error::from("只有草稿状态的采购入库单可以过账"));
+        }
+        if self.base.version != expected_version {
+            return Err(Error::from("采购入库单版本已变化，请刷新后重试"));
+        }
+        Ok(())
+    }
+
+    /// 校验已加载入库行完整且全部归属本单。
+    ///
+    /// # 参数
+    /// * `lines` - 已在事务内加载的入库行
+    ///
+    /// # 返回
+    /// 至少一行且全部行归属本单时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 空行或行表头关联不一致时返回错误。
+    pub fn ensure_posting_lines(&self, lines: &[PurchaseReceiptLine]) -> Result<()> {
+        if lines.is_empty() {
+            return Err(Error::from("采购入库单没有行，无法过账"));
+        }
+        let receipt_id = PurchaseReceiptId::new(self.base.id.clone());
+        if lines.iter().any(|line| line.purchase_receipt_id != receipt_id) {
+            return Err(Error::from("采购入库行与入库单关联不一致"));
+        }
+        Ok(())
+    }
+
+    /// 根据当前生效采购版本与累计有效收货计算采购履约进度。
+    ///
+    /// # 参数
+    /// * `revision_lines` - 当前生效采购版本行
+    /// * `received` - 按采购版本行汇总的累计合格收货
+    ///
+    /// # 返回
+    /// 全部有数量行均收满时返回 `Completed`，否则返回 `Partial`。
+    pub fn fulfillment_progress(
+        revision_lines: &[PurchaseOrderRevisionLine],
+        received: &HashMap<String, Quantity>,
+    ) -> ProgressStatus {
+        let total = revision_lines
+            .iter()
+            .filter_map(|line| line.quantity)
+            .fold(rust_decimal::Decimal::ZERO, |sum, quantity| {
+                sum + quantity.to_decimal()
+            });
+        let received_total = revision_lines
+            .iter()
+            .filter_map(|line| received.get(&line.base.id))
+            .fold(rust_decimal::Decimal::ZERO, |sum, quantity| {
+                sum + quantity.to_decimal()
+            });
+        if total > rust_decimal::Decimal::ZERO && received_total >= total {
+            ProgressStatus::Completed
+        } else {
+            ProgressStatus::Partial
+        }
+    }
+
     /// 过账入库（草稿 → 已过账）。
     ///
     /// 过账时记录入库过账时间与仓储经办人（§6.7）。库存入账、余额更新与
@@ -302,7 +482,8 @@ pub struct PurchaseReceiptLineData {
 /// 采购入库行实体（数据模型 §6.7 行）。
 ///
 /// 行的合格与不合格数量合计不得超过到货数量（§6.7）；仅合格数量形成库存入账
-/// 和销售预占，累计有效收货不得超过当前有效采购数量——跨聚合校验由 P3 完成。
+/// 和销售预占。Service 加载当前采购版本与累计收货后，由本实体校验超收上限并
+/// 计算采购销售分配对应的预占份额。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct PurchaseReceiptLine {
     #[serde(flatten)]
@@ -351,6 +532,85 @@ impl PurchaseReceiptLine {
             rejected_quantity: data.rejected_quantity,
             quality_result: data.quality_result,
         })
+    }
+
+    /// 返回本行计入累计有效收货上限的数量。
+    ///
+    /// # 返回
+    /// 返回合格数量与不合格数量之和。
+    ///
+    /// # 错误
+    /// 数量相加超出统一精度范围时返回错误。
+    pub fn posting_quantity(&self) -> Result<Quantity> {
+        Quantity::try_from(self.qualified_quantity.to_decimal() + self.rejected_quantity.to_decimal())
+            .map_err(|error| Error::from(error.to_string()))
+    }
+
+    /// 校验本行属于当前采购版本且累计收货不超采购数量。
+    ///
+    /// # 参数
+    /// * `revision_line` - 按本行采购版本行主键加载的当前生效版本行
+    /// * `already_received` - 过账前该采购版本行的累计合格收货
+    ///
+    /// # 返回
+    /// 关联一致、非物流费用行且累计不超收时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 采购版本行关联不一致、没有可收货数量或累计超收时返回错误。
+    pub fn ensure_within_revision(
+        &self,
+        revision_line: &PurchaseOrderRevisionLine,
+        already_received: Quantity,
+    ) -> Result<()> {
+        if revision_line.base.id != self.purchase_order_revision_line_id.to_string() {
+            return Err(Error::from("采购入库行与采购版本明细关联不一致"));
+        }
+        let available = revision_line
+            .quantity
+            .ok_or_else(|| Error::from("物流费用行不能入库"))?;
+        if already_received.to_decimal() + self.posting_quantity()?.to_decimal() > available.to_decimal() {
+            return Err(Error::from(
+                "累计有效收货超过当前有效采购数量，超收必须走明确审批和采购变更",
+            ));
+        }
+        Ok(())
+    }
+
+    /// 按采购销售分配比例分摊本次合格入库数量。
+    ///
+    /// 最后一个分配吸收六位数量精度的舍入尾差。
+    ///
+    /// # 参数
+    /// * `allocation_quantities` - 各采购销售分配数量
+    /// * `purchase_line_total` - 当前采购版本行总数量
+    ///
+    /// # 返回
+    /// 返回与分配集合一一对应、合计等于本行合格数量的预占份额。
+    ///
+    /// # 错误
+    /// 采购行数量非正或份额超出统一数量精度时返回错误。
+    pub fn reservation_shares(
+        &self,
+        allocation_quantities: &[Quantity],
+        purchase_line_total: Quantity,
+    ) -> Result<Vec<Quantity>> {
+        let total = purchase_line_total.to_decimal();
+        if total <= rust_decimal::Decimal::ZERO {
+            return Err(Error::from("采购明细数量必须为正数"));
+        }
+        let qualified = self.qualified_quantity.to_decimal();
+        let mut assigned = rust_decimal::Decimal::ZERO;
+        let mut shares = Vec::with_capacity(allocation_quantities.len());
+        for (index, allocation_quantity) in allocation_quantities.iter().enumerate() {
+            let share = if index + 1 == allocation_quantities.len() {
+                qualified - assigned
+            } else {
+                (qualified * allocation_quantity.to_decimal() / total).round_dp(6)
+            };
+            assigned += share;
+            shares.push(Quantity::try_from(share).map_err(|error| Error::from(error.to_string()))?);
+        }
+        Ok(shares)
     }
 }
 
@@ -406,6 +666,43 @@ mod tests {
             purchase_order_id: PurchaseOrderId::new("po-1"),
             warehouse_id: WarehouseId::new("wh-1"),
         }
+    }
+
+    /// 构造具备数量和销售关联的最小采购版本行测试夹具。
+    ///
+    /// # 参数
+    /// * `quantity` - 采购版本行数量
+    ///
+    /// # 返回
+    /// 返回用于收货上限、进度与关联规则测试的采购版本行。
+    fn revision_line(quantity: Quantity) -> PurchaseOrderRevisionLine {
+        PurchaseOrderRevisionLine::new(
+            PurchaseOrderRevisionLineId::new("po-line-1"),
+            crate::purchase_order::PurchaseOrderRevisionLineData {
+                purchase_order_revision_id: crate::ids::PurchaseOrderRevisionId::new("po-rev-1"),
+                line_no: 1,
+                line_type: crate::purchase_order::PurchaseLineType::ItemService,
+                procurement_confirmation_line_id: Some(crate::ids::ProcurementConfirmationLineId::new(
+                    "confirmation-line-1",
+                )),
+                sku_id: Some(crate::ids::SkuId::new("sku-1")),
+                sku_revision_id: None,
+                product_name_snapshot: Some("商品".to_string()),
+                specification_snapshot: Some("默认规格".to_string()),
+                quantity: Some(quantity),
+                base_unit_code: Some("PCS".to_string()),
+                unit_cost_gross: Some(crate::money::UnitPrice::from_str("10.0000").unwrap()),
+                gross_amount: Amount::from_str("100.00").unwrap(),
+                net_amount: Amount::from_str("87.00").unwrap(),
+                tax_amount: Amount::from_str("13.00").unwrap(),
+                input_tax_rate: Some(crate::money::Rate::from_str("0.130000").unwrap()),
+                expected_delivery_date: None,
+                sales_order_line_id: Some(SalesOrderLineId::new("sales-line-1")),
+                sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sales-revision-line-1")),
+                allocated_quantity: Some(quantity),
+            },
+        )
+        .unwrap()
     }
 
     /// happy path：单号规范化、初始草稿、过账与冲正全链路。
@@ -515,6 +812,177 @@ mod tests {
             ..line_data()
         };
         assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("l4"), zero_line_no).is_err());
+    }
+
+    /// 过账资格校验状态、版本、表头行归属、超收和预占分摊守恒。
+    #[test]
+    fn posting_rules_are_entity_owned() {
+        let mut receipt = PurchaseReceipt::new(PurchaseReceiptId::new("receipt-1"), receipt_data()).unwrap();
+        let line = PurchaseReceiptLine::new(PurchaseReceiptLineId::new("line-rule"), line_data()).unwrap();
+        assert!(receipt.ensure_draft_version(receipt.base.version).is_ok());
+        assert!(receipt.ensure_draft_version(receipt.base.version + 1).is_err());
+        assert!(receipt.ensure_posting_lines(&[]).is_err());
+        assert!(receipt.ensure_posting_lines(std::slice::from_ref(&line)).is_ok());
+        let foreign_line = PurchaseReceiptLine::new(
+            PurchaseReceiptLineId::new("foreign-line"),
+            PurchaseReceiptLineData {
+                purchase_receipt_id: PurchaseReceiptId::new("other-receipt"),
+                ..line_data()
+            },
+        )
+        .unwrap();
+        assert!(receipt
+            .ensure_posting_lines(std::slice::from_ref(&foreign_line))
+            .is_err());
+
+        let revision_line = revision_line(Quantity::from_str("10").unwrap());
+        assert!(line
+            .ensure_within_revision(&revision_line, Quantity::from_str("0").unwrap(),)
+            .is_ok());
+        assert!(line
+            .ensure_within_revision(&revision_line, Quantity::from_str("1").unwrap(),)
+            .is_err());
+        let mut foreign_revision_line = revision_line.clone();
+        foreign_revision_line.base.id = "other-po-line".to_string();
+        assert!(line
+            .ensure_within_revision(&foreign_revision_line, Quantity::from_str("0").unwrap())
+            .is_err());
+
+        let shares = line
+            .reservation_shares(
+                &[
+                    Quantity::from_str("3").unwrap(),
+                    Quantity::from_str("2").unwrap(),
+                    Quantity::from_str("5").unwrap(),
+                ],
+                Quantity::from_str("10").unwrap(),
+            )
+            .unwrap();
+        assert_eq!(shares[0], Quantity::from_str("2.7").unwrap());
+        assert_eq!(shares[1], Quantity::from_str("1.8").unwrap());
+        assert_eq!(shares[2], Quantity::from_str("4.5").unwrap());
+        assert!(line
+            .reservation_shares(
+                &[Quantity::from_str("1").unwrap()],
+                Quantity::from_str("0").unwrap()
+            )
+            .is_err());
+
+        let mut received = HashMap::new();
+        received.insert("po-line-1".to_string(), Quantity::from_str("10").unwrap());
+        assert_eq!(
+            PurchaseReceipt::fulfillment_progress(std::slice::from_ref(&revision_line), &received),
+            ProgressStatus::Completed,
+        );
+        assert_eq!(
+            PurchaseReceipt::fulfillment_progress(std::slice::from_ref(&revision_line), &HashMap::new()),
+            ProgressStatus::Partial,
+        );
+        receipt
+            .mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1")
+            .unwrap();
+        assert!(receipt.ensure_draft_version(receipt.base.version).is_err());
+    }
+
+    /// 采购来源履约资格校验采购状态、先款门槛与分配两端关联。
+    #[test]
+    fn purchase_fulfillment_eligibility_checks_loaded_context() {
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_order_fulfillable(PurchaseOrderStatus::Effective,).is_ok()
+        );
+        assert!(
+            PurchaseFulfillmentEligibility::ensure_order_fulfillable(PurchaseOrderStatus::Draft,).is_err()
+        );
+
+        let snapshot = PaymentTermSnapshot::new(
+            "PREPAY".to_string(),
+            true,
+            Some(Amount::from_str("50.00").unwrap()),
+            Some(crate::money::Rate::from_str("0.500000").unwrap()),
+        )
+        .unwrap();
+        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+            &snapshot,
+            Amount::from_str("100.00").unwrap(),
+            Amount::from_str("50.00").unwrap(),
+        )
+        .is_ok());
+        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+            &snapshot,
+            Amount::from_str("100.00").unwrap(),
+            Amount::from_str("49.99").unwrap(),
+        )
+        .is_err());
+        let ratio_only = PaymentTermSnapshot::new(
+            "PREPAY-RATIO".to_string(),
+            true,
+            None,
+            Some(crate::money::Rate::from_str("0.750000").unwrap()),
+        )
+        .unwrap();
+        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+            &ratio_only,
+            Amount::from_str("100.00").unwrap(),
+            Amount::from_str("74.99").unwrap(),
+        )
+        .is_err());
+        let gate_disabled = PaymentTermSnapshot::new(
+            "NET-30".to_string(),
+            false,
+            Some(Amount::from_str("100.00").unwrap()),
+            None,
+        )
+        .unwrap();
+        assert!(PurchaseFulfillmentEligibility::ensure_prepayment_satisfied(
+            &gate_disabled,
+            Amount::from_str("100.00").unwrap(),
+            Amount::from_str("0.00").unwrap(),
+        )
+        .is_ok());
+
+        let allocation = PurchaseLineSalesAllocation::new(
+            crate::ids::PurchaseLineSalesAllocationId::new("allocation-1"),
+            crate::purchase_order::PurchaseLineSalesAllocationData {
+                purchase_order_revision_line_id: PurchaseOrderRevisionLineId::new("po-line-1"),
+                sales_order_revision_line_id: SalesOrderRevisionLineId::new("sales-revision-line-1"),
+                allocated_quantity: Quantity::from_str("10").unwrap(),
+                allocated_cost_gross: Amount::from_str("100.00").unwrap(),
+                allocated_cost_net: Amount::from_str("87.00").unwrap(),
+            },
+        )
+        .unwrap();
+        let purchase_line_ids = [PurchaseOrderRevisionLineId::new("po-line-1")];
+        let sales_revision_line_id = SalesOrderRevisionLineId::new("sales-revision-line-1");
+        let sales_order_line_id = SalesOrderLineId::new("sales-line-1");
+        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+            &allocation,
+            &purchase_line_ids,
+            Some((&sales_revision_line_id, &sales_order_line_id)),
+            &sales_order_line_id,
+        )
+        .is_ok());
+        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+            &allocation,
+            &[],
+            Some((&sales_revision_line_id, &sales_order_line_id)),
+            &sales_order_line_id,
+        )
+        .is_err());
+        let other_sales_order_line_id = SalesOrderLineId::new("other-sales-line");
+        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+            &allocation,
+            &purchase_line_ids,
+            Some((&sales_revision_line_id, &other_sales_order_line_id)),
+            &sales_order_line_id,
+        )
+        .is_err());
+        assert!(PurchaseFulfillmentEligibility::ensure_allocation_consistent(
+            &allocation,
+            &purchase_line_ids,
+            None,
+            &sales_order_line_id,
+        )
+        .is_err());
     }
 
     /// 序列化：状态/质量结果枚举输出稳定代码；实体 BSON 往返。

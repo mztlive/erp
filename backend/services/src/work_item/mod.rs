@@ -23,10 +23,13 @@ use entities::{
         ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
         ReconciliationDifferenceResolutionId, ResolutionAction, ResolutionType,
     },
-    work_item::{WorkItem, WorkItemCloseData, WorkItemStatus, WorkItemType},
+    work_item::{
+        AvailableWorkItemAccount, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind,
+        WorkItemBriefRelation, WorkItemCloseData, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+    },
     Permission,
 };
-use mongodb::{bson::doc, Database};
+use mongodb::Database;
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
@@ -328,7 +331,7 @@ impl WorkItemService {
             .iter()
             .filter_map(|row| {
                 object_policy(row.work_item_type, &row.business_object_type)
-                    .map(|policy| (policy.kind, row.business_object_id.clone()))
+                    .map(|policy| (policy.object_kind, row.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
         self.load_object_facts(&keys, &mut NoTransaction).await
@@ -411,7 +414,7 @@ impl WorkItemService {
             .iter()
             .filter_map(|item| {
                 object_policy(item.work_item_type, &item.business_object_type)
-                    .map(|policy| (policy.kind, item.business_object_id.clone()))
+                    .map(|policy| (policy.object_kind, item.business_object_id.clone()))
             })
             .collect::<HashSet<_>>();
         let facts = self.load_object_facts(&keys, &mut NoTransaction).await?;
@@ -519,7 +522,7 @@ impl WorkItemService {
         for batch in self
             .db
             .legacy_import_batches()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -547,7 +550,7 @@ impl WorkItemService {
         for task in self
             .db
             .integration_error_tasks()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -576,7 +579,7 @@ impl WorkItemService {
         for difference in self
             .db
             .reconciliation_differences()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -604,7 +607,7 @@ impl WorkItemService {
         for task in self
             .db
             .master_mapping_tasks()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -634,7 +637,7 @@ impl WorkItemService {
         for order in self
             .db
             .supplier_fulfillment_orders()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
             facts.insert(
@@ -643,7 +646,10 @@ impl WorkItemService {
                     root_document_id: order.mall_order_id.to_string(),
                     label: format!("供应商履约订单 {}", order.fulfillment_order_no),
                     created_by: SYSTEM_OBJECT_OWNER.to_string(),
-                    subject_versions: vec![order.base.version.to_string()],
+                    subject_versions: WorkItemSubjectVersions::constrained(vec![order
+                        .base
+                        .version
+                        .to_string()])?,
                     counterparty_label: None,
                     impact_summary: None,
                     brief_source: None,
@@ -668,7 +674,7 @@ impl WorkItemService {
         let offerings = self
             .db
             .supplier_offerings()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         let offering_ids = offerings
             .iter()
@@ -702,7 +708,7 @@ impl WorkItemService {
                     root_document_id: offering.base.id.clone(),
                     label: format!("供应商供给 {}", offering.supplier_sku_code),
                     created_by: offering.stable.created_by,
-                    subject_versions,
+                    subject_versions: WorkItemSubjectVersions::constrained(subject_versions)?,
                     counterparty_label: None,
                     impact_summary: None,
                     brief_source: None,
@@ -788,7 +794,8 @@ impl WorkItemService {
             return self.applied_outcome(item, actor).await;
         }
         let item = self.load(id).await?;
-        forbid_approval_generic_mutation(&item)?;
+        item.ensure_generic_responsibility_mutation()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -852,7 +859,8 @@ impl WorkItemService {
             return self.applied_outcome(item, actor).await;
         }
         let item = self.load(id).await?;
-        forbid_approval_generic_mutation(&item)?;
+        item.ensure_generic_responsibility_mutation()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -860,7 +868,7 @@ impl WorkItemService {
         }
         ensure_item_in_managed_scope(&item, &managed_access)?;
         self.ensure_object_participation(actor, &item).await?;
-        if !is_w29_closable(&item) {
+        if !item.is_w29_closable() {
             return Err(Error::BusinessLogicError(
                 "只有 W29 登记的异常任务允许受控关闭".to_string(),
             ));
@@ -890,10 +898,20 @@ impl WorkItemService {
         }
     }
 
+    /// 按稳定 ID 加载未删除工作项。
+    ///
+    /// # 参数
+    /// * `id` - 工作项稳定 ID
+    ///
+    /// # 返回
+    /// 返回当前工作项实体。
+    ///
+    /// # 错误
+    /// 工作项不存在或仓储查询失败时返回错误。
     async fn load(&self, id: &str) -> Result<WorkItem> {
         self.db
             .work_items()
-            .find_by_id(id, &mut NoTransaction)
+            .find_work_item(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("任务不存在".to_string()))
     }
@@ -910,11 +928,7 @@ impl WorkItemService {
             return Err(Error::ValidationError("替代任务不能引用自身".to_string()));
         }
         let replacement = self.load(replacement_id).await?;
-        if replacement.status != WorkItemStatus::Open
-            || !is_w29_closable(&replacement)
-            || replacement.work_item_type != current.work_item_type
-            || replacement.business_object_type != current.business_object_type
-        {
+        if !replacement.is_w29_replacement_for(current) {
             return Err(Error::ConflictError(
                 "替代任务必须是同一 W29 对象类别的开放正式任务".to_string(),
             ));
@@ -1095,18 +1109,20 @@ impl WorkItemService {
             let assignee = self
                 .db
                 .accounts()
-                .find_by_id(assignee_id, &mut NoTransaction)
+                .find_work_item_account(assignee_id, &mut NoTransaction)
                 .await?
                 .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
+            let assignee = AvailableWorkItemAccount::from_account(&assignee)
+                .map_err(|_| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
             let assignee_role_ids =
-                active_role_ids(&self.db, assignee.kind, assignee_id, &mut NoTransaction).await?;
+                active_role_ids(&self.db, assignee.kind(), assignee_id, &mut NoTransaction).await?;
             let assignee_read_role_ids = self
                 .roles_granting_permission(&assignee_role_ids, &read_permission, true)
                 .await?;
             let snapshot = AssignmentAuthorizationSnapshot {
                 policy_revision: before,
                 actor_kind: actor.kind(),
-                assignee_kind: assignee.kind,
+                assignee_kind: assignee.kind(),
                 read_permission: read_permission.clone(),
                 actor_read_role_ids,
                 actor_manage_role_ids,
@@ -1123,7 +1139,7 @@ impl WorkItemService {
             .await?;
             self.ensure_assignment_candidate(
                 assignee_id,
-                assignee.kind,
+                assignee.kind(),
                 item,
                 &snapshot,
                 item.owner_user_id.as_deref() == Some(assignee_id),
@@ -1150,12 +1166,14 @@ impl WorkItemService {
         authorization: &AssignmentAuthorizationSnapshot,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
+        let account = self
+            .db
             .accounts()
-            .find_by_id(actor_id, executor)
+            .find_work_item_account(actor_id, executor)
             .await?
-            .filter(|account| account.kind == actor_kind && account.can_login())
             .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
+        AvailableWorkItemAccount::from_account_kind(&account, actor_kind)
+            .map_err(|_| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
         let access = self
             .assignment_access_for_executor(
                 actor_kind,
@@ -1199,12 +1217,14 @@ impl WorkItemService {
         allow_current_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
+        let account = self
+            .db
             .accounts()
-            .find_by_id(user_id, executor)
+            .find_work_item_account(user_id, executor)
             .await?
-            .filter(|account| account.kind == expected_kind && account.can_login())
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
+        AvailableWorkItemAccount::from_account_kind(&account, expected_kind)
+            .map_err(|_| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
         let access = self
             .assignment_access_for_executor(
                 expected_kind,
@@ -1230,7 +1250,7 @@ impl WorkItemService {
         allow_current_owner: bool,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        match assignment_separation_policy(item.work_item_type) {
+        match item.work_item_type.assignment_separation_policy() {
             AssignmentSeparationPolicy::ApprovalHistory => {
                 self.ensure_approval_assignment_separation(user_id, item, allow_current_owner, executor)
                     .await
@@ -1292,6 +1312,17 @@ impl WorkItemService {
         non_empty_assignment_actors(actors)
     }
 
+    /// 读取采购审核提交人和既往审核人用于岗位分离。
+    ///
+    /// # 参数
+    /// * `item` - 采购审核工作项
+    /// * `executor` - 当前责任变更事务执行器
+    ///
+    /// # 返回
+    /// 提交与任务对象一致时返回提交人和可选审核人。
+    ///
+    /// # 错误
+    /// 提交缺失、对象关系不一致或提交人缺失时返回错误。
     async fn purchase_review_assignment_actors(
         &self,
         item: &WorkItem,
@@ -1300,10 +1331,10 @@ impl WorkItemService {
         let submission = self
             .db
             .purchase_order_submissions()
-            .find_by_id(&item.subject_version, executor)
+            .find_work_item_purchase_submission(&item.subject_version, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("采购提交事实缺失".to_string()))?;
-        if submission.purchase_order_id.as_ref() != item.business_object_id {
+        if !item.matches_business_object("purchase_order", submission.purchase_order_id.as_ref()) {
             return Err(Error::Forbidden("采购提交与任务对象不一致".to_string()));
         }
         let submitted_by = submission
@@ -1312,6 +1343,17 @@ impl WorkItemService {
         Ok(optional_actors([Some(submitted_by), submission.reviewed_by]))
     }
 
+    /// 读取销售变更提交人用于岗位分离。
+    ///
+    /// # 参数
+    /// * `item` - 销售变更复核工作项
+    /// * `executor` - 当前责任变更事务执行器
+    ///
+    /// # 返回
+    /// 提交与任务对象一致时返回提交人账号 ID。
+    ///
+    /// # 错误
+    /// 提交缺失、对象关系不一致或仓储查询失败时返回错误。
     async fn sales_change_assignment_actors(
         &self,
         item: &WorkItem,
@@ -1320,24 +1362,38 @@ impl WorkItemService {
         let submission = self
             .db
             .sales_change_submissions()
-            .find_by_id(&item.subject_version, executor)
+            .find_work_item_sales_change_submission(&item.subject_version, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("销售变更提交事实缺失".to_string()))?;
+        if !item.matches_business_object("sales_change_review", submission.sales_change_order_id.as_ref()) {
+            return Err(Error::Forbidden("销售变更提交与任务对象不一致".to_string()));
+        }
         Ok(vec![submission.submitted_by])
     }
 
+    /// 读取卡券票款任务的权威经办、登记与复核账号用于岗位分离。
+    ///
+    /// # 参数
+    /// * `item` - 卡券票款复核工作项
+    /// * `executor` - 当前责任变更事务执行器
+    ///
+    /// # 返回
+    /// 返回应收、回款、发票与复核事实中的全部责任账号。
+    ///
+    /// # 错误
+    /// 对象类型、状态、版本或票款正式事实无法证明时返回错误。
     async fn card_funds_assignment_actors(
         &self,
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        if false || item.business_object_type != "receivable_account" {
+        if item.business_object_type != "receivable_account" {
             return Err(Error::Forbidden("卡券票款任务责任事实不合法".to_string()));
         }
         let account = self
             .db
             .receivable_accounts()
-            .find_by_id(&item.business_object_id, executor)
+            .find_work_item_receivable_account(&item.business_object_id, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("应收子账事实缺失".to_string()))?;
         let expected_status = match item.work_item_type {
@@ -1427,19 +1483,19 @@ impl WorkItemService {
         let order = self
             .db
             .sales_orders()
-            .find_by_id(account.sales_order_id.as_ref(), executor)
+            .find_work_item_sales_order(account.sales_order_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::Forbidden("应收子账来源销售单事实缺失".to_string()))?;
         let revision_id = order
             .stable
             .current_revision_id
             .ok_or_else(|| Error::Forbidden("应收子账来源销售单缺少当前正式版本".to_string()))?;
-        if revision_id != item.subject_version {
+        if !item.matches_subject_version(&revision_id) {
             return Err(Error::Forbidden("票款复核任务已不是当前销售版本".to_string()));
         }
         self.db
             .sales_order_revisions()
-            .find_by_id(&revision_id, executor)
+            .find_work_item_sales_order_revision(&revision_id, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("应收子账来源销售单当前正式版本事实缺失".to_string()))?;
         Ok(())
@@ -1458,10 +1514,7 @@ impl WorkItemService {
         let receipts = self
             .db
             .customer_receipts()
-            .find_many(
-                doc! { "id": { "$in": ids.iter().cloned().collect::<Vec<_>>() } },
-                executor,
-            )
+            .list_work_item_brief_entities_by_ids(&ids.iter().cloned().collect::<Vec<_>>(), executor)
             .await?;
         if receipts.len() != ids.len()
             || receipts.iter().any(|receipt| {
@@ -1492,10 +1545,7 @@ impl WorkItemService {
         let invoices = self
             .db
             .invoices()
-            .find_many(
-                doc! { "id": { "$in": ids.iter().cloned().collect::<Vec<_>>() } },
-                executor,
-            )
+            .list_work_item_brief_entities_by_ids(&ids.iter().cloned().collect::<Vec<_>>(), executor)
             .await?;
         if invoices.len() != ids.len()
             || invoices.iter().any(|invoice| {
@@ -1527,17 +1577,11 @@ impl WorkItemService {
         if resource_ids.is_empty() {
             return Ok(Vec::new());
         }
+        let resource_id_list = resource_ids.iter().cloned().collect::<Vec<_>>();
         let audits = self
             .db
             .audit_logs()
-            .find_many(
-                doc! {
-                    "resource_type": resource_type,
-                    "resource_id": { "$in": resource_ids.iter().cloned().collect::<Vec<_>>() },
-                    "success": true,
-                },
-                executor,
-            )
+            .list_successful_work_item_fact_audits(resource_type, &resource_id_list, executor)
             .await?;
         audited_fact_operator_actors(
             resource_type,
@@ -1548,6 +1592,17 @@ impl WorkItemService {
         )
     }
 
+    /// 读取库存调整任务的制单人与既往复核人用于岗位分离。
+    ///
+    /// # 参数
+    /// * `item` - 库存调整复核工作项
+    /// * `executor` - 当前责任变更事务执行器
+    ///
+    /// # 返回
+    /// 返回存在的制单、业务复核与财务复核账号 ID。
+    ///
+    /// # 错误
+    /// 库存调整事实缺失或仓储查询失败时返回错误。
     async fn inventory_assignment_actors(
         &self,
         item: &WorkItem,
@@ -1556,7 +1611,7 @@ impl WorkItemService {
         let adjustment = self
             .db
             .stock_adjustments()
-            .find_by_id(&item.business_object_id, executor)
+            .find_work_item_stock_adjustment(&item.business_object_id, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("库存调整事实缺失".to_string()))?;
         Ok(optional_actors([
@@ -1566,6 +1621,17 @@ impl WorkItemService {
         ]))
     }
 
+    /// 读取供应商结算任务的制单人与既往复核人用于岗位分离。
+    ///
+    /// # 参数
+    /// * `item` - 供应商结算复核工作项
+    /// * `executor` - 当前责任变更事务执行器
+    ///
+    /// # 返回
+    /// 任务版本仍匹配时返回存在的制单与复核账号 ID。
+    ///
+    /// # 错误
+    /// 结算事实缺失、版本不一致或仓储查询失败时返回错误。
     async fn settlement_assignment_actors(
         &self,
         item: &WorkItem,
@@ -1574,10 +1640,10 @@ impl WorkItemService {
         let statement = self
             .db
             .supplier_settlement_statements()
-            .find_by_id(&item.business_object_id, executor)
+            .find_work_item_supplier_settlement(&item.business_object_id, executor)
             .await?
             .ok_or_else(|| Error::Forbidden("供应商结算事实缺失".to_string()))?;
-        if statement.subject_hash != item.subject_version {
+        if !item.matches_subject_version(&statement.subject_hash) {
             return Err(Error::Forbidden("供应商结算版本与任务不一致".to_string()));
         }
         Ok(optional_actors([
@@ -1670,7 +1736,7 @@ impl WorkItemService {
     ) -> Result<()> {
         let policy = object_policy(item.work_item_type, &item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
-        let keys = HashSet::from([(policy.kind, item.business_object_id.clone())]);
+        let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.load_object_facts(&keys, executor).await?;
         if authorized_item_fields(item.clone(), access, &facts).is_none() {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
@@ -1701,7 +1767,7 @@ impl WorkItemService {
     ) -> Result<()> {
         let policy = object_policy(item.work_item_type, &item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
-        let keys = HashSet::from([(policy.kind, item.business_object_id.clone())]);
+        let keys = HashSet::from([(policy.object_kind, item.business_object_id.clone())]);
         let facts = self.load_object_facts(&keys, executor).await?;
         if !has_assignment_candidate_access(item, access, &facts) {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
@@ -1716,12 +1782,14 @@ impl WorkItemService {
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        self.db
+        let account = self
+            .db
             .accounts()
-            .find_by_id(actor.id(), executor)
+            .find_work_item_account(actor.id(), executor)
             .await?
-            .filter(|account| account.kind == actor.kind() && account.can_login())
             .ok_or_else(|| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
+        AvailableWorkItemAccount::from_account_kind(&account, actor.kind())
+            .map_err(|_| Error::Forbidden("操作账号不存在、已停用或身份已变化".to_string()))?;
         let policy = object_policy(item.work_item_type, &item.business_object_type)
             .ok_or_else(|| Error::Forbidden("任务类型未注册责任策略".to_string()))?;
         let read_permission = Permission::parse(policy.read_permission).expect("责任策略权限必须合法");
@@ -1887,7 +1955,7 @@ impl WorkItemService {
                 Box::pin(async move {
                     let mut current = db
                         .work_items()
-                        .find_by_id(&item_id, session)
+                        .find_work_item(&item_id, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("任务不存在".to_string()))?;
                     if current.base.version != expected_task_version {
@@ -2052,7 +2120,7 @@ impl WorkItemService {
         let Some(audit) = self
             .db
             .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
+            .find_work_item_command_audit(audit_id, &mut NoTransaction)
             .await?
         else {
             return Ok(None);
@@ -2086,7 +2154,7 @@ impl WorkItemService {
         let Some(item) = self
             .db
             .work_items()
-            .find_by_id(item_id, &mut NoTransaction)
+            .find_work_item(item_id, &mut NoTransaction)
             .await?
         else {
             return Ok(WorkItemMutationOutcome::Conflict(WorkItemConflict::new(
@@ -2355,14 +2423,10 @@ async fn close_w29_domain_object(
         }
         let replacement = db
             .work_items()
-            .find_by_id(replacement_work_item_id, executor)
+            .find_work_item(replacement_work_item_id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("替代任务不存在".to_string()))?;
-        if replacement.status != WorkItemStatus::Open
-            || !is_w29_closable(&replacement)
-            || replacement.work_item_type != item.work_item_type
-            || replacement.business_object_type != item.business_object_type
-        {
+        if !replacement.is_w29_replacement_for(item) {
             return Err(Error::ConflictError(
                 "替代任务必须在关闭事务中仍是同一 W29 对象类别的开放正式任务".to_string(),
             ));
@@ -2372,7 +2436,7 @@ async fn close_w29_domain_object(
         "integration_error_task" => {
             let mut task = db
                 .integration_error_tasks()
-                .find_by_id(&item.business_object_id, executor)
+                .find_work_item_integration_error_task(&item.business_object_id, executor)
                 .await?
                 .ok_or_else(|| Error::NotFound("集成异常任务不存在".to_string()))?;
             let registered_type = if task.error_class == ErrorClass::ResultUnknown {
@@ -2397,7 +2461,7 @@ async fn close_w29_domain_object(
         "reconciliation_difference" => {
             let difference_id = ReconciliationDifferenceId::new(item.business_object_id.clone());
             db.reconciliation_differences()
-                .find_by_id(&item.business_object_id, executor)
+                .find_work_item_reconciliation_difference(&item.business_object_id, executor)
                 .await?
                 .ok_or_else(|| Error::NotFound("对账差异不存在".to_string()))?;
             let latest = db
@@ -2453,45 +2517,10 @@ struct ActorAccess {
     can_manage: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ObjectKind {
-    SalesOrder,
-    ProcurementConfirmation,
-    PurchaseOrder,
-    PurchaseChangeOrder,
-    SalesChangeOrder,
-    ReceivableAccount,
-    CustomerReceipt,
-    CustomerRefund,
-    ReceiptReversal,
-    SupplierPayment,
-    SupplierRefund,
-    PaymentReversal,
-    StockAdjustment,
-    SupplierSettlement,
-    LegacyImportBatch,
-    IntegrationErrorTask,
-    ReconciliationDifference,
-    MasterMappingTask,
-    SupplierFulfillmentOrder,
-    SupplierOffering,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct ObjectPolicy {
-    kind: ObjectKind,
-    work_item_type: WorkItemType,
-    business_object_type: &'static str,
-    read_permission: &'static str,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AssignmentSeparationPolicy {
-    ApprovalHistory,
-    DomainActors,
-    RoleAndParticipation,
-    FailClosed,
-}
+/// 工作项简报事实装载使用的实体对象种类别名。
+type ObjectKind = WorkItemBriefObjectKind;
+/// 工作项责任形成使用的实体岗位分离策略别名。
+type AssignmentSeparationPolicy = WorkItemAssignmentSeparationPolicy;
 
 #[derive(Debug, Clone, Default)]
 struct SubjectBrief {
@@ -2505,8 +2534,8 @@ struct ObjectFact {
     root_document_id: String,
     label: String,
     created_by: String,
-    /// 生产者合同允许的权威版本；空集合表示该领域没有通用锁版本约束。
-    subject_versions: Vec<String>,
+    /// 生产者合同允许的权威版本；无约束值对象表示该领域没有通用锁版本约束。
+    subject_versions: WorkItemSubjectVersions,
     counterparty_label: Option<String>,
     impact_summary: Option<String>,
     brief_source: Option<brief::ObjectBriefSource>,
@@ -2535,7 +2564,7 @@ impl ObjectFact {
             root_document_id: root_document_id.into(),
             label: label.into(),
             created_by: created_by.into(),
-            subject_versions: Vec::new(),
+            subject_versions: WorkItemSubjectVersions::unrestricted(),
             counterparty_label: None,
             impact_summary: None,
             brief_source: None,
@@ -2548,258 +2577,22 @@ type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
-const OBJECT_POLICIES: [ObjectPolicy; 33] = [
-    ObjectPolicy {
-        kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::ProcurementOrderCreation,
-        business_object_type: "sales_order",
-        read_permission: "purchase_order:create",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::ImportBusinessConfirmation,
-        business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::ProcurementConfirmation,
-        work_item_type: WorkItemType::ImportBusinessConfirmation,
-        business_object_type: "procurement_confirmation",
-        read_permission: "procurement_confirmation:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::PurchaseOrder,
-        work_item_type: WorkItemType::PurchaseOrderReview,
-        business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesChangeOrder,
-        work_item_type: WorkItemType::SalesChangeImpactReview,
-        business_object_type: "sales_change_review",
-        read_permission: "sales_change_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesChangeOrder,
-        work_item_type: WorkItemType::SalesChangeFinanceReview,
-        business_object_type: "sales_change_review",
-        read_permission: "sales_change_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::ReceivableAccount,
-        work_item_type: WorkItemType::CardFundsReview,
-        business_object_type: "receivable_account",
-        read_permission: "receivable_account:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::ReceivableAccount,
-        work_item_type: WorkItemType::CardFundsDeltaReview,
-        business_object_type: "receivable_account",
-        read_permission: "receivable_account:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::StockAdjustment,
-        work_item_type: WorkItemType::InventoryAdjustmentReview,
-        business_object_type: "stock_adjustment",
-        read_permission: "stock_adjustment:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SupplierSettlement,
-        work_item_type: WorkItemType::SupplierSettlementReview,
-        business_object_type: "supplier_settlement_statement",
-        read_permission: "supplier_settlement_statement:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::LegacyImportBatch,
-        work_item_type: WorkItemType::ImportBusinessConfirmation,
-        business_object_type: "LEGACY_IMPORT_BATCH",
-        read_permission: "legacy_import_batch:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::IntegrationErrorTask,
-        work_item_type: WorkItemType::IntegrationResultUnknown,
-        business_object_type: "integration_error_task",
-        read_permission: "integration_error_task:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::IntegrationErrorTask,
-        work_item_type: WorkItemType::BusinessException,
-        business_object_type: "integration_error_task",
-        read_permission: "integration_error_task:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::ReconciliationDifference,
-        work_item_type: WorkItemType::BusinessException,
-        business_object_type: "reconciliation_difference",
-        read_permission: "reconciliation_difference:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::ReconciliationDifference,
-        work_item_type: WorkItemType::IntegrationResultUnknown,
-        business_object_type: "reconciliation_difference",
-        read_permission: "reconciliation_difference:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::MasterMappingTask,
-        work_item_type: WorkItemType::BusinessException,
-        business_object_type: "MASTER_MAPPING_TASK",
-        read_permission: "master_mapping_task:list",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SupplierFulfillmentOrder,
-        work_item_type: WorkItemType::IntegrationResultUnknown,
-        business_object_type: "SUPPLIER_FULFILLMENT_ORDER",
-        read_permission: "supplier_fulfillment_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SupplierFulfillmentOrder,
-        work_item_type: WorkItemType::BusinessException,
-        business_object_type: "SUPPLIER_FULFILLMENT_ORDER",
-        read_permission: "supplier_fulfillment_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SupplierOffering,
-        work_item_type: WorkItemType::BusinessException,
-        business_object_type: "SUPPLIER_OFFERING",
-        read_permission: "supplier_offering:list",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "voucher_sales_order",
-        read_permission: "sales_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SalesChangeOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "sales_change_order",
-        read_permission: "sales_change_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::PurchaseOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::PurchaseChangeOrder,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "purchase_change_order",
-        read_permission: "purchase_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::StockAdjustment,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "stock_adjustment",
-        read_permission: "stock_adjustment:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::CustomerReceipt,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "customer_receipt",
-        read_permission: "receivable_account:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::CustomerRefund,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "customer_refund",
-        read_permission: "receivable_account:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::ReceiptReversal,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "receipt_reversal",
-        read_permission: "receivable_account:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SupplierPayment,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "supplier_payment",
-        read_permission: "purchase_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::SupplierRefund,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "supplier_refund",
-        read_permission: "purchase_order:detail",
-    },
-    ObjectPolicy {
-        kind: ObjectKind::PaymentReversal,
-        work_item_type: WorkItemType::DocumentApproval,
-        business_object_type: "payment_reversal",
-        read_permission: "purchase_order:detail",
-    },
-];
-
-fn object_policy(work_item_type: WorkItemType, business_object_type: &str) -> Option<&'static ObjectPolicy> {
-    OBJECT_POLICIES.iter().find(|policy| {
-        policy.work_item_type == work_item_type && policy.business_object_type == business_object_type
-    })
-}
-
-/// 返回工作项类型对应的岗位分离策略。
+/// 解析实体注册的工作项简报关系。
 ///
 /// # 参数
 /// * `work_item_type` - 工作项类型
+/// * `business_object_type` - 工作项持久化的业务对象类型
 ///
 /// # 返回
-/// 返回审批历史、领域参与人、角色参与或失败关闭策略。
+/// 已注册组合返回权威对象种类与读取权限；未注册组合返回 `None`。
 ///
 /// # 错误
 /// 无。
-fn assignment_separation_policy(work_item_type: WorkItemType) -> AssignmentSeparationPolicy {
-    match work_item_type {
-        WorkItemType::DocumentApproval => AssignmentSeparationPolicy::ApprovalHistory,
-        WorkItemType::ProcurementOrderCreation => AssignmentSeparationPolicy::RoleAndParticipation,
-        WorkItemType::ImportBusinessConfirmation
-        | WorkItemType::PurchaseOrderReview
-        | WorkItemType::SalesChangeImpactReview
-        | WorkItemType::SalesChangeFinanceReview
-        | WorkItemType::CardFundsReview
-        | WorkItemType::CardFundsDeltaReview
-        | WorkItemType::InventoryAdjustmentReview
-        | WorkItemType::SupplierSettlementReview => AssignmentSeparationPolicy::DomainActors,
-        WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException => {
-            AssignmentSeparationPolicy::RoleAndParticipation
-        }
-        WorkItemType::OwnershipMigrationSalesConfirmation
-        | WorkItemType::OwnershipMigrationFinanceConfirmation
-        | WorkItemType::FinanceCorrectionReview => AssignmentSeparationPolicy::FailClosed,
-    }
-}
-
-/// 审批任务不得走通用工作项写接口。
-///
-/// # 参数
-/// * `item` - 当前任务
-///
-/// # 错误
-/// 带 `approval_node_execution_id` 或类型为 `DocumentApproval` 时返回固定错误码。
-fn forbid_approval_generic_mutation(item: &WorkItem) -> Result<()> {
-    if item.approval_node_execution_id.is_some() || item.work_item_type == WorkItemType::DocumentApproval {
-        return Err(Error::BusinessLogicError(
-            "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN".to_string(),
-        ));
-    }
-    Ok(())
+fn object_policy(
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+) -> Option<&'static WorkItemBriefRelation> {
+    work_item_type.brief_relation(business_object_type)
 }
 
 fn optional_actors<const N: usize>(actors: [Option<String>; N]) -> Vec<String> {
@@ -2858,6 +2651,17 @@ fn non_empty_assignment_actors(actors: Vec<String>) -> Result<HashSet<String>> {
     Ok(actors)
 }
 
+/// 从批量对象键中提取指定实体种类的稳定 ID。
+///
+/// # 参数
+/// * `keys` - 工作项关系解析形成的对象键集合
+/// * `kind` - 待装载的权威业务对象种类
+///
+/// # 返回
+/// 返回该种类的对象 ID 集合。
+///
+/// # 错误
+/// 无。
 fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<String> {
     keys.iter()
         .filter(|(candidate, _)| *candidate == kind)
@@ -2865,14 +2669,35 @@ fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<Str
         .collect()
 }
 
+/// 根据实体注册关系和当前权限形成仓储候选对象形状。
+///
+/// # 参数
+/// * `access` - 当前账号的权限与参与范围事实
+///
+/// # 返回
+/// 返回当前账号具备读取权限的工作项类型和业务对象类型组合。
+///
+/// # 错误
+/// 无；注册关系中的固定权限必须可解析。
 fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, String)> {
-    OBJECT_POLICIES
+    WorkItemType::registered_brief_relations()
         .iter()
         .filter(|policy| has_permission(access, policy.read_permission))
         .map(|policy| (policy.work_item_type, policy.business_object_type.to_string()))
         .collect()
 }
 
+/// 判断当前访问快照是否覆盖实体关系要求的读取权限。
+///
+/// # 参数
+/// * `access` - 当前账号权限快照
+/// * `permission` - 实体关系注册的固定权限代码
+///
+/// # 返回
+/// 任一已授予权限覆盖要求时返回 `true`。
+///
+/// # 错误
+/// 无；固定权限代码无效属于程序错误并触发断言。
 fn has_permission(access: &ActorAccess, permission: &str) -> bool {
     let required = Permission::parse(permission).expect("对象注册表权限必须合法");
     access
@@ -2901,7 +2726,7 @@ fn authorized_fields(
     rows.into_iter()
         .filter_map(|row| {
             let policy = object_policy(row.work_item_type, &row.business_object_type)?;
-            let fact = facts.get(&(policy.kind, row.business_object_id.clone()))?;
+            let fact = facts.get(&(policy.object_kind, row.business_object_id.clone()))?;
             if !has_permission(access, policy.read_permission)
                 || !has_item_participation(
                     row.work_item_type,
@@ -2911,7 +2736,7 @@ fn authorized_fields(
                     access,
                     fact,
                 )
-                || !subject_version_matches(fact, &row.subject_version)
+                || !fact.subject_versions.accepts(&row.subject_version)
             {
                 return None;
             }
@@ -2940,7 +2765,7 @@ fn authorized_item_fields(
     facts: &ObjectFactMap,
 ) -> Option<dto::WorkItemFields> {
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
-    let fact = facts.get(&(policy.kind, item.business_object_id.clone()))?;
+    let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
     if !has_permission(access, policy.read_permission)
         || !has_item_participation(
             item.work_item_type,
@@ -2950,7 +2775,7 @@ fn authorized_item_fields(
             access,
             fact,
         )
-        || !subject_version_matches(fact, &item.subject_version)
+        || !fact.subject_versions.accepts(&item.subject_version)
     {
         return None;
     }
@@ -2975,13 +2800,13 @@ fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts:
     let Some(policy) = object_policy(item.work_item_type, &item.business_object_type) else {
         return false;
     };
-    let Some(fact) = facts.get(&(policy.kind, item.business_object_id.clone())) else {
+    let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else {
         return false;
     };
     has_permission(access, policy.read_permission)
-        && (item.work_item_type == WorkItemType::ProcurementOrderCreation
+        && (item.work_item_type.is_procurement_order_creation()
             || has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact))
-        && subject_version_matches(fact, &item.subject_version)
+        && fact.subject_versions.accepts(&item.subject_version)
 }
 
 /// 把对象事实中的标题、往来方和影响写回任务投影字段。
@@ -3022,7 +2847,7 @@ fn apply_subject_display(
     fields.counterparty_label = subject
         .and_then(|item| item.counterparty_label.clone())
         .or_else(|| fact.counterparty_label.clone());
-    let preserve_task_impact = fields.work_item_type == WorkItemType::ProcurementOrderCreation
+    let preserve_task_impact = fields.work_item_type.is_procurement_order_creation()
         && fields
             .impact_summary
             .as_deref()
@@ -3038,10 +2863,6 @@ fn apply_subject_display(
     fields.brief_source = subject
         .and_then(|item| item.brief_source.clone())
         .or_else(|| fact.brief_source.clone());
-}
-
-fn subject_version_matches(fact: &ObjectFact, actual: &str) -> bool {
-    fact.subject_versions.is_empty() || fact.subject_versions.iter().any(|expected| expected == actual)
 }
 
 /// 判断账号是否满足工作项的参与条件。
@@ -3067,8 +2888,8 @@ fn has_item_participation(
     access: &ActorAccess,
     fact: &ObjectFact,
 ) -> bool {
-    let is_procurement_owner = work_item_type == WorkItemType::ProcurementOrderCreation
-        && owner_user_id == Some(access.actor_id.as_str());
+    let is_procurement_owner =
+        work_item_type.is_procurement_order_creation() && owner_user_id == Some(access.actor_id.as_str());
     is_procurement_owner || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
@@ -3152,7 +2973,7 @@ fn allowed_actions(
     access: &ActorAccess,
 ) -> Vec<WorkItemAllowedAction> {
     let mut actions = vec![WorkItemAllowedAction::View];
-    let is_procurement_owner = item.work_item_type == WorkItemType::ProcurementOrderCreation
+    let is_procurement_owner = item.work_item_type.is_procurement_order_creation()
         && item.owner_user_id.as_deref() == Some(actor_id);
     if item.owner_user_id.as_deref() == Some(actor_id)
         && (is_procurement_owner
@@ -3165,7 +2986,7 @@ fn allowed_actions(
     // 人，owner_role 为语义标签而非角色 ID，无法用责任范围校验）；最终授权由
     // /admin/approval-decisions 写时重验（账号启用 + approval_instance:decide +
     // 单据读权）。
-    if item.work_item_type == WorkItemType::DocumentApproval
+    if item.work_item_type.is_document_approval()
         && item.status == WorkItemStatus::Open
         && item.approval_node_execution_id.is_some()
         && item.owner_user_id.as_deref() == Some(actor_id)
@@ -3461,23 +3282,21 @@ fn expected_task_version(value: &str) -> Result<u64> {
     Ok(version)
 }
 
-fn is_w29_closable(item: &WorkItem) -> bool {
-    is_w29_shape(item.work_item_type, &item.business_object_type, false)
-}
-
+/// 判断工作项投影是否属于 W29 可受控关闭关系。
+///
+/// # 参数
+/// * `item` - 已授权的工作项投影字段
+///
+/// # 返回
+/// 非审批的集成异常或对账差异任务返回 `true`。
+///
+/// # 错误
+/// 无。
 fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
-    is_w29_shape(item.work_item_type, &item.business_object_type, false)
-}
-
-fn is_w29_shape(work_item_type: WorkItemType, business_object_type: &str, has_approval_step: bool) -> bool {
-    !has_approval_step
-        && matches!(
-            (work_item_type, business_object_type),
-            (
-                WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException,
-                "integration_error_task" | "reconciliation_difference"
-            )
-        )
+    item.work_item_type.is_w29_closable(
+        &item.business_object_type,
+        item.approval_node_execution_id.is_some(),
+    )
 }
 
 fn w29_close_reason(
@@ -3591,12 +3410,12 @@ fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_actions, approval_assignment_separated, assignment_separation_policy,
-        audit_command_fingerprint, audited_fact_operator_actors, authorized_fields, authorized_item_fields,
-        business_day_bounds_at, command_audit_message, counts_as_processable_stat, detail_scope,
-        expected_task_version, has_assignment_candidate_access, is_w29_shape, non_empty_assignment_actors,
-        object_access_shapes, object_policy, stable_digest, w29_close_reason, w29_domain_evidence_reference,
-        ActorAccess, AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
+        allowed_actions, approval_assignment_separated, audit_command_fingerprint,
+        audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
+        command_audit_message, counts_as_processable_stat, detail_scope, expected_task_version,
+        has_assignment_candidate_access, non_empty_assignment_actors, object_access_shapes, object_policy,
+        stable_digest, w29_close_reason, w29_domain_evidence_reference, ActorAccess,
+        AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
         ObjectFactMap, ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
@@ -3780,43 +3599,19 @@ mod tests {
 
     #[test]
     fn w29_close_registry_excludes_other_business_exception_workspaces() {
-        assert!(is_w29_shape(
-            WorkItemType::IntegrationResultUnknown,
-            "integration_error_task",
-            false,
-        ));
-        assert!(is_w29_shape(
-            WorkItemType::BusinessException,
-            "reconciliation_difference",
-            false,
-        ));
-        assert!(!is_w29_shape(
-            WorkItemType::BusinessException,
-            "MASTER_MAPPING_TASK",
-            false,
-        ));
-        assert!(!is_w29_shape(
-            WorkItemType::BusinessException,
-            "SUPPLIER_OFFERING",
-            false,
-        ));
-        assert!(!is_w29_shape(
-            WorkItemType::BusinessException,
-            "SUPPLIER_FULFILLMENT_ORDER",
-            false,
-        ));
-        assert!(!is_w29_shape(
-            WorkItemType::BusinessException,
-            "integration_error_task",
-            true,
-        ));
+        assert!(WorkItemType::IntegrationResultUnknown.is_w29_closable("integration_error_task", false,));
+        assert!(WorkItemType::BusinessException.is_w29_closable("reconciliation_difference", false,));
+        assert!(!WorkItemType::BusinessException.is_w29_closable("MASTER_MAPPING_TASK", false));
+        assert!(!WorkItemType::BusinessException.is_w29_closable("SUPPLIER_OFFERING", false));
+        assert!(!WorkItemType::BusinessException.is_w29_closable("SUPPLIER_FULFILLMENT_ORDER", false,));
+        assert!(!WorkItemType::BusinessException.is_w29_closable("integration_error_task", true,));
     }
 
     #[test]
     fn w29_business_exception_integration_error_object_policy_is_registered() {
         let policy = object_policy(WorkItemType::BusinessException, "integration_error_task").unwrap();
 
-        assert_eq!(policy.kind, ObjectKind::IntegrationErrorTask);
+        assert_eq!(policy.object_kind, ObjectKind::IntegrationErrorTask);
         assert_eq!(policy.read_permission, "integration_error_task:detail");
     }
 
@@ -3826,7 +3621,7 @@ mod tests {
         let facts = w13_facts();
         let policy = object_policy(WorkItemType::CardFundsDeltaReview, "receivable_account").unwrap();
 
-        assert_eq!(policy.kind, ObjectKind::ReceivableAccount);
+        assert_eq!(policy.object_kind, ObjectKind::ReceivableAccount);
         assert_eq!(policy.read_permission, "receivable_account:detail");
         assert!(object_access_shapes(&access).contains(&(
             WorkItemType::CardFundsDeltaReview,
@@ -3870,10 +3665,10 @@ mod tests {
         let item = procurement_item("buyer-1");
         let policy = object_policy(WorkItemType::ProcurementOrderCreation, "sales_order").unwrap();
 
-        assert_eq!(policy.kind, ObjectKind::SalesOrder);
+        assert_eq!(policy.object_kind, ObjectKind::SalesOrder);
         assert_eq!(policy.read_permission, "purchase_order:create");
         assert_eq!(
-            assignment_separation_policy(WorkItemType::ProcurementOrderCreation),
+            WorkItemType::ProcurementOrderCreation.assignment_separation_policy(),
             AssignmentSeparationPolicy::RoleAndParticipation
         );
         let fields = authorized_item_fields(item.clone(), &owner_access, &facts).unwrap();
@@ -4163,20 +3958,20 @@ mod tests {
             WorkItemType::SupplierSettlementReview,
         ] {
             assert_eq!(
-                assignment_separation_policy(work_item_type),
+                work_item_type.assignment_separation_policy(),
                 AssignmentSeparationPolicy::DomainActors
             );
         }
         assert_eq!(
-            assignment_separation_policy(WorkItemType::DocumentApproval),
+            WorkItemType::DocumentApproval.assignment_separation_policy(),
             AssignmentSeparationPolicy::ApprovalHistory
         );
         assert_eq!(
-            assignment_separation_policy(WorkItemType::FinanceCorrectionReview),
+            WorkItemType::FinanceCorrectionReview.assignment_separation_policy(),
             AssignmentSeparationPolicy::FailClosed
         );
         assert_eq!(
-            assignment_separation_policy(WorkItemType::DocumentApproval),
+            WorkItemType::DocumentApproval.assignment_separation_policy(),
             AssignmentSeparationPolicy::ApprovalHistory
         );
         assert!(object_policy(WorkItemType::DocumentApproval, "stock_adjustment").is_some());

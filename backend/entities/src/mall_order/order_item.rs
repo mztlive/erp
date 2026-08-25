@@ -185,6 +185,29 @@ impl MallOrderItem {
             cost_input_tax_rate: data.cost_input_tax_rate,
         })
     }
+
+    /// 判断商品明细是否属于给定商城订单。
+    ///
+    /// # 参数
+    /// * `mall_order_id` - 待校验的商城订单
+    ///
+    /// # 返回
+    /// 明细所属订单一致时返回 `true`。
+    pub fn belongs_to_order(&self, mall_order_id: &MallOrderId) -> bool {
+        &self.mall_order_id == mall_order_id
+    }
+
+    /// 判断累计退款数量与金额是否仍在原支付范围内。
+    ///
+    /// # 参数
+    /// * `refunded_quantity` - 含本次在内的累计退款数量
+    /// * `refunded_amount` - 含本次在内的累计退款金额
+    ///
+    /// # 返回
+    /// 数量不超过原购买数量且金额不超过原实付金额时返回 `true`。
+    pub fn allows_cumulative_refund(&self, refunded_quantity: Quantity, refunded_amount: Amount) -> bool {
+        refunded_quantity <= self.quantity && refunded_amount <= self.paid_amount
+    }
 }
 
 /// 校验明细行内金额恒等式与非负性。
@@ -337,6 +360,25 @@ mod tests {
             item.cost_input_tax_rate,
             Some(Rate::from_str("0.060000").unwrap())
         );
+    }
+
+    #[test]
+    fn order_relationship_and_refund_capacity_are_entity_owned() {
+        let item = MallOrderItem::new(MallOrderItemId::new("item-1"), data()).unwrap();
+        assert!(item.belongs_to_order(&MallOrderId::new("order-1")));
+        assert!(!item.belongs_to_order(&MallOrderId::new("order-2")));
+        assert!(item.allows_cumulative_refund(
+            Quantity::from_str("2.000000").unwrap(),
+            Amount::from_str("20.00").unwrap(),
+        ));
+        assert!(!item.allows_cumulative_refund(
+            Quantity::from_str("2.000001").unwrap(),
+            Amount::from_str("20.00").unwrap(),
+        ));
+        assert!(!item.allows_cumulative_refund(
+            Quantity::from_str("2.000000").unwrap(),
+            Amount::from_str("20.01").unwrap(),
+        ));
     }
 
     /// 失败路径：必填空、超长、数量越界、金额恒等不成立。

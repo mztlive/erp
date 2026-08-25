@@ -39,6 +39,23 @@ pub struct ApprovalProcessDefinition {
 }
 
 impl ApprovalProcessDefinition {
+    /// 规范化流程定义名称。
+    ///
+    /// # 参数
+    /// * `name` - 调用方提供的定义名称
+    ///
+    /// # 返回
+    /// 返回去除首尾空白后的有效名称。
+    ///
+    /// # 错误
+    /// 名称为空或超过模型长度上限时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 幂等摘要与实体构造必须复用同一规范化结果，避免空白差异形成双份规则源。
+    pub fn normalize_name(name: impl Into<String>) -> ModelResult<String> {
+        normalize_required(name, "定义名称不能为空", NAME_MAX_LEN, "定义名称过长")
+    }
+
     /// 创建草稿定义。
     ///
     /// 调用方必须提供主键、时间与处理人；本方法不读取系统时钟。
@@ -70,7 +87,7 @@ impl ApprovalProcessDefinition {
             base: base_model_at(id.to_string(), at)?,
             process_kind,
             definition_version,
-            name: normalize_required(name, "定义名称不能为空", NAME_MAX_LEN, "定义名称过长")?,
+            name: Self::normalize_name(name)?,
             status: ApprovalDefinitionStatus::Draft,
             entry_node_key: normalize_required(
                 entry_node_key,
@@ -92,6 +109,43 @@ impl ApprovalProcessDefinition {
     /// 返回 `base.version`，不与 `definition_version` 混用。
     pub fn definition_lock_version(&self) -> u64 {
         self.base.version
+    }
+
+    /// 校验定义乐观锁版本与调用方预期一致。
+    ///
+    /// # 参数
+    /// * `expected` - 调用方持有的定义锁版本
+    ///
+    /// # 返回
+    /// 当前锁版本一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 锁版本不一致时返回状态错误。
+    ///
+    /// # 关键业务约束
+    /// `definition_version` 是业务版本，不得用于替代持久化乐观锁版本。
+    pub fn ensure_lock_version(&self, expected: u64) -> ModelResult<()> {
+        if self.definition_lock_version() == expected {
+            return Ok(());
+        }
+        Err(ModelError::InvalidStatus("定义锁版本已过期"))
+    }
+
+    /// 由历史最高业务版本计算下一定义版本。
+    ///
+    /// # 参数
+    /// * `current_max` - 同流程种类历史最高业务版本；无历史时传入 `0`
+    ///
+    /// # 返回
+    /// 返回单调递增的下一业务版本。
+    ///
+    /// # 错误
+    /// `u32` 溢出时返回模型计数错误。
+    ///
+    /// # 关键业务约束
+    /// 版本不得回绕或复用，调用方必须在持久化新草稿前完成计算。
+    pub fn next_version_after(current_max: u32) -> ModelResult<u32> {
+        current_max.checked_add(1).ok_or(ModelError::Overflow("定义版本"))
     }
 
     /// 草稿仍可修改时返回成功。
@@ -158,6 +212,38 @@ impl ApprovalProcessDefinition {
         touch_base(&mut self.base, at)
     }
 
+    /// 发布当前草稿并同步退役此前的已发布定义。
+    ///
+    /// # 参数
+    /// * `previous` - 同流程种类当前已发布定义；没有历史发布版时为空
+    /// * `actor` - 发布与退役操作人
+    /// * `at` - 同一状态切换时间
+    ///
+    /// # 返回
+    /// 返回已发布的新定义与可选已退役旧定义。
+    ///
+    /// # 错误
+    /// 当前定义不是草稿或旧定义不是已发布状态时返回模型错误。
+    ///
+    /// # 关键业务约束
+    /// 旧定义必须先按模型退役，新定义再发布；Repository 负责把两次写入置于同一事务。
+    pub fn publish_replacing(
+        mut self,
+        previous: Option<Self>,
+        actor: ParticipantId,
+        at: Timestamp,
+    ) -> ModelResult<(Self, Option<Self>)> {
+        let previous = match previous {
+            Some(mut previous) => {
+                previous.retire(actor.clone(), at)?;
+                Some(previous)
+            }
+            None => None,
+        };
+        self.publish(actor, at)?;
+        Ok((self, previous))
+    }
+
     /// 将已发布定义退役。只维护本实体状态。
     ///
     /// # 参数
@@ -208,6 +294,27 @@ mod tests {
         assert!(definition.ensure_mutable().is_ok());
     }
 
+    /// 名称规范化、下一版本与锁校验由定义模型统一提供。
+    #[test]
+    fn definition_helpers_are_deterministic_and_fail_closed() {
+        assert_eq!(
+            ApprovalProcessDefinition::normalize_name(" 库存调整 ").unwrap(),
+            "库存调整"
+        );
+        assert!(ApprovalProcessDefinition::normalize_name("   ").is_err());
+        assert_eq!(ApprovalProcessDefinition::next_version_after(0).unwrap(), 1);
+        assert_eq!(ApprovalProcessDefinition::next_version_after(7).unwrap(), 8);
+        assert!(ApprovalProcessDefinition::next_version_after(u32::MAX).is_err());
+
+        let definition = draft();
+        assert!(definition
+            .ensure_lock_version(definition.definition_lock_version())
+            .is_ok());
+        assert!(definition
+            .ensure_lock_version(definition.definition_lock_version() + 1)
+            .is_err());
+    }
+
     /// 版本 0 与空名称失败关闭。
     #[test]
     fn new_draft_rejects_invalid_fields() {
@@ -248,6 +355,21 @@ mod tests {
         assert_eq!(definition.status, ApprovalDefinitionStatus::Published);
         assert!(definition.rename_draft("x", at).is_err());
         assert!(definition.ensure_mutable().is_err());
+
+        let replacement = draft();
+        let mut previous = draft();
+        previous.base.id = "def-old".to_string();
+        previous.publish(actor.clone(), at).unwrap();
+        let (published, retired) = replacement
+            .publish_replacing(
+                Some(previous),
+                actor.clone(),
+                Timestamp::from_unix_secs(3).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(published.status, ApprovalDefinitionStatus::Published);
+        assert_eq!(retired.unwrap().status, ApprovalDefinitionStatus::Retired);
+
         definition
             .retire(actor, Timestamp::from_unix_secs(3).unwrap())
             .unwrap();

@@ -22,10 +22,10 @@ use database::{
 use entities::common::time::Instant;
 use entities::ids::{BackgroundJobId, MallConsumptionBackfillItemId, MallConsumptionBackfillJobId};
 use entities::mall_backfill::{
-    BackfillCostBasis, BackfillItemResult, BackfillJobStatus, MallConsumptionBackfillItem,
-    MallConsumptionBackfillItemData, MallConsumptionBackfillJob, MallConsumptionBackfillJobData,
+    BackfillCostBasis, BackfillItemClassification, BackfillItemResult, BackfillJobStatus, BackfillWindow,
+    MallConsumptionBackfillItem, MallConsumptionBackfillItemData, MallConsumptionBackfillJob,
+    MallConsumptionBackfillJobData,
 };
-use entities::mall_order::{FactType, MallOrderFact, ProcessingStatus};
 use entities::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
@@ -48,9 +48,6 @@ pub use self::dto::{
 type BackfillJobFilter = <mongodb::Database as MallBackfillExt>::MallConsumptionBackfillJobFilter;
 /// 回填明细列表筛选条件类型。
 type BackfillItemFilter = <mongodb::Database as MallBackfillExt>::MallConsumptionBackfillItemFilter;
-/// 关键事实列表筛选条件类型（D29 `MallOrderExt` 关联类型）。
-type MallOrderFactFilter = <mongodb::Database as MallOrderExt>::MallOrderFactFilter;
-
 /// 历史消费回填服务：作业管理、执行（START/RESUME）与明细查询。
 pub struct MallBackfillService {
     db: Database,
@@ -156,38 +153,18 @@ impl MallBackfillService {
             .find_by_id(&req.cutover_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("切换记录不存在".to_string()))?;
-        if !cutover.status.is_enabled() {
-            return Err(Error::BusinessLogicError(
-                "切换记录尚未启用，不能回填".to_string(),
-            ));
-        }
-        let enabled_at = cutover
-            .enabled_at
-            .ok_or_else(|| Error::BusinessLogicError("切换记录缺少启用时间".to_string()))?;
-        if req.range_end != enabled_at.unix_secs() as u64 {
-            return Err(Error::BusinessLogicError(
-                "回填范围终点必须等于切换启用时间 T".to_string(),
-            ));
-        }
-        let range_start = Instant::from_unix_secs(req.range_start as i64);
-        let range_end = Instant::from_unix_secs(req.range_end as i64);
+        let window = BackfillWindow::for_cutover(
+            Instant::from_unix_secs(req.range_start as i64),
+            Instant::from_unix_secs(req.range_end as i64),
+            cutover.status.is_enabled(),
+            cutover.enabled_at,
+        )?;
         let existing = self
             .db
             .mall_consumption_backfill_jobs()
-            .find_many(
-                mongodb::bson::doc! { "mall_id": cutover.mall_id.clone(), "deleted_at": 0 },
-                &mut NoTransaction,
-            )
+            .list_overlapping_for_mall(&cutover.mall_id, window.start(), window.end(), &mut NoTransaction)
             .await?;
-        let overlapping = existing.into_iter().any(|job: MallConsumptionBackfillJob| {
-            matches!(
-                job.status,
-                BackfillJobStatus::Pending
-                    | BackfillJobStatus::Running
-                    | BackfillJobStatus::PartiallyCompleted
-            ) && job.range_start < range_end
-                && range_start < job.range_end
-        });
+        let overlapping = existing.iter().any(|job| job.blocks_overlapping_batch(window));
         if overlapping {
             return Err(Error::BusinessLogicError(
                 "已存在覆盖重叠范围的正式回填批次，请续跑原任务".to_string(),
@@ -199,8 +176,8 @@ impl MallBackfillService {
             MallConsumptionBackfillJobData {
                 mall_id: cutover.mall_id.clone(),
                 cutover_id: req.cutover_id.clone(),
-                range_start,
-                range_end,
+                range_start: window.start(),
+                range_end: window.end(),
                 total_count: req.total_count,
                 total_amount: Amount::from_str(&req.total_amount)?,
             },
@@ -346,24 +323,19 @@ impl MallBackfillService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("回填作业不存在".to_string()))?;
-        if job.base.version != req.version {
+        if !job.has_version(req.version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
         match req.command {
-            BackfillCommand::Start if job.status != BackfillJobStatus::Pending => {
+            BackfillCommand::Start if !job.status.accepts_start() => {
                 return Err(Error::BusinessLogicError(format!(
                     "当前状态 {} 不允许开始回填",
                     job.status.label()
                 )));
             }
-            BackfillCommand::Resume
-                if !matches!(
-                    job.status,
-                    BackfillJobStatus::PartiallyCompleted | BackfillJobStatus::Failed
-                ) =>
-            {
+            BackfillCommand::Resume if !job.status.accepts_resume() => {
                 return Err(Error::BusinessLogicError(format!(
                     "当前状态 {} 不允许续跑",
                     job.status.label()
@@ -375,7 +347,7 @@ impl MallBackfillService {
         if self
             .db
             .background_jobs()
-            .find_one_by_field("request_id", req.idempotency_key.clone(), &mut NoTransaction)
+            .find_by_request_id(&req.idempotency_key, &mut NoTransaction)
             .await?
             .is_some()
         {
@@ -401,6 +373,7 @@ impl MallBackfillService {
         let range_start = job.range_start;
         let range_end = job.range_end;
         let expected_version = req.version;
+        let command = req.command;
         let idempotency_key = req.idempotency_key.clone();
         let idempotency_key_for_tx = idempotency_key.clone();
         let operation_id = req.operation_id.clone();
@@ -415,13 +388,19 @@ impl MallBackfillService {
                         .find_by_id(&job_id_for_tx, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("回填作业不存在".to_string()))?;
-                    if job.base.version != expected_version {
+                    if !job.has_version(expected_version) {
                         return Err(Error::ConflictError(
                             "数据已被其他请求修改，请刷新后重试".to_string(),
                         ));
                     }
-                    job.transition_to(BackfillJobStatus::Running)?;
-                    let facts = load_range_facts(&db, &mall_id, range_start, range_end).await?;
+                    match command {
+                        BackfillCommand::Start => job.start()?,
+                        BackfillCommand::Resume => job.resume()?,
+                    }
+                    let facts = db
+                        .mall_order_facts()
+                        .list_by_mall_and_occurred_range(&mall_id, range_start, range_end, session)
+                        .await?;
                     let mut background = entities::bulk_job::BackgroundJob::new(
                         BackgroundJobId::new(next_id()),
                         entities::bulk_job::BackgroundJobData {
@@ -459,7 +438,12 @@ impl MallBackfillService {
                             background.record_progress(0, 1, 0, now)?;
                             continue;
                         }
-                        let (result, basis) = backfill_item_result(&fact);
+                        let classification = BackfillItemClassification::from_mall_fact(
+                            fact.fact_type,
+                            fact.processing_status,
+                        );
+                        let result = classification.result;
+                        let basis = classification.cost_basis;
                         let item = MallConsumptionBackfillItem::new(
                             MallConsumptionBackfillItemId::new(next_id()),
                             MallConsumptionBackfillItemData {
@@ -510,102 +494,6 @@ impl MallBackfillService {
             next_step: "在任务详情查看处理进度与失败明细".to_string(),
         })
     }
-}
-
-/// 分页加载指定商城与范围内（半开区间）的全部关键事实。
-///
-/// P2 事实筛选不支持 `occurred_at` 区间，此处按商城分页取回后在内存过滤
-/// （P3 规模可接受；大数据量优化见 PR「需要协调人处理的事项」）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `mall_id` - 来源商城
-/// * `range_start` - 范围起点（含）
-/// * `range_end` - 范围终点（不含）
-///
-/// # 返回
-/// 返回范围内按发生时间升序的事实实体。
-///
-/// # 错误
-/// 数据库查询失败时返回 `RepositoryError`。
-async fn load_range_facts(
-    db: &Database,
-    mall_id: &str,
-    range_start: Instant,
-    range_end: Instant,
-) -> Result<Vec<MallOrderFact>> {
-    let mut facts = Vec::new();
-    let mut page = 1u64;
-    loop {
-        let filter = MallOrderFactFilter {
-            mall_id: Some(mall_id.to_string()),
-            fact_type: None,
-            processing_status: None,
-            after_sales_request_id: None,
-            page,
-            page_size: 100,
-            sort_by: Some("occurred_at".to_string()),
-            sort_ascending: true,
-        };
-        let result = db
-            .mall_order_facts()
-            .search_facts(&filter, &mut NoTransaction)
-            .await?;
-        let Some(last) = result.items.last() else {
-            break;
-        };
-        let last_occurred = last.occurred_at;
-        for row in result.items {
-            if row.occurred_at < range_start {
-                continue;
-            }
-            if row.occurred_at >= range_end {
-                return Ok(facts);
-            }
-            if let Some(fact) = db
-                .mall_order_facts()
-                .find_by_id(&row.id, &mut NoTransaction)
-                .await?
-            {
-                facts.push(fact);
-            }
-        }
-        if last_occurred >= range_end || (result.total as u64) <= page * 100 {
-            break;
-        }
-        page += 1;
-    }
-    facts.sort_by_key(|fact| (fact.occurred_at, fact.base.id.clone()));
-    Ok(facts)
-}
-
-/// 派生回填明细结果与成本口径。
-///
-/// 结果：事实已归集为 `New`，待归集/差异为 `PendingAttribution`；
-/// 成本口径：按该事实消费的当前评估链尾派生（`ACTUAL`/`STANDARD`/`NONE`），
-/// 消费评估尚缺时按 `NONE`（回填只补台账，不猜测成本）。
-///
-/// # 参数
-/// * `fact` - 关键事实
-///
-/// # 返回
-/// 返回 `(结果, 成本口径)`。
-fn backfill_item_result(fact: &MallOrderFact) -> (BackfillItemResult, BackfillCostBasis) {
-    let result = match fact.processing_status {
-        ProcessingStatus::Attributed => BackfillItemResult::New,
-        ProcessingStatus::PendingAttribution | ProcessingStatus::Difference => {
-            BackfillItemResult::PendingAttribution
-        }
-        _ => BackfillItemResult::Failed,
-    };
-    let basis = match fact.fact_type {
-        FactType::PaymentSucceeded => match fact.processing_status {
-            ProcessingStatus::Attributed => BackfillCostBasis::Actual,
-            _ => BackfillCostBasis::None,
-        },
-        _ => BackfillCostBasis::None,
-    };
-    (result, basis)
 }
 
 /// 从作业实体构造视图（含进度统计）。

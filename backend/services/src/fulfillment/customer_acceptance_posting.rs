@@ -5,8 +5,7 @@ use entities::common::time::Instant;
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceResult, AllocationAction,
     CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine, CustomerAcceptanceLineData,
-    CustomerAcceptanceState, CustomerAcceptanceUpdate, DeliveryState, ElectronicDeliveryState,
-    FulfillmentFactType, ServiceFulfillmentState,
+    CustomerAcceptanceUpdate, FulfillmentFactType,
 };
 use entities::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
@@ -14,7 +13,6 @@ use entities::ids::{
 use entities::money::Quantity;
 use entities::sales_order::{BusinessType, FulfillmentProgress};
 use id_generator::next_id;
-use mongodb::bson::doc;
 use mongodb::Database;
 use validator::Validate;
 
@@ -96,15 +94,12 @@ impl FulfillmentService {
                     };
 
                     if let Some(existing) = existing.as_ref() {
-                        if existing.sales_order_id != req.sales_order_id
-                            || req
-                                .acceptance_no
-                                .as_deref()
-                                .is_some_and(|acceptance_no| existing.acceptance_no != acceptance_no)
+                        if !existing
+                            .matches_business_identity(&req.sales_order_id, req.acceptance_no.as_deref())
                         {
                             return Err(Error::ConflictError("验收单号已被其他业务占用".to_string()));
                         }
-                        if existing.status == CustomerAcceptanceState::Posted {
+                        if existing.is_posted() {
                             return Ok::<CustomerAcceptance, crate::errors::Error>(existing.clone());
                         }
                     }
@@ -122,19 +117,12 @@ impl FulfillmentService {
 
                     let mut acceptance = match existing {
                         Some(mut acceptance) => {
-                            if acceptance.status != CustomerAcceptanceState::Draft {
-                                return Err(Error::ConflictError(
-                                    "只有草稿状态的客户验收单可以登记".to_string(),
-                                ));
-                            }
                             let expected_version = req
                                 .expected_acceptance_version
                                 .ok_or_else(|| Error::ValidationError("已有草稿缺少期望版本".to_string()))?;
-                            if acceptance.base.version != expected_version {
-                                return Err(Error::ConflictError(
-                                    "客户验收草稿已变化，请刷新后重试".to_string(),
-                                ));
-                            }
+                            acceptance
+                                .ensure_draft_version(expected_version)
+                                .map_err(|error| Error::ConflictError(error.to_string()))?;
                             acceptance.update(CustomerAcceptanceUpdate {
                                 accepted_at: Some(Instant::from_unix_secs(req.accepted_at)),
                                 result: Some(req.result),
@@ -183,7 +171,10 @@ impl FulfillmentService {
                         if allocations.is_empty() {
                             return Err(Error::ValidationError("验收行缺少履约分配".to_string()));
                         }
-                        ensure_line_allocations_conserved(line, allocations)?;
+                        line.ensure_allocation_conserved(
+                            allocations.iter().map(|allocation| allocation.allocated_quantity),
+                        )
+                        .map_err(|error| Error::ValidationError(error.to_string()))?;
                         for allocation in allocations {
                             write_acceptance_allocation(
                                 &db,
@@ -265,15 +256,16 @@ impl FulfillmentService {
                         .find_by_id(acceptance_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("客户验收单不存在".to_string()))?;
-                    if acceptance.status != CustomerAcceptanceState::Draft {
-                        return Err(Error::ConflictError(
-                            "只有草稿状态的客户验收单可以过账".to_string(),
-                        ));
-                    }
+                    acceptance
+                        .ensure_draft()
+                        .map_err(|error| Error::ConflictError(error.to_string()))?;
                     let lines = db
                         .fulfillment()
                         .acceptance_lines_by_acceptance_ids(std::slice::from_ref(&acceptance_id), session)
                         .await?;
+                    acceptance
+                        .ensure_posting_lines(&lines)
+                        .map_err(|error| Error::ValidationError(error.to_string()))?;
                     ensure_post_lines_match(&lines, &req.lines)?;
                     for line in &lines {
                         let allocations = req
@@ -282,7 +274,10 @@ impl FulfillmentService {
                             .find(|input| input.sales_order_line_id == line.sales_order_line_id)
                             .map(|input| input.allocations.clone())
                             .ok_or_else(|| Error::ValidationError("过账分配缺少验收行".to_string()))?;
-                        ensure_line_allocations_conserved(line, &allocations)?;
+                        line.ensure_allocation_conserved(
+                            allocations.iter().map(|allocation| allocation.allocated_quantity),
+                        )
+                        .map_err(|error| Error::ValidationError(error.to_string()))?;
                         for allocation in &allocations {
                             write_acceptance_allocation(
                                 &db,
@@ -358,14 +353,9 @@ impl FulfillmentService {
                         .find_by_id(original_id.as_ref(), session)
                         .await?
                         .ok_or_else(|| Error::NotFound("客户验收单不存在".to_string()))?;
-                    if original.base.version != req.expected_version {
-                        return Err(Error::ConflictError(
-                            "数据已被其他请求修改，请刷新后重试".to_string(),
-                        ));
-                    }
-                    if original.status != CustomerAcceptanceState::Posted {
-                        return Err(Error::ConflictError("只有已过账的客户验收单可以冲正".to_string()));
-                    }
+                    original
+                        .ensure_reversible(req.expected_version)
+                        .map_err(|error| Error::ConflictError(error.to_string()))?;
                     let original_lines = db
                         .fulfillment()
                         .acceptance_lines_by_acceptance_ids(std::slice::from_ref(&original_id), session)
@@ -503,34 +493,6 @@ fn ensure_post_lines_match(
     Ok(())
 }
 
-/// 校验验收行分配守恒（§8.2 第 5 条：分配合计等于通过数量）。
-///
-/// # 参数
-/// * `line` - 草稿验收行
-/// * `allocations` - 过账分配
-///
-/// # 返回
-/// 守恒返回 `Ok(())`。
-///
-/// # 错误
-/// 分配合计不等于通过数量时返回 `ValidationError`。
-fn ensure_line_allocations_conserved(
-    line: &CustomerAcceptanceLine,
-    allocations: &[AcceptanceAllocationInput],
-) -> Result<()> {
-    let mut total = Quantity::from_str("0").unwrap();
-    for allocation in allocations {
-        total = Quantity::try_from(total.to_decimal() + allocation.allocated_quantity.to_decimal())
-            .map_err(Error::Logic)?;
-    }
-    if total != line.accepted_quantity {
-        return Err(Error::ValidationError(
-            "验收行分配合计必须等于通过数量".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 /// 写入单条验收履约分配并校验净验收上限（§8.2 第 5 条，位于调用方事务内）。
 ///
 /// 校验履约事实存在、属于同一销售明细且处于有效状态；净验收（既有 APPLY −
@@ -563,19 +525,9 @@ async fn write_acceptance_allocation(
         allocation.fulfillment_fact_type,
         &allocation.fulfillment_line_id,
         sales_order_id,
+        acceptance_line,
     )
     .await?;
-    if acceptance_line.sales_order_line_id.to_string()
-        != fact_sales_line(
-            db,
-            session,
-            allocation.fulfillment_fact_type,
-            &allocation.fulfillment_line_id,
-        )
-        .await?
-    {
-        return Err(Error::ValidationError("履约事实不属于本验收明细".to_string()));
-    }
     let existing = db
         .fulfillment()
         .allocations_by_fulfillment_fact(
@@ -584,24 +536,13 @@ async fn write_acceptance_allocation(
             session,
         )
         .await?;
-    let mut net_accepted = Quantity::from_str("0").unwrap();
-    for existing in existing {
-        net_accepted = match existing.allocation_action {
-            AllocationAction::Apply => {
-                Quantity::try_from(net_accepted.to_decimal() + existing.allocated_quantity.to_decimal())
-                    .map_err(Error::Logic)?
-            }
-            AllocationAction::Reverse => {
-                Quantity::try_from(net_accepted.to_decimal() - existing.allocated_quantity.to_decimal())
-                    .map_err(Error::Logic)?
-            }
-        };
-    }
-    if net_accepted.to_decimal() + allocation.allocated_quantity.to_decimal() > net_successful.to_decimal() {
-        return Err(Error::ValidationError(
-            "履约事实的净验收数量超过其净成功履约数量".to_string(),
-        ));
-    }
+    AcceptanceFulfillmentAllocation::ensure_apply_within_successful_quantity(
+        net_successful,
+        &existing,
+        &allocation.fulfillment_line_id,
+        allocation.allocated_quantity,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))?;
     let record = AcceptanceFulfillmentAllocation::new(
         AcceptanceFulfillmentAllocationId::new(next_id()),
         AcceptanceFulfillmentAllocationData {
@@ -627,6 +568,7 @@ async fn write_acceptance_allocation(
 /// * `fact_type` - 履约事实类型
 /// * `fact_id` - 履约事实行主键
 /// * `sales_order_id` - 销售单（校验归属）
+/// * `acceptance_line` - 验收行（校验销售稳定明细归属）
 ///
 /// # 返回
 /// 返回净成功履约数量。
@@ -639,6 +581,7 @@ async fn load_fulfillment_fact(
     fact_type: FulfillmentFactType,
     fact_id: &str,
     sales_order_id: &entities::ids::SalesOrderId,
+    acceptance_line: &CustomerAcceptanceLine,
 ) -> Result<Quantity> {
     match fact_type {
         FulfillmentFactType::Delivery => {
@@ -652,14 +595,9 @@ async fn load_fulfillment_fact(
                 .find_by_id(line.delivery_id.as_ref(), session)
                 .await?
                 .ok_or_else(|| Error::ValidationError("发货单不存在".to_string()))?;
-            if delivery.sales_order_id != *sales_order_id
-                || !matches!(delivery.status, DeliveryState::Shipped | DeliveryState::Signed)
-            {
-                return Err(Error::ValidationError(
-                    "发货事实不属于本销售单或状态无效".to_string(),
-                ));
-            }
-            Ok(line.quantity)
+            delivery
+                .acceptance_quantity(&line, sales_order_id, &acceptance_line.sales_order_line_id)
+                .map_err(|error| Error::ValidationError(error.to_string()))
         }
         FulfillmentFactType::ElectronicDelivery => {
             let record = db
@@ -667,10 +605,9 @@ async fn load_fulfillment_fact(
                 .find_by_id(fact_id, session)
                 .await?
                 .ok_or_else(|| Error::ValidationError("电子交付事实不存在".to_string()))?;
-            if record.status != ElectronicDeliveryState::Confirmed {
-                return Err(Error::ValidationError("电子交付事实状态无效".to_string()));
-            }
-            Ok(record.quantity)
+            record
+                .acceptance_quantity(&acceptance_line.sales_order_line_id)
+                .map_err(|error| Error::ValidationError(error.to_string()))
         }
         FulfillmentFactType::ServiceFulfillment => {
             let record = db
@@ -678,57 +615,9 @@ async fn load_fulfillment_fact(
                 .find_by_id(fact_id, session)
                 .await?
                 .ok_or_else(|| Error::ValidationError("服务履约事实不存在".to_string()))?;
-            if record.status != ServiceFulfillmentState::Confirmed {
-                return Err(Error::ValidationError("服务履约事实状态无效".to_string()));
-            }
-            Ok(record.quantity)
-        }
-    }
-}
-
-/// 取履约事实所属的销售稳定明细。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `fact_type` - 履约事实类型
-/// * `fact_id` - 履约事实行主键
-///
-/// # 返回
-/// 返回销售稳定明细 ID 字符串。
-///
-/// # 错误
-/// 事实不存在时返回 `ValidationError`。
-async fn fact_sales_line(
-    db: &Database,
-    session: &mut mongodb::ClientSession,
-    fact_type: FulfillmentFactType,
-    fact_id: &str,
-) -> Result<String> {
-    match fact_type {
-        FulfillmentFactType::Delivery => {
-            let line = db
-                .delivery_lines()
-                .find_by_id(fact_id, session)
-                .await?
-                .ok_or_else(|| Error::ValidationError("发货事实不存在".to_string()))?;
-            Ok(line.sales_order_line_id.to_string())
-        }
-        FulfillmentFactType::ElectronicDelivery => {
-            let record = db
-                .electronic_deliveries()
-                .find_by_id(fact_id, session)
-                .await?
-                .ok_or_else(|| Error::ValidationError("电子交付事实不存在".to_string()))?;
-            Ok(record.sales_order_line_id.to_string())
-        }
-        FulfillmentFactType::ServiceFulfillment => {
-            let record = db
-                .service_fulfillments()
-                .find_by_id(fact_id, session)
-                .await?
-                .ok_or_else(|| Error::ValidationError("服务履约事实不存在".to_string()))?;
-            Ok(record.sales_order_line_id.to_string())
+            record
+                .acceptance_quantity(&acceptance_line.sales_order_line_id)
+                .map_err(|error| Error::ValidationError(error.to_string()))
         }
     }
 }
@@ -784,14 +673,8 @@ async fn update_sales_order_fulfillment_progress(
         .list_by_revision_line_ids(&revision_line_ids, session)
         .await?;
     let deliveries = db
-        .deliveries()
-        .find_many(
-            doc! {
-                "sales_order_id": sales_order_id.to_string(),
-                "status": { "$in": vec![DeliveryState::Shipped.as_str(), DeliveryState::Signed.as_str()] },
-            },
-            session,
-        )
+        .fulfillment()
+        .list_acceptance_eligible_deliveries(sales_order_id, session)
         .await?;
     let delivery_ids: Vec<entities::ids::DeliveryId> = deliveries
         .iter()
@@ -801,25 +684,14 @@ async fn update_sales_order_fulfillment_progress(
         .fulfillment()
         .delivery_lines_by_delivery_ids(&delivery_ids, session)
         .await?;
+    let sales_order_line_ids = so_line_ids(&revision_lines);
     let electronic = db
-        .electronic_deliveries()
-        .find_many(
-            doc! {
-                "sales_order_line_id": { "$in": so_line_ids(&revision_lines) },
-                "status": ElectronicDeliveryState::Confirmed.as_str(),
-            },
-            session,
-        )
+        .fulfillment()
+        .list_confirmed_electronic_deliveries(&sales_order_line_ids, session)
         .await?;
     let service = db
-        .service_fulfillments()
-        .find_many(
-            doc! {
-                "sales_order_line_id": { "$in": so_line_ids(&revision_lines) },
-                "status": ServiceFulfillmentState::Confirmed.as_str(),
-            },
-            session,
-        )
+        .fulfillment()
+        .list_confirmed_service_fulfillments(&sales_order_line_ids, session)
         .await?;
     let delivery_allocations = db
         .fulfillment()
@@ -864,7 +736,7 @@ async fn update_sales_order_fulfillment_progress(
         delivery_allocations: &delivery_allocations,
         electronic_allocations: &electronic_allocations,
         service_allocations: &service_allocations,
-    });
+    })?;
     if groups.is_empty() {
         return Ok(());
     }
@@ -905,43 +777,6 @@ async fn update_sales_order_fulfillment_progress(
 
 #[cfg(test)]
 mod tests {
-    use super::ensure_line_allocations_conserved;
-    use crate::fulfillment::AcceptanceAllocationInput;
-    use entities::fulfillment::FulfillmentFactType;
-    use entities::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderLineId};
-    use entities::money::Quantity;
-    use std::str::FromStr;
-
-    #[test]
-    fn acceptance_lines_conservation_is_checked() {
-        let line = entities::fulfillment::CustomerAcceptanceLine::new(
-            CustomerAcceptanceLineId::new("line-1"),
-            entities::fulfillment::CustomerAcceptanceLineData {
-                customer_acceptance_id: CustomerAcceptanceId::new("acc-1"),
-                line_no: 1,
-                sales_order_line_id: SalesOrderLineId::new("so-line-1"),
-                accepted_quantity: Quantity::from_str("5").unwrap(),
-                short_quantity: Quantity::from_str("0").unwrap(),
-                rejected_quantity: Quantity::from_str("0").unwrap(),
-                reason: None,
-                evidence_attachment_id: None,
-            },
-        )
-        .unwrap();
-        let ok = vec![AcceptanceAllocationInput {
-            fulfillment_line_id: "dl-1".to_string(),
-            fulfillment_fact_type: FulfillmentFactType::Delivery,
-            allocated_quantity: Quantity::from_str("5").unwrap(),
-        }];
-        assert!(ensure_line_allocations_conserved(&line, &ok).is_ok());
-        let not_conserved = vec![AcceptanceAllocationInput {
-            fulfillment_line_id: "dl-1".to_string(),
-            fulfillment_fact_type: FulfillmentFactType::Delivery,
-            allocated_quantity: Quantity::from_str("4").unwrap(),
-        }];
-        assert!(ensure_line_allocations_conserved(&line, &not_conserved).is_err());
-    }
-
     /// 过账与冲正路径不得启动审批、不得创建任务、不得选择定义。
     #[test]
     fn post_does_not_start_approval_or_create_tasks() {

@@ -1,7 +1,8 @@
 //! 域 D16 `fulfillment`：采购入库、发货、电子交付、服务履约、客户验收与验收分配
 //! （页面：W06 客户验收、W09 收货与发货/交付与代发）。
 //!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
+//! 实体层不访问数据库或外部 I/O；采购来源履约资格只接收 Service 已完整加载的
+//! 采购状态、付款快照和关联 ID，在本域内执行确定性校验。
 //! 字段字典与约束见数据模型 §6.7；公共字段归属按 §4.3 判定：
 //! - `electronic_delivery` / `service_fulfillment` 的字典含 `occurred_at` 等正式
 //!   事实字段 → 组合 `FactBase`；其余单据按 §6.7 字典精确建模（`posted_at`/
@@ -43,8 +44,8 @@ pub use electronic_delivery::{
     FulfillmentResult,
 };
 pub use purchase_receipt::{
-    PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData, PurchaseReceiptState,
-    PurchaseReceiptUpdate, QualityResult,
+    PurchaseFulfillmentEligibility, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine,
+    PurchaseReceiptLineData, PurchaseReceiptState, PurchaseReceiptUpdate, QualityResult,
 };
 pub use service_fulfillment::{
     ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentState, ServiceFulfillmentUpdate,

@@ -5,7 +5,6 @@
 use std::collections::{HashMap, HashSet};
 
 use database::{Executor, PurchaseOrderExt, SalesOrderExt, SalesReviewExt};
-use mongodb::bson::doc;
 
 use super::brief::{join_list_summary, non_empty, push_section, ObjectBriefSource};
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, WorkItemService};
@@ -37,7 +36,7 @@ impl WorkItemService {
         let changes = self
             .db
             .sales_change_orders()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         if changes.is_empty() {
             return Ok(());
@@ -49,7 +48,7 @@ impl WorkItemService {
         let sales_nos = self
             .db
             .sales_orders()
-            .find_many(doc! { "id": { "$in": sales_order_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&sales_order_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.order_no))
@@ -112,7 +111,7 @@ impl WorkItemService {
         let changes = self
             .db
             .purchase_change_orders()
-            .find_many(doc! { "id": { "$in": ids.clone() } }, executor)
+            .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?;
         if changes.is_empty() {
             return Ok(());
@@ -124,7 +123,7 @@ impl WorkItemService {
         let purchase_nos = self
             .db
             .purchase_orders()
-            .find_many(doc! { "id": { "$in": purchase_ids } }, executor)
+            .list_work_item_brief_entities_by_ids(&purchase_ids, executor)
             .await?
             .into_iter()
             .map(|order| (order.base.id, order.purchase_no))

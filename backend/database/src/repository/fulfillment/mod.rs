@@ -45,11 +45,19 @@ use serde::{Deserialize, Serialize};
 
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine, Delivery, DeliveryLine,
-    FulfillmentFactType, PurchaseReceipt, PurchaseReceiptLine,
+    DeliveryState, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType, PurchaseReceipt,
+    PurchaseReceiptLine, PurchaseReceiptState, ServiceFulfillment, ServiceFulfillmentState,
 };
-use entities::ids::{CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, PurchaseReceiptId};
+use entities::ids::{
+    CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
+    PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+    ServiceFulfillmentId,
+};
+use entities::inventory::StockReservation;
+use entities::payable::{PayableAccount, PayableSourceType};
+use entities::sales_order::{SalesOrderLine, SalesOrderRevisionLine};
 
-use super::extensions::FulfillmentExt;
+use super::extensions::{FulfillmentExt, InventoryExt, PayableExt, SalesOrderExt};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
@@ -62,6 +70,14 @@ const CUSTOMER_ACCEPTANCE_LINES: &str = <mongodb::Database as FulfillmentExt>::C
 /// `acceptance_fulfillment_allocation` 集合名（单一来源：`FulfillmentExt` 关联常量）。
 const ACCEPTANCE_FULFILLMENT_ALLOCATIONS: &str =
     <mongodb::Database as FulfillmentExt>::ACCEPTANCE_FULFILLMENT_ALLOCATIONS;
+/// `payable_account` 集合名（跨域只读，来源常量仍由 D19 拥有）。
+const PAYABLE_ACCOUNTS: &str = <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS;
+/// `sales_order_revision_line` 集合名（跨域只读，来源常量仍由 D13 拥有）。
+const SALES_ORDER_REVISION_LINES: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDER_REVISION_LINES;
+/// `sales_order_line` 集合名（跨域只读，来源常量仍由 D13 拥有）。
+const SALES_ORDER_LINES: &str = <mongodb::Database as SalesOrderExt>::SALES_ORDER_LINES;
+/// `stock_reservation` 集合名（跨域只读，来源常量仍由 D17 拥有）。
+const STOCK_RESERVATIONS: &str = <mongodb::Database as InventoryExt>::STOCK_RESERVATIONS;
 
 /// D16 域专用仓储：跨集合批量查询与多步骤事务写入。
 ///
@@ -82,6 +98,403 @@ impl<'a> FulfillmentRepository<'a> {
     /// 返回仓储实例。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
+    }
+
+    /// 查询销售单下可进入客户验收的发货单。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回状态为已发货或已签收的发货单。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_acceptance_eligible_deliveries(
+        &self,
+        sales_order_id: &entities::ids::SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Delivery>> {
+        let states: Vec<&str> = DeliveryState::acceptance_eligible_states()
+            .iter()
+            .map(DeliveryState::as_str)
+            .collect();
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "status": { "$in": states },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询销售明细集合下已确认的电子交付事实。
+    ///
+    /// # 参数
+    /// * `sales_order_line_ids` - 销售稳定明细主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回已确认电子交付记录；空主键集合直接返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_confirmed_electronic_deliveries(
+        &self,
+        sales_order_line_ids: &[SalesOrderLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ElectronicDelivery>> {
+        list_by_ids_and_status(
+            self.db,
+            <mongodb::Database as FulfillmentExt>::ELECTRONIC_DELIVERIES,
+            "sales_order_line_id",
+            &ids_to_strings(sales_order_line_ids),
+            ElectronicDeliveryState::Confirmed.as_str(),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询销售明细集合下已确认的服务履约事实。
+    ///
+    /// # 参数
+    /// * `sales_order_line_ids` - 销售稳定明细主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回已确认服务履约记录；空主键集合直接返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_confirmed_service_fulfillments(
+        &self,
+        sales_order_line_ids: &[SalesOrderLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ServiceFulfillment>> {
+        list_by_ids_and_status(
+            self.db,
+            <mongodb::Database as FulfillmentExt>::SERVICE_FULFILLMENTS,
+            "sales_order_line_id",
+            &ids_to_strings(sales_order_line_ids),
+            ServiceFulfillmentState::Confirmed.as_str(),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询销售单的客户验收历史。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按验收时间倒序排列的验收单。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_customer_acceptance_history(
+        &self,
+        sales_order_id: &entities::ids::SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAcceptance>> {
+        mongo_ops::find_many(
+            &self.db.collection::<CustomerAcceptance>(
+                <mongodb::Database as FulfillmentExt>::CUSTOMER_ACCEPTANCES,
+            ),
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder().sort(doc! { "accepted_at": -1 }).build(),
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键批量读取发货单。
+    ///
+    /// # 参数
+    /// * `delivery_ids` - 发货单主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的发货单。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_deliveries_by_ids(
+        &self,
+        delivery_ids: &[DeliveryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Delivery>> {
+        find_lines_in(
+            self.db,
+            <mongodb::Database as FulfillmentExt>::DELIVERIES,
+            "id",
+            &ids_to_strings(delivery_ids),
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键批量读取电子交付记录。
+    ///
+    /// # 参数
+    /// * `record_ids` - 电子交付主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的电子交付记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_electronic_deliveries_by_ids(
+        &self,
+        record_ids: &[ElectronicDeliveryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ElectronicDelivery>> {
+        find_lines_in(
+            self.db,
+            <mongodb::Database as FulfillmentExt>::ELECTRONIC_DELIVERIES,
+            "id",
+            &ids_to_strings(record_ids),
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键批量读取服务履约记录。
+    ///
+    /// # 参数
+    /// * `record_ids` - 服务履约主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的服务履约记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_service_fulfillments_by_ids(
+        &self,
+        record_ids: &[ServiceFulfillmentId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ServiceFulfillment>> {
+        find_lines_in(
+            self.db,
+            <mongodb::Database as FulfillmentExt>::SERVICE_FULFILLMENTS,
+            "id",
+            &ids_to_strings(record_ids),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询采购单来源的应付往来子账。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回来源类型为采购单且来源主键匹配的应付子账。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_payable_accounts_for_purchase_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>> {
+        mongo_ops::find_many(
+            &self.db.collection::<PayableAccount>(PAYABLE_ACCOUNTS),
+            doc! {
+                "source_document_id": purchase_order_id.to_string(),
+                "source_type": PayableSourceType::PurchaseOrder.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询同时匹配版本行主键与销售稳定明细的销售版本行。
+    ///
+    /// # 参数
+    /// * `revision_line_id` - 销售版本行主键
+    /// * `sales_order_line_id` - 销售稳定明细主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配记录；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn sales_revision_line_for_allocation(
+        &self,
+        revision_line_id: &SalesOrderRevisionLineId,
+        sales_order_line_id: &SalesOrderLineId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesOrderRevisionLine>> {
+        mongo_ops::find_one(
+            &self
+                .db
+                .collection::<SalesOrderRevisionLine>(SALES_ORDER_REVISION_LINES),
+            doc! {
+                "id": revision_line_id.to_string(),
+                "sales_order_line_id": sales_order_line_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询采购单全部已过账入库单。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回状态为已过账的入库单。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_posted_receipts_for_purchase_order(
+        &self,
+        purchase_order_id: &PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseReceipt>> {
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<PurchaseReceipt>(<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS),
+            doc! {
+                "purchase_order_id": purchase_order_id.to_string(),
+                "status": PurchaseReceiptState::Posted.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键批量读取销售版本行。
+    ///
+    /// # 参数
+    /// * `revision_line_ids` - 销售版本行主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配销售版本行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_sales_revision_lines_by_ids(
+        &self,
+        revision_line_ids: &[SalesOrderRevisionLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevisionLine>> {
+        find_lines_in(
+            self.db,
+            SALES_ORDER_REVISION_LINES,
+            "id",
+            &ids_to_strings(revision_line_ids),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询入库行形成的库存预占。
+    ///
+    /// # 参数
+    /// * `receipt_line_ids` - 入库行主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的库存预占。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_stock_reservations_for_receipt_lines(
+        &self,
+        receipt_line_ids: &[PurchaseReceiptLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockReservation>> {
+        find_lines_in(
+            self.db,
+            STOCK_RESERVATIONS,
+            "source_receipt_line_id",
+            &ids_to_strings(receipt_line_ids),
+            executor,
+        )
+        .await
+    }
+
+    /// 按主键批量读取销售稳定明细。
+    ///
+    /// # 参数
+    /// * `sales_order_line_ids` - 销售稳定明细主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的销售稳定明细。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_sales_order_lines_by_ids(
+        &self,
+        sales_order_line_ids: &[SalesOrderLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderLine>> {
+        find_lines_in(
+            self.db,
+            SALES_ORDER_LINES,
+            "id",
+            &ids_to_strings(sales_order_line_ids),
+            executor,
+        )
+        .await
+    }
+
+    /// 查询销售单现有仓发草稿。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回任一未删除草稿发货单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn draft_delivery_for_sales_order(
+        &self,
+        sales_order_id: &entities::ids::SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Delivery>> {
+        mongo_ops::find_one(
+            &self
+                .db
+                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "status": DeliveryState::Draft.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
     }
 
     /// 批量读取采购入库行（`$in` 一次取回，按行号升序）。
@@ -403,6 +816,48 @@ impl<'a> FulfillmentRepository<'a> {
 /// 返回字符串集合。
 fn ids_to_strings<T: AsRef<str>>(ids: &[T]) -> Vec<String> {
     ids.iter().map(|id| id.as_ref().to_string()).collect()
+}
+
+/// 按给定字段与状态批量读取实体。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库
+/// * `collection_name` - 业务实体集合名
+/// * `field` - 主键或关联字段名
+/// * `values` - 待匹配的字段值集合
+/// * `status` - 待匹配的稳定状态代码
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回字段值与状态同时匹配且未删除的实体；空值集合直接返回空列表。
+///
+/// # 错误
+/// 当 MongoDB 查询或游标读取失败时返回错误。
+async fn list_by_ids_and_status<T>(
+    db: &Database,
+    collection_name: &str,
+    field: &str,
+    values: &[String],
+    status: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<T>>
+where
+    T: for<'de> Deserialize<'de> + Serialize + Send + Sync,
+{
+    if values.is_empty() {
+        return Ok(Vec::new());
+    }
+    mongo_ops::find_many(
+        &db.collection::<T>(collection_name),
+        doc! {
+            field: { "$in": values },
+            "status": status,
+            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        },
+        FindOptions::default(),
+        executor,
+    )
+    .await
 }
 
 /// 按给定字段 `$in` 批量读取行实体（空集合直接返回空列表）。

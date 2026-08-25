@@ -23,6 +23,34 @@ const BASE_UNIT_CODE_MAX_LEN: usize = 32;
 /// 服务区域最大长度。
 const SERVICE_REGION_MAX_LEN: usize = 128;
 
+/// 外部身份匹配的精确基数结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalIdentityResolution {
+    /// 没有有效映射。
+    Missing,
+    /// 恰好命中一条有效映射。
+    Resolved(String),
+    /// 命中多条有效映射。
+    Ambiguous,
+}
+
+impl ExternalIdentityResolution {
+    /// 按有效外部身份命中数量收敛解析结果。
+    ///
+    /// # 参数
+    /// * `matches` - 仓储返回的全部当前有效外部身份
+    ///
+    /// # 返回
+    /// 零条返回 `Missing`，一条返回 `Resolved`，多条返回 `Ambiguous`。
+    pub fn from_matches(matches: Vec<String>) -> Self {
+        match matches.as_slice() {
+            [] => Self::Missing,
+            [external_id] => Self::Resolved(external_id.clone()),
+            _ => Self::Ambiguous,
+        }
+    }
+}
+
 /// 业务性质（数据模型 §6.4：`VOUCHER` 或 `GOODS_SERVICE`，创建后永久不变）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -54,6 +82,22 @@ impl BusinessType {
             Self::Voucher => "VOUCHER",
             Self::GoodsService => "GOODS_SERVICE",
         }
+    }
+
+    /// 判断是否为卡券销售。
+    ///
+    /// # 返回
+    /// 卡券销售返回 `true`，实物及服务销售返回 `false`。
+    pub fn is_voucher(self) -> bool {
+        matches!(self, Self::Voucher)
+    }
+
+    /// 判断是否为实物及服务销售。
+    ///
+    /// # 返回
+    /// 实物及服务销售返回 `true`，卡券销售返回 `false`。
+    pub fn is_goods_service(self) -> bool {
+        matches!(self, Self::GoodsService)
     }
 }
 
@@ -122,6 +166,20 @@ impl LineType {
             Self::GoodsService => "GOODS_SERVICE",
             Self::Voucher => "VOUCHER",
         }
+    }
+
+    /// 判断行类型是否属于给定业务性质。
+    ///
+    /// # 参数
+    /// * `business_type` - 销售单业务性质
+    ///
+    /// # 返回
+    /// 行类型与业务性质一致时返回 `true`。
+    pub fn belongs_to(self, business_type: BusinessType) -> bool {
+        matches!(
+            (self, business_type),
+            (Self::GoodsService, BusinessType::GoodsService) | (Self::Voucher, BusinessType::Voucher)
+        )
     }
 }
 
@@ -599,6 +657,26 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&CardForm::Electronic).unwrap(),
             "\"ELECTRONIC\""
+        );
+    }
+
+    #[test]
+    fn type_and_external_identity_rules_are_explicit() {
+        assert!(BusinessType::Voucher.is_voucher());
+        assert!(BusinessType::GoodsService.is_goods_service());
+        assert!(LineType::Voucher.belongs_to(BusinessType::Voucher));
+        assert!(!LineType::Voucher.belongs_to(BusinessType::GoodsService));
+        assert_eq!(
+            ExternalIdentityResolution::from_matches(Vec::new()),
+            ExternalIdentityResolution::Missing
+        );
+        assert_eq!(
+            ExternalIdentityResolution::from_matches(vec!["external-1".to_string()]),
+            ExternalIdentityResolution::Resolved("external-1".to_string())
+        );
+        assert_eq!(
+            ExternalIdentityResolution::from_matches(vec!["a".to_string(), "b".to_string()]),
+            ExternalIdentityResolution::Ambiguous
         );
     }
 

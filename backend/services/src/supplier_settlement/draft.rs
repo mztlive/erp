@@ -18,10 +18,9 @@ use id_generator::next_id;
 use validator::Validate;
 
 use super::{
-    command_audit_id, digest_parts, ensure_audit_resource, receipt_result, settlement_subject_hash,
-    CreateSettlementStatementRequest, RefreshSettlementStatementRequest, SettlementDraftAction,
-    SettlementDraftCommandResult, SupplierSettlementService, REVIEW_CUTOFF_POLICY_ID,
-    REVIEW_CUTOFF_POLICY_VERSION,
+    command_audit_id, digest_parts, ensure_audit_resource, receipt_result, CreateSettlementStatementRequest,
+    RefreshSettlementStatementRequest, SettlementDraftAction, SettlementDraftCommandResult,
+    SupplierSettlementService, REVIEW_CUTOFF_POLICY_ID, REVIEW_CUTOFF_POLICY_VERSION,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -122,7 +121,7 @@ impl SupplierSettlementService {
             source_snapshot_hash: source.source_hash.clone(),
             has_difference: !snapshot.differences.is_empty(),
         })?;
-        statement.update_subject_hash(settlement_subject_hash(&statement, &snapshot.differences))?;
+        statement.update_subject_hash(statement.review_subject_hash(&snapshot.differences))?;
         let fingerprint = create_fingerprint(&req);
         let audit_id = command_audit_id(
             actor.id(),
@@ -221,7 +220,9 @@ impl SupplierSettlementService {
         if statement.prepared_by != actor.id() {
             return Err(Error::Forbidden("只有当前结算经办人可以刷新试算".to_string()));
         }
-        self.ensure_version(&statement, req.expected_lock_version)?;
+        statement
+            .ensure_version(req.expected_lock_version)
+            .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         if statement.source_snapshot_hash != req.expected_source_snapshot_hash {
             return Err(Error::ConflictError(
                 "结算来源快照已变化，请刷新详情后重试".to_string(),
@@ -279,7 +280,7 @@ impl SupplierSettlementService {
             source_snapshot_hash: source.source_hash.clone(),
             has_difference: !snapshot.differences.is_empty(),
         })?;
-        statement.update_subject_hash(settlement_subject_hash(&statement, &snapshot.differences))?;
+        statement.update_subject_hash(statement.review_subject_hash(&snapshot.differences))?;
         let old_item_ids = old_items
             .iter()
             .map(|item| item.base.id.clone())

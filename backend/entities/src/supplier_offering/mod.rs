@@ -15,4 +15,7 @@ pub use offering::{
     PrefillSourceRefs, SupplierOffering, SupplierOfferingData, SupplierOfferingRevision,
     SupplierOfferingRevisionData,
 };
-pub use types::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
+pub use types::{
+    AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingSourceType,
+    OfferingStatus,
+};

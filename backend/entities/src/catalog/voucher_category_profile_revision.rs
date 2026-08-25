@@ -84,6 +84,37 @@ impl VoucherCategoryProfileRevision {
         })
     }
 
+    /// 从当前快照派生一份描述变更的后继修订。
+    ///
+    /// SKU 稳定身份与启停状态保持不变，只替换描述并使用调用方提供的下一序号。
+    ///
+    /// # 参数
+    /// * `id` - 新扩展修订主键
+    /// * `revision_no` - 同一卡券类目内的下一修订序号
+    /// * `description` - 新卡券类目描述
+    ///
+    /// # 返回
+    /// 返回经完整实体校验的新扩展修订。
+    ///
+    /// # 错误
+    /// 描述或修订序号违反实体不变式时返回错误。
+    pub fn content_successor(
+        &self,
+        id: VoucherCategoryProfileRevisionId,
+        revision_no: u32,
+        description: String,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            VoucherCategoryProfileRevisionData {
+                sku_id: self.sku_id.clone(),
+                revision_no,
+                description,
+                status: self.status,
+            },
+        )
+    }
+
     /// 判断修订是否处于启用状态。
     ///
     /// # 返回
@@ -142,6 +173,26 @@ mod tests {
             zero_revision
         )
         .is_err());
+    }
+
+    /// 后继修订只替换描述并保留 SKU 身份与状态。
+    #[test]
+    fn content_successor_preserves_identity_and_status() {
+        let current =
+            VoucherCategoryProfileRevision::new(VoucherCategoryProfileRevisionId::new("vcp-1"), data())
+                .unwrap();
+        let successor = current
+            .content_successor(
+                VoucherCategoryProfileRevisionId::new("vcp-2"),
+                2,
+                "新描述".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(successor.revision.revision_no, 2);
+        assert_eq!(successor.description, "新描述");
+        assert_eq!(successor.sku_id, current.sku_id);
+        assert_eq!(successor.status, current.status);
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

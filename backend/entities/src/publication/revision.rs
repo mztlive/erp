@@ -72,6 +72,14 @@ impl SaleStatus {
             Self::PauseOrder => "pause_order",
         }
     }
+
+    /// 判断发布修订是否允许商城下单。
+    ///
+    /// # 返回
+    /// 状态为上架时返回 `true`。
+    pub fn is_on_sale(self) -> bool {
+        self == Self::OnSale
+    }
 }
 
 /// 商品级能力（数据模型 §6.15：商品级取消、退款、物流等能力；固定枚举，
@@ -148,6 +156,23 @@ impl MediaRole {
             Self::Carousel => "carousel",
             Self::Detail => "detail",
         }
+    }
+
+    /// 校验发布媒体集合至少包含一张主图。
+    ///
+    /// # 参数
+    /// * `roles` - 待提交或复制的媒体角色集合
+    ///
+    /// # 返回
+    /// 至少存在一张主图时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 集合为空或不包含主图时返回错误。
+    pub fn ensure_main_present(roles: impl IntoIterator<Item = Self>) -> Result<()> {
+        if roles.into_iter().any(|role| role == Self::Main) {
+            return Ok(());
+        }
+        Err(Error::from("提交发布必须至少包含一张主图"))
     }
 }
 
@@ -307,6 +332,49 @@ impl ProductPublicationRevision {
             content_hash,
         })
     }
+
+    /// 复制当前商城内容形成不可变安全暂停修订。
+    ///
+    /// # 参数
+    /// * `id` - 新暂停修订 ID
+    /// * `revision_no` - 同一发布内的新修订序号
+    /// * `committed_at` - 安全暂停统一业务时间
+    ///
+    /// # 返回
+    /// 返回内容快照一致、状态为暂停下单且重新开始生效区间的新修订。
+    ///
+    /// # 错误
+    /// 原修订快照违反当前发布校验规则时返回错误。
+    pub fn safety_pause_copy(
+        &self,
+        id: ProductPublicationRevisionId,
+        revision_no: u32,
+        committed_at: Instant,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            revision_no,
+            ProductPublicationRevisionData {
+                product_publication_id: self.product_publication_id.clone(),
+                sku_revision_id: self.sku_revision_id.clone(),
+                supplier_offering_revision_id: self.supplier_offering_revision_id.clone(),
+                category_id: self.category_id.clone(),
+                name: self.name.clone(),
+                specification: self.specification.clone(),
+                sales_description: self.sales_description.clone(),
+                minimum_purchase_quantity: self.minimum_purchase_quantity,
+                sales_price_gross: self.sales_price_gross,
+                sales_tax_rate: self.sales_tax_rate,
+                base_unit_code: self.base_unit_code.clone(),
+                sales_region: self.sales_region.clone(),
+                sale_status: SaleStatus::PauseOrder,
+                product_capabilities: self.product_capabilities.clone(),
+                valid_from: committed_at,
+                valid_to: None,
+                content_hash: "pending-safety-pause-hash".to_string(),
+            },
+        )
+    }
 }
 
 /// 校验发布销售不变式。
@@ -425,6 +493,34 @@ impl ProductPublicationRevisionMedia {
             sort_no: data.sort_no,
             alt_text,
         })
+    }
+
+    /// 复制媒体快照并绑定到新的发布修订。
+    ///
+    /// # 参数
+    /// * `id` - 新媒体行 ID
+    /// * `revision_id` - 新发布修订 ID
+    ///
+    /// # 返回
+    /// 返回文件、角色、顺序和替代文本不变的新媒体行。
+    ///
+    /// # 错误
+    /// 原替代文本违反当前媒体校验规则时返回错误。
+    pub fn copy_to_revision(
+        &self,
+        id: ProductPublicationRevisionMediaId,
+        revision_id: ProductPublicationRevisionId,
+    ) -> Result<Self> {
+        Self::new(
+            id,
+            revision_id,
+            ProductPublicationRevisionMediaData {
+                file_asset_id: self.file_asset_id.clone(),
+                media_role: self.media_role,
+                sort_no: self.sort_no,
+                alt_text: self.alt_text.clone(),
+            },
+        )
     }
 }
 
@@ -703,7 +799,55 @@ mod tests {
             "\"carousel\""
         );
         assert_eq!(SaleStatus::OnSale.label(), "上架");
+        assert!(SaleStatus::OnSale.is_on_sale());
+        assert!(!SaleStatus::PauseOrder.is_on_sale());
         assert_eq!(ProductCapability::Logistics.label(), "物流");
         assert_eq!(MediaRole::Main.label(), "主图");
+        assert!(MediaRole::ensure_main_present([MediaRole::Carousel]).is_err());
+        assert!(MediaRole::ensure_main_present([MediaRole::Main, MediaRole::Detail]).is_ok());
+    }
+
+    #[test]
+    fn safety_pause_copy_preserves_content_and_rebinds_media() {
+        let current = ProductPublicationRevision::new(
+            ProductPublicationRevisionId::new("pub-rev-1"),
+            1,
+            revision_data(),
+        )
+        .unwrap();
+        let paused = current
+            .safety_pause_copy(
+                ProductPublicationRevisionId::new("pub-rev-2"),
+                2,
+                Instant::from_unix_secs(1_750_000_000),
+            )
+            .unwrap();
+        assert_eq!(paused.sale_status, SaleStatus::PauseOrder);
+        assert_eq!(paused.name, current.name);
+        assert_eq!(paused.revision.revision_no, 2);
+        assert_eq!(paused.valid_to, None);
+
+        let media = ProductPublicationRevisionMedia::new(
+            ProductPublicationRevisionMediaId::new("media-1"),
+            ProductPublicationRevisionId::new("pub-rev-1"),
+            ProductPublicationRevisionMediaData {
+                file_asset_id: FileAssetId::new("file-1"),
+                media_role: MediaRole::Main,
+                sort_no: 1,
+                alt_text: Some("主图".to_string()),
+            },
+        )
+        .unwrap();
+        let copied = media
+            .copy_to_revision(
+                ProductPublicationRevisionMediaId::new("media-2"),
+                ProductPublicationRevisionId::new("pub-rev-2"),
+            )
+            .unwrap();
+        assert_eq!(
+            copied.product_publication_revision_id,
+            ProductPublicationRevisionId::new("pub-rev-2")
+        );
+        assert_eq!(copied.file_asset_id, media.file_asset_id);
     }
 }

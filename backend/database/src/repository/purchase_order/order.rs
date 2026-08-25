@@ -1,16 +1,25 @@
 //! `purchase_order` 采购主表仓储：列表投影查询与按采购单号身份查询。
 
-use entities::ids::{SalesOrderId, SupplierAccountId};
+use entities::ids::{SalesOrderId, SkuId, SupplierAccountId};
+use entities::payable::{PayableAccount, PayableSourceType};
 use entities::purchase_order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
 };
+use entities::sales_order::{CommercialStatus, SalesOrder};
+use entities::supplier_offering::{OfferingStatus, SupplierOffering};
+use entities::warehouse::{EnableStatus, Warehouse};
+use entities::work_item::{WorkItem, WorkItemStatus};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
-use super::common::{sort_doc, PURCHASE_ORDER_SORT_FIELDS};
+use super::common::{in_filter, sort_doc, PURCHASE_ORDER_SORT_FIELDS};
+use super::PurchaseOrderRepository;
 use crate::executor::Executor;
+use crate::repository::extensions::{
+    PayableExt, SalesOrderExt, SupplierOfferingExt, WarehouseExt, WorkItemExt,
+};
 use crate::repository::regex_filter::insert_literal_regex_filter;
 use crate::repository::{PageResult, Pagination, QueryFilter};
 use crate::{mongo_ops, Repository, Result};
@@ -101,6 +110,185 @@ impl Pagination for PurchaseOrderFilter {
     /// 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
+    }
+}
+
+impl<'a> PurchaseOrderRepository<'a> {
+    /// 批量读取采购单关联的销售单。
+    ///
+    /// # 参数
+    /// * `sales_order_ids` - 销售单稳定身份集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已存在的销售单；空输入直接返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_sales_orders_by_ids(
+        &self,
+        sales_order_ids: &[SalesOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrder>> {
+        if sales_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.db
+            .sales_orders()
+            .find_many(
+                in_filter("id", sales_order_ids.iter().map(ToString::to_string)),
+                executor,
+            )
+            .await
+    }
+
+    /// 批量读取已生效且可作为采购来源的销售单。
+    ///
+    /// # 参数
+    /// * `sales_order_ids` - 销售单稳定身份集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回已存在且商业状态为生效的销售单；空输入直接返回空集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_effective_sales_orders_by_ids(
+        &self,
+        sales_order_ids: &[SalesOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrder>> {
+        if sales_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.db
+            .sales_orders()
+            .find_many(
+                doc! {
+                    "id": { "$in": sales_order_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+                    "commercial_status": CommercialStatus::Effective.as_str(),
+                },
+                executor,
+            )
+            .await
+    }
+
+    /// 查询采购单对应的应付子账。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回采购单来源的应付子账；尚未形成时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_payable_account(
+        &self,
+        purchase_order_id: &entities::ids::PurchaseOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<PayableAccount>> {
+        self.db
+            .payable_accounts()
+            .find_one(
+                doc! {
+                    "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                    "source_document_id": purchase_order_id.to_string(),
+                    "source_type": PayableSourceType::PurchaseOrder.as_str(),
+                },
+                executor,
+            )
+            .await
+    }
+
+    /// 按 SKU 读取启用供给，并按供应商与供给 ID 稳定排序。
+    ///
+    /// # 参数
+    /// * `sku_id` - 公司 SKU 稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回该 SKU 的全部启用供给。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_offerings_by_sku(
+        &self,
+        sku_id: &SkuId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierOffering>> {
+        self.db
+            .supplier_offerings()
+            .find_many_sorted(
+                doc! {
+                    "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                    "sku_id": sku_id.to_string(),
+                    "status": OfferingStatus::Active.as_str(),
+                },
+                doc! { "supplier_id": 1, "id": 1 },
+                executor,
+            )
+            .await
+    }
+
+    /// 查询最早创建的启用仓库。
+    ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回最早创建的启用仓库；没有启用仓库时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_first_active_warehouse(
+        &self,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Warehouse>> {
+        Ok(self
+            .db
+            .warehouses()
+            .find_many_sorted(
+                doc! {
+                    "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                    "status": EnableStatus::Active.as_str(),
+                },
+                doc! { "created_at": 1, "id": 1 },
+                executor,
+            )
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    /// 读取审批节点执行上的全部开放任务，并按创建时间升序返回。
+    ///
+    /// # 参数
+    /// * `approval_node_execution_id` - 审批节点执行主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的开放任务。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_open_work_items_by_execution(
+        &self,
+        approval_node_execution_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.db
+            .work_items()
+            .find_many_sorted(
+                doc! {
+                    "approval_node_execution_id": approval_node_execution_id,
+                    "status": WorkItemStatus::Open.as_str(),
+                },
+                doc! { "created_at": 1, "id": 1 },
+                executor,
+            )
+            .await
     }
 }
 

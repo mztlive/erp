@@ -9,8 +9,7 @@ use database::{
 };
 use entities::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use entities::sales_order::{
-    BusinessType, CommercialStatus, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy,
-    WorkingPurpose,
+    BusinessType, ReviewStatus, SalesOrderSubmissionLine, SalesOrderWorkingCopy, WorkingPurpose,
 };
 use entities::Permission;
 use validator::Validate;
@@ -39,23 +38,6 @@ use crate::{
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
 type SalesOrderFilter = <mongodb::Database as SalesOrderExt>::SalesOrderFilter;
-
-/// 判断审核轨是否应存在开放审批任务。
-///
-/// # 参数
-/// * `review_status` - 销售单审核轨状态
-///
-/// # 返回
-/// 在统一审批或兼容的历史待审阶段返回 `true`；草稿、已通过和已驳回返回 `false`。
-///
-/// # 错误
-/// 无。
-fn stage_has_active_review_task(review_status: ReviewStatus) -> bool {
-    !matches!(
-        review_status,
-        ReviewStatus::NotSubmitted | ReviewStatus::Approved | ReviewStatus::Rejected
-    )
-}
 
 /// 构造尚无当前销售版本时的零采购覆盖视图。
 ///
@@ -239,14 +221,11 @@ impl SalesOrderService {
             None => None,
         };
 
-        let mut submissions = self
+        let submissions = self
             .db
             .sales_order_submissions()
-            .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
+            .list_by_order_newest_first(&order_id, &mut NoTransaction)
             .await?;
-
-        // 新提交在前，便于前端取「当前商业内容」
-        submissions.sort_by_key(|submission| std::cmp::Reverse(submission.submission_no));
         let submission_ids = submissions
             .iter()
             .map(|s| SalesOrderSubmissionId::new(s.base.id.clone()))
@@ -339,7 +318,7 @@ impl SalesOrderService {
         let receivable_accounts = self
             .db
             .receivable_accounts()
-            .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
+            .list_by_sales_order(&order_id, &mut NoTransaction)
             .await?;
         let (settled_total, invoiced_total, gross_total) = receivable_accounts.iter().fold(
             (zero_amount(), zero_amount(), zero_amount()),
@@ -362,17 +341,17 @@ impl SalesOrderService {
             gross_total,
         });
 
-        let has_active_change_order = match order.stable.current_revision_id.as_ref() {
-            Some(revision_id) => self
-                .db
-                .sales_change_orders()
-                .find_in_progress_by_order_and_base(
-                    &order_id,
-                    &SalesOrderRevisionId::new(revision_id.clone()),
-                    &mut NoTransaction,
-                )
-                .await?
-                .is_some(),
+        let has_active_change_order = match order.current_revision_id() {
+            Some(revision_id) => {
+                self.db
+                    .sales_change_orders()
+                    .has_in_progress_by_order_and_base(
+                        &order_id,
+                        &SalesOrderRevisionId::new(revision_id),
+                        &mut NoTransaction,
+                    )
+                    .await?
+            }
             None => false,
         };
         let (can_start_sales_change_order, change_order_blocker) = compute_can_start_sales_change(
@@ -487,16 +466,8 @@ impl SalesOrderService {
         coverage: &SalesProcurementCoverageView,
         actor: Option<&AuditActor>,
     ) -> Result<PurchaseCreationAccessView> {
-        if order.business_type != BusinessType::GoodsService {
-            return Ok(blocked_purchase_creation_access(
-                "非实物及服务销售单无需创建采购单",
-            ));
-        }
-        if order.commercial_status != CommercialStatus::Effective {
-            return Ok(blocked_purchase_creation_access("销售单最终生效后才能创建采购单"));
-        }
-        if coverage.remaining_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-            return Ok(blocked_purchase_creation_access("当前销售单待采购数量已全部覆盖"));
+        if let Some(message) = order.procurement_creation_blocker(coverage.remaining_quantity) {
+            return Ok(blocked_purchase_creation_access(message));
         }
         let Some(actor) = actor else {
             return Ok(blocked_purchase_creation_access("当前调用缺少采购责任上下文"));
@@ -591,7 +562,7 @@ impl SalesOrderService {
         &self,
         order: &entities::sales_order::SalesOrder,
     ) -> Result<SalesProcurementCoverageView> {
-        if order.stable.current_revision_id.is_none() {
+        if order.current_revision_id().is_none() {
             return Ok(empty_sales_procurement_coverage());
         }
         let coverage = crate::purchase_order::coverage::load_sales_procurement_coverage(
@@ -707,7 +678,7 @@ impl SalesOrderService {
         business_type: BusinessType,
         review_status: ReviewStatus,
     ) -> Result<(Option<String>, Option<String>, Option<u64>)> {
-        if !stage_has_active_review_task(review_status) {
+        if !review_status.has_active_review_task() {
             return Ok((None, None, None));
         }
         let object_type = document_type_for_sales_create(business_type).as_str().to_string();
@@ -743,7 +714,7 @@ impl SalesOrderService {
     ) -> Result<HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>> {
         let business_objects = rows
             .iter()
-            .filter(|(_, _, review_status)| stage_has_active_review_task(*review_status))
+            .filter(|(_, _, review_status)| review_status.has_active_review_task())
             .map(|(id, business_type, _)| {
                 (
                     document_type_for_sales_create(*business_type)
@@ -840,7 +811,7 @@ fn blocked_purchase_creation_access(message: &str) -> PurchaseCreationAccessView
 mod tests {
     use entities::sales_order::ReviewStatus;
 
-    use super::{blocked_purchase_creation_access, stage_has_active_review_task};
+    use super::blocked_purchase_creation_access;
 
     #[test]
     fn unified_and_legacy_pending_reviews_require_open_tasks() {
@@ -851,7 +822,7 @@ mod tests {
             ReviewStatus::PendingSalesLeader,
             ReviewStatus::PendingOperations,
         ] {
-            assert!(stage_has_active_review_task(status));
+            assert!(status.has_active_review_task());
         }
     }
 
@@ -862,7 +833,7 @@ mod tests {
             ReviewStatus::Approved,
             ReviewStatus::Rejected,
         ] {
-            assert!(!stage_has_active_review_task(status));
+            assert!(!status.has_active_review_task());
         }
     }
 

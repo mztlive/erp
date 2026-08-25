@@ -12,7 +12,9 @@
 //!
 //! 筛选/行类型定义在本文件，经 `MallSyncExt` 的关联类型对外暴露。
 
+use entities::catalog::{EnableStatus, VoucherCategoryProfileRevision};
 use entities::common::time::Instant;
+use entities::contract::{Contract, ContractStatus};
 use entities::mall_sync::{
     ExternalOrderKey, MallSalesOrderSnapshot, MallSalesReconciliationItem, MallSalesReconciliationJob,
     MallSalesSyncCursor, MallSalesSyncJob, MallSalesSyncJobStatus, MallSalesSyncJobType,
@@ -20,6 +22,10 @@ use entities::mall_sync::{
     MasterMappingTask, ReconciliationDifferenceType, ReconciliationItemStatus, ReconciliationJobStatus,
     SnapshotMappingStatus,
 };
+use entities::receivable::ReceivableAccount;
+use entities::source_registry::{ExternalIdentityTarget, TargetStatus};
+use entities::work_item::{WorkItem, WorkItemType};
+use entities::AuditLog;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -897,6 +903,205 @@ impl<'a> Repository<'a, MasterMappingTask> {
                 "source_snapshot_id": source_snapshot_id.to_string(),
                 "mapping_type": mapping_type.as_str(),
                 "status": MappingTaskStatus::Pending.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, WorkItem> {
+    /// 查询映射任务关联的正式责任任务，按创建时间稳定排序。
+    ///
+    /// # 参数
+    /// * `mapping_task_id` - 映射任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的正式任务；调用方必须校验责任事实唯一。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_for_master_mapping_task(
+        &self,
+        mapping_task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "work_item_type": WorkItemType::BusinessException.as_str(),
+                "business_object_type": "MASTER_MAPPING_TASK",
+                "business_object_id": mapping_task_id,
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, ExternalIdentityTarget> {
+    /// 查询外部身份映射的全部目标历史，最新有效期优先。
+    ///
+    /// # 参数
+    /// * `mapping_id` - 外部身份映射 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部目标历史，按 `valid_from` 降序、ID 升序稳定排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_for_external_identity_map(
+        &self,
+        mapping_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        self.find_many_sorted(
+            doc! { "external_identity_map_id": mapping_id },
+            doc! { "valid_from": -1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询外部身份映射当前有效目标，按生效时间稳定排序。
+    ///
+    /// # 参数
+    /// * `mapping_id` - 外部身份映射 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回状态为 `Active` 的目标，按 `valid_from` 与 ID 升序排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_active_for_external_identity_map(
+        &self,
+        mapping_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ExternalIdentityTarget>> {
+        self.find_many_sorted(
+            doc! {
+                "external_identity_map_id": mapping_id,
+                "status": TargetStatus::Active.as_str(),
+            },
+            doc! { "valid_from": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, AuditLog> {
+    /// 查询映射任务的不可变审计时间线。
+    ///
+    /// # 参数
+    /// * `mapping_task_id` - 映射任务 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回资源匹配的审计记录，按创建时间与 ID 升序排列。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_master_mapping_task_history(
+        &self,
+        mapping_task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AuditLog>> {
+        self.find_many_sorted(
+            doc! {
+                "resource_type": "MASTER_MAPPING_TASK",
+                "resource_id": mapping_task_id,
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, ReceivableAccount> {
+    /// 按来源销售版本查找应收结果。
+    ///
+    /// # 参数
+    /// * `revision_id` - 来源销售单修订 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回引用该销售版本的应收账户；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_source_sales_order_revision(
+        &self,
+        revision_id: &entities::ids::SalesOrderRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<ReceivableAccount>> {
+        self.find_one(
+            doc! { "source_sales_order_revision_id": revision_id.to_string() },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, Contract> {
+    /// 查找当前客户范围内指向指定结算主体的生效合同。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 当前操作人可参与的客户 ID 集合
+    /// * `settlement_party_id` - 目标结算主体 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回任一客户范围内的生效合同；客户集合为空或无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_effective_for_settlement_party(
+        &self,
+        customer_ids: &[String],
+        settlement_party_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Contract>> {
+        if customer_ids.is_empty() {
+            return Ok(None);
+        }
+        self.find_one(
+            doc! {
+                "customer_id": { "$in": customer_ids },
+                "settlement_party_id": settlement_party_id,
+                "status": ContractStatus::Effective.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, VoucherCategoryProfileRevision> {
+    /// 查找 SKU 当前启用的卡券类目扩展修订。
+    ///
+    /// # 参数
+    /// * `sku_id` - 目标 SKU ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回状态为 `Active` 的卡券类目扩展修订；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_active_by_sku(
+        &self,
+        sku_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<VoucherCategoryProfileRevision>> {
+        self.find_one(
+            doc! {
+                "sku_id": sku_id,
+                "status": EnableStatus::Active.as_str(),
             },
             executor,
         )

@@ -2,8 +2,6 @@
 // 销售变更单（W05 变更轨；§8.1.3 本批部分）
 // ---------------------------------------------------------------------
 
-use std::str::FromStr;
-
 use database::{
     AccessControlExt, DocumentRegistryExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt,
     Transactional,
@@ -16,11 +14,10 @@ use entities::ids::{
     BusinessDocumentId, SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
     SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
 };
-use entities::money::Amount;
-use entities::sales_order::{SalesOrderWorkingCopyLineData, WorkingCopyStatus, WorkingPurpose};
+use entities::sales_order::{SalesOrderWorkingCopyLineData, WorkingPurpose};
 use entities::sales_review::{
-    SalesChangeOrder, SalesChangeOrderData, SalesChangeOrderStatus, SalesChangeSubmission,
-    SalesChangeSubmissionData, SalesChangeSubmissionLine, SalesChangeSubmissionLineData,
+    SalesChangeOrder, SalesChangeOrderData, SalesChangeSubmission, SalesChangeSubmissionData,
+    SalesChangeSubmissionLine,
 };
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -38,7 +35,6 @@ use super::cancel_approval::{
 };
 use super::dto;
 use super::formalization::{build_change_revision, build_receivable_delta};
-use super::sales_change_mapping::{change_copy_goods, change_copy_voucher, convert_line_type};
 use super::start_approval::{
     build_sales_change_start_input, load_bound_definition_graph, load_start_receipt,
     persist_sales_change_start, SalesChangeStartInput, SalesChangeStartPersistInput,
@@ -149,37 +145,18 @@ impl SalesReviewService {
 
     /// 同一销售单同一基准版本是否已有进行中变更。
     ///
-    /// 仓储 `find_in_progress` 仍按旧确认态查询；目标 `IN_APPROVAL` 在本方法内补查。
-    ///
     /// # 错误
     /// 仓储失败时返回错误。
     async fn has_in_progress_change(
         &self,
         sales_order_id: &SalesOrderId,
-        base_revision_id: &str,
+        base_revision_id: &SalesOrderRevisionId,
     ) -> Result<bool> {
-        let base_revision = entities::sales_order::SalesOrderRevisionId::new(base_revision_id);
-        let legacy = self
+        Ok(self
             .db
             .sales_change_orders()
-            .find_in_progress_by_order_and_base(sales_order_id, &base_revision, &mut NoTransaction)
-            .await?;
-        if legacy.is_some() {
-            return Ok(true);
-        }
-        let in_approval = self
-            .db
-            .sales_change_orders()
-            .find_one(
-                mongodb::bson::doc! {
-                    "sales_order_id": sales_order_id.to_string(),
-                    "base_revision_id": base_revision_id,
-                    "status": SalesChangeOrderStatus::InApproval.as_str(),
-                },
-                &mut NoTransaction,
-            )
-            .await?;
-        Ok(in_approval.is_some())
+            .has_in_progress_by_order_and_base(sales_order_id, base_revision_id, &mut NoTransaction)
+            .await?)
     }
 
     /// 创建销售变更单（草稿 + 变更工作副本 + `BusinessDocument` 绑定原子形成）。
@@ -211,23 +188,18 @@ impl SalesReviewService {
             .find_by_id(&req.sales_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
-        if order.commercial_status != entities::sales_order::CommercialStatus::Effective {
-            return Err(Error::BusinessLogicError(
-                "只有已生效的销售单才能发起变更".to_string(),
-            ));
+        if let Some(blocker) = order.sales_change_start_blocker() {
+            return Err(Error::BusinessLogicError(blocker.to_string()));
         }
-        let base_revision_id = order
-            .stable
-            .current_revision_id
-            .clone()
-            .ok_or_else(|| Error::BusinessLogicError("销售单缺少当前版本，无法发起变更".to_string()))?;
+        let base_revision_id =
+            SalesOrderRevisionId::new(order.current_revision_id().expect("实体规则已确认当前版本存在"));
         let base_revision = self
             .db
             .sales_order_revisions()
-            .find_by_id(&base_revision_id, &mut NoTransaction)
+            .find_by_id(base_revision_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
-        if base_revision.revision.revision_no != req.expected_base_revision_no {
+        if !base_revision.matches_revision_no(req.expected_base_revision_no) {
             return Err(Error::ConflictError(format!(
                 "销售单当前版本已变更：期望 {}，实际 {}",
                 req.expected_base_revision_no, base_revision.revision.revision_no
@@ -241,17 +213,12 @@ impl SalesReviewService {
                 "同一基准版本已有进行中的销售变更单".to_string(),
             ));
         }
-        if order.business_type == entities::sales_order::BusinessType::Voucher {
-            return Err(Error::BusinessLogicError(
-                "卡券销售变更缺少原正式版本冻结的目标商城或应收到期日，禁止创建变更单".to_string(),
-            ));
-        }
 
         let change_order = SalesChangeOrder::new(
             SalesChangeOrderId::new(next_id()),
             SalesChangeOrderData {
                 sales_order_id: req.sales_order_id.clone(),
-                base_revision_id: base_revision_id.clone().into(),
+                base_revision_id: base_revision_id.clone(),
                 change_type: req.change_type,
                 reason: req.reason,
             },
@@ -260,10 +227,7 @@ impl SalesReviewService {
         let revision_lines = self
             .db
             .sales_order_revision_lines()
-            .list_lines_by_revision(
-                &SalesOrderRevisionId::new(base_revision_id.clone()),
-                &mut NoTransaction,
-            )
+            .list_lines_by_revision(&base_revision_id, &mut NoTransaction)
             .await?;
         let revision_line_ids = revision_lines
             .iter()
@@ -277,14 +241,14 @@ impl SalesReviewService {
         let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
         let (line_datas, lines) =
             build_change_working_copy_lines_from_revision(&working_copy_id, &revision_lines, &goods_lines)?;
-        let (gross, net, tax) = change_line_totals(&lines);
+        let (gross, net, tax) = entities::sales_order::SalesOrderWorkingCopyLine::amount_totals(&lines);
         let working_copy = entities::sales_order::SalesOrderWorkingCopy::new(
             working_copy_id,
             entities::sales_order::SalesOrderWorkingCopyData {
                 sales_order_id: req.sales_order_id.clone(),
                 working_purpose: WorkingPurpose::SalesChange,
                 sales_change_order_id: Some(change_order.base.id.clone().into()),
-                base_revision_id: Some(base_revision_id.clone().into()),
+                base_revision_id: Some(base_revision_id.clone()),
                 draft_version: 1,
                 content_hash: format!("change:{}:1", change_order.base.id),
                 editor_user_id: actor.id().to_string(),
@@ -388,12 +352,12 @@ impl SalesReviewService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        if change_order.base.version != req.version {
+        if !change_order.matches_version(req.version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
-        if change_order.stable.status() != SalesChangeOrderStatus::Draft {
+        if !change_order.is_draft() {
             return Err(Error::ConflictError(
                 "只有草稿状态的销售变更单可以提交审批".to_string(),
             ));
@@ -428,7 +392,7 @@ impl SalesReviewService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        if change_order.base.version != req.version {
+        if !change_order.matches_version(req.version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
@@ -437,11 +401,7 @@ impl SalesReviewService {
         let mut working_copy = self
             .db
             .sales_order_working_copies()
-            .find_active_by_order_and_purpose(
-                &change_order.sales_order_id,
-                WorkingPurpose::SalesChange,
-                &mut NoTransaction,
-            )
+            .find_by_sales_change_order(&SalesChangeOrderId::new(id), &mut NoTransaction)
             .await?;
         if let Some(copy) = &mut working_copy {
             copy.abandon()?;
@@ -495,7 +455,7 @@ impl SalesReviewService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
-        if change_order.base.version != req.expected_version {
+        if !change_order.matches_version(req.expected_version) {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
@@ -596,7 +556,7 @@ impl SalesReviewService {
         let submission_no = next_change_submission_no(&self.db, id).await?;
         let (submission, submission_lines) =
             build_change_submission_with_no(&change_order, &working_copy, &copy_lines, submission_no, actor)?;
-        lock_working_copy_if_editing(&mut working_copy)?;
+        working_copy.lock_for_submission_if_needed()?;
         start_sales_change_approval(
             &mut change_order,
             submission.base.id.clone().into(),
@@ -728,39 +688,13 @@ fn build_change_working_copy_lines_from_revision(
     }
     let mut datas = Vec::with_capacity(revision_lines.len());
     for line in revision_lines {
-        if line.line_type != entities::sales_order::LineType::GoodsService {
-            return Err(Error::ConflictError(format!(
-                "销售单当前版本第 {} 行不是实物服务行",
-                line.line_no
-            )));
-        }
         let goods = goods_lines
             .iter()
             .find(|goods| goods.revision_line_id.as_ref() == line.base.id)
             .ok_or_else(|| {
                 Error::ConflictError(format!("销售单当前版本第 {} 行缺少实物服务快照", line.line_no))
             })?;
-        datas.push(SalesOrderWorkingCopyLineData {
-            sales_order_line_id: line.sales_order_line_id.clone(),
-            line_no: line.line_no,
-            line_type: line.line_type,
-            sales_tax_rate: line.sales_tax_rate,
-            item_name_snapshot: line.item_name_snapshot.clone(),
-            spec_snapshot: line.spec_snapshot.clone(),
-            unit_snapshot: line.unit_snapshot.clone(),
-            goods: Some(entities::sales_order::GoodsLineFields {
-                sku_id: goods.sku_id.clone(),
-                sku_revision_id: goods.sku_revision_id.clone(),
-                welfare_scenario: goods.welfare_scenario,
-                service_region: goods.service_region.clone(),
-                fulfillment_mode: goods.fulfillment_mode,
-                fulfillment_due_at: goods.fulfillment_due_at,
-                quantity: goods.quantity,
-                base_unit_code: goods.base_unit_code.clone(),
-                unit_price_gross: goods.unit_price_gross,
-            }),
-            voucher: None,
-        });
+        datas.push(line.to_goods_working_copy_data(goods)?);
     }
     let mut built = Vec::with_capacity(datas.len());
     for data in &datas {
@@ -771,51 +705,6 @@ fn build_change_working_copy_lines_from_revision(
         )?);
     }
     Ok((datas, built))
-}
-
-/// 变更行金额访问器。
-trait ChangeLineAmounts {
-    /// 返回行含税金额。
-    fn gross_amount(&self) -> Amount;
-    /// 返回行不含税金额。
-    fn net_amount(&self) -> Amount;
-    /// 返回行税额。
-    fn tax_amount(&self) -> Amount;
-}
-
-impl ChangeLineAmounts for entities::sales_order::SalesOrderWorkingCopyLine {
-    fn gross_amount(&self) -> Amount {
-        self.gross_amount
-    }
-    fn net_amount(&self) -> Amount {
-        self.net_amount
-    }
-    fn tax_amount(&self) -> Amount {
-        self.tax_amount
-    }
-}
-
-/// 汇总已舍入的行金额三元组（§4.2 铁律 2）。
-///
-/// # 参数
-/// * `lines` - 行实体
-///
-/// # 返回
-/// 返回 `(含税合计, 不含税合计, 税额合计)`。
-fn change_line_totals(
-    lines: &[entities::sales_order::SalesOrderWorkingCopyLine],
-) -> (Amount, Amount, Amount) {
-    let zero = Amount::from_str("0.00").expect("静态零值必须合法");
-    let gross = lines
-        .iter()
-        .fold(zero, |acc, line| acc.checked_add(line.gross_amount()));
-    let net = lines
-        .iter()
-        .fold(zero, |acc, line| acc.checked_add(line.net_amount()));
-    let tax = lines
-        .iter()
-        .fold(zero, |acc, line| acc.checked_add(line.tax_amount()));
-    (gross, net, tax)
 }
 
 /// 从变更工作副本构建变更提交快照。
@@ -831,7 +720,7 @@ fn change_line_totals(
 /// 返回 `(变更提交实体, 变更提交行清单)`。
 ///
 /// # 错误
-/// 提交字段校验失败时返回错误。
+/// 工作副本关系、字段映射或提交实体校验失败时返回错误。
 fn build_change_submission_with_no(
     change_order: &SalesChangeOrder,
     working_copy: &entities::sales_order::SalesOrderWorkingCopy,
@@ -839,50 +728,16 @@ fn build_change_submission_with_no(
     submission_no: u32,
     actor: &AuditActor,
 ) -> Result<(SalesChangeSubmission, Vec<SalesChangeSubmissionLine>)> {
-    let (gross, net, tax) = change_line_totals(lines);
-    // 提交头 `validate_line_list` 需要行摘要；行实体另集存储，但创建数据必须非空。
-    let line_datas = build_change_submission_line_datas(lines)?;
-    let submission = SalesChangeSubmission::new(
-        SalesChangeSubmissionId::new(next_id()),
-        SalesChangeSubmissionData {
-            sales_change_order_id: change_order.base.id.clone().into(),
-            submission_no,
-            base_revision_id: change_order.base_revision_id.clone(),
-            sales_order_id: change_order.sales_order_id.clone(),
-            working_copy_id: working_copy.base.id.clone().into(),
-            working_copy_version: working_copy.draft_version,
-            business_type: convert_business_type(working_copy.business_type),
-            customer_id: working_copy.customer_id.clone(),
-            contract_revision_id: working_copy.contract_revision_id.clone(),
-            settlement_party_id: working_copy.settlement_party_id.clone(),
-            snapshot: entities::sales_review::HeaderSnapshotData {
-                customer_name: working_copy.customer_snapshot.customer_name.clone(),
-                contract_no: working_copy
-                    .contract_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.contract_no.clone()),
-                settlement_party_name: working_copy
-                    .settlement_party_snapshot
-                    .as_ref()
-                    .map(|snapshot| snapshot.settlement_party_name.clone()),
-                payment_term_code: working_copy.payment_term_snapshot.payment_term_code.clone(),
-                payment_term_name: working_copy.payment_term_snapshot.payment_term_name.clone(),
-                invoice_type: working_copy.invoice_requirement_snapshot.invoice_type.clone(),
-                tax_point: working_copy.invoice_requirement_snapshot.tax_point.clone(),
-            },
-            project_name: working_copy.project_name.clone(),
-            business_remark: working_copy.business_remark.clone(),
-            voucher_category_sku_id: working_copy.voucher_category_sku_id.clone(),
-            voucher_expiry_at: working_copy.voucher_expiry_at,
-            gross_amount: gross,
-            net_amount: net,
-            tax_amount: tax,
-            submitted_at: Instant::now(),
-            submitted_by: actor.id().to_string(),
-            lines: line_datas.clone(),
-        },
-    )
-    .map_err(Error::Logic)?;
+    let data = SalesChangeSubmissionData::from_sales_working_copy(
+        change_order,
+        working_copy,
+        lines,
+        submission_no,
+        Instant::now(),
+        actor.id(),
+    )?;
+    let line_datas = data.lines.clone();
+    let submission = SalesChangeSubmission::new(SalesChangeSubmissionId::new(next_id()), data)?;
     let mut submission_lines = Vec::with_capacity(line_datas.len());
     for data in line_datas {
         submission_lines.push(SalesChangeSubmissionLine::new(
@@ -892,48 +747,6 @@ fn build_change_submission_with_no(
         )?);
     }
     Ok((submission, submission_lines))
-}
-
-/// D13 业务性质 → D14 同形类型转换。
-fn convert_business_type(value: entities::sales_order::BusinessType) -> entities::sales_review::BusinessType {
-    match value {
-        entities::sales_order::BusinessType::GoodsService => {
-            entities::sales_review::BusinessType::GoodsService
-        }
-        entities::sales_order::BusinessType::Voucher => entities::sales_review::BusinessType::Voucher,
-    }
-}
-
-/// 从变更工作副本行构建变更提交行创建数据（提交头行摘要校验用）。
-///
-/// # 参数
-/// * `lines` - 工作副本行
-///
-/// # 返回
-/// 返回变更提交行创建数据清单。
-///
-/// # 错误
-/// 行字段组缺失或非法时返回错误。
-fn build_change_submission_line_datas(
-    lines: &[entities::sales_order::SalesOrderWorkingCopyLine],
-) -> Result<Vec<SalesChangeSubmissionLineData>> {
-    let mut datas = Vec::with_capacity(lines.len());
-    for line in lines {
-        let goods = change_copy_goods(line)?;
-        let voucher = change_copy_voucher(line)?;
-        datas.push(SalesChangeSubmissionLineData {
-            sales_order_line_id: line.sales_order_line_id.clone(),
-            line_no: line.line_no,
-            line_type: convert_line_type(line.line_type),
-            sales_tax_rate: line.sales_tax_rate,
-            item_name_snapshot: line.item_name_snapshot.clone(),
-            spec_snapshot: line.spec_snapshot.clone(),
-            unit_snapshot: line.unit_snapshot.clone(),
-            goods,
-            voucher,
-        });
-    }
-    Ok(datas)
 }
 
 /// 销售变更单创建事务写入集合。
@@ -1060,25 +873,15 @@ async fn load_change_working_copy(
     entities::sales_order::SalesOrderWorkingCopy,
     Vec<entities::sales_order::SalesOrderWorkingCopyLine>,
 )> {
-    let active = db
+    let working_copy = db
         .sales_order_working_copies()
-        .find_active_by_order_and_purpose(
+        .find_resubmittable_sales_change_copy(
             &change_order.sales_order_id,
-            WorkingPurpose::SalesChange,
+            &SalesChangeOrderId::new(change_order.base.id.clone()),
             &mut NoTransaction,
         )
-        .await?;
-    let bound = db
-        .sales_order_working_copies()
-        .find_one(
-            mongodb::bson::doc! {
-                "sales_change_order_id": change_order.base.id.clone(),
-                "working_purpose": WorkingPurpose::SalesChange.as_str(),
-            },
-            &mut NoTransaction,
-        )
-        .await?;
-    let working_copy = choose_resubmit_source(active, bound)?;
+        .await?
+        .ok_or_else(|| Error::NotFound("变更工作副本不存在".to_string()))?;
     let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
     let copy_lines = db
         .sales_order_working_copy_lines()
@@ -1087,76 +890,39 @@ async fn load_change_working_copy(
     Ok((working_copy, copy_lines))
 }
 
-/// 撤回后再提交时优先可编辑副本，否则使用已绑定该变更单的已提交副本。
-///
-/// # 错误
-/// 两者皆空时返回 `NotFound`。
-pub(super) fn choose_resubmit_source<T>(active: Option<T>, bound: Option<T>) -> Result<T> {
-    if let Some(active) = active {
-        return Ok(active);
-    }
-    bound.ok_or_else(|| Error::NotFound("变更工作副本不存在".to_string()))
-}
-
-/// 仅在编辑中时锁定工作副本；已提交副本可直接用于新 `submission_no`。
-///
-/// # 错误
-/// 状态不允许提交时返回错误。
-fn lock_working_copy_if_editing(
-    working_copy: &mut entities::sales_order::SalesOrderWorkingCopy,
-) -> Result<()> {
-    if working_copy_already_submitted(working_copy.stable.status()) {
-        return Ok(());
-    }
-    Ok(working_copy.submit()?)
-}
-
-/// 已提交工作副本不必再锁定。
-///
-/// # 参数
-/// * `status` - 工作副本状态
-///
-/// # 返回
-/// `Submitted` 为 `true`。
-pub(super) fn working_copy_already_submitted(status: WorkingCopyStatus) -> bool {
-    status == WorkingCopyStatus::Submitted
-}
-
-/// 由已冻结最大序号计算下一次提交号。
-///
-/// # 错误
-/// 溢出时返回冲突。
-pub(super) fn next_submission_no_from(current_max: u32) -> Result<u32> {
-    current_max
-        .checked_add(1)
-        .ok_or_else(|| Error::ConflictError("变更提交序号溢出".to_string()))
-}
-
 /// 计算下一次变更提交序号。
 ///
+/// # 参数
+/// * `db` - 数据库
+/// * `change_order_id` - 销售变更单 ID
+///
+/// # 返回
+/// 返回严格递增的下一提交序号。
+///
 /// # 错误
-/// 仓储失败或序号溢出时返回错误。
+/// 仓储失败或提交序号溢出时返回错误。
 async fn next_change_submission_no(db: &mongodb::Database, change_order_id: &str) -> Result<u32> {
-    next_submission_no_from(latest_change_submission_no(db, change_order_id).await?)
+    Ok(SalesChangeSubmission::next_submission_no(
+        latest_change_submission_no(db, change_order_id).await?,
+    )?)
 }
 
 /// 读取已冻结的最大提交序号；尚无提交时返回 0。
 ///
+/// # 参数
+/// * `db` - 数据库
+/// * `change_order_id` - 销售变更单 ID
+///
+/// # 返回
+/// 返回当前最大提交序号。
+///
 /// # 错误
 /// 仓储失败时返回错误。
 async fn latest_change_submission_no(db: &mongodb::Database, change_order_id: &str) -> Result<u32> {
-    let submissions = db
+    Ok(db
         .sales_change_submissions()
-        .find_many(
-            mongodb::bson::doc! { "sales_change_order_id": change_order_id },
-            &mut NoTransaction,
-        )
-        .await?;
-    Ok(submissions
-        .iter()
-        .map(|submission| submission.submission_no)
-        .max()
-        .unwrap_or(0))
+        .latest_submission_no_by_change_order(&SalesChangeOrderId::new(change_order_id), &mut NoTransaction)
+        .await?)
 }
 
 /// 在同一事务内生成生效修订并改写销售单。
@@ -1168,10 +934,7 @@ async fn persist_effective_change(
     change_order: SalesChangeOrder,
     actor: &AuditActor,
 ) -> Result<()> {
-    let submission_id = change_order
-        .current_submission_id
-        .clone()
-        .ok_or_else(|| Error::BusinessLogicError("变更单尚未提交审批".to_string()))?;
+    let submission_id = change_order.required_current_submission_id()?.clone();
     let submission = db
         .sales_change_submissions()
         .find_by_id(&submission_id, &mut NoTransaction)
@@ -1187,11 +950,9 @@ async fn persist_effective_change(
         .await?
         .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
     let current_revision_id = order
-        .stable
-        .current_revision_id
-        .clone()
+        .current_revision_id()
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少当前版本".to_string()))?;
-    if current_revision_id != change_order.base_revision_id.to_string() {
+    if !change_order.base_revision_matches(current_revision_id) {
         return Err(Error::ConflictError(
             "基准版本已不是销售单当前版本，请刷新后重新发起变更".to_string(),
         ));
@@ -1216,21 +977,20 @@ async fn write_effective_revision(
         .sales_order_revisions()
         .list_by_order(&change_order.sales_order_id, &mut NoTransaction)
         .await?;
-    let revision_no = existing_revisions
-        .iter()
-        .map(|revision| revision.revision.revision_no)
-        .max()
-        .unwrap_or(0)
-        + 1;
+    let revision_no = entities::sales_order::SalesOrderRevision::next_revision_no(
+        existing_revisions
+            .iter()
+            .map(|revision| revision.revision.revision_no)
+            .max()
+            .unwrap_or(0),
+    )?;
     let revision = build_change_revision(&order, &submission, &submission_lines, revision_no, now)?;
     let current_revision_id = order
-        .stable
-        .current_revision_id
-        .clone()
+        .current_revision_id()
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少当前版本".to_string()))?;
     let current_revision = db
         .sales_order_revisions()
-        .find_by_id(&current_revision_id, &mut NoTransaction)
+        .find_by_id(current_revision_id, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
     let mut order_for_tx = order.clone();
@@ -1239,11 +999,7 @@ async fn write_effective_revision(
     change_for_tx.apply_effective(revision.revision.base.id.clone().into(), actor.id())?;
     let existing_account = db
         .receivable_accounts()
-        .find_one_by_field(
-            "sales_order_id",
-            change_order.sales_order_id.to_string(),
-            &mut NoTransaction,
-        )
+        .find_primary_by_sales_order(&change_order.sales_order_id, &mut NoTransaction)
         .await?;
     let delta = build_receivable_delta(
         &order,
@@ -1362,26 +1118,13 @@ mod tests {
         assert!(source.contains("adapter.cancel_action"));
     }
 
-    /// 撤回后可定位已提交工作副本，并递增 submission_no。
+    /// 撤回后再提交使用语义仓储，并由实体递增版本、处理重复锁定。
     #[test]
-    fn cancel_then_resubmit_uses_bound_copy_and_increments_submission_no() {
-        assert_eq!(super::next_submission_no_from(0).unwrap(), 1);
-        assert_eq!(super::next_submission_no_from(1).unwrap(), 2);
-        assert!(super::next_submission_no_from(u32::MAX).is_err());
-        assert!(super::working_copy_already_submitted(
-            entities::sales_order::WorkingCopyStatus::Submitted
-        ));
-        assert!(!super::working_copy_already_submitted(
-            entities::sales_order::WorkingCopyStatus::Editing
-        ));
-        assert_eq!(
-            super::choose_resubmit_source(None, Some("submitted-copy")).unwrap(),
-            "submitted-copy"
-        );
-        assert_eq!(
-            super::choose_resubmit_source(Some("editing-copy"), Some("submitted-copy")).unwrap(),
-            "editing-copy"
-        );
-        assert!(super::choose_resubmit_source::<&str>(None, None).is_err());
+    fn cancel_then_resubmit_uses_repository_and_entity_rules() {
+        let source = include_str!("sales_change_order.rs");
+        assert!(source.contains("find_resubmittable_sales_change_copy"));
+        assert!(source.contains("latest_submission_no_by_change_order"));
+        assert!(source.contains("SalesChangeSubmission::next_submission_no"));
+        assert!(source.contains("lock_for_submission_if_needed"));
     }
 }

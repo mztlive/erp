@@ -70,6 +70,15 @@ impl DocumentState for SupplierAccountStatus {
     }
 }
 
+/// 供应商资料修订前的纯状态校验结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupplierProfileUpdateViolation {
+    /// 客户端携带的版本已过期。
+    VersionMismatch,
+    /// 供应商角色已停用。
+    SupplierDisabled,
+}
+
 /// 供应商角色创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierAccountData {
@@ -207,6 +216,23 @@ impl SupplierAccount {
         self.stable.status().is_active()
     }
 
+    /// 判断当前供应商是否允许从指定乐观锁版本修订资料。
+    ///
+    /// # 参数
+    /// * `expected_version` - 客户端读取资料时看到的供应商版本
+    ///
+    /// # 返回
+    /// 版本一致且供应商启用时返回 `None`；否则返回稳定违反原因。
+    pub fn profile_update_violation(&self, expected_version: u64) -> Option<SupplierProfileUpdateViolation> {
+        if self.base.version != expected_version {
+            return Some(SupplierProfileUpdateViolation::VersionMismatch);
+        }
+        if !self.is_active() {
+            return Some(SupplierProfileUpdateViolation::SupplierDisabled);
+        }
+        None
+    }
+
     /// 应用默认结算条件更新。
     ///
     /// # 参数
@@ -278,7 +304,10 @@ fn normalize_payment_term_id(value: Option<String>) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierAccountUpdate};
+    use super::{
+        SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierAccountUpdate,
+        SupplierProfileUpdateViolation,
+    };
     use crate::common::state::assert_adjacency_closed;
     use crate::field_update::FieldUpdate;
     use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
@@ -388,6 +417,23 @@ mod tests {
         assert!(
             account.current_commercial_profile_revision_id.is_some(),
             "Unchanged 保留原值"
+        );
+    }
+
+    /// 资料修订先校验版本，再校验供应商启停状态。
+    #[test]
+    fn profile_update_violation_preserves_gate_order() {
+        let mut account =
+            SupplierAccount::new(SupplierAccountId::new("supplier-4"), account_data(), "admin-1").unwrap();
+        assert_eq!(account.profile_update_violation(1), None);
+        assert_eq!(
+            account.profile_update_violation(2),
+            Some(SupplierProfileUpdateViolation::VersionMismatch)
+        );
+        account.stable.status = SupplierAccountStatus::Disabled;
+        assert_eq!(
+            account.profile_update_violation(1),
+            Some(SupplierProfileUpdateViolation::SupplierDisabled)
         );
     }
 
