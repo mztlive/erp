@@ -209,6 +209,29 @@ export function buildDefaultSourcingLines(
 }
 
 /**
+ * 表单选源行是否已与当前销售单明细对齐。
+ *
+ * 从工作台带着 `salesOrderId` 进入时，选中项在创建依据到达前就已确定；
+ * 未对齐时页面只展示骨架，不能把空表单当成“没有销售明细”。
+ *
+ * @param lines 表单当前选源行。
+ * @param order 当前选中的销售单。
+ * @returns 行数与稳定销售行 ID 均一致时为 true。
+ */
+export function sourcingFormLinesReady(
+    lines: readonly SourcingLineInput[],
+    order: SourcingSalesOrder,
+): boolean {
+    return (
+        lines.length === order.lines.length &&
+        lines.every(
+            (line, index) =>
+                line.salesOrderLineId === order.lines[index]?.salesOrderLineId,
+        )
+    )
+}
+
+/**
  * 查找一行当前选用的供应商选项。
  *
  * @param line 选源明细。

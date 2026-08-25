@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import {
     assignBestSuppliers,
+    buildDefaultSourcingLines,
     commonSuppliersForSelected,
     pickBestSourcingOption,
+    sourcingFormLinesReady,
     summarizeSourcingOrder,
     type SourcingLineInput,
     type SourcingProductLine,
@@ -301,5 +303,64 @@ describe("summarizeSourcingOrder", () => {
         expect(summary.paymentTermLabels).toEqual(["货到 30 天", "预付"])
         expect(summary.businessCategories).toEqual([])
         expect(summary.minEstimatedGross).toBe("39.00")
+    })
+})
+
+describe("buildDefaultSourcingLines", () => {
+    it("returns no form rows until a sales order is selected", () => {
+        expect(buildDefaultSourcingLines(undefined)).toEqual([])
+    })
+
+    it("writes one selected row per remaining sales line", () => {
+        expect(
+            buildDefaultSourcingLines(
+                order([
+                    line({
+                        salesOrderLineId: "l-1",
+                        remainingQuantity: "1",
+                        options: [
+                            option({
+                                supplierId: "s-a",
+                                supplierName: "甲",
+                                maxCreateQuantity: "1",
+                            }),
+                        ],
+                    }),
+                ]),
+            ),
+        ).toEqual([
+            {
+                salesOrderLineId: "l-1",
+                selected: true,
+                quantity: "1",
+                supplierId: "s-a",
+            },
+        ])
+    })
+})
+
+describe("sourcingFormLinesReady", () => {
+    it("treats empty form rows as not ready when the sales order has remaining lines", () => {
+        expect(
+            sourcingFormLinesReady(
+                [],
+                order([line({ salesOrderLineId: "l-1", options: [] })]),
+            ),
+        ).toBe(false)
+    })
+
+    it("is ready after default lines are written for the selected sales order", () => {
+        const selected = order([
+            line({
+                salesOrderLineId: "l-1",
+                options: [option({ supplierId: "s-a", supplierName: "甲" })],
+            }),
+        ])
+        expect(
+            sourcingFormLinesReady(
+                buildDefaultSourcingLines(selected),
+                selected,
+            ),
+        ).toBe(true)
     })
 })

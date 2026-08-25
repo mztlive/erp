@@ -118,7 +118,7 @@ export function WorkspaceTaskDetail({
           }
         : undefined
     const documentActions =
-        canReadPaper || documentHref ? (
+        canReadPaper || (approvalTask && documentHref) ? (
             <div className="flex shrink-0 items-center gap-1">
                 {canReadPaper ? (
                     <IconActionButton
@@ -129,7 +129,7 @@ export function WorkspaceTaskDetail({
                         <FileTextIcon aria-hidden="true" />
                     </IconActionButton>
                 ) : null}
-                {documentHref ? (
+                {approvalTask && documentHref ? (
                     <IconActionButton
                         label={openActionLabel}
                         testId={`work-item-open-document-${item.workItemId}`}
@@ -154,6 +154,14 @@ export function WorkspaceTaskDetail({
                 onDecisionApplied?.(view, item.workItemId)
             }
         />
+    ) : documentHref ? (
+        <Button
+            type="button"
+            data-testid={`work-item-open-document-${item.workItemId}`}
+            render={<a href={documentHref} aria-label={openActionLabel} />}
+        >
+            {openActionLabel}
+        </Button>
     ) : null
 
     return (

@@ -48,6 +48,7 @@ import {
     buildSourcingWorkspace,
     commonSuppliersForSelected,
     findSourcingOption,
+    sourcingFormLinesReady,
     sumPreviewTotals,
     type SourcingLineInput,
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
@@ -217,13 +218,12 @@ export function PurchaseOrderCreatePage({
     )
 
     React.useEffect(() => {
-        const order = workspaceRef.current.find(
-            (candidate) => candidate.salesOrderId === selectedSalesOrderId,
-        )
-        writeLines(buildDefaultSourcingLines(order))
+        // URL 已带 salesOrderId 时选中项首屏就是最终值，必须等创建依据到达后再写默认明细。
+        if (basesQuery.isPending) return
+        writeLines(buildDefaultSourcingLines(selectedOrder))
         setPreviewOpen(false)
         setCreatedOrders(null)
-    }, [selectedSalesOrderId, writeLines])
+    }, [basesQuery.isPending, selectedOrder, writeLines])
 
     const lines = useStore(form.store, (state) => state.values.lines)
     const previews = React.useMemo(
@@ -516,12 +516,9 @@ export function PurchaseOrderCreatePage({
                                     matchDisabled={!canMatchBest}
                                     onMatchBest={applyBestSuppliers}
                                 />
-                                {lines.length === selectedOrder.lines.length &&
-                                lines.every(
-                                    (line, index) =>
-                                        line.salesOrderLineId ===
-                                        selectedOrder.lines[index]
-                                            ?.salesOrderLineId,
+                                {sourcingFormLinesReady(
+                                    lines,
+                                    selectedOrder,
                                 ) ? (
                                     <PurchaseOrderCreateSourcingTable
                                         form={
