@@ -2,13 +2,16 @@
 
 import * as React from "react"
 
-import { uploadFileAssetImage } from "@/features/file-assets/api"
-import type { ProductFields } from "@/features/master-data/types"
+import { pendingFileReference } from "@/features/master-data/api/pending-assets"
+import type {
+    PendingAssetUpload,
+    ProductFields,
+} from "@/features/master-data/types"
 
 /**
  * 商品编辑器的待上传媒体：
  * - 本会话选择但尚未上传的图片文件（SPU 轮播/详情图按 fileName、SKU 主图按行号记录）；
- * - 保存前把仍是本地 blob 预览的图片上传为文件资产，返回回填后的字段。
+ * - 保存时只生成 multipart 临时引用；文件与商品命令由一个后端入口接收。
  */
 export function useProductUploads() {
     const [uploadingMedia, setUploadingMedia] = React.useState(false)
@@ -24,14 +27,21 @@ export function useProductUploads() {
         if (file) pendingSkuFilesRef.current.set(index, file)
     }, [])
 
-    /** 把仍是本地 blob 预览的图片上传为文件资产，返回回填后的字段。 */
-    const resolvePendingUploads = React.useCallback(
-        async (current: ProductFields): Promise<ProductFields> => {
-            const uploadIfPending = async (
+    /** 把本地 blob 映射为临时资产引用，并返回单次业务命令携带的文件集合。 */
+    const preparePendingUploads = React.useCallback(
+        (
+            current: ProductFields,
+        ): {
+            fields: ProductFields
+            pendingAssetUploads: readonly PendingAssetUpload[]
+        } => {
+            const pendingAssetUploads: PendingAssetUpload[] = []
+            const resolveIfPending = (
+                reference: string,
                 fileName: string,
                 previewUrl: string | undefined,
                 knownAssetId: string | undefined,
-            ): Promise<{ url: string; assetId?: string } | null> => {
+            ): { url: string; assetId?: string } | null => {
                 const url = previewUrl?.trim()
                 if (!url) return null
                 if (url.startsWith("blob:")) {
@@ -41,8 +51,8 @@ export function useProductUploads() {
                             `找不到待上传图片「${fileName}」的文件内容，请重新选择`,
                         )
                     }
-                    const uploaded = await uploadFileAssetImage(file)
-                    return { url: uploaded.url, assetId: uploaded.fileAssetId }
+                    pendingAssetUploads.push({ reference, file })
+                    return { url, assetId: reference }
                 }
                 return {
                     url,
@@ -52,8 +62,9 @@ export function useProductUploads() {
 
             const carouselPreviewUrls: Record<string, string> = {}
             const carouselFileAssetIds: Record<string, string> = {}
-            for (const fileName of current.carouselImages) {
-                const resolved = await uploadIfPending(
+            for (const [index, fileName] of current.carouselImages.entries()) {
+                const resolved = resolveIfPending(
+                    pendingFileReference("product", "carousel", index),
                     fileName,
                     current.carouselPreviewUrls[fileName],
                     current.carouselFileAssetIds[fileName],
@@ -66,8 +77,9 @@ export function useProductUploads() {
             }
             const detailPreviewUrls: Record<string, string> = {}
             const detailFileAssetIds: Record<string, string> = {}
-            for (const fileName of current.detailImages) {
-                const resolved = await uploadIfPending(
+            for (const [index, fileName] of current.detailImages.entries()) {
+                const resolved = resolveIfPending(
+                    pendingFileReference("product", "detail", index),
                     fileName,
                     current.detailPreviewUrls[fileName],
                     current.detailFileAssetIds[fileName],
@@ -91,20 +103,28 @@ export function useProductUploads() {
                         `找不到待上传主图「${sku.mainImage}」的文件内容，请重新选择`,
                     )
                 }
-                const uploaded = await uploadFileAssetImage(file)
+                const reference = pendingFileReference(
+                    "product",
+                    "sku",
+                    index,
+                    "main-image",
+                )
+                pendingAssetUploads.push({ reference, file })
                 skus[index] = {
                     ...sku,
-                    mainImagePreviewUrl: uploaded.url,
-                    mainImageAssetId: uploaded.fileAssetId,
+                    mainImageAssetId: reference,
                 }
             }
             return {
-                ...current,
-                carouselPreviewUrls,
-                carouselFileAssetIds,
-                detailPreviewUrls,
-                detailFileAssetIds,
-                skus,
+                fields: {
+                    ...current,
+                    carouselPreviewUrls,
+                    carouselFileAssetIds,
+                    detailPreviewUrls,
+                    detailFileAssetIds,
+                    skus,
+                },
+                pendingAssetUploads,
             }
         },
         [],
@@ -117,6 +137,6 @@ export function useProductUploads() {
         pendingSkuFilesRef,
         rememberPendingFiles,
         rememberSkuFile,
-        resolvePendingUploads,
+        preparePendingUploads,
     }
 }

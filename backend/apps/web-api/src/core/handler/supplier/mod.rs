@@ -4,9 +4,10 @@
 //! 直接复用 `services::supplier` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
+use entities::file_asset::SensitivityClass;
 use services::audit::AuditActor;
 use services::supplier::{
     profile::SupplierProfileService, PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
@@ -16,7 +17,14 @@ use services::supplier::{
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::Result,
+        handler::file_asset::{
+            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+            store_pending_asset_files,
+        },
+        response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -41,6 +49,40 @@ pub async fn supplier_profile_create(
 #[permission_macros::permission(
     group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "一次创建供应商资料及资质文件",
+    resource = "supplier",
+    action = "create"
+)]
+/// 一次接收供应商根命令与资质文件，并原子登记文件元数据和完整供应商资料。
+pub async fn supplier_profile_create_with_assets(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    mut multipart: Multipart,
+) -> Result<SupplierProfileMutationView> {
+    let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
+    let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
+    let result = SupplierProfileService::new(state.db(), state.sensitive_data())
+        .create_with_assets(req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(result) => {
+            if !result.assets_committed {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Ok(ApiResponse::ok_with_data(result.view))
+        }
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "修订完整供应商资料",
     resource = "supplier",
     action = "update"
@@ -56,6 +98,50 @@ pub async fn supplier_profile_update(
         .update(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "一次修订供应商资料及资质文件",
+    resource = "supplier",
+    action = "update"
+)]
+/// 一次接收供应商修订根命令与资质文件，并原子登记文件元数据和全部资料变化。
+pub async fn supplier_profile_update_with_assets(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    mut multipart: Multipart,
+) -> Result<SupplierProfileMutationView> {
+    let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
+    let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
+    let result = SupplierProfileService::new(state.db(), state.sensitive_data())
+        .update_with_assets(&id, req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(result) => {
+            if !result.assets_committed {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Ok(ApiResponse::ok_with_data(result.view))
+        }
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
+}
+
+/// 从受控临时引用派生供应商资质文件的最低敏感级别。
+fn supplier_asset_sensitivity(reference: &str) -> SensitivityClass {
+    if reference.contains(":legal_person_id:") {
+        SensitivityClass::HighlySensitive
+    } else {
+        SensitivityClass::Sensitive
+    }
 }
 
 #[permission_macros::permission(

@@ -2,7 +2,6 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/contracts"
 import {
     isPendingReviewStage,
-    PROCUREMENT_REJECT_REASON_LABEL,
     stageOwnerDisplay,
 } from "@/features/sales-orders/lib/labels"
 
@@ -23,11 +22,7 @@ export type NavSectionId =
     | "collaboration"
     | "versions"
 
-export type WorkSectionId =
-    | "procurement-rejection"
-    | "approval"
-    | "acceptance"
-    | "change-review"
+export type WorkSectionId = "approval" | "acceptance" | "change-review"
 
 export type FocusTaskId = WorkSectionId | "versions"
 
@@ -76,59 +71,18 @@ const LIFECYCLE_ORDER: LifecycleStepId[] = [
     "closed",
 ]
 
-export function isOpenProcurementRejection(order: SalesOrderListItem) {
-    const rejection = order.procurementRejection
-    if (!rejection) return false
-    return (
-        rejection.reviewStatus !== "RESOLVED" &&
-        rejection.reviewStatus !== "VOIDED"
-    )
-}
-
-/** 普通草稿：还没有正式提交，也不是采购驳回后的待处理单。 */
+/** 尚未正式提交的销售单草稿。 */
 export function isSalesOrderDraft(order: SalesOrderListItem) {
-    return (
-        order.primaryStatus.code === "draft" &&
-        !isOpenProcurementRejection(order)
-    )
+    return order.primaryStatus.code === "draft"
 }
 
-/** 服务端已允许「改完再报」时，才可以进入整单编辑。 */
-export function rejectionAllowsResubmit(order: SalesOrderListItem) {
-    return Boolean(
-        isOpenProcurementRejection(order) &&
-        order.procurementRejection?.allowedActions.includes(
-            "RESUBMIT_CHANGED_TERMS",
-        ),
-    )
-}
-
-/** 服务端已允许「驳回后作废」时，才展示作废入口。 */
-export function rejectionAllowsVoid(order: SalesOrderListItem) {
-    return Boolean(
-        isOpenProcurementRejection(order) &&
-        order.procurementRejection?.allowedActions.includes(
-            "VOID_AFTER_REJECTION",
-        ),
-    )
-}
-
-/**
- * 是否用建单表单替换对象中心。
- * 草稿直接进入编辑；采购驳回必须先看详情，再显式带 `mode=edit`。
- */
-export function shouldOpenSalesOrderEditor(options: {
-    order: SalesOrderListItem
-    mode?: string | null
-    canResubmit: boolean
-}) {
-    if (isSalesOrderDraft(options.order)) return true
-    return options.mode === "edit" && options.canResubmit
+/** 草稿直接使用建单表单，已提交单据进入只读对象中心。 */
+export function shouldOpenSalesOrderEditor(order: SalesOrderListItem) {
+    return isSalesOrderDraft(order)
 }
 
 export function isWorkSection(section?: string): section is WorkSectionId {
     return (
-        section === "procurement-rejection" ||
         section === "approval" ||
         section === "acceptance" ||
         section === "change-review"
@@ -148,7 +102,6 @@ export function resolveNavSection(
         case "fulfillment":
         case "acceptance":
             return "fulfillment"
-        case "procurement-rejection":
         case "change-review":
             return "overview"
         case "receivable":
@@ -176,26 +129,6 @@ export function resolveFocusTask(
     order: SalesOrderListItem,
     canAccept: boolean,
 ): FocusTask | null {
-    if (
-        order.nature !== "physical_service" &&
-        isOpenProcurementRejection(order) &&
-        order.procurementRejection
-    ) {
-        const rejection = order.procurementRejection
-        const reason =
-            PROCUREMENT_REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
-            rejection.rejectReasonCode
-        const comment = rejection.rejectComment.trim()
-        return {
-            id: "procurement-rejection",
-            title: "采购未通过，需要你处理",
-            description: comment
-                ? `${reason}：${comment}`
-                : `${reason}。可以改完再报采购，或作废本单。`,
-            actionLabel: "去处理",
-            tone: "warning",
-        }
-    }
     // 有审批绑定且仍在审核轨（含尚无 instance 投影的审批中）时，优先引导去审批，
     // 不得被验收等履约动作抢焦点。
     if (
@@ -250,10 +183,7 @@ export function isActionableFocusTask(
     task: FocusTask | null,
 ): task is FocusTask & { id: WorkSectionId } {
     // 审批入口已由「审批」tab 承接，不再用「去审批」主按钮跳转。
-    return (
-        task != null &&
-        (task.id === "procurement-rejection" || task.id === "acceptance")
-    )
+    return task != null && task.id === "acceptance"
 }
 
 function currentLifecycleId(order: SalesOrderListItem): LifecycleStepId {

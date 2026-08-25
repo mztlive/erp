@@ -139,74 +139,9 @@ type CloseEligibility = {
     note: string
 }
 
-type StructuredDiffItem = {
-    field: string
-    before: string
-    after: string
-}
-
 export type ActionBlocker = {
     action: string
     reason: string
-}
-
-export type ProcurementRejectionResolution = {
-    rejectedProcurementConfirmationId: string
-    rejectedProcurementWorkItemId: string
-    rejectedSubmissionId: string
-    rejectedSubmissionNo: number
-    rejectedSubjectHash: string
-    rejectReasonCode: string
-    rejectComment: string
-    rejectedByLabel: string
-    rejectedAt: string
-    reviewStatus: "REJECTED" | "RESOLVED" | "VOIDED"
-    draftDifference: {
-        changedItemOrService: boolean
-        changedSalesPrice: boolean
-        commercialTermsUnchanged: boolean
-        diffSummary: StructuredDiffItem[]
-    }
-    estimatedCost?: string
-    estimatedMarginPercent?: string
-    fixedResolutions: readonly [
-        "RESUBMIT_CHANGED_TERMS",
-        "REQUEST_LOW_MARGIN_ACCEPTANCE",
-        "VOID_AFTER_REJECTION",
-    ]
-    allowedActions: Array<
-        | "RESUBMIT_CHANGED_TERMS"
-        | "REQUEST_LOW_MARGIN_ACCEPTANCE"
-        | "VOID_AFTER_REJECTION"
-    >
-    actionBlockers: ActionBlocker[]
-    /** 已解决时的正式结果摘要（会话内） */
-    resolutionOutcome?: {
-        outcome:
-            | "CHANGED_TERMS_RESUBMITTED"
-            | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-            | "VOIDED_AFTER_PROCUREMENT_REJECTION"
-        reference: string
-        detail: string
-        newSubmissionNo?: number
-        newSubjectHash?: string
-        newWorkItemId?: string
-    }
-}
-
-/** 销售上级承接低毛利的唯一活动确认投影。 */
-export type ActiveLowMarginManagerConfirmation = {
-    confirmationId: string
-    workItemId: string
-    taskVersion: string
-    subjectVersion: string
-    lowMarginSubmissionId: string
-    rejectedProcurementConfirmationId: string
-    acceptanceReason: string
-    evidenceReferenceIds: string[]
-    ownerUser?: { id: string; displayName: string }
-    allowedActions: Array<"APPROVE" | "REJECT">
-    actionBlockers: Array<{ code: string; message: string }>
 }
 
 export type SalesOrderRevisionSnapshot = {
@@ -243,7 +178,6 @@ export type FormalAllowedAction =
     | "VIEW_CLOSE_CONDITIONS"
     | "PRINT"
     | "EXPORT"
-    | "RESOLVE_PROCUREMENT_REJECTION"
 
 export type SalesOrderListItem = {
     id: string
@@ -318,8 +252,6 @@ export type SalesOrderListItem = {
     commercialReadOnly: boolean
     commercialReadOnlyReason?: string
     revisions: readonly SalesOrderRevisionSnapshot[]
-    procurementRejection?: ProcurementRejectionResolution | null
-    activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
     /** 统一只读审批结构；实物为 SalesOrder，卡券为 VoucherSalesOrder。 */
     approval?: DocumentApprovalView
     activeChangeOrder?: SalesChangeOrderSummary | null

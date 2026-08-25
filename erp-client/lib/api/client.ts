@@ -55,7 +55,7 @@ export interface ApiRequestOptions {
     method?: string
     /** 额外请求头。 */
     headers?: Record<string, string>
-    /** 请求体：对象会被 JSON 序列化并自动带 Content-Type；字符串原样透传。 */
+    /** 请求体：普通对象会序列化为 JSON；字符串与 FormData 原样透传。 */
     body?: unknown
     /** 外部取消信号（与内置超时叠加）。 */
     signal?: AbortSignal
@@ -82,9 +82,11 @@ const apiFetch = async <T>(
         headers.Authorization = `Bearer ${token}`
     }
 
-    let body: string | undefined
+    let body: BodyInit | undefined
     if (options.body !== undefined) {
         if (typeof options.body === "string") {
+            body = options.body
+        } else if (options.body instanceof FormData) {
             body = options.body
         } else {
             body = JSON.stringify(options.body)
@@ -186,6 +188,24 @@ export const apiPost = <T>(
 export const apiPut = <T>(
     path: string,
     body?: unknown,
+    options?: ApiRequestOptions,
+): Promise<T> => apiFetch<T>(path, { ...options, method: "PUT", body })
+
+/**
+ * POST multipart 请求；浏览器负责生成包含 boundary 的 Content-Type。
+ */
+export const apiPostForm = <T>(
+    path: string,
+    body: FormData,
+    options?: ApiRequestOptions,
+): Promise<T> => apiFetch<T>(path, { ...options, method: "POST", body })
+
+/**
+ * PUT multipart 请求；浏览器负责生成包含 boundary 的 Content-Type。
+ */
+export const apiPutForm = <T>(
+    path: string,
+    body: FormData,
     options?: ApiRequestOptions,
 ): Promise<T> => apiFetch<T>(path, { ...options, method: "PUT", body })
 

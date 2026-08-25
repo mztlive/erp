@@ -10,26 +10,29 @@ use super::cancel_approval::{
     PaymentReversalCancelPersistInput,
 };
 use super::dto::{
-    CancelPaymentReversalApprovalRequest, CreatePaymentReversalRequest, PaymentReversalView,
-    SubmitPaymentReversalRequest,
+    CancelPaymentReversalApprovalRequest, CommitPaymentReversalRequest, CreatePaymentReversalRequest,
+    PaymentReversalView, SubmitPaymentReversalRequest,
 };
 use super::reversal_plan::{plan_payment_reverse, zero_amount};
 use super::start_approval::{
-    build_payment_reversal_start_input, load_bound_definition_graph, load_payment_reversal_start_receipt,
-    persist_payment_reversal_start, PaymentReversalStartInput, PaymentReversalStartPersistInput,
+    build_payment_reversal_start_input, load_bound_definition_graph,
+    load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
+    persist_payment_reversal_runtime, persist_payment_reversal_start, PaymentReversalStartInput,
+    PaymentReversalStartPersistInput,
 };
-use super::ReturnsService;
+use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::audit::AuditActor;
+use crate::audit::{AuditActor, CommandReceipt};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, PayableExt, ReturnsExt, SupplierExt, Transactional,
+    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PayableExt, ReturnsExt, SupplierExt,
+    Transactional,
 };
 use entities::common::time::Instant;
 use entities::document_registry::BusinessDocument;
@@ -101,6 +104,140 @@ impl ReturnsService {
         )?;
         persist_created_payment_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
         self.payment_reversal_detail(&reversal.base.id).await
+    }
+
+    /// 按原付款一次创建付款冲正并启动审批。
+    ///
+    /// 单据注册、定义绑定、冲正实体、审批快照、运行事实、入口任务和审计在同一
+    /// MongoDB 事务内完成。
+    pub async fn commit_payment_reversal(
+        &self,
+        req: CommitPaymentReversalRequest,
+        actor: &AuditActor,
+    ) -> Result<PaymentReversalView> {
+        req.validate()?;
+        let command_receipt = CommandReceipt::new(
+            "payment-reversal-commit-",
+            actor,
+            "payment_reversal.commit",
+            "payment_reversal",
+            &req.idempotency_key,
+            &req,
+        )?;
+        if let Some(reversal_id) = command_receipt.committed_resource_id(&self.db).await? {
+            return self.payment_reversal_detail(&reversal_id).await;
+        }
+        let payment = self
+            .db
+            .supplier_payments()
+            .find_by_id(&req.source_fact_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("原供应商付款不存在".to_string()))?;
+        let source_fact_id = SupplierPaymentId::new(payment.base.id.clone());
+        let source_version = payment.base.version;
+        let mut reversal = PaymentReversal::new(
+            PaymentReversalId::new(next_id()),
+            PaymentReversalData {
+                reversal_no: return_command_no("PCZ", actor.id(), &req.idempotency_key),
+                original_supplier_payment_id: source_fact_id.clone(),
+                reason_code: None,
+                reason_text: req.reason,
+                amount: req.amount.unwrap_or(payment.amount),
+                handled_by: actor.id().to_string(),
+                reviewed_by: "finance_reviewer".to_string(),
+                occurred_at: Instant::now(),
+                evidence_attachment_id: None,
+            },
+        )?;
+        let adapter = payment_reversal_adapter()?;
+        start_payment_reversal_approval(&mut reversal)?;
+        let id = reversal.base.id.clone();
+        let subject = payment_reversal_subject_ref(&id)?;
+        let (organization_id, supplier_id) =
+            load_payment_reversal_context(&self.db, &reversal.original_supplier_payment_id).await?;
+        let _ = payment_reversal_object_readable(&organization_id, actor.id())?;
+        let now = Instant::now();
+        let snapshot =
+            build_payment_reversal_snapshot(&reversal, &organization_id, &supplier_id, actor.id(), now)?;
+        let bind_command = BindPublishedDefinitionCommand {
+            document_type: DocumentType::PaymentReversal,
+            business_object_id: id.clone(),
+            business_object_version: reversal.base.version,
+            context: BindingRevalidationContext {
+                organization_id: organization_id.clone(),
+                creator_id: actor.id().to_string(),
+            },
+        };
+        let document =
+            new_registered_document(&id, DocumentType::PaymentReversal, reversal.reversal_no.clone())?;
+        let create_audit =
+            actor
+                .clone()
+                .resource_log("payment_reversal.create", "payment_reversal", id.clone())?;
+        let submit_audit =
+            actor
+                .clone()
+                .resource_log("payment_reversal.submit", "payment_reversal", id.clone())?;
+        let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let idempotency_key = req.idempotency_key;
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    validate_payment_reversal_source(&db, &source_fact_id, source_version, session).await?;
+                    let binding = persist_bound_payment_reversal_document(
+                        &db,
+                        &rbac,
+                        document,
+                        &bind_command,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let start_input = build_payment_reversal_start_input(PaymentReversalStartInput {
+                        graph,
+                        binding: &binding,
+                        subject,
+                        subject_version: reversal.approval_subject_version,
+                        actor_id: actor_owned.id(),
+                        organization_id: &organization_id,
+                        idempotency_key: &idempotency_key,
+                        receipt: None,
+                        now,
+                    })?;
+                    let prepared = prepare_start(start_input)?;
+                    db.payment_reversals().create(&reversal, session).await?;
+                    if let crate::approval::execution::PreparedExecution::Apply(writes) = prepared {
+                        persist_payment_reversal_runtime(
+                            &db,
+                            &writes,
+                            &snapshot,
+                            adapter.owner_role,
+                            &organization_id,
+                            now,
+                            session,
+                        )
+                        .await?;
+                    }
+                    db.audit_logs().create(&create_audit, session).await?;
+                    db.audit_logs().create(&submit_audit, session).await?;
+                    db.audit_logs().create(&command_audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await;
+        let detail_id = match transaction_result {
+            Ok(()) => id,
+            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
+                Some(reversal_id) => reversal_id,
+                None => return Err(error),
+            },
+        };
+        self.payment_reversal_detail(&detail_id).await
     }
 
     /// 提交付款冲正并调用统一 `start_approval`。
@@ -477,6 +614,28 @@ async fn load_payment_reversal_context(
     Ok((organization_id, payment.supplier_id))
 }
 
+/// 在创建冲正单的同一事务中重读并校验原供应商付款事实。
+///
+/// 原付款必须仍为调用前读取的版本且已经过账，避免为非正式事实创建审批任务。
+async fn validate_payment_reversal_source(
+    db: &Database,
+    source_fact_id: &SupplierPaymentId,
+    expected_version: u64,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let payment = db
+        .supplier_payments()
+        .find_by_id(source_fact_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("原供应商付款不存在".to_string()))?;
+    super::ensure_posted_source(
+        payment.base.version,
+        expected_version,
+        payment.status == SupplierPaymentStatus::Posted,
+        "只有已过账的供应商付款才能发起冲正",
+    )
+}
+
 /// 查询发布定义、写入绑定并持久化注册行。
 ///
 /// # 错误
@@ -488,7 +647,7 @@ async fn persist_bound_payment_reversal_document(
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<()> {
+) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = payment_reversal_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
@@ -496,9 +655,9 @@ async fn persist_bound_payment_reversal_document(
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
     let binding = binding.ok_or_else(|| Error::Internal("付款冲正单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(&mut document, binding)?;
+    attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, session).await?;
-    Ok(())
+    Ok(binding)
 }
 
 /// 在最终通过事务内执行过账副作用并写回冲正单。

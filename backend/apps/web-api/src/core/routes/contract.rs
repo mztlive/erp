@@ -11,7 +11,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::contract, middleware::with_permission},
+    core::{handler::contract, middleware::with_permission, upload},
 };
 
 /// 返回本域管理端路由集合。
@@ -29,6 +29,17 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(contract::contract_list),
                 rbac,
                 contract::contract_list_permission_key(),
+            ),
+        )
+        .route(
+            "/contracts/upload",
+            with_permission(
+                upload::multipart_route(
+                    post(contract::contract_upload),
+                    upload::MAX_CONTRACT_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                contract::contract_upload_permission_key(),
             ),
         )
         .route(

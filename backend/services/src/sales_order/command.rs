@@ -13,8 +13,8 @@ use entities::document_registry::{
     BusinessDocument, BusinessDocumentData, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
 use entities::ids::{
-    BusinessDocumentId, ContractId, ContractRevisionId, CustomerAccountId, SalesOrderId,
-    SalesOrderSubmissionId, SalesOrderWorkingCopyId, WorkflowActionId,
+    BusinessDocumentId, ContractId, CustomerAccountId, SalesOrderId, SalesOrderSubmissionId,
+    SalesOrderWorkingCopyId, WorkflowActionId,
 };
 use entities::sales_order::{
     BusinessType, LineType, SalesOrder, SalesOrderData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
@@ -38,8 +38,8 @@ use super::cancel_approval::{
 };
 use super::dto::{
     CancelSalesOrderApprovalRequest, CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDetailView,
-    SalesOrderDraftLineRequest, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
-    VoidSalesOrderRequest, WorkingCopyView,
+    SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderEditableDraftRequest,
+    SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
 };
 use super::mapper::{
     build_stable_lines, build_submission, build_submission_lines, build_working_copy,
@@ -47,8 +47,9 @@ use super::mapper::{
 };
 use super::pricing::line_totals;
 use super::start_approval::{
-    build_sales_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_order_start, SalesOrderStartInput, SalesOrderStartPersistInput,
+    build_sales_order_start_input, load_bound_definition_graph, load_bound_definition_graph_with_executor,
+    load_start_receipt, persist_runtime_writes, persist_sales_order_start, SalesOrderRuntimeWriteInput,
+    SalesOrderStartInput, SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
 };
 use super::SalesOrderService;
 use crate::approval::binding::{
@@ -99,6 +100,8 @@ struct ApprovalSubmissionStart<'a> {
     resolved_identities: Option<ResolvedCardExternalIdentities>,
     /// 工作副本行，用于可售引用重验。
     copy_lines: Vec<SalesOrderWorkingCopyLine>,
+    /// 草稿替换与补开副本的事务写入计划。
+    working_copy_plan: SalesOrderWorkingCopyPersistPlan,
 }
 
 /// 为销售提交幂等命令生成不泄露原始幂等键的稳定收据 ID。
@@ -113,16 +116,11 @@ fn sales_submission_audit_id(actor_id: &str, sales_order_id: &str, idempotency_k
 fn sales_submission_fingerprint(
     actor_id: &str,
     sales_order_id: &str,
-    expected_working_copy_version: u64,
-    idempotency_key: &str,
-) -> String {
-    format!(
-        "{:x}",
-        Sha256::digest(
-            format!("{actor_id}|{sales_order_id}|{expected_working_copy_version}|{idempotency_key}")
-                .as_bytes(),
-        )
-    )
+    request: &SubmitSalesOrderRequest,
+) -> Result<String> {
+    let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))
+        .map_err(|error| Error::Internal(format!("销售提交命令序列化失败: {error}")))?;
+    Ok(format!("{:x}", Sha256::digest(payload)))
 }
 
 /// 按业务性质构造创建时绑定命令。
@@ -157,7 +155,7 @@ async fn persist_bound_sales_document(
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut ClientSession,
-) -> Result<()> {
+) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = sales_order_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
@@ -165,9 +163,9 @@ async fn persist_bound_sales_document(
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
     let binding = binding.ok_or_else(|| Error::Internal("销售单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(document, binding)?;
+    attach_published_binding(document, binding.clone())?;
     db.business_documents().create(document, session).await?;
-    Ok(())
+    Ok(binding)
 }
 
 /// 为销售建单命令生成不泄露原始幂等键的稳定收据 ID。
@@ -188,6 +186,100 @@ fn sales_order_create_fingerprint<T: serde::Serialize>(actor_id: &str, request: 
 }
 
 impl SalesOrderService {
+    /// 解析销售命令所选合同的客户身份，供 HTTP 层执行客户数据范围校验。
+    ///
+    /// # 参数
+    /// * `contract_id` - 前端选择的合同稳定身份
+    ///
+    /// # 返回
+    /// 返回合同所属客户身份。
+    ///
+    /// # 错误
+    /// 合同不存在时返回 `NotFound`。
+    pub async fn sales_command_customer_id(&self, contract_id: &ContractId) -> Result<CustomerAccountId> {
+        let contract = self
+            .db
+            .contracts()
+            .find_by_id(contract_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
+        Ok(contract.customer_id)
+    }
+
+    /// 按当前有效合同修订补齐不可由客户端声明的销售草稿快照。
+    ///
+    /// # 参数
+    /// * `contract_id` - 合同稳定身份
+    /// * `editable` - 客户端可编辑字段与行
+    ///
+    /// # 返回
+    /// 返回合同所属客户、结算主体与完整内部草稿。
+    ///
+    /// # 错误
+    /// 合同或修订不存在、合同非生效态、所选修订已过期时返回错误。
+    async fn resolve_sales_command_draft(
+        &self,
+        contract_id: &ContractId,
+        editable: SalesOrderEditableDraftRequest,
+    ) -> Result<(CustomerAccountId, entities::ids::PartyId, SalesOrderDraftRequest)> {
+        editable.validate()?;
+        let contract = self
+            .db
+            .contracts()
+            .find_by_id(contract_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
+        if contract.stable.status != entities::contract::ContractStatus::Effective {
+            return Err(Error::BusinessLogicError(
+                "合同当前不可用于新销售提交".to_string(),
+            ));
+        }
+        if contract.stable.current_revision_id.as_deref()
+            != Some(editable.requested_contract_revision_id.as_ref())
+        {
+            return Err(Error::ConflictError(
+                "所选合同版本已不是当前可用版本，请刷新后重新选择".to_string(),
+            ));
+        }
+        let revision = self
+            .db
+            .contract_revisions()
+            .find_by_id(
+                editable.requested_contract_revision_id.as_ref(),
+                &mut NoTransaction,
+            )
+            .await?
+            .ok_or_else(|| Error::NotFound("合同版本不存在".to_string()))?;
+        if revision.contract_id.as_ref() != contract_id.as_ref() {
+            return Err(Error::ValidationError("合同版本不属于所选合同".to_string()));
+        }
+        if revision.settlement_party_id != contract.settlement_party_id {
+            return Err(Error::ConflictError(
+                "合同当前结算主体与所选版本不一致，请刷新后重试".to_string(),
+            ));
+        }
+        let draft = SalesOrderDraftRequest {
+            editor_user_id: editable.editor_user_id,
+            customer_name: revision.customer_snapshot.customer_name,
+            contract_no: Some(revision.contract_no),
+            requested_contract_revision_id: Some(editable.requested_contract_revision_id),
+            settlement_party_name: Some(revision.settlement_party_snapshot.settlement_party_name),
+            payment_term_code: revision.payment_term_snapshot.payment_term_code,
+            payment_term_name: revision.payment_term_snapshot.payment_term_name,
+            invoice_type: revision.invoice_requirement_snapshot.invoice_type,
+            tax_point: revision.invoice_requirement_snapshot.tax_point,
+            project_name: editable.project_name,
+            business_remark: editable.business_remark,
+            voucher_category_sku_id: editable.voucher_category_sku_id,
+            voucher_expiry_at: editable.voucher_expiry_at,
+            target_mall_id: editable.target_mall_id,
+            receivable_due_date: editable.receivable_due_date,
+            lines: editable.lines,
+        };
+        draft.validate()?;
+        Ok((contract.customer_id, contract.settlement_party_id, draft))
+    }
+
     /// 创建销售单（订单 + 稳定明细 + 首次提交工作副本原子形成；`intent=SUBMIT`
     /// 时随后立即提交）。
     ///
@@ -224,15 +316,16 @@ impl SalesOrderService {
             .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
             .await?
         {
-            return self
-                .complete_sales_order_creation(&order_id, req.intent, req.idempotency_key.clone(), actor)
-                .await;
+            return self.sales_order_detail(&order_id, None).await;
         }
-        self.ensure_sellable_draft_lines(&req.draft.lines).await?;
+        let (customer_id, settlement_party_id, draft) = self
+            .resolve_sales_command_draft(&req.contract_id, req.draft.clone())
+            .await?;
+        self.ensure_sellable_draft_lines(&draft.lines).await?;
         let customer = self
             .db
             .customer_accounts()
-            .find_by_id(&req.customer_id, &mut NoTransaction)
+            .find_by_id(&customer_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
         if !customer.is_active() {
@@ -240,12 +333,6 @@ impl SalesOrderService {
                 "客户已停用，禁止创建新销售单".to_string(),
             ));
         }
-        self.ensure_selected_contract_revision(
-            req.contract_id.as_ref(),
-            &req.customer_id,
-            req.draft.requested_contract_revision_id.as_ref(),
-        )
-        .await?;
 
         let order = SalesOrder::new(
             SalesOrderId::new(next_id()),
@@ -254,9 +341,9 @@ impl SalesOrderService {
                 business_type: req.business_type,
                 origin_system: entities::sales_order::OriginSystem::Erp,
                 source_identity_id: None,
-                customer_id: req.customer_id,
-                contract_id: req.contract_id,
-                settlement_party_id: req.settlement_party_id,
+                customer_id,
+                contract_id: Some(req.contract_id.clone()),
+                settlement_party_id,
                 source_status_code: None,
             },
             actor.id(),
@@ -270,9 +357,169 @@ impl SalesOrderService {
                 document_no: order.order_no.clone(),
             },
         )?;
-        let stable_lines = build_stable_lines(&order_id, &req.draft.lines)?;
-        let (working_copy, working_copy_lines) =
-            build_working_copy(&order, &stable_lines, &req.draft, 1, actor)?;
+        let stable_lines = build_stable_lines(&order_id, &draft.lines)?;
+        let (working_copy, working_copy_lines) = build_working_copy(&order, &stable_lines, &draft, 1, actor)?;
+
+        if req.intent == SalesOrderCreateIntent::Submit {
+            let ports = sales_approval_ports(order.business_type)?;
+            let subject = subject_ref_for_sales_business(order.business_type, &order.base.id)?;
+            let organization_id = sales_order_responsible_org_id(&order)?;
+            let _ = sales_order_object_readable(&organization_id, actor.id())?;
+            self.ensure_procurement_responsibility_before_submit(&order, &working_copy_lines)
+                .await?;
+            let resolved_identities = self
+                .resolve_card_external_identities(&working_copy, &mut NoTransaction)
+                .await?;
+            let submission = build_submission(
+                &working_copy,
+                &working_copy_lines,
+                1,
+                actor,
+                resolved_identities.as_ref().map(|value| value.customer.as_str()),
+                resolved_identities
+                    .as_ref()
+                    .map(|value| value.voucher_category.as_str()),
+            )?;
+            let submission_lines = build_submission_lines(&submission, &working_copy_lines)?;
+            let mut submitted_working_copy = working_copy;
+            submitted_working_copy.submit()?;
+            let mut submitted_order = order.clone();
+            execute_sales_order_domain_action(&mut submitted_order, ports.on_approval_start, actor.id())?;
+            let now = Instant::now();
+            let snapshot = build_sales_order_snapshot(
+                &submitted_order,
+                &submission,
+                &submission_lines,
+                actor.id(),
+                now,
+            )?;
+            let start = sales_order_start_command(
+                ports.document_type,
+                &submitted_order.base.id,
+                submission.submission_no,
+                actor.id(),
+                &idempotency_key,
+            );
+            ensure_unified_start_command(&start)?;
+            let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
+            let workflow_action = WorkflowAction::new(
+                WorkflowActionId::new(next_id()),
+                WorkflowActionData {
+                    document_id: BusinessDocumentId::new(submitted_order.base.id.clone()),
+                    action_type: WorkflowActionType::Submit,
+                    from_status: "DRAFT".to_string(),
+                    to_status: "PENDING_REVIEW".to_string(),
+                    actor_id: actor.id().to_string(),
+                    actor_role: "role-sales".to_string(),
+                    comment: None,
+                },
+            )?;
+            let create_audit = actor.clone().resource_log_with_id(
+                audit_id.clone(),
+                "sales_order.create",
+                "sales_order",
+                submitted_order.base.id.clone(),
+                Some(format!("command_sha256={fingerprint}")),
+            )?;
+            let submit_audit = actor.clone().resource_log_with_id(
+                sales_submission_audit_id(actor.id(), &submitted_order.base.id, &idempotency_key),
+                "sales_order.submit",
+                "sales_order_submission",
+                submission.base.id.clone(),
+                Some(format!("command_sha256=create:{fingerprint}")),
+            )?;
+            let bind_command = sales_create_bind_command(&submitted_order, actor)?;
+            let rbac = self.require_rbac().cloned()?;
+            let sellable_refs = Self::sellable_working_copy_refs(&working_copy_lines)?;
+            let detail_id = submitted_order.base.id.clone();
+            let db = self.db.clone();
+            let client = db.client().clone();
+            let actor_owned = actor.clone();
+            let mut document = document;
+            let transaction_result = client
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        SalesOrderService::new(db.clone())
+                            .ensure_sellable_refs(&sellable_refs, session)
+                            .await?;
+                        let current_identities = SalesOrderService::new(db.clone())
+                            .resolve_card_external_identities(&submitted_working_copy, session)
+                            .await?;
+                        if current_identities != resolved_identities {
+                            return Err(Error::ConflictError(
+                                "目标商城外部身份映射在提交期间已变化，请刷新后重试".to_string(),
+                            ));
+                        }
+                        let binding = persist_bound_sales_document(
+                            &db,
+                            &rbac,
+                            &mut document,
+                            &bind_command,
+                            &actor_owned,
+                            session,
+                        )
+                        .await?;
+                        let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                        let start_input = build_sales_order_start_input(SalesOrderStartInput {
+                            graph,
+                            binding: &binding,
+                            document_type: ports.document_type,
+                            subject,
+                            subject_version: submission.submission_no,
+                            actor_id: actor_owned.id(),
+                            organization_id: &organization_id,
+                            idempotency_key: &idempotency_key,
+                            receipt: None,
+                            now,
+                        })?;
+                        let prepared = prepare_start(start_input)?;
+                        db.sales_orders().create(&submitted_order, session).await?;
+                        for line in &stable_lines {
+                            db.sales_order_lines().create(line, session).await?;
+                        }
+                        db.sales_order_working_copies()
+                            .create(&submitted_working_copy, session)
+                            .await?;
+                        for line in &working_copy_lines {
+                            db.sales_order_working_copy_lines().create(line, session).await?;
+                        }
+                        db.sales_order_submissions().create(&submission, session).await?;
+                        for line in &submission_lines {
+                            db.sales_order_submission_lines().create(line, session).await?;
+                        }
+                        db.workflow_actions().create(&workflow_action, session).await?;
+                        if let crate::approval::execution::PreparedExecution::Apply(writes) = prepared {
+                            persist_runtime_writes(
+                                &db,
+                                &writes,
+                                SalesOrderRuntimeWriteInput {
+                                    document_type: ports.document_type,
+                                    snapshot_payload: &snapshot,
+                                    owner_role: ports.owner_role,
+                                    organization_id: &organization_id,
+                                    now,
+                                },
+                                session,
+                            )
+                            .await?;
+                        }
+                        db.audit_logs().create(&create_audit, session).await?;
+                        db.audit_logs().create(&submit_audit, session).await?;
+                        Ok::<(), crate::errors::Error>(())
+                    })
+                })
+                .await;
+            if let Err(error) = transaction_result {
+                if let Some(order_id) = self
+                    .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
+                    .await?
+                {
+                    return self.sales_order_detail(&order_id, None).await;
+                }
+                return Err(error);
+            }
+            return self.sales_order_detail(&detail_id, None).await;
+        }
 
         let audit = actor.clone().resource_log_with_id(
             audit_id.clone(),
@@ -327,37 +574,12 @@ impl SalesOrderService {
                 .replay_sales_order_creation(&audit_id, &fingerprint, actor.id())
                 .await?
             {
-                return self
-                    .complete_sales_order_creation(&order_id, req.intent, req.idempotency_key.clone(), actor)
-                    .await;
+                return self.sales_order_detail(&order_id, None).await;
             }
             return Err(error);
         }
 
-        self.complete_sales_order_creation(&order.base.id, req.intent, req.idempotency_key, actor)
-            .await
-    }
-
-    /// 完成建单命令声明的意图；重放 `SUBMIT` 时复用提交命令自身的幂等收据。
-    async fn complete_sales_order_creation(
-        &self,
-        order_id: &str,
-        intent: SalesOrderCreateIntent,
-        idempotency_key: String,
-        actor: &AuditActor,
-    ) -> Result<SalesOrderDetailView> {
-        if intent == SalesOrderCreateIntent::Submit {
-            self.submit_sales_order(
-                order_id,
-                SubmitSalesOrderRequest {
-                    version: 1,
-                    idempotency_key,
-                },
-                actor,
-            )
-            .await?;
-        }
-        self.sales_order_detail(order_id, None).await
+        self.sales_order_detail(&order.base.id, None).await
     }
 
     /// 按稳定审计收据回读已创建的销售单身份。
@@ -427,6 +649,9 @@ impl SalesOrderService {
         actor: &AuditActor,
     ) -> Result<WorkingCopyView> {
         req.validate()?;
+        let (customer_id, settlement_party_id, draft) = self
+            .resolve_sales_command_draft(&req.contract_id, req.draft)
+            .await?;
         let order = self
             .db
             .sales_orders()
@@ -434,27 +659,29 @@ impl SalesOrderService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        self.ensure_selected_contract_revision(
-            order.contract_id.as_ref(),
-            &order.customer_id,
-            req.draft.requested_contract_revision_id.as_ref(),
-        )
-        .await?;
-        self.ensure_sellable_draft_lines(&req.draft.lines).await?;
+        if order.contract_id.as_ref() != Some(&req.contract_id)
+            || order.customer_id != customer_id
+            || order.settlement_party_id != settlement_party_id
+        {
+            return Err(Error::ConflictError(
+                "销售单合同归属已变化，请刷新后重试".to_string(),
+            ));
+        }
+        self.ensure_sellable_draft_lines(&draft.lines).await?;
         let (mut working_copy, stable, opened_new) = self
-            .load_or_reopen_first_submission_working_copy(&order, req.version, &req.draft, actor)
+            .load_or_reopen_first_submission_working_copy(&order, req.version, &draft, actor)
             .await?;
         if opened_new {
             return self.working_copy_view(&working_copy).await;
         }
 
-        let snapshot = header_snapshot(&req.draft)?;
+        let snapshot = header_snapshot(&draft)?;
         let created_stable_lines = stable.created;
         let lines = build_working_copy_lines(
             &order_id,
             &working_copy.base.id.clone().into(),
             &stable.all,
-            &req.draft.lines,
+            &draft.lines,
         )?;
         let (gross, net, tax) = line_totals(&lines);
         let next_version = working_copy.draft_version + 1;
@@ -463,18 +690,17 @@ impl SalesOrderService {
                 content_hash: Some(draft_hash(&working_copy.base.id, next_version)),
                 customer_id: Some(order.customer_id.clone()),
                 contract_id: order.contract_id.clone(),
-                contract_revision_id: req.draft.requested_contract_revision_id.clone(),
+                contract_revision_id: draft.requested_contract_revision_id.clone(),
                 settlement_party_id: Some(order.settlement_party_id.clone()),
                 snapshot: Some(snapshot),
-                project_name: req.draft.project_name.clone(),
-                business_remark: req.draft.business_remark.clone(),
-                voucher_category_sku_id: req.draft.voucher_category_sku_id.clone(),
-                voucher_expiry_at: req
-                    .draft
+                project_name: draft.project_name.clone(),
+                business_remark: draft.business_remark.clone(),
+                voucher_category_sku_id: draft.voucher_category_sku_id.clone(),
+                voucher_expiry_at: draft
                     .voucher_expiry_at
                     .map(|secs| Instant::from_unix_secs(secs as i64)),
-                target_mall_id: req.draft.target_mall_id.clone(),
-                receivable_due_date: req.draft.receivable_due_date,
+                target_mall_id: draft.target_mall_id.clone(),
+                receivable_due_date: draft.receivable_due_date,
                 gross_amount: Some(gross),
                 net_amount: Some(net),
                 tax_amount: Some(tax),
@@ -483,7 +709,7 @@ impl SalesOrderService {
         )?;
         working_copy.save_draft(
             draft_hash(&working_copy.base.id, next_version),
-            req.draft.editor_user_id.clone(),
+            draft.editor_user_id.clone(),
         )?;
 
         let old_lines = self
@@ -552,36 +778,110 @@ impl SalesOrderService {
         actor: &AuditActor,
     ) -> Result<SubmissionView> {
         req.validate()?;
-        let idempotency_key = req.idempotency_key.trim();
+        let idempotency_key = req.idempotency_key.trim().to_string();
         if idempotency_key.is_empty() {
             return Err(Error::ValidationError("幂等键不能为空".to_string()));
         }
-        let audit_id = sales_submission_audit_id(actor.id(), id, idempotency_key);
-        let fingerprint = sales_submission_fingerprint(actor.id(), id, req.version, idempotency_key);
+        let audit_id = sales_submission_audit_id(actor.id(), id, &idempotency_key);
+        let fingerprint = sales_submission_fingerprint(actor.id(), id, &req)?;
         if let Some(existing) = self
             .replay_sales_submission(&audit_id, &fingerprint, id, actor.id())
             .await?
         {
             return Ok(existing);
         }
+        let (customer_id, settlement_party_id, draft) = self
+            .resolve_sales_command_draft(&req.contract_id, req.draft)
+            .await?;
         let order = self
             .db
             .sales_orders()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        Self::assert_draft_allows_working_copy(&order)?;
+        if order.contract_id.as_ref() != Some(&req.contract_id)
+            || order.customer_id != customer_id
+            || order.settlement_party_id != settlement_party_id
+        {
+            return Err(Error::ConflictError(
+                "销售单合同归属已变化，请刷新后重试".to_string(),
+            ));
+        }
+        self.ensure_sellable_draft_lines(&draft.lines).await?;
         let order_id = SalesOrderId::new(order.base.id.clone());
-        let mut working_copy = self
+        let active_working_copy = self
             .db
             .sales_order_working_copies()
             .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("有效工作副本不存在".to_string()))?;
-        if working_copy.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
+            .await?;
+        let stable = self
+            .collect_stable_lines_for_draft(&order_id, &draft.lines)
+            .await?;
+        let (mut working_copy, copy_lines, working_copy_plan) = match active_working_copy {
+            Some(mut working_copy) => {
+                if working_copy.base.version != req.version {
+                    return Err(Error::ConflictError(
+                        "数据已被其他请求修改，请刷新后重试".to_string(),
+                    ));
+                }
+                let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
+                let old_lines = self
+                    .db
+                    .sales_order_working_copy_lines()
+                    .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
+                    .await?;
+                let copy_lines = build_working_copy_lines(&order_id, &copy_id, &stable.all, &draft.lines)?;
+                let (gross, net, tax) = line_totals(&copy_lines);
+                let next_version = working_copy.draft_version + 1;
+                working_copy.update(
+                    SalesOrderWorkingCopyUpdate {
+                        content_hash: Some(draft_hash(&working_copy.base.id, next_version)),
+                        customer_id: Some(order.customer_id.clone()),
+                        contract_id: order.contract_id.clone(),
+                        contract_revision_id: draft.requested_contract_revision_id.clone(),
+                        settlement_party_id: Some(order.settlement_party_id.clone()),
+                        snapshot: Some(header_snapshot(&draft)?),
+                        project_name: draft.project_name.clone(),
+                        business_remark: draft.business_remark.clone(),
+                        voucher_category_sku_id: draft.voucher_category_sku_id.clone(),
+                        voucher_expiry_at: draft
+                            .voucher_expiry_at
+                            .map(|secs| Instant::from_unix_secs(secs as i64)),
+                        target_mall_id: draft.target_mall_id.clone(),
+                        receivable_due_date: draft.receivable_due_date,
+                        gross_amount: Some(gross),
+                        net_amount: Some(net),
+                        tax_amount: Some(tax),
+                    },
+                    actor.id(),
+                )?;
+                working_copy.save_draft(
+                    draft_hash(&working_copy.base.id, next_version),
+                    draft.editor_user_id.clone(),
+                )?;
+                let plan = SalesOrderWorkingCopyPersistPlan {
+                    created_stable_lines: stable.created,
+                    old_working_copy_lines: old_lines,
+                    new_working_copy_lines: copy_lines.clone(),
+                    replace_working_copy_lines: true,
+                    create_working_copy: false,
+                };
+                (working_copy, copy_lines, plan)
+            }
+            None => {
+                let (working_copy, copy_lines) =
+                    Self::build_reopened_first_submission_working_copy(&order, &stable.all, &draft, actor)?;
+                let plan = SalesOrderWorkingCopyPersistPlan {
+                    created_stable_lines: stable.created,
+                    old_working_copy_lines: Vec::new(),
+                    new_working_copy_lines: copy_lines.clone(),
+                    replace_working_copy_lines: false,
+                    create_working_copy: true,
+                };
+                (working_copy, copy_lines, plan)
+            }
+        };
         if let Some(existing) = self
             .db
             .sales_order_submissions()
@@ -600,13 +900,6 @@ impl SalesOrderService {
                 .await?;
             return Ok(submission_view(existing, existing_lines));
         }
-
-        let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
-        let copy_lines = self
-            .db
-            .sales_order_working_copy_lines()
-            .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
-            .await?;
         self.ensure_sellable_working_copy_lines(&copy_lines).await?;
         self.ensure_procurement_responsibility_before_submit(&order, &copy_lines)
             .await?;
@@ -645,9 +938,10 @@ impl SalesOrderService {
                 submission_lines,
                 resolved_identities,
                 copy_lines,
+                working_copy_plan,
             },
             actor,
-            &req.idempotency_key,
+            &idempotency_key,
             audit_id,
             fingerprint,
         )
@@ -690,6 +984,7 @@ impl SalesOrderService {
             submission_lines,
             resolved_identities,
             copy_lines,
+            working_copy_plan,
         } = start;
         let ports = sales_approval_ports(order.business_type)?;
         let subject = subject_ref_for_sales_business(order.business_type, id)?;
@@ -776,6 +1071,8 @@ impl SalesOrderService {
                 organization_id,
                 now,
                 audit,
+                working_copy_plan,
+                sellable_refs,
             },
         )
         .await
@@ -999,54 +1296,6 @@ impl SalesOrderService {
         self.ensure_sellable_refs(&refs, &mut NoTransaction).await
     }
 
-    /// 校验销售草稿精确引用所选合同的当前不可变版本。
-    async fn ensure_selected_contract_revision(
-        &self,
-        contract_id: Option<&ContractId>,
-        customer_id: &CustomerAccountId,
-        revision_id: Option<&ContractRevisionId>,
-    ) -> Result<()> {
-        let (Some(contract_id), Some(revision_id)) = (contract_id, revision_id) else {
-            if contract_id.is_none() && revision_id.is_none() {
-                return Ok(());
-            }
-            return Err(Error::ValidationError(
-                "合同与合同版本必须同时提供或同时省略".to_string(),
-            ));
-        };
-        let contract = self
-            .db
-            .contracts()
-            .find_by_id(contract_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
-        if &contract.customer_id != customer_id {
-            return Err(Error::ValidationError(
-                "销售单引用的合同不属于所选客户".to_string(),
-            ));
-        }
-        if contract.stable.status != entities::contract::ContractStatus::Effective {
-            return Err(Error::BusinessLogicError(
-                "合同当前不可用于新销售提交".to_string(),
-            ));
-        }
-        if contract.stable.current_revision_id.as_deref() != Some(revision_id.as_ref()) {
-            return Err(Error::ConflictError(
-                "所选合同版本已不是当前可用版本，请刷新后重新选择".to_string(),
-            ));
-        }
-        let revision = self
-            .db
-            .contract_revisions()
-            .find_by_id(revision_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同版本不存在".to_string()))?;
-        if revision.contract_id.as_ref() != contract_id.as_ref() {
-            return Err(Error::ValidationError("合同版本不属于所选合同".to_string()));
-        }
-        Ok(())
-    }
-
     /// 提交前重新校验已保存工作副本的精确 SKU 修订资格。
     ///
     /// # 参数
@@ -1249,6 +1498,45 @@ mod card_projection_input_tests {
     };
     use serde_json::json;
 
+    fn submission_request(version: u64) -> super::SubmitSalesOrderRequest {
+        serde_json::from_value(json!({
+            "version": version,
+            "idempotency_key": "secret-request",
+            "contract_id": "contract-1",
+            "draft": {
+                "editor_user_id": "actor-1",
+                "requested_contract_revision_id": "contract-revision-1",
+                "project_name": null,
+                "business_remark": null,
+                "voucher_category_sku_id": null,
+                "voucher_expiry_at": null,
+                "target_mall_id": null,
+                "receivable_due_date": null,
+                "lines": [{
+                    "line_no": 1,
+                    "line_type": "GOODS_SERVICE",
+                    "sales_tax_rate": "0.13",
+                    "item_name_snapshot": "测试商品",
+                    "spec_snapshot": null,
+                    "unit_snapshot": "件",
+                    "goods": {
+                        "sku_id": "sku-1",
+                        "sku_revision_id": "sku-revision-1",
+                        "welfare_scenario": null,
+                        "service_region": null,
+                        "fulfillment_mode": "COMPANY_WAREHOUSE",
+                        "fulfillment_due_at": 1800000000,
+                        "quantity": "1",
+                        "base_unit_code": "件",
+                        "unit_price_gross": "100"
+                    },
+                    "voucher": null
+                }]
+            }
+        }))
+        .unwrap()
+    }
+
     #[test]
     fn unique_external_identity_accepts_exactly_one_mapping() {
         assert_eq!(
@@ -1281,8 +1569,8 @@ mod card_projection_input_tests {
         );
         assert!(!receipt.contains("secret-request"));
         assert_ne!(
-            sales_submission_fingerprint("actor-1", "order-1", 1, "secret-request"),
-            sales_submission_fingerprint("actor-1", "order-1", 2, "secret-request")
+            sales_submission_fingerprint("actor-1", "order-1", &submission_request(1)).unwrap(),
+            sales_submission_fingerprint("actor-1", "order-1", &submission_request(2)).unwrap()
         );
     }
 

@@ -21,7 +21,6 @@ export function useSalesOrderDetailUrlState({
     const searchParams = useSearchParams()
     const returnTo = searchParams.get("returnTo")
     const fromWorkspace = searchParams.get("from")
-    const pageMode = searchParams.get("mode")
     const focusedWorkItemId = searchParams.get("workItemId")?.trim() ?? ""
     const queueContextId = searchParams.get("queueContextId")?.trim() ?? ""
     const workItemReturnTo =
@@ -29,23 +28,6 @@ export function useSalesOrderDetailUrlState({
         (queueContextId && focusedWorkItemId
             ? `/workspace/tasks?queueContextId=${encodeURIComponent(queueContextId)}&currentWorkItemId=${encodeURIComponent(focusedWorkItemId)}`
             : "/workspace/tasks")
-
-    const replaceOrderHref = React.useCallback(
-        (patch: { section?: string; mode?: string | null }) => {
-            const params = new URLSearchParams(searchParams.toString())
-            if (patch.section) params.set("section", patch.section)
-            if (patch.mode) params.set("mode", patch.mode)
-            else if (patch.mode === null) params.delete("mode")
-            const qs = params.toString()
-            router.replace(
-                qs
-                    ? `/sales/orders/${salesOrderId}?${qs}`
-                    : `/sales/orders/${salesOrderId}`,
-                { scroll: false },
-            )
-        },
-        [router, salesOrderId, searchParams],
-    )
 
     const selectSection = React.useCallback(
         (next: NavSectionId | WorkSectionId | "versions") => {
@@ -56,9 +38,7 @@ export function useSalesOrderDetailUrlState({
             const workItemId = searchParams.get("workItemId")
             if (
                 workItemId &&
-                (next === "approval" ||
-                    next === "procurement-rejection" ||
-                    next === "change-review")
+                (next === "approval" || next === "change-review")
             ) {
                 params.set("workItemId", workItemId)
             }
@@ -76,20 +56,6 @@ export function useSalesOrderDetailUrlState({
         },
         [fromWorkspace, returnTo, router, salesOrderId, searchParams],
     )
-
-    const enterRejectionEdit = React.useCallback(() => {
-        replaceOrderHref({
-            section: "procurement-rejection",
-            mode: "edit",
-        })
-    }, [replaceOrderHref])
-
-    const leaveRejectionEdit = React.useCallback(() => {
-        replaceOrderHref({
-            section: "procurement-rejection",
-            mode: null,
-        })
-    }, [replaceOrderHref])
 
     const fromQueue =
         Boolean(returnTo) &&
@@ -109,16 +75,12 @@ export function useSalesOrderDetailUrlState({
     return {
         returnTo,
         fromWorkspace,
-        pageMode,
         focusedWorkItemId,
         queueContextId,
         workItemReturnTo,
         fromQueue,
         backHref,
         backLabel,
-        replaceOrderHref,
         selectSection,
-        enterRejectionEdit,
-        leaveRejectionEdit,
     }
 }

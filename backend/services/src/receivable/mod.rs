@@ -26,11 +26,12 @@ use entities::document_registry::{
 };
 use entities::file_asset::SecurityScanStatus;
 use entities::ids::{
-    BusinessDocumentId, CustomerReceiptId, InvoiceId, ReceiptAllocationId, ReceivableAccountId,
-    ReceivableEntryId, ReceivableFundsReviewId, SalesInvoiceAllocationId, SalesOrderRevisionId,
-    WorkflowActionId,
+    BusinessDocumentId, CustomerReceiptId, InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId,
+    ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId,
+    SalesInvoiceAllocationId, SalesOrderRevisionId, WorkflowActionId,
 };
-use entities::money::Amount;
+use entities::money::{round_to_cent, Amount};
+use entities::payable::{PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 use entities::receivable::{
     AccountReviewStatus, AllocationAction, CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus,
     EntryDirection, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, InvoiceStatus,
@@ -55,7 +56,7 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::AuditActor;
+use crate::audit::{AuditActor, CommandReceipt};
 use crate::document_registry::{find_approval_binding, new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::{self, SharedRbacService};
@@ -80,20 +81,24 @@ use self::cancel_approval::{
 };
 use self::dto::SortDir;
 pub use self::dto::{
-    CancelCustomerReceiptApprovalRequest, CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction,
-    CardFundsReviewBusinessResult, CardFundsReviewConclusion, CardFundsReviewDecision,
-    CardFundsReviewDetailParams, CardFundsReviewFollowUpConfiguration, CardFundsReviewResult,
-    CardFundsReviewType, CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult,
-    CompletedWorkItemStatus, CreateCustomerReceiptRequest, CreateInvoiceRequest,
-    CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView, DocumentApprovalView,
-    FollowUpRequiredRegistration, FundsReviewView, InvoiceListParams, InvoiceView, IssueRedInvoiceRequest,
-    PageView, PostCustomerReceiptRequest, PostInvoiceRequest, ReceiptAllocationView,
-    ReceivableAccountListParams, ReceivableAccountView, ReceivableInvoiceFactView, ReceivableReceiptFactView,
-    SalesInvoiceAllocationView, SubmitCustomerReceiptRequest,
+    CancelCustomerReceiptApprovalRequest, CardFundsRegistrationAllocation, CardFundsRegistrationResult,
+    CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction, CardFundsReviewBusinessResult,
+    CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewDetailParams,
+    CardFundsReviewFollowUpConfiguration, CardFundsReviewResult, CardFundsReviewType,
+    CommitCustomerReceiptRequest, CommitInvoiceRequest, CommitRedInvoiceRequest,
+    CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CompletedWorkItemStatus,
+    CreateCustomerReceiptRequest, CreateInvoiceRequest, CreateReceivableAccountRequest,
+    CustomerReceiptListParams, CustomerReceiptView, DocumentApprovalView, FollowUpRequiredRegistration,
+    FundsReviewView, InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest,
+    PostInvoiceRequest, ReceiptAllocationView, ReceivableAccountListParams, ReceivableAccountView,
+    ReceivableInvoiceFactView, ReceivableReceiptFactView, RegisterCardFundsInvoiceRequest,
+    RegisterCardFundsReceiptRequest, SalesInvoiceAllocationView, SubmitCustomerReceiptRequest,
 };
 use self::start_approval::{
-    build_customer_receipt_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_customer_receipt_start, CustomerReceiptStartInput, CustomerReceiptStartPersistInput,
+    build_customer_receipt_start_input, load_bound_definition_graph,
+    load_bound_definition_graph_with_executor, load_start_receipt, load_start_receipt_with_executor,
+    persist_customer_receipt_start, persist_customer_receipt_start_in_transaction, CustomerReceiptStartInput,
+    CustomerReceiptStartPersistInput,
 };
 
 /// 应收往来子账列表筛选条件类型（经 `ReceivableExt` 关联类型跨 crate 可达）。
@@ -691,6 +696,379 @@ impl ReceivableService {
         )))
     }
 
+    /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。
+    ///
+    /// 任务、责任、销售版本和票款事实版本在事务内重验；回款单、单据注册、
+    /// 核销分配、子账进度、销售进度与审计任一失败时整体回滚。
+    pub async fn register_card_funds_receipt(
+        &self,
+        req: RegisterCardFundsReceiptRequest,
+        actor: &AuditActor,
+    ) -> Result<CardFundsRegistrationResult> {
+        req.validate()?;
+        let expected_task_version = parse_task_version(&req.expected_task_version)?;
+        let fingerprint = card_funds_registration_fingerprint(&req)?;
+        let audit_id = card_funds_registration_audit_id(
+            CARD_FUNDS_RECEIPT_REGISTRATION_ACTION,
+            actor.id(),
+            &req.idempotency_key,
+        );
+        let receipt_no = normalized_registration_no(req.receipt_no.as_deref())
+            .unwrap_or_else(|| stable_registration_no("SK", actor.id(), &req.idempotency_key));
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let actor_id = actor.id().to_string();
+        let req_for_tx = req.clone();
+        let audit_id_for_tx = audit_id.clone();
+        let fingerprint_for_tx = fingerprint.clone();
+        let (account_id, receipt_id) = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    if let Some(replayed) = replay_card_funds_registration(
+                        &db,
+                        &audit_id_for_tx,
+                        CARD_FUNDS_RECEIPT_REGISTRATION_ACTION,
+                        &fingerprint_for_tx,
+                        session,
+                    )
+                    .await?
+                    {
+                        return Ok::<(String, String), crate::errors::Error>(replayed);
+                    }
+                    let (account, snapshot) = load_card_funds_registration_context(
+                        &db,
+                        rbac.clone(),
+                        &req_for_tx.work_item_id,
+                        expected_task_version,
+                        &req_for_tx.expected_subject_version,
+                        &req_for_tx.expected_funds_fact_version,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
+                    validate_card_funds_registration_allocations(
+                        &req_for_tx.allocations,
+                        &account.base.id,
+                        req_for_tx.gross_amount,
+                    )?;
+                    if db
+                        .customer_receipts()
+                        .find_by_receipt_no(&receipt_no, session)
+                        .await?
+                        .is_some()
+                    {
+                        return Err(Error::ConflictError("回款单号已登记，请勿重复提交".to_string()));
+                    }
+
+                    let allocation_plan =
+                        plan_card_funds_receipt_allocations(&snapshot, req_for_tx.gross_amount)?;
+                    let mut receipt = CustomerReceipt::new(
+                        CustomerReceiptId::new(next_id()),
+                        CustomerReceiptData {
+                            receipt_no: receipt_no.clone(),
+                            counterparty_party_id: account.counterparty_party_id.clone(),
+                            customer_id: Some(account.customer_id.clone()),
+                            received_at: req_for_tx.received_at,
+                            amount: req_for_tx.gross_amount,
+                            bank_reference: Some(req_for_tx.evidence_reference.clone()),
+                        },
+                    )?;
+                    receipt.register_historical_fact()?;
+                    let organization_id = customer_receipt_responsible_org_id(&receipt)?;
+                    let bind_command = BindPublishedDefinitionCommand {
+                        document_type: DocumentType::CustomerReceipt,
+                        business_object_id: receipt.base.id.clone(),
+                        business_object_version: receipt.base.version,
+                        context: BindingRevalidationContext {
+                            organization_id,
+                            creator_id: actor_id.clone(),
+                        },
+                    };
+                    let document = new_registered_document(
+                        &receipt.base.id,
+                        DocumentType::CustomerReceipt,
+                        receipt.receipt_no.clone(),
+                    )?;
+                    persist_bound_customer_receipt_document(
+                        &db,
+                        &rbac,
+                        document,
+                        &bind_command,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
+                    db.customer_receipts().create(&receipt, session).await?;
+                    for (index, (entry_id, amount)) in allocation_plan.iter().enumerate() {
+                        let applied = db
+                            .receivable_accounts()
+                            .apply_settlement(
+                                &ReceivableAccountId::new(account.base.id.clone()),
+                                amount,
+                                &actor_id,
+                                session,
+                            )
+                            .await?;
+                        if !applied {
+                            return Err(Error::BusinessLogicError(
+                                "子账剩余开放余额不足，历史回款登记被拒绝".to_string(),
+                            ));
+                        }
+                        let allocation = ReceiptAllocation::new(
+                            ReceiptAllocationId::new(next_id()),
+                            ReceiptAllocationData {
+                                customer_receipt_id: CustomerReceiptId::new(receipt.base.id.clone()),
+                                receivable_entry_id: entry_id.clone(),
+                                allocation_seq: (index as u32) + 1,
+                                allocation_action: AllocationAction::Apply,
+                                allocated_amount: *amount,
+                                allocated_at: Instant::now(),
+                                reverses_allocation_id: None,
+                            },
+                        )?;
+                        db.receipt_allocations().create(&allocation, session).await?;
+                    }
+                    let create_audit = actor_owned.clone().resource_log_with_message(
+                        "customer_receipt.card_funds_register",
+                        "customer_receipt",
+                        receipt.base.id.clone(),
+                        Some(req_for_tx.evidence_reference.clone()),
+                    )?;
+                    db.audit_logs().create(&create_audit, session).await?;
+                    let receipt_audit = actor_owned.clone().resource_log_with_id(
+                        audit_id_for_tx,
+                        CARD_FUNDS_RECEIPT_REGISTRATION_ACTION,
+                        "receivable_account",
+                        account.base.id.clone(),
+                        Some(card_funds_registration_receipt_message(
+                            &fingerprint_for_tx,
+                            "receipt",
+                            &receipt.base.id,
+                        )),
+                    )?;
+                    db.audit_logs().create(&receipt_audit, session).await?;
+                    crate::sales_order::update_sales_order_money_progress(
+                        &db,
+                        session,
+                        &account.sales_order_id,
+                        actor_id.clone(),
+                        None,
+                    )
+                    .await?;
+                    Ok::<(String, String), crate::errors::Error>((account.base.id, receipt.base.id))
+                })
+            })
+            .await?;
+        self.card_funds_registration_result(&account_id, Some(&receipt_id), None)
+            .await
+    }
+
+    /// 在 W13 当前责任任务内原子登记历史销项发票及其分配。
+    ///
+    /// 任务、责任、销售版本和票款事实版本在事务内重验；发票、分配、子账
+    /// 进度、销售进度与审计任一失败时整体回滚。
+    pub async fn register_card_funds_invoice(
+        &self,
+        req: RegisterCardFundsInvoiceRequest,
+        actor: &AuditActor,
+    ) -> Result<CardFundsRegistrationResult> {
+        req.validate()?;
+        let expected_task_version = parse_task_version(&req.expected_task_version)?;
+        let fingerprint = card_funds_registration_fingerprint(&req)?;
+        let audit_id = card_funds_registration_audit_id(
+            CARD_FUNDS_INVOICE_REGISTRATION_ACTION,
+            actor.id(),
+            &req.idempotency_key,
+        );
+        let invoice_no = normalized_registration_no(req.invoice_no.as_deref())
+            .unwrap_or_else(|| stable_registration_no("FP", actor.id(), &req.idempotency_key));
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let actor_id = actor.id().to_string();
+        let req_for_tx = req.clone();
+        let audit_id_for_tx = audit_id.clone();
+        let fingerprint_for_tx = fingerprint.clone();
+        let (account_id, invoice_id) = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    if let Some(replayed) = replay_card_funds_registration(
+                        &db,
+                        &audit_id_for_tx,
+                        CARD_FUNDS_INVOICE_REGISTRATION_ACTION,
+                        &fingerprint_for_tx,
+                        session,
+                    )
+                    .await?
+                    {
+                        return Ok::<(String, String), crate::errors::Error>(replayed);
+                    }
+                    let (account, _snapshot) = load_card_funds_registration_context(
+                        &db,
+                        rbac.clone(),
+                        &req_for_tx.work_item_id,
+                        expected_task_version,
+                        &req_for_tx.expected_subject_version,
+                        &req_for_tx.expected_funds_fact_version,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
+                    validate_card_funds_registration_allocations(
+                        &req_for_tx.allocations,
+                        &account.base.id,
+                        req_for_tx.gross_amount,
+                    )?;
+                    if req_for_tx.gross_amount != req_for_tx.net_amount.checked_add(req_for_tx.tax_amount) {
+                        return Err(Error::ValidationError(
+                            "发票含税金额必须等于不含税金额加税额".to_string(),
+                        ));
+                    }
+                    if db
+                        .invoices()
+                        .find_by_direction_and_normalized_no(
+                            InvoiceDirection::Sales,
+                            &invoice_no.to_uppercase(),
+                            session,
+                        )
+                        .await?
+                        .is_some()
+                    {
+                        return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
+                    }
+                    let mut invoice = Invoice::new(
+                        InvoiceId::new(next_id()),
+                        InvoiceData {
+                            invoice_direction: InvoiceDirection::Sales,
+                            invoice_kind: InvoiceKind::Blue,
+                            party_id: account.counterparty_party_id.clone(),
+                            invoice_code: None,
+                            invoice_no: invoice_no.clone(),
+                            invoice_date: req_for_tx.invoice_date,
+                            gross_amount: req_for_tx.gross_amount,
+                            net_amount: req_for_tx.net_amount,
+                            tax_amount: req_for_tx.tax_amount,
+                            rounding_adjustment_amount: zero_amount(),
+                            rounding_reason: None,
+                            original_invoice_id: None,
+                        },
+                        &actor_id,
+                    )?;
+                    invoice.mark_registered(&actor_id)?;
+                    register_created_invoice_document(&db, &rbac, &invoice, &actor_owned, session).await?;
+                    let applied = db
+                        .receivable_accounts()
+                        .apply_invoicing(
+                            &ReceivableAccountId::new(account.base.id.clone()),
+                            &req_for_tx.gross_amount,
+                            &actor_id,
+                            session,
+                        )
+                        .await?;
+                    if !applied {
+                        return Err(Error::BusinessLogicError(
+                            "子账剩余可开票额度不足，历史发票登记被拒绝".to_string(),
+                        ));
+                    }
+                    db.invoices().create(&invoice, session).await?;
+                    let allocation = SalesInvoiceAllocation::new(
+                        SalesInvoiceAllocationId::new(next_id()),
+                        SalesInvoiceAllocationData {
+                            invoice_id: InvoiceId::new(invoice.base.id.clone()),
+                            receivable_account_id: ReceivableAccountId::new(account.base.id.clone()),
+                            allocation_seq: 1,
+                            allocation_action: AllocationAction::Apply,
+                            allocated_gross_amount: req_for_tx.gross_amount,
+                            allocated_net_amount: req_for_tx.net_amount,
+                            allocated_tax_amount: req_for_tx.tax_amount,
+                            reverses_allocation_id: None,
+                        },
+                    )?;
+                    db.sales_invoice_allocations()
+                        .create(&allocation, session)
+                        .await?;
+                    let create_audit = actor_owned.clone().resource_log_with_message(
+                        "invoice.card_funds_register",
+                        "invoice",
+                        invoice.base.id.clone(),
+                        Some(req_for_tx.evidence_reference.clone()),
+                    )?;
+                    db.audit_logs().create(&create_audit, session).await?;
+                    let receipt_audit = actor_owned.clone().resource_log_with_id(
+                        audit_id_for_tx,
+                        CARD_FUNDS_INVOICE_REGISTRATION_ACTION,
+                        "receivable_account",
+                        account.base.id.clone(),
+                        Some(card_funds_registration_receipt_message(
+                            &fingerprint_for_tx,
+                            "invoice",
+                            &invoice.base.id,
+                        )),
+                    )?;
+                    db.audit_logs().create(&receipt_audit, session).await?;
+                    crate::sales_order::update_sales_order_money_progress(
+                        &db,
+                        session,
+                        &account.sales_order_id,
+                        actor_id.clone(),
+                        None,
+                    )
+                    .await?;
+                    Ok::<(String, String), crate::errors::Error>((account.base.id, invoice.base.id))
+                })
+            })
+            .await?;
+        self.card_funds_registration_result(&account_id, None, Some(&invoice_id))
+            .await
+    }
+
+    /// 装配 W13 原子登记后的账户金额与本次正式事实。
+    async fn card_funds_registration_result(
+        &self,
+        account_id: &str,
+        receipt_id: Option<&str>,
+        invoice_id: Option<&str>,
+    ) -> Result<CardFundsRegistrationResult> {
+        let view = self.receivable_account_view(account_id.to_string()).await?;
+        let receipt_facts = receipt_id
+            .map(|id| {
+                view.receipt_facts
+                    .iter()
+                    .filter(|fact| fact.receipt_id == id)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let invoice_facts = invoice_id
+            .map(|id| {
+                view.invoice_facts
+                    .iter()
+                    .filter(|fact| fact.invoice_id == id)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if receipt_id.is_some() && receipt_facts.is_empty() {
+            return Err(Error::Internal("历史回款登记结果缺少正式事实".to_string()));
+        }
+        if invoice_id.is_some() && invoice_facts.is_empty() {
+            return Err(Error::Internal("历史发票登记结果缺少正式事实".to_string()));
+        }
+        Ok(CardFundsRegistrationResult {
+            funds_fact_version: view.funds_fact_version,
+            subject_hash: format!("acct:{}:v{}", view.id, view.account_domain_version),
+            settled_total: view.settled_total,
+            invoiced_total: view.invoiced_total,
+            open_total: view.open_total,
+            open_invoiceable_total: view.open_invoiceable_total,
+            receipt_facts,
+            invoice_facts,
+        })
+    }
+
     // -----------------------------------------------------------------------
     // 客户回款单
     // -----------------------------------------------------------------------
@@ -785,6 +1163,202 @@ impl ReceivableService {
         )?;
         persist_created_customer_receipt(&self.db, &self.rbac, receipt.clone(), actor.clone()).await?;
         self.customer_receipt_detail(&receipt.base.id).await
+    }
+
+    /// 原子创建或提交客户回款并启动审批。
+    ///
+    /// 新回款的单据注册与定义绑定、回款实体、冻结核销分配、审批运行事实、
+    /// 不可变快照、入口任务和审计全部位于同一事务。已有草稿用乐观锁校验后
+    /// 走同一启动事务，前端不得再执行“先创建草稿、再提交”。
+    ///
+    /// # 参数
+    /// * `req` - 新回款或已有草稿身份、冻结分配与幂等键
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回进入审批后的回款单视图。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 参数组合或分配不合法
+    /// * `ConflictError` - 草稿版本、状态、绑定或审批定义冲突
+    /// * `NotFound` - 已有草稿不存在
+    pub async fn commit_customer_receipt(
+        &self,
+        req: CommitCustomerReceiptRequest,
+        actor: &AuditActor,
+    ) -> Result<CustomerReceiptView> {
+        req.validate()?;
+        let command_receipt = CommandReceipt::new(
+            "customer-receipt-commit-",
+            actor,
+            "customer_receipt.commit",
+            "customer_receipt",
+            &req.idempotency_key,
+            &req,
+        )?;
+        if let Some(receipt_id) = command_receipt.committed_resource_id(&self.db).await? {
+            return self.customer_receipt_detail(&receipt_id).await;
+        }
+        let new_receipt = match (&req.receipt_id, req.expected_version, req.receipt) {
+            (None, None, Some(create)) => {
+                create.validate()?;
+                Some(CustomerReceipt::new(
+                    CustomerReceiptId::new(next_id()),
+                    CustomerReceiptData {
+                        receipt_no: create.receipt_no,
+                        counterparty_party_id: create.counterparty_party_id,
+                        customer_id: create.customer_id,
+                        received_at: create.received_at,
+                        amount: create.amount,
+                        bank_reference: create.bank_reference,
+                    },
+                )?)
+            }
+            (Some(_), Some(version), None) if version > 0 => None,
+            _ => {
+                return Err(Error::ValidationError(
+                    "新回款必须提交 receipt；已有草稿必须提交 receipt_id 与 expected_version".to_string(),
+                ));
+            }
+        };
+        let requested_id = req.receipt_id.clone();
+        let expected_version = req.expected_version;
+        let allocations = pending_allocations_from_request(&req.allocations)?;
+        let idempotency_key = req.idempotency_key;
+        let adapter = customer_receipt_adapter()?;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let command_receipt_for_tx = command_receipt.clone();
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let (mut receipt, binding) = match new_receipt {
+                        Some(candidate) => {
+                            if db
+                                .customer_receipts()
+                                .find_by_receipt_no(&candidate.receipt_no, session)
+                                .await?
+                                .is_some()
+                            {
+                                return Err(Error::ConflictError("回款单号已存在，请刷新后重试".to_string()));
+                            }
+                            let organization_id = customer_receipt_responsible_org_id(&candidate)?;
+                            let bind_command = BindPublishedDefinitionCommand {
+                                document_type: DocumentType::CustomerReceipt,
+                                business_object_id: candidate.base.id.clone(),
+                                business_object_version: candidate.base.version,
+                                context: BindingRevalidationContext {
+                                    organization_id,
+                                    creator_id: actor_owned.id().to_string(),
+                                },
+                            };
+                            let document = new_registered_document(
+                                &candidate.base.id,
+                                DocumentType::CustomerReceipt,
+                                candidate.receipt_no.clone(),
+                            )?;
+                            let binding = persist_bound_customer_receipt_document(
+                                &db,
+                                &rbac,
+                                document,
+                                &bind_command,
+                                &actor_owned,
+                                session,
+                            )
+                            .await?;
+                            db.customer_receipts().create(&candidate, session).await?;
+                            let audit = actor_owned.clone().resource_log(
+                                "customer_receipt.create",
+                                "customer_receipt",
+                                candidate.base.id.clone(),
+                            )?;
+                            db.audit_logs().create(&audit, session).await?;
+                            (candidate, binding)
+                        }
+                        None => {
+                            let receipt_id = requested_id
+                                .as_deref()
+                                .ok_or_else(|| Error::ValidationError("已有回款缺少主键".to_string()))?;
+                            let receipt = db
+                                .customer_receipts()
+                                .find_by_id(receipt_id, session)
+                                .await?
+                                .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
+                            ensure_expected_version(
+                                receipt.base.version,
+                                expected_version.ok_or_else(|| {
+                                    Error::ValidationError("已有回款缺少期望版本".to_string())
+                                })?,
+                            )?;
+                            let binding = find_approval_binding(&db, receipt_id, session)
+                                .await?
+                                .ok_or_else(|| Error::ConflictError("客户回款单缺少审批绑定".to_string()))?;
+                            (receipt, binding)
+                        }
+                    };
+                    let binding = require_frozen_binding(Some(&binding))?.clone();
+                    start_customer_receipt_approval(&mut receipt, allocations)?;
+                    let id = receipt.base.id.clone();
+                    let subject = customer_receipt_subject_ref(&id)?;
+                    let now = Instant::now();
+                    let snapshot = build_customer_receipt_snapshot(&receipt, actor_owned.id(), now)?;
+                    let organization_id = customer_receipt_responsible_org_id(&receipt)?;
+                    let _ = customer_receipt_object_readable(&organization_id, actor_owned.id())?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let existing_start_receipt = load_start_receipt_with_executor(
+                        &db,
+                        &subject,
+                        receipt.approval_subject_version,
+                        &idempotency_key,
+                        session,
+                    )
+                    .await?;
+                    let start_input = build_customer_receipt_start_input(CustomerReceiptStartInput {
+                        graph,
+                        binding: &binding,
+                        subject,
+                        subject_version: receipt.approval_subject_version,
+                        actor_id: actor_owned.id(),
+                        organization_id: &organization_id,
+                        idempotency_key: &idempotency_key,
+                        receipt: existing_start_receipt,
+                        now,
+                    })?;
+                    let prepared = prepare_start(start_input)?;
+                    let committed = persist_customer_receipt_start_in_transaction(
+                        &db,
+                        CustomerReceiptStartPersistInput {
+                            receipt,
+                            actor: actor_owned.clone(),
+                            id,
+                            snapshot_payload: snapshot,
+                            prepared,
+                            owner_role: adapter.owner_role,
+                            organization_id,
+                            now,
+                        },
+                        session,
+                    )
+                    .await?;
+                    let command_audit =
+                        command_receipt_for_tx.audit(actor_owned.clone(), committed.base.id.clone())?;
+                    db.audit_logs().create(&command_audit, session).await?;
+                    Ok::<CustomerReceipt, crate::errors::Error>(committed)
+                })
+            })
+            .await;
+
+        let committed = match transaction_result {
+            Ok(committed) => committed,
+            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
+                Some(receipt_id) => return self.customer_receipt_detail(&receipt_id).await,
+                None => return Err(error),
+            },
+        };
+
+        self.customer_receipt_detail(&committed.base.id).await
     }
 
     /// 提交客户回款并调用统一 `start_approval`。
@@ -1250,6 +1824,218 @@ impl ReceivableService {
         self.invoice_detail(&invoice.base.id).await
     }
 
+    /// 原子创建或提交销项发票并完成分配。
+    ///
+    /// 新发票的 `BusinessDocument` 注册、发票实体、销项分配、应收子账开票进度、
+    /// 销售单开票进度和审计全部位于同一 MongoDB 事务。已有草稿则用乐观锁
+    /// 校验后在同一事务过账，前端不得再执行“先创建、再过账”。
+    ///
+    /// # 参数
+    /// * `req` - 新发票或已有草稿身份、最终分配与幂等键
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回已登记发票及其正式分配。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 新建/已有草稿参数组合或金额不合法
+    /// * `ConflictError` - 草稿版本、状态或规范化发票号码冲突
+    /// * `BusinessLogicError` - 跨主体、分配不守恒或超额开票
+    pub async fn commit_invoice(&self, req: CommitInvoiceRequest, actor: &AuditActor) -> Result<InvoiceView> {
+        req.validate()?;
+        let command_receipt = CommandReceipt::new(
+            "sales-invoice-commit-",
+            actor,
+            "invoice.commit",
+            "invoice",
+            &req.idempotency_key,
+            &req,
+        )?;
+        if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
+            return self.invoice_detail(&invoice_id).await;
+        }
+        let new_invoice = match (&req.invoice_id, req.expected_version, req.invoice) {
+            (None, None, Some(create)) => {
+                create.validate()?;
+                if create.invoice_direction != InvoiceDirection::Sales {
+                    return Err(Error::ValidationError("应收登记命令只接受销项发票".to_string()));
+                }
+                Some(Invoice::new(
+                    InvoiceId::new(next_id()),
+                    InvoiceData {
+                        invoice_direction: create.invoice_direction,
+                        invoice_kind: create.invoice_kind,
+                        party_id: create.party_id,
+                        invoice_code: create.invoice_code,
+                        invoice_no: create.invoice_no,
+                        invoice_date: create.invoice_date,
+                        gross_amount: create.gross_amount,
+                        net_amount: create.net_amount,
+                        tax_amount: create.tax_amount,
+                        rounding_adjustment_amount: create
+                            .rounding_adjustment_amount
+                            .unwrap_or(zero_amount()),
+                        rounding_reason: create.rounding_reason,
+                        original_invoice_id: None,
+                    },
+                    actor.id(),
+                )?)
+            }
+            (Some(_), Some(version), None) if version > 0 => None,
+            _ => {
+                return Err(Error::ValidationError(
+                    "新发票必须提交 invoice；已有草稿必须提交 invoice_id 与 expected_version".to_string(),
+                ));
+            }
+        };
+        let invoice_id = req
+            .invoice_id
+            .clone()
+            .or_else(|| new_invoice.as_ref().map(|invoice| invoice.base.id.clone()))
+            .ok_or_else(|| Error::ValidationError("缺少发票身份".to_string()))?;
+        let expected_version = req.expected_version;
+        let allocations = req.allocations;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let actor_id = actor.id().to_string();
+        let command_receipt_for_tx = command_receipt.clone();
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let mut invoice = match new_invoice {
+                        Some(invoice) => {
+                            register_created_invoice_document(&db, &rbac, &invoice, &actor_owned, session)
+                                .await?;
+                            db.invoices().create(&invoice, session).await?;
+                            invoice
+                        }
+                        None => {
+                            let invoice = db
+                                .invoices()
+                                .find_by_id(&invoice_id, session)
+                                .await?
+                                .ok_or_else(|| Error::NotFound("发票不存在".to_string()))?;
+                            ensure_expected_version(
+                                invoice.base.version,
+                                expected_version.ok_or_else(|| {
+                                    Error::ValidationError("已有发票缺少期望版本".to_string())
+                                })?,
+                            )?;
+                            invoice
+                        }
+                    };
+                    if invoice.stable.status() != InvoiceStatus::Draft {
+                        return Err(Error::ConflictError("发票已登记，请勿重复提交".to_string()));
+                    }
+                    let duplicate = db
+                        .invoices()
+                        .find_by_direction_and_normalized_no(
+                            invoice.invoice_direction,
+                            &invoice.normalized_no,
+                            session,
+                        )
+                        .await?;
+                    if duplicate
+                        .as_ref()
+                        .is_some_and(|other| other.base.id != invoice.base.id)
+                    {
+                        return Err(Error::ConflictError("发票号码已登记，请勿重复提交".to_string()));
+                    }
+
+                    let requested: Amount = allocations.iter().fold(zero_amount(), |sum, line| {
+                        sum.checked_add(line.allocated_gross_amount)
+                    });
+                    if requested != invoice.gross_amount {
+                        return Err(Error::BusinessLogicError(
+                            "发票分配合计必须等于发票金额".to_string(),
+                        ));
+                    }
+
+                    let mut new_allocations = Vec::with_capacity(allocations.len());
+                    let mut sales_order_ids = Vec::new();
+                    for (index, line) in allocations.iter().enumerate() {
+                        let account = db
+                            .receivable_accounts()
+                            .find_by_id(&line.receivable_account_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
+                        sales_order_ids.push(account.sales_order_id.to_string());
+                        if account.counterparty_party_id != invoice.party_id {
+                            return Err(Error::BusinessLogicError("禁止跨往来主体开票".to_string()));
+                        }
+                        let applied = db
+                            .receivable_accounts()
+                            .apply_invoicing(
+                                &line.receivable_account_id,
+                                &line.allocated_gross_amount,
+                                &actor_id,
+                                session,
+                            )
+                            .await?;
+                        if !applied {
+                            return Err(Error::BusinessLogicError(
+                                "子账剩余可开票额度不足，开票被拒绝".to_string(),
+                            ));
+                        }
+                        new_allocations.push(SalesInvoiceAllocation::new(
+                            SalesInvoiceAllocationId::new(next_id()),
+                            SalesInvoiceAllocationData {
+                                invoice_id: invoice.base.id.clone().into(),
+                                receivable_account_id: line.receivable_account_id.clone(),
+                                allocation_seq: (index as u32) + 1,
+                                allocation_action: AllocationAction::Apply,
+                                allocated_gross_amount: line.allocated_gross_amount,
+                                allocated_net_amount: line.allocated_net_amount,
+                                allocated_tax_amount: line.allocated_tax_amount,
+                                reverses_allocation_id: None,
+                            },
+                        )?);
+                    }
+                    invoice.mark_registered(&actor_id)?;
+                    db.invoices().update(&mut invoice, session).await?;
+                    for allocation in &new_allocations {
+                        db.sales_invoice_allocations().create(allocation, session).await?;
+                    }
+                    let audit = actor_owned.clone().resource_log(
+                        "invoice.commit",
+                        "invoice",
+                        invoice.base.id.clone(),
+                    )?;
+                    db.audit_logs().create(&audit, session).await?;
+                    sales_order_ids.sort();
+                    sales_order_ids.dedup();
+                    for sales_order_id in sales_order_ids {
+                        crate::sales_order::update_sales_order_money_progress(
+                            &db,
+                            session,
+                            &entities::ids::SalesOrderId::new(sales_order_id),
+                            actor_id.clone(),
+                            None,
+                        )
+                        .await?;
+                    }
+                    let committed_id = invoice.base.id.clone();
+                    let command_audit =
+                        command_receipt_for_tx.audit(actor_owned.clone(), committed_id.clone())?;
+                    db.audit_logs().create(&command_audit, session).await?;
+                    Ok::<String, crate::errors::Error>(committed_id)
+                })
+            })
+            .await;
+
+        let detail_id = match transaction_result {
+            Ok(invoice_id) => invoice_id,
+            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
+                Some(invoice_id) => invoice_id,
+                None => return Err(error),
+            },
+        };
+
+        self.invoice_detail(&detail_id).await
+    }
+
     /// 发票登记过账并分配（§8.3-2 事务不变量）。
     ///
     /// 同一事务内：规范化号码去重（`find_by_direction_and_normalized_no` +
@@ -1389,29 +2175,28 @@ impl ReceivableService {
         self.invoice_detail(&detail_id).await
     }
 
-    /// 开具红票并红冲（§8.3-3 事务不变量）。
+    /// 按原蓝票一次开具红票并红冲（§8.3-3 事务不变量）。
     ///
-    /// 同一事务内：原蓝票必须已登记；红票规范化号码去重；红冲分配只允许
-    /// 反向原蓝票有效 `APPLY` 分配且累计不超过原分配；按条件原子冲减子账
-    /// 净已开票进度（`revert_invoicing`）；原蓝票置已红冲。
-    /// 任一校验失败整体回滚。保留原事实，不覆盖蓝票分配。
+    /// 服务端在同一事务内读取原票的有效分配、计算本次反向行、创建红票、
+    /// 冲减应收或应付子账进度并写审计。客户端不得提交分配 ID、净额或税额。
+    /// 部分红冲时原蓝票保持已登记；全部剩余金额红冲后才置为已红冲。
     ///
     /// # 参数
     /// * `id` - 原蓝票 ID
-    /// * `req` - 红票请求（含红冲分配行）
+    /// * `req` - 红票业务意图与幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
     /// 返回新建红票视图。
     ///
     /// # 错误
-    /// * `NotFound` - 原蓝票或蓝票分配不存在
+    /// * `NotFound` - 原蓝票或有效分配不存在
     /// * `ConflictError` - 红票号码重复
     /// * `BusinessLogicError` - 红冲累计超过原分配或超额红冲
     pub async fn issue_red_invoice(
         &self,
         id: &str,
-        req: IssueRedInvoiceRequest,
+        req: CommitRedInvoiceRequest,
         actor: &AuditActor,
     ) -> Result<InvoiceView> {
         req.validate()?;
@@ -1420,15 +2205,21 @@ impl ReceivableService {
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
-        let red_invoice_id = InvoiceId::new(next_id());
-        let red_invoice_id_for_tx = red_invoice_id.clone();
-        let red_no = req.invoice_no.clone();
-        let red_date = req.invoice_date;
-        let red_gross = req.gross_amount;
-        let red_net = req.net_amount;
-        let red_tax = req.tax_amount;
+        let digest = format!(
+            "{:x}",
+            Sha256::digest(format!("{}|{}|{}", actor.id(), id, req.idempotency_key.trim()).as_bytes())
+        );
+        let red_no = req
+            .invoice_no
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| format!("HT-{}", &digest[..12]));
+        let requested_amount = req.amount;
+        let reason = req.reason.trim().to_string();
         let original_id = id.to_string();
-        client
+        let red_invoice_id = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let original = db
@@ -1441,7 +2232,71 @@ impl ReceivableService {
                             "只有已登记的蓝票可以被红冲".to_string(),
                         ));
                     }
-                    if db
+                    let (plan, fully_reversed) = match original.invoice_direction {
+                        InvoiceDirection::Sales => {
+                            let blue = db
+                                .sales_invoice_allocations()
+                                .find_allocations_by_invoices(
+                                    &[InvoiceId::new(original.base.id.clone())],
+                                    session,
+                                )
+                                .await?;
+                            let account_ids = blue
+                                .iter()
+                                .filter(|line| line.allocation_action == AllocationAction::Apply)
+                                .map(|line| line.receivable_account_id.clone())
+                                .collect::<Vec<_>>();
+                            let related = db
+                                .sales_invoice_allocations()
+                                .find_allocations_by_accounts(&account_ids, session)
+                                .await?;
+                            let basis = blue
+                                .iter()
+                                .filter(|line| line.allocation_action == AllocationAction::Apply)
+                                .map(|line| red_sales_basis(line, &related))
+                                .collect::<Result<Vec<_>>>()?;
+                            plan_red_invoice_allocations(basis, requested_amount)?
+                        }
+                        InvoiceDirection::Purchase => {
+                            let blue = db
+                                .purchase_invoice_allocations()
+                                .find_allocations_by_invoices(
+                                    &[InvoiceId::new(original.base.id.clone())],
+                                    session,
+                                )
+                                .await?;
+                            let account_ids = blue
+                                .iter()
+                                .filter(|line| {
+                                    line.allocation_action == entities::payable::AllocationAction::Apply
+                                })
+                                .map(|line| line.payable_account_id.clone())
+                                .collect::<Vec<_>>();
+                            let related = db
+                                .purchase_invoice_allocations()
+                                .find_allocations_by_accounts(&account_ids, session)
+                                .await?;
+                            let basis = blue
+                                .iter()
+                                .filter(|line| {
+                                    line.allocation_action == entities::payable::AllocationAction::Apply
+                                })
+                                .map(|line| red_purchase_basis(line, &related))
+                                .collect::<Result<Vec<_>>>()?;
+                            plan_red_invoice_allocations(basis, requested_amount)?
+                        }
+                    };
+                    let red_gross = plan
+                        .iter()
+                        .fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
+                    let red_net = plan
+                        .iter()
+                        .fold(zero_amount(), |sum, line| sum.checked_add(line.net));
+                    let red_tax = plan
+                        .iter()
+                        .fold(zero_amount(), |sum, line| sum.checked_add(line.tax));
+
+                    if let Some(existing) = db
                         .invoices()
                         .find_by_direction_and_normalized_no(
                             original.invoice_direction,
@@ -1449,20 +2304,29 @@ impl ReceivableService {
                             session,
                         )
                         .await?
-                        .is_some()
                     {
+                        if existing.invoice_kind == InvoiceKind::Red
+                            && existing.original_invoice_id.as_ref()
+                                == Some(&InvoiceId::new(original.base.id.clone()))
+                            && existing.gross_amount == red_gross
+                            && existing.net_amount == red_net
+                            && existing.tax_amount == red_tax
+                        {
+                            return Ok::<String, crate::errors::Error>(existing.base.id);
+                        }
                         return Err(Error::ConflictError("红票号码已登记，请勿重复提交".to_string()));
                     }
 
-                    let red_invoice = Invoice::new(
-                        red_invoice_id_for_tx.clone(),
+                    let red_invoice_id = InvoiceId::new(next_id());
+                    let mut red_mut = Invoice::new(
+                        red_invoice_id.clone(),
                         InvoiceData {
                             invoice_direction: original.invoice_direction,
                             invoice_kind: InvoiceKind::Red,
                             party_id: original.party_id.clone(),
                             invoice_code: original.invoice_code.clone(),
                             invoice_no: red_no.clone(),
-                            invoice_date: red_date,
+                            invoice_date: entities::common::time::BusinessDate::today(),
                             gross_amount: red_gross,
                             net_amount: red_net,
                             tax_amount: red_tax,
@@ -1472,107 +2336,120 @@ impl ReceivableService {
                         },
                         &actor_id,
                     )?;
-
-                    let existing = db
-                        .sales_invoice_allocations()
-                        .find_allocations_by_invoices(&[original.base.id.clone().into()], session)
-                        .await?;
-                    let mut lines = Vec::with_capacity(req.allocations.len());
-                    let mut account_ids = Vec::new();
-                    for (index, line) in req.allocations.iter().enumerate() {
-                        let blue = existing
-                            .iter()
-                            .find(|allocation| allocation.base.id == line.reverses_allocation_id)
-                            .ok_or_else(|| Error::NotFound("被红冲的蓝票分配不存在".to_string()))?;
-                        account_ids.push(blue.receivable_account_id.to_string());
-                        if blue.allocation_action != AllocationAction::Apply {
-                            return Err(Error::BusinessLogicError("只能红冲蓝票正向分配".to_string()));
-                        }
-                        let red_total: Amount = db
-                            .sales_invoice_allocations()
-                            .find_allocations_by_invoices(&[original.base.id.clone().into()], session)
-                            .await?
-                            .iter()
-                            .filter(|allocation| allocation.allocation_action == AllocationAction::Reverse)
-                            .filter(|allocation| {
-                                allocation.reverses_allocation_id.as_ref()
-                                    == Some(&SalesInvoiceAllocationId::new(&line.reverses_allocation_id))
-                            })
-                            .fold(zero_amount(), |sum, allocation| {
-                                sum.checked_add(allocation.allocated_gross_amount)
-                            });
-                        if red_total.checked_add(line.allocated_gross_amount) > blue.allocated_gross_amount {
-                            return Err(Error::BusinessLogicError(
-                                "红冲累计不得超过原蓝票分配".to_string(),
-                            ));
-                        }
-                        let reverted = db
-                            .receivable_accounts()
-                            .revert_invoicing(
-                                &blue.receivable_account_id,
-                                &line.allocated_gross_amount,
-                                &actor_id,
-                                session,
-                            )
-                            .await?;
-                        if !reverted {
-                            return Err(Error::BusinessLogicError("红冲金额超过已开票进度".to_string()));
-                        }
-                        lines.push(SalesInvoiceAllocation::new(
-                            SalesInvoiceAllocationId::new(next_id()),
-                            SalesInvoiceAllocationData {
-                                invoice_id: red_invoice.base.id.clone().into(),
-                                receivable_account_id: blue.receivable_account_id.clone(),
-                                allocation_seq: (index as u32) + 1,
-                                allocation_action: AllocationAction::Reverse,
-                                allocated_gross_amount: line.allocated_gross_amount,
-                                allocated_net_amount: line.allocated_net_amount,
-                                allocated_tax_amount: line.allocated_tax_amount,
-                                reverses_allocation_id: Some(blue.base.id.clone().into()),
-                            },
-                        )?);
-                    }
-
-                    let mut red_mut = red_invoice;
                     red_mut.mark_registered(&actor_id)?;
                     let mut original_mut = original;
-                    original_mut.mark_red_invoiced(&actor_id)?;
                     register_created_invoice_document(&db, &rbac, &red_mut, &actor_owned, session).await?;
                     db.invoices().create(&red_mut, session).await?;
-                    db.invoices().update(&mut original_mut, session).await?;
-                    for allocation in &lines {
-                        db.sales_invoice_allocations().create(allocation, session).await?;
+                    if fully_reversed {
+                        original_mut.mark_red_invoiced(&actor_id)?;
+                        db.invoices().update(&mut original_mut, session).await?;
                     }
-                    let audit = actor_owned.clone().resource_log(
+
+                    let mut sales_order_account_ids = Vec::new();
+                    for (index, line) in plan.iter().enumerate() {
+                        match original_mut.invoice_direction {
+                            InvoiceDirection::Sales => {
+                                let account_id = ReceivableAccountId::new(line.account_id.clone());
+                                let reverted = db
+                                    .receivable_accounts()
+                                    .revert_invoicing(&account_id, &line.gross, &actor_id, session)
+                                    .await?;
+                                if !reverted {
+                                    return Err(Error::BusinessLogicError(
+                                        "红冲金额超过已开票进度".to_string(),
+                                    ));
+                                }
+                                db.sales_invoice_allocations()
+                                    .create(
+                                        &SalesInvoiceAllocation::new(
+                                            SalesInvoiceAllocationId::new(next_id()),
+                                            SalesInvoiceAllocationData {
+                                                invoice_id: red_invoice_id.clone(),
+                                                receivable_account_id: account_id,
+                                                allocation_seq: (index as u32) + 1,
+                                                allocation_action: AllocationAction::Reverse,
+                                                allocated_gross_amount: line.gross,
+                                                allocated_net_amount: line.net,
+                                                allocated_tax_amount: line.tax,
+                                                reverses_allocation_id: Some(SalesInvoiceAllocationId::new(
+                                                    line.original_allocation_id.clone(),
+                                                )),
+                                            },
+                                        )?,
+                                        session,
+                                    )
+                                    .await?;
+                                sales_order_account_ids.push(line.account_id.clone());
+                            }
+                            InvoiceDirection::Purchase => {
+                                let account_id = PayableAccountId::new(line.account_id.clone());
+                                let reverted = db
+                                    .payable_accounts()
+                                    .revert_invoicing(&account_id, &line.gross, &actor_id, session)
+                                    .await?;
+                                if !reverted {
+                                    return Err(Error::BusinessLogicError(
+                                        "红冲金额超过已收票进度".to_string(),
+                                    ));
+                                }
+                                db.purchase_invoice_allocations()
+                                    .create(
+                                        &PurchaseInvoiceAllocation::new(
+                                            PurchaseInvoiceAllocationId::new(next_id()),
+                                            PurchaseInvoiceAllocationData {
+                                                invoice_id: red_invoice_id.clone(),
+                                                payable_account_id: account_id,
+                                                allocation_seq: (index as u32) + 1,
+                                                allocation_action:
+                                                    entities::payable::AllocationAction::Reverse,
+                                                allocated_gross_amount: line.gross,
+                                                allocated_net_amount: line.net,
+                                                allocated_tax_amount: line.tax,
+                                                reverses_allocation_id: Some(
+                                                    PurchaseInvoiceAllocationId::new(
+                                                        line.original_allocation_id.clone(),
+                                                    ),
+                                                ),
+                                            },
+                                        )?,
+                                        session,
+                                    )
+                                    .await?;
+                            }
+                        }
+                    }
+                    let audit = actor_owned.clone().resource_log_with_message(
                         "invoice.red_issue",
                         "invoice",
                         red_mut.base.id.clone(),
+                        Some(reason.clone()),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
-                    // 红冲后刷新销售单开票进度（可开票余额回升）
-                    account_ids.sort();
-                    account_ids.dedup();
-                    let mut sales_order_ids = Vec::new();
-                    for account in db
-                        .receivable_accounts()
-                        .find_many(doc! { "id": { "$in": account_ids } }, session)
-                        .await?
-                    {
-                        sales_order_ids.push(account.sales_order_id.to_string());
+                    if original_mut.invoice_direction == InvoiceDirection::Sales {
+                        sales_order_account_ids.sort();
+                        sales_order_account_ids.dedup();
+                        let mut sales_order_ids = Vec::new();
+                        for account in db
+                            .receivable_accounts()
+                            .find_many(doc! { "id": { "$in": sales_order_account_ids } }, session)
+                            .await?
+                        {
+                            sales_order_ids.push(account.sales_order_id.to_string());
+                        }
+                        sales_order_ids.sort();
+                        sales_order_ids.dedup();
+                        for sales_order_id in sales_order_ids {
+                            crate::sales_order::update_sales_order_money_progress(
+                                &db,
+                                session,
+                                &entities::ids::SalesOrderId::new(sales_order_id),
+                                actor_id.clone(),
+                                None,
+                            )
+                            .await?;
+                        }
                     }
-                    sales_order_ids.sort();
-                    sales_order_ids.dedup();
-                    for sales_order_id in sales_order_ids {
-                        crate::sales_order::update_sales_order_money_progress(
-                            &db,
-                            session,
-                            &entities::ids::SalesOrderId::new(sales_order_id),
-                            actor_id.clone(),
-                            None,
-                        )
-                        .await?;
-                    }
-                    Ok::<(), crate::errors::Error>(())
+                    Ok::<String, crate::errors::Error>(red_invoice_id.to_string())
                 })
             })
             .await?;
@@ -1844,6 +2721,9 @@ impl ReceivableService {
 const CARD_FUNDS_REVIEW_ACTION: &str = "receivable_funds_review.complete";
 const CARD_FUNDS_REVIEW_RECEIPT_PREFIX: &str = "card-funds-review-command-";
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
+const CARD_FUNDS_RECEIPT_REGISTRATION_ACTION: &str = "card_funds.receipt.register";
+const CARD_FUNDS_INVOICE_REGISTRATION_ACTION: &str = "card_funds.invoice.register";
+const CARD_FUNDS_REGISTRATION_RECEIPT_PREFIX: &str = "card-funds-registration-";
 const REJECT_FOLLOW_UP_BLOCKER: &str = "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED";
 const REJECT_FOLLOW_UP_MESSAGE: &str =
     "本次复核已驳回并完成当前任务；驳回后继任务尚未注册，请联系流程管理员协作处理。";
@@ -1862,6 +2742,243 @@ struct CardFundsSnapshot {
     invoice_allocations: Vec<SalesInvoiceAllocation>,
     receipts: Vec<CustomerReceipt>,
     invoices: Vec<Invoice>,
+}
+
+/// 在事务内加载并校验 W13 历史票款登记的任务、责任、账户与事实版本。
+async fn load_card_funds_registration_context(
+    db: &Database,
+    rbac: SharedRbacService,
+    work_item_id: &entities::ids::WorkItemId,
+    expected_task_version: u64,
+    expected_subject_version: &str,
+    expected_funds_fact_version: &str,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<(ReceivableAccount, CardFundsSnapshot)> {
+    let work_item = db
+        .work_items()
+        .find_by_id(work_item_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("卡券票款复核任务不存在".to_string()))?;
+    if work_item.base.version != expected_task_version {
+        return Err(Error::ConflictError(
+            "复核任务版本已变化，请刷新后重试".to_string(),
+        ));
+    }
+    if work_item.subject_version != expected_subject_version.trim() {
+        return Err(Error::ConflictError(
+            "复核任务对象版本已变化，请刷新后重试".to_string(),
+        ));
+    }
+    if work_item.business_object_type != "receivable_account"
+        || !matches!(
+            work_item.work_item_type,
+            WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
+        )
+    {
+        return Err(Error::BusinessLogicError(
+            "当前任务不是应收账户卡券票款复核任务".to_string(),
+        ));
+    }
+    if !work_item.is_owned_by(actor.id()) {
+        return Err(Error::Forbidden("当前账号不是开放任务的当前责任人".to_string()));
+    }
+    WorkItemService::new(db.clone(), rbac)
+        .ensure_domain_decision_access(actor, &work_item, executor)
+        .await?;
+
+    let account = db
+        .receivable_accounts()
+        .find_by_id(&work_item.business_object_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("应收往来子账不存在".to_string()))?;
+    let snapshot = load_card_funds_snapshot(db, &account, executor).await?;
+    if snapshot.current_sales_order_revision_id != work_item.subject_version {
+        return Err(Error::ConflictError(
+            "销售单当前版本已变化，请刷新后重试".to_string(),
+        ));
+    }
+    let expected_review_status = match work_item.work_item_type {
+        WorkItemType::CardFundsReview => AccountReviewStatus::OpeningPending,
+        WorkItemType::CardFundsDeltaReview => AccountReviewStatus::SyncDeltaPending,
+        _ => unreachable!("任务类型已在前置校验收窄"),
+    };
+    if account.review_status != expected_review_status {
+        return Err(Error::ConflictError(
+            "应收账户已不在当前复核类型的待处理状态".to_string(),
+        ));
+    }
+    if snapshot
+        .counterparty_party_name
+        .as_deref()
+        .is_none_or(|name| name.trim().is_empty())
+    {
+        return Err(Error::BusinessLogicError(
+            "当前销售版本缺少收款或开票往来主体名称".to_string(),
+        ));
+    }
+    if funds_fact_version(&account, &snapshot) != expected_funds_fact_version.trim() {
+        return Err(Error::ConflictError("票款事实已变化，请刷新后重试".to_string()));
+    }
+    Ok((account, snapshot))
+}
+
+/// 校验 W13 登记分配只指向当前任务账户且金额严格守恒。
+fn validate_card_funds_registration_allocations(
+    allocations: &[CardFundsRegistrationAllocation],
+    account_id: &str,
+    expected_total: Amount,
+) -> Result<()> {
+    let mut total = zero_amount();
+    for allocation in allocations {
+        if allocation.target_account_id.as_ref() != account_id {
+            return Err(Error::BusinessLogicError(
+                "卡券票款登记只能分配到当前任务应收账户".to_string(),
+            ));
+        }
+        if allocation.amount <= zero_amount() {
+            return Err(Error::ValidationError("分配金额必须大于零".to_string()));
+        }
+        total = total.checked_add(allocation.amount);
+    }
+    if total != expected_total {
+        return Err(Error::BusinessLogicError(
+            "票款分配合计必须等于本次登记金额".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 按应收分录顺序为 W13 历史回款生成服务端核销计划。
+fn plan_card_funds_receipt_allocations(
+    snapshot: &CardFundsSnapshot,
+    amount: Amount,
+) -> Result<Vec<(ReceivableEntryId, Amount)>> {
+    if amount <= zero_amount() {
+        return Err(Error::ValidationError("回款金额必须大于零".to_string()));
+    }
+    let mut entries = snapshot
+        .entries
+        .iter()
+        .filter(|entry| entry.direction == EntryDirection::Increase)
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| {
+        left.source_sequence
+            .cmp(&right.source_sequence)
+            .then_with(|| left.base.id.cmp(&right.base.id))
+    });
+    let mut unallocated = amount;
+    let mut plan = Vec::new();
+    for entry in entries {
+        if unallocated == zero_amount() {
+            break;
+        }
+        let allocated = snapshot
+            .receipt_allocations
+            .iter()
+            .filter(|line| line.receivable_entry_id.as_ref() == entry.base.id)
+            .fold(zero_amount(), |total, line| match line.allocation_action {
+                AllocationAction::Apply => total.checked_add(line.allocated_amount),
+                AllocationAction::Reverse => total.checked_sub(line.allocated_amount),
+            });
+        if allocated > entry.amount {
+            return Err(Error::BusinessLogicError(
+                "应收分录历史核销累计超过分录金额".to_string(),
+            ));
+        }
+        let available = entry.amount.checked_sub(allocated);
+        if available == zero_amount() {
+            continue;
+        }
+        let planned = if available <= unallocated {
+            available
+        } else {
+            unallocated
+        };
+        plan.push((ReceivableEntryId::new(entry.base.id.clone()), planned));
+        unallocated = unallocated.checked_sub(planned);
+    }
+    if unallocated != zero_amount() {
+        return Err(Error::BusinessLogicError(
+            "应收分录开放余额不足，无法完成历史回款分配".to_string(),
+        ));
+    }
+    Ok(plan)
+}
+
+/// 归一化可选票款单号；空白由服务端生成。
+fn normalized_registration_no(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+/// 按操作者与幂等键生成稳定且不泄漏原键的票款单号。
+fn stable_registration_no(prefix: &str, actor_id: &str, key: &str) -> String {
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{actor_id}|{}", key.trim()).as_bytes())
+    );
+    format!("{prefix}-{}", &digest[..12])
+}
+
+/// 计算 W13 登记命令指纹。
+fn card_funds_registration_fingerprint<T: serde::Serialize>(command: &T) -> Result<String> {
+    let serialized = serde_json::to_vec(command)
+        .map_err(|error| Error::Internal(format!("卡券票款登记命令序列化失败: {error}")))?;
+    Ok(format!("{:x}", Sha256::digest(serialized)))
+}
+
+/// 生成 W13 登记命令的稳定审计主键。
+fn card_funds_registration_audit_id(action: &str, actor_id: &str, key: &str) -> String {
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{action}|{actor_id}|{}", key.trim()).as_bytes())
+    );
+    format!("{CARD_FUNDS_REGISTRATION_RECEIPT_PREFIX}{digest}")
+}
+
+/// 将 W13 登记结果编码为幂等审计收据。
+fn card_funds_registration_receipt_message(fingerprint: &str, kind: &str, fact_id: &str) -> String {
+    format!("{COMMAND_FINGERPRINT_PREFIX}{fingerprint};fact={kind}|{fact_id}")
+}
+
+/// 在事务内读取并严格验证 W13 登记幂等收据。
+async fn replay_card_funds_registration(
+    db: &Database,
+    audit_id: &str,
+    expected_action: &str,
+    expected_fingerprint: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<(String, String)>> {
+    let Some(audit) = db.audit_logs().find_by_id(audit_id, executor).await? else {
+        return Ok(None);
+    };
+    if audit.action != expected_action || audit.resource_type != "receivable_account" || !audit.success {
+        return Err(Error::Internal("卡券票款登记幂等收据身份非法".to_string()));
+    }
+    let expected_prefix = format!("{COMMAND_FINGERPRINT_PREFIX}{expected_fingerprint};fact=");
+    let fact = audit
+        .message
+        .as_deref()
+        .and_then(|message| message.strip_prefix(&expected_prefix))
+        .ok_or_else(|| Error::ConflictError("幂等键已用于不同的卡券票款登记命令".to_string()))?;
+    let (kind, fact_id) = fact
+        .split_once('|')
+        .ok_or_else(|| Error::Internal("卡券票款登记幂等收据格式非法".to_string()))?;
+    let expected_kind = if expected_action == CARD_FUNDS_RECEIPT_REGISTRATION_ACTION {
+        "receipt"
+    } else {
+        "invoice"
+    };
+    if kind != expected_kind || fact_id.trim().is_empty() {
+        return Err(Error::Internal("卡券票款登记幂等收据事实非法".to_string()));
+    }
+    let account_id = audit
+        .resource_id
+        .ok_or_else(|| Error::Internal("卡券票款登记幂等收据缺少应收账户".to_string()))?;
+    Ok(Some((account_id, fact_id.to_string())))
 }
 
 /// W13 幂等审计收据中的确定性正式结果。
@@ -2834,6 +3951,163 @@ fn parse_card_funds_receipt(message: &str, expected_fingerprint: &str) -> Result
     })
 }
 
+/// 原蓝票分配扣除既有红冲后的可红冲金额基数。
+#[derive(Debug, Clone)]
+struct RedInvoiceAllocationBasis {
+    original_allocation_id: String,
+    account_id: String,
+    allocation_seq: u32,
+    gross: Amount,
+    net: Amount,
+    tax: Amount,
+}
+
+/// 本次红票由服务端计算出的反向分配行。
+#[derive(Debug, Clone)]
+struct RedInvoiceAllocationPlan {
+    original_allocation_id: String,
+    account_id: String,
+    gross: Amount,
+    net: Amount,
+    tax: Amount,
+}
+
+/// 从销项蓝票分配及其全部相关反向事实计算剩余可红冲基数。
+fn red_sales_basis(
+    blue: &SalesInvoiceAllocation,
+    related: &[SalesInvoiceAllocation],
+) -> Result<RedInvoiceAllocationBasis> {
+    let reversed = related
+        .iter()
+        .filter(|line| {
+            line.allocation_action == AllocationAction::Reverse
+                && line.reverses_allocation_id.as_ref()
+                    == Some(&SalesInvoiceAllocationId::new(blue.base.id.clone()))
+        })
+        .fold(
+            (zero_amount(), zero_amount(), zero_amount()),
+            |(gross, net, tax), line| {
+                (
+                    gross.checked_add(line.allocated_gross_amount),
+                    net.checked_add(line.allocated_net_amount),
+                    tax.checked_add(line.allocated_tax_amount),
+                )
+            },
+        );
+    if reversed.0 > blue.allocated_gross_amount
+        || reversed.1 > blue.allocated_net_amount
+        || reversed.2 > blue.allocated_tax_amount
+    {
+        return Err(Error::BusinessLogicError(
+            "销项发票历史红冲累计超过原分配".to_string(),
+        ));
+    }
+    Ok(RedInvoiceAllocationBasis {
+        original_allocation_id: blue.base.id.clone(),
+        account_id: blue.receivable_account_id.to_string(),
+        allocation_seq: blue.allocation_seq,
+        gross: blue.allocated_gross_amount.checked_sub(reversed.0),
+        net: blue.allocated_net_amount.checked_sub(reversed.1),
+        tax: blue.allocated_tax_amount.checked_sub(reversed.2),
+    })
+}
+
+/// 从进项蓝票分配及其全部相关反向事实计算剩余可红冲基数。
+fn red_purchase_basis(
+    blue: &PurchaseInvoiceAllocation,
+    related: &[PurchaseInvoiceAllocation],
+) -> Result<RedInvoiceAllocationBasis> {
+    let reversed = related
+        .iter()
+        .filter(|line| {
+            line.allocation_action == entities::payable::AllocationAction::Reverse
+                && line.reverses_allocation_id.as_ref()
+                    == Some(&PurchaseInvoiceAllocationId::new(blue.base.id.clone()))
+        })
+        .fold(
+            (zero_amount(), zero_amount(), zero_amount()),
+            |(gross, net, tax), line| {
+                (
+                    gross.checked_add(line.allocated_gross_amount),
+                    net.checked_add(line.allocated_net_amount),
+                    tax.checked_add(line.allocated_tax_amount),
+                )
+            },
+        );
+    if reversed.0 > blue.allocated_gross_amount
+        || reversed.1 > blue.allocated_net_amount
+        || reversed.2 > blue.allocated_tax_amount
+    {
+        return Err(Error::BusinessLogicError(
+            "进项发票历史红冲累计超过原分配".to_string(),
+        ));
+    }
+    Ok(RedInvoiceAllocationBasis {
+        original_allocation_id: blue.base.id.clone(),
+        account_id: blue.payable_account_id.to_string(),
+        allocation_seq: blue.allocation_seq,
+        gross: blue.allocated_gross_amount.checked_sub(reversed.0),
+        net: blue.allocated_net_amount.checked_sub(reversed.1),
+        tax: blue.allocated_tax_amount.checked_sub(reversed.2),
+    })
+}
+
+/// 按原分配顺序生成本次红冲行；部分红冲行按剩余税额比例做银行家舍入。
+fn plan_red_invoice_allocations(
+    mut basis: Vec<RedInvoiceAllocationBasis>,
+    requested: Option<Amount>,
+) -> Result<(Vec<RedInvoiceAllocationPlan>, bool)> {
+    basis.sort_by_key(|line| line.allocation_seq);
+    basis.retain(|line| line.gross > zero_amount());
+    let remaining_total = basis
+        .iter()
+        .fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
+    if remaining_total <= zero_amount() {
+        return Err(Error::BusinessLogicError(
+            "原蓝票没有可红冲的有效分配".to_string(),
+        ));
+    }
+    let requested = requested.unwrap_or(remaining_total);
+    if requested <= zero_amount() || requested > remaining_total {
+        return Err(Error::BusinessLogicError(
+            "红冲金额必须大于零且不超过原蓝票剩余有效分配".to_string(),
+        ));
+    }
+
+    let mut unplanned = requested;
+    let mut plan = Vec::new();
+    for line in basis {
+        if unplanned == zero_amount() {
+            break;
+        }
+        let gross = if line.gross <= unplanned {
+            line.gross
+        } else {
+            unplanned
+        };
+        let (net, tax) = if gross == line.gross {
+            (line.net, line.tax)
+        } else {
+            let tax = Amount::try_from(round_to_cent(
+                gross.to_decimal() * line.tax.to_decimal() / line.gross.to_decimal(),
+            ))?;
+            (gross.checked_sub(tax), tax)
+        };
+        plan.push(RedInvoiceAllocationPlan {
+            original_allocation_id: line.original_allocation_id,
+            account_id: line.account_id,
+            gross,
+            net,
+            tax,
+        });
+        unplanned = unplanned.checked_sub(gross);
+    }
+    if unplanned != zero_amount() {
+        return Err(Error::Internal("红票反向分配计划未覆盖请求金额".to_string()));
+    }
+    Ok((plan, requested == remaining_total))
+}
+
 /// 返回固定零金额（`Amount::from_str("0.00")` 的确定性快捷方式）。
 ///
 /// # 返回
@@ -3169,7 +4443,7 @@ async fn persist_bound_customer_receipt_document(
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<()> {
+) -> Result<ApprovalDefinitionBinding> {
     let _ = customer_receipt_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
@@ -3177,9 +4451,9 @@ async fn persist_bound_customer_receipt_document(
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户回款单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(&mut document, binding)?;
+    attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, session).await?;
-    Ok(())
+    Ok(binding)
 }
 
 /// 汇总冻结分配行金额。

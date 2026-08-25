@@ -5,14 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import {
-    adjustProcurementRejectionDraft,
     cancelSalesOrderApproval,
     createSalesOrder,
     createSalesOrderExportJob,
     fetchSalesOrderDetail,
     fetchSalesOrderDraftForResume,
     fetchSalesOrders,
-    resolveProcurementRejection,
     saveSalesOrderDraft,
     startSalesChangeOrder,
     submitSalesChangeOrder,
@@ -139,33 +137,6 @@ export function useSubmitSalesOrderMutation() {
                     queryKey: workItemKeys.all,
                 }),
             ])
-        },
-    })
-}
-
-export function useAdjustProcurementRejectionDraftMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: adjustProcurementRejectionDraft,
-        onSuccess: async (_data, variables) => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.detail(variables.salesOrderId),
-            })
-        },
-    })
-}
-
-export function useResolveProcurementRejectionMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: resolveProcurementRejection,
-        onSuccess: async (_data, variables) => {
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.detail(variables.salesOrderId),
-            })
-            await queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.all,
-            })
         },
     })
 }

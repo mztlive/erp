@@ -18,9 +18,8 @@ mod start_approval;
 pub use self::adapter::sales_change_order_object_readable;
 pub use self::dto::{
     CancelSalesChangeApprovalRequest, ChangeReviewDecisionRequest, CreateSalesChangeOrderRequest,
-    DocumentApprovalView, PageView, SalesChangeDraftRequest, SalesChangeLineRequest,
-    SalesChangeOrderDetailView, SalesChangeOrderListParams, SalesChangeOrderView, SubmitSalesChangeRequest,
-    VoidSalesChangeOrderRequest,
+    DocumentApprovalView, PageView, SalesChangeOrderDetailView, SalesChangeOrderListParams,
+    SalesChangeOrderView, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
 
 /// 销售变更单列表筛选条件类型。

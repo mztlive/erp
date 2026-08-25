@@ -92,6 +92,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/product-publication-deliveries/{delivery_id}/retry",
+            with_permission(
+                post(publication::product_publication_delivery_retry),
+                rbac,
+                publication::product_publication_delivery_retry_permission_key(),
+            ),
+        )
+        .route(
             "/product-publication-deliveries/{delivery_id}/actions",
             with_permission(
                 post(publication::product_publication_delivery_action),

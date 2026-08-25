@@ -53,9 +53,10 @@ pub use self::dto::{
     CreateProductPublicationRequest, CreateProductPublicationRevisionRequest,
     DeliverPublicationRevisionRequest, MediaItemRequest, PageView, ProcessPublicationDeliveriesRequest,
     ProcessPublicationDeliveriesResult, ProductPublicationDeliveryListParams, ProductPublicationDeliveryView,
-    ProductPublicationListParams, ProductPublicationRevisionMediaView, ProductPublicationRevisionView,
-    ProductPublicationView, PublicationDeliveryAction, PublicationDeliveryActionResult,
-    PublicationDeliveryActionResultView, PublicationDeliveryCommand, PublicationDeliveryResultView,
+    ProductPublicationListParams, ProductPublicationRevisionCommitView, ProductPublicationRevisionMediaView,
+    ProductPublicationRevisionView, ProductPublicationView, PublicationDeliveryAction,
+    PublicationDeliveryActionResult, PublicationDeliveryActionResultView, PublicationDeliveryCommand,
+    PublicationDeliveryResultView, RetryPublicationDeliveryRequest, RetryPublicationDeliveryResultView,
     SystemSafetyPauseOperationView, SystemSafetyPauseTrigger, UpdateProductPublicationRequest,
 };
 
@@ -557,7 +558,7 @@ impl PublicationService {
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回新建发布修订的响应视图。
+    /// 返回发布修订与固定待发送投递的原子提交结果。
     ///
     /// # 错误
     /// * `NotFound` - 发布/供给修订/商品版本不存在
@@ -568,7 +569,7 @@ impl PublicationService {
         publication_id: &str,
         req: CreateProductPublicationRevisionRequest,
         actor: &AuditActor,
-    ) -> Result<ProductPublicationRevisionView> {
+    ) -> Result<ProductPublicationRevisionCommitView> {
         req.validate()?;
         let mut publication = self
             .db
@@ -649,6 +650,22 @@ impl PublicationService {
                 .map_err(Into::into)
             })
             .collect::<Result<Vec<_>>>()?;
+        let delivery = ProductPublicationDelivery::new(
+            ProductPublicationDeliveryId::new(next_id()),
+            ProductPublicationDeliveryData {
+                publication_revision_id: revision.base.id.clone().into(),
+                target_mall_id: publication.target_mall_id.clone(),
+                delivery_status: PublicationDeliveryStatus::PendingSend,
+                attempt_count: 0,
+                last_attempt_at: None,
+                next_attempt_at: None,
+                mall_ack_at: None,
+                mall_version: None,
+                error_class: None,
+                error_code: None,
+                error_summary: None,
+            },
+        )?;
         let has_safety_pause = self
             .db
             .system_safety_pause_operations()
@@ -676,11 +693,15 @@ impl PublicationService {
         let mut publication_tx = publication;
         let revision_tx = revision.clone();
         let media_tx = media.clone();
+        let delivery_tx = delivery.clone();
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.publication()
                         .create_revision_with_media(&revision_tx, &media_tx, session)
+                        .await?;
+                    db.product_publication_deliveries()
+                        .create(&delivery_tx, session)
                         .await?;
                     db.product_publications()
                         .update(&mut publication_tx, session)
@@ -691,7 +712,7 @@ impl PublicationService {
             })
             .await?;
 
-        Ok(ProductPublicationRevisionView {
+        let revision_view = ProductPublicationRevisionView {
             id: revision.base.id,
             product_publication_id: revision.product_publication_id.to_string(),
             revision_no: revision.revision.revision_no,
@@ -702,6 +723,12 @@ impl PublicationService {
             valid_to: revision.valid_to.map(|at| at.unix_secs()),
             version: revision.base.version,
             created_at: revision.base.created_at,
+        };
+        Ok(ProductPublicationRevisionCommitView {
+            revision: revision_view,
+            delivery_id: delivery.base.id,
+            delivery_status: delivery.delivery_status,
+            operation_id: delivery.message_key,
         })
     }
 

@@ -3,15 +3,7 @@ import type { FieldComponent, ReactFormExtendedApi } from "@tanstack/react-form"
 
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 
-export type SalesOrderEditorPurpose = "create" | "draft" | "resubmit"
-
-export type SalesOrderEditorResult = {
-    status: "succeeded" | "blocked" | "unknown"
-    title: string
-    description: string
-    reference: string
-    nextResponsible?: string
-}
+export type SalesOrderEditorPurpose = "create" | "draft"
 
 /**
  * 建单表单实例的共享类型。校验槽位用 `any`：各拆分组件只关心字段与值，

@@ -177,7 +177,7 @@ impl FulfillmentService {
 ///
 /// # 错误
 /// 行数量为负或说明超长时返回错误（实体构造）。
-fn build_acceptance_lines(
+pub(super) fn build_acceptance_lines(
     acceptance_id: &CustomerAcceptanceId,
     inputs: &[AcceptanceLineInput],
 ) -> Result<Vec<CustomerAcceptanceLine>> {
@@ -395,7 +395,7 @@ async fn persist_unbound_customer_acceptance_document(
 ///
 /// # 错误
 /// 绑定端口或注册写入失败时返回错误。
-async fn register_created_customer_acceptance_document(
+pub(super) async fn register_created_customer_acceptance_document(
     db: &Database,
     rbac: &SharedRbacService,
     acceptance: &CustomerAcceptance,

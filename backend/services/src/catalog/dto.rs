@@ -34,8 +34,8 @@ pub(crate) use brand_unit::{
     ProductBrandListQuery, UnitOfMeasureListQuery, PRODUCT_BRAND_SORT_FIELDS, UNIT_OF_MEASURE_SORT_FIELDS,
 };
 pub use category::{
-    CreateProductCategoryRequest, MoveProductCategoryRequest, ProductCategoryListParams, ProductCategoryView,
-    UpdateProductCategoryRequest,
+    CreateProductCategoryRequest, MoveProductCategoryRequest, ProductCategoryListParams,
+    ProductCategoryParentChange, ProductCategoryView, UpdateProductCategoryRequest,
 };
 #[allow(unused_imports)]
 pub(crate) use category::{ProductCategoryListQuery, PRODUCT_CATEGORY_SORT_FIELDS};
@@ -44,7 +44,7 @@ pub(crate) use common::normalize_sort;
 #[allow(unused_imports)]
 pub use common::{PageParams, PageView, SortDir};
 pub use product::{
-    CreateProductRequest, ProductListParams, ProductListingView, ProductMediaInput,
+    CreateProductRequest, DisableProductRequest, ProductListParams, ProductListingView, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,
     SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput,
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest,

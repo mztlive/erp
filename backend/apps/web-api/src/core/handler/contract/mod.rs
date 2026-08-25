@@ -4,22 +4,26 @@
 //! 直接复用 `services::contract` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
+use entities::file_asset::{RetentionClass, SensitivityClass};
 use services::{
     audit::AuditActor,
     contract::{
         ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractService,
-        ContractView, CreateContractRequest, PageView, TerminateContractRequest,
+        ContractView, CreateContractRequest, PageView, TerminateContractRequest, UploadContractRequest,
+        UploadContractView,
     },
 };
+
+use super::file_asset::{extract_asset_file_with_limit, should_compensate_pending_assets, store_asset_file};
 
 use crate::{
     app_state::AppState,
     core::{
         errors::Result, extractor::UserID, handler::customer::ensure_customer_access,
-        middleware::RbacSubject, response::ApiResponse,
+        middleware::RbacSubject, response::ApiResponse, upload,
     },
 };
 
@@ -79,6 +83,71 @@ pub async fn contract_create(
         .create_contract(req, &actor)
         .await?;
 
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "合同",
+    group_desc = "合同 PDF 档案管理",
+    desc = "一次上传并归档合同 PDF",
+    resource = "contract",
+    action = "create"
+)]
+/// 一次接收合同 PDF 与业务字段，并原子登记文件元数据、合同及首修订。
+///
+/// 对象存储不具备 MongoDB 事务能力；数据库事务失败时本入口立即删除刚上传的
+/// 对象作为补偿，避免留下未登记文件。
+pub async fn contract_upload(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(UserID(user_id)): Extension<UserID>,
+    mut multipart: Multipart,
+) -> Result<UploadContractView> {
+    let file = extract_asset_file_with_limit(&mut multipart, upload::MAX_CONTRACT_PDF_BYTES).await?;
+    let mut command = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| crate::core::errors::Error::BadRequest("Multipart 表单无效".to_string()))?
+    {
+        if field.name() != Some("command") {
+            continue;
+        }
+        let text = field
+            .text()
+            .await
+            .map_err(|_| crate::core::errors::Error::BadRequest("合同命令读取失败".to_string()))?;
+        command = Some(
+            serde_json::from_str::<UploadContractRequest>(&text)
+                .map_err(|_| crate::core::errors::Error::BadRequest("合同命令格式无效".to_string()))?,
+        );
+        break;
+    }
+    let command =
+        command.ok_or_else(|| crate::core::errors::Error::BadRequest("缺少合同命令".to_string()))?;
+    ensure_customer_access(&state, &subject, &user_id, command.customer_id.as_ref()).await?;
+    let asset_request = store_asset_file(
+        &state,
+        file,
+        SensitivityClass::Sensitive,
+        RetentionClass::LongTerm,
+        None,
+    )
+    .await?;
+    let object_key = asset_request.storage_object_key.clone();
+    let result = ContractService::new(state.db())
+        .upload_contract(command, asset_request, &actor)
+        .await;
+    let view = match result {
+        Ok(view) => view,
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                let _ = state.storage().delete(&object_key).await;
+            }
+            return Err(error.into());
+        }
+    };
     Ok(ApiResponse::ok_with_data(view))
 }
 

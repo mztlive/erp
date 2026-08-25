@@ -13,7 +13,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::file_asset, middleware::with_permission},
+    core::{handler::file_asset, middleware::with_permission, upload},
 };
 
 /// 返回本域管理端路由集合。
@@ -36,7 +36,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .route(
             "/file-assets/upload",
             with_permission(
-                post(file_asset::file_asset_upload),
+                upload::multipart_route(
+                    post(file_asset::file_asset_upload),
+                    upload::MAX_MULTIPART_REQUEST_BYTES,
+                ),
                 rbac,
                 file_asset::file_asset_upload_permission_key(),
             ),

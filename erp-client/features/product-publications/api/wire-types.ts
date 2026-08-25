@@ -25,6 +25,13 @@ export type BackendRevision = {
     created_at: number
 }
 
+export type BackendRevisionCommit = {
+    revision: BackendRevision
+    delivery_id: string
+    delivery_status: string
+    operation_id: string
+}
+
 export type BackendDelivery = {
     id: string
     publication_revision_id: string
@@ -44,6 +51,13 @@ export type BackendDeliveryResult = {
     error_task_id?: string | null
     mall_version?: string | null
     publication_version: number
+}
+
+export type BackendRetryDeliveryResult = {
+    delivery_id: string
+    attempt_count: number
+    delivery_status: string
+    operation_id: string
 }
 
 export type BackendMedia = {

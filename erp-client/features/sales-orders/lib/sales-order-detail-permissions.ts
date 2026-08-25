@@ -8,8 +8,6 @@ export const SALES_ORDER_DETAIL_PERMISSIONS = {
     registerAcceptance: "customer_acceptance:create",
     cancelApproval: "sales_order:cancel_approval",
     startChange: "sales_change_order:create",
-    voidOrder: "sales_order:delete",
-    editAfterRejection: "sales_order:update",
 } as const
 
 /** 打开履约工作面：与侧栏 W09 采购 lane 入口对齐。 */
@@ -37,8 +35,6 @@ const REASON: Record<SalesOrderDetailPermissionKind, string> = {
     registerAcceptance: "当前账号没有登记客户验收权限",
     cancelApproval: "当前账号没有撤回销售单审批权限",
     startChange: "当前账号没有发起销售变更权限",
-    voidOrder: "当前账号没有作废销售单权限",
-    editAfterRejection: "当前账号没有编辑销售单权限",
 }
 
 export function permissionBlockedReason(
@@ -73,11 +69,7 @@ export function gateNavigate(
     granted: readonly string[] | undefined | null,
     kind: Exclude<
         SalesOrderDetailPermissionKind,
-        | "registerAcceptance"
-        | "cancelApproval"
-        | "startChange"
-        | "voidOrder"
-        | "editAfterRejection"
+        "registerAcceptance" | "cancelApproval" | "startChange"
     >,
 ): PermissionGate {
     const required =
@@ -99,8 +91,6 @@ export function gateCommand(
         | "registerAcceptance"
         | "cancelApproval"
         | "startChange"
-        | "voidOrder"
-        | "editAfterRejection"
     >,
     serverReason?: string,
 ): PermissionGate {

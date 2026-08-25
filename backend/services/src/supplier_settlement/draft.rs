@@ -44,7 +44,7 @@ struct RefreshReceipt {
 }
 
 impl SupplierSettlementService {
-    /// 从最新且策略版本精确匹配的不可变来源批次创建结算草稿。
+    /// 从服务端最新的不可变来源批次创建结算草稿。
     ///
     /// 请求不接收金额明细。服务端逐行构造结算项与差异，并把单头、明细、差异和
     /// 幂等审计置于同一事务中；缺少来源批次时整单失败。
@@ -79,18 +79,11 @@ impl SupplierSettlementService {
         let source = self
             .db
             .supplier_settlement_source_evidence()
-            .latest_for_period(
-                &req.supplier_id,
-                period_start,
-                period_end,
-                req.period_policy_id.trim(),
-                req.expected_period_policy_version.trim(),
-                &mut NoTransaction,
-            )
+            .latest_for_scope(&req.supplier_id, period_start, period_end, &mut NoTransaction)
             .await?
             .ok_or_else(|| {
                 Error::BusinessLogicError(
-                    "SOURCE_EVIDENCE_MISSING: 当前供应商、期间与策略版本缺少完整来源证据批次".to_string(),
+                    "SOURCE_EVIDENCE_MISSING: 当前供应商与期间缺少完整来源证据批次".to_string(),
                 )
             })?;
         let statement_id = SupplierSettlementStatementId::new(next_id());
@@ -524,8 +517,6 @@ fn validate_create_replay(
     if statement.supplier_id != req.supplier_id
         || statement.period_start != period_start
         || statement.period_end != period_end
-        || statement.period_policy_id != req.period_policy_id.trim()
-        || statement.period_policy_version != req.expected_period_policy_version.trim()
     {
         return Err(Error::ConflictError(
             "创建幂等键已用于不同的供应商结算命令".to_string(),
@@ -541,8 +532,6 @@ fn create_fingerprint(req: &CreateSettlementStatementRequest) -> String {
         req.supplier_id.to_string(),
         req.period_start.trim().to_string(),
         req.period_end.trim().to_string(),
-        req.period_policy_id.trim().to_string(),
-        req.expected_period_policy_version.trim().to_string(),
     ])
 }
 

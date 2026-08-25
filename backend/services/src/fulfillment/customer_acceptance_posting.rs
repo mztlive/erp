@@ -5,8 +5,8 @@ use entities::common::time::Instant;
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceResult, AllocationAction,
     CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine, CustomerAcceptanceLineData,
-    CustomerAcceptanceState, DeliveryState, ElectronicDeliveryState, FulfillmentFactType,
-    ServiceFulfillmentState,
+    CustomerAcceptanceState, CustomerAcceptanceUpdate, DeliveryState, ElectronicDeliveryState,
+    FulfillmentFactType, ServiceFulfillmentState,
 };
 use entities::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
@@ -22,12 +22,207 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::acceptance_eligibility::{build_eligibility_groups, so_line_ids, EligibilityGroupSources};
+use super::customer_acceptance::{build_acceptance_lines, register_created_customer_acceptance_document};
 use super::{
-    AcceptanceAllocationInput, CustomerAcceptanceView, FulfillmentService, PostAcceptanceLineInput,
-    PostCustomerAcceptanceRequest, ReverseCustomerAcceptanceRequest,
+    AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
+    CustomerAcceptanceView, FulfillmentService, PostAcceptanceLineInput, PostCustomerAcceptanceRequest,
+    ReverseCustomerAcceptanceRequest,
 };
 
 impl FulfillmentService {
+    /// 原子登记并过账客户验收。
+    ///
+    /// 同一事务内完成草稿创建或完整替换、履约事实分配校验与写入、验收过账、
+    /// 销售单履约进度刷新和审计。前端无需先保存草稿或预查询事实类型。
+    /// 已按同一验收单号完成过账时直接返回既有结果，支持结果未知后的安全重试。
+    ///
+    /// # 参数
+    /// * `req` - 最终验收表头、行、分配和乐观锁版本
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回已过账验收单以及过账后重新计算的剩余可验收事实。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 行、分配、事实归属或版本参数不合法
+    /// * `ConflictError` - 草稿、销售单版本或状态冲突
+    /// * `NotFound` - 草稿、销售单或履约事实不存在
+    /// * `OutcomeUnknown` - 事务提交结果无法确认
+    pub async fn commit_customer_acceptance(
+        &self,
+        req: CommitCustomerAcceptanceRequest,
+        actor: &AuditActor,
+    ) -> Result<CommitCustomerAcceptanceView> {
+        req.validate()?;
+        if req.acceptance_id.is_some() != req.expected_acceptance_version.is_some() {
+            return Err(Error::ValidationError(
+                "已有草稿必须同时提交草稿主键和期望版本".to_string(),
+            ));
+        }
+        if req.acceptance_id.is_none()
+            && req
+                .acceptance_no
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+        {
+            return Err(Error::ValidationError("新建客户验收必须提供验收单号".to_string()));
+        }
+
+        let acceptance_id = req
+            .acceptance_id
+            .as_ref()
+            .map(|id| CustomerAcceptanceId::new(id.clone()))
+            .unwrap_or_else(|| CustomerAcceptanceId::new(next_id()));
+        let final_lines = build_acceptance_lines(&acceptance_id, &req.lines)?;
+        let sales_order_id = req.sales_order_id.clone();
+        let actor = actor.clone();
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let posted = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let existing = if let Some(id) = req.acceptance_id.as_deref() {
+                        db.customer_acceptances().find_by_id(id, session).await?
+                    } else {
+                        let acceptance_no = req.acceptance_no.as_deref().ok_or_else(|| {
+                            Error::ValidationError("新建客户验收必须提供验收单号".to_string())
+                        })?;
+                        db.customer_acceptances()
+                            .find_by_acceptance_no(acceptance_no, session)
+                            .await?
+                    };
+
+                    if let Some(existing) = existing.as_ref() {
+                        if existing.sales_order_id != req.sales_order_id
+                            || req
+                                .acceptance_no
+                                .as_deref()
+                                .is_some_and(|acceptance_no| existing.acceptance_no != acceptance_no)
+                        {
+                            return Err(Error::ConflictError("验收单号已被其他业务占用".to_string()));
+                        }
+                        if existing.status == CustomerAcceptanceState::Posted {
+                            return Ok::<CustomerAcceptance, crate::errors::Error>(existing.clone());
+                        }
+                    }
+
+                    let order = db
+                        .sales_orders()
+                        .find_by_id(req.sales_order_id.as_ref(), session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+                    if order.base.version != req.expected_sales_order_version {
+                        return Err(Error::ConflictError(
+                            "销售单已变化，请刷新履约事实后重试".to_string(),
+                        ));
+                    }
+
+                    let mut acceptance = match existing {
+                        Some(mut acceptance) => {
+                            if acceptance.status != CustomerAcceptanceState::Draft {
+                                return Err(Error::ConflictError(
+                                    "只有草稿状态的客户验收单可以登记".to_string(),
+                                ));
+                            }
+                            let expected_version = req
+                                .expected_acceptance_version
+                                .ok_or_else(|| Error::ValidationError("已有草稿缺少期望版本".to_string()))?;
+                            if acceptance.base.version != expected_version {
+                                return Err(Error::ConflictError(
+                                    "客户验收草稿已变化，请刷新后重试".to_string(),
+                                ));
+                            }
+                            acceptance.update(CustomerAcceptanceUpdate {
+                                accepted_at: Some(Instant::from_unix_secs(req.accepted_at)),
+                                result: Some(req.result),
+                            })?;
+                            db.customer_acceptances().update(&mut acceptance, session).await?;
+                            db.fulfillment()
+                                .replace_customer_acceptance_lines(&acceptance_id, &final_lines, session)
+                                .await?;
+                            acceptance
+                        }
+                        None => {
+                            let acceptance_no = req.acceptance_no.clone().ok_or_else(|| {
+                                Error::ValidationError("新建客户验收必须提供验收单号".to_string())
+                            })?;
+                            let acceptance = CustomerAcceptance::new(
+                                acceptance_id.clone(),
+                                CustomerAcceptanceData {
+                                    acceptance_no,
+                                    sales_order_id: req.sales_order_id.clone(),
+                                    accepted_at: Instant::from_unix_secs(req.accepted_at),
+                                    result: req.result,
+                                },
+                            )?;
+                            register_created_customer_acceptance_document(
+                                &db,
+                                &rbac,
+                                &acceptance,
+                                &actor,
+                                session,
+                            )
+                            .await?;
+                            db.fulfillment()
+                                .create_customer_acceptance_with_lines(&acceptance, &final_lines, session)
+                                .await?;
+                            acceptance
+                        }
+                    };
+
+                    for line in &final_lines {
+                        let allocations = req
+                            .lines
+                            .iter()
+                            .find(|input| input.sales_order_line_id == line.sales_order_line_id)
+                            .map(|input| input.allocations.as_slice())
+                            .ok_or_else(|| Error::ValidationError("登记请求缺少验收行".to_string()))?;
+                        if allocations.is_empty() {
+                            return Err(Error::ValidationError("验收行缺少履约分配".to_string()));
+                        }
+                        ensure_line_allocations_conserved(line, allocations)?;
+                        for allocation in allocations {
+                            write_acceptance_allocation(
+                                &db,
+                                session,
+                                &line.base.id,
+                                allocation,
+                                line,
+                                &acceptance.sales_order_id,
+                            )
+                            .await?;
+                        }
+                    }
+                    acceptance.mark_posted()?;
+                    db.customer_acceptances().update(&mut acceptance, session).await?;
+                    update_sales_order_fulfillment_progress(
+                        &db,
+                        session,
+                        &acceptance.sales_order_id,
+                        actor.id().to_string(),
+                    )
+                    .await?;
+                    let audit = actor.resource_log(
+                        "customer_acceptance.commit",
+                        "customer_acceptance",
+                        acceptance.base.id.clone(),
+                    )?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<CustomerAcceptance, crate::errors::Error>(acceptance)
+                })
+            })
+            .await?;
+
+        let remaining_eligibility = self.acceptance_eligibility(sales_order_id.as_ref()).await?;
+        Ok(CommitCustomerAcceptanceView {
+            acceptance: posted.into(),
+            remaining_eligibility,
+        })
+    }
+
     /// 过账客户验收（草稿 → 已过账；§8.2 第 5 条跨集合事务）。
     ///
     /// 客户验收签署为 `NO_APPROVAL`：过账只写履约分配与状态迁移，不得绑定

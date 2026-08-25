@@ -12,14 +12,15 @@ use services::{
     returns::{
         CancelCustomerRefundApprovalRequest, CancelPaymentReversalApprovalRequest,
         CancelReceiptReversalApprovalRequest, CancelSupplierRefundApprovalRequest,
-        CreateCustomerRefundRequest, CreatePaymentReversalRequest, CreatePurchaseReturnOrderRequest,
-        CreateReceiptReversalRequest, CreateSalesReturnCaseRequest, CreateSupplierRefundRequest,
-        CustomerRefundListParams, CustomerRefundView, PageView, PaymentReversalView,
-        PostCustomerRefundRequest, PostPaymentReversalRequest, PostReceiptReversalRequest,
-        PostSupplierRefundRequest, PurchaseReturnOrderListParams, PurchaseReturnOrderView,
-        ReceiptReversalView, ReturnsService, SalesReturnCaseListParams, SalesReturnCaseView,
-        SubmitCustomerRefundRequest, SubmitPaymentReversalRequest, SubmitReceiptReversalRequest,
-        SubmitSupplierRefundRequest, SupplierRefundView,
+        CommitCustomerRefundRequest, CommitPaymentReversalRequest, CommitReceiptReversalRequest,
+        CommitSupplierRefundRequest, CreateCustomerRefundRequest, CreatePaymentReversalRequest,
+        CreatePurchaseReturnOrderRequest, CreateReceiptReversalRequest, CreateSalesReturnCaseRequest,
+        CreateSupplierRefundRequest, CustomerRefundListParams, CustomerRefundView, PageView,
+        PaymentReversalView, PostCustomerRefundRequest, PostPaymentReversalRequest,
+        PostReceiptReversalRequest, PostSupplierRefundRequest, PurchaseReturnOrderListParams,
+        PurchaseReturnOrderView, ReceiptReversalView, ReturnsService, SalesReturnCaseListParams,
+        SalesReturnCaseView, SubmitCustomerRefundRequest, SubmitPaymentReversalRequest,
+        SubmitReceiptReversalRequest, SubmitSupplierRefundRequest, SupplierRefundView,
     },
 };
 
@@ -271,6 +272,25 @@ pub async fn customer_refund_create(
 #[permission_macros::permission(
     group = "退货退款",
     group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "一次创建并提交客户退款审批",
+    resource = "customer_refund",
+    action = "submit"
+)]
+/// 按原回款一次创建客户退款并启动审批。
+pub async fn customer_refund_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitCustomerRefundRequest>,
+) -> Result<CustomerRefundView> {
+    let view = ReturnsService::new(state.db())
+        .commit_customer_refund(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
     desc = "提交客户退款审批",
     resource = "customer_refund",
     action = "submit"
@@ -408,6 +428,25 @@ pub async fn supplier_refund_create(
         .create_supplier_refund(req, &actor)
         .await?;
 
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "一次创建并提交供应商退款审批",
+    resource = "supplier_refund",
+    action = "submit"
+)]
+/// 按原付款一次创建供应商退款并启动审批。
+pub async fn supplier_refund_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitSupplierRefundRequest>,
+) -> Result<SupplierRefundView> {
+    let view = ReturnsService::new(state.db())
+        .commit_supplier_refund(req, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -557,6 +596,25 @@ pub async fn receipt_reversal_create(
 #[permission_macros::permission(
     group = "退货退款",
     group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "一次创建并提交回款冲正审批",
+    resource = "receipt_reversal",
+    action = "submit"
+)]
+/// 按原回款一次创建回款冲正并启动审批。
+pub async fn receipt_reversal_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitReceiptReversalRequest>,
+) -> Result<ReceiptReversalView> {
+    let view = ReturnsService::new(state.db())
+        .commit_receipt_reversal(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
     desc = "提交回款冲正审批",
     resource = "receipt_reversal",
     action = "submit"
@@ -694,6 +752,25 @@ pub async fn payment_reversal_create(
         .create_payment_reversal(req, &actor)
         .await?;
 
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "一次创建并提交付款冲正审批",
+    resource = "payment_reversal",
+    action = "submit"
+)]
+/// 按原付款一次创建付款冲正并启动审批。
+pub async fn payment_reversal_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitPaymentReversalRequest>,
+) -> Result<PaymentReversalView> {
+    let view = ReturnsService::new(state.db())
+        .commit_payment_reversal(req, &actor)
+        .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

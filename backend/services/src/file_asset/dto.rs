@@ -276,6 +276,18 @@ pub struct RegisterFileAssetRequest {
     pub expires_at: Option<u64>,
 }
 
+/// 随业务命令一并提交、尚未登记的文件资产。
+///
+/// `reference` 是本次 multipart 请求内的临时引用；业务 DTO 中对应的
+/// `FileAssetId` 使用同一值，服务在事务前将其替换为新生成的正式资产 ID。
+#[derive(Debug, Clone)]
+pub struct PendingFileAssetRequest {
+    /// 本次请求内唯一的临时引用。
+    pub reference: String,
+    /// 已写入对象存储、尚未登记到 MongoDB 的元数据。
+    pub registration: RegisterFileAssetRequest,
+}
+
 impl RegisterFileAssetRequest {
     /// 转换为实体创建数据。
     ///

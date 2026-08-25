@@ -12,7 +12,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::supplier, middleware::with_permission},
+    core::{handler::supplier, middleware::with_permission, upload},
 };
 
 /// 返回本域管理端路由集合。
@@ -33,11 +33,33 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-profiles/with-assets",
+            with_permission(
+                upload::multipart_route(
+                    post(supplier::supplier_profile_create_with_assets),
+                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                supplier::supplier_profile_create_with_assets_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-profiles/{id}",
             with_permission(
                 put(supplier::supplier_profile_update),
                 rbac,
                 supplier::supplier_profile_update_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-profiles/{id}/with-assets",
+            with_permission(
+                upload::multipart_route(
+                    put(supplier::supplier_profile_update_with_assets),
+                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                supplier::supplier_profile_update_with_assets_permission_key(),
             ),
         )
         .route(

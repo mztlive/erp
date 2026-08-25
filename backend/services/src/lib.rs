@@ -25,6 +25,7 @@ mod owned_task;
 mod page;
 pub mod party;
 pub mod payable;
+mod pending_file_assets;
 pub mod procurement_responsibility;
 pub mod projection;
 pub mod publication;

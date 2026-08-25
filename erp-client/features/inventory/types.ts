@@ -213,6 +213,7 @@ export type AdjustmentReasonType =
 
 export type AdjustmentDraftView = Readonly<{
     stockAdjustmentId: string
+    lineId: string
     adjustmentNo: string
     balanceId: string
     warehouseId: string

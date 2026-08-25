@@ -293,6 +293,100 @@ pub struct ProjectionDeliveryCommand {
     pub request_id: String,
 }
 
+/// 批量投递命令动作。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProjectionBulkAction {
+    /// 逐项查询原稳定消息键的商城最终结果。
+    BulkQuery,
+    /// 逐项沿原稳定消息键安排受控重试。
+    BulkRetry,
+}
+
+impl ProjectionBulkAction {
+    /// 返回协议稳定动作代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::BulkQuery => "BULK_QUERY",
+            Self::BulkRetry => "BULK_RETRY",
+        }
+    }
+
+    /// 返回单项投递动作。
+    pub fn delivery_action(self) -> ProjectionDeliveryAction {
+        match self {
+            Self::BulkQuery => ProjectionDeliveryAction::QueryResult,
+            Self::BulkRetry => ProjectionDeliveryAction::Retry,
+        }
+    }
+}
+
+/// 批量投递命令请求。
+///
+/// 客户端只提交显式选中的稳定投影 ID；投影修订、投递身份与当前
+/// 对象版本由服务端在命令执行时解析。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionBulkCommandRequest {
+    /// 批量动作。
+    pub action: ProjectionBulkAction,
+    /// 显式选中的投影 ID，上限 20 条。
+    #[validate(length(min = 1, max = 20, message = "批量选择数必须在1-20之间"))]
+    pub projection_ids: Vec<String>,
+    /// 批次幂等请求身份。
+    #[validate(length(max = 128, message = "请求ID过长"))]
+    #[validate(custom(function = "non_blank", message = "请求ID不能为空"))]
+    pub request_id: String,
+}
+
+/// 批量命令单项结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectionBulkItemResultView {
+    /// 投影稳定身份。
+    pub projection_id: String,
+    /// 销售单稳定身份；未能解析投影时回退为投影 ID。
+    pub sales_order_no: String,
+    /// 投递身份；解析前失败时为空。
+    pub delivery_id: String,
+    /// `SUCCEEDED` / `SKIPPED` / `FAILED` / `STILL_UNKNOWN`。
+    pub outcome: String,
+    /// 面向操作人的结果说明。
+    pub reason: String,
+}
+
+/// 批量投递命令结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectionBulkCommandResultView {
+    /// 稳定批次编号。
+    pub job_id: String,
+    /// 批量动作。
+    pub action: ProjectionBulkAction,
+    /// `SUCCEEDED` / `PARTIAL` / `FAILED`。
+    pub status: String,
+    /// 选中总数。
+    pub total: u32,
+    /// 已处理数。
+    pub completed: u32,
+    /// 成功数。
+    pub succeeded: u32,
+    /// 跳过数。
+    pub skipped: u32,
+    /// 失败数。
+    pub failed: u32,
+    /// 结果仍未知数。
+    pub still_unknown: u32,
+    /// 本次显式选择的稳定摘要身份。
+    pub selection_snapshot_id: String,
+    /// 逐项结果。
+    pub items: Vec<ProjectionBulkItemResultView>,
+    /// 开始时间（秒级时间戳）。
+    pub started_at: i64,
+    /// 完成时间（秒级时间戳）。
+    pub finished_at: i64,
+    /// 服务端给出的下一步。
+    pub next_action: String,
+}
+
 /// 投递对象强动作结果分类。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

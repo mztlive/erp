@@ -14,7 +14,6 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { SalesOrderMarginRiskHint } from "@/features/sales-orders/components/sales-order-margin-risk-hint"
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import {
     SalesOrderDetailCommandDialogs,
@@ -31,14 +30,9 @@ import {
     salesOrderKeys,
     useSalesOrderDetailQuery,
 } from "@/features/sales-orders/hooks/queries"
-import {
-    useSalesOrderDetailRejectionResolution,
-    useSalesOrderDetailStartChange,
-} from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
-import { useSalesOrderDetailModeGuard } from "@/features/sales-orders/hooks/use-sales-order-detail-mode-guard"
+import { useSalesOrderDetailStartChange } from "@/features/sales-orders/hooks/use-sales-order-detail-commands"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { useSalesOrderDetailUrlState } from "@/features/sales-orders/hooks/use-sales-order-detail-url-state"
-import { salesOrderMarginRiskHint } from "@/features/sales-orders/lib/sales-order-approval"
 import { deriveSalesOrderDetailState } from "@/features/sales-orders/lib/sales-order-detail-derived"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { mapWorkItemDto } from "@/features/work-items/types"
@@ -62,17 +56,12 @@ export function SalesOrderDetailPage({
     const {
         returnTo,
         fromWorkspace,
-        pageMode,
         focusedWorkItemId,
         fromQueue,
         backHref,
         backLabel,
-        replaceOrderHref,
         selectSection,
-        enterRejectionEdit,
-        leaveRejectionEdit,
     } = useSalesOrderDetailUrlState({ salesOrderId })
-    const rejectionResolution = useSalesOrderDetailRejectionResolution()
     const startChangeCommand = useSalesOrderDetailStartChange()
     const detailPermissions = useSalesOrderDetailPermissions()
     const focusedWorkItemQuery = useWorkItemDetailQuery(focusedWorkItemId)
@@ -80,10 +69,6 @@ export function SalesOrderDetailPage({
         ? mapWorkItemDto(focusedWorkItemQuery.data)
         : undefined
 
-    const [voidOpen, setVoidOpen] = React.useState(false)
-    const [lowMarginOpen, setLowMarginOpen] = React.useState(false)
-    const [lowMarginReason, setLowMarginReason] = React.useState("")
-    const [lowMarginEvidence, setLowMarginEvidence] = React.useState("")
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [result, setResult] =
         React.useState<SalesOrderDetailActionResult | null>(null)
@@ -119,12 +104,6 @@ export function SalesOrderDetailPage({
     const commandLedger = commandLedgerRef.current.ledger
 
     const order = query.data
-    useSalesOrderDetailModeGuard({
-        order,
-        pageMode,
-        replaceOrderHref,
-    })
-
     if (query.isPending) {
         return (
             <PageScaffold>
@@ -171,12 +150,9 @@ export function SalesOrderDetailPage({
 
     const derived = deriveSalesOrderDetailState(order, {
         section,
-        pageMode,
         fromWorkspace,
         returnTo,
     })
-    const marginHint = salesOrderMarginRiskHint(order)
-
     if (derived.showEditor) {
         return (
             <SalesOrderEditableCenter
@@ -185,60 +161,33 @@ export function SalesOrderDetailPage({
                 backLabel={backLabel}
                 fromQueue={fromQueue}
                 fromWorkspace={fromWorkspace}
-                result={result}
-                onResult={handleActionResult}
-                showBackToDetail={derived.openRejection}
-                onBackToDetail={leaveRejectionEdit}
-                canVoidAfterRejection={derived.canVoid}
                 commandLedger={commandLedger}
             />
         )
     }
 
-    const resubmitGate = detailPermissions.editAfterRejection(
-        derived.canResubmit,
-        "当前不能改完再报",
-    )
     const acceptanceFocusGate = detailPermissions.registerAcceptance(
         derived.canAccept,
         "当前不能验收，请先完成交付或确认业务条件。",
     )
-    const primaryTaskAction =
-        order.nature !== "physical_service" &&
-        derived.openRejection &&
-        derived.canResubmit ? (
-            <Button
-                type="button"
-                size="sm"
-                disabled={!resubmitGate.enabled}
-                title={resubmitGate.reason}
-                onClick={enterRejectionEdit}
-            >
-                改完再报
-            </Button>
-        ) : derived.actionableFocusTask &&
-          !(
-              order.nature !== "physical_service" &&
-              derived.openRejection &&
-              derived.navSection === "overview"
-          ) ? (
-            <Button
-                type="button"
-                size="sm"
-                disabled={
-                    derived.actionableFocusTask.id === "acceptance" &&
-                    !acceptanceFocusGate.enabled
-                }
-                title={
-                    derived.actionableFocusTask.id === "acceptance"
-                        ? acceptanceFocusGate.reason
-                        : undefined
-                }
-                onClick={() => selectSection(derived.actionableFocusTask!.id)}
-            >
-                {derived.actionableFocusTask.actionLabel}
-            </Button>
-        ) : null
+    const primaryTaskAction = derived.actionableFocusTask ? (
+        <Button
+            type="button"
+            size="sm"
+            disabled={
+                derived.actionableFocusTask.id === "acceptance" &&
+                !acceptanceFocusGate.enabled
+            }
+            title={
+                derived.actionableFocusTask.id === "acceptance"
+                    ? acceptanceFocusGate.reason
+                    : undefined
+            }
+            onClick={() => selectSection(derived.actionableFocusTask!.id)}
+        >
+            {derived.actionableFocusTask.actionLabel}
+        </Button>
+    ) : null
 
     return (
         <PageScaffold>
@@ -279,7 +228,6 @@ export function SalesOrderDetailPage({
                 <FocusTaskBanner
                     order={order}
                     focusTask={derived.focusTask}
-                    canActOnRejection={derived.canResubmit || derived.canVoid}
                     action={
                         derived.bannerJump ? (
                             <Button
@@ -320,8 +268,6 @@ export function SalesOrderDetailPage({
                 />
             ) : null}
 
-            {marginHint ? <SalesOrderMarginRiskHint hint={marginHint} /> : null}
-
             {section === "change-review" ? (
                 <SalesChangeOrderApprovalSection
                     salesOrderId={order.id}
@@ -340,16 +286,9 @@ export function SalesOrderDetailPage({
                 secondaryActions={
                     <SalesOrderDetailSecondaryActions
                         order={order}
-                        openRejection={derived.openRejection}
-                        canRequestLowMargin={
-                            derived.isCard && derived.canRequestLowMargin
-                        }
-                        canVoid={derived.canVoid}
                         canStartChange={derived.canStartChange}
                         changeBlocker={derived.changeBlocker}
                         changePending={startChangeCommand.isPending}
-                        onOpenLowMargin={() => setLowMarginOpen(true)}
-                        onOpenVoid={() => setVoidOpen(true)}
                         onOpenChangeConfirm={() => setChangeConfirmOpen(true)}
                         onApprovalResult={handleActionResult}
                     />
@@ -394,33 +333,6 @@ export function SalesOrderDetailPage({
 
             <SalesOrderDetailCommandDialogs
                 order={order}
-                voidOpen={voidOpen}
-                onVoidOpenChange={setVoidOpen}
-                voidPending={rejectionResolution.isPending}
-                onVoidConfirm={(reason) =>
-                    rejectionResolution.voidAfterRejection({
-                        order,
-                        commandLedger,
-                        onResult: handleActionResult,
-                        reason,
-                    })
-                }
-                lowMarginOpen={lowMarginOpen}
-                onLowMarginOpenChange={setLowMarginOpen}
-                lowMarginReason={lowMarginReason}
-                onLowMarginReasonChange={setLowMarginReason}
-                lowMarginEvidence={lowMarginEvidence}
-                onLowMarginEvidenceChange={setLowMarginEvidence}
-                lowMarginPending={rejectionResolution.isPending}
-                onLowMarginConfirm={() =>
-                    rejectionResolution.requestLowMargin({
-                        order,
-                        commandLedger,
-                        onResult: handleActionResult,
-                        reason: lowMarginReason,
-                        evidence: lowMarginEvidence,
-                    })
-                }
                 changeConfirmOpen={changeConfirmOpen}
                 onChangeConfirmOpenChange={setChangeConfirmOpen}
                 onChangeConfirm={() =>

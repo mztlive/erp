@@ -14,7 +14,7 @@ use entities::document_registry::{
 };
 use entities::ids::{
     BusinessDocumentId, SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
-    SalesOrderId, SalesOrderLineId, SalesOrderWorkingCopyId,
+    SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
 };
 use entities::money::Amount;
 use entities::sales_order::{SalesOrderWorkingCopyLineData, WorkingCopyStatus, WorkingPurpose};
@@ -44,9 +44,9 @@ use super::start_approval::{
     persist_sales_change_start, SalesChangeStartInput, SalesChangeStartPersistInput,
 };
 use super::{
-    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeDraftRequest,
-    SalesChangeLineRequest, SalesChangeOrderDetailView, SalesChangeOrderFilter, SalesChangeOrderListParams,
-    SalesChangeOrderView, SalesReviewService, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
+    CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeOrderDetailView,
+    SalesChangeOrderFilter, SalesChangeOrderListParams, SalesChangeOrderView, SalesReviewService,
+    SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
@@ -227,12 +227,23 @@ impl SalesReviewService {
             .find_by_id(&base_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单当前版本不存在".to_string()))?;
+        if base_revision.revision.revision_no != req.expected_base_revision_no {
+            return Err(Error::ConflictError(format!(
+                "销售单当前版本已变更：期望 {}，实际 {}",
+                req.expected_base_revision_no, base_revision.revision.revision_no
+            )));
+        }
         if self
             .has_in_progress_change(&req.sales_order_id, &base_revision_id)
             .await?
         {
             return Err(Error::ConflictError(
                 "同一基准版本已有进行中的销售变更单".to_string(),
+            ));
+        }
+        if order.business_type == entities::sales_order::BusinessType::Voucher {
+            return Err(Error::BusinessLogicError(
+                "卡券销售变更缺少原正式版本冻结的目标商城或应收到期日，禁止创建变更单".to_string(),
             ));
         }
 
@@ -246,20 +257,27 @@ impl SalesReviewService {
             },
             actor.id(),
         )?;
-        let stable_lines = self
+        let revision_lines = self
             .db
-            .sales_order_lines()
-            .list_lines_by_order(&req.sales_order_id, &mut NoTransaction)
+            .sales_order_revision_lines()
+            .list_lines_by_revision(
+                &SalesOrderRevisionId::new(base_revision_id.clone()),
+                &mut NoTransaction,
+            )
+            .await?;
+        let revision_line_ids = revision_lines
+            .iter()
+            .map(|line| SalesOrderRevisionLineId::new(line.base.id.clone()))
+            .collect::<Vec<_>>();
+        let goods_lines = self
+            .db
+            .sales_order_goods_service_line_revisions()
+            .list_by_revision_line_ids(&revision_line_ids, &mut NoTransaction)
             .await?;
         let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
         let (line_datas, lines) =
-            build_change_working_copy_lines(&working_copy_id, &stable_lines, &req.draft.lines)?;
+            build_change_working_copy_lines_from_revision(&working_copy_id, &revision_lines, &goods_lines)?;
         let (gross, net, tax) = change_line_totals(&lines);
-        if order.business_type == entities::sales_order::BusinessType::Voucher {
-            return Err(Error::BusinessLogicError(
-                "卡券销售变更缺少原正式版本冻结的目标商城或应收到期日，禁止创建变更单".to_string(),
-            ));
-        }
         let working_copy = entities::sales_order::SalesOrderWorkingCopy::new(
             working_copy_id,
             entities::sales_order::SalesOrderWorkingCopyData {
@@ -269,23 +287,31 @@ impl SalesReviewService {
                 base_revision_id: Some(base_revision_id.clone().into()),
                 draft_version: 1,
                 content_hash: format!("change:{}:1", change_order.base.id),
-                editor_user_id: req.draft.editor_user_id.clone(),
+                editor_user_id: actor.id().to_string(),
                 business_type: order.business_type,
                 customer_id: order.customer_id.clone(),
                 contract_id: order.contract_id.clone(),
-                contract_revision_id: order
-                    .contract_id
-                    .as_ref()
-                    .and_then(|_| base_revision.contract_revision_id.clone()),
+                contract_revision_id: base_revision.contract_revision_id.clone(),
                 settlement_party_id: order.settlement_party_id.clone(),
-                snapshot: change_header_snapshot(&req.draft)?,
-                project_name: req.draft.project_name.clone(),
-                business_remark: req.draft.business_remark.clone(),
-                voucher_category_sku_id: req.draft.voucher_category_sku_id.clone(),
-                voucher_expiry_at: req
-                    .draft
-                    .voucher_expiry_at
-                    .map(|secs| Instant::from_unix_secs(secs as i64)),
+                snapshot: entities::sales_order::HeaderSnapshotData {
+                    customer_name: base_revision.customer_snapshot.customer_name.clone(),
+                    contract_no: base_revision
+                        .contract_snapshot
+                        .as_ref()
+                        .map(|snapshot| snapshot.contract_no.clone()),
+                    settlement_party_name: base_revision
+                        .settlement_party_snapshot
+                        .as_ref()
+                        .map(|snapshot| snapshot.settlement_party_name.clone()),
+                    payment_term_code: base_revision.payment_term_snapshot.payment_term_code.clone(),
+                    payment_term_name: base_revision.payment_term_snapshot.payment_term_name.clone(),
+                    invoice_type: base_revision.invoice_requirement_snapshot.invoice_type.clone(),
+                    tax_point: base_revision.invoice_requirement_snapshot.tax_point.clone(),
+                },
+                project_name: base_revision.project_name.clone(),
+                business_remark: base_revision.business_remark.clone(),
+                voucher_category_sku_id: base_revision.voucher_category_sku_id.clone(),
+                voucher_expiry_at: base_revision.voucher_expiry_at,
                 target_mall_id: None,
                 receivable_due_date: None,
                 gross_amount: gross,
@@ -675,53 +701,65 @@ fn detail_view(
     }
 }
 ///
-/// # 参数
-/// * `working_copy_id` - 所属工作副本 ID
-/// * `stable_lines` - 稳定明细行
-/// * `lines` - 变更目标行请求
-///
-/// # 返回
-/// 返回工作副本行清单。
-///
-/// # 错误
-/// 行字段组与行类型不一致、金额非法时返回错误。
-/// 构建变更工作副本行（行创建数据同时用于头实体跨行断言与行实体落库）。
+/// 从当前生效销售版本构建变更工作副本行。
 ///
 /// # 参数
 /// * `working_copy_id` - 所属工作副本 ID
-/// * `stable_lines` - 稳定明细行（行号与草稿行一一对应）
-/// * `lines` - 变更目标草稿行请求
+/// * `revision_lines` - 当前生效版本的公共行快照
+/// * `goods_lines` - 当前生效版本的实物服务子行快照
 ///
 /// # 返回
 /// 返回 `(行创建数据, 行实体清单)`。
 ///
 /// # 错误
-/// 行号无对应稳定明细时返回错误。
-fn build_change_working_copy_lines(
+/// 版本为空、含非实物服务行或公共行缺少子行时返回错误。
+fn build_change_working_copy_lines_from_revision(
     working_copy_id: &SalesOrderWorkingCopyId,
-    stable_lines: &[entities::sales_order::SalesOrderLine],
-    lines: &[SalesChangeLineRequest],
+    revision_lines: &[entities::sales_order::SalesOrderRevisionLine],
+    goods_lines: &[entities::sales_order::SalesOrderGoodsServiceLineRevision],
 ) -> Result<(
     Vec<SalesOrderWorkingCopyLineData>,
     Vec<entities::sales_order::SalesOrderWorkingCopyLine>,
 )> {
-    let mut datas = Vec::with_capacity(lines.len());
-    for line in lines {
-        let stable_id = stable_lines
+    if revision_lines.is_empty() {
+        return Err(Error::ConflictError(
+            "销售单当前版本没有明细，无法发起变更".to_string(),
+        ));
+    }
+    let mut datas = Vec::with_capacity(revision_lines.len());
+    for line in revision_lines {
+        if line.line_type != entities::sales_order::LineType::GoodsService {
+            return Err(Error::ConflictError(format!(
+                "销售单当前版本第 {} 行不是实物服务行",
+                line.line_no
+            )));
+        }
+        let goods = goods_lines
             .iter()
-            .find(|stable| stable.line_no == line.line_no)
-            .map(|stable| stable.base.id.clone())
-            .ok_or_else(|| Error::ValidationError(format!("行号 {} 无对应稳定明细", line.line_no)))?;
+            .find(|goods| goods.revision_line_id.as_ref() == line.base.id)
+            .ok_or_else(|| {
+                Error::ConflictError(format!("销售单当前版本第 {} 行缺少实物服务快照", line.line_no))
+            })?;
         datas.push(SalesOrderWorkingCopyLineData {
-            sales_order_line_id: SalesOrderLineId::new(stable_id),
+            sales_order_line_id: line.sales_order_line_id.clone(),
             line_no: line.line_no,
-            line_type: line.line_type.clone(),
-            sales_tax_rate: line.sales_tax_rate.clone(),
+            line_type: line.line_type,
+            sales_tax_rate: line.sales_tax_rate,
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
-            goods: line.goods.clone(),
-            voucher: line.voucher.clone(),
+            goods: Some(entities::sales_order::GoodsLineFields {
+                sku_id: goods.sku_id.clone(),
+                sku_revision_id: goods.sku_revision_id.clone(),
+                welfare_scenario: goods.welfare_scenario,
+                service_region: goods.service_region.clone(),
+                fulfillment_mode: goods.fulfillment_mode,
+                fulfillment_due_at: goods.fulfillment_due_at,
+                quantity: goods.quantity,
+                base_unit_code: goods.base_unit_code.clone(),
+                unit_price_gross: goods.unit_price_gross,
+            }),
+            voucher: None,
         });
     }
     let mut built = Vec::with_capacity(datas.len());
@@ -778,27 +816,6 @@ fn change_line_totals(
         .iter()
         .fold(zero, |acc, line| acc.checked_add(line.tax_amount()));
     (gross, net, tax)
-}
-
-/// 构建变更表头快照入参。
-///
-/// # 参数
-/// * `draft` - 变更目标草稿请求
-///
-/// # 返回
-/// 返回表头快照入参。
-fn change_header_snapshot(
-    draft: &SalesChangeDraftRequest,
-) -> Result<entities::sales_order::HeaderSnapshotData> {
-    Ok(entities::sales_order::HeaderSnapshotData {
-        customer_name: draft.customer_name.clone(),
-        contract_no: draft.contract_no.clone(),
-        settlement_party_name: draft.settlement_party_name.clone(),
-        payment_term_code: draft.payment_term_code.clone(),
-        payment_term_name: draft.payment_term_name.clone(),
-        invoice_type: draft.invoice_type.clone(),
-        tax_point: draft.tax_point.clone(),
-    })
 }
 
 /// 从变更工作副本构建变更提交快照。

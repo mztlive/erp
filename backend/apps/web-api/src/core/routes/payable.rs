@@ -73,6 +73,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-payments/commit",
+            with_permission(
+                post(payable::supplier_payment_commit),
+                rbac,
+                payable::supplier_payment_commit_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-payments/{id}/submit",
             with_permission(
                 post(payable::supplier_payment_submit),

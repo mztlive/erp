@@ -4,9 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
-    ensurePaymentReversalDraft,
-    ensureSupplierPaymentDraft,
-    ensureSupplierRefundDraft,
+    commitPaymentReversal,
+    commitSupplierRefund,
     fetchAllocationSession,
     fetchPayableDetail,
     fetchPaymentReversal,
@@ -174,23 +173,6 @@ export function useSubmitPaymentMutation() {
     })
 }
 
-/**
- * 提交确认前创建或刷新付款草稿，只读带回服务端绑定。
- */
-export function useEnsureSupplierPaymentDraftMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ensureSupplierPaymentDraft,
-        onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: supplierPayablesKeys.all,
-                })
-            }
-        },
-    })
-}
-
 export function useSubmitInvoiceMutation() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -228,12 +210,12 @@ export function useReverseInvoiceMutation() {
 }
 
 /**
- * 提交确认前创建供应商退款草稿，并刷新只读审批绑定。
+ * 一次创建供应商退款并启动审批。
  */
-export function useEnsureSupplierRefundDraftMutation() {
+export function useCommitSupplierRefundMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ensureSupplierRefundDraft,
+        mutationFn: commitSupplierRefund,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await queryClient.invalidateQueries({
@@ -276,12 +258,12 @@ export function useSubmitSupplierRefundMutation() {
 }
 
 /**
- * 提交确认前创建付款冲正草稿，并刷新只读审批绑定。
+ * 一次创建付款冲正并启动审批。
  */
-export function useEnsurePaymentReversalDraftMutation() {
+export function useCommitPaymentReversalMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ensurePaymentReversalDraft,
+        mutationFn: commitPaymentReversal,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 await queryClient.invalidateQueries({

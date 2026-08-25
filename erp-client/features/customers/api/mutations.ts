@@ -13,12 +13,8 @@ import {
     mapContactInput,
     mapMutationResult,
     todayBusinessDate,
-    tsToIso,
 } from "./mappers"
-import type {
-    BackendCustomerProfile,
-    BackendProfileMutation,
-} from "./wire-types"
+import type { BackendProfileMutation } from "./wire-types"
 
 type BackendProfileRequest = {
     idempotency_key: string
@@ -52,42 +48,24 @@ function unknownFromError(
     return null
 }
 
-/** 从服务端当前资料构造乐观锁冲突结果。 */
-async function conflictResult(
+/** 从本次提交快照构造乐观锁冲突结果。 */
+function conflictResult(
     error: ApiError,
-    customerId: string,
     fallback: Pick<
         SaveCustomerDetailsInput,
         "expectedLockVersion" | "legalName" | "shortName" | "unifiedCreditCode"
     >,
-): Promise<CustomerMutationResult> {
-    try {
-        const current = await apiGet<BackendCustomerProfile>(
-            `/admin/customer-profiles/${customerId}`,
-        )
-        return {
-            outcome: "conflict",
-            message: apiErrorMessage(error),
-            serverLockVersion: current.version,
-            serverRevisionNo: current.current_revision.revision_no,
-            serverLegalName: current.current_revision.legal_name,
-            serverShortName: current.current_revision.short_name ?? undefined,
-            serverUnifiedCreditCode: current.unified_credit_code ?? undefined,
-            actor: "系统",
-            changedAt: tsToIso(current.updated_at),
-        }
-    } catch {
-        return {
-            outcome: "conflict",
-            message: apiErrorMessage(error),
-            serverLockVersion: fallback.expectedLockVersion,
-            serverRevisionNo: 0,
-            serverLegalName: fallback.legalName,
-            serverShortName: fallback.shortName,
-            serverUnifiedCreditCode: fallback.unifiedCreditCode,
-            actor: "系统",
-            changedAt: new Date().toISOString(),
-        }
+): CustomerMutationResult {
+    return {
+        outcome: "conflict",
+        message: apiErrorMessage(error),
+        serverLockVersion: fallback.expectedLockVersion,
+        serverRevisionNo: 0,
+        serverLegalName: fallback.legalName,
+        serverShortName: fallback.shortName,
+        serverUnifiedCreditCode: fallback.unifiedCreditCode,
+        actor: "系统",
+        changedAt: new Date().toISOString(),
     }
 }
 
@@ -166,7 +144,7 @@ export async function saveCustomerDetails(
             const unknown = unknownFromError(error, input.idempotencyKey)
             if (unknown) return unknown
             if (error.status === 409) {
-                return conflictResult(error, input.customerId, input)
+                return conflictResult(error, input)
             }
         }
         throw error

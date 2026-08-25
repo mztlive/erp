@@ -10,11 +10,11 @@ use axum::{
 use services::{
     audit::AuditActor,
     payable::{
-        CancelSupplierPaymentApprovalRequest, CreatePayableAccountRequest, CreateSupplierPaymentRequest,
-        PageView, PayableAccountListParams, PayableAccountView, PayableService, PostSupplierPaymentRequest,
-        PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
-        RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest, SupplierPaymentListParams,
-        SupplierPaymentView,
+        CancelSupplierPaymentApprovalRequest, CommitSupplierPaymentRequest, CreatePayableAccountRequest,
+        CreateSupplierPaymentRequest, PageView, PayableAccountListParams, PayableAccountView, PayableService,
+        PostSupplierPaymentRequest, PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView,
+        PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest,
+        SupplierPaymentListParams, SupplierPaymentView,
     },
 };
 
@@ -178,6 +178,34 @@ pub async fn supplier_payment_create(
 ) -> Result<SupplierPaymentView> {
     let view = PayableService::new(state.db())
         .create_supplier_payment(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商往来",
+    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
+    desc = "原子创建或提交供应商付款审批",
+    resource = "supplier_payment",
+    action = "submit"
+)]
+/// 原子创建或提交供应商付款并启动统一审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 新付款或已有草稿、冻结分配与幂等键
+///
+/// # 返回
+/// 返回进入审批后的付款单视图。
+pub async fn supplier_payment_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitSupplierPaymentRequest>,
+) -> Result<SupplierPaymentView> {
+    let view = PayableService::new(state.db())
+        .commit_supplier_payment(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

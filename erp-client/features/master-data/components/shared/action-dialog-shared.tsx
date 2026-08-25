@@ -9,11 +9,12 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { FileUpload, imagePreviewSource } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/toast"
-import { uploadFileAssetImage } from "@/features/file-assets/api"
+import { pendingFileReference } from "@/features/master-data/api/pending-assets"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     BrandFields,
     MasterDataMutationResult,
+    PendingAssetUpload,
 } from "@/features/master-data/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
@@ -34,27 +35,42 @@ export function notifySuccess(
     })
 }
 
-export async function resolveBrandLogoFields(
+export function prepareBrandLogoFields(
     fields: BrandFields,
     pendingFile: File | undefined,
     existingAssetId: string,
     existingUrl: string,
-): Promise<BrandFields> {
+): {
+    fields: BrandFields
+    pendingAssetUploads: readonly PendingAssetUpload[]
+} {
     if (!fields.logo) {
-        return { ...fields, logoAssetId: undefined, logoPreviewUrl: undefined }
+        return {
+            fields: {
+                ...fields,
+                logoAssetId: undefined,
+                logoPreviewUrl: undefined,
+            },
+            pendingAssetUploads: [],
+        }
     }
     if (pendingFile) {
-        const uploaded = await uploadFileAssetImage(pendingFile)
+        const reference = pendingFileReference("brand", "logo")
         return {
-            ...fields,
-            logoAssetId: uploaded.fileAssetId,
-            logoPreviewUrl: uploaded.url,
+            fields: {
+                ...fields,
+                logoAssetId: reference,
+            },
+            pendingAssetUploads: [{ reference, file: pendingFile }],
         }
     }
     return {
-        ...fields,
-        logoAssetId: existingAssetId || undefined,
-        logoPreviewUrl: existingUrl || undefined,
+        fields: {
+            ...fields,
+            logoAssetId: existingAssetId || undefined,
+            logoPreviewUrl: existingUrl || undefined,
+        },
+        pendingAssetUploads: [],
     }
 }
 

@@ -368,6 +368,8 @@ export type PostAllocationInput = {
     draftSessionId: string
     editVersion: number
     idempotencyKey: string
+    fact: AllocationSessionView["fact"]
+    allocations: readonly AllocationDraftLine[]
 }
 
 export type PostAllocationResult =

@@ -42,6 +42,15 @@ pub struct UpdateProductCategoryRequest {
     pub product_kind: Option<ProductKind>,
     /// 启停状态；缺省表示不修改。
     pub status: Option<EnableStatus>,
+    /// 可选父级变更；存在时与名称、类型、状态在同一事务提交。
+    pub parent_change: Option<ProductCategoryParentChange>,
+}
+
+/// 商品分类更新命令中的父级变更。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ProductCategoryParentChange {
+    /// 新父分类；空表示提升为根分类。
+    pub parent_category_id: Option<ProductCategoryId>,
 }
 
 /// 移动商品分类到新父分类请求（树形维护：只允许移动叶节点或整棵子树）。

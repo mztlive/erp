@@ -192,12 +192,12 @@ pub async fn stock_adjustment_detail(
 /// * `req` - 创建请求（表头 + 明细）
 ///
 /// # 返回
-/// 返回新建调整单的响应视图。
+/// 返回新建调整单的完整详情视图。
 pub async fn stock_adjustment_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateStockAdjustmentRequest>,
-) -> Result<StockAdjustmentView> {
+) -> Result<StockAdjustmentDetailView> {
     let view = inventory_service(&state)
         .create_stock_adjustment(req, &actor)
         .await?;
@@ -248,16 +248,16 @@ pub async fn stock_adjustment_update(
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 调整单主键
-/// * `req` - 提交请求（版本与幂等键）
+/// * `req` - 最终草稿、余额版本与幂等键
 ///
 /// # 返回
-/// 返回提交后的调整单视图。
+/// 返回提交后的完整详情视图。
 pub async fn stock_adjustment_submit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SubmitStockAdjustmentRequest>,
-) -> Result<StockAdjustmentView> {
+) -> Result<StockAdjustmentDetailView> {
     let view = inventory_service(&state)
         .submit_stock_adjustment(&id, req, &actor)
         .await?;

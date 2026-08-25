@@ -126,3 +126,14 @@ export type BackendInvoice = {
         allocation_action: string
     }>
 }
+
+export type BackendCardFundsRegistrationResult = {
+    funds_fact_version: string
+    subject_hash: string
+    settled_total: string
+    invoiced_total: string
+    open_total: string
+    open_invoiceable_total: string
+    receipt_facts: BackendReceiptFact[]
+    invoice_facts: BackendInvoiceFact[]
+}

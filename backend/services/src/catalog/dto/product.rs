@@ -172,6 +172,19 @@ pub struct UpdateProductRequest {
     pub skus: Vec<ProductSkuInput>,
 }
 
+/// 商品停用命令（当前商品修订、媒体和有效期终点均由后端读取并复制）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct DisableProductRequest {
+    /// 用户打开页面时看到的商品乐观锁版本；冲突时拒绝覆盖。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 本次停用原因，写入同一事务内的审计日志。
+    #[validate(length(max = 256, message = "停用原因过长"))]
+    pub change_reason: Option<String>,
+    /// 停用修订的生效开始日。
+    pub effective_from: BusinessDate,
+}
+
 /// 商品（SPU）响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProductView {

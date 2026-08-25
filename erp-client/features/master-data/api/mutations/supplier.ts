@@ -18,6 +18,10 @@ import {
     todayDateOnly,
     tsToIso,
 } from "@/features/master-data/api/presentation"
+import {
+    postAssetCommand,
+    putAssetCommand,
+} from "@/features/master-data/api/pending-assets"
 import { parseMediaList } from "@/features/master-data/lib/resource-fields"
 import type {
     CreateMasterDataInput,
@@ -133,77 +137,84 @@ export async function createSupplier(
         }
     }
     try {
-        const created = await apiPost<SupplierProfileMutationDto>(
-            "/admin/supplier-profiles",
-            {
-                idempotency_key: input.idempotencyKey,
-                party_no: genBusinessCode("PTY"),
-                supplier_no: genBusinessCode("SUP"),
-                expected_party_version: null,
-                expected_supplier_version: null,
-                legal_name: fields.company || input.name.trim(),
-                short_name: input.name.trim(),
-                unified_credit_code: fields.creditCode?.trim() || null,
-                contact:
-                    fields.contactName?.trim() && fields.contactPhone?.trim()
-                        ? {
-                              contact_name: fields.contactName.trim(),
-                              mobile: fields.contactPhone.trim(),
-                              telephone: null,
-                              email: null,
-                          }
-                        : null,
-                clear_contact: false,
-                address: fields.address?.trim()
+        const command = {
+            idempotency_key: input.idempotencyKey,
+            party_no: genBusinessCode("PTY"),
+            supplier_no: genBusinessCode("SUP"),
+            expected_party_version: null,
+            expected_supplier_version: null,
+            legal_name: fields.company || input.name.trim(),
+            short_name: input.name.trim(),
+            unified_credit_code: fields.creditCode?.trim() || null,
+            contact:
+                fields.contactName?.trim() && fields.contactPhone?.trim()
                     ? {
-                          address: fields.address.trim(),
-                          contact_name: fields.contactName?.trim() || null,
+                          contact_name: fields.contactName.trim(),
+                          mobile: fields.contactPhone.trim(),
+                          telephone: null,
+                          email: null,
                       }
                     : null,
-                clear_address: false,
-                tax_no: fields.taxNo?.trim() || null,
-                clear_tax_profile: false,
-                bank_account:
-                    fields.bankName?.trim() && fields.bankAccount?.trim()
-                        ? {
-                              bank_name: fields.bankName.trim(),
-                              account_number: fields.bankAccount.trim(),
-                          }
-                        : null,
-                clear_bank_account: false,
-                settlement_mode: settlementToBackend(fields.settlement),
-                reconciliation_cycle: "monthly",
-                payment_term_snapshot: buildPaymentTermSnapshot(
-                    fields.settlement,
-                    fields.businessCategory,
-                ),
-                invoice_type: invoiceToBackend(fields.invoiceType),
-                invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
-                signing_entity_party_id: fields.signingEntity.trim(),
-                payment_entity_party_id: fields.paymentEntity.trim(),
-                capability_codes: capabilityCodes,
-                qualifications: buildSupplierProfileQualifications(
-                    fields,
-                    effectiveFrom,
-                    capabilityCodes,
-                ),
-                rating:
-                    fields.supplierRating ||
-                    fields.currentScore ||
-                    fields.initialScore
-                        ? {
-                              initial_score:
-                                  parseScore100(fields.initialScore) ?? null,
-                              rating: ratingToBackend(fields.supplierRating),
-                              current_score:
-                                  parseScore100(fields.currentScore) ?? 0,
-                              valid_from: effectiveFrom,
-                          }
-                        : null,
-                effective_from: effectiveFrom,
-                change_reason: input.changeReason || "新建",
-            },
-        )
+            clear_contact: false,
+            address: fields.address?.trim()
+                ? {
+                      address: fields.address.trim(),
+                      contact_name: fields.contactName?.trim() || null,
+                  }
+                : null,
+            clear_address: false,
+            tax_no: fields.taxNo?.trim() || null,
+            clear_tax_profile: false,
+            bank_account:
+                fields.bankName?.trim() && fields.bankAccount?.trim()
+                    ? {
+                          bank_name: fields.bankName.trim(),
+                          account_number: fields.bankAccount.trim(),
+                      }
+                    : null,
+            clear_bank_account: false,
+            settlement_mode: settlementToBackend(fields.settlement),
+            reconciliation_cycle: "monthly",
+            payment_term_snapshot: buildPaymentTermSnapshot(
+                fields.settlement,
+                fields.businessCategory,
+            ),
+            invoice_type: invoiceToBackend(fields.invoiceType),
+            invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
+            signing_entity_party_id: fields.signingEntity.trim(),
+            payment_entity_party_id: fields.paymentEntity.trim(),
+            capability_codes: capabilityCodes,
+            qualifications: buildSupplierProfileQualifications(
+                fields,
+                effectiveFrom,
+                capabilityCodes,
+            ),
+            rating:
+                fields.supplierRating ||
+                fields.currentScore ||
+                fields.initialScore
+                    ? {
+                          initial_score:
+                              parseScore100(fields.initialScore) ?? null,
+                          rating: ratingToBackend(fields.supplierRating),
+                          current_score:
+                              parseScore100(fields.currentScore) ?? 0,
+                          valid_from: effectiveFrom,
+                      }
+                    : null,
+            effective_from: effectiveFrom,
+            change_reason: input.changeReason || "新建",
+        }
+        const created = input.pendingAssetUploads?.length
+            ? await postAssetCommand<SupplierProfileMutationDto>(
+                  "/admin/supplier-profiles/with-assets",
+                  command,
+                  input.pendingAssetUploads,
+              )
+            : await apiPost<SupplierProfileMutationDto>(
+                  "/admin/supplier-profiles",
+                  command,
+              )
 
         return {
             outcome: "succeeded",
@@ -242,77 +253,84 @@ export async function updateSupplierRevision(
                 message: "供应商版本或签约、付款主体缺失，请刷新后重试。",
             }
         }
-        const updated = await apiPut<SupplierProfileMutationDto>(
-            `/admin/supplier-profiles/${input.stableId}`,
-            {
-                idempotency_key: input.idempotencyKey,
-                party_no: null,
-                supplier_no: null,
-                expected_party_version: input.expectedPartyVersion,
-                expected_supplier_version: input.expectedLockVersion,
-                legal_name: fields.company || input.name.trim(),
-                short_name: input.name.trim(),
-                unified_credit_code: fields.creditCode?.trim() || null,
-                contact:
-                    fields.contactName?.trim() && fields.contactPhone?.trim()
-                        ? {
-                              contact_name: fields.contactName.trim(),
-                              mobile: fields.contactPhone.trim(),
-                              telephone: null,
-                              email: null,
-                          }
-                        : null,
-                clear_contact: fields.clearContact === true,
-                address: fields.address?.trim()
+        const command = {
+            idempotency_key: input.idempotencyKey,
+            party_no: null,
+            supplier_no: null,
+            expected_party_version: input.expectedPartyVersion,
+            expected_supplier_version: input.expectedLockVersion,
+            legal_name: fields.company || input.name.trim(),
+            short_name: input.name.trim(),
+            unified_credit_code: fields.creditCode?.trim() || null,
+            contact:
+                fields.contactName?.trim() && fields.contactPhone?.trim()
                     ? {
-                          address: fields.address.trim(),
-                          contact_name: fields.contactName?.trim() || null,
+                          contact_name: fields.contactName.trim(),
+                          mobile: fields.contactPhone.trim(),
+                          telephone: null,
+                          email: null,
                       }
                     : null,
-                clear_address: fields.clearAddress === true,
-                tax_no: fields.taxNo?.trim() || null,
-                clear_tax_profile: fields.clearTaxProfile === true,
-                bank_account:
-                    fields.bankName?.trim() && fields.bankAccount?.trim()
-                        ? {
-                              bank_name: fields.bankName.trim(),
-                              account_number: fields.bankAccount.trim(),
-                          }
-                        : null,
-                clear_bank_account: fields.clearBankAccount === true,
-                settlement_mode: settlementToBackend(fields.settlement),
-                reconciliation_cycle: "monthly",
-                payment_term_snapshot: buildPaymentTermSnapshot(
-                    fields.settlement,
-                    fields.businessCategory,
-                ),
-                invoice_type: invoiceToBackend(fields.invoiceType),
-                invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
-                signing_entity_party_id: fields.signingEntity.trim(),
-                payment_entity_party_id: fields.paymentEntity.trim(),
-                capability_codes: capabilityCodes,
-                qualifications: buildSupplierProfileQualifications(
-                    fields,
-                    effectiveFrom,
-                    capabilityCodes,
-                ),
-                rating:
-                    fields.supplierRating ||
-                    fields.currentScore ||
-                    fields.initialScore
-                        ? {
-                              initial_score:
-                                  parseScore100(fields.initialScore) ?? null,
-                              rating: ratingToBackend(fields.supplierRating),
-                              current_score:
-                                  parseScore100(fields.currentScore) ?? 0,
-                              valid_from: effectiveFrom,
-                          }
-                        : null,
-                effective_from: effectiveFrom,
-                change_reason: input.changeReason,
-            },
-        )
+            clear_contact: fields.clearContact === true,
+            address: fields.address?.trim()
+                ? {
+                      address: fields.address.trim(),
+                      contact_name: fields.contactName?.trim() || null,
+                  }
+                : null,
+            clear_address: fields.clearAddress === true,
+            tax_no: fields.taxNo?.trim() || null,
+            clear_tax_profile: fields.clearTaxProfile === true,
+            bank_account:
+                fields.bankName?.trim() && fields.bankAccount?.trim()
+                    ? {
+                          bank_name: fields.bankName.trim(),
+                          account_number: fields.bankAccount.trim(),
+                      }
+                    : null,
+            clear_bank_account: fields.clearBankAccount === true,
+            settlement_mode: settlementToBackend(fields.settlement),
+            reconciliation_cycle: "monthly",
+            payment_term_snapshot: buildPaymentTermSnapshot(
+                fields.settlement,
+                fields.businessCategory,
+            ),
+            invoice_type: invoiceToBackend(fields.invoiceType),
+            invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
+            signing_entity_party_id: fields.signingEntity.trim(),
+            payment_entity_party_id: fields.paymentEntity.trim(),
+            capability_codes: capabilityCodes,
+            qualifications: buildSupplierProfileQualifications(
+                fields,
+                effectiveFrom,
+                capabilityCodes,
+            ),
+            rating:
+                fields.supplierRating ||
+                fields.currentScore ||
+                fields.initialScore
+                    ? {
+                          initial_score:
+                              parseScore100(fields.initialScore) ?? null,
+                          rating: ratingToBackend(fields.supplierRating),
+                          current_score:
+                              parseScore100(fields.currentScore) ?? 0,
+                          valid_from: effectiveFrom,
+                      }
+                    : null,
+            effective_from: effectiveFrom,
+            change_reason: input.changeReason,
+        }
+        const updated = input.pendingAssetUploads?.length
+            ? await putAssetCommand<SupplierProfileMutationDto>(
+                  `/admin/supplier-profiles/${input.stableId}/with-assets`,
+                  command,
+                  input.pendingAssetUploads,
+              )
+            : await apiPut<SupplierProfileMutationDto>(
+                  `/admin/supplier-profiles/${input.stableId}`,
+                  command,
+              )
         return {
             outcome: "succeeded",
             stableId: updated.supplier_id,

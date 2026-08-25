@@ -64,14 +64,15 @@ export function useCardFundsRegistration(args: {
             assertAllowed("REGISTER_RECEIPT")
             const result = await registerReceiptMutation.mutateAsync({
                 workItemId: task.workItem.workItemId,
+                expectedTaskVersion: task.workItem.taskVersion,
                 expectedSubjectVersion: task.workItem.subjectVersion,
-                receiptNo:
-                    receiptForm.receiptNo.trim() ||
-                    `SK-${Date.now().toString(36).toUpperCase()}`,
+                expectedFundsFactVersion: task.fundsFactVersion,
+                receiptNo: receiptForm.receiptNo.trim() || "",
                 receivedAt: receiptForm.receivedAt,
                 grossAmount: receiptForm.grossAmount,
                 allocations: allocLines,
                 evidenceReference: evidenceRef.trim() || "银行回单-本次登记",
+                idempotencyKey: `w13-receipt-${task.workItem.workItemId}-${crypto.randomUUID()}`,
             })
             // 登记后停留当前项，刷新金额/指纹（invalidate 后 query 更新）
             setAllocationMode(null)
@@ -110,16 +111,17 @@ export function useCardFundsRegistration(args: {
                 moneyStrSafe(Number(gross) - Number(net))
             const result = await registerInvoiceMutation.mutateAsync({
                 workItemId: task.workItem.workItemId,
+                expectedTaskVersion: task.workItem.taskVersion,
                 expectedSubjectVersion: task.workItem.subjectVersion,
-                invoiceNo:
-                    invoiceForm.invoiceNo.trim() ||
-                    `FP-${Date.now().toString(36).toUpperCase()}`,
+                expectedFundsFactVersion: task.fundsFactVersion,
+                invoiceNo: invoiceForm.invoiceNo.trim() || "",
                 issuedAt: invoiceForm.issuedAt,
                 grossAmount: gross,
                 netAmount: net,
                 taxAmount: tax,
                 allocations: allocLines,
                 evidenceReference: evidenceRef.trim() || "发票扫描件-本次登记",
+                idempotencyKey: `w13-invoice-${task.workItem.workItemId}-${crypto.randomUUID()}`,
             })
             setAllocationMode(null)
             setLastResult({

@@ -11,6 +11,7 @@ import type {
 } from "@/features/sales-orders/lib/acceptance-types"
 import {
     formatInstant,
+    mapFactType,
     mapHistoryItem,
     mapSalesLine,
     type BackendAcceptanceDetail,
@@ -159,6 +160,9 @@ export async function fetchCustomerAcceptanceWorkspace(
                         )
                         .map((a) => ({
                             fulfillmentLineId: a.fulfillment_line_id,
+                            fulfillmentFactType: mapFactType(
+                                a.fulfillment_fact_type,
+                            ),
                             allocatedQuantity: a.allocated_quantity,
                         })),
                 })),

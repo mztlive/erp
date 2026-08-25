@@ -7,17 +7,13 @@ import { useStore } from "@tanstack/react-form"
 import { useAppForm } from "@/components/form"
 import {
     useAllocationSessionQuery,
-    useEnsureSupplierPaymentDraftMutation,
     useResolveUnknownMutation,
     useSaveAllocationDraftMutation,
     useSubmitInvoiceMutation,
     useSubmitPaymentMutation,
 } from "@/features/supplier-payables/hooks/queries"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import {
-    mapSupplierPaymentApproval,
-    readSupplierPaymentApprovalResponsibility,
-} from "@/features/supplier-payables/lib/supplier-payment-approval"
+import { readSupplierPaymentApprovalResponsibility } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { buildAllocationIssues } from "@/features/supplier-payables/lib/allocation-validation"
 import {
     cents,
@@ -79,7 +75,6 @@ export function useAllocationSession(
     const submitInvoice = useSubmitInvoiceMutation()
     const saveDraft = useSaveAllocationDraftMutation()
     const resolveUnknown = useResolveUnknownMutation()
-    const ensurePaymentDraft = useEnsureSupplierPaymentDraftMutation()
 
     const session = sessionQuery.data
     const policy = session?.payablePriorityPolicy
@@ -104,8 +99,6 @@ export function useAllocationSession(
         },
         validators: { onChange: paymentSchema },
         onSubmit: async () => {
-            const prepared = await preparePaymentDraft()
-            if (!prepared) return
             setConfirmOpen(true)
         },
     })
@@ -309,44 +302,6 @@ export function useAllocationSession(
         )
     }
 
-    /**
-     * 提交确认前先创建付款草稿，只读展示服务端绑定。
-     *
-     * @returns 创建或刷新成功为 true。
-     */
-    async function preparePaymentDraft(): Promise<boolean> {
-        if (!session || track !== "payment") return false
-        if (!idempotencyRef.current) {
-            idempotencyRef.current = `w12_${track}_${session.draftSessionId}_${Date.now()}`
-        }
-        try {
-            const v = paymentForm.state.values
-            const ensured = await ensurePaymentDraft.mutateAsync({
-                draftSessionId: session.draftSessionId,
-                supplierId,
-                paidAt: v.paidAt,
-                amount: session.existingPaymentId
-                    ? (session.existingAmount ?? v.amount)
-                    : v.amount,
-                bankReference: v.bankReference,
-                existingPaymentId: session.existingPaymentId,
-                idempotencyKey: idempotencyRef.current,
-            })
-            if (ensured.status !== "succeeded") {
-                setDraftHint(ensured.description)
-                return false
-            }
-            setPaymentApproval(
-                ensured.session?.approval ??
-                    mapSupplierPaymentApproval(ensured.payment.approval),
-            )
-            return true
-        } catch {
-            setDraftHint("创建付款草稿失败，请刷新后重试。")
-            return false
-        }
-    }
-
     function requestSubmit() {
         if (track === "payment") {
             void paymentForm.handleSubmit()
@@ -495,10 +450,7 @@ export function useAllocationSession(
         policyBlocksAuto,
         issues,
         canSubmit,
-        isSubmitting:
-            submitPayment.isPending ||
-            submitInvoice.isPending ||
-            ensurePaymentDraft.isPending,
+        isSubmitting: submitPayment.isPending || submitInvoice.isPending,
         isSavingDraft: saveDraft.isPending,
         hasSubmitKey: idempotencyRef.current !== null,
         toggleItem,

@@ -227,37 +227,6 @@ export type BackendRevision = {
     created_at: number
 }
 
-/** 开放中的采购驳回摘要（销售单详情内嵌，不依赖采购队列权限）。 */
-export type BackendOpenProcurementRejection = {
-    procurement_confirmation_id: string
-    submission_id: string
-    reject_reason_code?: string | null
-    comment?: string | null
-    handled_by?: string | null
-    handled_by_name?: string | null
-    handled_at?: number | null
-    allowed_actions: Array<
-        | "RESUBMIT_CHANGED_TERMS"
-        | "REQUEST_LOW_MARGIN_ACCEPTANCE"
-        | "VOID_AFTER_REJECTION"
-    >
-}
-
-/** 销售单详情内嵌的活动低毛利上级确认。 */
-export type BackendActiveLowMarginManagerConfirmation = {
-    confirmation_id: string
-    work_item_id: string
-    task_version: string | number
-    subject_version: string
-    low_margin_submission_id: string
-    rejected_procurement_confirmation_id: string
-    acceptance_reason: string
-    evidence_reference_ids: string[]
-    owner_user?: { id: string; display_name: string } | null
-    allowed_actions: Array<"APPROVE" | "REJECT">
-    action_blockers: Array<{ code: string; message: string }>
-}
-
 export type BackendSalesOrderDetail = {
     id: string
     order_no: string
@@ -295,8 +264,6 @@ export type BackendSalesOrderDetail = {
     close_eligibility: BackendCloseEligibility
     can_start_sales_change_order: boolean
     change_order_blocker?: string | null
-    open_procurement_rejection?: BackendOpenProcurementRejection | null
-    active_low_margin_manager_confirmation?: BackendActiveLowMarginManagerConfirmation | null
     /** 统一只读审批结构；实物为 SalesOrder，卡券为 VoucherSalesOrder。 */
     approval?: DocumentApprovalViewDto | null
 }
@@ -341,16 +308,6 @@ export type BackendPartyContact = {
     status: string
 }
 
-export type BackendProcurementConfirmation = {
-    id: string
-    sales_order_id: string
-    submission_id: string
-    status: string
-    handled_by?: string | null
-    handled_at?: number | null
-    created_at: number
-}
-
 export type BackendSalesChangeOrder = {
     id: string
     sales_order_id: string
@@ -371,94 +328,6 @@ export type BackendBackgroundJob = {
     total_count?: number
     created_at?: number
     version?: number
-}
-
-export type ProcurementResolutionOutcome = {
-    outcome:
-        | "CHANGED_TERMS_RESUBMITTED"
-        | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-        | "VOIDED_AFTER_PROCUREMENT_REJECTION"
-    reference: string
-    detail: string
-    newSubmissionNo?: number
-    newSubjectHash?: string
-    newWorkItemId?: string
-    reviewStatus?: "REJECTED" | "RESOLVED" | "VOIDED"
-    primaryStatusLabel?: string
-}
-
-export type BackendProcurementRejectionResolutionResult =
-    | {
-          operation_id: string
-          status: "COMMITTED"
-          committed_at: number
-          outcome: "CHANGED_TERMS_RESUBMITTED"
-          sales_order_id: string
-          new_submission_id: string
-          new_submission_no: number
-          workflow_action_id: string
-          new_procurement_confirmation_id: string
-          new_procurement_work_item_id: string
-      }
-    | {
-          operation_id: string
-          status: "COMMITTED"
-          committed_at: number
-          outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-          sales_order_id: string
-          new_submission_id: string
-          new_submission_no: number
-          workflow_action_id: string
-          low_margin_confirmation_id: string
-          low_margin_manager_work_item_id: string
-      }
-    | {
-          operation_id: string
-          status: "COMMITTED"
-          committed_at: number
-          outcome: "VOIDED_AFTER_PROCUREMENT_REJECTION"
-          sales_order_id: string
-          workflow_action_id: string
-      }
-
-export type LowMarginManagerDecisionOutcome =
-    | {
-          outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
-          salesOrderId: string
-          lowMarginSubmissionId: string
-          salesOrderReviewId: string
-          workflowActionId: string
-          newProcurementConfirmationId: string
-          newProcurementWorkItemId: string
-      }
-    | {
-          outcome: "LOW_MARGIN_REJECTED_TO_SALES"
-          salesOrderId: string
-          lowMarginSubmissionId: string
-          salesOrderReviewId: string
-          workflowActionId: string
-      }
-
-export type BackendLowMarginManagerDecisionResult = {
-    work_item_id: string
-    work_item_status: "COMPLETED"
-    business_result:
-        | {
-              outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
-              sales_order_id: string
-              low_margin_submission_id: string
-              sales_order_review_id: string
-              workflow_action_id: string
-              new_procurement_confirmation_id: string
-              new_procurement_work_item_id: string
-          }
-        | {
-              outcome: "LOW_MARGIN_REJECTED_TO_SALES"
-              sales_order_id: string
-              low_margin_submission_id: string
-              sales_order_review_id: string
-              workflow_action_id: string
-          }
 }
 
 export type ExportJobResult = {

@@ -19,7 +19,6 @@ import {
     parseAmt,
 } from "@/features/customer-receivables/lib/allocation-math"
 import {
-    useEnsureCustomerReceiptDraftMutation,
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
     useSaveAllocationDraftMutation,
@@ -54,7 +53,6 @@ export function useAllocationSession({
     const saveMutation = useSaveAllocationDraftMutation()
     const postMutation = usePostAllocationMutation()
     const resolveMutation = useResolvePostUnknownMutation()
-    const ensureReceiptMutation = useEnsureCustomerReceiptDraftMutation()
 
     const [allocations, setAllocations] = React.useState<AllocationDraftLine[]>(
         () => session.allocations.map((a) => ({ ...a })),
@@ -84,10 +82,6 @@ export function useAllocationSession({
             onChange: factFormSchema,
         },
         onSubmit: async () => {
-            if (isReceipt) {
-                const prepared = await prepareReceiptDraft()
-                if (!prepared) return
-            }
             setConfirmOpen(true)
         },
     })
@@ -296,47 +290,6 @@ export function useAllocationSession({
         }
     }
 
-    /**
-     * 提交确认前先创建回款草稿，只读展示服务端绑定。
-     *
-     * @returns 创建或刷新成功为 true。
-     */
-    async function prepareReceiptDraft(): Promise<boolean> {
-        if (!canOperate) {
-            setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
-            return false
-        }
-        setActionError(null)
-        if (!idempotencyRef.current) {
-            idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
-        }
-        try {
-            const fact = factFromValues(form.state.values, isReceipt)
-            const saved = await saveMutation.mutateAsync({
-                draftSessionId: session.draftSessionId,
-                fact,
-                allocations,
-                editVersion,
-            })
-            setEditVersion(saved.editVersion)
-            setDraftSavedAt(saved.savedAt)
-            const ensured = await ensureReceiptMutation.mutateAsync({
-                draftSessionId: session.draftSessionId,
-                editVersion: saved.editVersion,
-                idempotencyKey: idempotencyRef.current,
-            })
-            if (ensured.status !== "succeeded") {
-                setActionError(ensured.message)
-                return false
-            }
-            setReceiptApproval(ensured.session.approval)
-            return true
-        } catch (err) {
-            setActionError(getErrorMessage(err, "创建回款草稿失败"))
-            return false
-        }
-    }
-
     async function doPost() {
         if (!canOperate) {
             setActionError(permissionReason ?? "当前账号没有执行此操作的权限。")
@@ -347,21 +300,14 @@ export function useAllocationSession({
         if (!idempotencyRef.current) {
             idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
         }
-        // 先保存草稿同步服务端
         try {
             const fact = factFromValues(form.state.values, isReceipt)
-            const saved = await saveMutation.mutateAsync({
-                draftSessionId: session.draftSessionId,
-                fact,
-                allocations,
-                editVersion,
-            })
-            setEditVersion(saved.editVersion)
-
             const res = await postMutation.mutateAsync({
                 draftSessionId: session.draftSessionId,
-                editVersion: saved.editVersion,
+                editVersion,
                 idempotencyKey: idempotencyRef.current,
+                fact,
+                allocations,
             })
             applyPostResult(res)
         } catch (err) {
@@ -499,6 +445,5 @@ export function useAllocationSession({
         saveMutation,
         postMutation,
         resolveMutation,
-        ensureReceiptMutation,
     }
 }

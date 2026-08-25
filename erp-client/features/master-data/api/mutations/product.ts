@@ -2,8 +2,11 @@
 
 import { apiPost, apiPut } from "@/lib/api"
 import type { ProductDto } from "@/features/master-data/api/contracts"
-import { centerProduct } from "@/features/master-data/api/centers"
 import { isFutureDate } from "@/features/master-data/api/list-mappers"
+import {
+    postAssetCommand,
+    putAssetCommand,
+} from "@/features/master-data/api/pending-assets"
 import { isoNow } from "@/features/master-data/api/presentation"
 import type {
     CreateMasterDataInput,
@@ -88,7 +91,7 @@ export async function createProduct(
     }
 
     try {
-        const created = await apiPost<ProductDto>("/admin/products", {
+        const command = {
             change_reason: input.changeReason || "新建商品",
             product_no: fields.productNo.trim(),
             product_kind: fields.productKind,
@@ -109,7 +112,14 @@ export async function createProduct(
                 fields.detailFileAssetIds,
             ),
             skus: mapProductSkus(fields),
-        })
+        }
+        const created = input.pendingAssetUploads?.length
+            ? await postAssetCommand<ProductDto>(
+                  "/admin/products/with-assets",
+                  command,
+                  input.pendingAssetUploads,
+              )
+            : await apiPost<ProductDto>("/admin/products", command)
         if (!created.current_revision_id) {
             throw new Error("商品创建成功但未返回当前修订，禁止伪造修订身份")
         }
@@ -146,37 +156,40 @@ export async function updateProductRevision(
                 message: "请完整填写分类、品牌与基础单位。",
             }
         }
-        const updated = await apiPut<ProductDto>(
-            `/admin/products/${input.stableId}`,
-            {
-                version: input.expectedLockVersion,
-                change_reason: input.changeReason,
-                name: input.name.trim(),
-                description: fields.description || null,
-                specification: fields.specification || null,
-                category_id: fields.categoryId,
-                brand_id: fields.brandId,
-                status:
-                    fields.lifecycleStatus === "DISABLED"
-                        ? "disabled"
-                        : "active",
-                effective_from: input.effectiveFrom,
-                effective_to: input.effectiveTo || null,
-                carousel_media: mapProductMedia(
-                    fields.carouselImages,
-                    fields.carouselFileAssetIds,
-                ),
-                detail_media: mapProductMedia(
-                    fields.detailImages,
-                    fields.detailFileAssetIds,
-                ),
-                skus: mapProductSkus(fields),
-            },
-        )
+        const command = {
+            version: input.expectedLockVersion,
+            change_reason: input.changeReason,
+            name: input.name.trim(),
+            description: fields.description || null,
+            specification: fields.specification || null,
+            category_id: fields.categoryId,
+            brand_id: fields.brandId,
+            status:
+                fields.lifecycleStatus === "DISABLED" ? "disabled" : "active",
+            effective_from: input.effectiveFrom,
+            effective_to: input.effectiveTo || null,
+            carousel_media: mapProductMedia(
+                fields.carouselImages,
+                fields.carouselFileAssetIds,
+            ),
+            detail_media: mapProductMedia(
+                fields.detailImages,
+                fields.detailFileAssetIds,
+            ),
+            skus: mapProductSkus(fields),
+        }
+        const updated = input.pendingAssetUploads?.length
+            ? await putAssetCommand<ProductDto>(
+                  `/admin/products/${input.stableId}/with-assets`,
+                  command,
+                  input.pendingAssetUploads,
+              )
+            : await apiPut<ProductDto>(
+                  `/admin/products/${input.stableId}`,
+                  command,
+              )
         if (!updated.current_revision_id) {
-            throw new Error(
-                "商品更新成功但未返回当前修订，禁止伪造修订身份",
-            )
+            throw new Error("商品更新成功但未返回当前修订，禁止伪造修订身份")
         }
         return {
             outcome: "succeeded",
@@ -206,56 +219,16 @@ export async function disableProduct(
     input: DisableMasterDataInput,
 ): Promise<MasterDataMutationResult> {
     try {
-        // Product update requires full body; load current then set disabled.
-        const center = await centerProduct(input.stableId)
-        if (!center) {
-            return {
-                outcome: "unknown",
-                message: "资料不存在或无权访问。",
-                idempotencyKey: input.idempotencyKey,
-            }
-        }
-        if (center.lifecycleStatus === "DISABLED") {
-            return {
-                outcome: "blocked",
-                code: "ALREADY_DISABLED",
-                message: "资料已停用；不是删除，历史记录仍可查看。",
-            }
-        }
-        const detail = center.productDetail
         const updated = await apiPut<ProductDto>(
-            `/admin/products/${input.stableId}`,
+            `/admin/products/${input.stableId}/disable`,
             {
                 version: input.expectedLockVersion,
                 change_reason: input.changeReason,
-                name: center.name,
-                description: detail?.description || null,
-                specification: detail?.specification || null,
-                category_id: detail?.categoryId || "",
-                brand_id: detail?.brandId || "",
-                status: "disabled",
                 effective_from: input.effectiveFrom,
-                effective_to: center.currentRevision.effectiveTo || null,
-                carousel_media: mapProductMedia(
-                    detail?.carouselImages ?? [],
-                    detail?.carouselFileAssetIds ?? {},
-                ),
-                detail_media: mapProductMedia(
-                    detail?.detailImages ?? [],
-                    detail?.detailFileAssetIds ?? {},
-                ),
-                skus: detail
-                    ? mapProductSkus({
-                          ...detail,
-                          productKind: center.productKind ?? "",
-                      })
-                    : [],
             },
         )
         if (!updated.current_revision_id) {
-            throw new Error(
-                "商品停用成功但未返回当前修订，禁止伪造修订身份",
-            )
+            throw new Error("商品停用成功但未返回当前修订，禁止伪造修订身份")
         }
         return {
             outcome: "succeeded",

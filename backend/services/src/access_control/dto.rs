@@ -504,12 +504,9 @@ impl AssignUserRoleRequest {
     }
 }
 
-/// 撤权请求（携带乐观锁版本，冲突返回 409；撤权必须记录结构化原因）。
+/// 撤权命令（当前绑定版本由后端在事务内读取；撤权必须记录结构化原因）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RevokeUserRoleRequest {
-    /// 期望的乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
     /// 撤权原因代码（结构化，必填）。
     #[validate(custom(function = "non_blank", message = "撤权原因代码不能为空"))]
     pub revoke_reason_code: String,

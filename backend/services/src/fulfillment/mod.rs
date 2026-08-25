@@ -36,15 +36,16 @@ mod service_fulfillment;
 
 pub use self::dto::{
     AcceptanceAllocationInput, AcceptanceAllocationView, AcceptanceEligibilityView, AcceptanceLineInput,
-    AcceptanceSalesLineGroupView, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
-    CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
-    CustomerAcceptanceDetailView, CustomerAcceptanceLineView, CustomerAcceptanceListParams,
-    CustomerAcceptanceView, DeliveryDetailView, DeliveryLineInput, DeliveryLineView, DeliveryListParams,
-    DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView, EligibleFulfillmentFactView,
-    PageView, PostAcceptanceLineInput, PostCustomerAcceptanceRequest, PurchaseReceiptDetailView,
-    PurchaseReceiptLineInput, PurchaseReceiptLineView, PurchaseReceiptListParams, PurchaseReceiptView,
-    ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams, ServiceFulfillmentView,
-    UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
+    AcceptanceSalesLineGroupView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
+    CreateCustomerAcceptanceRequest, CreateDeliveryRequest, CreateElectronicDeliveryRequest,
+    CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView,
+    CustomerAcceptanceLineView, CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView,
+    DeliveryLineInput, DeliveryLineView, DeliveryListParams, DeliveryView, ElectronicDeliveryListParams,
+    ElectronicDeliveryView, EligibleFulfillmentFactView, PageView, PostAcceptanceLineInput,
+    PostCustomerAcceptanceRequest, PostDeliveryRequest, PostPurchaseReceiptRequest,
+    PurchaseReceiptDetailView, PurchaseReceiptLineInput, PurchaseReceiptLineView, PurchaseReceiptListParams,
+    PurchaseReceiptView, ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams,
+    ServiceFulfillmentView, UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
 };
 
 /// 履约服务。

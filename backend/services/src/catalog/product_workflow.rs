@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use database::{AccessControlExt, CatalogExt, FileAssetExt, NoTransaction, Transactional};
-use entities::catalog::product::{Product, ProductData};
+use entities::catalog::product::{Product, ProductData, ProductUpdate};
 use entities::catalog::product_revision::{ProductRevision, ProductRevisionData};
 use entities::catalog::product_revision_media::{MediaRole, ProductRevisionMedia, ProductRevisionMediaData};
 use entities::catalog::sku::{Sku, SkuUpdate};
@@ -22,9 +22,12 @@ use super::support::ensure_version;
 use super::CatalogService;
 use crate::audit::AuditActor;
 use crate::catalog::dto::{
-    CreateProductRequest, ProductMediaInput, ProductSkuInput, ProductView, UpdateProductRequest,
+    CreateProductRequest, DisableProductRequest, ProductMediaInput, ProductSkuInput, ProductView,
+    UpdateProductRequest,
 };
 use crate::errors::{Error, Result};
+use crate::file_asset::PendingFileAssetRequest;
+use crate::pending_file_assets::PendingFileAssets;
 
 /// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
 struct ProductDraft {
@@ -76,9 +79,38 @@ impl CatalogService {
     /// * `BusinessLogicError` - 分类不允许商品类型、规格不适用于分类、条码冲突等
     /// * `ConflictError` - 唯一约束冲突或并发事务冲突
     pub async fn product_create(&self, req: CreateProductRequest, actor: &AuditActor) -> Result<ProductView> {
+        self.product_create_with_assets(req, Vec::new(), actor).await
+    }
+
+    /// 创建商品，并把同一次 multipart 命令携带的文件资产与商品聚合原子登记。
+    ///
+    /// # 参数
+    /// * `req` - 创建请求，文件字段可使用本次请求内临时引用
+    /// * `asset_requests` - 已写入对象存储、尚未登记的文件资产
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回新建商品的响应视图。
+    ///
+    /// # 错误
+    /// 临时引用无效、业务校验失败或事务写入失败时返回错误。
+    pub async fn product_create_with_assets(
+        &self,
+        mut req: CreateProductRequest,
+        asset_requests: Vec<PendingFileAssetRequest>,
+        actor: &AuditActor,
+    ) -> Result<ProductView> {
         req.validate()?;
-        let draft = self.build_product_draft(req, actor).await?;
-        let product = self.write_product_draft(draft, actor).await?;
+        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
+        let used = resolve_product_file_references(
+            &mut req.carousel_media,
+            &mut req.detail_media,
+            &mut req.skus,
+            &pending_assets,
+        )?;
+        pending_assets.ensure_all_used(&used)?;
+        let draft = self.build_product_draft(req, actor, &pending_assets).await?;
+        let product = self.write_product_draft(draft, actor, pending_assets).await?;
         self.product_view(product).await
     }
 
@@ -107,12 +139,170 @@ impl CatalogService {
         req: UpdateProductRequest,
         actor: &AuditActor,
     ) -> Result<ProductView> {
+        self.product_update_with_assets(id, req, Vec::new(), actor).await
+    }
+
+    /// 编辑商品，并把同一次 multipart 命令携带的文件资产与新修订原子登记。
+    ///
+    /// # 参数
+    /// * `id` - 商品稳定 ID
+    /// * `req` - 完整规格编辑请求，文件字段可使用本次请求内临时引用
+    /// * `asset_requests` - 已写入对象存储、尚未登记的文件资产
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回更新后的商品视图。
+    ///
+    /// # 错误
+    /// 临时引用无效、业务校验失败、版本冲突或事务写入失败时返回错误。
+    pub async fn product_update_with_assets(
+        &self,
+        id: &str,
+        mut req: UpdateProductRequest,
+        asset_requests: Vec<PendingFileAssetRequest>,
+        actor: &AuditActor,
+    ) -> Result<ProductView> {
         req.validate()?;
+        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
+        let used = resolve_product_file_references(
+            &mut req.carousel_media,
+            &mut req.detail_media,
+            &mut req.skus,
+            &pending_assets,
+        )?;
+        pending_assets.ensure_all_used(&used)?;
         let mut product = self.load_product(id).await?;
         ensure_version(product.base.version, req.version)?;
-        let plan = self.build_spec_edit_plan(&mut product, req, actor).await?;
-        let product = self.write_spec_edit_plan(plan, actor).await?;
+        let plan = self
+            .build_spec_edit_plan(&mut product, req, actor, &pending_assets)
+            .await?;
+        let product = self.write_spec_edit_plan(plan, actor, pending_assets).await?;
         self.product_view(product).await
+    }
+
+    /// 停用商品并生成一份服务端派生的不可变商品修订。
+    ///
+    /// 客户端只提交商品身份、已见版本、原因和生效日。服务端在同一事务内
+    /// 读取当前商品及修订、复制当前媒体、写入停用修订、更新稳定主表并记录
+    /// 审计，避免客户端为拼装完整更新请求而发起额外读取。
+    ///
+    /// # 参数
+    /// * `id` - 商品稳定 ID
+    /// * `req` - 停用命令
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回停用后的商品视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 商品或当前修订不存在
+    /// * `ConflictError` - 页面版本已过期或并发写入冲突
+    /// * `BusinessLogicError` - 商品已经停用
+    pub async fn product_disable(
+        &self,
+        id: &str,
+        req: DisableProductRequest,
+        actor: &AuditActor,
+    ) -> Result<ProductView> {
+        req.validate()?;
+        let audit = actor.clone().resource_log_with_message(
+            "product.disable",
+            "product",
+            id.to_string(),
+            req.change_reason.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let id = id.to_string();
+        let actor_id = actor.id().to_string();
+        let updated = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let mut product = db
+                        .products()
+                        .find_by_id(&id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("商品不存在".to_string()))?;
+                    ensure_version(product.base.version, req.version)?;
+                    if !product.is_active() {
+                        return Err(Error::BusinessLogicError("商品已经停用".to_string()));
+                    }
+
+                    let current_revision_id = product
+                        .stable
+                        .current_revision_id
+                        .clone()
+                        .ok_or_else(|| Error::NotFound("商品当前修订不存在".to_string()))?;
+                    let current_revision = db
+                        .product_revisions()
+                        .find_by_id(&current_revision_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("商品当前修订不存在".to_string()))?;
+                    let product_id = ProductId::new(product.base.id.clone());
+                    let revision_no = db
+                        .product_revisions()
+                        .find_many(doc! { "product_id": product_id.to_string() }, session)
+                        .await?
+                        .into_iter()
+                        .map(|revision| revision.revision.revision_no)
+                        .max()
+                        .unwrap_or(0)
+                        .checked_add(1)
+                        .ok_or_else(|| Error::BusinessLogicError("商品修订序号已达上限".to_string()))?;
+                    let source_media = db
+                        .product_revision_medias()
+                        .find_media_by_revision_ids(&[ProductRevisionId::new(current_revision_id)], session)
+                        .await?;
+                    let revision_id = ProductRevisionId::new(next_id());
+                    let revision = ProductRevision::new(
+                        revision_id.clone(),
+                        ProductRevisionData {
+                            product_id,
+                            revision_no,
+                            name: current_revision.name,
+                            description: current_revision.description,
+                            specification: current_revision.specification,
+                            category_id: current_revision.category_id,
+                            brand_id: current_revision.brand_id,
+                            status: EnableStatus::Disabled,
+                            effective_from: req.effective_from,
+                            effective_to: current_revision.effective_to,
+                        },
+                    )?;
+                    let media = source_media
+                        .into_iter()
+                        .map(|row| {
+                            ProductRevisionMedia::new(
+                                ProductRevisionMediaId::new(next_id()),
+                                ProductRevisionMediaData {
+                                    product_revision_id: revision_id.clone(),
+                                    file_asset_id: row.file_asset_id,
+                                    media_role: row.media_role,
+                                    sort_order: row.sort_order,
+                                    alt_text: row.alt_text,
+                                },
+                            )
+                        })
+                        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+                    product.update(
+                        ProductUpdate {
+                            status: Some(EnableStatus::Disabled),
+                        },
+                        actor_id,
+                    )?;
+                    product.stable.current_revision_id = Some(revision.base.id.clone());
+                    db.products().update(&mut product, session).await?;
+                    db.catalog()
+                        .create_product_revision_with_media(&revision, &media, session)
+                        .await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<Product, crate::errors::Error>(product)
+                })
+            })
+            .await?;
+
+        self.product_view(updated).await
     }
 
     /// 构造商品创建草稿（全部 ID 预生成，事务外完成全部业务校验）。
@@ -130,9 +320,16 @@ impl CatalogService {
         &self,
         req: CreateProductRequest,
         actor: &AuditActor,
+        pending_assets: &PendingFileAssets,
     ) -> Result<ProductDraft> {
-        self.ensure_product_dictionaries(&req.category_id, &req.brand_id, &req.skus, req.product_kind)
-            .await?;
+        self.ensure_product_dictionaries(
+            &req.category_id,
+            &req.brand_id,
+            &req.skus,
+            req.product_kind,
+            pending_assets,
+        )
+        .await?;
         let product_id = ProductId::new(next_id());
         let revision_id = ProductRevisionId::new(next_id());
         let status = req.status.unwrap_or(EnableStatus::Active);
@@ -146,11 +343,16 @@ impl CatalogService {
             actor.id(),
         )?;
         let media = self
-            .build_media_rows(&revision_id, &req.carousel_media, MediaRole::Carousel)
+            .build_media_rows(
+                &revision_id,
+                &req.carousel_media,
+                MediaRole::Carousel,
+                pending_assets,
+            )
             .await?
             .into_iter()
             .chain(
-                self.build_media_rows(&revision_id, &req.detail_media, MediaRole::Detail)
+                self.build_media_rows(&revision_id, &req.detail_media, MediaRole::Detail, pending_assets)
                     .await?,
             )
             .collect::<Vec<_>>();
@@ -227,13 +429,28 @@ impl CatalogService {
         brand_id: &ProductBrandId,
         skus: &[ProductSkuInput],
         product_kind: ProductKind,
+        pending_assets: &PendingFileAssets,
     ) -> Result<()> {
         let category = self.load_category(category_id.as_ref()).await?;
         if category.product_kind != product_kind {
             return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
         }
         self.ensure_brand_and_unit_ok(brand_id, skus.iter().map(|sku| &sku.base_unit_id))
-            .await
+            .await?;
+        for sku in skus {
+            let Some(asset_id) = sku.main_image_asset_id.as_ref() else {
+                continue;
+            };
+            if pending_assets.contains_id(asset_id) {
+                continue;
+            }
+            self.db
+                .file_assets()
+                .find_by_id(asset_id, &mut NoTransaction)
+                .await?
+                .ok_or_else(|| Error::NotFound("SKU 主图文件不存在".to_string()))?;
+        }
+        Ok(())
     }
 
     /// 构造媒体行（校验 `file_asset` 引用存在，媒体角色与顺序落位）。
@@ -253,14 +470,17 @@ impl CatalogService {
         revision_id: &ProductRevisionId,
         inputs: &[ProductMediaInput],
         role: MediaRole,
+        pending_assets: &PendingFileAssets,
     ) -> Result<Vec<ProductRevisionMedia>> {
         let mut rows = Vec::with_capacity(inputs.len());
         for input in inputs {
-            self.db
-                .file_assets()
-                .find_by_id(input.file_asset_id.as_ref(), &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("媒体文件不存在".to_string()))?;
+            if !pending_assets.contains_id(&input.file_asset_id) {
+                self.db
+                    .file_assets()
+                    .find_by_id(input.file_asset_id.as_ref(), &mut NoTransaction)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("媒体文件不存在".to_string()))?;
+            }
             let row = ProductRevisionMedia::new(
                 ProductRevisionMediaId::new(next_id()),
                 ProductRevisionMediaData {
@@ -291,7 +511,12 @@ impl CatalogService {
     ///
     /// # 错误
     /// 唯一索引冲突（409）或事务失败时返回错误并整体回滚。
-    async fn write_product_draft(&self, draft: ProductDraft, actor: &AuditActor) -> Result<Product> {
+    async fn write_product_draft(
+        &self,
+        draft: ProductDraft,
+        actor: &AuditActor,
+        pending_assets: PendingFileAssets,
+    ) -> Result<Product> {
         let ProductDraft {
             change_reason,
             product,
@@ -310,6 +535,7 @@ impl CatalogService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    pending_assets.persist(&db, session).await?;
                     db.products().create(&product, session).await?;
                     db.catalog()
                         .create_product_revision_with_media(&revision, &media, session)
@@ -342,9 +568,16 @@ impl CatalogService {
         product: &mut Product,
         req: UpdateProductRequest,
         actor: &AuditActor,
+        pending_assets: &PendingFileAssets,
     ) -> Result<SpecEditPlan> {
-        self.ensure_product_dictionaries(&req.category_id, &req.brand_id, &req.skus, product.product_kind)
-            .await?;
+        self.ensure_product_dictionaries(
+            &req.category_id,
+            &req.brand_id,
+            &req.skus,
+            product.product_kind,
+            pending_assets,
+        )
+        .await?;
         let product_id = ProductId::new(product.base.id.clone());
         let existing = self
             .db
@@ -358,11 +591,16 @@ impl CatalogService {
         let next_product_revision_no = self.next_product_revision_no(&product_id).await?;
         let revision_id = ProductRevisionId::new(next_id());
         let media = self
-            .build_media_rows(&revision_id, &req.carousel_media, MediaRole::Carousel)
+            .build_media_rows(
+                &revision_id,
+                &req.carousel_media,
+                MediaRole::Carousel,
+                pending_assets,
+            )
             .await?
             .into_iter()
             .chain(
-                self.build_media_rows(&revision_id, &req.detail_media, MediaRole::Detail)
+                self.build_media_rows(&revision_id, &req.detail_media, MediaRole::Detail, pending_assets)
                     .await?,
             )
             .collect::<Vec<_>>();
@@ -489,7 +727,12 @@ impl CatalogService {
     ///
     /// # 错误
     /// 并发冲突（409）或事务失败时返回错误并整体回滚。
-    async fn write_spec_edit_plan(&self, plan: SpecEditPlan, actor: &AuditActor) -> Result<Product> {
+    async fn write_spec_edit_plan(
+        &self,
+        plan: SpecEditPlan,
+        actor: &AuditActor,
+        pending_assets: PendingFileAssets,
+    ) -> Result<Product> {
         let SpecEditPlan {
             change_reason,
             mut product,
@@ -509,6 +752,7 @@ impl CatalogService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    pending_assets.persist(&db, session).await?;
                     db.products().update(&mut product, session).await?;
                     db.catalog()
                         .create_product_revision_with_media(&revision, &media, session)
@@ -604,6 +848,25 @@ impl CatalogService {
             .unwrap_or(0)
             + 1)
     }
+}
+
+/// 解析商品命令中全部临时文件引用，并返回实际被引用的临时键集合。
+fn resolve_product_file_references(
+    carousel_media: &mut [ProductMediaInput],
+    detail_media: &mut [ProductMediaInput],
+    skus: &mut [ProductSkuInput],
+    pending_assets: &PendingFileAssets,
+) -> Result<HashSet<String>> {
+    let mut used = HashSet::new();
+    for media in carousel_media.iter_mut().chain(detail_media.iter_mut()) {
+        pending_assets.resolve_id(&mut media.file_asset_id, &mut used)?;
+    }
+    for sku in skus {
+        if let Some(asset_id) = sku.main_image_asset_id.as_mut() {
+            pending_assets.resolve_id(asset_id, &mut used)?;
+        }
+    }
+    Ok(used)
 }
 
 /// 校验一组整数内无重复（用于媒体展示顺序等组合唯一前置检查）。

@@ -178,6 +178,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/customer-acceptances/commit",
+            with_permission(
+                post(fulfillment::customer_acceptance_commit),
+                rbac,
+                fulfillment::customer_acceptance_commit_permission_key(),
+            ),
+        )
+        .route(
             "/customer-acceptances/{id}",
             with_permission(
                 get(fulfillment::customer_acceptance_detail),

@@ -89,6 +89,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/sales-order-projection-deliveries/bulk-actions",
+            with_permission(
+                post(projection::sales_order_projection_delivery_bulk_action),
+                rbac,
+                projection::sales_order_projection_delivery_bulk_action_permission_key(),
+            ),
+        )
+        .route(
             "/sales-order-projection-deliveries/{delivery_id}/actions",
             with_permission(
                 post(projection::sales_order_projection_delivery_action),

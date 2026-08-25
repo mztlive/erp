@@ -313,6 +313,27 @@ pub struct SubmitSupplierPaymentRequest {
     pub allocations: Vec<PaymentAllocationLineRequest>,
 }
 
+/// 供应商付款原子创建并提交审批请求。
+///
+/// 已有草稿提交 `payment_id + expected_version`；新登记提交完整 `payment`。
+/// 服务端在一个事务内完成绑定、创建、冻结分配、审批启动与审计。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CommitSupplierPaymentRequest {
+    /// 已有付款草稿主键。
+    pub payment_id: Option<String>,
+    /// 已有草稿期望乐观锁版本。
+    pub expected_version: Option<u64>,
+    /// 新付款完整字段；提交已有草稿时为空。
+    pub payment: Option<CreateSupplierPaymentRequest>,
+    /// 提交时冻结的待过账核销分配。
+    #[validate(length(min = 1, message = "至少提供一条核销分配"))]
+    pub allocations: Vec<PaymentAllocationLineRequest>,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
 /// 撤回供应商付款审批请求。原因必填。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]

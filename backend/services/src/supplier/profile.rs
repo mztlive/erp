@@ -42,7 +42,9 @@ use validator::Validate;
 use crate::{
     audit::AuditActor,
     errors::{Error, Result},
+    file_asset::PendingFileAssetRequest,
     party::{SensitiveDataCodec, SensitiveFieldKind},
+    pending_file_assets::PendingFileAssets,
 };
 
 use super::{
@@ -54,6 +56,14 @@ use super::{
 pub struct SupplierProfileService {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
+}
+
+/// 携带文件资产的供应商根命令执行结果。
+pub struct SupplierProfileWithAssetsResult {
+    /// 稳定业务结果。
+    pub view: SupplierProfileMutationView,
+    /// 本次上传对象是否已随业务事务登记；幂等重放时为 `false`。
+    pub assets_committed: bool,
 }
 
 impl SupplierProfileService {
@@ -71,6 +81,19 @@ impl SupplierProfileService {
         req: SaveSupplierProfileRequest,
         actor: &AuditActor,
     ) -> Result<SupplierProfileMutationView> {
+        Ok(self.create_with_assets(req, Vec::new(), actor).await?.view)
+    }
+
+    /// 创建完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
+    ///
+    /// # Errors
+    /// 输入无效、文件引用或敏感级别不匹配、身份重复或事务失败时返回错误。
+    pub async fn create_with_assets(
+        &self,
+        mut req: SaveSupplierProfileRequest,
+        asset_requests: Vec<PendingFileAssetRequest>,
+        actor: &AuditActor,
+    ) -> Result<SupplierProfileWithAssetsResult> {
         self.validate_request(&req)?;
         if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
             return Err(Error::ValidationError(
@@ -79,24 +102,38 @@ impl SupplierProfileService {
         }
         let request_fingerprint = request_fingerprint(&req)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "create", None, &request_fingerprint);
+            return Ok(SupplierProfileWithAssetsResult {
+                view: replay_command(command, "create", None, &request_fingerprint)?,
+                assets_committed: false,
+            });
         }
+        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
+        let used = resolve_supplier_file_references(&mut req, &pending_assets)?;
+        pending_assets.ensure_all_used(&used)?;
         let party_no = required_create_identity(req.party_no.as_deref(), "主体编号")?;
         let supplier_no = required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachment_references(&req.qualifications).await?;
+        self.ensure_attachment_references(&req.qualifications, &pending_assets)
+            .await?;
         self.ensure_unique_inputs(&req)?;
 
         let idempotency_key = req.idempotency_key.clone();
-        let prepared = self.prepare_create(req, party_no, supplier_no, request_fingerprint.clone(), actor)?;
+        let prepared = self.prepare_create(
+            req,
+            party_no,
+            supplier_no,
+            request_fingerprint.clone(),
+            actor,
+            pending_assets,
+        )?;
         let result = prepared.result.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction_result = client
             .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
             .await;
-        self.resolve_transaction_result(
+        self.resolve_transaction_result_with_assets(
             transaction_result,
             result,
             &idempotency_key,
@@ -117,18 +154,48 @@ impl SupplierProfileService {
         req: SaveSupplierProfileRequest,
         actor: &AuditActor,
     ) -> Result<SupplierProfileMutationView> {
+        Ok(self
+            .update_with_assets(supplier_id, req, Vec::new(), actor)
+            .await?
+            .view)
+    }
+
+    /// 修订完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
+    ///
+    /// # Errors
+    /// 输入无效、文件引用或敏感级别不匹配、乐观锁冲突或事务失败时返回错误。
+    pub async fn update_with_assets(
+        &self,
+        supplier_id: &str,
+        mut req: SaveSupplierProfileRequest,
+        asset_requests: Vec<PendingFileAssetRequest>,
+        actor: &AuditActor,
+    ) -> Result<SupplierProfileWithAssetsResult> {
         self.validate_request(&req)?;
         let request_fingerprint = request_fingerprint(&req)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "update", Some(supplier_id), &request_fingerprint);
+            return Ok(SupplierProfileWithAssetsResult {
+                view: replay_command(command, "update", Some(supplier_id), &request_fingerprint)?,
+                assets_committed: false,
+            });
         }
+        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
+        let used = resolve_supplier_file_references(&mut req, &pending_assets)?;
+        pending_assets.ensure_all_used(&used)?;
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachment_references(&req.qualifications).await?;
+        self.ensure_attachment_references(&req.qualifications, &pending_assets)
+            .await?;
         self.ensure_unique_inputs(&req)?;
         let idempotency_key = req.idempotency_key.clone();
         let prepared = self
-            .prepare_update(supplier_id, req, request_fingerprint.clone(), actor)
+            .prepare_update(
+                supplier_id,
+                req,
+                request_fingerprint.clone(),
+                actor,
+                pending_assets,
+            )
             .await?;
         let result = prepared.result.clone();
         let db = self.db.clone();
@@ -136,7 +203,7 @@ impl SupplierProfileService {
         let transaction_result = client
             .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
             .await;
-        self.resolve_transaction_result(
+        self.resolve_transaction_result_with_assets(
             transaction_result,
             result,
             &idempotency_key,
@@ -165,7 +232,7 @@ impl SupplierProfileService {
     }
 
     /// 事务失败时查询同幂等键结果；并发首请求已提交时返回该稳定结果。
-    async fn resolve_transaction_result(
+    async fn resolve_transaction_result_with_assets(
         &self,
         transaction_result: Result<()>,
         intended_result: SupplierProfileMutationView,
@@ -173,13 +240,22 @@ impl SupplierProfileService {
         operation: &str,
         supplier_id: Option<&str>,
         request_fingerprint: &str,
-    ) -> Result<SupplierProfileMutationView> {
+    ) -> Result<SupplierProfileWithAssetsResult> {
         match transaction_result {
-            Ok(()) => Ok(intended_result),
-            Err(error) => match self.command_record(idempotency_key).await? {
-                Some(command) => replay_command(command, operation, supplier_id, request_fingerprint),
-                None => Err(error),
-            },
+            Ok(()) => Ok(SupplierProfileWithAssetsResult {
+                view: intended_result,
+                assets_committed: true,
+            }),
+            Err(error) => {
+                let assets_may_be_committed = matches!(&error, Error::OutcomeUnknown(_));
+                match self.command_record(idempotency_key).await? {
+                    Some(command) => Ok(SupplierProfileWithAssetsResult {
+                        view: replay_command(command, operation, supplier_id, request_fingerprint)?,
+                        assets_committed: assets_may_be_committed,
+                    }),
+                    None => Err(error),
+                }
+            }
         }
     }
 
@@ -296,18 +372,24 @@ impl SupplierProfileService {
     async fn ensure_attachment_references(
         &self,
         qualifications: &[SupplierProfileQualificationInput],
+        pending_assets: &PendingFileAssets,
     ) -> Result<()> {
         for qualification in qualifications {
             let Some(attachment_id) = qualification.attachment_id.as_ref() else {
                 continue;
             };
-            let asset = self
-                .db
-                .file_assets()
-                .find_by_id(attachment_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("资质附件不存在，请先上传文件".to_string()))?;
-            ensure_qualification_sensitivity(qualification, asset.sensitivity_class)?;
+            let sensitivity = match pending_assets.sensitivity(attachment_id) {
+                Some(sensitivity) => sensitivity,
+                None => {
+                    self.db
+                        .file_assets()
+                        .find_by_id(attachment_id, &mut NoTransaction)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("资质附件不存在，请先上传文件".to_string()))?
+                        .sensitivity_class
+                }
+            };
+            ensure_qualification_sensitivity(qualification, sensitivity)?;
         }
         Ok(())
     }
@@ -358,6 +440,7 @@ impl SupplierProfileService {
         supplier_no: String,
         request_fingerprint: String,
         actor: &AuditActor,
+        pending_assets: PendingFileAssets,
     ) -> Result<PreparedCreate> {
         let party_id = PartyId::new(next_id());
         let supplier_id = SupplierAccountId::new(next_id());
@@ -418,6 +501,7 @@ impl SupplierProfileService {
             command,
             audit,
             result,
+            pending_assets,
         })
     }
 
@@ -520,6 +604,7 @@ impl SupplierProfileService {
         req: SaveSupplierProfileRequest,
         request_fingerprint: String,
         actor: &AuditActor,
+        pending_assets: PendingFileAssets,
     ) -> Result<PreparedUpdate> {
         let mut supplier = self.load_supplier_for_update(supplier_id, &req).await?;
         let mut party = self.load_party_for_update(&supplier, &req).await?;
@@ -554,6 +639,7 @@ impl SupplierProfileService {
             req.effective_from,
             req.change_reason,
             actor,
+            pending_assets,
         )
     }
 
@@ -973,11 +1059,13 @@ struct PreparedCreate {
     command: SupplierProfileCommand,
     audit: entities::AuditLog,
     result: SupplierProfileMutationView,
+    pending_assets: PendingFileAssets,
 }
 
 impl PreparedCreate {
     /// 将完整供应商资料与幂等结果写入同一事务。
     async fn persist(self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+        self.pending_assets.persist(db, session).await?;
         db.party_revisions().create(&self.party_revision, session).await?;
         db.parties().create(&self.party, session).await?;
         db.supplier()
@@ -1115,6 +1203,7 @@ struct PreparedUpdate {
     command: SupplierProfileCommand,
     audit: entities::AuditLog,
     result: SupplierProfileMutationView,
+    pending_assets: PendingFileAssets,
 }
 
 impl PreparedUpdate {
@@ -1146,6 +1235,7 @@ impl PreparedUpdate {
         effective_from: entities::common::time::BusinessDate,
         change_reason: String,
         actor: &AuditActor,
+        pending_assets: PendingFileAssets,
     ) -> Result<Self> {
         let PreparedUpdateContext {
             party,
@@ -1190,11 +1280,13 @@ impl PreparedUpdate {
             command,
             audit,
             result,
+            pending_assets,
         })
     }
 
     /// 将完整资料修订与幂等结果写入同一事务。
     async fn persist(mut self, db: &Database, session: &mut mongodb::ClientSession) -> Result<()> {
+        self.pending_assets.persist(db, session).await?;
         self.persist_roots(db, session).await?;
         self.facts.persist(db, session).await?;
         self.capabilities.persist(db, session).await?;
@@ -1617,6 +1709,20 @@ fn request_fingerprint(req: &SaveSupplierProfileRequest) -> Result<String> {
     let bytes =
         serde_json::to_vec(req).map_err(|error| Error::Internal(format!("供应商命令序列化失败: {error}")))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+/// 解析供应商根命令中的临时资质文件引用。
+fn resolve_supplier_file_references(
+    req: &mut SaveSupplierProfileRequest,
+    pending_assets: &PendingFileAssets,
+) -> Result<HashSet<String>> {
+    let mut used = HashSet::new();
+    for qualification in &mut req.qualifications {
+        if let Some(attachment_id) = qualification.attachment_id.as_mut() {
+            pending_assets.resolve_id(attachment_id, &mut used)?;
+        }
+    }
+    Ok(used)
 }
 
 /// 校验幂等命令的操作、目标与请求指纹，并返回持久化结果。

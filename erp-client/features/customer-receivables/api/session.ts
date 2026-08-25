@@ -270,10 +270,7 @@ export async function fetchAllocationSession(
 ): Promise<AllocationSessionView | null> {
     const s = sessions.get(draftSessionId)
     if (!s) return null
-    const pool = await buildPool(s.mode, s.counterpartyPartyId, {
-        salesOrderId: s.returnContext?.salesOrderId,
-        receivableAccountId: s.returnContext?.receivableAccountId,
-    })
+    const pool = s.pool
     const factAmount =
         s.mode === "receipt"
             ? (s.fact.amount ?? "0")

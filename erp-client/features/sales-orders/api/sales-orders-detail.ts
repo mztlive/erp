@@ -44,13 +44,12 @@ export async function cancelSalesOrderApproval(input: {
     expectedVersion: number
     reason: string
     idempotencyKey: string
-}): Promise<SalesOrderDetailView | null> {
+}): Promise<void> {
     await apiPost(`/admin/sales-orders/${input.salesOrderId}/cancel-approval`, {
         expected_version: input.expectedVersion,
         reason: input.reason.trim(),
         idempotency_key: input.idempotencyKey,
     })
-    return fetchSalesOrderDetail(input.salesOrderId)
 }
 
 export async function downloadSalesOrderContractPdf(
@@ -73,13 +72,7 @@ export async function downloadSalesOrderContractPdf(
     await downloadFileAsset(fileId, `${contract.contract_no}.pdf`)
 }
 
-/**
- * 详情页附属信息：卡券审批与在途改单。
- *
- * 采购驳回摘要由销售单详情字段 `open_procurement_rejection` 权威下发，
- * 不再侧查采购确认列表（销售角色通常无 `procurement_confirmation:list`，
- * 且旧实现仅取全局第 1 页 50 条，会静默丢入口）。
- */
+/** 详情页附属信息：在途改单。 */
 async function loadDetailExtras(
     salesOrderId: string,
     nature: SalesOrderNature,

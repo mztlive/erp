@@ -22,7 +22,8 @@ use super::command_receipt::{
 };
 use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverage};
 use super::dto::{
-    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine, TotalsView,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
+    SavePurchaseOrderLinePatch, TotalsView,
 };
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
@@ -73,6 +74,8 @@ struct SaveDraftFingerprintPayload<'a> {
     payment_term_code: Option<&'a str>,
     /// 保留顺序的完整草稿行。
     lines: &'a [SavePurchaseOrderLine],
+    /// 保留顺序的草稿行可编辑字段快照。
+    line_patches: &'a [SavePurchaseOrderLinePatch],
 }
 
 /// 待写入的新采购草稿提交及金额。
@@ -114,6 +117,7 @@ impl PurchaseOrderService {
         actor: &AuditActor,
     ) -> Result<SavePurchaseOrderDraftResult> {
         req.validate()?;
+        ensure_save_request_shape(&req)?;
         let authorization = self.authorize_actor_permission(actor, SAVE_PERMISSION).await?;
         let fingerprint = save_request_fingerprint(id, &req)?;
         let receipt_id = command_receipt_id(
@@ -269,8 +273,9 @@ async fn replace_current_draft(
 ) -> Result<SavePurchaseOrderDraftResult> {
     let (mut old_draft, old_lines) = load_current_draft(db, order, session).await?;
     let coverage = advance_guard_and_load_coverage(db, order, command.actor.id(), session).await?;
-    validate_procurement_line_edit(&command.request.lines, &old_lines, &coverage)?;
-    let replacement = build_draft_replacement(service, order, &old_draft, command.request).await?;
+    let requested_lines = resolve_requested_lines(command.request, &old_lines)?;
+    validate_procurement_line_edit(&requested_lines, &old_lines, &coverage)?;
+    let replacement = build_draft_replacement(service, order, &old_draft, &requested_lines).await?;
     order.update(Default::default(), command.actor.id())?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());
@@ -384,6 +389,121 @@ async fn load_current_draft(
     Ok((draft, lines))
 }
 
+/// 校验保存请求只使用一种行载荷。
+fn ensure_save_request_shape(request: &SavePurchaseOrderDraftRequest) -> Result<()> {
+    if request.lines.is_empty() == request.line_patches.is_empty() {
+        return Err(Error::ValidationError(
+            "完整采购行与草稿行补丁必须且只能提供一种".to_string(),
+        ));
+    }
+    for patch in &request.line_patches {
+        patch.validate()?;
+    }
+    Ok(())
+}
+
+/// 在事务内把客户端可编辑字段合并到服务端冻结的草稿来源行。
+fn resolve_requested_lines(
+    request: &SavePurchaseOrderDraftRequest,
+    existing: &[PurchaseOrderSubmissionLine],
+) -> Result<Vec<SavePurchaseOrderLine>> {
+    if !request.lines.is_empty() {
+        return Ok(request.lines.clone());
+    }
+    resolve_line_patches(&request.line_patches, existing)
+}
+
+/// 将草稿行补丁合并为完整采购行，冻结字段只从服务端当前草稿取得。
+pub(super) fn resolve_line_patches(
+    line_patches: &[SavePurchaseOrderLinePatch],
+    existing: &[PurchaseOrderSubmissionLine],
+) -> Result<Vec<SavePurchaseOrderLine>> {
+    if line_patches.len() != existing.len() {
+        return Err(Error::ValidationError(
+            "采购草稿行补丁必须覆盖全部当前草稿行".to_string(),
+        ));
+    }
+    let mut patches = HashMap::with_capacity(line_patches.len());
+    for patch in line_patches {
+        if patches.insert(patch.line_id.trim().to_string(), patch).is_some() {
+            return Err(Error::ValidationError("采购草稿包含重复行补丁".to_string()));
+        }
+    }
+
+    existing
+        .iter()
+        .map(|line| {
+            let patch = patches
+                .remove(&line.base.id)
+                .ok_or_else(|| Error::ConflictError("采购草稿行已变化，请刷新后重试".to_string()))?;
+            if patch.line_type != line.line_type {
+                return Err(Error::ValidationError("采购草稿行类型不可修改".to_string()));
+            }
+            let is_item = line.line_type == PurchaseLineType::ItemService;
+            let quantity = if is_item {
+                patch
+                    .quantity
+                    .clone()
+                    .or_else(|| line.quantity.map(|value| value.to_string()))
+            } else {
+                None
+            };
+            Ok(SavePurchaseOrderLine {
+                line_type: line.line_type,
+                procurement_confirmation_line_id: line
+                    .procurement_confirmation_line_id
+                    .as_ref()
+                    .map(ToString::to_string),
+                sku_id: line.sku_id.as_ref().map(ToString::to_string),
+                sku_revision_id: line.sku_revision_id.as_ref().map(ToString::to_string),
+                product_name: line.product_name_snapshot.clone(),
+                specification: line.specification_snapshot.clone(),
+                quantity: quantity.clone(),
+                base_unit_code: if is_item {
+                    line.base_unit_code.clone()
+                } else {
+                    None
+                },
+                unit_cost_gross: if is_item {
+                    patch
+                        .unit_cost_gross
+                        .clone()
+                        .or_else(|| line.unit_cost_gross.map(|value| value.to_string()))
+                } else {
+                    None
+                },
+                input_tax_rate: patch
+                    .input_tax_rate
+                    .clone()
+                    .or_else(|| line.input_tax_rate.map(|value| value.to_string())),
+                expected_delivery_date: if is_item {
+                    line.expected_delivery_date.map(|value| value.to_string())
+                } else {
+                    None
+                },
+                sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
+                sales_order_revision_line_id: line
+                    .sales_order_revision_line_id
+                    .as_ref()
+                    .map(ToString::to_string),
+                sales_order_submission_line_id: line
+                    .sales_order_submission_line_id
+                    .as_ref()
+                    .map(ToString::to_string),
+                allocated_quantity: if is_item { quantity } else { None },
+                gross_amount: if is_item {
+                    None
+                } else {
+                    patch
+                        .unit_cost_gross
+                        .clone()
+                        .or_else(|| Some(line.gross_amount.to_string()))
+                },
+            })
+        })
+        .collect()
+}
+
 /// 推进销售采购 guard 并加载最新采购覆盖。
 ///
 /// # 参数
@@ -400,7 +520,7 @@ async fn load_current_draft(
 ///
 /// # 关键业务约束
 /// guard 与后续草稿写入处于同一事务，保证与采购创建命令串行化。
-async fn advance_guard_and_load_coverage(
+pub(super) async fn advance_guard_and_load_coverage(
     db: &mongodb::Database,
     order: &PurchaseOrder,
     actor_id: &str,
@@ -436,9 +556,9 @@ async fn build_draft_replacement(
     service: &PurchaseOrderService,
     order: &PurchaseOrder,
     old_draft: &PurchaseOrderSubmission,
-    request: &SavePurchaseOrderDraftRequest,
+    lines: &[SavePurchaseOrderLine],
 ) -> Result<DraftReplacement> {
-    let (gross, net, tax) = service.compute_request_totals(&request.lines).await?;
+    let (gross, net, tax) = service.compute_request_totals(lines).await?;
     let submission = PurchaseOrderSubmission::new(
         PurchaseOrderSubmissionId::new(next_id()),
         PurchaseOrderSubmissionData {
@@ -456,7 +576,7 @@ async fn build_draft_replacement(
         },
     )?;
     let lines = service
-        .build_lines_from_request(&submission.base.id.clone().into(), &request.lines)
+        .build_lines_from_request(&submission.base.id.clone().into(), lines)
         .await?;
     Ok(DraftReplacement {
         submission,
@@ -625,6 +745,7 @@ fn save_request_fingerprint(
         expected_lock_version: request.expected_lock_version,
         payment_term_code: request.payment_term_code.as_deref().map(str::trim),
         lines: &request.lines,
+        line_patches: &request.line_patches,
     };
     command_request_fingerprint(SAVE_ACTION, purchase_order_id, &payload)
 }
@@ -692,7 +813,7 @@ impl SaveDraftReceipt {
 ///
 /// # 错误
 /// 请求试图修改付款条件时返回校验错误。
-fn ensure_payment_term_unchanged(current: &str, requested: Option<&str>) -> Result<()> {
+pub(super) fn ensure_payment_term_unchanged(current: &str, requested: Option<&str>) -> Result<()> {
     if requested.is_some_and(|value| value.trim() != current) {
         return Err(Error::ValidationError(
             "采购草稿创建后的付款条件不可修改".to_string(),
@@ -717,7 +838,7 @@ fn ensure_payment_term_unchanged(current: &str, requested: Option<&str>) -> Resu
 ///
 /// # 关键业务约束
 /// 当前覆盖包含本采购单旧草稿，因此编辑上限需加回本单原占用后再比较。
-fn validate_procurement_line_edit(
+pub(super) fn validate_procurement_line_edit(
     requested: &[SavePurchaseOrderLine],
     existing: &[PurchaseOrderSubmissionLine],
     coverage: &SalesProcurementCoverage,
@@ -954,6 +1075,7 @@ mod tests {
                 allocated_quantity: Some(quantity.to_string()),
                 gross_amount: None,
             }],
+            line_patches: vec![],
             idempotency_key: "save-key-1".to_string(),
         }
     }

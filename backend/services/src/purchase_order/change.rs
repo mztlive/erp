@@ -129,6 +129,28 @@ impl PurchaseOrderService {
         Ok(result)
     }
 
+    /// 提交采购变更并返回提交后的完整变更单视图。
+    ///
+    /// # 参数
+    /// * `change_id` - 变更单 ID
+    /// * `req` - 期望版本、可选目标内容与幂等键
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回写事务完成后重读的完整变更单视图。
+    ///
+    /// # 错误
+    /// 提交事务或提交后权威视图读取失败时返回错误。
+    pub async fn submit_change_view(
+        &self,
+        change_id: &str,
+        req: SubmitPurchaseChangeRequest,
+        actor: &AuditActor,
+    ) -> Result<PurchaseChangeOrderView> {
+        self.submit_change(change_id, req, actor).await?;
+        self.change_order_detail(change_id).await
+    }
+
     /// 撤回审批中的采购变更单，回到可修正草稿且 `subject_version` 不回退。
     ///
     /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
@@ -477,15 +499,21 @@ impl PurchaseOrderService {
             .find_by_id(&change.base_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("基准版本不存在".to_string()))?;
+        let mut normalized_request = req.clone();
+        if normalized_request.lines.is_empty() {
+            normalized_request.lines = self
+                .change_lines_from_base_revision(&change.base_revision_id)
+                .await?;
+        }
         let supplier_name = self
             .resolve_supplier_name(&order.supplier_id)
             .await?
             .unwrap_or_else(|| order.supplier_id.to_string());
         let submission = self
-            .build_change_submission(change, order, &base_revision, &supplier_name, req)
+            .build_change_submission(change, order, &base_revision, &supplier_name, &normalized_request)
             .await?;
         let enriched_lines = self
-            .enrich_change_lines_with_current_sales_revision(order, &req.lines)
+            .enrich_change_lines_with_current_sales_revision(order, &normalized_request.lines)
             .await?;
         let lines = self
             .build_change_submission_lines(&submission.base.id.clone(), &enriched_lines)
@@ -495,9 +523,57 @@ impl PurchaseOrderService {
         Ok(FrozenChangeSubmission {
             submission: submission_mut,
             lines,
-            content_hash: content_fingerprint(&req.lines),
+            content_hash: content_fingerprint(&normalized_request.lines),
             idempotency_key: req.idempotency_key.clone(),
         })
+    }
+
+    /// 从变更单冻结的基准采购版本恢复完整目标行。
+    async fn change_lines_from_base_revision(
+        &self,
+        revision_id: &entities::ids::PurchaseOrderRevisionId,
+    ) -> Result<Vec<SavePurchaseOrderLine>> {
+        let mut lines = self
+            .db
+            .purchase_order_revision_lines()
+            .find_lines_by_revision_ids(std::slice::from_ref(revision_id), &mut NoTransaction)
+            .await?;
+        lines.sort_by_key(|line| line.line_no);
+        if lines.is_empty() {
+            return Err(Error::BusinessLogicError("采购变更基准版本缺少明细".to_string()));
+        }
+        Ok(lines
+            .into_iter()
+            .map(|line| {
+                let is_item = line.line_type == entities::purchase_order::PurchaseLineType::ItemService;
+                SavePurchaseOrderLine {
+                    line_type: line.line_type,
+                    procurement_confirmation_line_id: line
+                        .procurement_confirmation_line_id
+                        .map(|value| value.to_string()),
+                    sku_id: line.sku_id.map(|value| value.to_string()),
+                    sku_revision_id: line.sku_revision_id.map(|value| value.to_string()),
+                    product_name: line.product_name_snapshot,
+                    specification: line.specification_snapshot,
+                    quantity: line.quantity.map(|value| value.to_string()),
+                    base_unit_code: line.base_unit_code,
+                    unit_cost_gross: line.unit_cost_gross.map(|value| value.to_string()),
+                    input_tax_rate: line.input_tax_rate.map(|value| value.to_string()),
+                    expected_delivery_date: line.expected_delivery_date.map(|value| value.to_string()),
+                    sales_order_line_id: line.sales_order_line_id.map(|value| value.to_string()),
+                    sales_order_revision_line_id: line
+                        .sales_order_revision_line_id
+                        .map(|value| value.to_string()),
+                    sales_order_submission_line_id: None,
+                    allocated_quantity: line.allocated_quantity.map(|value| value.to_string()),
+                    gross_amount: if is_item {
+                        None
+                    } else {
+                        Some(line.gross_amount.to_string())
+                    },
+                }
+            })
+            .collect())
     }
 
     /// 将采购变更目标行绑定到来源销售单当前版本行。

@@ -3,6 +3,13 @@
 import type { MasterDataResource } from "@/features/master-data/api/types-core"
 import type { MasterDataResourceFields } from "@/features/master-data/api/types-fields"
 
+/** 随一次基础资料业务命令提交的本地文件。 */
+export type PendingAssetUpload = Readonly<{
+    /** 与业务 DTO 中临时 file_asset_id 完全一致的请求内引用。 */
+    reference: string
+    file: File
+}>
+
 export type CreateMasterDataInput = Readonly<{
     resource: MasterDataResource
     name: string
@@ -11,6 +18,7 @@ export type CreateMasterDataInput = Readonly<{
     changeReason: string
     fields: MasterDataResourceFields[MasterDataResource]
     idempotencyKey: string
+    pendingAssetUploads?: readonly PendingAssetUpload[]
 }>
 
 export type CreateRevisionInput = Readonly<{
@@ -26,6 +34,7 @@ export type CreateRevisionInput = Readonly<{
     changeReason: string
     fields: MasterDataResourceFields[MasterDataResource]
     idempotencyKey: string
+    pendingAssetUploads?: readonly PendingAssetUpload[]
 }>
 
 export type DisableMasterDataInput = Readonly<{

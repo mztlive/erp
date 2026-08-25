@@ -53,11 +53,12 @@ use self::adapter::{
 };
 use self::dto::SortDir;
 pub use self::dto::{
-    CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest, DocumentApprovalView, PageView,
-    StockAdjustmentDetailView, StockAdjustmentLineInput, StockAdjustmentLineView, StockAdjustmentListParams,
-    StockAdjustmentView, StockBalanceDetailView, StockBalanceListParams, StockBalanceView,
-    StockMovementListParams, StockMovementView, StockReservationListParams, StockReservationView,
-    SubmitStockAdjustmentRequest, UpdateStockAdjustmentRequest,
+    CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest, DocumentApprovalView,
+    ExpectedStockBalanceVersion, PageView, StockAdjustmentDetailView, StockAdjustmentLineInput,
+    StockAdjustmentLineView, StockAdjustmentListParams, StockAdjustmentView, StockBalanceDetailView,
+    StockBalanceListParams, StockBalanceView, StockMovementListParams, StockMovementView,
+    StockReservationListParams, StockReservationView, SubmitStockAdjustmentRequest,
+    UpdateStockAdjustmentRequest,
 };
 
 mod adapter;
@@ -528,7 +529,7 @@ impl InventoryService {
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回新建调整单的响应视图。
+    /// 返回新建调整单的完整详情视图。
     ///
     /// # 错误
     /// * `ValidationError` - 请求体校验失败
@@ -538,8 +539,10 @@ impl InventoryService {
         &self,
         req: CreateStockAdjustmentRequest,
         actor: &AuditActor,
-    ) -> Result<StockAdjustmentView> {
+    ) -> Result<StockAdjustmentDetailView> {
         req.validate()?;
+        let balance_id = req.balance_id.clone();
+        let expected_balance_version = req.expected_balance_version;
         let id = StockAdjustmentId::new(next_id());
         let adjustment = StockAdjustment::new(
             id.clone(),
@@ -581,10 +584,12 @@ impl InventoryService {
                 bind_command,
                 audit,
                 actor: actor.clone(),
+                balance_id,
+                expected_balance_version,
             },
         )
         .await?;
-        Ok(adjustment.into())
+        self.stock_adjustment_detail(id.as_ref()).await
     }
 
     /// 更新库存调整单（仅草稿/驳回；乐观锁语义）。
@@ -697,11 +702,11 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `id` - 调整单主键
-    /// * `req` - 提交请求（版本与幂等键）
+    /// * `req` - 最终草稿、余额版本与幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回提交后的调整单视图。
+    /// 返回提交后的完整详情视图。
     ///
     /// # 错误
     /// * `NotFound` - 调整单不存在
@@ -711,19 +716,27 @@ impl InventoryService {
         id: &str,
         req: SubmitStockAdjustmentRequest,
         actor: &AuditActor,
-    ) -> Result<StockAdjustmentView> {
+    ) -> Result<StockAdjustmentDetailView> {
         req.validate()?;
         let adapter = stock_adjustment_adapter()?;
         let subject = stock_adjustment_subject_ref(id)?;
         let mut adjustment = self.load_stock_adjustment(id).await?;
         ensure_expected_version(adjustment.base.version, req.expected_version)?;
+        adjustment.update(StockAdjustmentUpdate {
+            reason_type: Some(req.reason_type),
+            reviewed_by: None,
+            finance_reviewed_by: None,
+            note: Some(req.note),
+            occurred_at: Some(Instant::from_unix_secs(req.occurred_at)),
+        })?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let lines = self
+        let mut lines = self
             .db
             .inventory()
             .adjustment_lines_by_adjustment_ids(&[StockAdjustmentId::new(id.to_string())], &mut NoTransaction)
             .await?;
+        apply_adjustment_line_updates(&adjustment, &mut lines, &req.lines, true)?;
         execute_stock_adjustment_domain_action(&mut adjustment, adapter.on_approval_start)?;
         let now = Instant::now();
         let snapshot = build_stock_adjustment_snapshot(&adjustment, &lines, actor.id(), now)?;
@@ -767,9 +780,12 @@ impl InventoryService {
                 owner_role: adapter.owner_role,
                 organization_id,
                 now,
+                lines,
+                balances: req.balances,
             },
         )
-        .await
+        .await?;
+        self.stock_adjustment_detail(id).await
     }
 
     /// 撤回库存调整审批，成功后回到草稿且 `subject_version` 不回退。
@@ -953,6 +969,10 @@ struct CreatedAdjustmentPersist {
     audit: entities::AuditLog,
     /// 审计操作人。
     actor: AuditActor,
+    /// 用户发起时所依据的库存余额行。
+    balance_id: String,
+    /// 用户发起时看到的库存余额版本。
+    expected_balance_version: u64,
 }
 
 /// 在创建事务内写入调整单、绑定发布定义并登记单据。
@@ -987,6 +1007,8 @@ async fn persist_created_adjustment(
         bind_command,
         audit,
         actor,
+        balance_id,
+        expected_balance_version,
     } = persist;
     let db = db.clone();
     let rbac = rbac.clone();
@@ -994,6 +1016,19 @@ async fn persist_created_adjustment(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                let balance = db
+                    .stock_balances()
+                    .find_by_id(&balance_id, session)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+                if balance.base.version != expected_balance_version {
+                    return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
+                }
+                if balance.warehouse_id != adjustment.warehouse_id
+                    || !lines.iter().all(|line| line.sku_id == balance.sku_id)
+                {
+                    return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
+                }
                 db.inventory()
                     .create_stock_adjustment_with_lines(&adjustment, &lines, session)
                     .await?;
@@ -1003,6 +1038,56 @@ async fn persist_created_adjustment(
             })
         })
         .await
+}
+
+/// 校验并把提交命令中的最终值覆盖到内存明细。
+///
+/// # 参数
+/// * `adjustment` - 已应用最终表头值的调整单
+/// * `lines` - 当前持久化明细的内存副本
+/// * `updates` - 客户端提交的最终明细值
+/// * `require_all` - 是否要求每一条持久化明细都出现在命令中
+///
+/// # 错误
+/// 行归属、重复行、数量、方向或完整性不符合约束时返回校验错误。
+fn apply_adjustment_line_updates(
+    adjustment: &StockAdjustment,
+    lines: &mut [StockAdjustmentLine],
+    updates: &[self::dto::StockAdjustmentLineUpdateInput],
+    require_all: bool,
+) -> Result<()> {
+    let expected_direction = match adjustment.reason_type {
+        AdjustmentReasonType::StockGain => MovementDirection::Increase,
+        AdjustmentReasonType::StockLoss | AdjustmentReasonType::Damage => MovementDirection::Decrease,
+    };
+    let mut seen = HashSet::with_capacity(updates.len());
+    for update in updates {
+        if !seen.insert(update.line_id.as_str()) {
+            return Err(Error::ValidationError("调整明细行不得重复".to_string()));
+        }
+        let line = lines
+            .iter_mut()
+            .find(|line| line.base.id == update.line_id)
+            .ok_or_else(|| Error::ValidationError("明细行不属于该调整单".to_string()))?;
+        let quantity = Quantity::from_str(&update.quantity).map_err(Error::Logic)?;
+        if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+            return Err(Error::ValidationError("调整数量必须为正数".to_string()));
+        }
+        let direction = update.direction.unwrap_or(line.direction);
+        if direction != expected_direction {
+            return Err(Error::ValidationError(format!(
+                "调整原因 {} 的明细方向必须为 {}",
+                adjustment.reason_type.label(),
+                expected_direction.as_str()
+            )));
+        }
+        line.quantity = quantity;
+        line.direction = direction;
+    }
+    if require_all && seen.len() != lines.len() {
+        return Err(Error::ValidationError("提交必须包含全部调整明细".to_string()));
+    }
+    Ok(())
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。

@@ -4,17 +4,14 @@
  */
 
 export {
-    ensurePaymentReversalDraft,
-    ensureSupplierPaymentDraft,
-    ensureSupplierRefundDraft,
+    commitPaymentReversal,
+    commitSupplierRefund,
     fetchAllocationSession,
     fetchPayableDetail,
     fetchPaymentReversal,
     fetchSupplierAccounts,
     fetchSupplierPayment,
     fetchSupplierRefund,
-    forgetPaymentReversalDraft,
-    forgetSupplierRefundDraft,
     resolveUnknownResult,
     reverseInvoice,
     reversePayment,

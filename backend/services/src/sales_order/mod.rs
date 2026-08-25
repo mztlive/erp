@@ -39,9 +39,8 @@ mod status;
 
 pub use self::adapter::sales_order_object_readable;
 pub use self::dto::{
-    ActiveCardSalesApprovalView, ActiveLowMarginManagerConfirmationView, CancelSalesOrderApprovalRequest,
-    CardSalesApprovalAllowedAction, CloseEligibilityView, CreateSalesOrderRequest, DocumentApprovalView,
-    LowMarginManagerAllowedAction, OpenProcurementRejectionView, PageView, ProcurementRejectionAllowedAction,
+    ActiveCardSalesApprovalView, CancelSalesOrderApprovalRequest, CardSalesApprovalAllowedAction,
+    CloseEligibilityView, CreateSalesOrderRequest, DocumentApprovalView, PageView,
     PurchaseCreationAccessView, RevisionView, SalesOrderCreateIntent, SalesOrderDetailView,
     SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams,
     SalesOrderStageSummary, SalesOrderView, SalesOrderWorkingCopyLineView, SalesProcurementCoverageView,

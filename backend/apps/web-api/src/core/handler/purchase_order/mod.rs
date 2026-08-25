@@ -13,12 +13,12 @@ use services::{
         CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
         CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisListParams,
         CreationBasisView, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
-        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseChangeSubmitResult,
-        PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
-        PurchaseReviewResult, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
-        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
-        VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+        PurchaseChangeOrderListParams, PurchaseChangeOrderView, PurchaseOrderCenterView,
+        PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService, PurchaseReviewResult,
+        ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
+        StartPurchaseChangeRequest, StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+        SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, VoidPurchaseOrderRequest,
+        VoidPurchaseOrderResult,
     },
 };
 
@@ -339,9 +339,9 @@ pub async fn purchase_change_submit(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SubmitPurchaseChangeRequest>,
-) -> Result<PurchaseChangeSubmitResult> {
+) -> Result<PurchaseChangeOrderView> {
     let view = PurchaseOrderService::with_rbac(state.db(), state.rbac())
-        .submit_change(&id, req, &actor)
+        .submit_change_view(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

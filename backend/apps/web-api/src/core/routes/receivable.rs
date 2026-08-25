@@ -58,6 +58,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/card-funds-review/receipts",
+            with_permission(
+                post(receivable::card_funds_receipt_register),
+                rbac,
+                receivable::card_funds_receipt_register_permission_key(),
+            ),
+        )
+        .route(
+            "/card-funds-review/invoices",
+            with_permission(
+                post(receivable::card_funds_invoice_register),
+                rbac,
+                receivable::card_funds_invoice_register_permission_key(),
+            ),
+        )
+        .route(
             "/customer-receipts",
             with_permission(
                 get(receivable::customer_receipt_list),
@@ -79,6 +95,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(receivable::customer_receipt_detail),
                 rbac,
                 receivable::customer_receipt_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-receipts/commit",
+            with_permission(
+                post(receivable::customer_receipt_commit),
+                rbac,
+                receivable::customer_receipt_commit_permission_key(),
             ),
         )
         .route(
@@ -127,6 +151,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(receivable::invoice_detail),
                 rbac,
                 receivable::invoice_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/invoices/commit",
+            with_permission(
+                post(receivable::invoice_commit),
+                rbac,
+                receivable::invoice_commit_permission_key(),
             ),
         )
         .route(

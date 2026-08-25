@@ -152,6 +152,65 @@ pub struct CreateContractRequest {
     pub signed_at: BusinessDate,
 }
 
+/// 合同 PDF 一次上传命令。
+///
+/// 文件字节由 HTTP 层写入对象存储；文件资产元数据、合同与首个修订由服务端在
+/// 同一个数据库事务登记。`settlement_party_id` 为空时使用客户自有主体。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct UploadContractRequest {
+    /// 合同编号（唯一，创建后不可修改）。
+    #[validate(custom(function = "non_blank", message = "合同编号不能为空"))]
+    pub contract_no: String,
+    /// 客户稳定身份。
+    pub customer_id: CustomerAccountId,
+    /// 可选结算主体；空时由服务端取客户自有主体。
+    pub settlement_party_id: Option<PartyId>,
+    /// 客户名称快照。
+    #[validate(custom(function = "non_blank", message = "客户名称不能为空"))]
+    pub customer_name: String,
+    /// 结算主体名称快照。
+    #[validate(custom(function = "non_blank", message = "结算主体名称不能为空"))]
+    pub settlement_party_name: String,
+    /// 付款条件代码。
+    #[validate(custom(function = "non_blank", message = "付款条件代码不能为空"))]
+    pub payment_term_code: String,
+    /// 付款条件名称。
+    #[validate(custom(function = "non_blank", message = "付款条件名称不能为空"))]
+    pub payment_term_name: String,
+    /// 开票类型。
+    #[validate(custom(function = "non_blank", message = "开票类型不能为空"))]
+    pub invoice_type: String,
+    /// 税点。
+    #[validate(custom(function = "non_blank", message = "税点不能为空"))]
+    pub tax_point: String,
+    /// 合同有效期起。
+    pub valid_from: BusinessDate,
+    /// 合同有效期止；缺省表示长期。
+    pub valid_to: Option<BusinessDate>,
+    /// 签订日期。
+    pub signed_at: BusinessDate,
+}
+
+/// 合同 PDF 一次上传结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct UploadContractView {
+    /// 合同稳定身份。
+    pub id: String,
+    /// 合同编号。
+    pub contract_no: String,
+    /// 首个不可变修订身份。
+    pub revision_id: String,
+    /// 首个修订序号，固定为 1。
+    pub revision_no: u32,
+    /// 文件资产身份。
+    pub file_asset_id: String,
+    /// 原始文件名。
+    pub file_name: String,
+    /// 创建时间。
+    pub created_at: u64,
+}
+
 /// 追加合同版本请求（归档后续 PDF 版本，乐观锁：携带期望版本）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ArchiveContractRevisionRequest {

@@ -5,11 +5,7 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
-import type {
-    BackendContractDetail,
-    BackendSalesChangeOrder,
-    BackendSalesOrderDetail,
-} from "@/features/sales-orders/api/contracts"
+import type { BackendSalesChangeOrder } from "@/features/sales-orders/api/contracts"
 import {
     mapChangeOrder,
     throwValidation,
@@ -25,158 +21,29 @@ export type StartSalesChangeOrderIntent = {
     nature: "physical_service" | "card_voucher"
 }
 
-export type StartSalesChangeOrderPayload = StartSalesChangeOrderIntent & {
-    command: Record<string, unknown>
-}
+export type StartSalesChangeOrderPayload = StartSalesChangeOrderIntent
 
 export type StartSalesChangeOrderInput = StartSalesChangeOrderPayload & {
     idempotencyKey: string
 }
 
-/** 冻结改单完整载荷；正式请求结果未知后禁止重新从可变详情拼装。 */
-export async function prepareStartSalesChangeOrder(
-    input: StartSalesChangeOrderIntent,
-): Promise<StartSalesChangeOrderPayload> {
-    const detail = await apiGet<BackendSalesOrderDetail>(
-        `/admin/sales-orders/${input.salesOrderId}`,
-    )
-    const wc = detail.working_copy
-    const latestRev = detail.revisions?.[0]
-    // 已生效订单的 FIRST_SUBMISSION 工作副本已提交（status=SUBMITTED），
-    // 详情视图只返回可编辑副本（Editing/Conflict），故 wc 通常为空；
-    // 与 fetchSalesOrderDraftForResume 同策略：回退到最近一次提交快照。
-    const submissions = [...(detail.submissions ?? [])].sort(
-        (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0),
-    )
-    const latestSubmission = submissions[0]
-    const draftSource = wc && wc.lines.length > 0 ? wc : latestSubmission
-
-    // 变更单创建需要完整 draft；以当前工作副本/最近提交快照行作为目标草稿骨架。
-    // 字段不足时后端会校验失败并经 ApiError 抛出。
-    let contractNo: string | null = null
-    let customerName = detail.customer_id
-    let settlementName: string | null = null
-    let paymentCode = "CUSTOM"
-    let paymentName = "合同约定"
-    let invoiceType = "SPECIAL"
-    let taxPoint = "0"
-
-    if (detail.contract_id) {
-        try {
-            const contract = await apiGet<BackendContractDetail>(
-                `/admin/contracts/${detail.contract_id}`,
-            )
-            contractNo = contract.contract_no
-            const rev = contract.revisions.find(
-                (r) => r.id === contract.current_revision_id,
-            )
-            if (rev) {
-                customerName = rev.customer_name
-                settlementName = rev.settlement_party_name
-                paymentCode = rev.payment_term_code
-                paymentName = rev.payment_term_name
-                invoiceType = rev.invoice_type
-                taxPoint = rev.tax_point
-            }
-        } catch {
-            // ignore
-        }
-    }
-
-    const lines =
-        draftSource?.lines?.map((line) => {
-            const isVoucher = line.line_type === "VOUCHER"
-            const row: Record<string, unknown> = {
-                line_no: line.line_no,
-                line_type: line.line_type,
-                sales_tax_rate: line.sales_tax_rate,
-                item_name_snapshot: line.item_name_snapshot,
-                spec_snapshot: line.spec_snapshot ?? null,
-                unit_snapshot: line.unit_snapshot ?? null,
-                goods: null,
-                voucher: null,
-            }
-            if (isVoucher) {
-                const cardCount = line.card_count ?? 1
-                const face = line.face_value ?? "0.00"
-                const unitPrice = line.unit_price_gross ?? "0.0000"
-                const faceTotal = (Number(face) * cardCount).toFixed(2)
-                const txn = (Number(unitPrice) * cardCount).toFixed(2)
-                const gift = (Number(faceTotal) - Number(txn)).toFixed(2)
-                row.voucher = {
-                    face_value: face,
-                    card_count: cardCount,
-                    unit_price_gross: unitPrice,
-                    face_value_total: faceTotal,
-                    transaction_amount: txn,
-                    gift_amount: gift,
-                    gift_rate: null,
-                    card_form: line.card_form ?? "ELECTRONIC",
-                }
-            } else {
-                const skuId = line.sku_id?.trim()
-                const skuRevisionId = line.sku_revision_id?.trim()
-                if (!skuId || !skuRevisionId) {
-                    throwValidation(
-                        "历史草稿缺少精确 SKU 修订，请重新从公司商品池选择商品",
-                    )
-                }
-                row.goods = {
-                    sku_id: skuId,
-                    sku_revision_id: skuRevisionId,
-                    service_region: line.service_region ?? null,
-                    welfare_scenario: null,
-                    fulfillment_mode: "COMPANY_WAREHOUSE",
-                    fulfillment_due_at: Math.floor(Date.now() / 1000),
-                    quantity: line.quantity ?? "0",
-                    base_unit_code: line.base_unit_code ?? "EA",
-                    unit_price_gross: line.unit_price_gross ?? "0.0000",
-                }
-            }
-            return row
-        }) ?? []
-
-    if (lines.length === 0) {
-        throwValidation("无法发起变更：缺少可变更的明细草稿")
-    }
-
-    return {
-        ...input,
-        baseRevisionNo: input.baseRevisionNo || latestRev?.revision_no || 0,
-        command: {
-            sales_order_id: input.salesOrderId,
-            change_type: input.nature === "card_voucher" ? "OTHER" : "AMOUNT",
-            reason: "销售发起变更",
-            draft: {
-                editor_user_id:
-                    (wc && wc.lines.length > 0
-                        ? wc.editor_user_id
-                        : latestSubmission?.submitted_by) ?? "unknown",
-                customer_name: customerName,
-                contract_no: contractNo,
-                settlement_party_name: settlementName,
-                payment_term_code: paymentCode,
-                payment_term_name: paymentName,
-                invoice_type: invoiceType,
-                tax_point: taxPoint,
-                project_name: null,
-                business_remark: null,
-                voucher_category_sku_id: null,
-                voucher_expiry_at: null,
-                lines,
-            },
-        },
-    }
-}
-
-/** 使用已冻结载荷创建改单。 */
+/** 创建改单；完整工作副本由后端从当前生效版本派生。 */
 export async function startSalesChangeOrder(
     input: StartSalesChangeOrderInput,
 ): Promise<SalesChangeOrderSummary> {
+    if (
+        !Number.isSafeInteger(input.baseRevisionNo) ||
+        input.baseRevisionNo <= 0
+    ) {
+        throwValidation("销售单尚无可变更的生效版本")
+    }
     const created = await apiPost<BackendSalesChangeOrder>(
         "/admin/sales-change-orders",
         {
-            ...input.command,
+            sales_order_id: input.salesOrderId,
+            expected_base_revision_no: input.baseRevisionNo,
+            change_type: input.nature === "card_voucher" ? "OTHER" : "AMOUNT",
+            reason: "销售发起变更",
             idempotency_key: input.idempotencyKey,
         },
     )

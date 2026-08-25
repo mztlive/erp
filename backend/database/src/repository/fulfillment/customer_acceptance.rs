@@ -84,6 +84,26 @@ impl Pagination for CustomerAcceptanceFilter {
 }
 
 impl<'a> Repository<'a, CustomerAcceptance> {
+    /// 按客户验收单号查询未删除验收单。
+    ///
+    /// # 参数
+    /// * `acceptance_no` - 客户验收单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除验收单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_acceptance_no(
+        &self,
+        acceptance_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAcceptance>> {
+        self.find_one_by_field("acceptance_no", acceptance_no, executor)
+            .await
+    }
+
     /// 分页检索客户验收单列表（投影查询）。
     ///
     /// 只返回 [`CustomerAcceptanceRow`] 所需的列表字段，不加载整文档；排序

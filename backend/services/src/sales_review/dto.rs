@@ -6,7 +6,6 @@
 //!
 //! 契约来源：erp-client `features/sales-orders`（W05 变更轨）。
 
-use entities::sales_order::{GoodsLineFields, LineType, VoucherLineDraft};
 use entities::sales_review::SalesChangeType;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -164,83 +163,25 @@ impl SalesChangeOrderListParams {
     }
 }
 
-/// 变更目标草稿行请求（与销售草稿行同形）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct SalesChangeLineRequest {
-    /// 行号。
-    #[validate(range(min = 1, message = "行号必须为正整数"))]
-    pub line_no: u32,
-    /// 行类型。
-    pub line_type: LineType,
-    /// 销项税率。
-    pub sales_tax_rate: entities::money::Rate,
-    /// 销售项名称快照。
-    #[validate(custom(function = "non_blank", message = "销售项名称不能为空"))]
-    pub item_name_snapshot: String,
-    /// 规格快照。
-    pub spec_snapshot: Option<String>,
-    /// 单位快照。
-    pub unit_snapshot: Option<String>,
-    /// 实物及服务字段组（`GOODS_SERVICE` 行必填）。
-    pub goods: Option<GoodsLineFields>,
-    /// 卡券字段组（`VOUCHER` 行必填）。
-    pub voucher: Option<VoucherLineDraft>,
-}
-
-/// 变更目标草稿表头请求。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct SalesChangeDraftRequest {
-    /// 当前草稿责任人。
-    #[validate(custom(function = "non_blank", message = "编辑人不能为空"))]
-    pub editor_user_id: String,
-    /// 客户名称快照。
-    #[validate(custom(function = "non_blank", message = "客户名称不能为空"))]
-    pub customer_name: String,
-    /// 合同编号快照。
-    pub contract_no: Option<String>,
-    /// 结算主体名称快照。
-    pub settlement_party_name: Option<String>,
-    /// 付款条件代码。
-    #[validate(custom(function = "non_blank", message = "付款条件代码不能为空"))]
-    pub payment_term_code: String,
-    /// 付款条件名称。
-    #[validate(custom(function = "non_blank", message = "付款条件名称不能为空"))]
-    pub payment_term_name: String,
-    /// 开票类型。
-    #[validate(custom(function = "non_blank", message = "开票类型不能为空"))]
-    pub invoice_type: String,
-    /// 税点。
-    #[validate(custom(function = "non_blank", message = "税点不能为空"))]
-    pub tax_point: String,
-    /// 客户项目名称。
-    pub project_name: Option<String>,
-    /// 业务备注。
-    pub business_remark: Option<String>,
-    /// 卡券类目 SKU（卡券单必填）。
-    pub voucher_category_sku_id: Option<entities::ids::SkuId>,
-    /// 卡券履约期限（秒级时间戳，卡券单必填）。
-    pub voucher_expiry_at: Option<u64>,
-    /// 目标行清单（非空，上限 200 行）。
-    #[validate(length(min = 1, max = 200, message = "明细行数必须在1-200之间"))]
-    pub lines: Vec<SalesChangeLineRequest>,
-}
-
-/// 创建销售变更单请求（草稿 + 变更工作副本原子形成）。
+/// 创建销售变更单请求。
+///
+/// 客户端只提交变更意图和当前已见的正式版本号；变更工作副本的
+/// 表头、明细、合同与商业快照必须由服务端从当前生效版本派生。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSalesChangeOrderRequest {
     /// 原销售单。
     pub sales_order_id: entities::ids::SalesOrderId,
     /// 变更类型。
     pub change_type: SalesChangeType,
+    /// 客户端已见的当前正式版本号；已变更时拒绝以防止从过期页面发起。
+    #[validate(range(min = 1, message = "基准版本号必须大于 0"))]
+    pub expected_base_revision_no: u32,
     /// 变更原因。
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub reason: String,
     /// 幂等键。
     #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
     pub idempotency_key: String,
-    /// 变更目标草稿表头与明细。
-    #[validate(nested)]
-    pub draft: SalesChangeDraftRequest,
 }
 
 /// 发起销售变更影响确认请求。

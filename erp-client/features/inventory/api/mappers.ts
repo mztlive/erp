@@ -231,6 +231,7 @@ export function toDraftView(
     const st = adjustmentStatusMap(a.status)
     return {
         stockAdjustmentId: a.id,
+        lineId: line?.id ?? "",
         adjustmentNo: a.adjustment_no,
         balanceId: line ? `${a.warehouse_id}:${line.sku_id}` : a.warehouse_id,
         warehouseId: a.warehouse_id,
@@ -245,8 +246,8 @@ export function toDraftView(
             ? directionFrontend(line.direction)
             : reasonDirection(a.reason_type),
         quantity: line?.quantity ?? "",
-        note: "",
-        occurredAt: secsToIso(a.created_at).slice(0, 16),
+        note: a.note ?? "",
+        occurredAt: secsToIso(a.occurred_at ?? a.created_at).slice(0, 16),
         status: st.status,
         statusLabel: st.statusLabel,
         balanceLockVersion,

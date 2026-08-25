@@ -19,6 +19,7 @@ import {
 import { useSupplierMediaAssets } from "@/features/master-data/hooks/use-supplier-media-assets"
 import type {
     MasterDataMutationResult,
+    PendingAssetUpload,
     SupplierFields,
 } from "@/features/master-data/types"
 import {
@@ -58,7 +59,7 @@ export function useSupplierEditor(stableId: string) {
         rememberMediaFiles,
         mediaUrlsFor,
         mediaAssetIdsFor,
-        resolvePendingMedia,
+        preparePendingMedia,
     } = useSupplierMediaAssets(data)
     /** 已实际编辑过的敏感字段；用于区分“保留打码值”和“明确清空”。 */
     const editedSensitiveRef = React.useRef(
@@ -116,8 +117,11 @@ export function useSupplierEditor(stableId: string) {
             }
 
             let fields = buildResourceFields("suppliers", value)
+            let pendingAssetUploads: readonly PendingAssetUpload[] = []
             try {
-                const assetMaps = await resolvePendingMedia(value)
+                const preparedMedia = preparePendingMedia(value)
+                const assetMaps = preparedMedia.assetMaps
+                pendingAssetUploads = preparedMedia.pendingAssetUploads
                 fields = {
                     ...fields,
                     clearContact:
@@ -165,6 +169,7 @@ export function useSupplierEditor(stableId: string) {
                     changeReason,
                     fields,
                     idempotencyKey,
+                    pendingAssetUploads,
                 })
                 if (response.outcome === "succeeded") {
                     toast.add({
@@ -189,6 +194,7 @@ export function useSupplierEditor(stableId: string) {
                 changeReason,
                 fields,
                 idempotencyKey,
+                pendingAssetUploads,
             })
             if (response.outcome === "succeeded") {
                 toast.add({

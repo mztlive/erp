@@ -294,6 +294,22 @@ impl CustomerReceipt {
         self.transition(CustomerReceiptStatus::Posted)
     }
 
+    /// 将经 W13 当前责任任务核验的历史回款登记为已过账事实。
+    ///
+    /// 本入口只表达历史事实迁移；调用方必须在同一数据库事务内校验开放的
+    /// 卡券票款复核任务、当前责任、对象版本与分配守恒，并同步写入分配、
+    /// 子账进度和审计。普通客户回款不得调用本入口绕过审批。
+    ///
+    /// # 错误
+    /// 状态不是草稿时返回冲突。
+    pub fn register_historical_fact(&mut self) -> Result<()> {
+        if self.status != CustomerReceiptStatus::Draft {
+            return Err(Error::from("只有草稿回款可以登记为历史事实"));
+        }
+        self.transition(CustomerReceiptStatus::InApproval)?;
+        self.transition(CustomerReceiptStatus::Posted)
+    }
+
     /// 判断回款单是否已过账。
     ///
     /// # 返回

@@ -2,9 +2,8 @@
 
 import * as React from "react"
 
-import { forgetSupplierRefundDraft } from "@/features/supplier-payables/api/refunds"
 import {
-    useEnsureSupplierRefundDraftMutation,
+    useCommitSupplierRefundMutation,
     useSubmitSupplierRefundMutation,
 } from "@/features/supplier-payables/hooks/queries"
 import {
@@ -18,7 +17,7 @@ import type {
 } from "@/features/supplier-payables/types"
 
 /**
- * 供应商退款确认流程：先创建草稿再确认冻结路线后提交审批。
+ * 供应商退款确认流程：本地确认后由一个原子命令创建单据并启动审批。
  */
 export function useSupplierRefundFlow(args: {
     openRefundPreview: (refundId: string) => void
@@ -41,20 +40,25 @@ export function useSupplierRefundFlow(args: {
     refundSubmitPending: boolean
 } {
     const { openRefundPreview, setLastResult, setActionError } = args
-    const ensureRefundMutation = useEnsureSupplierRefundDraftMutation()
+    const commitRefundMutation = useCommitSupplierRefundMutation()
     const submitRefundMutation = useSubmitSupplierRefundMutation()
 
     const [refundRequest, setRefundRequest] =
         React.useState<SupplierRefundRequest | null>(null)
     const [refundDraft, setRefundDraft] =
         React.useState<SupplierRefundRow | null>(null)
+    const [pendingCommit, setPendingCommit] = React.useState<{
+        sourcePaymentId: string
+        amount?: string
+        reason: string
+    } | null>(null)
     const [refundSubmitOpen, setRefundSubmitOpen] = React.useState(false)
     const refundSlotRef = React.useRef<SupplierRefundIdempotencySlot | null>(
         null,
     )
 
     /**
-     * 按当前意图绑定退款幂等槽。换单或改原因时轮换并丢弃旧草稿缓存。
+     * 按当前意图绑定退款幂等槽。
      *
      * @param scopeId 原付款 ID 或已有退款单 ID。
      * @param reason 退款原因。
@@ -65,40 +69,26 @@ export function useSupplierRefundFlow(args: {
     ): SupplierRefundIdempotencySlot {
         const current = refundSlotRef.current
         const next = slotForSupplierRefundIntent(current, scopeId, reason)
-        if (current && current.key !== next.key) {
-            forgetSupplierRefundDraft(current.key)
-        }
         refundSlotRef.current = next
         return next
     }
 
     /**
-     * 登记供应商退款草稿并打开提交确认。
+     * 冻结本地退款意图并打开提交确认，不写入后端。
      *
      * @param reason 非空退款原因。
      */
     async function prepareRefundDraft(reason: string) {
         if (!refundRequest) return
         const slot = bindRefundSlot(refundRequest.sourcePaymentId, reason)
-        const res = await ensureRefundMutation.mutateAsync({
+        setPendingCommit({
             sourcePaymentId: refundRequest.sourcePaymentId,
-            supplierId: refundRequest.supplierId,
             amount: refundRequest.amount,
             reason,
-            idempotencyKey: slot.key,
         })
-        if (res.status !== "succeeded") {
-            setActionError(res.message)
-            setRefundRequest(null)
-            return
-        }
-        refundSlotRef.current = {
-            ...slot,
-            refundId: res.refund.refundId,
-        }
-        setRefundDraft(res.refund)
+        refundSlotRef.current = slot
+        setRefundDraft(null)
         setRefundRequest(null)
-        openRefundPreview(res.refund.refundId)
         setRefundSubmitOpen(true)
     }
 
@@ -108,6 +98,7 @@ export function useSupplierRefundFlow(args: {
      * @param row 当前退款草稿投影。
      */
     function beginRefundSubmit(row: SupplierRefundRow) {
+        setPendingCommit(null)
         setRefundDraft(row)
         const current = refundSlotRef.current
         if (current?.refundId === row.refundId) {
@@ -127,13 +118,29 @@ export function useSupplierRefundFlow(args: {
      */
     async function confirmRefundSubmit() {
         const slot = refundSlotRef.current
-        if (!refundDraft || !slot) return
-        const res = await submitRefundMutation.mutateAsync({
-            refundId: refundDraft.refundId,
-            expectedVersion: refundDraft.baselineVersion,
-            idempotencyKey: slot.key,
-        })
-        if (res.status !== "succeeded") {
+        if (!slot || (!pendingCommit && !refundDraft)) return
+        const res = pendingCommit
+            ? await commitRefundMutation.mutateAsync({
+                  ...pendingCommit,
+                  idempotencyKey: slot.key,
+              })
+            : await submitRefundMutation.mutateAsync({
+                  refundId: refundDraft!.refundId,
+                  expectedVersion: refundDraft!.baselineVersion,
+                  idempotencyKey: slot.key,
+              })
+        if (res.status === "unknown") {
+            setLastResult({
+                status: "unknown",
+                title: "退款结果待确认",
+                description: res.message,
+                reference: res.idempotencyKey,
+                operationId: res.idempotencyKey,
+            })
+            setRefundSubmitOpen(false)
+            return
+        }
+        if (res.status === "failed") {
             setActionError(res.message)
             setRefundSubmitOpen(false)
             return
@@ -148,8 +155,8 @@ export function useSupplierRefundFlow(args: {
                 { label: "当前状态", value: res.refund.statusLabel },
             ],
         })
-        forgetSupplierRefundDraft(slot.key)
         refundSlotRef.current = null
+        setPendingCommit(null)
         setRefundDraft(res.refund)
         setRefundSubmitOpen(false)
         openRefundPreview(res.refund.refundId)
@@ -164,7 +171,8 @@ export function useSupplierRefundFlow(args: {
         refundDraft,
         refundSubmitOpen,
         setRefundSubmitOpen,
-        refundDraftPending: ensureRefundMutation.isPending,
-        refundSubmitPending: submitRefundMutation.isPending,
+        refundDraftPending: false,
+        refundSubmitPending:
+            commitRefundMutation.isPending || submitRefundMutation.isPending,
     }
 }

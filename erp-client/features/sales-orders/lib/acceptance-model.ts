@@ -103,12 +103,17 @@ export function buildDraftLines(
 ): AcceptanceDraftLine[] {
     const bySalesLine = new Map<
         string,
-        Array<{ fulfillmentLineId: string; allocatedQuantity: string }>
+        Array<{
+            fulfillmentLineId: string
+            fulfillmentFactType: AcceptanceDraftLine["allocations"][number]["fulfillmentFactType"]
+            allocatedQuantity: string
+        }>
     >()
     for (const [id, entry] of selected) {
         const list = bySalesLine.get(entry.fact.salesOrderLineId) ?? []
         list.push({
             fulfillmentLineId: id,
+            fulfillmentFactType: entry.fact.fulfillmentFactType,
             allocatedQuantity: entry.qty,
         })
         bySalesLine.set(entry.fact.salesOrderLineId, list)

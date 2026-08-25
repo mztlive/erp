@@ -98,63 +98,19 @@ export async function postFulfillmentOperation(
 
     try {
         if (draft.type === "RECEIPT") {
-            // Prefer post existing draft document; if not found, create then post
-            const receiptId = input.operationId
-            let receipt: BackendPurchaseReceipt | null = null
-            try {
-                const detail = await apiGet<BackendPurchaseReceiptDetail>(
-                    `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}`,
-                )
-                // PurchaseReceipt 为 NO_APPROVAL，确认前丢弃误带的审批绑定。
-                receipt = stripPurchaseReceiptApprovalField(detail.receipt)
-            } catch (error) {
-                if (!(isApiError(error) && error.status === 404)) throw error
-            }
-
-            if (!receipt) {
-                if (!draft.lines.length) {
-                    return {
-                        status: "failed",
-                        code: "VALIDATION_BLOCKED",
-                        message: "入库明细不能为空",
-                    }
-                }
-                // Need purchase_order_id — not always on draft; require from source via prior queue
+            if (!draft.lines.length) {
                 return {
                     status: "failed",
-                    code: "BACKEND_GAP",
-                    message:
-                        "未找到可确认的入库草稿。请返回采购单创建入库单后再确认。",
+                    code: "VALIDATION_BLOCKED",
+                    message: "入库明细不能为空",
                 }
             }
-
-            let commandVersion = input.expectedDocumentVersion
-            if (
-                receipt.warehouse_id !== draft.warehouseId &&
-                draft.warehouseId
-            ) {
-                const updated = stripPurchaseReceiptApprovalField(
-                    await apiPut<BackendPurchaseReceipt>(
-                        `/admin/purchase-receipts/${encodeURIComponent(receiptId)}`,
-                        {
-                            version: input.expectedDocumentVersion,
-                            expected_source_version:
-                                input.expectedSourceVersion,
-                            idempotency_key: input.idempotencyKey,
-                            warehouse_id: draft.warehouseId,
-                        },
-                    ),
-                )
-                commandVersion = updated.version
-            }
-
             const posted = stripPurchaseReceiptApprovalField(
                 await apiPost<BackendPurchaseReceipt>(
-                    `/admin/purchase-receipts/${encodeURIComponent(receiptId)}/post`,
+                    `/admin/purchase-receipts/${encodeURIComponent(input.operationId)}/post`,
                     {
-                        version: commandVersion,
-                        expected_source_version: input.expectedSourceVersion,
-                        idempotency_key: input.idempotencyKey,
+                        version: input.expectedDocumentVersion,
+                        warehouse_id: draft.warehouseId || undefined,
                     },
                 ),
             )
@@ -168,44 +124,13 @@ export async function postFulfillmentOperation(
             draft.type === "WAREHOUSE_SHIP" ||
             draft.type === "SUPPLIER_DIRECT"
         ) {
-            let delivery: BackendDelivery | null = null
-            try {
-                const detail = await apiGet<BackendDeliveryDetail>(
-                    `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
-                )
-                // Delivery 为 NO_APPROVAL，确认前丢弃误带的审批绑定。
-                delivery = stripDeliveryApprovalField(detail.delivery)
-            } catch (error) {
-                if (!(isApiError(error) && error.status === 404)) throw error
-            }
-
-            if (!delivery) {
-                return {
-                    status: "failed",
-                    code: "DOCUMENT_NOT_FOUND",
-                    message: "发货草稿已不存在，请刷新后重新选择单据",
-                }
-            }
-
-            const updated = stripDeliveryApprovalField(
-                await apiPut<BackendDelivery>(
-                    `/admin/deliveries/${encodeURIComponent(delivery.id)}`,
-                    {
-                        version: input.expectedDocumentVersion,
-                        expected_source_version: input.expectedSourceVersion,
-                        idempotency_key: input.idempotencyKey,
-                        carrier: draft.carrier || undefined,
-                        tracking_no: draft.trackingNo || undefined,
-                    },
-                ),
-            )
             const posted = stripDeliveryApprovalField(
                 await apiPost<BackendDelivery>(
-                    `/admin/deliveries/${encodeURIComponent(delivery.id)}/post`,
+                    `/admin/deliveries/${encodeURIComponent(input.operationId)}/post`,
                     {
-                        version: updated.version,
-                        expected_source_version: input.expectedSourceVersion,
-                        idempotency_key: input.idempotencyKey,
+                        version: input.expectedDocumentVersion,
+                        carrier: draft.carrier || undefined,
+                        tracking_no: draft.trackingNo || undefined,
                     },
                 ),
             )

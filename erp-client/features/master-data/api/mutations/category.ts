@@ -1,4 +1,4 @@
-/** 商品分类的创建 / 修订 / 停用命令（父级迁移走独立端点）。 */
+/** 商品分类的创建 / 原子修订 / 停用命令。 */
 
 import { apiPost, apiPut } from "@/lib/api"
 import type { ProductCategoryDto } from "@/features/master-data/api/contracts"
@@ -60,25 +60,12 @@ export async function updateCategoryRevision(
                     ? mapProductKindInput(fields.productKind)
                     : undefined,
                 status: undefined,
+                parent_change:
+                    fields.parentId !== undefined
+                        ? { parent_category_id: fields.parentId || null }
+                        : undefined,
             },
         )
-        // parent move is a separate endpoint
-        if (fields.parentId !== undefined) {
-            try {
-                await apiPut(
-                    `/admin/product-categories/${input.stableId}/parent`,
-                    {
-                        version: updated.version,
-                        parent_category_id: fields.parentId || null,
-                    },
-                )
-            } catch (error) {
-                return mapMutationError(error, {
-                    version: updated.version,
-                    revisionNo: updated.version,
-                })
-            }
-        }
         return {
             outcome: "succeeded",
             stableId: updated.id,

@@ -366,6 +366,105 @@ pub struct CardFundsReviewActionBlockerView {
     pub message: String,
 }
 
+/// W13 历史票款登记的账户分配意图。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CardFundsRegistrationAllocation {
+    /// 目标应收子账；当前命令只允许正式任务关联的账户。
+    pub target_account_id: ReceivableAccountId,
+    /// 分配含税金额。
+    pub amount: Amount,
+}
+
+/// W13 历史回款原子登记命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct RegisterCardFundsReceiptRequest {
+    /// 当前开放复核任务。
+    pub work_item_id: WorkItemId,
+    /// 当前任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    pub expected_task_version: String,
+    /// 任务冻结的销售版本。
+    #[validate(custom(function = "non_blank", message = "对象版本不能为空"))]
+    pub expected_subject_version: String,
+    /// 提交前的票款事实版本。
+    #[validate(custom(function = "non_blank", message = "票款事实版本不能为空"))]
+    pub expected_funds_fact_version: String,
+    /// 回款单号；为空时由幂等键生成稳定号码。
+    pub receipt_no: Option<String>,
+    /// 实际到账时间。
+    pub received_at: Instant,
+    /// 回款含税金额。
+    pub gross_amount: Amount,
+    /// 目标账户分配；合计必须等于回款金额。
+    #[validate(length(min = 1, message = "至少提供一条回款分配"), nested)]
+    pub allocations: Vec<CardFundsRegistrationAllocation>,
+    /// 银行流水或证据引用。
+    #[validate(custom(function = "non_blank", message = "回款证据不能为空"))]
+    pub evidence_reference: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// W13 历史销项发票原子登记命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct RegisterCardFundsInvoiceRequest {
+    /// 当前开放复核任务。
+    pub work_item_id: WorkItemId,
+    /// 当前任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    pub expected_task_version: String,
+    /// 任务冻结的销售版本。
+    #[validate(custom(function = "non_blank", message = "对象版本不能为空"))]
+    pub expected_subject_version: String,
+    /// 提交前的票款事实版本。
+    #[validate(custom(function = "non_blank", message = "票款事实版本不能为空"))]
+    pub expected_funds_fact_version: String,
+    /// 发票号码；为空时由幂等键生成稳定号码。
+    pub invoice_no: Option<String>,
+    /// 开票业务日期。
+    pub invoice_date: BusinessDate,
+    /// 含税金额。
+    pub gross_amount: Amount,
+    /// 不含税金额。
+    pub net_amount: Amount,
+    /// 税额。
+    pub tax_amount: Amount,
+    /// 目标账户分配；合计必须等于发票含税金额。
+    #[validate(length(min = 1, message = "至少提供一条发票分配"), nested)]
+    pub allocations: Vec<CardFundsRegistrationAllocation>,
+    /// 发票证据引用。
+    #[validate(custom(function = "non_blank", message = "发票证据不能为空"))]
+    pub evidence_reference: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// W13 历史票款原子登记结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CardFundsRegistrationResult {
+    /// 登记后的票款事实版本。
+    pub funds_fact_version: String,
+    /// 登记后的账户领域版本。
+    pub subject_hash: String,
+    /// 净已收金额。
+    pub settled_total: Amount,
+    /// 净已开票金额。
+    pub invoiced_total: Amount,
+    /// 剩余开放金额。
+    pub open_total: Amount,
+    /// 剩余可开票金额。
+    pub open_invoiceable_total: Amount,
+    /// 本次登记的回款事实。
+    pub receipt_facts: Vec<ReceivableReceiptFactView>,
+    /// 本次登记的发票事实。
+    pub invoice_facts: Vec<ReceivableInvoiceFactView>,
+}
+
 /// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReceivableAccountListParams {
@@ -489,6 +588,27 @@ pub struct SubmitCustomerReceiptRequest {
     /// 提交时冻结的待过账核销分配。
     #[validate(length(min = 1, message = "至少提供一条核销分配"))]
     pub allocations: Vec<ReceiptAllocationLineRequest>,
+}
+
+/// 客户回款原子创建并提交审批请求。
+///
+/// 已有草稿提交 `receipt_id + expected_version`；新登记提交完整 `receipt`。
+/// 服务端在一个事务内完成绑定、创建、冻结分配、审批启动与审计。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CommitCustomerReceiptRequest {
+    /// 已有回款草稿主键。
+    pub receipt_id: Option<String>,
+    /// 已有草稿期望乐观锁版本。
+    pub expected_version: Option<u64>,
+    /// 新回款完整字段；提交已有草稿时为空。
+    pub receipt: Option<CreateCustomerReceiptRequest>,
+    /// 提交时冻结的待过账核销分配。
+    #[validate(length(min = 1, message = "至少提供一条核销分配"))]
+    pub allocations: Vec<ReceiptAllocationLineRequest>,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
 }
 
 /// 撤回客户回款审批请求。原因必填。
@@ -753,36 +873,44 @@ pub struct PostInvoiceRequest {
     pub allocations: Vec<SalesInvoiceAllocationLineRequest>,
 }
 
-/// 红票开具请求（§8.3-3：红票反向原蓝票有效分配，累计不超过原分配）。
+/// 销项发票原子登记请求。
+///
+/// 已有草稿时提交 `invoice_id + expected_version`；新登记时提交完整 `invoice`。
+/// 服务端在一个事务内完成单据注册、发票创建、分配、子账进度与审计。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct IssueRedInvoiceRequest {
-    /// 发票号码。
-    #[validate(custom(function = "non_blank", message = "发票号码不能为空"))]
-    pub invoice_no: String,
-    /// 开票日期（`YYYY-MM-DD`）。
-    pub invoice_date: BusinessDate,
-    /// 含税金额。
-    pub gross_amount: Amount,
-    /// 不含税金额。
-    pub net_amount: Amount,
-    /// 税额。
-    pub tax_amount: Amount,
-    /// 红票反向分配行（引用原蓝票分配，合计等于红票金额）。
-    #[validate(length(min = 1, message = "至少提供一条红冲分配"))]
-    pub allocations: Vec<RedInvoiceAllocationLineRequest>,
+#[serde(deny_unknown_fields)]
+pub struct CommitInvoiceRequest {
+    /// 已有发票草稿主键。
+    pub invoice_id: Option<String>,
+    /// 已有草稿期望乐观锁版本。
+    pub expected_version: Option<u64>,
+    /// 新发票完整字段；提交已有草稿时为空。
+    pub invoice: Option<CreateInvoiceRequest>,
+    /// 销项发票分配行。
+    #[validate(length(min = 1, message = "至少提供一条发票分配"))]
+    pub allocations: Vec<SalesInvoiceAllocationLineRequest>,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
 }
 
-/// 红票反向分配请求行。
+/// 红票原子开具请求。
+///
+/// 客户端只提交原票上的业务意图；服务端在事务内读取有效分配并生成反向行，
+/// 禁止客户端搬运原分配 ID、净额或税额。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct RedInvoiceAllocationLineRequest {
-    /// 被红冲的原蓝票分配。
-    pub reverses_allocation_id: String,
-    /// 分配含税金额。
-    pub allocated_gross_amount: Amount,
-    /// 分配不含税金额。
-    pub allocated_net_amount: Amount,
-    /// 分配税额。
-    pub allocated_tax_amount: Amount,
+#[serde(deny_unknown_fields)]
+pub struct CommitRedInvoiceRequest {
+    /// 红票号码；为空时按幂等键生成稳定号码。
+    pub invoice_no: Option<String>,
+    /// 本次红冲含税金额；为空时红冲全部剩余有效分配。
+    pub amount: Option<Amount>,
+    /// 红冲业务原因，写入审计日志。
+    #[validate(custom(function = "non_blank", message = "红冲原因不能为空"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
 }
 
 /// 销项发票分配视图。

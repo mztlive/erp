@@ -330,6 +330,8 @@ export type SubmitPurchaseOrderInput = {
     expectedLockVersion: number
     expectedDraftContentHash: string
     draftEditToken: string
+    paymentTermCode: string
+    lines: SavePurchaseOrderDraftInput["lines"]
     idempotencyKey: string
 }
 

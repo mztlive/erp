@@ -686,12 +686,32 @@ pub struct SavePurchaseOrderDraftRequest {
     pub expected_lock_version: u64,
     /// 付款条件；缺省表示不修改。
     pub payment_term_code: Option<String>,
-    /// 完整行集合（整表替换草稿明细）。
+    /// 完整行集合（兼容服务端调用；与 `line_patches` 二选一）。
+    #[serde(default)]
     pub lines: Vec<SavePurchaseOrderLine>,
+    /// 以当前草稿行 ID 为键的可编辑字段快照，由服务端在事务内合并冻结来源字段。
+    #[serde(default)]
+    pub line_patches: Vec<SavePurchaseOrderLinePatch>,
     /// 幂等键（同内容重复保存返回同一结果）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     #[validate(length(max = 128, message = "幂等键过长"))]
     pub idempotency_key: String,
+}
+
+/// 采购草稿行可编辑字段快照。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SavePurchaseOrderLinePatch {
+    /// 当前草稿提交行 ID。
+    #[validate(custom(function = "non_blank", message = "草稿行 ID 不能为空"))]
+    pub line_id: String,
+    /// 行类型；必须与服务端当前草稿一致。
+    pub line_type: PurchaseLineType,
+    /// 商品/服务采购数量。
+    pub quantity: Option<String>,
+    /// 商品/服务含税单价；物流费用行表示含税费用金额。
+    pub unit_cost_gross: Option<String>,
+    /// 进项税率。
+    pub input_tax_rate: Option<String>,
 }
 
 /// 草稿行写入项。
@@ -780,6 +800,11 @@ pub struct SubmitPurchaseOrderRequest {
     /// 期望的乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_lock_version: u64,
+    /// 付款条件只用于确认未改写创建时冻结值。
+    pub payment_term_code: Option<String>,
+    /// 提交时一并保存的草稿行可编辑字段；为空表示直接冻结当前草稿。
+    #[serde(default)]
+    pub line_patches: Vec<SavePurchaseOrderLinePatch>,
     /// 幂等键（重复提交只产生一条正式提交）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     #[validate(length(max = 128, message = "幂等键过长"))]

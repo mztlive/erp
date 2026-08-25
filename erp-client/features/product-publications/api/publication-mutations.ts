@@ -2,7 +2,7 @@
  * W22 商品发布 · 变更命令（发布修订 / 手动暂停 / 重试发送）。
  */
 
-import { apiGet, apiPost, apiPut } from "@/lib/api"
+import { apiPost, apiPut } from "@/lib/api"
 
 import {
     mapDeliveryStatus,
@@ -11,9 +11,9 @@ import {
     toBackendSaleStatus,
 } from "@/features/product-publications/api/mappers"
 import type {
-    BackendDeliveryResult,
     BackendPublication,
-    BackendRevision,
+    BackendRevisionCommit,
+    BackendRetryDeliveryResult,
 } from "@/features/product-publications/api/wire-types"
 import type {
     ManualPauseCommand,
@@ -28,7 +28,7 @@ export async function publishRevision(
     command: PublishRevisionCommand,
 ): Promise<PublishRevisionResult> {
     const content = command.content
-    const revision = await apiPost<BackendRevision>(
+    const committed = await apiPost<BackendRevisionCommit>(
         `/admin/product-publications/${encodeURIComponent(command.publicationId)}/revisions`,
         {
             sku_revision_id: content.skuRevisionId,
@@ -60,18 +60,15 @@ export async function publishRevision(
         },
     )
 
-    const delivery = await apiPost<BackendDeliveryResult>(
-        `/admin/product-publications/${encodeURIComponent(command.publicationId)}/revisions/${revision.revision_no}/deliver`,
-        { idempotency_key: command.requestId },
-    )
+    const revision = committed.revision
 
     return {
         status: "succeeded",
-        operationId: delivery.inbox_message_id,
+        operationId: committed.operation_id,
         publicationId: command.publicationId,
         revisionId: revision.id,
         revisionNo: revision.revision_no,
-        deliveryId: delivery.delivery_id,
+        deliveryId: committed.delivery_id,
         deliveryStatus: "PENDING_SEND",
         committedAt: secsToIso(revision.created_at),
     }
@@ -100,29 +97,16 @@ export async function manualPausePublication(
 export async function retryDelivery(
     command: RetryDeliveryCommand,
 ): Promise<RetryDeliveryResult> {
-    // 重试：对当前发布的最新修订再次 deliver（幂等键 = requestId）
-    const revisions = await apiGet<BackendRevision[]>(
-        `/admin/product-publications/${encodeURIComponent(command.publicationId)}/revisions`,
-    ).catch(() => [] as BackendRevision[])
-    const latest = revisions[0]
-    if (!latest) {
-        return {
-            status: "blocked",
-            code: "NO_REVISION",
-            message: "无可重试的发布修订",
-        }
-    }
-
-    const result = await apiPost<BackendDeliveryResult>(
-        `/admin/product-publications/${encodeURIComponent(command.publicationId)}/revisions/${latest.revision_no}/deliver`,
-        { idempotency_key: command.requestId },
+    const result = await apiPost<BackendRetryDeliveryResult>(
+        `/admin/product-publication-deliveries/${encodeURIComponent(command.deliveryId)}/retry`,
+        { request_id: command.requestId },
     )
 
     const st = mapDeliveryStatus(result.delivery_status)
     return {
         status: "succeeded",
         deliveryId: result.delivery_id,
-        attemptCount: 1,
+        attemptCount: result.attempt_count,
         deliveryStatus: st,
     }
 }

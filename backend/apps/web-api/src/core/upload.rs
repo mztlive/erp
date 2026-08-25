@@ -1,21 +1,34 @@
 //! Multipart 图片上传的 HTTP 协议适配与输入校验。
 
-use std::{path::Path, time::Duration};
+use std::{path::Path, sync::OnceLock, time::Duration};
 
 use axum::{
-    extract::{multipart::Field, Multipart, Request, State},
-    middleware::Next,
+    extract::{multipart::Field, DefaultBodyLimit, Multipart, Request, State},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
+    routing::MethodRouter,
 };
 use tracing::{error, warn};
 
-use crate::core::{errors, middleware::RbacSubject, rate_limit::RateLimiter, response::ApiResponse};
+use crate::{
+    app_state::AppState,
+    core::{errors, middleware::RbacSubject, rate_limit::RateLimiter, response::ApiResponse},
+};
 
 /// 单个上传文件内容允许的最大字节数。
 pub(crate) const MAX_UPLOAD_FILE_BYTES: usize = 5 * 1024 * 1024;
 
 /// Multipart 请求允许的最大字节数，额外空间用于边界、字段头等协议开销。
 pub(crate) const MAX_MULTIPART_REQUEST_BYTES: usize = MAX_UPLOAD_FILE_BYTES + 1024 * 1024;
+
+/// 合同 PDF 允许的最大字节数，与前端提交合同保持一致。
+pub(crate) const MAX_CONTRACT_PDF_BYTES: usize = 20 * 1024 * 1024;
+
+/// 合同 multipart 请求总上限，额外空间用于命令字段与协议边界。
+pub(crate) const MAX_CONTRACT_MULTIPART_REQUEST_BYTES: usize = MAX_CONTRACT_PDF_BYTES + 1024 * 1024;
+
+/// 多文件业务命令的累计请求上限；单文件仍受 5 MiB 限制。
+pub(crate) const MAX_BATCH_MULTIPART_REQUEST_BYTES: usize = 32 * 1024 * 1024;
 
 const MAX_UPLOADS_PER_WINDOW: usize = 10;
 const MAX_GLOBAL_UPLOADS_PER_WINDOW: usize = 100;
@@ -27,6 +40,26 @@ const MAX_CONCURRENT_UPLOADS: usize = 4;
 /// # 返回值
 /// 返回每主体 10 次/60 秒、全局 100 次/60 秒、并发 4 个请求的限流器。
 pub(crate) fn limiter() -> RateLimiter {
+    static SHARED_LIMITER: OnceLock<RateLimiter> = OnceLock::new();
+    SHARED_LIMITER.get_or_init(new_limiter).clone()
+}
+
+/// 为单个 multipart 方法安装共享上传准入和显式请求体上限。
+///
+/// # 参数
+/// * `route` - 已注册 handler 的方法路由
+/// * `request_limit` - 包含文件、命令字段和协议边界的累计字节上限
+///
+/// # 返回值
+/// 返回仅对当前 multipart 方法生效的受保护路由。
+pub(crate) fn multipart_route(route: MethodRouter<AppState>, request_limit: usize) -> MethodRouter<AppState> {
+    route
+        .route_layer(middleware::from_fn_with_state(limiter(), enforce_admission))
+        .layer(DefaultBodyLimit::max(request_limit))
+}
+
+/// 创建一份上传策略；生产路由通过 `limiter` 共享同一份实例。
+fn new_limiter() -> RateLimiter {
     RateLimiter::new(
         MAX_UPLOADS_PER_WINDOW,
         MAX_GLOBAL_UPLOADS_PER_WINDOW,
@@ -273,7 +306,7 @@ mod tests {
 
     use crate::core::{errors, middleware::RbacSubject, rate_limit::Error as RateLimitError};
 
-    use super::{limiter, upload_subject, Error, FormFile, MAX_UPLOAD_FILE_BYTES};
+    use super::{limiter, new_limiter, upload_subject, Error, FormFile, MAX_UPLOAD_FILE_BYTES};
 
     fn form_file(filename: &str, content_type: Option<&str>, content: &[u8]) -> FormFile {
         FormFile {
@@ -405,7 +438,7 @@ mod tests {
 
     #[test]
     fn upload_policy_limits_each_authenticated_subject() {
-        let limiter = limiter();
+        let limiter = new_limiter();
         for _ in 0..10 {
             drop(limiter.admit("user:admin:1").unwrap());
         }
@@ -415,6 +448,20 @@ mod tests {
             Err(RateLimitError::KeyExceeded { .. })
         ));
         assert!(limiter.admit("user:admin:2").is_ok());
+    }
+
+    #[test]
+    fn upload_policy_is_shared_by_all_upload_routes() {
+        let first_route = limiter();
+        let second_route = limiter();
+        for _ in 0..10 {
+            drop(first_route.admit("test:shared-upload-policy").unwrap());
+        }
+
+        assert!(matches!(
+            second_route.admit("test:shared-upload-policy"),
+            Err(RateLimitError::KeyExceeded { .. })
+        ));
     }
 
     #[test]

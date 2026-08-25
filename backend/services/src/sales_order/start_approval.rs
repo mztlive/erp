@@ -11,14 +11,14 @@ use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, NoTransaction, SalesOrderExt,
-    Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
+    SalesOrderExt, Transactional, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
-use entities::sales_order::SalesOrder;
+use entities::sales_order::{SalesOrder, SalesOrderLine, SalesOrderWorkingCopyLine};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
@@ -48,9 +48,18 @@ pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
+    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
+pub(super) async fn load_bound_definition_graph_with_executor(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
+        .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("销售单绑定的审批定义不存在".to_string()))?;
     Ok(engine_graph(graph))
@@ -299,6 +308,27 @@ pub(super) struct SalesOrderStartPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: entities::AuditLog,
+    /// 本次提交附带的草稿替换写入计划。
+    pub working_copy_plan: SalesOrderWorkingCopyPersistPlan,
+    /// 事务内必须重新确认的商品池精确引用。
+    pub sellable_refs: Vec<(String, String)>,
+}
+
+/// 销售提交事务内的工作副本写入计划。
+///
+/// 普通提交不改草稿行；“编辑并提交”会在同一事务替换行；驳回后没有活动副本时
+/// 会在同一事务新建并直接锁定副本。
+pub(super) struct SalesOrderWorkingCopyPersistPlan {
+    /// 本次草稿新增的稳定行。
+    pub created_stable_lines: Vec<SalesOrderLine>,
+    /// 需要软删除的旧工作副本行。
+    pub old_working_copy_lines: Vec<SalesOrderWorkingCopyLine>,
+    /// 本次完整工作副本行。
+    pub new_working_copy_lines: Vec<SalesOrderWorkingCopyLine>,
+    /// 是否需要写入本次完整工作副本行。
+    pub replace_working_copy_lines: bool,
+    /// 是否是本次新建工作副本。
+    pub create_working_copy: bool,
 }
 
 /// 在同一事务中写入提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -337,14 +367,45 @@ pub(super) async fn persist_sales_order_start(
         organization_id,
         now,
         audit,
+        working_copy_plan,
+        sellable_refs,
     } = input;
     let submission_view = super::mapper::submission_view(submission.clone(), submission_lines.clone());
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                db.sales_order()
-                    .submit_working_copy(&mut working_copy, &submission, &submission_lines, session)
+                super::SalesOrderService::new(db.clone())
+                    .ensure_sellable_refs(&sellable_refs, session)
                     .await?;
+                for line in &working_copy_plan.created_stable_lines {
+                    db.sales_order_lines().create(line, session).await?;
+                }
+                for mut old in working_copy_plan.old_working_copy_lines {
+                    db.sales_order_working_copy_lines()
+                        .soft_delete(&mut old, session)
+                        .await?;
+                }
+                if working_copy_plan.replace_working_copy_lines {
+                    for line in &working_copy_plan.new_working_copy_lines {
+                        db.sales_order_working_copy_lines().create(line, session).await?;
+                    }
+                }
+                if working_copy_plan.create_working_copy {
+                    db.sales_order_working_copies()
+                        .create(&working_copy, session)
+                        .await?;
+                    for line in &working_copy_plan.new_working_copy_lines {
+                        db.sales_order_working_copy_lines().create(line, session).await?;
+                    }
+                    db.sales_order_submissions().create(&submission, session).await?;
+                    for line in &submission_lines {
+                        db.sales_order_submission_lines().create(line, session).await?;
+                    }
+                } else {
+                    db.sales_order()
+                        .submit_working_copy(&mut working_copy, &submission, &submission_lines, session)
+                        .await?;
+                }
                 db.sales_orders().update(&mut order, session).await?;
                 db.workflow_actions().create(&workflow_action, session).await?;
                 match prepared {
@@ -389,17 +450,17 @@ pub(super) async fn persist_sales_order_start(
 ///
 /// # 关键业务约束
 /// `document_type` 必须与提交分派一致，不得在此改写。
-struct SalesOrderRuntimeWriteInput<'a> {
+pub(super) struct SalesOrderRuntimeWriteInput<'a> {
     /// 按业务性质分派的单据类型。
-    document_type: DocumentType,
+    pub document_type: DocumentType,
     /// 冻结快照载荷。
-    snapshot_payload: &'a ApprovalSubjectSnapshotPayload,
+    pub snapshot_payload: &'a ApprovalSubjectSnapshotPayload,
     /// 责任角色。
-    owner_role: &'a str,
+    pub owner_role: &'a str,
     /// 责任组织。
-    organization_id: &'a str,
+    pub organization_id: &'a str,
     /// 调用方时间。
-    now: Instant,
+    pub now: Instant,
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
@@ -421,7 +482,7 @@ struct SalesOrderRuntimeWriteInput<'a> {
 ///
 /// # 关键业务约束
 /// 缺少入口执行时不得提交销售单。
-async fn persist_runtime_writes(
+pub(super) async fn persist_runtime_writes(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
     input: SalesOrderRuntimeWriteInput<'_>,

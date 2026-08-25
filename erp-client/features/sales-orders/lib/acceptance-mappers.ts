@@ -118,6 +118,18 @@ export function mapFactType(
     }
 }
 
+export function mapFactTypeToBackend(type: FulfillmentFactType): string {
+    switch (type) {
+        case "ELECTRONIC":
+            return "ELECTRONIC_DELIVERY"
+        case "SERVICE":
+            return "SERVICE_FULFILLMENT"
+        case "WAREHOUSE_SHIP":
+        case "SUPPLIER_DIRECT":
+            return "DELIVERY"
+    }
+}
+
 export function mapOverallResult(code: string): AcceptanceOverallResult {
     switch (code) {
         case "SHORTAGE":

@@ -385,6 +385,35 @@ impl PurchaseReturnOrderListParams {
 // 客户退款（customer_refund）
 // ---------------------------------------------------------------------------
 
+/// 按原资金事实一次创建并提交退款/冲正审批的命令。
+///
+/// 服务端从原事实解析客户、供应商与默认金额，并在一个事务内完成单据创建、
+/// 审批绑定、状态迁移、不可变快照、运行事实、入口任务和审计。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CommitReturnFactRequest {
+    /// 原回款或原付款主键。
+    #[validate(custom(function = "non_blank", message = "原资金事实不能为空"))]
+    pub source_fact_id: String,
+    /// 本次金额；为空时使用原资金事实全额。
+    pub amount: Option<Amount>,
+    /// 原因说明。
+    #[validate(custom(function = "non_blank", message = "原因说明不能为空"))]
+    pub reason: String,
+    /// 业务请求幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 客户退款一次提交命令。
+pub type CommitCustomerRefundRequest = CommitReturnFactRequest;
+/// 供应商退款一次提交命令。
+pub type CommitSupplierRefundRequest = CommitReturnFactRequest;
+/// 回款冲正一次提交命令。
+pub type CommitReceiptReversalRequest = CommitReturnFactRequest;
+/// 付款冲正一次提交命令。
+pub type CommitPaymentReversalRequest = CommitReturnFactRequest;
+
 /// 客户退款创建请求（W11 纠错入口：草稿，财务经办/复核分离）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateCustomerRefundRequest {

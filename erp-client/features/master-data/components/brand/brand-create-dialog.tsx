@@ -11,7 +11,7 @@ import {
 import {
     newIdempotencyKey,
     notifySuccess,
-    resolveBrandLogoFields,
+    prepareBrandLogoFields,
 } from "@/features/master-data/components/shared/action-dialog-shared"
 import { useCreateMasterDataMutation } from "@/features/master-data/hooks/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
@@ -19,6 +19,7 @@ import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resour
 import type {
     BrandFields,
     MasterDataMutationResult,
+    PendingAssetUpload,
 } from "@/features/master-data/types"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -46,8 +47,9 @@ export function BrandCreateDialog({
         validators: { onChange: brandFormSchema },
         onSubmit: async ({ value }) => {
             let fields: BrandFields
+            let pendingAssetUploads: readonly PendingAssetUpload[] = []
             try {
-                fields = await resolveBrandLogoFields(
+                const prepared = prepareBrandLogoFields(
                     {
                         code: value.code.trim(),
                         logo: value.logo.trim() || undefined,
@@ -56,6 +58,8 @@ export function BrandCreateDialog({
                     logoAssetId,
                     logoPreviewUrl,
                 )
+                fields = prepared.fields
+                pendingAssetUploads = prepared.pendingAssetUploads
             } catch (error) {
                 setResult({
                     outcome: "blocked",
@@ -71,6 +75,7 @@ export function BrandCreateDialog({
                 changeReason: value.changeReason.trim(),
                 fields,
                 idempotencyKey,
+                pendingAssetUploads,
             })
             if (response.outcome === "succeeded") {
                 notifySuccess(masterDataCopy.createSuccessTitle, response)

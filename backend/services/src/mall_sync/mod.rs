@@ -64,7 +64,7 @@ pub use self::dto::{
     MallSalesSyncCursorView, MallSalesSyncJobListParams, MallSalesSyncJobView, MasterMappingTaskDetailParams,
     MasterMappingTaskListParams, MasterMappingTaskView, PageView, ReapplyMallSnapshotCommand,
     ReapplyOperationView, RequestSourceFixCommand, RequestSourceFixResult,
-    ResolveMallSalesReconciliationItemRequest, TriggerMallSyncCommand,
+    ResolveMallSalesReconciliationItemRequest, RetryMallSalesSyncJobRequest, TriggerMallSyncCommand,
 };
 use self::dto::{
     MallSalesSyncJobListQuery, MappingActionBlockerView, MappingCandidateTargetView,
@@ -168,6 +168,46 @@ impl MallSyncService {
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
         Self { db }
+    }
+
+    /// 沿失败作业的服务端事实创建一次重试作业。
+    ///
+    /// # 参数
+    /// * `failed_job_id` - 待重试作业 ID
+    /// * `request` - 仅包含理由、可选水位版本与幂等键的重试请求
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回原子创建的重试作业视图。
+    ///
+    /// # 错误
+    /// 原作业不存在、状态不可重试、来源阶段不可写或版本冲突时返回错误。
+    pub async fn retry_sync_job(
+        &self,
+        failed_job_id: &str,
+        request: RetryMallSalesSyncJobRequest,
+        actor: &AuditActor,
+    ) -> Result<MallSalesSyncJobView> {
+        let failed_job_id = required_trigger_text(failed_job_id, "失败作业 ID")?;
+        let original = self
+            .db
+            .mall_sales_sync_jobs()
+            .find_by_id(&failed_job_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("待重试同步作业不存在".to_string()))?;
+
+        self.trigger_sync_job(
+            TriggerMallSyncCommand::RetryFailedJob {
+                source_system_id: original.source_system_id,
+                execution_stage: MallSyncStage::FirstPhaseMallOwned,
+                failed_job_id,
+                reason: request.reason,
+                base_cursor_version: request.base_cursor_version,
+                idempotency_key: request.idempotency_key,
+            },
+            actor,
+        )
+        .await
     }
 
     /// 按 W17 强类型触发命令创建同步作业。

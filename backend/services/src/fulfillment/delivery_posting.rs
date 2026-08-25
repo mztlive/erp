@@ -9,12 +9,13 @@ use entities::inventory::{
 };
 use id_generator::next_id;
 use mongodb::Database;
+use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate};
-use super::{DeliveryView, FulfillmentService};
+use super::{DeliveryView, FulfillmentService, PostDeliveryRequest};
 
 impl FulfillmentService {
     /// 过账发货（草稿 → 已发货；§8.2 第 2 条跨集合事务）。
@@ -27,6 +28,7 @@ impl FulfillmentService {
     ///
     /// # 参数
     /// * `id` - 发货单主键
+    /// * `req` - 最终草稿与期望版本
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -37,8 +39,17 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许过账或重复过账
     /// * `BusinessLogicError` - 预占归属不符、数量不足或门槛未满足
     /// * `OutcomeUnknown` - 提交结果无法确认
-    pub async fn post_delivery(&self, id: &str, actor: &AuditActor) -> Result<DeliveryView> {
+    pub async fn post_delivery(
+        &self,
+        id: &str,
+        req: PostDeliveryRequest,
+        actor: &AuditActor,
+    ) -> Result<DeliveryView> {
+        req.validate()?;
         let delivery_id = DeliveryId::new(id.to_string());
+        let expected_version = req.version;
+        let carrier = req.carrier;
+        let tracking_no = req.tracking_no;
         let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
@@ -53,6 +64,10 @@ impl FulfillmentService {
                     if delivery.status != DeliveryState::Draft {
                         return Err(Error::ConflictError("只有草稿状态的发货单可以过账".to_string()));
                     }
+                    if delivery.base.version != expected_version {
+                        return Err(Error::ConflictError("发货单版本已变化，请刷新后重试".to_string()));
+                    }
+                    delivery.update(entities::fulfillment::DeliveryUpdate { carrier, tracking_no })?;
                     let lines = db
                         .fulfillment()
                         .delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session)

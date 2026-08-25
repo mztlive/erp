@@ -14,14 +14,14 @@ use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSna
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
-use entities::inventory::StockAdjustment;
+use entities::inventory::{StockAdjustment, StockAdjustmentLine};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
 use mongodb::Database;
 
 use super::adapter::stock_adjustment_object_readable;
-use super::dto::StockAdjustmentView;
+use super::dto::{ExpectedStockBalanceVersion, StockAdjustmentView};
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
 use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
@@ -289,6 +289,10 @@ pub(super) struct StockAdjustmentStartPersistInput {
     pub organization_id: String,
     /// 调用方时间。
     pub now: Instant,
+    /// 已完成服务端校验、用于冻结快照的最终明细。
+    pub lines: Vec<StockAdjustmentLine>,
+    /// 提交时必须仍匹配的余额版本。
+    pub balances: Vec<ExpectedStockBalanceVersion>,
 }
 
 /// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
@@ -321,6 +325,8 @@ pub(super) async fn persist_stock_adjustment_start(
         owner_role,
         organization_id,
         now,
+        lines,
+        balances,
     } = input;
     let audit = actor.resource_log("stock_adjustment.submit", "stock_adjustment", id)?;
     let db = db.clone();
@@ -328,6 +334,7 @@ pub(super) async fn persist_stock_adjustment_start(
     let updated = client
         .with_transaction(move |session| {
             Box::pin(async move {
+                validate_balance_versions(&db, &adjustment, &lines, &balances, session).await?;
                 match prepared {
                     PreparedExecution::Apply(writes) => {
                         persist_runtime_writes(
@@ -343,6 +350,15 @@ pub(super) async fn persist_stock_adjustment_start(
                     }
                     PreparedExecution::Replay { .. } => {}
                 }
+                for line in &lines {
+                    if !db
+                        .inventory()
+                        .update_adjustment_line(&line.base.id, line.quantity, Some(line.direction), session)
+                        .await?
+                    {
+                        return Err(Error::NotFound("调整明细不存在".to_string()));
+                    }
+                }
                 let mut adjustment = adjustment;
                 db.stock_adjustments().update(&mut adjustment, session).await?;
                 db.audit_logs().create(&audit, session).await?;
@@ -351,6 +367,55 @@ pub(super) async fn persist_stock_adjustment_start(
         })
         .await?;
     Ok(updated.into())
+}
+
+/// 在提交事务内校验余额身份、维度与乐观锁版本。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `adjustment` - 待提交调整单
+/// * `lines` - 最终调整明细
+/// * `expected` - 客户端编辑时冻结的余额版本
+/// * `session` - 当前事务
+///
+/// # 错误
+/// 余额缺失、版本冲突、重复或不能完整覆盖明细维度时返回错误。
+async fn validate_balance_versions(
+    db: &Database,
+    adjustment: &StockAdjustment,
+    lines: &[StockAdjustmentLine],
+    expected: &[ExpectedStockBalanceVersion],
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let mut balance_ids = std::collections::HashSet::with_capacity(expected.len());
+    let mut covered_dimensions = std::collections::HashSet::with_capacity(expected.len());
+    for item in expected {
+        if !balance_ids.insert(item.balance_id.as_str()) {
+            return Err(Error::ValidationError("库存余额版本行不得重复".to_string()));
+        }
+        let balance = db
+            .stock_balances()
+            .find_by_id(&item.balance_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+        if balance.base.version != item.expected_version {
+            return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
+        }
+        if balance.warehouse_id != adjustment.warehouse_id
+            || !lines.iter().any(|line| line.sku_id == balance.sku_id)
+        {
+            return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
+        }
+        covered_dimensions.insert((balance.warehouse_id.to_string(), balance.sku_id.to_string()));
+    }
+    if lines.iter().any(|line| {
+        !covered_dimensions.contains(&(adjustment.warehouse_id.to_string(), line.sku_id.to_string()))
+    }) {
+        return Err(Error::ValidationError(
+            "提交缺少调整明细对应的库存余额版本".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

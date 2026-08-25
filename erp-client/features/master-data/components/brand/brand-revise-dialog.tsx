@@ -11,7 +11,7 @@ import {
 import {
     newIdempotencyKey,
     notifySuccess,
-    resolveBrandLogoFields,
+    prepareBrandLogoFields,
 } from "@/features/master-data/components/shared/action-dialog-shared"
 import { useCreateRevisionMutation } from "@/features/master-data/hooks/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
@@ -24,6 +24,7 @@ import {
 import type {
     BrandFields,
     MasterDataMutationResult,
+    PendingAssetUpload,
 } from "@/features/master-data/types"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -55,8 +56,9 @@ export function BrandReviseDialog({
         onSubmit: async ({ value }) => {
             if (!ids.stableId || !ids.baseRevisionId) return
             let fields: BrandFields
+            let pendingAssetUploads: readonly PendingAssetUpload[] = []
             try {
-                fields = await resolveBrandLogoFields(
+                const prepared = prepareBrandLogoFields(
                     {
                         code: value.code.trim(),
                         logo: value.logo.trim() || undefined,
@@ -65,6 +67,8 @@ export function BrandReviseDialog({
                     logoAssetId,
                     logoPreviewUrl,
                 )
+                fields = prepared.fields
+                pendingAssetUploads = prepared.pendingAssetUploads
             } catch (error) {
                 setResult({
                     outcome: "blocked",
@@ -83,6 +87,7 @@ export function BrandReviseDialog({
                 changeReason: value.changeReason.trim(),
                 fields,
                 idempotencyKey,
+                pendingAssetUploads,
             })
             if (response.outcome === "succeeded") {
                 notifySuccess(masterDataCopy.reviseSuccessTitle, response)

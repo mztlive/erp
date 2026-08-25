@@ -11,11 +11,12 @@ use axum::{
 use services::{
     audit::AuditActor,
     fulfillment::{
-        AcceptanceEligibilityView, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
-        CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
-        CustomerAcceptanceDetailView, CustomerAcceptanceListParams, CustomerAcceptanceView,
-        DeliveryDetailView, DeliveryListParams, DeliveryView, ElectronicDeliveryListParams,
-        ElectronicDeliveryView, FulfillmentService, PageView, PostCustomerAcceptanceRequest,
+        AcceptanceEligibilityView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
+        CreateCustomerAcceptanceRequest, CreateDeliveryRequest, CreateElectronicDeliveryRequest,
+        CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView,
+        CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView, DeliveryListParams,
+        DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView, FulfillmentService, PageView,
+        PostCustomerAcceptanceRequest, PostDeliveryRequest, PostPurchaseReceiptRequest,
         PurchaseReceiptDetailView, PurchaseReceiptListParams, PurchaseReceiptView,
         ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams, ServiceFulfillmentView,
         UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
@@ -125,7 +126,7 @@ pub async fn purchase_receipt_create(
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 入库单主键
-/// * `req` - 更新请求（含期望版本）
+/// * `req` - 最终草稿与期望版本
 ///
 /// # 返回
 /// 返回更新后入库单的响应视图。
@@ -160,8 +161,9 @@ pub async fn purchase_receipt_post(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    Json(req): Json<PostPurchaseReceiptRequest>,
 ) -> Result<PurchaseReceiptView> {
-    let view = service(&state).post_purchase_receipt(&id, &actor).await?;
+    let view = service(&state).post_purchase_receipt(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -255,7 +257,7 @@ pub async fn delivery_create(
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 发货单主键
-/// * `req` - 更新请求（含期望版本）
+/// * `req` - 最终草稿与期望版本
 ///
 /// # 返回
 /// 返回更新后发货单的响应视图。
@@ -290,8 +292,9 @@ pub async fn delivery_post(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    Json(req): Json<PostDeliveryRequest>,
 ) -> Result<DeliveryView> {
-    let view = service(&state).post_delivery(&id, &actor).await?;
+    let view = service(&state).post_delivery(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -518,6 +521,32 @@ pub async fn customer_acceptance_create(
     Json(req): Json<CreateCustomerAcceptanceRequest>,
 ) -> Result<CustomerAcceptanceView> {
     let view = service(&state).create_customer_acceptance(req, &actor).await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "履约",
+    group_desc = "采购入库、发货、交付、服务与客户验收管理",
+    desc = "原子登记客户验收",
+    resource = "customer_acceptance",
+    action = "post"
+)]
+/// 原子创建或替换客户验收草稿并立即过账。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 最终表头、行、履约分配和乐观锁版本
+///
+/// # 返回
+/// 返回已过账验收单和过账后的剩余可验收事实。
+pub async fn customer_acceptance_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitCustomerAcceptanceRequest>,
+) -> Result<CommitCustomerAcceptanceView> {
+    let view = service(&state).commit_customer_acceptance(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

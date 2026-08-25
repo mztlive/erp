@@ -73,10 +73,10 @@ pub async fn sales_order_create(
     Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
-    ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
-    let view = SalesOrderService::with_rbac(state.db(), state.rbac())
-        .create_sales_order(req, &actor)
-        .await?;
+    let service = SalesOrderService::with_rbac(state.db(), state.rbac());
+    let customer_id = service.sales_command_customer_id(&req.contract_id).await?;
+    ensure_customer_access(&state, &subject, &user_id, customer_id.as_ref()).await?;
+    let view = service.create_sales_order(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

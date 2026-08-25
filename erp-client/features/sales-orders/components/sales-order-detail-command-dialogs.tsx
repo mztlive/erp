@@ -1,50 +1,32 @@
 "use client"
 
 import * as React from "react"
-import { BanIcon, FilePenLineIcon } from "lucide-react"
+import { FilePenLineIcon } from "lucide-react"
 
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCancelApprovalButton } from "@/features/sales-orders/components/sales-order-cancel-approval-button"
-import { VoidSalesOrderDialog } from "@/features/sales-orders/components/void-sales-order-dialog"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import type { ActionBlocker } from "@/features/sales-orders/types"
 
 export function SalesOrderDetailSecondaryActions({
     order,
-    openRejection,
-    canRequestLowMargin,
-    canVoid,
     canStartChange,
     changeBlocker,
     changePending,
-    onOpenLowMargin,
-    onOpenVoid,
     onOpenChangeConfirm,
     onApprovalResult,
 }: {
     order: SalesOrderDetailView
-    openRejection: boolean
-    canRequestLowMargin: boolean
-    canVoid: boolean
     canStartChange: boolean
     changeBlocker?: ActionBlocker
     changePending: boolean
-    onOpenLowMargin: () => void
-    onOpenVoid: () => void
     onOpenChangeConfirm: () => void
     onApprovalResult?: (result: SalesOrderDetailActionResult) => void
 }) {
     const permissions = useSalesOrderDetailPermissions()
-    const lowMarginGate = permissions.editAfterRejection(
-        canRequestLowMargin,
-        "当前不能申请低毛利承接",
-    )
-    const voidGate = permissions.voidOrder(canVoid, "当前不能作废本单")
     const startChangeGate = permissions.startChange(
         canStartChange,
         changeBlocker?.reason ??
@@ -58,127 +40,34 @@ export function SalesOrderDetailSecondaryActions({
                 order={order}
                 onResult={onApprovalResult}
             />
-            {openRejection && canRequestLowMargin ? (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!lowMarginGate.enabled}
-                    title={lowMarginGate.reason}
-                    onClick={onOpenLowMargin}
-                >
-                    申请低毛利承接
-                </Button>
-            ) : null}
-            {openRejection && canVoid ? (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!voidGate.enabled}
-                    title={voidGate.reason}
-                    onClick={onOpenVoid}
-                >
-                    <BanIcon data-icon="inline-start" aria-hidden="true" />
-                    作废
-                </Button>
-            ) : null}
-            {!openRejection ? (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!startChangeGate.enabled || changePending}
-                    title={startChangeGate.reason}
-                    onClick={onOpenChangeConfirm}
-                >
-                    <FilePenLineIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
-                    发起改单
-                </Button>
-            ) : null}
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!startChangeGate.enabled || changePending}
+                title={startChangeGate.reason}
+                onClick={onOpenChangeConfirm}
+            >
+                <FilePenLineIcon data-icon="inline-start" aria-hidden="true" />
+                发起改单
+            </Button>
         </div>
     )
 }
 
 export function SalesOrderDetailCommandDialogs({
     order,
-    voidOpen,
-    onVoidOpenChange,
-    voidPending,
-    onVoidConfirm,
-    lowMarginOpen,
-    onLowMarginOpenChange,
-    lowMarginReason,
-    onLowMarginReasonChange,
-    lowMarginEvidence,
-    onLowMarginEvidenceChange,
-    lowMarginPending,
-    onLowMarginConfirm,
     changeConfirmOpen,
     onChangeConfirmOpenChange,
     onChangeConfirm,
 }: {
     order: SalesOrderDetailView
-    voidOpen: boolean
-    onVoidOpenChange: (open: boolean) => void
-    voidPending: boolean
-    onVoidConfirm: (reason: string) => Promise<void>
-    lowMarginOpen: boolean
-    onLowMarginOpenChange: (open: boolean) => void
-    lowMarginReason: string
-    onLowMarginReasonChange: (value: string) => void
-    lowMarginEvidence: string
-    onLowMarginEvidenceChange: (value: string) => void
-    lowMarginPending: boolean
-    onLowMarginConfirm: () => Promise<void>
     changeConfirmOpen: boolean
     onChangeConfirmOpenChange: (open: boolean) => void
     onChangeConfirm: () => Promise<void>
 }) {
     return (
         <>
-            <VoidSalesOrderDialog
-                open={voidOpen}
-                onOpenChange={onVoidOpenChange}
-                pending={voidPending}
-                onConfirm={onVoidConfirm}
-            />
-
-            <FormalActionConfirmDialog
-                open={lowMarginOpen}
-                onOpenChange={onLowMarginOpenChange}
-                title="申请低毛利承接"
-                actionLabel="提交承接申请"
-                fromStatus={{ label: "采购未通过", tone: "warning" }}
-                toStatus={{ label: "待销售上级确认", tone: "info" }}
-                description={
-                    <div className="space-y-2 text-left">
-                        <Textarea
-                            value={lowMarginReason}
-                            onChange={(event) =>
-                                onLowMarginReasonChange(event.target.value)
-                            }
-                            placeholder="说明维持原商业条件并由公司承接低毛利的理由"
-                        />
-                        <Input
-                            value={lowMarginEvidence}
-                            onChange={(event) =>
-                                onLowMarginEvidenceChange(event.target.value)
-                            }
-                            placeholder="已登记证据 ID；多个以逗号分隔"
-                        />
-                    </div>
-                }
-                lockedFields={["原商业条件", "被驳回提交"]}
-                effects={["冻结新提交", "创建销售上级低毛利确认待办"]}
-                nextDepartment="销售上级"
-                pending={lowMarginPending}
-                onConfirm={onLowMarginConfirm}
-            />
-
             <FormalActionConfirmDialog
                 open={changeConfirmOpen}
                 onOpenChange={onChangeConfirmOpenChange}

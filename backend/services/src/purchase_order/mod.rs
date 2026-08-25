@@ -56,7 +56,7 @@ pub use self::dto::{
     PurchaseOrderReviewDecisionCommand, PurchaseOrderReviewDecisionResult, PurchaseReviewDomainAction,
     PurchaseReviewResult, PurchaseReviewWorkItemView, PurchaseSalesAllocationView,
     ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-    SavePurchaseOrderLine, StartPurchaseChangeRequest, StartPurchaseChangeResult,
+    SavePurchaseOrderLine, SavePurchaseOrderLinePatch, StartPurchaseChangeRequest, StartPurchaseChangeResult,
     SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, TotalsView,
     VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };

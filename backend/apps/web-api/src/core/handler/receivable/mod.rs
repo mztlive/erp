@@ -10,11 +10,13 @@ use axum::{
 use services::{
     audit::AuditActor,
     receivable::{
-        CancelCustomerReceiptApprovalRequest, CardFundsReviewDetailParams, CompleteCardFundsReviewCommand,
-        CompleteCardFundsReviewResult, CreateCustomerReceiptRequest, CreateInvoiceRequest,
-        CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView, InvoiceListParams,
-        InvoiceView, IssueRedInvoiceRequest, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
-        ReceivableAccountListParams, ReceivableAccountView, ReceivableService, SubmitCustomerReceiptRequest,
+        CancelCustomerReceiptApprovalRequest, CardFundsRegistrationResult, CardFundsReviewDetailParams,
+        CommitCustomerReceiptRequest, CommitInvoiceRequest, CommitRedInvoiceRequest,
+        CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CreateCustomerReceiptRequest,
+        CreateInvoiceRequest, CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView,
+        InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
+        ReceivableAccountListParams, ReceivableAccountView, ReceivableService,
+        RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest, SubmitCustomerReceiptRequest,
     },
 };
 
@@ -138,6 +140,44 @@ pub async fn receivable_funds_review_complete(
 #[permission_macros::permission(
     group = "客户往来",
     group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    desc = "原子登记卡券票款历史回款",
+    resource = "customer_receipt",
+    action = "create"
+)]
+/// 在当前 W13 正式任务内一次登记历史回款、核销分配与进度。
+pub async fn card_funds_receipt_register(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<RegisterCardFundsReceiptRequest>,
+) -> Result<CardFundsRegistrationResult> {
+    let result = ReceivableService::new(state.db())
+        .register_card_funds_receipt(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "客户往来",
+    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    desc = "原子登记卡券票款历史发票",
+    resource = "invoice",
+    action = "create"
+)]
+/// 在当前 W13 正式任务内一次登记历史销项发票、分配与进度。
+pub async fn card_funds_invoice_register(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<RegisterCardFundsInvoiceRequest>,
+) -> Result<CardFundsRegistrationResult> {
+    let result = ReceivableService::new(state.db())
+        .register_card_funds_invoice(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "客户往来",
+    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
     desc = "查询客户回款单列表",
     resource = "customer_receipt",
     action = "list"
@@ -210,6 +250,34 @@ pub async fn customer_receipt_create(
 ) -> Result<CustomerReceiptView> {
     let view = ReceivableService::new(state.db())
         .create_customer_receipt(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "客户往来",
+    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    desc = "原子创建或提交客户回款审批",
+    resource = "customer_receipt",
+    action = "submit"
+)]
+/// 原子创建或提交客户回款并启动统一审批。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 新回款或已有草稿、冻结分配与幂等键
+///
+/// # 返回
+/// 返回进入审批后的回款单视图。
+pub async fn customer_receipt_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitCustomerReceiptRequest>,
+) -> Result<CustomerReceiptView> {
+    let view = ReceivableService::new(state.db())
+        .commit_customer_receipt(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -380,6 +448,34 @@ pub async fn invoice_create(
 #[permission_macros::permission(
     group = "客户往来",
     group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+    desc = "原子登记销项发票并分配",
+    resource = "invoice",
+    action = "post"
+)]
+/// 原子创建或提交销项发票并完成正式分配。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 新发票或已有草稿、分配与乐观锁版本
+///
+/// # 返回
+/// 返回登记后的发票视图。
+pub async fn invoice_commit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CommitInvoiceRequest>,
+) -> Result<InvoiceView> {
+    let view = ReceivableService::new(state.db())
+        .commit_invoice(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "客户往来",
+    group_desc = "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
     desc = "发票登记过账并分配",
     resource = "invoice",
     action = "post"
@@ -428,7 +524,7 @@ pub async fn invoice_red_issue(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-    Json(req): Json<IssueRedInvoiceRequest>,
+    Json(req): Json<CommitRedInvoiceRequest>,
 ) -> Result<InvoiceView> {
     let view = ReceivableService::new(state.db())
         .issue_red_invoice(&id, req, &actor)

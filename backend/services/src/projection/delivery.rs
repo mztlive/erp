@@ -1,5 +1,7 @@
 //! W23 执行投影投递、原结果查询、受控重试与 W29 升级。
 
+use std::collections::HashSet;
+
 use database::repository::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};
 use database::{
     AccessControlExt, IntegrationOpsExt, NoTransaction, ProjectionExt, Transactional, WorkItemExt,
@@ -26,6 +28,7 @@ use crate::integration_ops::{error_owner_role, error_work_item};
 use crate::projection::connector::{ClassifiedError, DeliverAck, QueryProjectionResult};
 use crate::projection::dto::{
     DeliverProjectionRevisionRequest, ProcessProjectionDeliveriesRequest, ProcessProjectionDeliveriesResult,
+    ProjectionBulkCommandRequest, ProjectionBulkCommandResultView, ProjectionBulkItemResultView,
     ProjectionDeliveryAction, ProjectionDeliveryActionResult, ProjectionDeliveryCommand,
     ProjectionDeliveryResultView,
 };
@@ -128,6 +131,198 @@ impl ProjectionService {
                 None => Err(error),
             },
         }
+    }
+
+    /// 对显式选中的投影执行一次服务端批量命令。
+    ///
+    /// 客户端不再逐项读取详情和提交动作。服务端为每个投影解析最新
+    /// 修订、固定投递与当前版本，然后调用单项原子状态迁移。批量允许部分成功，
+    /// 因此不将已取得的外部商城结果因其他项失败而回滚。
+    ///
+    /// # 参数
+    /// * `req` - 批量动作、显式投影 ID 和幂等请求身份
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回批次汇总和逐项正式结果。
+    ///
+    /// # 错误
+    /// 请求为空、超过 20 条、含空 ID 或重复 ID 时整批拒绝。
+    pub async fn apply_bulk_delivery_command(
+        &self,
+        req: ProjectionBulkCommandRequest,
+        actor: &AuditActor,
+    ) -> Result<ProjectionBulkCommandResultView> {
+        req.validate()?;
+        let mut seen = HashSet::with_capacity(req.projection_ids.len());
+        for projection_id in &req.projection_ids {
+            let normalized = projection_id.trim();
+            if normalized.is_empty() {
+                return Err(Error::ValidationError("投影ID不能为空".to_string()));
+            }
+            if !seen.insert(normalized.to_string()) {
+                return Err(Error::ValidationError(format!("投影ID重复: {normalized}")));
+            }
+        }
+
+        let started_at = Instant::now().unix_secs();
+        let total = req.projection_ids.len() as u32;
+        let mut succeeded = 0;
+        let skipped = 0;
+        let mut failed = 0;
+        let mut still_unknown = 0;
+        let mut items = Vec::with_capacity(req.projection_ids.len());
+
+        for projection_id in &req.projection_ids {
+            match self
+                .bulk_delivery_command(
+                    projection_id.trim(),
+                    req.action.delivery_action(),
+                    &req.request_id,
+                )
+                .await
+            {
+                Ok((sales_order_id, command)) => {
+                    let delivery_id = command.delivery_id.clone();
+                    match self.apply_delivery_command(&delivery_id, command, actor).await {
+                        Ok(result) => {
+                            let (outcome, reason) = match result.result {
+                                ProjectionDeliveryActionResult::StillUnknown => {
+                                    still_unknown += 1;
+                                    ("STILL_UNKNOWN", "商城仍未返回可验证的最终结果")
+                                }
+                                ProjectionDeliveryActionResult::Failed => {
+                                    failed += 1;
+                                    ("FAILED", "商城返回明确失败")
+                                }
+                                ProjectionDeliveryActionResult::Acked => {
+                                    succeeded += 1;
+                                    ("SUCCEEDED", "已取得商城权威确认")
+                                }
+                                ProjectionDeliveryActionResult::RetryScheduled => {
+                                    succeeded += 1;
+                                    ("SUCCEEDED", "已沿原稳定消息键安排受控重试")
+                                }
+                                ProjectionDeliveryActionResult::Escalated => {
+                                    succeeded += 1;
+                                    ("SUCCEEDED", "已升级为人工处理")
+                                }
+                            };
+                            items.push(ProjectionBulkItemResultView {
+                                projection_id: projection_id.trim().to_string(),
+                                sales_order_no: sales_order_id,
+                                delivery_id,
+                                outcome: outcome.to_string(),
+                                reason: result.next_action.unwrap_or_else(|| reason.to_string()),
+                            });
+                        }
+                        Err(error) => {
+                            failed += 1;
+                            items.push(ProjectionBulkItemResultView {
+                                projection_id: projection_id.trim().to_string(),
+                                sales_order_no: sales_order_id,
+                                delivery_id,
+                                outcome: "FAILED".to_string(),
+                                reason: error.to_string(),
+                            });
+                        }
+                    }
+                }
+                Err(error) => {
+                    failed += 1;
+                    items.push(ProjectionBulkItemResultView {
+                        projection_id: projection_id.trim().to_string(),
+                        sales_order_no: projection_id.trim().to_string(),
+                        delivery_id: String::new(),
+                        outcome: "FAILED".to_string(),
+                        reason: error.to_string(),
+                    });
+                }
+            }
+        }
+
+        let status = if failed == 0 && still_unknown == 0 {
+            "SUCCEEDED"
+        } else if succeeded > 0 {
+            "PARTIAL"
+        } else {
+            "FAILED"
+        };
+        let next_action = if still_unknown > 0 {
+            "存在结果未知项：不得标记成功，请再次查询原结果"
+        } else if failed > 0 {
+            "部分项未执行，请按逐项结果处理"
+        } else {
+            "批量命令已完成"
+        };
+        let batch_identity = format!("{}|{}|{}", actor.id(), req.action.as_str(), req.request_id);
+        Ok(ProjectionBulkCommandResultView {
+            job_id: stable_entity_id("pbulk", &batch_identity),
+            action: req.action,
+            status: status.to_string(),
+            total,
+            completed: items.len() as u32,
+            succeeded,
+            skipped,
+            failed,
+            still_unknown,
+            selection_snapshot_id: stable_entity_id("psnap", &batch_identity),
+            items,
+            started_at,
+            finished_at: Instant::now().unix_secs(),
+            next_action: next_action.to_string(),
+        })
+    }
+
+    /// 从投影稳定身份解析最新修订、固定投递与当前版本命令。
+    async fn bulk_delivery_command(
+        &self,
+        projection_id: &str,
+        action: ProjectionDeliveryAction,
+        request_id: &str,
+    ) -> Result<(String, ProjectionDeliveryCommand)> {
+        let projection = self
+            .db
+            .sales_order_projections()
+            .find_by_id(projection_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("执行投影不存在".to_string()))?;
+        let revision = self
+            .db
+            .sales_order_projection_revisions()
+            .list_revisions_by_projection(
+                &SalesOrderProjectionId::new(projection.base.id.clone()),
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| Error::NotFound("执行投影尚无修订".to_string()))?;
+        let delivery = self
+            .db
+            .sales_order_projection_deliveries()
+            .find_delivery_by_revision_and_mall(
+                &SalesOrderProjectionRevisionId::new(revision.id.clone()),
+                &projection.target_mall_id,
+                &mut NoTransaction,
+            )
+            .await?
+            .ok_or_else(|| Error::NotFound("投影最新修订缺少固定投递记录".to_string()))?;
+        let item_request_id = stable_entity_id(
+            "preq",
+            &format!("{request_id}|{}|{}", action.as_str(), projection.base.id),
+        );
+        Ok((
+            projection.sales_order_id.to_string(),
+            ProjectionDeliveryCommand {
+                projection_id: projection.base.id,
+                projection_revision_id: revision.id,
+                delivery_id: delivery.base.id,
+                action,
+                expected_object_version: delivery.base.version,
+                request_id: item_request_id,
+            },
+        ))
     }
 
     /// 以有界批次处理 `PENDING_SEND` 与到期 `RETRYING` 记录。

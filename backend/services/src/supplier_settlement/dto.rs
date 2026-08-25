@@ -388,10 +388,6 @@ pub struct CreateSettlementStatementRequest {
     pub supplier_id: SupplierAccountId,
     pub period_start: String,
     pub period_end: String,
-    #[validate(custom(function = "non_blank", message = "期间策略不能为空"))]
-    pub period_policy_id: String,
-    #[validate(custom(function = "non_blank", message = "期间策略版本不能为空"))]
-    pub expected_period_policy_version: String,
     #[validate(length(min = 1, max = 128, message = "请求ID长度必须在1-128之间"))]
     #[validate(custom(function = "safe_command_id", message = "请求ID格式非法"))]
     pub request_id: String,

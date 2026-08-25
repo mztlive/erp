@@ -24,12 +24,13 @@ use entities::purchase_order::ProgressStatus;
 use id_generator::next_id;
 use mongodb::bson::doc;
 use mongodb::Database;
+use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::purchase_context::{ensure_po_fulfillable, ensure_prepay_gate, load_po_current_revision};
-use super::{FulfillmentService, PurchaseReceiptView};
+use super::{FulfillmentService, PostPurchaseReceiptRequest, PurchaseReceiptView};
 
 impl FulfillmentService {
     /// 过账采购入库（草稿 → 已过账；§8.2 第 1 条跨集合事务）。
@@ -42,6 +43,7 @@ impl FulfillmentService {
     ///
     /// # 参数
     /// * `id` - 入库单主键
+    /// * `req` - 最终草稿与期望版本
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -52,8 +54,16 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许过账或重复过账
     /// * `BusinessLogicError` - 门槛未满足、超收或采购单不可履约
     /// * `OutcomeUnknown` - 提交结果无法确认
-    pub async fn post_purchase_receipt(&self, id: &str, actor: &AuditActor) -> Result<PurchaseReceiptView> {
+    pub async fn post_purchase_receipt(
+        &self,
+        id: &str,
+        req: PostPurchaseReceiptRequest,
+        actor: &AuditActor,
+    ) -> Result<PurchaseReceiptView> {
+        req.validate()?;
         let receipt_id = PurchaseReceiptId::new(id.to_string());
+        let expected_version = req.version;
+        let warehouse_id = req.warehouse_id;
         let actor = actor.clone();
         let db = self.db.clone();
         let client = db.client().clone();
@@ -70,6 +80,14 @@ impl FulfillmentService {
                             "只有草稿状态的采购入库单可以过账".to_string(),
                         ));
                     }
+                    if receipt.base.version != expected_version {
+                        return Err(Error::ConflictError(
+                            "采购入库单版本已变化，请刷新后重试".to_string(),
+                        ));
+                    }
+                    receipt.update(entities::fulfillment::PurchaseReceiptUpdate {
+                        warehouse_id: warehouse_id.or(Some(receipt.warehouse_id.clone())),
+                    })?;
                     let lines = db
                         .fulfillment()
                         .receipt_lines_by_receipt_ids(std::slice::from_ref(&receipt_id), session)

@@ -44,6 +44,7 @@ export function useMallSyncManualSyncActions(
                 value.externalOrderNo.trim(),
             )
             const res = await triggerSo.mutateAsync({
+                sourceSystemId: data.context?.sourceSystem.id ?? "",
                 externalOrderNo: value.externalOrderNo,
                 reason: value.reason,
                 stage,
@@ -71,6 +72,7 @@ export function useMallSyncManualSyncActions(
         onSubmit: async ({ value }) => {
             const identity = commandIdentity("incremental", "manual")
             const res = await triggerInc.mutateAsync({
+                sourceSystemId: data.context?.sourceSystem.id ?? "",
                 reason: value.reason,
                 stage,
                 idempotencyKey: identity.idempotencyKey,
@@ -93,7 +95,10 @@ export function useMallSyncManualSyncActions(
 
     async function handleRetryJob() {
         if (!data.data?.selectedJob) return
-        const identity = commandIdentity("retry-job", data.data.selectedJob.jobId)
+        const identity = commandIdentity(
+            "retry-job",
+            data.data.selectedJob.jobId,
+        )
         const res = await retryJob.mutateAsync({
             jobId: data.data.selectedJob.jobId,
             reason: "重试未成功部分的分页",

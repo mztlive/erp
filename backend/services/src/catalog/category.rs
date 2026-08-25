@@ -122,7 +122,7 @@ impl CatalogService {
         Ok(category.into())
     }
 
-    /// 更新商品分类（乐观锁语义，`category_code`/`parent_category_id` 不可改）。
+    /// 更新商品分类（乐观锁语义；名称、类型、状态与可选父级变更原子提交）。
     ///
     /// # 参数
     /// * `id` - 分类 ID
@@ -144,6 +144,10 @@ impl CatalogService {
         req.validate()?;
         let mut category = self.load_category(id).await?;
         ensure_version(category.base.version, req.version)?;
+        if let Some(parent_change) = &req.parent_change {
+            self.ensure_parent_chain_ok(&category.base.id, parent_change.parent_category_id.as_ref())
+                .await?;
+        }
         category.update(
             ProductCategoryUpdate {
                 name: req.name,
@@ -152,6 +156,9 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+        if let Some(parent_change) = req.parent_change {
+            category.set_parent(parent_change.parent_category_id, actor.id())?;
+        }
         let audit = actor.clone().resource_log(
             "product_category.update",
             "product_category",

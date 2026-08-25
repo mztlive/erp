@@ -191,6 +191,16 @@ pub struct DeliverPublicationRevisionRequest {
     pub idempotency_key: String,
 }
 
+/// 沿固定投递身份安排重试的单一命令请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct RetryPublicationDeliveryRequest {
+    /// 调用方幂等请求身份；不会原文写入审计。
+    #[validate(length(max = 128, message = "请求ID过长"))]
+    #[validate(custom(function = "non_blank", message = "请求ID不能为空"))]
+    pub request_id: String,
+}
+
 /// 商品发布响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProductPublicationView {
@@ -233,6 +243,19 @@ pub struct ProductPublicationRevisionView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 发布修订与固定待发送投递的原子提交结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProductPublicationRevisionCommitView {
+    /// 本次形成的不可变发布修订。
+    pub revision: ProductPublicationRevisionView,
+    /// 与该修订同事务建立的固定投递记录。
+    pub delivery_id: String,
+    /// 初始投递状态。
+    pub delivery_status: PublicationDeliveryStatus,
+    /// 跨全部发送尝试保持不变的操作身份。
+    pub operation_id: String,
 }
 
 /// 发布修订媒体响应视图。
@@ -391,6 +414,19 @@ pub struct PublicationDeliveryActionResultView {
     pub occurred_at: i64,
     /// 服务端下一步。
     pub next_action: Option<String>,
+}
+
+/// 固定投递重试命令结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RetryPublicationDeliveryResultView {
+    /// 固定投递 ID。
+    pub delivery_id: String,
+    /// 服务端安排重试后的发送次数。
+    pub attempt_count: u32,
+    /// 服务端安排重试后的投递状态。
+    pub delivery_status: PublicationDeliveryStatus,
+    /// 本次幂等操作编号。
+    pub operation_id: String,
 }
 
 /// W22 有界待发送处理请求。

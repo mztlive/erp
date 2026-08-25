@@ -10,33 +10,35 @@ use super::cancel_approval::{
     CustomerRefundCancelPersistInput,
 };
 use super::dto::{
-    CancelCustomerRefundApprovalRequest, CreateCustomerRefundRequest, CustomerRefundListParams,
-    CustomerRefundView, PageView, SortDir, SubmitCustomerRefundRequest,
+    CancelCustomerRefundApprovalRequest, CommitCustomerRefundRequest, CreateCustomerRefundRequest,
+    CustomerRefundListParams, CustomerRefundView, PageView, SortDir, SubmitCustomerRefundRequest,
 };
 use super::reversal_plan::{plan_receipt_reverse, zero_amount};
 use super::start_approval::{
-    build_customer_refund_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_customer_refund_start, CustomerRefundStartInput, CustomerRefundStartPersistInput,
+    build_customer_refund_start_input, load_bound_definition_graph,
+    load_bound_definition_graph_with_executor, load_start_receipt, persist_customer_refund_start,
+    persist_runtime_writes, CustomerRefundStartInput, CustomerRefundStartPersistInput,
 };
-use super::ReturnsService;
+use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::audit::AuditActor;
+use crate::audit::{AuditActor, CommandReceipt};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 use database::{
-    AccessControlExt, CustomerExt, DocumentRegistryExt, NoTransaction, ReceivableExt, ReturnsExt,
+    AccessControlExt, CustomerExt, DocumentRegistryExt, Executor, NoTransaction, ReceivableExt, ReturnsExt,
     Transactional,
 };
 use entities::common::time::Instant;
 use entities::document_registry::BusinessDocument;
 use entities::document_registry::DocumentType;
 use entities::ids::{
-    CustomerAccountId, CustomerRefundId, ReceiptAllocationId, ReceivableEntryId, ReceivableEntryOffsetId,
+    CustomerAccountId, CustomerReceiptId, CustomerRefundId, ReceiptAllocationId, ReceivableEntryId,
+    ReceivableEntryOffsetId,
 };
 use entities::money::Amount;
 use entities::receivable::{
@@ -149,6 +151,144 @@ impl ReturnsService {
         )?;
         persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone()).await?;
         self.customer_refund_detail(&refund.base.id).await
+    }
+
+    /// 按原回款一次创建客户退款并启动审批。
+    ///
+    /// 单据注册、定义绑定、退款实体、审批快照、运行事实、入口任务和两类审计
+    /// 全部在同一 MongoDB 事务内写入。
+    pub async fn commit_customer_refund(
+        &self,
+        req: CommitCustomerRefundRequest,
+        actor: &AuditActor,
+    ) -> Result<CustomerRefundView> {
+        req.validate()?;
+        let command_receipt = CommandReceipt::new(
+            "customer-refund-commit-",
+            actor,
+            "customer_refund.commit",
+            "customer_refund",
+            &req.idempotency_key,
+            &req,
+        )?;
+        if let Some(refund_id) = command_receipt.committed_resource_id(&self.db).await? {
+            return self.customer_refund_detail(&refund_id).await;
+        }
+        let receipt = self
+            .db
+            .customer_receipts()
+            .find_by_id(&req.source_fact_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))?;
+        let source_fact_id = CustomerReceiptId::new(receipt.base.id.clone());
+        let source_version = receipt.base.version;
+        let customer_id = receipt
+            .customer_id
+            .clone()
+            .ok_or_else(|| Error::BusinessLogicError("原回款未关联经营客户，不能退款".to_string()))?;
+        let mut refund = CustomerRefund::new(
+            CustomerRefundId::new(next_id()),
+            CustomerRefundData {
+                refund_no: return_command_no("TK", actor.id(), &req.idempotency_key),
+                sales_return_case_id: None,
+                customer_id: customer_id.clone(),
+                original_receipt_id: Some(source_fact_id.clone()),
+                original_receivable_entry_id: None,
+                reason_code: None,
+                reason_text: req.reason,
+                amount: req.amount.unwrap_or(receipt.amount),
+                handled_by: actor.id().to_string(),
+                reviewed_by: "finance_reviewer".to_string(),
+                occurred_at: Instant::now(),
+                evidence_attachment_id: None,
+            },
+        )?;
+        let adapter = customer_refund_adapter()?;
+        start_customer_refund_approval(&mut refund)?;
+        let id = refund.base.id.clone();
+        let subject = customer_refund_subject_ref(&id)?;
+        let organization_id = load_customer_responsible_org_id(&self.db, &customer_id).await?;
+        let _ = customer_refund_object_readable(&organization_id, actor.id())?;
+        let now = Instant::now();
+        let snapshot = build_customer_refund_snapshot(&refund, &organization_id, actor.id(), now)?;
+        let bind_command = BindPublishedDefinitionCommand {
+            document_type: DocumentType::CustomerRefund,
+            business_object_id: id.clone(),
+            business_object_version: refund.base.version,
+            context: BindingRevalidationContext {
+                organization_id: organization_id.clone(),
+                creator_id: actor.id().to_string(),
+            },
+        };
+        let document = new_registered_document(&id, DocumentType::CustomerRefund, refund.refund_no.clone())?;
+        let create_audit =
+            actor
+                .clone()
+                .resource_log("customer_refund.create", "customer_refund", id.clone())?;
+        let submit_audit =
+            actor
+                .clone()
+                .resource_log("customer_refund.submit", "customer_refund", id.clone())?;
+        let command_audit = command_receipt.audit(actor.clone(), id.clone())?;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let client = db.client().clone();
+        let actor_owned = actor.clone();
+        let idempotency_key = req.idempotency_key;
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    validate_customer_refund_source(&db, &source_fact_id, source_version, session).await?;
+                    let binding = persist_bound_customer_refund_document(
+                        &db,
+                        &rbac,
+                        document,
+                        &bind_command,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
+                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
+                    let start_input = build_customer_refund_start_input(CustomerRefundStartInput {
+                        graph,
+                        binding: &binding,
+                        subject,
+                        subject_version: refund.approval_subject_version,
+                        actor_id: actor_owned.id(),
+                        organization_id: &organization_id,
+                        idempotency_key: &idempotency_key,
+                        receipt: None,
+                        now,
+                    })?;
+                    let prepared = prepare_start(start_input)?;
+                    db.customer_refunds().create(&refund, session).await?;
+                    if let crate::approval::execution::PreparedExecution::Apply(writes) = prepared {
+                        persist_runtime_writes(
+                            &db,
+                            &writes,
+                            &snapshot,
+                            adapter.owner_role,
+                            &organization_id,
+                            now,
+                            session,
+                        )
+                        .await?;
+                    }
+                    db.audit_logs().create(&create_audit, session).await?;
+                    db.audit_logs().create(&submit_audit, session).await?;
+                    db.audit_logs().create(&command_audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await;
+        let detail_id = match transaction_result {
+            Ok(()) => id,
+            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
+                Some(refund_id) => refund_id,
+                None => return Err(error),
+            },
+        };
+        self.customer_refund_detail(&detail_id).await
     }
 
     /// 提交客户退款并调用统一 `start_approval`。
@@ -530,6 +670,35 @@ async fn load_customer_responsible_org_id(db: &Database, customer_id: &CustomerA
     customer_refund_responsible_org_id(customer.party_id.as_ref())
 }
 
+/// 在创建退款的同一事务中重读并校验原回款事实。
+///
+/// 原事实必须仍为调用前读取的版本且已经过账，避免为草稿、审批中或已冲正回款
+/// 创建无法最终执行的审批任务。
+async fn validate_customer_refund_source(
+    db: &Database,
+    source_fact_id: &CustomerReceiptId,
+    expected_version: u64,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let receipt = db
+        .customer_receipts()
+        .find_by_id(source_fact_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))?;
+    super::ensure_posted_source(
+        receipt.base.version,
+        expected_version,
+        receipt.status == CustomerReceiptStatus::Posted,
+        "只有已过账的客户回款才能发起退款",
+    )?;
+    if receipt.customer_id.is_none() {
+        return Err(Error::BusinessLogicError(
+            "原回款未关联经营客户，不能退款".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// 查询发布定义、写入绑定并持久化注册行。
 ///
 /// # 错误
@@ -541,7 +710,7 @@ async fn persist_bound_customer_refund_document(
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<()> {
+) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
     let _ = customer_refund_object_readable(
         &bind_command.context.organization_id,
         &bind_command.context.creator_id,
@@ -549,9 +718,9 @@ async fn persist_bound_customer_refund_document(
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
     let binding = binding.ok_or_else(|| Error::Internal("客户退款单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(&mut document, binding)?;
+    attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, session).await?;
-    Ok(())
+    Ok(binding)
 }
 
 /// 在调用方事务内写入退款出账副作用。

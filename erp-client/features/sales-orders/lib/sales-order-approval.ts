@@ -5,7 +5,6 @@ import {
     type DocumentApprovalView,
     type DocumentApprovalViewDto,
 } from "@/features/approval-workflow/types"
-import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
 /** 实物及服务销售单作为合同 DocumentType 的固定值。 */
 export const SALES_ORDER_DOCUMENT_TYPE = "SalesOrder" as const
@@ -89,27 +88,3 @@ export const readSalesOrderApprovalResponsibility = (
     currentNodeLabel:
         approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
 })
-
-/**
- * 毛利风险只读提示。有提示也不阻断提交或审批决定。
- *
- * @param order 销售单列表/详情投影。
- * @returns 可展示的提示文案；无风险时为 null。
- */
-export const salesOrderMarginRiskHint = (
-    order: Pick<
-        SalesOrderListItem,
-        "procurementRejection" | "activeLowMarginManagerConfirmation"
-    >,
-): string | null => {
-    const confirmationReason =
-        order.activeLowMarginManagerConfirmation?.acceptanceReason.trim()
-    if (confirmationReason) {
-        return `${confirmationReason}。毛利风险仅供参考，不阻断提交或审批决定。`
-    }
-    const percent = order.procurementRejection?.estimatedMarginPercent?.trim()
-    if (percent) {
-        return `预计毛利 ${percent}%。毛利风险仅供参考，不阻断提交或审批决定。`
-    }
-    return null
-}

@@ -83,6 +83,7 @@ export type AcceptanceDraftLine = {
     serviceFail?: boolean
     allocations: Array<{
         fulfillmentLineId: string
+        fulfillmentFactType: FulfillmentFactType
         allocatedQuantity: string
     }>
 }

@@ -28,6 +28,7 @@ use crate::publication::dto::{
     DeliverPublicationRevisionRequest, ProcessPublicationDeliveriesRequest,
     ProcessPublicationDeliveriesResult, PublicationDeliveryAction, PublicationDeliveryActionResult,
     PublicationDeliveryActionResultView, PublicationDeliveryCommand, PublicationDeliveryResultView,
+    RetryPublicationDeliveryRequest, RetryPublicationDeliveryResultView,
 };
 
 const RETRY_DELAY_SECONDS: i64 = 60;
@@ -44,6 +45,55 @@ struct PublicationSuccessSettlement<'a> {
 }
 
 impl PublicationService {
+    /// 沿服务端锁定的固定投递身份安排重试。
+    ///
+    /// # 参数
+    /// * `delivery_id` - 固定投递 ID
+    /// * `req` - 仅含幂等请求身份的重试命令
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回重试后的投递状态和发送次数。
+    ///
+    /// # 错误
+    /// 投递、修订不存在，状态不允许重试或 CAS 冲突时返回错误。
+    pub async fn retry_delivery_by_id(
+        &self,
+        delivery_id: &str,
+        req: RetryPublicationDeliveryRequest,
+        actor: &AuditActor,
+    ) -> Result<RetryPublicationDeliveryResultView> {
+        req.validate()?;
+        let delivery = self.current_publication_delivery(delivery_id).await?;
+        let revision = self
+            .db
+            .product_publication_revisions()
+            .find_by_id(delivery.publication_revision_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("发布修订不存在".to_string()))?;
+        let action = self
+            .apply_publication_delivery_command(
+                delivery_id,
+                PublicationDeliveryCommand {
+                    publication_id: revision.product_publication_id.to_string(),
+                    publication_revision_id: revision.base.id,
+                    delivery_id: delivery_id.to_string(),
+                    action: PublicationDeliveryAction::Retry,
+                    expected_object_version: delivery.base.version,
+                    request_id: req.request_id,
+                },
+                actor,
+            )
+            .await?;
+        let updated = self.current_publication_delivery(delivery_id).await?;
+        Ok(RetryPublicationDeliveryResultView {
+            delivery_id: updated.base.id,
+            attempt_count: updated.attempt_count,
+            delivery_status: updated.delivery_status,
+            operation_id: action.operation_id,
+        })
+    }
+
     /// 处理指定发布修订已预建的固定待发送投递。
     ///
     /// 本入口绝不创建第二条投递；并发调用仅一个能以 CAS 取得原记录。

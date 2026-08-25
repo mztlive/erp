@@ -33,7 +33,7 @@ pub use snapshot::{
 };
 pub use sync_job::{
     CompleteMallSalesSyncJobRequest, MallSalesSyncCursorView, MallSalesSyncJobListParams,
-    MallSalesSyncJobView, SyncJobOutcome, TriggerMallSyncCommand,
+    MallSalesSyncJobView, RetryMallSalesSyncJobRequest, SyncJobOutcome, TriggerMallSyncCommand,
 };
 
 #[allow(unused_imports)]

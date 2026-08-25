@@ -356,6 +356,42 @@ impl<'a> FulfillmentRepository<'a> {
         )
         .await
     }
+
+    /// 原子替换草稿客户验收单的全部行。
+    ///
+    /// 本方法只执行仓储写入，不判断表头状态；Service 必须先锁定并校验表头仍
+    /// 为草稿，再传入同一个事务执行器。删除旧行与插入新行必须共同回滚。
+    ///
+    /// # 参数
+    /// * `acceptance_id` - 草稿验收单主键
+    /// * `lines` - 完整的新验收行集合
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 错误
+    /// 当删除或批量插入失败时返回错误。
+    pub async fn replace_customer_acceptance_lines(
+        &self,
+        acceptance_id: &CustomerAcceptanceId,
+        lines: &[CustomerAcceptanceLine],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::delete_many(
+            &self
+                .db
+                .collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
+            doc! { "customer_acceptance_id": acceptance_id.to_string() },
+            executor,
+        )
+        .await?;
+        mongo_ops::insert_many(
+            &self
+                .db
+                .collection::<CustomerAcceptanceLine>(CUSTOMER_ACCEPTANCE_LINES),
+            lines.to_vec(),
+            executor,
+        )
+        .await
+    }
 }
 
 /// 把 ID newtype 集合转为字符串集合（用于 `$in` 查询）。

@@ -143,6 +143,8 @@ pub struct CustomerAcceptanceData {
 /// 客户验收单更新数据（仅草稿可更新）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CustomerAcceptanceUpdate {
+    /// 验收时间；`None` 表示不修改。
+    pub accepted_at: Option<Instant>,
     /// 验收结果；`None` 表示不修改。
     pub result: Option<AcceptanceResult>,
 }
@@ -215,6 +217,9 @@ impl CustomerAcceptance {
     /// 状态不可编辑时返回错误。
     pub fn update(&mut self, update: CustomerAcceptanceUpdate) -> Result<()> {
         self.ensure_editable()?;
+        if let Some(accepted_at) = update.accepted_at {
+            self.accepted_at = accepted_at;
+        }
         if let Some(result) = update.result {
             self.result = result;
         }
@@ -454,6 +459,7 @@ mod tests {
         assert!(acceptance
             .update(CustomerAcceptanceUpdate {
                 result: Some(AcceptanceResult::Shortage),
+                ..Default::default()
             })
             .is_ok());
         assert_eq!(acceptance.result, AcceptanceResult::Shortage);
@@ -461,9 +467,7 @@ mod tests {
         // from == to 幂等迁移恒合法（state.rs 契约）；POSTED 不可编辑由 update 把关。
         assert!(acceptance.mark_posted().is_ok());
         assert!(
-            acceptance
-                .update(CustomerAcceptanceUpdate { result: None })
-                .is_err(),
+            acceptance.update(CustomerAcceptanceUpdate::default()).is_err(),
             "已过账不可编辑"
         );
         assert!(acceptance.reverse(CustomerAcceptanceId::new("a6")).is_ok());

@@ -2,6 +2,10 @@
 
 import { apiPost, apiPut } from "@/lib/api"
 import type { ProductBrandDto } from "@/features/master-data/api/contracts"
+import {
+    postAssetCommand,
+    putAssetCommand,
+} from "@/features/master-data/api/pending-assets"
 import { isoNow } from "@/features/master-data/api/presentation"
 import type {
     BrandFields,
@@ -17,15 +21,19 @@ export async function createBrand(
 ): Promise<MasterDataMutationResult> {
     const fields = input.fields as BrandFields
     try {
-        const created = await apiPost<ProductBrandDto>(
-            "/admin/product-brands",
-            {
-                brand_code: fields.code,
-                name: input.name.trim(),
-                status: "active",
-                logo_file_asset_id: fields.logoAssetId || null,
-            },
-        )
+        const command = {
+            brand_code: fields.code,
+            name: input.name.trim(),
+            status: "active",
+            logo_file_asset_id: fields.logoAssetId || null,
+        }
+        const created = input.pendingAssetUploads?.length
+            ? await postAssetCommand<ProductBrandDto>(
+                  "/admin/product-brands/with-assets",
+                  command,
+                  input.pendingAssetUploads,
+              )
+            : await apiPost<ProductBrandDto>("/admin/product-brands", command)
         return {
             outcome: "succeeded",
             stableId: created.id,
@@ -50,16 +58,21 @@ export async function updateBrandRevision(
 ): Promise<MasterDataMutationResult> {
     try {
         const fields = input.fields as BrandFields
-        const updated = await apiPut<ProductBrandDto>(
-            `/admin/product-brands/${input.stableId}`,
-            {
-                version: input.expectedLockVersion,
-                name: input.name.trim(),
-                logo_file_asset_id: fields.logo
-                    ? fields.logoAssetId || null
-                    : null,
-            },
-        )
+        const command = {
+            version: input.expectedLockVersion,
+            name: input.name.trim(),
+            logo_file_asset_id: fields.logo ? fields.logoAssetId || null : null,
+        }
+        const updated = input.pendingAssetUploads?.length
+            ? await putAssetCommand<ProductBrandDto>(
+                  `/admin/product-brands/${input.stableId}/with-assets`,
+                  command,
+                  input.pendingAssetUploads,
+              )
+            : await apiPut<ProductBrandDto>(
+                  `/admin/product-brands/${input.stableId}`,
+                  command,
+              )
         return {
             outcome: "succeeded",
             stableId: updated.id,

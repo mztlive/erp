@@ -17,10 +17,11 @@ use services::{
         CreateProductPublicationRevisionRequest, DeliverPublicationRevisionRequest, PageView,
         ProcessPublicationDeliveriesRequest, ProcessPublicationDeliveriesResult,
         ProductPublicationDeliveryListParams, ProductPublicationDeliveryView, ProductPublicationListParams,
-        ProductPublicationRevisionMediaView, ProductPublicationRevisionView, ProductPublicationView,
-        PublicationDeliveryActionResultView, PublicationDeliveryCommand, PublicationDeliveryResultView,
-        PublicationService, SystemSafetyPauseOperationView, UnavailableMallConnector,
-        UpdateProductPublicationRequest,
+        ProductPublicationRevisionCommitView, ProductPublicationRevisionMediaView,
+        ProductPublicationRevisionView, ProductPublicationView, PublicationDeliveryActionResultView,
+        PublicationDeliveryCommand, PublicationDeliveryResultView, PublicationService,
+        RetryPublicationDeliveryRequest, RetryPublicationDeliveryResultView, SystemSafetyPauseOperationView,
+        UnavailableMallConnector, UpdateProductPublicationRequest,
     },
 };
 
@@ -127,13 +128,13 @@ pub async fn product_publication_update(
 /// * `req` - 形成修订请求（含媒体清单）
 ///
 /// # 返回
-/// 返回新建发布修订的响应视图。
+/// 返回发布修订与固定待发送投递的原子提交结果。
 pub async fn product_publication_revision_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<CreateProductPublicationRevisionRequest>,
-) -> Result<ProductPublicationRevisionView> {
+) -> Result<ProductPublicationRevisionCommitView> {
     let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
         .create_revision(&id, req, &actor)
         .await?;
@@ -267,6 +268,35 @@ pub async fn product_publication_delivery_action(
 ) -> Result<PublicationDeliveryActionResultView> {
     let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
         .apply_publication_delivery_command(&delivery_id, command, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "商品发布",
+    group_desc = "二期商品发布与投递（W22）",
+    desc = "重试固定商品发布投递",
+    resource = "product_publication_delivery",
+    action = "retry"
+)]
+/// 沿固定投递身份安排受控重试。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `delivery_id` - 固定投递 ID
+/// * `req` - 幂等请求身份
+///
+/// # 返回
+/// 返回重试后的投递状态。
+pub async fn product_publication_delivery_retry(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(delivery_id): Path<String>,
+    Json(req): Json<RetryPublicationDeliveryRequest>,
+) -> Result<RetryPublicationDeliveryResultView> {
+    let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .retry_delivery_by_id(&delivery_id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
 }

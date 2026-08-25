@@ -5,20 +5,14 @@
 
 import { apiPost } from "@/lib/api"
 import type {
-    BulkItemOutcome,
     BulkProjectionJob,
     ProjectionDeliveryCommandResult,
 } from "@/features/execution-projections/types"
 import type { BackendDeliveryActionResult } from "@/features/execution-projections/api/mapping"
 import { secsToIso } from "@/features/execution-projections/api/mapping"
-import { fetchExecutionProjectionDetail } from "@/features/execution-projections/api/reads"
 
 /** 批量操作上限（前端选择条需同步提示，超限禁用批量按钮） */
 export const BULK_SELECTION_LIMIT = 20
-
-// ─── In-memory bulk jobs (no backend bulk endpoint) ───────────────────────────
-
-const bulkJobs = new Map<string, BulkProjectionJob>()
 
 export type DeliveryCommandInput = {
     projectionId: string
@@ -73,138 +67,71 @@ export type BulkCommandInput = {
     requestId: string
 }
 
+type BackendBulkProjectionCommandResult = {
+    job_id: string
+    action: "BULK_QUERY" | "BULK_RETRY"
+    status: "SUCCEEDED" | "PARTIAL" | "FAILED"
+    total: number
+    completed: number
+    succeeded: number
+    skipped: number
+    failed: number
+    still_unknown: number
+    selection_snapshot_id: string
+    items: Array<{
+        projection_id: string
+        sales_order_no: string
+        delivery_id: string
+        outcome: "SUCCEEDED" | "SKIPPED" | "FAILED" | "STILL_UNKNOWN"
+        reason: string
+    }>
+    started_at: number
+    finished_at: number
+    next_action: string
+}
+
 export async function submitBulkProjectionCommand(
     input: BulkCommandInput,
 ): Promise<BulkProjectionJob> {
-    if (!input.projectionIds.length) {
-        return {
-            jobId: `bulk_empty_${input.requestId}`,
+    const result = await apiPost<BackendBulkProjectionCommandResult>(
+        "/admin/sales-order-projection-deliveries/bulk-actions",
+        {
             action: input.action,
-            status: "failed",
-            total: 0,
-            completed: 0,
-            succeeded: 0,
-            skipped: 0,
-            failed: 0,
-            stillUnknown: 0,
-            selectionSnapshotId: `snap-${input.requestId}`,
-            items: [],
-            startedAt: new Date().toISOString(),
-            nextAction: "请先逐项显式勾选失败/可处理项",
-        }
+            projection_ids: input.projectionIds,
+            request_id: input.requestId,
+        },
+    )
+    const outcomes = {
+        SUCCEEDED: "succeeded",
+        SKIPPED: "skipped",
+        FAILED: "failed",
+        STILL_UNKNOWN: "still_unknown",
+    } as const
+    const statuses = {
+        SUCCEEDED: "succeeded",
+        PARTIAL: "partial",
+        FAILED: "failed",
+    } as const
+    return {
+        jobId: result.job_id,
+        action: result.action,
+        status: statuses[result.status],
+        total: result.total,
+        completed: result.completed,
+        succeeded: result.succeeded,
+        skipped: result.skipped,
+        failed: result.failed,
+        stillUnknown: result.still_unknown,
+        selectionSnapshotId: result.selection_snapshot_id,
+        items: result.items.map((item) => ({
+            projectionId: item.projection_id,
+            salesOrderNo: item.sales_order_no,
+            deliveryId: item.delivery_id,
+            outcome: outcomes[item.outcome],
+            reason: item.reason,
+        })),
+        startedAt: secsToIso(result.started_at),
+        finishedAt: secsToIso(result.finished_at),
+        nextAction: result.next_action,
     }
-
-    if (input.projectionIds.length > BULK_SELECTION_LIMIT) {
-        return {
-            jobId: `bulk_reject_${input.requestId}`,
-            action: input.action,
-            status: "failed",
-            total: input.projectionIds.length,
-            completed: 0,
-            succeeded: 0,
-            skipped: 0,
-            failed: input.projectionIds.length,
-            stillUnknown: 0,
-            selectionSnapshotId: `snap-${input.requestId}`,
-            items: input.projectionIds.map((id) => ({
-                projectionId: id,
-                salesOrderNo: id,
-                deliveryId: "",
-                outcome: "failed" as const,
-                reason: `批量最多 ${BULK_SELECTION_LIMIT} 条，超出部分请分批`,
-            })),
-            startedAt: new Date().toISOString(),
-            nextAction: `批量最多 ${BULK_SELECTION_LIMIT} 条，超出部分请分批`,
-        }
-    }
-
-    const jobId = `bulk_${input.action}_${input.requestId}`
-    const items: BulkItemOutcome[] = []
-    let succeeded = 0
-    let failed = 0
-    let stillUnknown = 0
-
-    for (const projectionId of input.projectionIds) {
-        try {
-            const detail = await fetchExecutionProjectionDetail({
-                projectionId,
-            })
-            const result = await submitProjectionDeliveryCommand({
-                action:
-                    input.action === "BULK_QUERY" ? "QUERY_RESULT" : "RETRY",
-                projectionId,
-                projectionRevisionId:
-                    detail?.selectedRevision.projectionRevisionId ?? "",
-                deliveryId:
-                    detail?.deliveries[0]?.deliveryId ?? `dlv_${projectionId}`,
-                expectedObjectVersion: detail?.objectVersion ?? "1",
-                requestId: `${input.requestId}:${projectionId}`,
-            })
-            if (result.stillUnknown) {
-                stillUnknown += 1
-                items.push({
-                    projectionId,
-                    salesOrderNo: result.salesOrderNo,
-                    deliveryId: result.deliveryId,
-                    outcome: "still_unknown",
-                    reason: result.resultLabel,
-                })
-            } else if (result.result === "FAILED") {
-                failed += 1
-                items.push({
-                    projectionId,
-                    salesOrderNo: result.salesOrderNo,
-                    deliveryId: result.deliveryId,
-                    outcome: "failed",
-                    reason: result.resultLabel,
-                })
-            } else {
-                succeeded += 1
-                items.push({
-                    projectionId,
-                    salesOrderNo: result.salesOrderNo,
-                    deliveryId: result.deliveryId,
-                    outcome: "succeeded",
-                    reason: result.resultLabel,
-                })
-            }
-        } catch {
-            failed += 1
-            items.push({
-                projectionId,
-                salesOrderNo: projectionId,
-                deliveryId: "",
-                outcome: "failed",
-                reason: "请求失败",
-            })
-        }
-    }
-
-    const job: BulkProjectionJob = {
-        jobId,
-        action: input.action,
-        status:
-            failed === 0 && stillUnknown === 0
-                ? "succeeded"
-                : succeeded > 0
-                  ? "partial"
-                  : "failed",
-        total: input.projectionIds.length,
-        completed: items.length,
-        succeeded,
-        skipped: 0,
-        failed,
-        stillUnknown,
-        selectionSnapshotId: `snap-${input.requestId}`,
-        items,
-        startedAt: new Date().toISOString(),
-        nextAction:
-            stillUnknown > 0
-                ? "存在结果未知项：不得标成功，请逐项查询"
-                : failed > 0
-                  ? "部分失败，请查看明细"
-                  : "批量完成",
-    }
-    bulkJobs.set(jobId, job)
-    return job
 }

@@ -5,15 +5,15 @@ export interface PermissionItem {
     path: string
     description: string
     permission: {
-        resource: string
-        action: string
+      resource: string
+      action: string
     }
 }
 
 export interface PermissionGroup {
-    name: string
-    description: string
-    permissions: PermissionItem[]
+    name: string;
+    description: string;
+    permissions: PermissionItem[];
 }
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
@@ -1227,9 +1227,29 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-profiles/with-assets",
+                description: "一次创建供应商资料及资质文件",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/supplier-profiles/{id}",
                 description: "修订完整供应商资料",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-profiles/{id}/with-assets",
+                description: "一次修订供应商资料及资质文件",
                 permission: {
                     resource: "supplier",
                     action: "update",
@@ -1363,9 +1383,29 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/product-brands/with-assets",
+                description: "一次创建商品品牌及Logo",
+                permission: {
+                    resource: "product_brand",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/product-brands/{id}",
                 description: "更新商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-brands/{id}/with-assets",
+                description: "一次更新商品品牌及Logo",
                 permission: {
                     resource: "product_brand",
                     action: "update",
@@ -1523,9 +1563,39 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/products/with-assets",
+                description: "一次创建商品及媒体",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/products/{id}",
                 description: "规格编辑商品",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/products/{id}/with-assets",
+                description: "一次修订商品及媒体",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/products/{id}/disable",
+                description: "停用商品",
                 permission: {
                     resource: "product",
                     action: "update",
@@ -1715,6 +1785,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "contract",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts/upload",
+                description: "一次上传并归档合同 PDF",
+                permission: {
+                    resource: "contract",
+                    action: "create",
                 },
             },
             {
@@ -2253,6 +2333,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances/commit",
+                description: "原子登记客户验收",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/customer-acceptances/{id}",
                 description: "查询客户验收单详情",
@@ -2435,6 +2525,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/card-funds-review/receipts",
+                description: "原子登记卡券票款历史回款",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/card-funds-review/invoices",
+                description: "原子登记卡券票款历史发票",
+                permission: {
+                    resource: "invoice",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/customer-receipts",
                 description: "查询客户回款单列表",
@@ -2461,6 +2571,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "customer_receipt",
                     action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/commit",
+                description: "原子创建或提交客户回款审批",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
                 },
             },
             {
@@ -2521,6 +2641,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "invoice",
                     action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/commit",
+                description: "原子登记销项发票并分配",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
                 },
             },
             {
@@ -2607,6 +2737,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_payment",
                     action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments/commit",
+                description: "原子创建或提交供应商付款审批",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "submit",
                 },
             },
             {
@@ -2784,6 +2924,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/customer-refunds/commit",
+                description: "一次创建并提交客户退款审批",
+                permission: {
+                    resource: "customer_refund",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/customer-refunds",
                 description: "登记客户退款草稿",
                 permission: {
@@ -2843,6 +2993,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds/commit",
+                description: "一次创建并提交供应商退款审批",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-refunds/{id}",
                 description: "查询供应商退款详情",
@@ -2893,6 +3053,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals/commit",
+                description: "一次创建并提交回款冲正审批",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/receipt-reversals/{id}",
                 description: "查询回款冲正详情",
@@ -2939,6 +3109,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "payment_reversal",
                     action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals/commit",
+                description: "一次创建并提交付款冲正审批",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "submit",
                 },
             },
             {
@@ -3121,6 +3301,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "mall_sales_sync_job",
                     action: "complete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-sync-jobs/{id}/retry",
+                description: "原子重试失败同步作业",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "create",
                 },
             },
             {
@@ -3484,6 +3674,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/product-publication-deliveries/{delivery_id}/retry",
+                description: "重试固定商品发布投递",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "retry",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/product-publication-deliveries/{delivery_id}/actions",
                 description: "执行发布投递对象动作",
                 permission: {
@@ -3595,6 +3795,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "sales_order_projection_delivery",
                     action: "process_pending",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projection-deliveries/bulk-actions",
+                description: "批量执行投递对象强动作",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "operate",
                 },
             },
             {
@@ -4245,4 +4455,4 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
-]
+];

@@ -2,9 +2,12 @@
 
 import * as React from "react"
 
-import { uploadFileAssetImage } from "@/features/file-assets/api"
+import { pendingFileReference } from "@/features/master-data/api/pending-assets"
 import type { SupplierEditorFormValues } from "@/features/master-data/lib/supplier-editor-model"
-import type { MasterDataCenterView } from "@/features/master-data/types"
+import type {
+    MasterDataCenterView,
+    PendingAssetUpload,
+} from "@/features/master-data/types"
 
 const MEDIA_FIELDS = [
     "qualification",
@@ -13,6 +16,17 @@ const MEDIA_FIELDS = [
     "foodLicense",
     "legalPersonIdCard",
 ] as const
+
+const QUALIFICATION_TYPE_BY_FIELD: Record<
+    (typeof MEDIA_FIELDS)[number],
+    string
+> = {
+    qualification: "certificate",
+    contractFile: "contract",
+    authorizationFile: "authorization",
+    foodLicense: "food_license",
+    legalPersonIdCard: "legal_person_id",
+}
 
 /** 已登记资质附件：字段 key → fileName → { assetId, url }（回显链接 + 再次保存不重复上传）。 */
 export function useSupplierMediaAssets(
@@ -34,11 +48,6 @@ export function useSupplierMediaAssets(
     }, [data])
     /** 本会话选择但尚未上传的资质文件；保存时按文件名上传并回填 asset id。 */
     const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
-    /** 保存失败后保留本会话已上传资产，重试时不重复上传。 */
-    const uploadedAssetMapsRef = React.useRef<
-        Record<string, Record<string, { assetId: string; url: string }>>
-    >({})
-
     const rememberMediaFiles = React.useCallback((files: File[]) => {
         for (const file of files) {
             pendingFilesRef.current.set(file.name, file)
@@ -68,49 +77,42 @@ export function useSupplierMediaAssets(
         [mediaAssetMaps],
     )
 
-    /** 上传仍为本地待传的资质文件，返回 fileName → asset id 映射（按字段）。 */
-    const resolvePendingMedia = React.useCallback(
-        async (
+    /** 形成临时资产引用；文件与供应商根命令由一次 multipart 请求提交。 */
+    const preparePendingMedia = React.useCallback(
+        (
             values: SupplierEditorFormValues,
-        ): Promise<Record<string, Record<string, string>>> => {
+        ): {
+            assetMaps: Record<string, Record<string, string>>
+            pendingAssetUploads: readonly PendingAssetUpload[]
+        } => {
             const out: Record<string, Record<string, string>> = {}
+            const pendingAssetUploads: PendingAssetUpload[] = []
             for (const key of MEDIA_FIELDS) {
                 const names = (values[key] ?? "")
                     .split(",")
                     .map((s) => s.trim())
                     .filter(Boolean)
                 const existing = mediaAssetMaps[key] ?? {}
-                const uploadedInSession = uploadedAssetMapsRef.current[key] ?? {}
                 const map: Record<string, string> = {}
-                for (const name of names) {
-                    const known = existing[name] ?? uploadedInSession[name]
+                for (const [index, name] of names.entries()) {
+                    const known = existing[name]
                     if (known?.assetId) {
                         map[name] = known.assetId
                         continue
                     }
                     const file = pendingFilesRef.current.get(name)
                     if (!file) continue
-                    const sensitivityClass =
-                        key === "legalPersonIdCard"
-                            ? "highly_sensitive"
-                            : "sensitive"
-                    const uploaded = await uploadFileAssetImage(
-                        file,
-                        "attachment",
-                        sensitivityClass,
+                    const reference = pendingFileReference(
+                        "supplier",
+                        QUALIFICATION_TYPE_BY_FIELD[key],
+                        index,
                     )
-                    map[name] = uploaded.fileAssetId
-                    uploadedAssetMapsRef.current[key] = {
-                        ...uploadedAssetMapsRef.current[key],
-                        [name]: {
-                            assetId: uploaded.fileAssetId,
-                            url: uploaded.url,
-                        },
-                    }
+                    map[name] = reference
+                    pendingAssetUploads.push({ reference, file })
                 }
                 out[key] = map
             }
-            return out
+            return { assetMaps: out, pendingAssetUploads }
         },
         [mediaAssetMaps],
     )
@@ -119,6 +121,6 @@ export function useSupplierMediaAssets(
         rememberMediaFiles,
         mediaUrlsFor,
         mediaAssetIdsFor,
-        resolvePendingMedia,
+        preparePendingMedia,
     }
 }

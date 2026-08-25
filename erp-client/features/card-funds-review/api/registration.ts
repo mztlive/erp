@@ -1,45 +1,53 @@
 /**
  * W13 卡券票款复核 API · 登记历史回款/发票
- * (POST /admin/customer-receipts、/admin/invoices)。
+ * 每次提交只调用一个 W13 原子登记命令。
  */
 
 import { apiPost } from "@/lib/api"
-import { listWorkItems } from "@/features/work-items"
 import type { RegisterFundsResult } from "@/features/card-funds-review/types"
-import { instantToIso } from "./mappers"
-import { loadAccount } from "./queue"
-import type { BackendCustomerReceipt, BackendInvoice, BackendReceivableAccount } from "./dto"
+import type { BackendCardFundsRegistrationResult } from "./dto"
 
-/** 定位当前责任下的应收子账；不存在时按 404 拒绝。 */
-async function requireRegistrationAccount(
-    workItemId: string,
-): Promise<BackendReceivableAccount> {
-    const workItems = await listWorkItems({
-        scope: "mine",
-        workItemType: "CARD_FUNDS_REVIEW",
-        currentWorkItemId: workItemId,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        page: 1,
-        pageSize: 1,
-    })
-    const workItem = workItems.items.find((item) => item.id === workItemId)
-    const account = workItem ? await loadAccount(workItem.business_object_id) : null
-    if (!account) {
-        return Promise.reject({
-            kind: "Http",
-            message: "应收往来子账不存在",
-            status: 404,
-        })
+function projectRegistrationResult(
+    result: BackendCardFundsRegistrationResult,
+): RegisterFundsResult {
+    return {
+        fundsFactVersion: result.funds_fact_version,
+        subjectHash: result.subject_hash,
+        settledTotal: result.settled_total,
+        invoicedTotal: result.invoiced_total,
+        openTotal: result.open_total,
+        openInvoiceableTotal: result.open_invoiceable_total,
+        receiptFacts: result.receipt_facts.map((fact) => ({
+            receiptId: fact.receipt_id,
+            receiptNo: fact.receipt_no,
+            receivedAt: fact.received_at,
+            grossAmount: fact.gross_amount,
+            allocatedToAccount: fact.allocated_to_account,
+            otherAllocationSummary: fact.other_allocation_summary ?? undefined,
+            reversed: fact.reversed,
+        })),
+        invoiceFacts: result.invoice_facts.map((fact) => ({
+            invoiceId: fact.invoice_id,
+            invoiceNo: fact.invoice_no,
+            direction: fact.direction,
+            issuedAt: fact.issued_at,
+            grossAmount: fact.gross_amount,
+            netAmount: fact.net_amount,
+            taxAmount: fact.tax_amount,
+            allocatedToAccount: fact.allocated_to_account,
+            reversed: fact.reversed,
+        })),
     }
-    return account
 }
 
 /**
- * 登记历史回款：create + post customer receipt with entry allocations.
+ * 一次登记历史回款、核销分配、子账进度和审计。
  */
 export async function registerHistoricalReceipt(input: {
     workItemId: string
+    expectedTaskVersion: string
     expectedSubjectVersion: string
+    expectedFundsFactVersion: string
     receiptNo: string
     receivedAt: string
     grossAmount: string
@@ -50,6 +58,7 @@ export async function registerHistoricalReceipt(input: {
         amount: string
     }[]
     evidenceReference: string
+    idempotencyKey: string
 }): Promise<RegisterFundsResult> {
     if (!input.grossAmount || Number(input.grossAmount) <= 0) {
         return Promise.reject({
@@ -58,71 +67,35 @@ export async function registerHistoricalReceipt(input: {
         })
     }
 
-    const account = await requireRegistrationAccount(input.workItemId)
-
-    // Prefer increase entries as allocation targets
-    const increaseEntry = (account.entries ?? []).find(
-        (e) => e.direction === "increase",
-    )
     const receivedAtSecs = input.receivedAt
         ? Math.floor(new Date(input.receivedAt).getTime() / 1000)
         : Math.floor(Date.now() / 1000)
-
-    const created = await apiPost<BackendCustomerReceipt>(
-        "/admin/customer-receipts",
+    const result = await apiPost<BackendCardFundsRegistrationResult>(
+        "/admin/card-funds-review/receipts",
         {
-            receipt_no: input.receiptNo,
-            counterparty_party_id: account.counterparty_party_id,
-            customer_id: account.customer_id,
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            expected_funds_fact_version: input.expectedFundsFactVersion,
+            receipt_no: input.receiptNo.trim() || undefined,
             received_at: receivedAtSecs,
-            amount: input.grossAmount,
-            bank_reference: input.evidenceReference || undefined,
+            gross_amount: input.grossAmount,
+            allocations: input.allocations.map((line) => ({
+                target_account_id: line.targetAccountId,
+                amount: line.amount,
+            })),
+            evidence_reference: input.evidenceReference,
+            idempotency_key: input.idempotencyKey,
         },
     )
-
-    const entryId = increaseEntry?.id
-    let posted = created
-    if (entryId) {
-        posted = await apiPost<BackendCustomerReceipt>(
-            `/admin/customer-receipts/${encodeURIComponent(created.id)}/post`,
-            {
-                allocations: [
-                    {
-                        receivable_entry_id: entryId,
-                        allocated_amount: input.grossAmount,
-                    },
-                ],
-            },
-        )
-    }
-
-    const refreshed = await loadAccount(account.id)
-    const subjectHash = `acct:${account.id}:v${refreshed?.version ?? account.version}`
-    return {
-        fundsFactVersion: `ffv:${account.id}:v${refreshed?.version ?? account.version}`,
-        subjectHash,
-        settledTotal: refreshed?.settled_total ?? account.settled_total,
-        invoicedTotal: refreshed?.invoiced_total ?? account.invoiced_total,
-        openTotal: refreshed?.open_total ?? account.open_total,
-        openInvoiceableTotal:
-            refreshed?.open_invoiceable_total ?? account.open_invoiceable_total,
-        receiptFacts: [
-            {
-                receiptId: posted.id,
-                receiptNo: posted.receipt_no,
-                receivedAt: instantToIso(posted.received_at),
-                grossAmount: posted.amount,
-                allocatedToAccount: posted.allocated_total,
-                reversed: posted.status === "reversed",
-            },
-        ],
-        invoiceFacts: [],
-    }
+    return projectRegistrationResult(result)
 }
 
 export async function registerHistoricalInvoice(input: {
     workItemId: string
+    expectedTaskVersion: string
     expectedSubjectVersion: string
+    expectedFundsFactVersion: string
     invoiceNo: string
     issuedAt: string
     grossAmount: string
@@ -135,6 +108,7 @@ export async function registerHistoricalInvoice(input: {
         amount: string
     }[]
     evidenceReference: string
+    idempotencyKey: string
 }): Promise<RegisterFundsResult> {
     if (!input.grossAmount || Number(input.grossAmount) <= 0) {
         return Promise.reject({
@@ -143,56 +117,25 @@ export async function registerHistoricalInvoice(input: {
         })
     }
 
-    const account = await requireRegistrationAccount(input.workItemId)
-
-    const created = await apiPost<BackendInvoice>("/admin/invoices", {
-        invoice_direction: "sales",
-        invoice_kind: "blue",
-        party_id: account.counterparty_party_id,
-        invoice_no: input.invoiceNo,
-        invoice_date: input.issuedAt.slice(0, 10),
-        gross_amount: input.grossAmount,
-        net_amount: input.netAmount,
-        tax_amount: input.taxAmount,
-    })
-
-    const posted = await apiPost<BackendInvoice>(
-        `/admin/invoices/${encodeURIComponent(created.id)}/post`,
+    const result = await apiPost<BackendCardFundsRegistrationResult>(
+        "/admin/card-funds-review/invoices",
         {
-            allocations: [
-                {
-                    receivable_account_id: account.id,
-                    allocated_gross_amount: input.grossAmount,
-                    allocated_net_amount: input.netAmount,
-                    allocated_tax_amount: input.taxAmount,
-                },
-            ],
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            expected_funds_fact_version: input.expectedFundsFactVersion,
+            invoice_no: input.invoiceNo.trim() || undefined,
+            invoice_date: input.issuedAt.slice(0, 10),
+            gross_amount: input.grossAmount,
+            net_amount: input.netAmount,
+            tax_amount: input.taxAmount,
+            allocations: input.allocations.map((line) => ({
+                target_account_id: line.targetAccountId,
+                amount: line.amount,
+            })),
+            evidence_reference: input.evidenceReference,
+            idempotency_key: input.idempotencyKey,
         },
     )
-
-    const refreshed = await loadAccount(account.id)
-    const subjectHash = `acct:${account.id}:v${refreshed?.version ?? account.version}`
-    return {
-        fundsFactVersion: `ffv:${account.id}:v${refreshed?.version ?? account.version}`,
-        subjectHash,
-        settledTotal: refreshed?.settled_total ?? account.settled_total,
-        invoicedTotal: refreshed?.invoiced_total ?? account.invoiced_total,
-        openTotal: refreshed?.open_total ?? account.open_total,
-        openInvoiceableTotal:
-            refreshed?.open_invoiceable_total ?? account.open_invoiceable_total,
-        receiptFacts: [],
-        invoiceFacts: [
-            {
-                invoiceId: posted.id,
-                invoiceNo: posted.invoice_no,
-                direction: "BLUE",
-                issuedAt: posted.invoice_date,
-                grossAmount: posted.gross_amount,
-                netAmount: posted.net_amount,
-                taxAmount: posted.tax_amount,
-                allocatedToAccount: posted.allocated_total,
-                reversed: false,
-            },
-        ],
-    }
+    return projectRegistrationResult(result)
 }

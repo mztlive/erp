@@ -39,21 +39,14 @@ import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components
 import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/components/sales-order-create-line-items-section"
 import { SalesOrderCreateTotalBar } from "@/features/sales-orders/components/sales-order-create-total-bar"
 import { SalesOrderCreateSummaryPanel } from "@/features/sales-orders/components/sales-order-create-summary-panel"
-import { SalesOrderCreateResubmitDialog } from "@/features/sales-orders/components/sales-order-create-resubmit-dialog"
 import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
 import { SalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-order-submit-confirm-dialog"
 import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/components/voucher-sales-order-approval-area"
 import { VoucherSalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/voucher-sales-order-submit-confirm-dialog"
 
-import type {
-    SalesOrderEditorPurpose,
-    SalesOrderEditorResult,
-} from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { SalesOrderEditorPurpose } from "@/features/sales-orders/lib/sales-order-create-form-types"
 
-export type {
-    SalesOrderEditorPurpose,
-    SalesOrderEditorResult,
-} from "@/features/sales-orders/lib/sales-order-create-form-types"
+export type { SalesOrderEditorPurpose } from "@/features/sales-orders/lib/sales-order-create-form-types"
 
 export function SalesOrderCreateForm({
     initialCustomerId = "",
@@ -63,7 +56,6 @@ export function SalesOrderCreateForm({
     initialDraft = null,
     purpose = "create",
     chrome = "page",
-    onResult,
     onSubmitted,
     commandLedger: commandLedgerProp,
 }: {
@@ -71,12 +63,11 @@ export function SalesOrderCreateForm({
     initialContractId?: string
     initialContractRevisionId?: string
     initialNature?: SalesOrderNature
-    /** 继续编辑 / 驳回改单：已有可编辑内容；新建时为 `null`。 */
+    /** 继续编辑时已有的可编辑内容；新建时为 `null`。 */
     initialDraft?: SalesOrderDraftResumeData | null
     purpose?: SalesOrderEditorPurpose
     /** page：独立建单页；none：嵌在对象中心内，外壳由详情页提供。 */
     chrome?: "page" | "none"
-    onResult?: (result: SalesOrderEditorResult) => void
     onSubmitted?: (salesOrderId: string) => void
     commandLedger?: FormalCommandKeyLedger
 }) {
@@ -97,9 +88,7 @@ export function SalesOrderCreateForm({
     )
     const submission = useSalesOrderCreateSubmission({
         initialDraft,
-        purpose,
         commandLedger,
-        onResult,
         onSubmitted,
     })
     const { setDraftSaved } = submission
@@ -362,7 +351,6 @@ export function SalesOrderCreateForm({
 
                         <SalesOrderCreateTotalBar
                             form={form}
-                            purpose={purpose}
                             onSaveDraftClick={() => {
                                 submission.submitIntentRef.current =
                                     "SAVE_DRAFT"
@@ -401,15 +389,6 @@ export function SalesOrderCreateForm({
                     if (pendingNature) applyNature(pendingNature)
                     setPendingNature(null)
                 }}
-            />
-
-            <SalesOrderCreateResubmitDialog
-                open={submission.resubmitConfirmOpen}
-                onOpenChange={submission.setResubmitConfirmOpen}
-                evidence={submission.resubmitEvidence}
-                onEvidenceChange={submission.setResubmitEvidence}
-                pending={submission.isResubmitting}
-                onConfirm={() => submission.confirmResubmit()}
             />
 
             {nature === "card_voucher" ? (

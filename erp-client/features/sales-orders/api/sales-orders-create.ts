@@ -11,7 +11,6 @@ import {
     welfareScenarioLabel,
 } from "@/lib/business-options"
 import type {
-    BackendContractDetail,
     BackendSalesOrderDetail,
     BackendWorkingCopy,
     BackendWorkingCopyLine,
@@ -59,8 +58,7 @@ type DraftContentInput = {
  */
 function buildDraftPayload(
     input: DraftContentInput,
-    contract: BackendContractDetail,
-    requested: BackendContractDetail["revisions"][number],
+    requestedContractRevisionId: string,
 ): {
     businessType: "VOUCHER" | "GOODS_SERVICE"
     draft: Record<string, unknown>
@@ -132,17 +130,7 @@ function buildDraftPayload(
         draft: {
             editor_user_id:
                 input.ownerUserId.trim() || input.ownerName.trim() || "unknown",
-            customer_name: requested.customer_name,
-            contract_no: contract.contract_no,
-            requested_contract_revision_id: requested.id,
-            settlement_party_name: requested.settlement_party_name,
-            payment_term_code: requested.payment_term_code || "CUSTOM",
-            payment_term_name:
-                input.paymentTerms.trim() ||
-                requested.payment_term_name ||
-                "合同约定",
-            invoice_type: requested.invoice_type || "SPECIAL",
-            tax_point: requested.tax_point || input.taxRatePercent || "0",
+            requested_contract_revision_id: requestedContractRevisionId,
             // 表头项目名称存中文快照，便于列表/纸质件直接展示
             project_name: welfareScenarioLabel(input.welfareScene) || null,
             business_remark: input.remark.trim() || null,
@@ -167,26 +155,6 @@ function buildDraftPayload(
     }
 }
 
-async function resolveContractRevision(input: {
-    contractId: string
-    requestedContractRevisionId: string
-}): Promise<{
-    contract: BackendContractDetail
-    requested: BackendContractDetail["revisions"][number]
-}> {
-    const contract = await apiGet<BackendContractDetail>(
-        `/admin/contracts/${input.contractId}`,
-    )
-    const requested = contract.revisions.find(
-        (r) => r.id === input.requestedContractRevisionId,
-    )
-
-    if (!requested) {
-        throwValidation("合同修订不存在")
-    }
-    return { contract, requested }
-}
-
 export async function createSalesOrder(
     input: CreateSalesOrderInput,
 ): Promise<CreateSalesOrderResult> {
@@ -197,21 +165,15 @@ export async function createSalesOrder(
         throwValidation("卡券销售单必须且只能有一行明细")
     }
 
-    const { contract, requested } = await resolveContractRevision(
-        input.contract,
-    )
     const { businessType, draft } = buildDraftPayload(
         input,
-        contract,
-        requested,
+        input.contract.requestedContractRevisionId,
     )
 
     const body = {
         order_no: input.orderNo,
         business_type: businessType,
-        customer_id: contract.customer_id,
-        contract_id: contract.id,
-        settlement_party_id: contract.settlement_party_id,
+        contract_id: input.contract.contractId,
         idempotency_key: input.idempotencyKey,
         intent: input.intent,
         draft,
@@ -255,32 +217,43 @@ export async function saveSalesOrderDraft(
         throwValidation("卡券销售单必须且只能有一行明细")
     }
 
-    const { contract, requested } = await resolveContractRevision(
-        input.contract,
+    const { draft } = buildDraftPayload(
+        input,
+        input.contract.requestedContractRevisionId,
     )
-    const { draft } = buildDraftPayload(input, contract, requested)
 
     const updated = await apiPut<BackendWorkingCopy>(
         `/admin/sales-orders/${input.salesOrderId}/working-copy`,
-        { version: input.version, draft },
+        {
+            version: input.version,
+            contract_id: input.contract.contractId,
+            draft,
+        },
     )
 
     return { version: updated.version }
 }
 
 /** 提交已存在的草稿进入审核轨（继续编辑场景的"提交"动作）。 */
-export type SubmitSalesOrderInput = {
+export type SubmitSalesOrderInput = DraftContentInput & {
     salesOrderId: string
     version: number
     idempotencyKey: string
+    contract: SalesOrderContractInput
 }
 
 export async function submitSalesOrder(
     input: SubmitSalesOrderInput,
 ): Promise<{ salesOrderId: string }> {
+    const { draft } = buildDraftPayload(
+        input,
+        input.contract.requestedContractRevisionId,
+    )
     await apiPost(`/admin/sales-orders/${input.salesOrderId}/submit`, {
         version: input.version,
         idempotency_key: input.idempotencyKey,
+        contract_id: input.contract.contractId,
+        draft,
     })
     return { salesOrderId: input.salesOrderId }
 }
@@ -335,15 +308,11 @@ function mapDraftLines(
 }
 
 function isEditableSalesOrder(detail: BackendSalesOrderDetail) {
-    return (
-        detail.commercial_status === "DRAFT" ||
-        Boolean(detail.open_procurement_rejection) ||
-        detail.stage?.code === "awaiting_sales"
-    )
+    return detail.commercial_status === "DRAFT"
 }
 
 /**
- * 取回可编辑表单值：草稿继续编辑，或采购驳回后改整单再报。
+ * 取回可编辑表单值：草稿继续编辑。
  * 优先工作副本；没有副本时回退到最近一次提交快照。
  */
 export async function fetchSalesOrderDraftForResume(

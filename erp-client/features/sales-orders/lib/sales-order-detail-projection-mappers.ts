@@ -1,7 +1,4 @@
 import type {
-    BackendActiveLowMarginManagerConfirmation,
-    BackendOpenProcurementRejection,
-    BackendProcurementConfirmation,
     BackendSalesChangeOrder,
     BackendSalesOrderDetail,
     BackendSubmission,
@@ -9,13 +6,10 @@ import type {
     BackendWorkingCopyLine,
 } from "@/features/sales-orders/api/contracts"
 import type {
-    ActiveLowMarginManagerConfirmation,
-    ProcurementRejectionResolution,
     SalesChangeOrderSummary,
     SalesOrderListItem,
     SalesOrderNature,
 } from "@/features/sales-orders/types"
-import { personDisplayName } from "@/features/sales-orders/lib/labels"
 import {
     mapSalesChangeOrderApproval,
     salesChangeOrderStatusLabel,
@@ -24,7 +18,6 @@ import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-a
 import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import {
     formatEpochDate,
-    formatInstant,
     mapListItemFromBackend,
     mapRevisions,
     mapWorkingCopyLines,
@@ -150,25 +143,11 @@ export function mapDetailToListItem(
         targetMallName?: string
         ownerUserId?: string
         ownerName?: string
-        procurementRejection?: ProcurementRejectionResolution | null
         activeChangeOrder?: SalesChangeOrderSummary | null
         customerContact?: string
     },
 ): SalesOrderListItem {
     const commercial = pickCommercialContent(detail)
-    const openRejectionSubmissionNo = detail.submissions.find(
-        (s) => s.id === detail.open_procurement_rejection?.submission_id,
-    )?.submission_no
-    const procurementRejection =
-        extras?.procurementRejection ??
-        mapOpenProcurementRejection(
-            detail.open_procurement_rejection,
-            openRejectionSubmissionNo,
-        )
-    const activeLowMarginManagerConfirmation =
-        mapActiveLowMarginManagerConfirmation(
-            detail.active_low_margin_manager_confirmation,
-        )
     // 正式销售版本只认 `current_revision_id` 指向的不可变修订。
     // 实体乐观锁 `version` 会随保存、提交和状态流转递增，绝不能作为业务版本兜底。
     const currentRevisionNo = detail.current_revision_id
@@ -228,8 +207,6 @@ export function mapDetailToListItem(
             receivableDueDate: commercial.receivableDueDate,
             remark: commercial.remark,
             revisions: mapRevisions(detail.revisions),
-            procurementRejection,
-            activeLowMarginManagerConfirmation,
             approval:
                 detail.business_type === "VOUCHER"
                     ? mapVoucherSalesOrderApproval(detail.approval)
@@ -251,99 +228,6 @@ export function mapDetailToListItem(
             },
         },
     )
-}
-
-/** 将服务端 actor-specific 低毛利确认投影原样收敛为页面工作面。 */
-export function mapActiveLowMarginManagerConfirmation(
-    confirmation?: BackendActiveLowMarginManagerConfirmation | null,
-): ActiveLowMarginManagerConfirmation | null {
-    if (!confirmation) return null
-    return {
-        confirmationId: confirmation.confirmation_id,
-        workItemId: confirmation.work_item_id,
-        taskVersion: String(confirmation.task_version),
-        subjectVersion: confirmation.subject_version,
-        lowMarginSubmissionId: confirmation.low_margin_submission_id,
-        rejectedProcurementConfirmationId:
-            confirmation.rejected_procurement_confirmation_id,
-        acceptanceReason: confirmation.acceptance_reason,
-        evidenceReferenceIds: confirmation.evidence_reference_ids,
-        ownerUser: confirmation.owner_user
-            ? {
-                  id: confirmation.owner_user.id,
-                  displayName: confirmation.owner_user.display_name,
-              }
-            : undefined,
-        allowedActions: confirmation.allowed_actions,
-        actionBlockers: confirmation.action_blockers,
-    }
-}
-
-export function mapRejectedProcurement(
-    conf: BackendProcurementConfirmation,
-): ProcurementRejectionResolution | null {
-    if (conf.status !== "REJECTED") return null
-    return {
-        rejectedProcurementConfirmationId: conf.id,
-        rejectedProcurementWorkItemId: "",
-        rejectedSubmissionId: conf.submission_id,
-        rejectedSubmissionNo: 0,
-        rejectedSubjectHash: conf.submission_id,
-        rejectReasonCode: "",
-        rejectComment: "",
-        rejectedByLabel: personDisplayName(conf.handled_by),
-        rejectedAt: formatInstant(conf.handled_at),
-        reviewStatus: "REJECTED",
-        draftDifference: {
-            changedItemOrService: false,
-            changedSalesPrice: false,
-            commercialTermsUnchanged: true,
-            diffSummary: [],
-        },
-        fixedResolutions: [
-            "RESUBMIT_CHANGED_TERMS",
-            "REQUEST_LOW_MARGIN_ACCEPTANCE",
-            "VOID_AFTER_REJECTION",
-        ],
-        allowedActions: [],
-        actionBlockers: [],
-    }
-}
-
-/**
- * 将销售单详情内嵌的开放采购驳回映射为前端处理卡契约。
- * 权威来源为 `GET /admin/sales-orders/{id}`，不依赖采购队列 list 权限。
- */
-export function mapOpenProcurementRejection(
-    open: BackendOpenProcurementRejection | null | undefined,
-    submissionNo?: number,
-): ProcurementRejectionResolution | null {
-    if (!open) return null
-    return {
-        rejectedProcurementConfirmationId: open.procurement_confirmation_id,
-        rejectedProcurementWorkItemId: "",
-        rejectedSubmissionId: open.submission_id,
-        rejectedSubmissionNo: submissionNo ?? 0,
-        rejectedSubjectHash: open.submission_id,
-        rejectReasonCode: open.reject_reason_code ?? "",
-        rejectComment: open.comment ?? "",
-        rejectedByLabel: personDisplayName(open.handled_by_name),
-        rejectedAt: formatInstant(open.handled_at),
-        reviewStatus: "REJECTED",
-        draftDifference: {
-            changedItemOrService: false,
-            changedSalesPrice: false,
-            commercialTermsUnchanged: true,
-            diffSummary: [],
-        },
-        fixedResolutions: [
-            "RESUBMIT_CHANGED_TERMS",
-            "REQUEST_LOW_MARGIN_ACCEPTANCE",
-            "VOID_AFTER_REJECTION",
-        ],
-        allowedActions: open.allowed_actions,
-        actionBlockers: [],
-    }
 }
 
 /**

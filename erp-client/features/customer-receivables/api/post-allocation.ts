@@ -1,22 +1,34 @@
 /** Post allocation (draft session → formal receipt/invoice allocations). */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 
 import type {
     AllocationSessionView,
     PostAllocationInput,
     PostAllocationResult,
 } from "@/features/customer-receivables/types"
-import {
-    buildCustomerReceiptSubmitRequest,
-    mapCustomerReceiptApproval,
-} from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
 import { sessions } from "./session"
 
 export const postIdempotency = new Map<string, PostAllocationResult>()
+type PendingPostCommand = {
+    input: PostAllocationInput
+    session: AllocationSessionView
+}
+
+const pendingPostCommands = new Map<string, PendingPostCommand>()
+
+function freezePostInput(input: PostAllocationInput): PostAllocationInput {
+    return {
+        ...input,
+        fact: { ...input.fact },
+        allocations: input.allocations.map((line) => ({ ...line })),
+    }
+}
 
 function failedResult(
     code: string,
@@ -25,149 +37,41 @@ function failedResult(
     return { status: "failed", code, message }
 }
 
-function isPostedReceiptStatus(status?: string): boolean {
-    return status === "posted" || status === "POSTED" || status === "reversed"
-}
-
-function isInApprovalReceiptStatus(status?: string): boolean {
-    return (
-        status === "IN_APPROVAL" ||
-        status === "in_approval" ||
-        status === "pending_review"
-    )
-}
-
-/**
- * 把已创建回款草稿写回会话，供绑定卡只读展示。
- *
- * @param session 当前核销会话。
- * @param receipt 服务端回款视图。
- */
-function rememberCreatedReceipt(
-    session: AllocationSessionView,
-    receipt: BackendCustomerReceipt,
-): AllocationSessionView {
-    const next: AllocationSessionView = {
-        ...session,
-        existingFactId: receipt.id,
-        existingFactNo: receipt.receipt_no,
-        existingFactVersion: receipt.version,
-        approval: mapCustomerReceiptApproval(receipt.approval),
-    }
-    sessions.set(session.draftSessionId, next)
-    return next
-}
-
-/**
- * 创建客户回款草稿并只读展示服务端绑定。提交仍走独立确认。
- *
- * @param session 当前核销会话。
- */
-async function createCustomerReceiptDraft(
-    session: AllocationSessionView,
-    idempotencyKey: string,
-): Promise<BackendCustomerReceipt> {
-    const amount = session.fact.amount ?? "0"
-    const receivedAtLocal = session.fact.receivedAt
-    const receivedAtSecs = receivedAtLocal
-        ? Math.floor(new Date(receivedAtLocal).getTime() / 1000)
-        : Math.floor(Date.now() / 1000)
-    const receiptNo = `SK-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${idempotencyKey.slice(-6)}`
-    return apiPost<BackendCustomerReceipt>("/admin/customer-receipts", {
-        receipt_no: receiptNo,
-        counterparty_party_id: session.counterpartyPartyId,
-        customer_id: session.customerId || undefined,
-        received_at: receivedAtSecs,
-        amount,
-        bank_reference: session.fact.bankReference || undefined,
-    })
-}
-
-/**
- * 确保回款草稿已在服务端创建并带回只读审批绑定。
- *
- * 已存在草稿时只刷新版本与绑定，不得调用过账旁路。
- *
- * @param input 当前核销会话标识。
- */
-export async function ensureCustomerReceiptDraft(input: {
-    draftSessionId: string
-    editVersion: number
-    idempotencyKey: string
-}): Promise<
-    | {
-          status: "succeeded"
-          session: AllocationSessionView
-      }
-    | Extract<PostAllocationResult, { status: "failed" }>
-> {
-    const session = sessions.get(input.draftSessionId)
-    if (!session || session.status !== "draft") {
-        return failedResult("SESSION_INVALID", "本次核销已不存在或已提交。")
-    }
-    if (input.editVersion !== session.editVersion) {
-        return failedResult(
-            "VERSION_CONFLICT",
-            "草稿数据已更新，请保存或刷新后重试。",
-        )
-    }
-    if (session.mode !== "receipt") {
-        return failedResult("NOT_RECEIPT", "当前核销不是回款。")
-    }
-
-    if (session.existingFactId) {
-        const latest = await apiGet<BackendCustomerReceipt>(
-            `/admin/customer-receipts/${encodeURIComponent(session.existingFactId)}`,
-        )
-        if (isPostedReceiptStatus(latest.status)) {
-            return failedResult(
-                "RECEIPT_ALREADY_POSTED",
-                "已过账回款不得再次过账。未分配余额请另登新回款。",
-            )
-        }
-        if (isInApprovalReceiptStatus(latest.status)) {
-            return failedResult(
-                "RECEIPT_IN_APPROVAL",
-                "回款正在审批中，不能重复提交。",
-            )
-        }
-        return {
-            status: "succeeded",
-            session: rememberCreatedReceipt(session, latest),
-        }
-    }
-
-    const created = await createCustomerReceiptDraft(
-        session,
-        input.idempotencyKey,
-    )
-    return {
-        status: "succeeded",
-        session: rememberCreatedReceipt(session, created),
-    }
-}
-
 export async function postAllocation(
     input: PostAllocationInput,
 ): Promise<PostAllocationResult> {
     const cached = postIdempotency.get(input.idempotencyKey)
-    if (cached) return cached
+    if (cached && cached.status !== "unknown") return cached
+    postIdempotency.delete(input.idempotencyKey)
 
-    const s = sessions.get(input.draftSessionId)
-    if (!s || s.status !== "draft") {
-        const failed: PostAllocationResult = {
-            status: "failed",
-            code: "SESSION_INVALID",
-            message: "本次核销已不存在或已提交。",
+    const pending = pendingPostCommands.get(input.idempotencyKey)
+    const commandInput = pending?.input ?? freezePostInput(input)
+    let s: AllocationSessionView
+
+    if (pending) {
+        s = pending.session
+    } else {
+        const stored = sessions.get(commandInput.draftSessionId)
+        if (!stored || stored.status !== "draft") {
+            const failed: PostAllocationResult = {
+                status: "failed",
+                code: "SESSION_INVALID",
+                message: "本次核销已不存在或已提交。",
+            }
+            postIdempotency.set(commandInput.idempotencyKey, failed)
+            return failed
         }
-        postIdempotency.set(input.idempotencyKey, failed)
-        return failed
-    }
-    if (input.editVersion !== s.editVersion) {
-        return {
-            status: "failed",
-            code: "VERSION_CONFLICT",
-            message: "草稿数据已更新，请保存或刷新后重试。",
+        if (commandInput.editVersion !== stored.editVersion) {
+            return {
+                status: "failed",
+                code: "VERSION_CONFLICT",
+                message: "草稿数据已更新，请保存或刷新后重试。",
+            }
+        }
+        s = {
+            ...stored,
+            fact: { ...commandInput.fact },
+            allocations: commandInput.allocations.map((line) => ({ ...line })),
         }
     }
 
@@ -197,39 +101,57 @@ export async function postAllocation(
                     "提交审批至少需要一条核销分配。",
                 )
             }
-
-            const ensured = await ensureCustomerReceiptDraft({
-                draftSessionId: input.draftSessionId,
-                editVersion: input.editVersion,
-                idempotencyKey: input.idempotencyKey,
+            if (!commandInput.fact.receivedAt) {
+                commandInput.fact.receivedAt = new Date().toISOString()
+                s = {
+                    ...s,
+                    fact: {
+                        ...s.fact,
+                        receivedAt: commandInput.fact.receivedAt,
+                    },
+                }
+            }
+            pendingPostCommands.set(commandInput.idempotencyKey, {
+                input: commandInput,
+                session: s,
             })
-            if (ensured.status !== "succeeded") {
-                return ensured
-            }
-            const draft = ensured.session
-            const factId = draft.existingFactId
-            const expectedVersion = draft.existingFactVersion
-            if (!factId || !expectedVersion) {
-                return failedResult(
-                    "RECEIPT_DRAFT_MISSING",
-                    "回款草稿尚未创建，请刷新后重试。",
-                )
-            }
 
+            const amount = s.fact.amount ?? "0"
+            const receivedAt = new Date(commandInput.fact.receivedAt)
+            const receivedAtSecs = Math.floor(receivedAt.getTime() / 1000)
             const submitted = await apiPost<BackendCustomerReceipt>(
-                `/admin/customer-receipts/${encodeURIComponent(factId)}/submit`,
-                buildCustomerReceiptSubmitRequest({
-                    expectedVersion,
-                    idempotencyKey: input.idempotencyKey,
+                "/admin/customer-receipts/commit",
+                {
+                    receipt_id: s.existingFactId ?? null,
+                    expected_version: s.existingFactId
+                        ? (s.existingFactVersion ?? null)
+                        : null,
+                    receipt: s.existingFactId
+                        ? null
+                        : {
+                              receipt_no: `SK-${receivedAt
+                                  .toISOString()
+                                  .slice(0, 10)
+                                  .replaceAll(
+                                      "-",
+                                      "",
+                                  )}-${commandInput.idempotencyKey.slice(-6)}`,
+                              counterparty_party_id: s.counterpartyPartyId,
+                              customer_id: s.customerId || undefined,
+                              received_at: receivedAtSecs,
+                              amount,
+                              bank_reference: s.fact.bankReference || undefined,
+                          },
                     allocations: positiveLines.map((line) => ({
-                        receivableEntryId: line.targetId,
-                        allocatedAmount: line.amount,
+                        receivable_entry_id: line.targetId,
+                        allocated_amount: line.amount,
                     })),
-                }),
+                    idempotency_key: commandInput.idempotencyKey,
+                },
             )
             const approval = mapCustomerReceiptApproval(submitted.approval)
-            sessions.set(input.draftSessionId, {
-                ...draft,
+            sessions.set(commandInput.draftSessionId, {
+                ...s,
                 status: "posted",
                 existingFactId: submitted.id,
                 existingFactNo: submitted.receipt_no,
@@ -243,72 +165,60 @@ export async function postAllocation(
                 factNo: submitted.receipt_no,
                 allocatedTotal: submitted.allocated_total,
                 unallocatedAmount: submitted.unallocated_amount,
-                operationId: input.idempotencyKey,
+                operationId: commandInput.idempotencyKey,
                 watermark: new Date().toISOString(),
-                returnTo: draft.returnContext?.returnTo,
+                returnTo: s.returnContext?.returnTo,
                 approval,
                 subjectStatus: submitted.status,
             }
-            postIdempotency.set(input.idempotencyKey, result)
+            postIdempotency.set(commandInput.idempotencyKey, result)
+            pendingPostCommands.delete(commandInput.idempotencyKey)
             return result
-        }
-
-        // invoice mode
-        let factId = s.existingFactId
-        let factNo = s.existingFactNo ?? (s.fact.invoiceNo ?? "").trim()
-
-        if (!factId) {
-            const created = stripInvoiceApprovalField(
-                await apiPost<BackendInvoice>("/admin/invoices", {
-                    invoice_direction: "sales",
-                    invoice_kind: s.fact.invoiceKind ?? "blue",
-                    party_id: s.counterpartyPartyId,
-                    invoice_code: s.fact.invoiceCode?.trim() || undefined,
-                    invoice_no: factNo,
-                    invoice_date: s.fact.invoiceDate,
-                    gross_amount: s.fact.grossAmount ?? "0",
-                    net_amount: s.fact.netAmount || s.fact.grossAmount || "0",
-                    tax_amount: s.fact.taxAmount || "0",
-                }),
-            )
-            factId = created.id
-            factNo = created.invoice_no
         }
 
         if (positiveLines.length === 0) {
-            sessions.set(input.draftSessionId, { ...s, status: "posted" })
-            const result: PostAllocationResult = {
-                status: "succeeded",
-                mode: "invoice",
-                factId: factId!,
-                factNo,
-                allocatedTotal: "0.00",
-                unallocatedAmount: s.fact.grossAmount ?? "0",
-                operationId: input.idempotencyKey,
-                watermark: new Date().toISOString(),
-                returnTo: s.returnContext?.returnTo,
-            }
-            postIdempotency.set(input.idempotencyKey, result)
-            return result
+            return failedResult(
+                "NEED_ALLOCATION",
+                "登记销项发票至少需要一条正式分配。",
+            )
         }
+        pendingPostCommands.set(commandInput.idempotencyKey, {
+            input: commandInput,
+            session: s,
+        })
 
         const gross = s.fact.grossAmount ?? "0"
         const net = s.fact.netAmount || gross
         const tax = s.fact.taxAmount || "0"
         const posted = stripInvoiceApprovalField(
-            await apiPost<BackendInvoice>(
-                `/admin/invoices/${encodeURIComponent(factId!)}/post`,
-                {
-                    allocations: positiveLines.map((line) => ({
-                        receivable_account_id: line.targetId,
-                        allocated_gross_amount: line.amount,
-                        allocated_net_amount: net,
-                        allocated_tax_amount: tax,
-                    })),
-                },
-            ),
+            await apiPost<BackendInvoice>("/admin/invoices/commit", {
+                invoice_id: s.existingFactId ?? null,
+                expected_version: s.existingFactId
+                    ? (s.existingFactVersion ?? null)
+                    : null,
+                invoice: s.existingFactId
+                    ? null
+                    : {
+                          invoice_direction: "sales",
+                          invoice_kind: s.fact.invoiceKind ?? "blue",
+                          party_id: s.counterpartyPartyId,
+                          invoice_code: s.fact.invoiceCode?.trim() || undefined,
+                          invoice_no: (s.fact.invoiceNo ?? "").trim(),
+                          invoice_date: s.fact.invoiceDate,
+                          gross_amount: gross,
+                          net_amount: net,
+                          tax_amount: tax,
+                      },
+                allocations: positiveLines.map((line) => ({
+                    receivable_account_id: line.targetId,
+                    allocated_gross_amount: line.amount,
+                    allocated_net_amount: net,
+                    allocated_tax_amount: tax,
+                })),
+                idempotency_key: commandInput.idempotencyKey,
+            }),
         )
-        sessions.set(input.draftSessionId, { ...s, status: "posted" })
+        sessions.set(commandInput.draftSessionId, { ...s, status: "posted" })
         const result: PostAllocationResult = {
             status: "succeeded",
             mode: "invoice",
@@ -316,11 +226,12 @@ export async function postAllocation(
             factNo: posted.invoice_no,
             allocatedTotal: posted.allocated_total,
             unallocatedAmount: posted.unallocated_amount,
-            operationId: input.idempotencyKey,
+            operationId: commandInput.idempotencyKey,
             watermark: new Date().toISOString(),
             returnTo: s.returnContext?.returnTo,
         }
-        postIdempotency.set(input.idempotencyKey, result)
+        postIdempotency.set(commandInput.idempotencyKey, result)
+        pendingPostCommands.delete(commandInput.idempotencyKey)
         return result
     } catch (err) {
         const message = getErrorMessage(err, "提交失败，请稍后重试。")
@@ -332,6 +243,19 @@ export async function postAllocation(
             err && typeof err === "object" && "status" in err
                 ? String((err as { status?: number }).status ?? "HTTP_ERROR")
                 : errorCode
+        if (
+            errorCode === "OUTCOME_UNKNOWN" ||
+            classifyFormalCommandError(err) === "unknown"
+        ) {
+            const unknown: PostAllocationResult = {
+                status: "unknown",
+                message,
+                idempotencyKey: commandInput.idempotencyKey,
+                operationId: commandInput.idempotencyKey,
+            }
+            postIdempotency.set(commandInput.idempotencyKey, unknown)
+            return unknown
+        }
         const failed: PostAllocationResult = {
             status: "failed",
             code,
@@ -339,8 +263,9 @@ export async function postAllocation(
         }
         // Do not cache non-idempotent validation failures under success key
         if (code === "409" || errorCode === "CONFLICT") {
-            postIdempotency.set(input.idempotencyKey, failed)
+            postIdempotency.set(commandInput.idempotencyKey, failed)
         }
+        pendingPostCommands.delete(commandInput.idempotencyKey)
         return failed
     }
 }
@@ -348,5 +273,10 @@ export async function postAllocation(
 export async function resolvePostUnknown(
     idempotencyKey: string,
 ): Promise<PostAllocationResult | null> {
-    return postIdempotency.get(idempotencyKey) ?? null
+    const cached = postIdempotency.get(idempotencyKey)
+    if (cached?.status !== "unknown") return cached ?? null
+    const pending = pendingPostCommands.get(idempotencyKey)
+    if (!pending) return cached
+    postIdempotency.delete(idempotencyKey)
+    return postAllocation(pending.input)
 }

@@ -8,9 +8,10 @@
 pub mod product;
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
+use entities::file_asset::SensitivityClass;
 use services::audit::AuditActor;
 use services::catalog::{
     CatalogService, CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
@@ -23,7 +24,14 @@ use services::catalog::{
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::Result,
+        handler::file_asset::{
+            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+            store_pending_asset_files,
+        },
+        response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -225,6 +233,35 @@ pub async fn product_brand_create(
 #[permission_macros::permission(
     group = "商品与仓库",
     group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "一次创建商品品牌及Logo",
+    resource = "product_brand",
+    action = "create"
+)]
+/// 一次接收品牌创建命令与 Logo，并原子登记文件元数据和品牌。
+pub async fn product_brand_create_with_assets(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    mut multipart: Multipart,
+) -> Result<ProductBrandView> {
+    let (req, files) = extract_command_with_asset_files::<CreateProductBrandRequest>(&mut multipart).await?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
+    let result = CatalogService::new(state.db())
+        .product_brand_create_with_assets(req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
     desc = "更新商品品牌",
     resource = "product_brand",
     action = "update"
@@ -250,6 +287,36 @@ pub async fn product_brand_update(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "一次更新商品品牌及Logo",
+    resource = "product_brand",
+    action = "update"
+)]
+/// 一次接收品牌更新命令与 Logo，并原子登记文件元数据和品牌变更。
+pub async fn product_brand_update_with_assets(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    mut multipart: Multipart,
+) -> Result<ProductBrandView> {
+    let (req, files) = extract_command_with_asset_files::<UpdateProductBrandRequest>(&mut multipart).await?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
+    let result = CatalogService::new(state.db())
+        .product_brand_update_with_assets(&id, req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
 }
 
 #[permission_macros::permission(

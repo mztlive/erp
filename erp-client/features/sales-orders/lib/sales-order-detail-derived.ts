@@ -2,10 +2,7 @@ import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-ord
 import {
     buildSelfHref,
     isActionableFocusTask,
-    isOpenProcurementRejection,
     navItemsFor,
-    rejectionAllowsResubmit,
-    rejectionAllowsVoid,
     resolveFocusTask,
     resolveNavSection,
     shouldOpenSalesOrderEditor,
@@ -19,12 +16,11 @@ export function deriveSalesOrderDetailState(
     order: SalesOrderDetailView,
     input: {
         section?: string
-        pageMode: string | null
         fromWorkspace: string | null
         returnTo: string | null
     },
 ) {
-    const { section, pageMode, fromWorkspace, returnTo } = input
+    const { section, fromWorkspace, returnTo } = input
 
     const canAccept =
         order.nature === "physical_service" &&
@@ -46,18 +42,7 @@ export function deriveSalesOrderDetailState(
     const showVoucherApproval =
         order.nature === "card_voucher" && Boolean(order.approval)
     const showApproval = showGoodsApproval || showVoucherApproval
-    const canResubmit = rejectionAllowsResubmit(order)
-    const canVoid = rejectionAllowsVoid(order)
-    const canRequestLowMargin = Boolean(
-        order.procurementRejection?.allowedActions.includes(
-            "REQUEST_LOW_MARGIN_ACCEPTANCE",
-        ),
-    )
-    const showEditor = shouldOpenSalesOrderEditor({
-        order,
-        mode: pageMode,
-        canResubmit,
-    })
+    const showEditor = shouldOpenSalesOrderEditor(order)
 
     const focusTask = resolveFocusTask(order, Boolean(canAccept))
     const actionableFocusTask = isActionableFocusTask(focusTask)
@@ -73,25 +58,11 @@ export function deriveSalesOrderDetailState(
     )
     const visibleNav = navItemsFor(order).filter((item) => item.show)
 
-    const openRejection = isOpenProcurementRejection(order)
-    const hasPrimaryTaskAction =
-        Boolean(
-            order.nature !== "physical_service" && openRejection && canResubmit,
-        ) ||
-        Boolean(
-            actionableFocusTask &&
-            !(
-                order.nature !== "physical_service" &&
-                openRejection &&
-                navSection === "overview"
-            ),
-        )
+    const hasPrimaryTaskAction = Boolean(actionableFocusTask)
     const bannerJump =
         Boolean(focusTask) &&
         !hasPrimaryTaskAction &&
         ((focusTask?.id === "versions" && navSection !== "versions") ||
-            (focusTask?.id === "procurement-rejection" &&
-                navSection !== "overview") ||
             (focusTask?.id === "acceptance" && !acceptanceExpanded))
 
     return {
@@ -102,16 +73,12 @@ export function deriveSalesOrderDetailState(
         navSection,
         acceptanceExpanded,
         showApproval,
-        canResubmit,
-        canVoid,
-        canRequestLowMargin,
         showEditor,
         focusTask,
         actionableFocusTask,
         returnSection,
         selfReturn,
         visibleNav,
-        openRejection,
         hasPrimaryTaskAction,
         bannerJump,
     }

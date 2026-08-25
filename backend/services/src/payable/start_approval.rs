@@ -8,7 +8,8 @@ use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, PayableExt, Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, PayableExt, Transactional,
+    WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -44,9 +45,29 @@ pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
+    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器加载绑定定义图。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `binding` - 创建时冻结的定义绑定
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回已持久化的定义图。
+///
+/// # 错误
+/// 定义不存在或仓储失败时返回错误。
+pub(super) async fn load_bound_definition_graph_with_executor(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
+        .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("供应商付款单绑定的审批定义不存在".to_string()))?;
     Ok(engine_graph(graph))
@@ -86,6 +107,30 @@ pub(super) async fn load_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    load_start_receipt_with_executor(db, subject, subject_version, idempotency_key, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器读取同载荷启动收据。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `subject` - 业务对象引用
+/// * `subject_version` - 冻结提交版本
+/// * `idempotency_key` - 调用方幂等键
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 已存在收据或空。
+///
+/// # 错误
+/// 幂等键非法或仓储失败时返回错误。
+pub(super) async fn load_start_receipt_with_executor(
+    db: &Database,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::SupplierPayment);
     let scope = start_scope(
@@ -96,12 +141,7 @@ pub(super) async fn load_start_receipt(
     );
     Ok(db
         .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
+        .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, executor)
         .await?)
 }
 
@@ -307,6 +347,32 @@ pub(super) async fn persist_supplier_payment_start(
     db: &Database,
     input: SupplierPaymentStartPersistInput,
 ) -> Result<SupplierPayment> {
+    let db = db.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move { persist_supplier_payment_start_in_transaction(&db, input, session).await })
+        })
+        .await
+}
+
+/// 在调用方事务内写入供应商付款审批启动事实。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `input` - 已进入审批的付款、快照与启动计划
+/// * `session` - 调用方事务会话
+///
+/// # 返回
+/// 返回更新后的付款实体。
+///
+/// # 错误
+/// 运行事实、付款或审计写入失败时返回错误。
+pub(super) async fn persist_supplier_payment_start_in_transaction(
+    db: &Database,
+    input: SupplierPaymentStartPersistInput,
+    session: &mut mongodb::ClientSession,
+) -> Result<SupplierPayment> {
     let SupplierPaymentStartPersistInput {
         payment,
         actor,
@@ -318,33 +384,25 @@ pub(super) async fn persist_supplier_payment_start(
         now,
     } = input;
     let audit = actor.resource_log("supplier_payment.submit", "supplier_payment", id)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move {
-                match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_runtime_writes(
-                            &db,
-                            &writes,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
-                            session,
-                        )
-                        .await?;
-                    }
-                    PreparedExecution::Replay { .. } => {}
-                }
-                let mut payment = payment;
-                db.supplier_payments().update(&mut payment, session).await?;
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<SupplierPayment, crate::errors::Error>(payment)
-            })
-        })
-        .await
+    match prepared {
+        PreparedExecution::Apply(writes) => {
+            persist_runtime_writes(
+                db,
+                &writes,
+                &snapshot_payload,
+                owner_role,
+                &organization_id,
+                now,
+                session,
+            )
+            .await?;
+        }
+        PreparedExecution::Replay { .. } => {}
+    }
+    let mut payment = payment;
+    db.supplier_payments().update(&mut payment, session).await?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(payment)
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

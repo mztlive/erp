@@ -609,6 +609,12 @@ pub struct StockAdjustmentLineInput {
 /// 库存调整单创建请求（HTTP 契约：表头 + 明细一次提交，初始状态为草稿）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateStockAdjustmentRequest {
+    /// 发起调整时所依据的库存余额行。
+    #[validate(length(min = 1, max = 128, message = "库存余额 id 不能为空"))]
+    pub balance_id: String,
+    /// 发起调整时看到的库存余额版本；创建事务内不一致时拒绝。
+    #[validate(range(min = 1, message = "库存余额版本必须大于 0"))]
+    pub expected_balance_version: u64,
     /// 调整单号（全局唯一）。
     #[validate(length(min = 1, max = 64, message = "调整单号长度必须在1-64之间"))]
     pub adjustment_no: String,
@@ -655,13 +661,39 @@ pub struct StockAdjustmentLineUpdateInput {
     pub direction: Option<MovementDirection>,
 }
 
-/// 库存调整单提交审批请求。客户端不得选择定义或审批人。
+/// 库存调整提交时冻结的余额版本。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ExpectedStockBalanceVersion {
+    /// 库存余额行主键。
+    #[validate(length(min = 1, max = 128, message = "库存余额 id 不能为空"))]
+    pub balance_id: String,
+    /// 用户编辑时看到的余额版本。
+    #[validate(range(min = 1, message = "库存余额版本必须大于 0"))]
+    pub expected_version: u64,
+}
+
+/// 库存调整单保存最终草稿并提交审批的原子命令。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitStockAdjustmentRequest {
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
+    /// 调整原因类型；与明细方向在服务端共同校验。
+    pub reason_type: AdjustmentReasonType,
+    /// 最终明细值。提交事务内先覆盖草稿，再冻结审批快照。
+    #[validate(length(min = 1, max = 100, message = "调整明细行数必须在1-100之间"))]
+    #[validate(nested)]
+    pub lines: Vec<StockAdjustmentLineUpdateInput>,
+    /// 提交时冻结的全部库存余额版本。
+    #[validate(length(min = 1, max = 100, message = "库存余额版本行数必须在1-100之间"))]
+    #[validate(nested)]
+    pub balances: Vec<ExpectedStockBalanceVersion>,
+    /// 原因说明；空串表示清除草稿中的说明。
+    #[validate(length(max = 512, message = "原因说明不能超过512个字符"))]
+    pub note: String,
+    /// 业务发生时间（秒级时间戳）。
+    pub occurred_at: i64,
     /// 业务请求幂等键。
     #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
     pub idempotency_key: String,
@@ -813,6 +845,18 @@ mod tests {
         );
         let submit: SubmitStockAdjustmentRequest = serde_json::from_value(serde_json::json!({
             "expected_version": 1,
+            "reason_type": "STOCK_LOSS",
+            "lines": [{
+                "line_id": "line-1",
+                "quantity": "2",
+                "direction": "DECREASE"
+            }],
+            "balances": [{
+                "balance_id": "balance-1",
+                "expected_version": 3
+            }],
+            "note": "盘点差异",
+            "occurred_at": 1_700_000_000,
             "idempotency_key": "k1"
         }))
         .unwrap();

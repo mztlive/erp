@@ -100,7 +100,7 @@ export function useProductEditor(stableId: string) {
         setUploadingMedia,
         rememberPendingFiles,
         rememberSkuFile,
-        resolvePendingUploads,
+        preparePendingUploads,
     } = useProductUploads()
     const { activeSection, setActiveSection } = useProductSectionSpy(
         isCreate,
@@ -138,9 +138,9 @@ export function useProductEditor(stableId: string) {
             }
 
             try {
-                // 先把仍为本地 blob 的图片上传为文件资产，再携带真实 URL/asset id 保存
+                // 文件与商品命令在一个 multipart 请求中提交；此处只形成临时引用。
                 setUploadingMedia(true)
-                const resolvedFields = await resolvePendingUploads(nextFields)
+                const prepared = preparePendingUploads(nextFields)
                 if (!isCreate) {
                     if (!data || !revisionId || lockVersion == null) return
                     const response = await reviseMutation.mutateAsync({
@@ -152,8 +152,9 @@ export function useProductEditor(stableId: string) {
                         effectiveFrom: value.effectiveFrom,
                         effectiveTo: value.effectiveTo.trim() || undefined,
                         changeReason: value.changeReason.trim(),
-                        fields: resolvedFields,
+                        fields: prepared.fields,
                         idempotencyKey,
+                        pendingAssetUploads: prepared.pendingAssetUploads,
                     })
                     if (response.outcome === "succeeded") {
                         toast.add({
@@ -177,8 +178,9 @@ export function useProductEditor(stableId: string) {
                     effectiveFrom: value.effectiveFrom,
                     effectiveTo: value.effectiveTo.trim() || undefined,
                     changeReason: value.changeReason.trim(),
-                    fields: resolvedFields,
+                    fields: prepared.fields,
                     idempotencyKey,
+                    pendingAssetUploads: prepared.pendingAssetUploads,
                 })
                 if (response.outcome === "succeeded") {
                     toast.add({

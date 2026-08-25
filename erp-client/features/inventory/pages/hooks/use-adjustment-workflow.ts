@@ -24,6 +24,8 @@ import type {
 
 export type AdjustmentMeta = {
     stockAdjustmentId: string
+    lineId: string
+    balanceId: string
     warehouseName: string
     skuCode: string
     skuName: string
@@ -38,8 +40,10 @@ export type AdjustmentMeta = {
 
 export type AdjustmentPendingPayload = {
     stockAdjustmentId: string
+    expectedDocumentVersion: number
+    lineId: string
+    balanceId: string
     expectedBalanceLockVersion: number
-    seedBalanceLockVersion: number
     reasonType: AdjustmentReasonType
     reasonTypeLabel: string
     direction: "increase" | "decrease"
@@ -94,7 +98,6 @@ export function useAdjustmentWorkflow({
         null,
     )
     const [adjustLockVersion, setAdjustLockVersion] = React.useState<number>(0)
-    const [adjustSeedLock, setAdjustSeedLock] = React.useState<number>(0)
     const [adjustMeta, setAdjustMeta] = React.useState<AdjustmentMeta | null>(
         null,
     )
@@ -152,13 +155,21 @@ export function useAdjustmentWorkflow({
             try {
                 const draft = await createDraftMutation.mutateAsync({
                     balanceId: row.balanceId,
+                    balanceLockVersion: row.lockVersion,
+                    warehouseId: row.warehouseId,
+                    warehouseName: row.warehouseName,
+                    skuId: row.skuId,
+                    skuCode: row.skuCode,
+                    skuName: row.skuName,
+                    baseUnit: row.baseUnit,
                 })
                 setAdjustBalanceId(row.balanceId)
                 setAdjustDraftId(draft.stockAdjustmentId)
                 setAdjustLockVersion(draft.balanceLockVersion)
-                setAdjustSeedLock(row.lockVersion)
                 setAdjustMeta({
                     stockAdjustmentId: draft.stockAdjustmentId,
+                    lineId: draft.lineId,
+                    balanceId: draft.balanceId,
                     warehouseName: draft.warehouseName,
                     skuCode: draft.skuCode,
                     skuName: draft.skuName,
@@ -203,8 +214,10 @@ export function useAdjustmentWorkflow({
         }
         const payload: AdjustmentPendingPayload = {
             stockAdjustmentId: adjustDraftId,
+            expectedDocumentVersion: adjustMeta.editVersion,
+            lineId: adjustMeta.lineId,
+            balanceId: adjustMeta.balanceId,
             expectedBalanceLockVersion: adjustLockVersion,
-            seedBalanceLockVersion: adjustSeedLock,
             reasonType: values.reasonType,
             reasonTypeLabel: reason.label,
             direction: reason.direction,
@@ -256,7 +269,6 @@ export function useAdjustmentWorkflow({
         adjustDraftId,
         adjustMeta,
         adjustLockVersion,
-        adjustSeedLock,
         form.state.values,
         submitMutation,
         closeAdjustment,

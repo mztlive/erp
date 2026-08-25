@@ -10,12 +10,9 @@ export {
     throwValidation,
 } from "@/features/sales-orders/lib/sales-order-detail-mappers"
 export {
-    mapActiveLowMarginManagerConfirmation,
     mapChangeOrder,
     mapDetailToListItem,
-    mapOpenProcurementRejection,
     pickSalesOrderCommercialSource,
-    mapRejectedProcurement,
 } from "@/features/sales-orders/lib/sales-order-detail-projection-mappers"
 
 export function mapCommercialStatusFilterToBackend(

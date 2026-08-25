@@ -335,33 +335,26 @@ export function AcceptanceWorkspace({
                 hasExceptionResult={selection.hasExceptionResult}
                 onConfirmAcceptance={async () => {
                     if (!view) return
-                    // 先确保草稿版本
                     submittedOverallRef.current = selection.overallPreview
                     const values = form.state.values
                     const lines = buildDraftLines(
                         selection.selected,
                         selection.lineResults,
                     )
-                    const draft = await saveDraftMutation.mutateAsync({
+                    await postMutation.mutateAsync({
                         salesOrderId,
-                        acceptanceDraftId: view.draft?.acceptanceDraftId,
-                        expectedDraftVersion: view.draft?.draftVersion,
+                        acceptanceDraftId:
+                            view.draft?.acceptanceDraftId ??
+                            `draft_${idempotencyKey}`,
+                        expectedDraftVersion: view.draft?.draftVersion ?? 0,
+                        expectedSalesOrderLockVersion:
+                            view.salesOrder.lockVersion,
+                        idempotencyKey,
                         acceptedAt: values.acceptedAt
                             ? new Date(values.acceptedAt).toISOString()
                             : new Date().toISOString(),
                         comment: values.comment,
                         lines,
-                    })
-                    await postMutation.mutateAsync({
-                        salesOrderId,
-                        acceptanceDraftId: draft.acceptanceDraftId,
-                        expectedDraftVersion: draft.draftVersion,
-                        expectedSalesOrderLockVersion:
-                            view.salesOrder.lockVersion,
-                        idempotencyKey,
-                        acceptedAt: draft.acceptedAt,
-                        comment: draft.comment,
-                        lines: draft.lines,
                     })
                 }}
                 reverseTarget={reverseTarget}

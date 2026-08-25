@@ -552,6 +552,25 @@ impl<'a> Repository<'a, PayableEntryOffset> {
 }
 
 impl<'a> Repository<'a, SupplierPayment> {
+    /// 按付款单号查询未删除付款单。
+    ///
+    /// # 参数
+    /// * `payment_no` - 付款单号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配付款单；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_payment_no(
+        &self,
+        payment_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierPayment>> {
+        self.find_one_by_field("payment_no", payment_no, executor).await
+    }
+
     /// 分页检索供应商付款单列表（投影查询）。
     ///
     /// 只返回 [`SupplierPaymentRow`] 所需的列表字段；付款单号支持字面量

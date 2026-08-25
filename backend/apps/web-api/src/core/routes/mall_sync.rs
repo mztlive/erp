@@ -61,6 +61,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/mall-sales-sync-jobs/{id}/retry",
+            with_permission(
+                post(mall_sync::mall_sales_sync_job_retry),
+                rbac,
+                mall_sync::mall_sales_sync_job_retry_permission_key(),
+            ),
+        )
+        .route(
             "/mall-sales-order-snapshots",
             with_permission(
                 get(mall_sync::mall_sales_order_snapshot_list),

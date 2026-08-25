@@ -5,21 +5,29 @@
 //! 商品字典接口见同目录 `mod.rs`。
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
+use entities::file_asset::SensitivityClass;
 use services::audit::AuditActor;
 use services::catalog::{
-    CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, PageView, ProductListParams,
-    ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams,
-    SellableSkuView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView,
+    CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, PageView,
+    ProductListParams, ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView,
+    SellableSkuListParams, SellableSkuView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView,
     UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest, UpdateVoucherCategoryRequest,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::Result,
+        handler::file_asset::{
+            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+            store_pending_asset_files,
+        },
+        response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -100,6 +108,38 @@ pub async fn product_create(
 #[permission_macros::permission(
     group = "商品与仓库",
     group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "一次创建商品及媒体",
+    resource = "product",
+    action = "create"
+)]
+/// 一次接收商品创建命令与新增媒体，并原子登记文件元数据和商品聚合。
+///
+/// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
+/// 对象作为补偿。
+pub async fn product_create_with_assets(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    mut multipart: Multipart,
+) -> Result<ProductView> {
+    let (req, files) = extract_command_with_asset_files::<CreateProductRequest>(&mut multipart).await?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
+    let result = CatalogService::new(state.db())
+        .product_create_with_assets(req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
     desc = "规格编辑商品",
     resource = "product",
     action = "update"
@@ -122,6 +162,69 @@ pub async fn product_update(
 ) -> Result<ProductView> {
     let view = CatalogService::new(state.db())
         .product_update(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "一次修订商品及媒体",
+    resource = "product",
+    action = "update"
+)]
+/// 一次接收商品修订命令与新增媒体，并原子登记文件元数据和商品新修订。
+///
+/// 对象存储不具备 MongoDB 事务能力；数据库事务失败时删除本请求刚写入的
+/// 对象作为补偿。
+pub async fn product_update_with_assets(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    mut multipart: Multipart,
+) -> Result<ProductView> {
+    let (req, files) = extract_command_with_asset_files::<UpdateProductRequest>(&mut multipart).await?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::General).await?;
+    let result = CatalogService::new(state.db())
+        .product_update_with_assets(&id, req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(error.into())
+        }
+    }
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "停用商品",
+    resource = "product",
+    action = "update"
+)]
+/// 停用商品；当前修订和媒体由后端读取并在跨集合事务内复制。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 商品稳定 ID
+/// * `req` - 停用意图（已见版本、原因和生效日）
+///
+/// # 返回
+/// 返回停用后的商品视图。
+pub async fn product_disable(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<DisableProductRequest>,
+) -> Result<ProductView> {
+    let view = CatalogService::new(state.db())
+        .product_disable(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

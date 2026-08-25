@@ -3,7 +3,7 @@
  * 幂等结果缓存见 api/shared。
  */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import type {
     BackendInvoice,
     BackendPurchaseInvoiceAllocation,
@@ -101,35 +101,12 @@ export async function reverseInvoice(
     const cached = submitIdempotency.get(input.idempotencyKey)
     if (cached) return cached
     try {
-        // Purchase red-issue via invoices red-issue (D18) when blue purchase invoice
-        const inv = await apiGet<BackendInvoice>(
-            `/admin/invoices/${encodeURIComponent(input.invoiceId)}`,
-        )
-        const applyLines = (inv.allocations ?? []).filter(
-            (a) => a.allocation_action === "apply",
-        )
-        if (applyLines.length === 0) {
-            return {
-                status: "failed",
-                title: "无法红冲",
-                description: "原票无有效分配。",
-                errorCode: "NO_ALLOCATIONS",
-            }
-        }
         const red = await apiPost<BackendInvoice>(
             `/admin/invoices/${encodeURIComponent(input.invoiceId)}/red-issue`,
             {
                 invoice_no: input.redInvoiceNo,
-                invoice_date: new Date().toISOString().slice(0, 10),
-                gross_amount: inv.gross_amount,
-                net_amount: inv.net_amount,
-                tax_amount: inv.tax_amount,
-                allocations: applyLines.map((a) => ({
-                    reverses_allocation_id: a.id,
-                    allocated_gross_amount: a.allocated_gross_amount,
-                    allocated_net_amount: a.allocated_gross_amount,
-                    allocated_tax_amount: "0",
-                })),
+                reason: input.reason,
+                idempotency_key: input.idempotencyKey,
             },
         )
         const result: FormalSubmitResult = {

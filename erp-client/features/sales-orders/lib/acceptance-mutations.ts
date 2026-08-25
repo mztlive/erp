@@ -3,7 +3,7 @@
  * 从 api/acceptance.ts 拆出；api/acceptance.ts 保持原导出名 re-export。
  */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import { getErrorMessage, type ApiError } from "@/lib/api/errors"
 import type {
     PostAcceptanceInput,
@@ -16,6 +16,7 @@ import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
 import {
     mapOverallResult,
     mapOverallResultToBackend,
+    mapFactTypeToBackend,
     type BackendAcceptanceDetail,
     type BackendAcceptanceHeader,
     type BackendEligibilityView,
@@ -51,7 +52,9 @@ export async function saveCustomerAcceptanceDraft(
             reason: line.reason || null,
             allocations: line.allocations.map((a) => ({
                 fulfillment_line_id: a.fulfillmentLineId,
-                fulfillment_fact_type: "DELIVERY",
+                fulfillment_fact_type: mapFactTypeToBackend(
+                    a.fulfillmentFactType,
+                ),
                 allocated_quantity: a.allocatedQuantity || "0",
             })),
         })),
@@ -77,69 +80,71 @@ export async function postCustomerAcceptanceWorkspace(
     input: PostAcceptanceInput,
 ): Promise<PostAcceptanceResult> {
     try {
-        let acceptanceId = input.acceptanceDraftId
-
-        // 若无服务端草稿 id，先创建
-        if (!acceptanceId || acceptanceId.startsWith("draft_")) {
-            const saved = await saveCustomerAcceptanceDraft({
-                salesOrderId: input.salesOrderId,
-                acceptedAt: input.acceptedAt,
-                comment: input.comment,
-                lines: input.lines,
-            })
-            acceptanceId = saved.acceptanceDraftId
-        }
-
-        // 解析履约事实类型：优先用工作台已加载的类型映射
-        const eligibility = await apiGet<BackendEligibilityView>(
-            "/admin/customer-acceptances/eligible",
-            { sales_order_id: input.salesOrderId },
-        ).catch(() => null)
-
-        const factTypeByLineId = new Map<string, string>()
-        for (const group of eligibility?.sales_lines ?? []) {
-            for (const fact of group.fulfillment_facts ?? []) {
-                factTypeByLineId.set(
-                    fact.fulfillment_line_id,
-                    fact.fulfillment_fact_type,
-                )
-            }
-        }
-
-        const posted = await apiPost<BackendAcceptanceDetail>(
-            `/admin/customer-acceptances/${acceptanceId}/post`,
-            {
-                lines: input.lines.map((line) => ({
-                    sales_order_line_id: line.salesOrderLineId,
-                    allocations: line.allocations.map((a) => ({
-                        fulfillment_line_id: a.fulfillmentLineId,
-                        fulfillment_fact_type:
-                            factTypeByLineId.get(a.fulfillmentLineId) ??
-                            "DELIVERY",
-                        allocated_quantity: a.allocatedQuantity || "0",
-                    })),
+        const hasServerDraft =
+            Boolean(input.acceptanceDraftId) &&
+            !input.acceptanceDraftId.startsWith("draft_")
+        const posted = await apiPost<{
+            acceptance: BackendAcceptanceHeader
+            remaining_eligibility: BackendEligibilityView
+        }>("/admin/customer-acceptances/commit", {
+            acceptance_id: hasServerDraft ? input.acceptanceDraftId : null,
+            expected_acceptance_version: hasServerDraft
+                ? input.expectedDraftVersion
+                : null,
+            acceptance_no: hasServerDraft
+                ? null
+                : `YS-${input.idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`,
+            sales_order_id: input.salesOrderId,
+            expected_sales_order_version: input.expectedSalesOrderLockVersion,
+            accepted_at: input.acceptedAt
+                ? Math.floor(Date.parse(input.acceptedAt) / 1000) ||
+                  Math.floor(Date.now() / 1000)
+                : Math.floor(Date.now() / 1000),
+            result: mapOverallResultToBackend(input.lines),
+            lines: input.lines.map((line) => ({
+                sales_order_line_id: line.salesOrderLineId,
+                accepted_quantity: line.acceptedQuantity || "0",
+                short_quantity: line.shortQuantity || "0",
+                rejected_quantity: line.rejectedQuantity || "0",
+                reason: line.reason || null,
+                allocations: line.allocations.map((allocation) => ({
+                    fulfillment_line_id: allocation.fulfillmentLineId,
+                    fulfillment_fact_type: mapFactTypeToBackend(
+                        allocation.fulfillmentFactType,
+                    ),
+                    allocated_quantity: allocation.allocatedQuantity || "0",
                 })),
-            },
-        )
+            })),
+            idempotency_key: input.idempotencyKey,
+        })
 
-        const header =
-            posted.acceptance ?? (posted as unknown as BackendAcceptanceHeader)
+        const header = posted.acceptance
         const overall = mapOverallResult(header.result)
-
-        // 估算剩余可验收
-        let remainingEligibleCount = 0
-        if (eligibility) {
-            remainingEligibleCount = eligibility.sales_lines
-                .flatMap((g) => g.fulfillment_facts)
-                .filter((f) => Number(f.eligible_quantity) > 0).length
+        const remainingFacts = posted.remaining_eligibility.sales_lines
+            .flatMap((group) =>
+                group.fulfillment_facts.map((fact) => ({
+                    ...fact,
+                    unitCode: group.unit_code ?? "",
+                })),
+            )
+            .filter((fact) => Number(fact.eligible_quantity) > 0)
+        const quantitiesByUnit = new Map<string, number>()
+        for (const fact of remainingFacts) {
+            quantitiesByUnit.set(
+                fact.unitCode,
+                (quantitiesByUnit.get(fact.unitCode) ?? 0) +
+                    Number(fact.eligible_quantity),
+            )
         }
 
         return {
             status: "succeeded",
             acceptanceNo: header.acceptance_no,
             acceptanceId: header.id,
-            remainingEligibleCount,
-            remainingEligibleQuantityLabel: "",
+            remainingEligibleCount: remainingFacts.length,
+            remainingEligibleQuantityLabel: Array.from(quantitiesByUnit)
+                .map(([unit, quantity]) => `${quantity}${unit}`)
+                .join("、"),
             overallResult: overall,
             factOnlyNotice: FACT_ONLY_NOTICE,
         }

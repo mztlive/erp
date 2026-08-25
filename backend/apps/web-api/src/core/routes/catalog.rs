@@ -16,7 +16,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::catalog, middleware::with_permission},
+    core::{handler::catalog, middleware::with_permission, upload},
 };
 
 /// 返回本域管理端路由集合。
@@ -85,11 +85,33 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/product-brands/with-assets",
+            with_permission(
+                upload::multipart_route(
+                    post(catalog::product_brand_create_with_assets),
+                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                catalog::product_brand_create_with_assets_permission_key(),
+            ),
+        )
+        .route(
             "/product-brands/{id}",
             with_permission(
                 put(catalog::product_brand_update),
                 rbac,
                 catalog::product_brand_update_permission_key(),
+            ),
+        )
+        .route(
+            "/product-brands/{id}/with-assets",
+            with_permission(
+                upload::multipart_route(
+                    put(catalog::product_brand_update_with_assets),
+                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                catalog::product_brand_update_with_assets_permission_key(),
             ),
         )
         .route(
@@ -213,11 +235,41 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/products/with-assets",
+            with_permission(
+                upload::multipart_route(
+                    post(catalog::product::product_create_with_assets),
+                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                catalog::product::product_create_with_assets_permission_key(),
+            ),
+        )
+        .route(
             "/products/{id}",
             with_permission(
                 put(catalog::product::product_update),
                 rbac,
                 catalog::product::product_update_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/with-assets",
+            with_permission(
+                upload::multipart_route(
+                    put(catalog::product::product_update_with_assets),
+                    upload::MAX_BATCH_MULTIPART_REQUEST_BYTES,
+                ),
+                rbac,
+                catalog::product::product_update_with_assets_permission_key(),
+            ),
+        )
+        .route(
+            "/products/{id}/disable",
+            with_permission(
+                put(catalog::product::product_disable),
+                rbac,
+                catalog::product::product_disable_permission_key(),
             ),
         )
         .route(

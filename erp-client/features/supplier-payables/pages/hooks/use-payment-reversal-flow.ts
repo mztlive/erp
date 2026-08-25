@@ -2,9 +2,8 @@
 
 import * as React from "react"
 
-import { forgetPaymentReversalDraft } from "@/features/supplier-payables/api/reversals"
 import {
-    useEnsurePaymentReversalDraftMutation,
+    useCommitPaymentReversalMutation,
     useSubmitPaymentReversalMutation,
 } from "@/features/supplier-payables/hooks/queries"
 import {
@@ -18,7 +17,7 @@ import type {
 } from "@/features/supplier-payables/types"
 
 /**
- * 付款冲正确认流程：先创建草稿再确认冻结路线后提交审批。
+ * 付款冲正确认流程：本地确认后由一个原子命令创建单据并启动审批。
  */
 export function usePaymentReversalFlow(args: {
     openReversalPreview: (reversalId: string) => void
@@ -44,19 +43,25 @@ export function usePaymentReversalFlow(args: {
     reversalSubmitPending: boolean
 } {
     const { openReversalPreview, setLastResult, setActionError } = args
-    const ensureReversalMutation = useEnsurePaymentReversalDraftMutation()
+    const commitReversalMutation = useCommitPaymentReversalMutation()
     const submitReversalMutation = useSubmitPaymentReversalMutation()
 
     const [reversalRequest, setReversalRequest] =
         React.useState<PaymentReversalRequest | null>(null)
     const [reversalDraft, setReversalDraft] =
         React.useState<PaymentReversalRow | null>(null)
+    const [pendingCommit, setPendingCommit] = React.useState<{
+        sourcePaymentId: string
+        amount?: string
+        reason: string
+    } | null>(null)
     const [reversalSubmitOpen, setReversalSubmitOpen] = React.useState(false)
-    const reversalSlotRef =
-        React.useRef<PaymentReversalIdempotencySlot | null>(null)
+    const reversalSlotRef = React.useRef<PaymentReversalIdempotencySlot | null>(
+        null,
+    )
 
     /**
-     * 按当前意图绑定冲正幂等槽。换单或改原因时轮换并丢弃旧草稿缓存。
+     * 按当前意图绑定冲正幂等槽。
      *
      * @param scopeId 原付款 ID 或已有冲正单 ID。
      * @param reason 冲正原因。
@@ -67,15 +72,12 @@ export function usePaymentReversalFlow(args: {
     ): PaymentReversalIdempotencySlot {
         const current = reversalSlotRef.current
         const next = slotForPaymentReversalIntent(current, scopeId, reason)
-        if (current && current.key !== next.key) {
-            forgetPaymentReversalDraft(current.key)
-        }
         reversalSlotRef.current = next
         return next
     }
 
     /**
-     * 登记付款冲正草稿并打开提交确认。
+     * 冻结本地付款冲正意图并打开提交确认，不写入后端。
      *
      * @param reason 非空冲正原因。
      */
@@ -86,24 +88,14 @@ export function usePaymentReversalFlow(args: {
         const current = request ?? reversalRequest
         if (!current) return
         const slot = bindReversalSlot(current.sourcePaymentId, reason)
-        const res = await ensureReversalMutation.mutateAsync({
+        setPendingCommit({
             sourcePaymentId: current.sourcePaymentId,
             amount: current.amount,
             reason,
-            idempotencyKey: slot.key,
         })
-        if (res.status !== "succeeded") {
-            setActionError(res.message)
-            setReversalRequest(null)
-            return
-        }
-        reversalSlotRef.current = {
-            ...slot,
-            reversalId: res.reversal.reversalId,
-        }
-        setReversalDraft(res.reversal)
+        reversalSlotRef.current = slot
+        setReversalDraft(null)
         setReversalRequest(null)
-        openReversalPreview(res.reversal.reversalId)
         // 抽屉与确认弹窗同帧挂载时，Base UI 两个同级 portal 会互相标记 aria-hidden，
         // 顶层弹窗按钮会从无障碍树消失（getByRole 不可见）；把弹窗推迟到下一帧再打开。
         setTimeout(() => setReversalSubmitOpen(true), 0)
@@ -115,6 +107,7 @@ export function usePaymentReversalFlow(args: {
      * @param row 当前冲正草稿投影。
      */
     function beginReversalSubmit(row: PaymentReversalRow) {
+        setPendingCommit(null)
         setReversalDraft(row)
         const current = reversalSlotRef.current
         if (current?.reversalId === row.reversalId) {
@@ -134,13 +127,29 @@ export function usePaymentReversalFlow(args: {
      */
     async function confirmReversalSubmit() {
         const slot = reversalSlotRef.current
-        if (!reversalDraft || !slot) return
-        const res = await submitReversalMutation.mutateAsync({
-            reversalId: reversalDraft.reversalId,
-            expectedVersion: reversalDraft.baselineVersion,
-            idempotencyKey: slot.key,
-        })
-        if (res.status !== "succeeded") {
+        if (!slot || (!pendingCommit && !reversalDraft)) return
+        const res = pendingCommit
+            ? await commitReversalMutation.mutateAsync({
+                  ...pendingCommit,
+                  idempotencyKey: slot.key,
+              })
+            : await submitReversalMutation.mutateAsync({
+                  reversalId: reversalDraft!.reversalId,
+                  expectedVersion: reversalDraft!.baselineVersion,
+                  idempotencyKey: slot.key,
+              })
+        if (res.status === "unknown") {
+            setLastResult({
+                status: "unknown",
+                title: "冲正结果待确认",
+                description: res.message,
+                reference: res.idempotencyKey,
+                operationId: res.idempotencyKey,
+            })
+            setReversalSubmitOpen(false)
+            return
+        }
+        if (res.status === "failed") {
             setActionError(res.message)
             setReversalSubmitOpen(false)
             return
@@ -155,8 +164,8 @@ export function usePaymentReversalFlow(args: {
                 { label: "当前状态", value: res.reversal.statusLabel },
             ],
         })
-        forgetPaymentReversalDraft(slot.key)
         reversalSlotRef.current = null
+        setPendingCommit(null)
         setReversalDraft(res.reversal)
         setReversalSubmitOpen(false)
         openReversalPreview(res.reversal.reversalId)
@@ -171,7 +180,9 @@ export function usePaymentReversalFlow(args: {
         reversalDraft,
         reversalSubmitOpen,
         setReversalSubmitOpen,
-        reversalDraftPending: ensureReversalMutation.isPending,
-        reversalSubmitPending: submitReversalMutation.isPending,
+        reversalDraftPending: false,
+        reversalSubmitPending:
+            commitReversalMutation.isPending ||
+            submitReversalMutation.isPending,
     }
 }

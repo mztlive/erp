@@ -75,7 +75,6 @@ export function AllocationSessionPanel({
         saveMutation,
         postMutation,
         resolveMutation,
-        ensureReceiptMutation,
     } = useAllocationSession({
         session,
         onClose,
@@ -310,7 +309,6 @@ export function AllocationSessionPanel({
                                 !canOperate ||
                                 !canSubmit ||
                                 postMutation.isPending ||
-                                ensureReceiptMutation.isPending ||
                                 postedLocally
                             }
                             title={canOperate ? undefined : permissionReason}

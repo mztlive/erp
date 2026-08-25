@@ -11,11 +11,13 @@
 //! 审计写入复用 `audit::AuditActor::resource_log` + `AccessControlExt::audit_logs`，
 //! 与既有 `source_registry` 模板一致。
 
-use database::{AccessControlExt, ContractExt, CustomerExt, NoTransaction, Transactional};
+use database::{AccessControlExt, ContractExt, CustomerExt, FileAssetExt, NoTransaction, Transactional};
 use entities::contract::{
     ArchiveSource, Contract, ContractData, ContractId, ContractRevision, ContractRevisionData,
     ContractRevisionId,
 };
+use entities::file_asset::FileAsset;
+use entities::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -30,7 +32,9 @@ mod scope;
 pub use self::dto::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListScope,
     ContractRevisionView, ContractView, CreateContractRequest, PageView, TerminateContractRequest,
+    UploadContractRequest, UploadContractView,
 };
+use crate::file_asset::RegisterFileAssetRequest;
 
 /// 合同服务。
 ///
@@ -136,6 +140,112 @@ impl ContractService {
             .await?;
 
         Ok(contract.into())
+    }
+
+    /// 一次登记合同 PDF 文件资产、合同稳定身份与首个不可变修订。
+    ///
+    /// 对象存储写入由 HTTP 层在事务前完成；本方法把全部 MongoDB 数据变化置于
+    /// 同一事务。事务失败时 HTTP 层负责删除尚未登记的对象，避免孤儿文件。
+    ///
+    /// # 参数
+    /// * `req` - 合同业务字段
+    /// * `asset_req` - 已写入对象存储、尚未登记的文件资产元数据
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回合同、首修订与文件资产身份。
+    ///
+    /// # 错误
+    /// 客户不存在或停用、字段非法、唯一索引冲突或事务写入失败时返回错误。
+    pub async fn upload_contract(
+        &self,
+        req: UploadContractRequest,
+        asset_req: RegisterFileAssetRequest,
+        actor: &AuditActor,
+    ) -> Result<UploadContractView> {
+        req.validate()?;
+        asset_req.validate()?;
+        let customer = self
+            .db
+            .customer_accounts()
+            .find_by_id(&req.customer_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
+        if !customer.is_active() {
+            return Err(Error::BusinessLogicError(
+                "客户已停用，禁止归档新合同".to_string(),
+            ));
+        }
+        let settlement_party_id = req
+            .settlement_party_id
+            .unwrap_or_else(|| customer.party_id.clone());
+        let file_name = asset_req.file_name.clone();
+        let asset = FileAsset::new(FileAssetId::new(next_id()), asset_req.into_data(actor.id())?)?;
+        let contract = Contract::new(
+            ContractId::new(next_id()),
+            ContractData {
+                contract_no: req.contract_no,
+                customer_id: req.customer_id,
+                settlement_party_id: settlement_party_id.clone(),
+            },
+            actor.id(),
+        )?;
+        let revision = ContractRevision::new(
+            ContractRevisionId::new(next_id()),
+            contract.base.id.clone().into(),
+            1,
+            ContractRevisionData {
+                contract_no: contract.contract_no.clone(),
+                customer_name: req.customer_name,
+                contract_pdf_file_id: FileAssetId::new(asset.base.id.clone()),
+                archive_source: ArchiveSource::ContractCenter,
+                settlement_party_id,
+                settlement_party_name: req.settlement_party_name,
+                payment_term_code: req.payment_term_code,
+                payment_term_name: req.payment_term_name,
+                invoice_type: req.invoice_type,
+                tax_point: req.tax_point,
+                valid_from: req.valid_from,
+                valid_to: req.valid_to,
+                signed_at: req.signed_at,
+            },
+        )?;
+        let asset_audit =
+            actor
+                .clone()
+                .resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
+        let contract_audit =
+            actor
+                .clone()
+                .resource_log("contract.create", "contract", contract.base.id.clone())?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let mut contract_for_tx = contract.clone();
+        let asset_for_tx = asset.clone();
+        let revision_for_tx = revision.clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.file_assets().create(&asset_for_tx, session).await?;
+                    db.contract()
+                        .create_contract_with_revision(&mut contract_for_tx, &revision_for_tx, session)
+                        .await?;
+                    db.audit_logs().create(&asset_audit, session).await?;
+                    db.audit_logs().create(&contract_audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await?;
+
+        Ok(UploadContractView {
+            id: contract.base.id,
+            contract_no: contract.contract_no,
+            revision_id: revision.base.id,
+            revision_no: revision.revision.revision_no,
+            file_asset_id: asset.base.id,
+            file_name,
+            created_at: contract.base.created_at,
+        })
     }
 
     /// 查询合同详情（合同 + 全部不可变版本时间线）。

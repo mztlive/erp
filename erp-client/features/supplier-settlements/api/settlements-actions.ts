@@ -3,7 +3,7 @@
  * 从 api/settlements.ts 拆出；请求体与结果映射保持不变。
  */
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import type {
     AppendEvidenceInput,
     CreateDraftInput,
@@ -20,21 +20,12 @@ import type {
     BackendEvidenceResult,
     BackendReviewDecisionResult,
     BackendReviewSubmissionResult,
-    BackendSourceEvidence,
 } from "@/features/supplier-settlements/api/settlements-wire"
 
 export async function createSettlementDraft(
     input: CreateDraftInput,
 ): Promise<FormalOutcome> {
     try {
-        const source = await apiGet<BackendSourceEvidence>(
-            "/admin/supplier-settlement-source-evidence",
-            {
-                supplier_id: input.supplierId,
-                period_start: input.periodStart,
-                period_end: input.periodEnd,
-            },
-        )
         const result = await apiPost<BackendDraftCommandResult>(
             "/admin/supplier-settlement-statements",
             {
@@ -42,8 +33,6 @@ export async function createSettlementDraft(
                 supplier_id: input.supplierId,
                 period_start: input.periodStart,
                 period_end: input.periodEnd,
-                period_policy_id: source.period_policy_id,
-                expected_period_policy_version: source.period_policy_version,
                 request_id: input.requestId,
                 idempotency_key: input.idempotencyKey,
             },

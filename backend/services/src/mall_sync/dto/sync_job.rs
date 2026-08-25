@@ -66,6 +66,20 @@ pub enum TriggerMallSyncCommand {
     },
 }
 
+/// 失败同步作业重试请求。
+///
+/// 原作业的来源商城、执行阶段、作业类型与查询范围均由服务端按 `failed_job_id`
+/// 重读，调用方不得重复提交这些可推导字段。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RetryMallSalesSyncJobRequest {
+    /// 人工重试理由。
+    pub reason: String,
+    /// 可选的同步水位乐观锁版本。
+    pub base_cursor_version: Option<u64>,
+    /// 本次重试命令幂等键。
+    pub idempotency_key: String,
+}
+
 impl TriggerMallSyncCommand {
     /// 返回命令指定的来源商城。
     pub fn source_system_id(&self) -> &SourceSystemId {

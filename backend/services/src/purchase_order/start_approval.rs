@@ -23,6 +23,7 @@ use id_generator::next_id;
 use mongodb::Database;
 
 use super::adapter::purchase_order_object_readable;
+use super::dto::SavePurchaseOrderLine;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
 use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
 use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
@@ -278,6 +279,8 @@ pub(super) struct PurchaseOrderStartPersistInput {
     pub submission: PurchaseOrderSubmission,
     /// 冻结提交行。
     pub submission_lines: Vec<PurchaseOrderSubmissionLine>,
+    /// 提交时携带草稿补丁时，在同一事务推进 guard 并复核采购覆盖。
+    pub procurement_guard: Option<PurchaseSubmitProcurementGuard>,
     /// 冻结快照载荷。
     pub snapshot_payload: ApprovalSubjectSnapshotPayload,
     /// `prepare_start` 结果。
@@ -290,6 +293,16 @@ pub(super) struct PurchaseOrderStartPersistInput {
     pub now: Instant,
     /// 已构造审计。
     pub audit: entities::AuditLog,
+}
+
+/// 提交时草稿补丁的采购覆盖校验上下文。
+pub(super) struct PurchaseSubmitProcurementGuard {
+    /// 服务端合并后的完整目标行。
+    pub requested_lines: Vec<SavePurchaseOrderLine>,
+    /// 补丁合并前的当前草稿行。
+    pub existing_lines: Vec<PurchaseOrderSubmissionLine>,
+    /// 推进销售采购 guard 的操作人。
+    pub actor_id: String,
 }
 
 /// 在同一事务中写入正式号、提交快照、单据迁移、快照、BPM 运行事实与入口任务。
@@ -321,6 +334,7 @@ pub(super) async fn persist_purchase_order_start(
         mut superseded_draft,
         submission,
         submission_lines,
+        procurement_guard,
         snapshot_payload,
         prepared,
         owner_role,
@@ -331,6 +345,20 @@ pub(super) async fn persist_purchase_order_start(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                if let Some(guard) = procurement_guard {
+                    let coverage = super::draft_edit::advance_guard_and_load_coverage(
+                        &db,
+                        &order,
+                        &guard.actor_id,
+                        session,
+                    )
+                    .await?;
+                    super::draft_edit::validate_procurement_line_edit(
+                        &guard.requested_lines,
+                        &guard.existing_lines,
+                        &coverage,
+                    )?;
+                }
                 db.purchase_order()
                     .create_purchase_submission(&mut order, &submission, &submission_lines, session)
                     .await?;

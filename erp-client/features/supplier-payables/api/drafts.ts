@@ -7,6 +7,7 @@ import {
     draftSnapshots,
     sessions,
     submitIdempotency,
+    submitUnknownResolvers,
 } from "@/features/supplier-payables/api/shared"
 import type {
     FormalSubmitResult,
@@ -28,5 +29,8 @@ export async function saveAllocationDraft(
 export async function resolveUnknownResult(
     idempotencyKey: string,
 ): Promise<FormalSubmitResult | null> {
-    return submitIdempotency.get(idempotencyKey) ?? null
+    const cached = submitIdempotency.get(idempotencyKey)
+    if (cached?.status !== "unknown") return cached ?? null
+    const resolve = submitUnknownResolvers.get(idempotencyKey)
+    return resolve ? resolve() : cached
 }

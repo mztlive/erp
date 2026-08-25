@@ -9,7 +9,7 @@
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
 use entities::common::time::BusinessDate;
-use entities::ids::{ContractId, CustomerAccountId, PartyId, SkuId, SourceSystemId};
+use entities::ids::{ContractId, CustomerAccountId, SkuId, SourceSystemId};
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::sales_order::{
     BusinessType, CardForm, CommercialStatus, FulfillmentMode, GoodsLineFields, LineStatus, LineType,
@@ -192,43 +192,76 @@ pub struct SalesOrderDraftRequest {
     pub lines: Vec<SalesOrderDraftLineRequest>,
 }
 
-/// 创建销售单请求（W05 M5：合同 + 表头 + 明细 + 意图 + 幂等键）。
+/// 前端可编辑的销售草稿命令。
+///
+/// 客户、合同号、结算主体、付款条件与开票要求均由服务端按所选合同修订冻结，
+/// 客户端不得复制后再回传这些权威快照。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct SalesOrderEditableDraftRequest {
+    /// 当前草稿责任人。
+    #[validate(custom(function = "non_blank", message = "编辑人不能为空"))]
+    pub editor_user_id: String,
+    /// 用户明确选择的合同不可变版本。
+    pub requested_contract_revision_id: entities::ids::ContractRevisionId,
+    /// 客户项目名称。
+    pub project_name: Option<String>,
+    /// 业务备注。
+    pub business_remark: Option<String>,
+    /// 卡券类目 SKU（卡券单必填）。
+    pub voucher_category_sku_id: Option<SkuId>,
+    /// 卡券履约期限（秒级时间戳，卡券单必填）。
+    pub voucher_expiry_at: Option<u64>,
+    /// 卡券执行投影的目标商城；非卡券单为空。
+    pub target_mall_id: Option<SourceSystemId>,
+    /// 卡券最终通过时形成应收所使用的到期日；非卡券单为空。
+    pub receivable_due_date: Option<BusinessDate>,
+    /// 草稿行清单（非空，上限 200 行）。
+    #[validate(length(min = 1, max = 200, message = "明细行数必须在1-200之间"))]
+    #[validate(nested)]
+    pub lines: Vec<SalesOrderDraftLineRequest>,
+}
+
+/// 创建销售单请求（W05 M5：合同 + 可编辑草稿 + 意图 + 幂等键）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct CreateSalesOrderRequest {
     /// 销售单号（唯一，创建后不可修改）。
     #[validate(custom(function = "non_blank", message = "销售单号不能为空"))]
     pub order_no: String,
     /// 业务性质（创建后永久不变）。
     pub business_type: BusinessType,
-    /// 客户稳定身份。
-    pub customer_id: CustomerAccountId,
-    /// 合同稳定身份（无合同时省略）。
-    pub contract_id: Option<ContractId>,
-    /// 结算主体。
-    pub settlement_party_id: PartyId,
+    /// 合同稳定身份；客户与结算主体由服务端从当前合同修订解析。
+    pub contract_id: ContractId,
     /// 幂等键；同一操作人、同一键和同一完整载荷返回原销售单，异载荷返回冲突。
     #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
     pub idempotency_key: String,
     /// 建单意图。
     pub intent: SalesOrderCreateIntent,
-    /// 草稿表头与明细。
+    /// 客户端可编辑草稿；合同权威快照由服务端补齐。
     #[validate(nested)]
-    pub draft: SalesOrderDraftRequest,
+    pub draft: SalesOrderEditableDraftRequest,
 }
 
-/// 保存草稿请求（乐观锁：携带期望版本；整表头覆盖 + 明细整批替换）。
+/// 保存草稿请求（乐观锁：携带期望版本；服务端解析合同快照后整批替换）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SaveWorkingCopyRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
-    /// 草稿表头与明细。
+    /// 所选合同稳定身份。
+    pub contract_id: ContractId,
+    /// 客户端可编辑草稿；合同权威快照由服务端补齐。
     #[validate(nested)]
-    pub draft: SalesOrderDraftRequest,
+    pub draft: SalesOrderEditableDraftRequest,
 }
 
-/// 提交销售单请求（幂等键 + 期望版本）。
+/// 提交销售单请求（完整草稿 + 幂等键 + 期望版本）。
+///
+/// 服务端在一个事务中完成草稿替换、提交快照冻结与审批启动；前端不得先保存。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct SubmitSalesOrderRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝提交（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
@@ -236,6 +269,11 @@ pub struct SubmitSalesOrderRequest {
     /// 幂等键（重复提交按「同一草稿已提交」去重，返回既有提交）。
     #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
     pub idempotency_key: String,
+    /// 所选合同稳定身份。
+    pub contract_id: ContractId,
+    /// 本次提交的完整可编辑草稿。
+    #[validate(nested)]
+    pub draft: SalesOrderEditableDraftRequest,
 }
 
 /// 作废销售单请求（乐观锁：携带期望版本）。
@@ -687,79 +725,6 @@ pub struct RevisionView {
     pub created_at: u64,
 }
 
-/// 开放中的采购二次确认驳回摘要（销售单详情内嵌，供销售处理）。
-///
-/// 仅在「销售单仍为草稿、存在驳回确认、且无新的待处理确认」时出现；不依赖
-/// 采购队列 list 权限，避免销售角色静默丢入口。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct OpenProcurementRejectionView {
-    /// 被驳回的采购确认 ID。
-    pub procurement_confirmation_id: String,
-    /// 被驳回的销售提交快照 ID。
-    pub submission_id: String,
-    /// 驳回原因代码（稳定码，如 `CANNOT_FULFILL`）。
-    pub reject_reason_code: Option<String>,
-    /// 驳回补充说明。
-    pub comment: Option<String>,
-    /// 采购处理人账号 ID。
-    pub handled_by: Option<String>,
-    /// 采购处理人姓名；账号已不存在时为 `None`，前端不得回退展示 `handled_by`。
-    pub handled_by_name: Option<String>,
-    /// 处理时间（秒级时间戳）。
-    pub handled_at: Option<u64>,
-    /// 当前操作人可执行的固定销售处置动作。
-    pub allowed_actions: Vec<ProcurementRejectionAllowedAction>,
-}
-
-/// 采购驳回处理卡的服务端权威动作。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ProcurementRejectionAllowedAction {
-    /// 改品或改价后重提。
-    ResubmitChangedTerms,
-    /// 照原条件申请低毛利承接。
-    RequestLowMarginAcceptance,
-    /// 确认不做并作废。
-    VoidAfterRejection,
-}
-
-/// 低毛利上级确认的服务端权威领域动作。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum LowMarginManagerAllowedAction {
-    /// 通过低毛利承接。
-    Approve,
-    /// 驳回低毛利承接。
-    Reject,
-}
-
-/// 销售单详情内嵌的活动低毛利上级确认。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ActiveLowMarginManagerConfirmationView {
-    /// 低毛利确认事实。
-    pub confirmation_id: String,
-    /// 当前待办。
-    pub work_item_id: String,
-    /// 当前待办版本。
-    pub task_version: String,
-    /// 冻结提交版本。
-    pub subject_version: String,
-    /// 被审批的新提交。
-    pub low_margin_submission_id: String,
-    /// 原驳回采购确认。
-    pub rejected_procurement_confirmation_id: String,
-    /// 销售承接理由。
-    pub acceptance_reason: String,
-    /// 受控证据引用。
-    pub evidence_reference_ids: Vec<String>,
-    /// 当前责任人安全摘要。
-    pub owner_user: Option<WorkItemPartyView>,
-    /// 当前操作人的领域动作。
-    pub allowed_actions: Vec<LowMarginManagerAllowedAction>,
-    /// 当前阻断原因。
-    pub action_blockers: Vec<ProcessingBlockerView>,
-}
-
 /// 卡券销售审批工作面允许执行的固定动作。
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -909,12 +874,8 @@ pub struct SalesOrderDetailView {
     pub can_start_sales_change_order: bool,
     /// 不可发起销售变更单时的原因；可发起时为 `None`。
     pub change_order_blocker: Option<String>,
-    /// 开放中的采购驳回（无则为 `None`）。
-    pub open_procurement_rejection: Option<OpenProcurementRejectionView>,
     /// 唯一活动卡券审批；非卡券、无活动实例或数据不完整时为空。
     pub active_card_sales_approval: Option<ActiveCardSalesApprovalView>,
-    /// 唯一活动低毛利上级确认。
-    pub active_low_margin_manager_confirmation: Option<ActiveLowMarginManagerConfirmationView>,
     /// 统一只读审批结构（`SalesOrder` 与 `VoucherSalesOrder`）。
     pub approval: Option<DocumentApprovalView>,
 }

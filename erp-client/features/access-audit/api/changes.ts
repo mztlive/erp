@@ -1,12 +1,11 @@
 // 权限变更写路径：影响预览 + 提交。仅紧急撤权映射到后端 HTTP，其余命令如实阻断。
 
-import { apiGet, apiPost } from "@/lib/api"
+import { apiPost } from "@/lib/api"
 import type {
     AccessChangeCommand,
     AccessChangeOutcome,
     AccessImpactPreview,
 } from "@/features/access-audit/types"
-import type { BackendUserRole } from "./backend-types"
 import { instantToIso } from "./mappers"
 
 function submissionBlockerFor(command: AccessChangeCommand) {
@@ -67,19 +66,6 @@ export async function previewAccessChange(
     }
 }
 
-/** 读取当前角色绑定版本；不存在时返回空，禁止用猜测版本提交撤权。 */
-async function roleAssignmentVersion(
-    subjectId: string,
-    roleAssignmentId: string,
-): Promise<number | null> {
-    const list = await apiGet<BackendUserRole[]>("/admin/user-roles", {
-        user_id: subjectId,
-    })
-    return (
-        list.find((binding) => binding.id === roleAssignmentId)?.version ?? null
-    )
-}
-
 export async function submitAccessChange(
     command: AccessChangeCommand,
 ): Promise<AccessChangeOutcome> {
@@ -104,19 +90,7 @@ export async function submitAccessChange(
                 message: "紧急撤权需要 USER + roleAssignmentId",
             }
         }
-        const version = await roleAssignmentVersion(
-            command.subjectId,
-            command.roleAssignmentId,
-        )
-        if (version == null) {
-            return {
-                outcome: "REJECTED",
-                code: "ROLE_ASSIGNMENT_NOT_FOUND",
-                message: "当前角色绑定不存在或已被其他操作撤销，请刷新后核对。",
-            }
-        }
         await apiPost(`/admin/user-roles/${command.roleAssignmentId}/revoke`, {
-            version,
             revoke_reason_code: command.reasonCode,
             revoke_reason_text: command.comment,
         })
@@ -136,7 +110,6 @@ export async function submitAccessChange(
     return {
         outcome: "REJECTED",
         code: "UNSUPPORTED_COMMAND",
-        message:
-            "当前操作暂不可用，请刷新后重试；如仍不可用，请联系管理员。",
+        message: "当前操作暂不可用，请刷新后重试；如仍不可用，请联系管理员。",
     }
 }

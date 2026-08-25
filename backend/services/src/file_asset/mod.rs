@@ -12,7 +12,7 @@
 //! 安全检查、保留期与销毁状态只作治理记录，不阻断业务对象关联。
 
 use database::{AccessControlExt, DocumentRegistryExt, FileAssetExt, NoTransaction, Transactional};
-use entities::file_asset::{DocumentAttachment, FileAsset};
+use entities::file_asset::{AttachmentUsage, DocumentAttachment, FileAsset};
 use entities::ids::{BusinessDocumentId, DocumentAttachmentId, FileAssetId};
 use id_generator::next_id;
 use mongodb::Database;
@@ -25,7 +25,8 @@ mod dto;
 
 pub use self::dto::{
     AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
-    FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, RegisterFileAssetRequest,
+    FileAssetListParams, FileAssetView, MarkScanResultRequest, PageView, PendingFileAssetRequest,
+    RegisterFileAssetRequest,
 };
 
 /// 文件资产列表筛选条件类型（经 `FileAssetExt` 关联类型跨 crate 可达）。
@@ -169,11 +170,71 @@ impl FileAssetService {
         req: RegisterFileAssetRequest,
         actor: &AuditActor,
     ) -> Result<FileAssetView> {
+        self.register_file_asset_command(req, None, actor).await
+    }
+
+    /// 登记文件资产，并在同一事务内建立业务单据附件关联。
+    ///
+    /// 文件对象已由上传 handler 写入对象存储；本方法只负责将文件元数据、
+    /// 附件关系及两条审计日志原子提交到 MongoDB。
+    ///
+    /// # 参数
+    /// * `req` - 文件资产登记请求
+    /// * `document_id` - 要关联的业务单据 ID
+    /// * `usage` - 附件用途
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回新建的资产详情视图。
+    ///
+    /// # 错误
+    /// 请求非法、业务单据不存在、唯一键冲突或事务写入失败时返回错误。
+    pub async fn register_file_asset_with_attachment(
+        &self,
+        req: RegisterFileAssetRequest,
+        document_id: BusinessDocumentId,
+        usage: AttachmentUsage,
+        actor: &AuditActor,
+    ) -> Result<FileAssetView> {
+        self.register_file_asset_command(req, Some((document_id, usage)), actor)
+            .await
+    }
+
+    /// 执行文件资产登记命令，并按需在同一事务内追加附件关联。
+    async fn register_file_asset_command(
+        &self,
+        req: RegisterFileAssetRequest,
+        attachment_target: Option<(BusinessDocumentId, AttachmentUsage)>,
+        actor: &AuditActor,
+    ) -> Result<FileAssetView> {
         req.validate()?;
         let asset = FileAsset::new(FileAssetId::new(next_id()), req.into_data(actor.id())?)?;
-        let audit = actor
-            .clone()
-            .resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
+        let asset_audit =
+            actor
+                .clone()
+                .resource_log("file_asset.register", "file_asset", asset.base.id.clone())?;
+        let (attachment, attachment_audit) = match attachment_target {
+            Some((document_id, usage)) => {
+                self.ensure_business_document_registered(&document_id).await?;
+                let request = AttachToDocumentRequest {
+                    document_id,
+                    file_asset_id: FileAssetId::new(asset.base.id.clone()),
+                    usage,
+                };
+                request.validate()?;
+                let attachment = DocumentAttachment::new(
+                    DocumentAttachmentId::new(next_id()),
+                    request.into_data(actor.id()),
+                )?;
+                let audit = actor.clone().resource_log(
+                    "document_attachment.create",
+                    "document_attachment",
+                    attachment.base.id.clone(),
+                )?;
+                (Some(attachment), Some(audit))
+            }
+            None => (None, None),
+        };
         let db = self.db.clone();
         let client = db.client().clone();
         let asset_for_tx = asset.clone();
@@ -181,7 +242,12 @@ impl FileAssetService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.file_assets().create(&asset_for_tx, session).await?;
-                    db.audit_logs().create(&audit, session).await?;
+                    db.audit_logs().create(&asset_audit, session).await?;
+                    if let (Some(attachment), Some(audit)) = (attachment.as_ref(), attachment_audit.as_ref())
+                    {
+                        db.document_attachments().create(attachment, session).await?;
+                        db.audit_logs().create(audit, session).await?;
+                    }
                     Ok::<(), crate::errors::Error>(())
                 })
             })

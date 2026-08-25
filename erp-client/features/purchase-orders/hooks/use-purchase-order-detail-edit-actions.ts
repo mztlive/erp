@@ -208,60 +208,29 @@ export function usePurchaseOrderDetailEditActions({
         let submitCommand =
             commandLedger.peek<SubmitPurchaseOrderPayload>("submit")
         if (!submitCommand) {
-            const savePayload = {
-                purchaseOrderId,
-                expectedLockVersion: order.identity.lockVersion,
-                draftEditToken,
-                paymentTermCode: getPaymentTermCode(),
-                paymentTermLabel: order.header.paymentTermLabel,
-                lines: order.currentContent.lines.map((line) => ({
-                    lineId: line.lineId,
-                    lineType: line.lineType,
-                    quantity: lineEdits[line.lineId]?.quantity ?? line.quantity,
-                    unitCostGross:
-                        lineEdits[line.lineId]?.unitCostGross ??
-                        line.unitCostGross,
-                    inputTaxRate:
-                        lineEdits[line.lineId]?.inputTaxRate ??
-                        line.inputTaxRate,
-                })),
-            }
-            const saveCommand = commandLedger.acquire(
-                "save-before-submit",
-                `purchase:${purchaseOrderId}:save-before-submit`,
-                savePayload,
-            )
-            const saveRes = await saveMutation.mutateAsync({
-                ...saveCommand.payload,
-                idempotencyKey: saveCommand.idempotencyKey,
-            })
-            commandLedger.settle("save-before-submit", saveRes.status)
-            if (saveRes.status !== "succeeded") {
-                setSubmitConfirmOpen(false)
-                setResult({
-                    status:
-                        saveRes.status === "unknown" ? "unknown" : "rejected",
-                    title: "提交前保存未成功",
-                    description: saveRes.message,
-                    reference:
-                        saveRes.status === "unknown"
-                            ? documentReference
-                            : undefined,
-                })
-                return
-            }
-
-            const refreshed = await refetch()
-            const lockVersion =
-                refreshed.data?.identity.lockVersion ?? saveRes.data.lockVersion
             submitCommand = commandLedger.acquire(
                 "submit",
                 `purchase:${purchaseOrderId}:submit`,
                 {
                     purchaseOrderId,
-                    expectedLockVersion: lockVersion,
-                    expectedDraftContentHash: saveRes.data.draftContentHash,
+                    expectedLockVersion: order.identity.lockVersion,
+                    expectedDraftContentHash:
+                        order.currentContent.subjectHash ??
+                        `v${order.currentContent.version}`,
                     draftEditToken,
+                    paymentTermCode: getPaymentTermCode(),
+                    lines: order.currentContent.lines.map((line) => ({
+                        lineId: line.lineId,
+                        lineType: line.lineType,
+                        quantity:
+                            lineEdits[line.lineId]?.quantity ?? line.quantity,
+                        unitCostGross:
+                            lineEdits[line.lineId]?.unitCostGross ??
+                            line.unitCostGross,
+                        inputTaxRate:
+                            lineEdits[line.lineId]?.inputTaxRate ??
+                            line.inputTaxRate,
+                    })),
                 },
             )
         }

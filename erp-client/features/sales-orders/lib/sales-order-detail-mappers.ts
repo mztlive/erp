@@ -9,9 +9,7 @@ import type {
 } from "@/features/sales-orders/api/contracts"
 import type {
     ActionBlocker,
-    ActiveLowMarginManagerConfirmation,
     FormalAllowedAction,
-    ProcurementRejectionResolution,
     ProgressTrack,
     SalesOrderProcurementProgress,
     SalesChangeOrderSummary,
@@ -281,7 +279,6 @@ function defaultAllowedActions(
     commercial: string,
     fulfillment: string,
     close: string,
-    hasRejection: boolean,
     /**
      * 能否发起销售变更单——后端权威判定（`sales_order_detail` 的
      * `can_start_sales_change_order`/`change_order_blocker`）。纯列表拉取没有
@@ -315,10 +312,6 @@ function defaultAllowedActions(
         allowed.push("REGISTER_ACCEPTANCE")
     }
 
-    if (hasRejection) {
-        allowed.push("RESOLVE_PROCUREMENT_REJECTION")
-    }
-
     return { allowed, blockers }
 }
 
@@ -346,8 +339,6 @@ export function mapListItemFromBackend(
         remark?: string
         settlementEntity?: string
         revisions?: SalesOrderRevisionSnapshot[]
-        procurementRejection?: ProcurementRejectionResolution | null
-        activeLowMarginManagerConfirmation?: ActiveLowMarginManagerConfirmation | null
         approval?: DocumentApprovalView
         activeChangeOrder?: SalesChangeOrderSummary | null
         customerContact?: string
@@ -381,12 +372,10 @@ export function mapListItemFromBackend(
         (Boolean(extras?.approval?.instance) ||
             row.commercial_status === "PENDING_REVIEW" ||
             row.review_status === "IN_APPROVAL")
-    const hasRejection = Boolean(extras?.procurementRejection)
     const { allowed, blockers } = defaultAllowedActions(
         row.commercial_status,
         row.fulfillment_progress,
         row.close_status,
-        hasRejection,
         extras?.startSalesChange,
     )
 
@@ -456,9 +445,6 @@ export function mapListItemFromBackend(
                   : undefined
             : undefined,
         revisions: extras?.revisions ?? [],
-        procurementRejection: extras?.procurementRejection ?? null,
-        activeLowMarginManagerConfirmation:
-            extras?.activeLowMarginManagerConfirmation ?? null,
         approval: extras?.approval,
         activeChangeOrder: extras?.activeChangeOrder ?? null,
         allowedActions: allowed,

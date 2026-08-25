@@ -497,12 +497,12 @@ impl AccessControlService {
 
     /// 撤权（立即紧急撤权语义，必须记录结构化原因）。
     ///
-    /// 撤权是审计动作，历史撤权记录累积保留；已撤权绑定不可重复撤权（实体
-    /// 校验）；乐观锁版本不一致时返回 409。
+    /// 撤权是审计动作，历史撤权记录累积保留；绑定读取、实体撤权、乐观锁
+    /// 更新和审计事件写入在同一事务内完成。已撤权绑定不可重复撤权。
     ///
     /// # 参数
     /// * `id` - 绑定 ID
-    /// * `req` - 撤权请求（含期望版本与原因）
+    /// * `req` - 撤权命令（只携带业务原因，当前版本由服务端读取）
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -510,7 +510,7 @@ impl AccessControlService {
     ///
     /// # 错误
     /// * `NotFound` - 绑定不存在
-    /// * `ConflictError` - 版本陈旧或绑定已撤权
+    /// * `ConflictError` - 并发修改或绑定已撤权
     pub async fn revoke_user_role(
         &self,
         id: &str,
@@ -518,32 +518,29 @@ impl AccessControlService {
         actor: &AuditActor,
     ) -> Result<UserRoleView> {
         req.validate()?;
-        let mut binding = self
-            .db
-            .user_roles()
-            .find_by_id(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("用户角色绑定不存在".to_string()))?;
-        if binding.base.version != req.version {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
-        binding.revoke(req.into_revoke_data(), actor.id(), Instant::now())?;
         let event = self
             .build_audit_event(
                 actor,
                 "user_role.revoke",
                 "user_role",
-                Some(binding.base.id.clone()),
+                Some(id.to_string()),
                 vec!["revoked_at".to_string()],
             )
             .await?;
         let db = self.db.clone();
         let client = db.client().clone();
+        let id = id.to_string();
+        let revoked_by = actor.id().to_string();
+        let revoke_data = req.into_revoke_data();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    let mut binding = db
+                        .user_roles()
+                        .find_by_id(&id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("用户角色绑定不存在".to_string()))?;
+                    binding.revoke(revoke_data, &revoked_by, Instant::now())?;
                     db.user_roles().update(&mut binding, session).await?;
                     db.audit_events().create(&event, session).await?;
                     Ok::<UserRole, crate::errors::Error>(binding)

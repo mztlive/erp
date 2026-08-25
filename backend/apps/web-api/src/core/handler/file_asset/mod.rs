@@ -17,12 +17,13 @@ use axum::{
     response::Response,
     Extension, Json,
 };
+use serde::de::DeserializeOwned;
 use services::{
     audit::AuditActor,
     file_asset::{
         AttachToDocumentRequest, DestroyFileAssetRequest, DocumentAttachmentView, FileAssetListItemView,
         FileAssetListParams, FileAssetService, FileAssetView, MarkScanResultRequest, PageView,
-        RegisterFileAssetRequest,
+        PendingFileAssetRequest, RegisterFileAssetRequest,
     },
 };
 use tracing::error;
@@ -166,43 +167,37 @@ pub async fn file_asset_upload(
 ) -> Result<FileAssetView> {
     let file = extract_asset_file(&mut multipart).await?;
     let fields = FileAssetFormFields::from_multipart(&mut multipart).await?;
-    let config = state.config_snapshot();
-    let unique_name = storage_key_with_extension(id_generator::next_id(), &file.file_name);
-    state
-        .storage()
-        .save_with_content_type(&unique_name, &file.content, Some(file.content_type.as_str()))
-        .await
-        .map_err(|storage_error| {
-            error!(error = %storage_error, object_key = %unique_name, "Failed to save file asset to S3");
-            Error::Internal("Object storage operation failed".to_string())
-        })?;
-    let content_hmac =
-        entities::file_asset::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
-    let request = RegisterFileAssetRequest {
-        storage_object_key: unique_name,
-        file_name: file.file_name,
-        content_type: file.content_type,
-        byte_size: file.content.len() as u64,
-        content_hmac,
-        sensitivity_class: fields.sensitivity_class,
-        retention_class: fields.retention_class,
-        expires_at: fields.expires_at,
-    };
+    let request = store_asset_file(
+        &state,
+        file,
+        fields.sensitivity_class,
+        fields.retention_class,
+        fields.expires_at,
+    )
+    .await?;
+    let cleanup = [PendingFileAssetRequest {
+        reference: "file-upload".to_string(),
+        registration: request.clone(),
+    }];
     let service = FileAssetService::new(state.db());
-    let mut asset = service.register_file_asset(request, &actor).await?;
+    let result = match fields.document_id {
+        Some(document_id) => {
+            service
+                .register_file_asset_with_attachment(request, document_id, fields.usage, &actor)
+                .await
+        }
+        None => service.register_file_asset(request, &actor).await,
+    };
+    let mut asset = match result {
+        Ok(asset) => asset,
+        Err(error) => {
+            if should_compensate_pending_assets(&error) {
+                delete_pending_asset_objects(&state, &cleanup).await;
+            }
+            return Err(error.into());
+        }
+    };
     prepare_asset_response(&state, &mut asset);
-    if let Some(document_id) = fields.document_id {
-        service
-            .attach_to_document(
-                AttachToDocumentRequest {
-                    document_id,
-                    file_asset_id: entities::ids::FileAssetId::new(asset.id.clone()),
-                    usage: fields.usage,
-                },
-                &actor,
-            )
-            .await?;
-    }
 
     Ok(ApiResponse::ok_with_data(asset))
 }
@@ -397,6 +392,141 @@ pub(crate) struct AssetFile {
     pub content: Vec<u8>,
 }
 
+/// multipart 业务命令中的一个具名文件字段。
+#[derive(Debug)]
+pub(crate) struct PendingAssetFile {
+    /// 与业务 DTO 内临时 `FileAssetId` 一致的字段名。
+    pub reference: String,
+    /// 已完成大小、扩展名、MIME 与真实文件头校验的文件。
+    pub file: AssetFile,
+}
+
+/// 一次解析 multipart 中的 JSON 命令和全部具名文件。
+///
+/// 字段顺序不构成协议；`command` 是唯一 JSON 字段，其余带文件名的字段名均
+/// 作为临时文件引用。单文件沿用 5 MiB 上限，单次命令最多携带 32 个文件。
+pub(crate) async fn extract_command_with_asset_files<T: DeserializeOwned>(
+    multipart: &mut Multipart,
+) -> std::result::Result<(T, Vec<PendingAssetFile>), Error> {
+    const MAX_FILE_COUNT: usize = 32;
+
+    let mut command = None;
+    let mut files = Vec::new();
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| Error::BadRequest("Multipart 表单无效".to_string()))?
+    {
+        let name = field.name().unwrap_or_default().trim().to_string();
+        if let Some(file_name) = field.file_name().map(ToString::to_string) {
+            if name.is_empty() {
+                return Err(Error::BadRequest("上传文件缺少临时引用".to_string()));
+            }
+            if files.len() >= MAX_FILE_COUNT {
+                return Err(Error::BadRequest("单次业务提交最多上传 32 个文件".to_string()));
+            }
+            let content_type = field
+                .content_type()
+                .map(ToString::to_string)
+                .ok_or_else(|| Error::BadRequest("缺少文件 MIME 类型".to_string()))?;
+            let mut content = Vec::new();
+            while let Some(chunk) = field
+                .chunk()
+                .await
+                .map_err(|_| Error::BadRequest("上传文件读取失败".to_string()))?
+            {
+                if content.len().saturating_add(chunk.len()) > upload::MAX_UPLOAD_FILE_BYTES {
+                    return Err(Error::BadRequest("上传文件大小不能超过 5 MiB".to_string()));
+                }
+                content.extend_from_slice(&chunk);
+            }
+            files.push(PendingAssetFile {
+                reference: name,
+                file: validate_asset_file(AssetFile {
+                    file_name,
+                    content_type,
+                    content,
+                })?,
+            });
+            continue;
+        }
+        if name != "command" {
+            continue;
+        }
+        if command.is_some() {
+            return Err(Error::BadRequest("业务命令不能重复".to_string()));
+        }
+        let text = field
+            .text()
+            .await
+            .map_err(|_| Error::BadRequest("业务命令读取失败".to_string()))?;
+        command = Some(
+            serde_json::from_str::<T>(&text)
+                .map_err(|_| Error::BadRequest("业务命令格式无效".to_string()))?,
+        );
+    }
+    let command = command.ok_or_else(|| Error::BadRequest("缺少业务命令".to_string()))?;
+    Ok((command, files))
+}
+
+/// 把一组已校验文件写入对象存储，并形成尚未登记的文件资产事务载荷。
+///
+/// 任一对象写入失败时删除本批次此前已经写入的对象。
+pub(crate) async fn store_pending_asset_files(
+    state: &AppState,
+    files: Vec<PendingAssetFile>,
+    sensitivity_for: impl Fn(&str) -> entities::file_asset::SensitivityClass,
+) -> std::result::Result<Vec<PendingFileAssetRequest>, Error> {
+    let mut requests = Vec::with_capacity(files.len());
+    for pending in files {
+        let request = match store_asset_file(
+            state,
+            pending.file,
+            sensitivity_for(&pending.reference),
+            entities::file_asset::RetentionClass::LongTerm,
+            None,
+        )
+        .await
+        {
+            Ok(request) => request,
+            Err(error) => {
+                delete_pending_asset_objects(state, &requests).await;
+                return Err(error);
+            }
+        };
+        requests.push(PendingFileAssetRequest {
+            reference: pending.reference,
+            registration: request,
+        });
+    }
+    Ok(requests)
+}
+
+/// 删除一次尚未登记或事务已回滚的上传批次，作为对象存储补偿。
+pub(crate) async fn delete_pending_asset_objects(state: &AppState, requests: &[PendingFileAssetRequest]) {
+    for request in requests {
+        if let Err(storage_error) = state
+            .storage()
+            .delete(&request.registration.storage_object_key)
+            .await
+        {
+            error!(
+                error = %storage_error,
+                object_key = %request.registration.storage_object_key,
+                "Failed to compensate unregistered file object"
+            );
+        }
+    }
+}
+
+/// 判断数据库失败是否已经确定回滚，因而可以安全删除刚上传的对象。
+///
+/// 提交结果未知时事务可能已经落库，必须保留对象并等待同一业务命令核对结果；
+/// 其余错误由事务合同保证没有提交，可以立即执行对象存储补偿。
+pub(crate) fn should_compensate_pending_assets(error: &services::Error) -> bool {
+    !matches!(error, services::Error::OutcomeUnknown(_))
+}
+
 /// 提取 Multipart 表单中的第一个文件字段并校验大小与 MIME。
 ///
 /// # 参数
@@ -407,7 +537,25 @@ pub(crate) struct AssetFile {
 ///
 /// # 错误
 /// 无文件字段、文件超过 5 MiB 或缺少 MIME 类型时返回错误。
-async fn extract_asset_file(multipart: &mut Multipart) -> std::result::Result<AssetFile, Error> {
+pub(crate) async fn extract_asset_file(multipart: &mut Multipart) -> std::result::Result<AssetFile, Error> {
+    extract_asset_file_with_limit(multipart, upload::MAX_UPLOAD_FILE_BYTES).await
+}
+
+/// 按调用方业务上限提取首个文件，并继续执行扩展名、MIME 与真实文件头校验。
+///
+/// # 参数
+/// * `multipart` - Multipart 表单数据
+/// * `max_file_bytes` - 当前业务允许的单文件最大字节数
+///
+/// # 返回
+/// 返回校验通过的文件。
+///
+/// # 错误
+/// 无文件字段、文件超过业务上限或文件类型不受支持时返回错误。
+pub(crate) async fn extract_asset_file_with_limit(
+    multipart: &mut Multipart,
+    max_file_bytes: usize,
+) -> std::result::Result<AssetFile, Error> {
     let mut selected = None;
     while let Some(mut field) = multipart
         .next_field()
@@ -431,8 +579,11 @@ async fn extract_asset_file(multipart: &mut Multipart) -> std::result::Result<As
             .await
             .map_err(|_| Error::BadRequest("上传文件读取失败".to_string()))?
         {
-            if content.len().saturating_add(chunk.len()) > upload::MAX_UPLOAD_FILE_BYTES {
-                return Err(Error::BadRequest("上传文件大小不能超过 5 MiB".to_string()));
+            if content.len().saturating_add(chunk.len()) > max_file_bytes {
+                return Err(Error::BadRequest(format!(
+                    "上传文件大小不能超过 {} MiB",
+                    max_file_bytes / (1024 * 1024)
+                )));
             }
             content.extend_from_slice(&chunk);
         }
@@ -444,6 +595,40 @@ async fn extract_asset_file(multipart: &mut Multipart) -> std::result::Result<As
         break;
     }
     selected.ok_or_else(|| Error::BadRequest("未上传文件".to_string()))
+}
+
+/// 把已校验文件写入对象存储并构造尚未落库的文件资产登记命令。
+///
+/// 数据库登记由调用方服务事务负责；调用方失败时必须删除返回命令中的对象键。
+pub(crate) async fn store_asset_file(
+    state: &AppState,
+    file: AssetFile,
+    sensitivity_class: entities::file_asset::SensitivityClass,
+    retention_class: entities::file_asset::RetentionClass,
+    expires_at: Option<u64>,
+) -> std::result::Result<RegisterFileAssetRequest, Error> {
+    let config = state.config_snapshot();
+    let unique_name = storage_key_with_extension(id_generator::next_id(), &file.file_name);
+    state
+        .storage()
+        .save_with_content_type(&unique_name, &file.content, Some(file.content_type.as_str()))
+        .await
+        .map_err(|storage_error| {
+            error!(error = %storage_error, object_key = %unique_name, "Failed to save file asset to S3");
+            Error::Internal("Object storage operation failed".to_string())
+        })?;
+    let content_hmac =
+        entities::file_asset::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
+    Ok(RegisterFileAssetRequest {
+        storage_object_key: unique_name,
+        file_name: file.file_name,
+        content_type: file.content_type,
+        byte_size: file.content.len() as u64,
+        content_hmac,
+        sensitivity_class,
+        retention_class,
+        expires_at,
+    })
 }
 
 /// 校验附件扩展名、声明 MIME 与真实文件头一致；支持受控图片和 PDF。
@@ -595,7 +780,9 @@ fn storage_key_with_extension(id: String, file_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{storage_key_with_extension, validate_asset_file, AssetFile};
+    use super::{
+        should_compensate_pending_assets, storage_key_with_extension, validate_asset_file, AssetFile,
+    };
 
     #[test]
     fn supported_image_names_keep_normalized_extension() {
@@ -633,5 +820,16 @@ mod tests {
             content: b"not-a-pdf".to_vec(),
         };
         assert!(validate_asset_file(spoofed).is_err());
+    }
+
+    #[test]
+    fn unknown_commit_outcome_keeps_uploaded_object() {
+        let database_error =
+            database::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit result"));
+        let unknown = services::Error::OutcomeUnknown(database_error);
+        let definite = services::Error::ConflictError("已确定回滚".to_string());
+
+        assert!(!should_compensate_pending_assets(&unknown));
+        assert!(should_compensate_pending_assets(&definite));
     }
 }

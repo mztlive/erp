@@ -4,42 +4,31 @@
  */
 
 import { apiGet, apiPost } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 import type { BackendPaymentReversal } from "@/features/supplier-payables/api/mappers"
 import { projectPaymentReversal } from "@/features/supplier-payables/api/mappers"
-import type { BackendSupplierPayment } from "@/features/supplier-payables/api/mappers"
+import { isOutcomeUnknown } from "@/features/supplier-payables/api/shared"
 import { buildPaymentReversalSubmitRequest } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import type { PaymentReversalRow } from "@/features/supplier-payables/types"
 
-export const paymentReversalDrafts = new Map<string, BackendPaymentReversal>()
+type PaymentReversalMutationResult =
+    | { status: "succeeded"; reversal: PaymentReversalRow }
+    | { status: "failed"; code: string; message: string }
+    | { status: "unknown"; message: string; idempotencyKey: string }
 
-/**
- * 丢弃指定幂等键下的付款冲正草稿缓存。
- *
- * 来源单据或原因变化后必须调用，避免把上一张冲正单当成当前意图。
- *
- * @param idempotencyKey 即将作废的幂等键。
- */
-export const forgetPaymentReversalDraft = (idempotencyKey: string): void => {
-    paymentReversalDrafts.delete(idempotencyKey)
-}
-
-function failedResult(
-    code: string,
-    message: string,
-): { status: "failed"; code: string; message: string } {
+function reversalError(
+    error: unknown,
+    idempotencyKey: string,
+): Exclude<PaymentReversalMutationResult, { status: "succeeded" }> {
+    const message = getErrorMessage(error, "冲正提交失败，请稍后重试。")
+    if (isOutcomeUnknown(error)) {
+        return { status: "unknown", message, idempotencyKey }
+    }
+    const code =
+        error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code ?? "HTTP_ERROR")
+            : "HTTP_ERROR"
     return { status: "failed", code, message }
-}
-
-function isPostedReversalStatus(status?: string): boolean {
-    return status === "posted" || status === "POSTED" || status === "reversed"
-}
-
-function isInApprovalReversalStatus(status?: string): boolean {
-    return (
-        status === "IN_APPROVAL" ||
-        status === "in_approval" ||
-        status === "pending_review"
-    )
 }
 
 /**
@@ -61,76 +50,34 @@ export async function fetchPaymentReversal(
 }
 
 /**
- * 按原付款创建付款冲正草稿，只读带回服务端审批绑定。
+ * 按原付款一次创建付款冲正并启动审批。
  *
- * 已存在草稿时只刷新版本与绑定，不得调用过账旁路。
+ * 服务端在一个事务内完成单据、审批绑定、运行实例、任务与审计写入。
  *
- * @param input 冲正草稿创建所需字段。
+ * @param input 冲正提交所需业务意图。
  */
-export async function ensurePaymentReversalDraft(input: {
+export async function commitPaymentReversal(input: {
     sourcePaymentId: string
     amount?: string
     reason: string
     idempotencyKey: string
-}): Promise<
-    | { status: "succeeded"; reversal: PaymentReversalRow }
-    | { status: "failed"; code: string; message: string }
-> {
-    const cached = paymentReversalDrafts.get(input.idempotencyKey)
-    if (cached) {
-        if (
-            cached.original_supplier_payment_id !== input.sourcePaymentId ||
-            cached.reason_text !== input.reason
-        ) {
-            forgetPaymentReversalDraft(input.idempotencyKey)
-            return failedResult(
-                "REVERSAL_INTENT_MISMATCH",
-                "当前冲正草稿已不是这次提交意图，请重新发起。",
-            )
-        }
-        const latest = await apiGet<BackendPaymentReversal>(
-            `/admin/payment-reversals/${encodeURIComponent(cached.id)}`,
+}): Promise<PaymentReversalMutationResult> {
+    try {
+        const submitted = await apiPost<BackendPaymentReversal>(
+            "/admin/payment-reversals/commit",
+            {
+                source_fact_id: input.sourcePaymentId,
+                amount: input.amount,
+                reason: input.reason,
+                idempotency_key: input.idempotencyKey,
+            },
         )
-        if (isPostedReversalStatus(latest.status)) {
-            return failedResult(
-                "REVERSAL_ALREADY_POSTED",
-                "已过账冲正不得再次提交。",
-            )
-        }
-        if (isInApprovalReversalStatus(latest.status)) {
-            return failedResult(
-                "REVERSAL_IN_APPROVAL",
-                "冲正正在审批中，不能重复提交。",
-            )
-        }
-        paymentReversalDrafts.set(input.idempotencyKey, latest)
         return {
             status: "succeeded",
-            reversal: projectPaymentReversal(latest),
+            reversal: projectPaymentReversal(submitted),
         }
-    }
-
-    const payment = await apiGet<BackendSupplierPayment>(
-        `/admin/supplier-payments/${encodeURIComponent(input.sourcePaymentId)}`,
-    )
-    const nowSecs = Math.floor(Date.now() / 1000)
-    const noSuffix = input.idempotencyKey.slice(-8)
-    const created = await apiPost<BackendPaymentReversal>(
-        "/admin/payment-reversals",
-        {
-            reversal_no: `PCZ-${noSuffix}`,
-            original_supplier_payment_id: input.sourcePaymentId,
-            reason_text: input.reason,
-            amount: input.amount ?? payment.amount,
-            handled_by: "finance_handler",
-            reviewed_by: "finance_reviewer",
-            occurred_at: nowSecs,
-        },
-    )
-    paymentReversalDrafts.set(input.idempotencyKey, created)
-    return {
-        status: "succeeded",
-        reversal: projectPaymentReversal(created),
+    } catch (error) {
+        return reversalError(error, input.idempotencyKey)
     }
 }
 
@@ -143,19 +90,20 @@ export async function submitPaymentReversal(input: {
     reversalId: string
     expectedVersion: number
     idempotencyKey: string
-}): Promise<
-    | { status: "succeeded"; reversal: PaymentReversalRow }
-    | { status: "failed"; code: string; message: string }
-> {
-    const submitted = await apiPost<BackendPaymentReversal>(
-        `/admin/payment-reversals/${encodeURIComponent(input.reversalId)}/submit`,
-        buildPaymentReversalSubmitRequest({
-            expectedVersion: input.expectedVersion,
-            idempotencyKey: input.idempotencyKey,
-        }),
-    )
-    return {
-        status: "succeeded",
-        reversal: projectPaymentReversal(submitted),
+}): Promise<PaymentReversalMutationResult> {
+    try {
+        const submitted = await apiPost<BackendPaymentReversal>(
+            `/admin/payment-reversals/${encodeURIComponent(input.reversalId)}/submit`,
+            buildPaymentReversalSubmitRequest({
+                expectedVersion: input.expectedVersion,
+                idempotencyKey: input.idempotencyKey,
+            }),
+        )
+        return {
+            status: "succeeded",
+            reversal: projectPaymentReversal(submitted),
+        }
+    } catch (error) {
+        return reversalError(error, input.idempotencyKey)
     }
 }

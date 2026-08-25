@@ -16,8 +16,9 @@ use services::{
     projection::{
         CreateSalesOrderProjectionRequest, CreateSalesOrderProjectionRevisionRequest,
         DeliverProjectionRevisionRequest, PageView, ProcessProjectionDeliveriesRequest,
-        ProcessProjectionDeliveriesResult, ProjectionDeliveryCommand, ProjectionDeliveryResultView,
-        ProjectionService, SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
+        ProcessProjectionDeliveriesResult, ProjectionBulkCommandRequest, ProjectionBulkCommandResultView,
+        ProjectionDeliveryCommand, ProjectionDeliveryResultView, ProjectionService,
+        SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
         SalesOrderProjectionListParams, SalesOrderProjectionRevisionView, SalesOrderProjectionView,
         UnavailableMallConnector,
     },
@@ -238,6 +239,34 @@ pub async fn sales_order_projection_delivery_action(
 ) -> Result<ProjectionDeliveryResultView> {
     let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
         .apply_delivery_command(&delivery_id, command, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "执行投影",
+    group_desc = "销售单执行投影与下发（W23）",
+    desc = "批量执行投递对象强动作",
+    resource = "sales_order_projection_delivery",
+    action = "operate"
+)]
+/// 对显式选中的投影执行一次服务端批量命令。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 批量动作、显式投影 ID 和幂等键
+///
+/// # 返回
+/// 返回批次汇总和逐项正式结果。
+pub async fn sales_order_projection_delivery_bulk_action(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<ProjectionBulkCommandRequest>,
+) -> Result<ProjectionBulkCommandResultView> {
+    let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+        .apply_bulk_delivery_command(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(result))

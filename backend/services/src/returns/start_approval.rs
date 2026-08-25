@@ -8,7 +8,8 @@ use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, ReturnsExt, Transactional, WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, ReturnsExt, Transactional,
+    WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -47,9 +48,18 @@ pub(super) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
+    load_bound_definition_graph_with_executor(db, binding, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器加载冻结绑定的定义图。
+pub(super) async fn load_bound_definition_graph_with_executor(
+    db: &Database,
+    binding: &ApprovalDefinitionBinding,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
     let graph = db
         .bpm_workflow()
-        .load_definition_graph(&binding.approval_process_definition_id, &mut NoTransaction)
+        .load_definition_graph(&binding.approval_process_definition_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("客户退款单绑定的审批定义不存在".to_string()))?;
     Ok(engine_graph(graph))
@@ -354,7 +364,7 @@ pub(super) async fn persist_customer_refund_start(
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
-async fn persist_runtime_writes(
+pub(super) async fn persist_runtime_writes(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
@@ -740,7 +750,7 @@ pub(super) async fn persist_supplier_refund_start(
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
-async fn persist_supplier_refund_runtime(
+pub(super) async fn persist_supplier_refund_runtime(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
@@ -1103,7 +1113,7 @@ pub(super) async fn persist_receipt_reversal_start(
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
-async fn persist_receipt_reversal_runtime(
+pub(super) async fn persist_receipt_reversal_runtime(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,
@@ -1466,7 +1476,7 @@ pub(super) async fn persist_payment_reversal_start(
 ///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
-async fn persist_payment_reversal_runtime(
+pub(super) async fn persist_payment_reversal_runtime(
     db: &Database,
     writes: &crate::approval::execution::apply_plan::PlannedWrites,
     snapshot_payload: &ApprovalSubjectSnapshotPayload,

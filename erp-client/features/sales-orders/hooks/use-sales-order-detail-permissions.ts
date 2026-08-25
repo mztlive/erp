@@ -78,10 +78,6 @@ export function useSalesOrderDetailPermissions() {
             command(serverAllows, "cancelApproval", serverReason),
         startChange: (serverAllows: boolean, serverReason?: string) =>
             command(serverAllows, "startChange", serverReason),
-        voidOrder: (serverAllows: boolean, serverReason?: string) =>
-            command(serverAllows, "voidOrder", serverReason),
-        editAfterRejection: (serverAllows: boolean, serverReason?: string) =>
-            command(serverAllows, "editAfterRejection", serverReason),
     }
 }
 
@@ -101,9 +97,5 @@ function permissionKindFallback(kind: SalesOrderDetailPermissionKind): string {
             return "当前账号没有撤回销售单审批权限"
         case "startChange":
             return "当前账号没有发起销售变更权限"
-        case "voidOrder":
-            return "当前账号没有作废销售单权限"
-        case "editAfterRejection":
-            return "当前账号没有编辑销售单权限"
     }
 }

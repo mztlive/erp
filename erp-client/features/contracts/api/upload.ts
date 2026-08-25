@@ -1,25 +1,32 @@
-import { apiGet, apiPost, createApiError } from "@/lib/api"
+import {
+    createApiError,
+    getApiBaseUrl,
+    getToken,
+    notifyUnauthorized,
+} from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { contractPdfError } from "@/features/contracts/lib/pdf"
 
 import {
-    loadCustomerBrief,
     paymentTermCodeFromLabel,
     tsToIso,
-    uploadFileAsset,
 } from "@/features/contracts/api/helpers"
-import type {
-    BackendContractDetail,
-    BackendContractView,
-} from "@/features/contracts/api/wire-types"
 import type {
     UploadContractPdfInput,
     UploadContractPdfResult,
 } from "@/features/contracts/types"
 
-/**
- * 上传合同 PDF：先 file-asset 上传，再 create contract。
- */
+type BackendContractUpload = {
+    id: string
+    contract_no: string
+    revision_id: string
+    revision_no: number
+    file_asset_id: string
+    file_name: string
+    created_at: number
+}
+
+/** 上传合同 PDF；前端只发一个 multipart 命令。 */
 export async function uploadContractPdf(
     input: UploadContractPdfInput,
 ): Promise<UploadContractPdfResult> {
@@ -33,7 +40,6 @@ export async function uploadContractPdf(
         })
     }
 
-    // 后端文件资产上限 5 MiB（handler），前端文案仍为 20 MB 校验；超 5 MiB 由后端拒绝
     if (!input.customerId?.trim()) {
         throw createApiError({
             kind: "Validation",
@@ -43,35 +49,15 @@ export async function uploadContractPdf(
         })
     }
 
-    const customer = await loadCustomerBrief(input.customerId.trim())
-    if (!customer) {
-        throw createApiError({
-            kind: "Http",
-            status: 404,
-            message: "客户不存在或无权访问",
-            retryable: false,
-        })
-    }
-
-    // 结算主体：以表单选定为准；未提供时退回客户自有主体。
-    // 不能用名称反查：/admin/parties 的 keyword 仅匹配主体编号，名称搜索
-    // 永远落空，曾导致所选结算主体被静默替换为客户自有主体。
-    const settlementPartyId =
-        input.settlementPartyId?.trim() || customer.partyId
-
     const termCode = paymentTermCodeFromLabel(input.paymentTerms)
     const termName =
         PAYMENT_TERM_OPTIONS.find((o) => o.value === termCode)?.label ??
         input.paymentTerms
 
-    const asset = await uploadFileAsset(input.pdfFile)
-
-    const created = await apiPost<BackendContractView>("/admin/contracts", {
+    const command = {
         contract_no: input.contractNo.trim(),
         customer_id: input.customerId.trim(),
-        settlement_party_id: settlementPartyId,
-        contract_pdf_file_id: asset.id,
-        archive_source: "CONTRACT_CENTER",
+        settlement_party_id: input.settlementPartyId?.trim() || null,
         customer_name: input.customerName.trim(),
         settlement_party_name: input.settlementPartyName.trim(),
         payment_term_code: termCode,
@@ -82,32 +68,84 @@ export async function uploadContractPdf(
         valid_from: input.validFrom,
         valid_to: input.validTo || undefined,
         signed_at: input.signedAt,
-    })
-
-    let revisionId = created.current_revision_id ?? created.id
-    let revisionNo = 1
+    }
+    const form = new FormData()
+    // 服务端流式解析先取文件，再读取 JSON 命令；顺序是协议的一部分。
+    form.append("file", input.pdfFile, input.pdfFile.name)
+    form.append("command", JSON.stringify(command))
+    const headers: Record<string, string> = {}
+    const token = getToken()
+    if (token) headers.Authorization = `Bearer ${token}`
+    let response: Response
     try {
-        const detail = await apiGet<BackendContractDetail>(
-            `/admin/contracts/${created.id}`,
-        )
-        const current =
-            detail.revisions.find((r) => r.id === detail.current_revision_id) ??
-            detail.revisions[0]
-        if (current) {
-            revisionId = current.id
-            revisionNo = current.revision_no
-        }
-    } catch {
-        // keep defaults
+        response = await fetch(`${getApiBaseUrl()}/admin/contracts/upload`, {
+            method: "POST",
+            headers,
+            body: form,
+            signal: AbortSignal.timeout(60_000),
+        })
+    } catch (cause) {
+        throw createApiError({
+            kind: "Network",
+            message: "网络请求失败或连接超时",
+            cause,
+        })
+    }
+    const text = await response.text()
+    let parsed: unknown
+    try {
+        parsed = text ? JSON.parse(text) : null
+    } catch (cause) {
+        throw createApiError({
+            kind: "Parse",
+            message: "响应数据解析失败",
+            cause,
+            responseData: text,
+        })
+    }
+    const envelope = parsed as {
+        success?: boolean
+        status?: number
+        errorMessage?: string
+        data?: BackendContractUpload | null
+    } | null
+    if (response.status === 401 || envelope?.status === 401) {
+        notifyUnauthorized()
+        throw createApiError({
+            kind: "Auth",
+            message: "登录状态已失效，请重新登录",
+            status: 401,
+            responseData: parsed,
+        })
+    }
+    if (!response.ok || envelope?.success === false) {
+        throw createApiError({
+            kind: response.status === 400 ? "Validation" : "Http",
+            message:
+                envelope?.errorMessage ||
+                (response.status === 400
+                    ? "请求未通过业务校验"
+                    : `请求失败（HTTP ${response.status}）`),
+            status: response.status,
+            responseData: parsed,
+        })
+    }
+    const created = envelope?.data
+    if (!created?.id || !created.revision_id) {
+        throw createApiError({
+            kind: "Parse",
+            message: "上传响应缺少合同或修订身份",
+            responseData: parsed,
+        })
     }
 
     return {
         contractId: created.id,
         contractNo: created.contract_no,
-        revisionId,
-        revisionNo,
+        revisionId: created.revision_id,
+        revisionNo: created.revision_no,
         uploadedAt: tsToIso(created.created_at),
-        fileName: asset.file_name,
+        fileName: created.file_name,
         reference: `CT-UP-${created.contract_no}`,
     }
 }

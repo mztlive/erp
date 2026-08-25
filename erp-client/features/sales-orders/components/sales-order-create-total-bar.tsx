@@ -10,10 +10,7 @@ import {
 } from "@/components/business"
 import { toFieldErrors } from "@/components/form"
 import { calculateTotals } from "@/features/sales-orders/lib/sales-order-create-model"
-import type {
-    SalesOrderCreateFormApi,
-    SalesOrderEditorPurpose,
-} from "@/features/sales-orders/lib/sales-order-create-form-types"
+import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 
 const HEADER_VALIDATION_FIELDS = [
     { name: "contractId", label: "有效合同", targetId: "contractId" },
@@ -38,14 +35,12 @@ const HEADER_VALIDATION_FIELDS = [
 
 export type SalesOrderCreateTotalBarProps = {
     form: SalesOrderCreateFormApi
-    purpose: SalesOrderEditorPurpose
     onSaveDraftClick: () => void
     onSubmitClick: () => void
 }
 
 export function SalesOrderCreateTotalBar({
     form,
-    purpose,
     onSaveDraftClick,
     onSubmitClick,
 }: SalesOrderCreateTotalBarProps) {
@@ -124,29 +119,15 @@ export function SalesOrderCreateTotalBar({
                                     />
                                     <form.SubmitButton
                                         data-testid="sales-order-submit"
-                                        label={
-                                            purpose === "resubmit"
-                                                ? "再报给采购"
-                                                : "提交"
-                                        }
-                                        pendingLabel={
-                                            purpose === "resubmit"
-                                                ? "正在准备重提…"
-                                                : "正在提交…"
-                                        }
+                                        label="提交"
+                                        pendingLabel="正在提交…"
                                         onClick={onSubmitClick}
                                     >
-                                        {purpose === "resubmit" ? (
-                                            "再报给采购"
-                                        ) : (
-                                            <>
-                                                <PlusIcon
-                                                    data-icon="inline-start"
-                                                    aria-hidden="true"
-                                                />
-                                                提交
-                                            </>
-                                        )}
+                                        <PlusIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        提交
                                     </form.SubmitButton>
                                 </form.AppForm>
                             }

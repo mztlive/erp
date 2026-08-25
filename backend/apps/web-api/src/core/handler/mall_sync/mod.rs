@@ -19,7 +19,7 @@ use services::{
         MallSalesSyncJobView, MallSyncService, MasterMappingTaskDetailParams, MasterMappingTaskListParams,
         MasterMappingTaskView, PageView, ReapplyMallSnapshotCommand, ReapplyOperationView,
         RequestSourceFixCommand, RequestSourceFixResult, ResolveMallSalesReconciliationItemRequest,
-        TriggerMallSyncCommand,
+        RetryMallSalesSyncJobRequest, TriggerMallSyncCommand,
     },
 };
 
@@ -129,6 +129,36 @@ pub async fn mall_sales_sync_job_complete(
 ) -> Result<MallSalesSyncJobView> {
     let view = MallSyncService::new(state.db())
         .complete_sync_job(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商城同步与映射",
+    group_desc = "商城卡券销售单同步作业、快照、核对与映射任务管理",
+    desc = "原子重试失败同步作业",
+    resource = "mall_sales_sync_job",
+    action = "create"
+)]
+/// 沿服务端保存的失败作业事实创建重试作业。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 待重试作业 ID
+/// * `request` - 重试理由与幂等信息
+///
+/// # 返回
+/// 返回原子创建的重试作业视图。
+pub async fn mall_sales_sync_job_retry(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<RetryMallSalesSyncJobRequest>,
+) -> Result<MallSalesSyncJobView> {
+    let view = MallSyncService::new(state.db())
+        .retry_sync_job(&id, request, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

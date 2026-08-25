@@ -82,6 +82,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/customer-refunds/commit",
+            with_permission(
+                post(returns::customer_refund_commit),
+                rbac,
+                returns::customer_refund_commit_permission_key(),
+            ),
+        )
+        .route(
             "/customer-refunds",
             with_permission(
                 post(returns::customer_refund_create),
@@ -130,6 +138,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-refunds/commit",
+            with_permission(
+                post(returns::supplier_refund_commit),
+                rbac,
+                returns::supplier_refund_commit_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-refunds/{id}",
             with_permission(
                 get(returns::supplier_refund_detail),
@@ -170,6 +186,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/receipt-reversals/commit",
+            with_permission(
+                post(returns::receipt_reversal_commit),
+                rbac,
+                returns::receipt_reversal_commit_permission_key(),
+            ),
+        )
+        .route(
             "/receipt-reversals/{id}",
             with_permission(
                 get(returns::receipt_reversal_detail),
@@ -207,6 +231,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(returns::payment_reversal_create),
                 rbac,
                 returns::payment_reversal_create_permission_key(),
+            ),
+        )
+        .route(
+            "/payment-reversals/commit",
+            with_permission(
+                post(returns::payment_reversal_commit),
+                rbac,
+                returns::payment_reversal_commit_permission_key(),
             ),
         )
         .route(

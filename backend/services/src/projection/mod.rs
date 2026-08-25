@@ -30,9 +30,10 @@ pub(crate) use self::dto::projection_content_hash;
 pub use self::dto::{
     CreateSalesOrderProjectionRequest, CreateSalesOrderProjectionRevisionRequest,
     DeliverProjectionRevisionRequest, PageView, ProcessProjectionDeliveriesRequest,
-    ProcessProjectionDeliveriesResult, ProjectionActionBlockerView, ProjectionDeliveryAction,
-    ProjectionDeliveryActionResult, ProjectionDeliveryCommand, ProjectionDeliveryResultView,
-    SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView, SalesOrderProjectionListParams,
-    SalesOrderProjectionRevisionView, SalesOrderProjectionView,
+    ProcessProjectionDeliveriesResult, ProjectionActionBlockerView, ProjectionBulkAction,
+    ProjectionBulkCommandRequest, ProjectionBulkCommandResultView, ProjectionBulkItemResultView,
+    ProjectionDeliveryAction, ProjectionDeliveryActionResult, ProjectionDeliveryCommand,
+    ProjectionDeliveryResultView, SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
+    SalesOrderProjectionListParams, SalesOrderProjectionRevisionView, SalesOrderProjectionView,
 };
 pub use self::service::ProjectionService;

@@ -2,8 +2,7 @@
 
 export {
     useAllocationSessionQuery,
-    useEnsureSupplierPaymentDraftMutation,
-    useEnsureSupplierRefundDraftMutation,
+    useCommitSupplierRefundMutation,
     usePayableDetailQuery,
     useResolveUnknownMutation,
     useReverseInvoiceMutation,

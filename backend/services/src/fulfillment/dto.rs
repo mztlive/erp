@@ -165,6 +165,17 @@ pub struct UpdatePurchaseReceiptRequest {
     pub warehouse_id: Option<WarehouseId>,
 }
 
+/// 保存采购入库最终草稿并过账的原子命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct PostPurchaseReceiptRequest {
+    /// 期望的采购入库单版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 最终入库仓；缺省表示保持草稿值。
+    pub warehouse_id: Option<WarehouseId>,
+}
+
 /// 采购入库行视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseReceiptLineView {
@@ -320,6 +331,19 @@ pub struct UpdateDeliveryRequest {
     /// 物流承运方；缺省表示不修改。
     pub carrier: Option<String>,
     /// 物流单号；缺省表示不修改。
+    pub tracking_no: Option<String>,
+}
+
+/// 保存发货最终草稿并过账的原子命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct PostDeliveryRequest {
+    /// 期望的发货单版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 最终物流承运方；缺省表示保持草稿值。
+    pub carrier: Option<String>,
+    /// 最终物流单号；缺省表示保持草稿值。
     pub tracking_no: Option<String>,
 }
 
@@ -715,6 +739,44 @@ pub struct PostCustomerAcceptanceRequest {
     /// 逐行对履约事实的分配（行内合计必须等于该行通过数量）。
     #[validate(length(min = 1, max = 200, message = "验收行数必须在1-200之间"))]
     pub lines: Vec<PostAcceptanceLineInput>,
+}
+
+/// 客户验收原子登记请求。
+///
+/// 前端一次提交必须发送最终表头、最终行和履约分配；服务端在同一事务内完成
+/// 草稿创建或替换、分配校验与写入、过账、销售单履约进度刷新和审计。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CommitCustomerAcceptanceRequest {
+    /// 已保存草稿主键；为空时在事务内新建草稿。
+    pub acceptance_id: Option<String>,
+    /// 已保存草稿的期望乐观锁版本；提交已有草稿时必填。
+    pub expected_acceptance_version: Option<u64>,
+    /// 客户验收单号（新建时必填且全局唯一；提交已有草稿时可省略）。
+    pub acceptance_no: Option<String>,
+    /// 销售单。
+    pub sales_order_id: SalesOrderId,
+    /// 销售单期望乐观锁版本，防止基于过期履约事实提交。
+    #[validate(range(min = 1, message = "销售单乐观锁版本必须大于 0"))]
+    pub expected_sales_order_version: u64,
+    /// 验收时间（秒级时间戳）。
+    pub accepted_at: i64,
+    /// 验收结果。
+    pub result: AcceptanceResult,
+    /// 最终验收行及其履约事实分配。
+    #[validate(length(min = 1, max = 200, message = "验收行数必须在1-200之间"))]
+    pub lines: Vec<AcceptanceLineInput>,
+    /// 客户端提交标识；用于审计关联和结果未知后的安全重试。
+    #[validate(custom(function = "non_blank", message = "提交标识不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 客户验收原子登记结果。
+#[derive(Debug, Clone, Serialize)]
+pub struct CommitCustomerAcceptanceView {
+    /// 已过账客户验收单。
+    pub acceptance: CustomerAcceptanceView,
+    /// 过账后重新计算的可验收事实，供前端直接刷新结果区。
+    pub remaining_eligibility: AcceptanceEligibilityView,
 }
 
 /// 客户验收过账的逐行输入。
