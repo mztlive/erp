@@ -73,14 +73,6 @@ export const NATURE_OPTIONS = [
     { value: "card_voucher", label: "卡券" },
 ] as const
 
-/** 实物/服务单履约方式（数据模型 §6.4；提交按行携带，后端据此形成采购履约责任）。 */
-export const FULFILLMENT_MODE_OPTIONS = [
-    { value: "公司仓发", label: "公司仓发" },
-    { value: "供应商直发", label: "供应商直发" },
-    { value: "电子交付", label: "电子交付" },
-    { value: "线下服务", label: "线下服务" },
-] as const
-
 export const CARD_FORM_OPTIONS = [
     { value: "电子卡", label: "电子卡" },
     { value: "实体卡", label: "实体卡" },
@@ -102,11 +94,6 @@ export function createEmptyLine(
         /** 非卡券单位随 SKU 基础单位带出；卡券固定为张。建单页不可改。 */
         unit: nature === "card_voucher" ? "张" : "",
         unitPriceGross: "0.00",
-        /**
-         * 履约方式：实物/服务单由建单页单据头选择（默认公司仓发），
-         * 提交时按行携带（mapFulfillmentMode），服务端据此形成采购履约责任。
-         */
-        fulfillmentMode: nature === "physical_service" ? "公司仓发" : "",
         dueDate: "",
         faceValue: "",
         /** 配赠只读推导，不作为输入；保留字段供兼容提交快照。 */

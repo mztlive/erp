@@ -11,7 +11,7 @@ import type {
     PurchaseType,
 } from "@/features/purchase-orders/types"
 
-/** 一条销售明细可选的合格供应商。 */
+/** 一条销售明细可选的合格履约方案。 */
 export type SourcingSupplierOption = Readonly<{
     supplierId: string
     supplierName: string
@@ -37,6 +37,8 @@ export type SourcingProductLine = Readonly<{
     salesQuantity: string
     coveredQuantity: string
     remainingQuantity: string
+    /** 销售承诺的最晚交付日，采购预计交付日不得晚于此日。 */
+    deliveryDeadline: string
     salesAllocationLabel: string
     options: readonly SourcingSupplierOption[]
 }>
@@ -54,10 +56,12 @@ export type SourcingSalesOrder = Readonly<{
 
 /** 建单表单中一条可编辑选源行。 */
 export type SourcingLineInput = {
+    rowKey: string
     salesOrderLineId: string
     selected: boolean
     quantity: string
-    supplierId: string
+    basisId: string
+    expectedDeliveryDate: string
 }
 
 /** 确认创建前按拆分维度预览的一张采购单。 */
@@ -149,6 +153,7 @@ export function buildSourcingWorkspace(
                     salesQuantity: line.salesQuantity,
                     coveredQuantity: line.coveredQuantity,
                     remainingQuantity: line.remainingQuantity,
+                    deliveryDeadline: line.salesDeliveryDeadline,
                     salesAllocationLabel: line.salesAllocationLabel,
                     options: [option],
                 })
@@ -156,7 +161,7 @@ export function buildSourcingWorkspace(
             }
             if (
                 existing.options.some(
-                    (candidate) => candidate.supplierId === option.supplierId,
+                    (candidate) => candidate.basisId === option.basisId,
                 )
             ) {
                 continue
@@ -172,12 +177,20 @@ export function buildSourcingWorkspace(
             ...bucket.order,
             lines: [...bucket.lines.values()].map((line) => ({
                 ...line,
-                options: [...line.options].sort((left, right) =>
-                    left.supplierName.localeCompare(
+                options: [...line.options].sort((left, right) => {
+                    const supplier = left.supplierName.localeCompare(
                         right.supplierName,
                         "zh-CN",
-                    ),
-                ),
+                    )
+                    if (supplier !== 0) return supplier
+                    const responsibility =
+                        left.fulfillmentResponsibility.localeCompare(
+                            right.fulfillmentResponsibility,
+                            "en",
+                        )
+                    if (responsibility !== 0) return responsibility
+                    return left.basisId.localeCompare(right.basisId, "en")
+                }),
             })),
         }))
         .sort((left, right) =>
@@ -196,14 +209,18 @@ export function buildDefaultSourcingLines(
 ): SourcingLineInput[] {
     return (
         order?.lines.map((line) => ({
+            rowKey: `${line.salesOrderLineId}:0`,
             salesOrderLineId: line.salesOrderLineId,
             selected: true,
             quantity:
                 line.options.length === 1
                     ? line.options[0]!.maxCreateQuantity
                     : line.remainingQuantity,
-            supplierId:
-                line.options.length === 1 ? line.options[0]!.supplierId : "",
+            basisId: line.options.length === 1 ? line.options[0]!.basisId : "",
+            expectedDeliveryDate:
+                line.options.length === 1
+                    ? line.options[0]!.expectedDeliveryDate
+                    : line.deliveryDeadline,
         })) ?? []
     )
 }
@@ -223,10 +240,11 @@ export function sourcingFormLinesReady(
     order: SourcingSalesOrder,
 ): boolean {
     return (
-        lines.length === order.lines.length &&
-        lines.every(
-            (line, index) =>
-                line.salesOrderLineId === order.lines[index]?.salesOrderLineId,
+        lines.length >= order.lines.length &&
+        order.lines.every((product) =>
+            lines.some(
+                (line) => line.salesOrderLineId === product.salesOrderLineId,
+            ),
         )
     )
 }
@@ -235,15 +253,15 @@ export function sourcingFormLinesReady(
  * 查找一行当前选用的供应商选项。
  *
  * @param line 选源明细。
- * @param supplierId 当前选用供应商。
+ * @param basisId 当前选用的精确履约依据。
  * @returns 命中的选项；未选或已失效时为空。
  */
 export function findSourcingOption(
     line: SourcingProductLine | undefined,
-    supplierId: string,
+    basisId: string,
 ): SourcingSupplierOption | undefined {
-    if (!line || !supplierId) return undefined
-    return line.options.find((option) => option.supplierId === supplierId)
+    if (!line || !basisId) return undefined
+    return line.options.find((option) => option.basisId === basisId)
 }
 
 /**
@@ -297,7 +315,7 @@ export function pickBestSourcingOption(
  * @param lines 表单选源行。
  * @returns 填充后的选源行。
  */
-export function assignBestSuppliers(
+export function assignBestSourcingOptions(
     order: SourcingSalesOrder | undefined,
     lines: readonly SourcingLineInput[],
 ): SourcingLineInput[] {
@@ -314,8 +332,9 @@ export function assignBestSuppliers(
         return {
             ...line,
             selected: true,
-            supplierId: option.supplierId,
+            basisId: option.basisId,
             quantity: option.maxCreateQuantity,
+            expectedDeliveryDate: option.expectedDeliveryDate,
         }
     })
 }
@@ -420,15 +439,15 @@ function uniqueStable<T>(values: readonly T[]): T[] {
 }
 
 /**
- * 勾选明细上出现过的供应商，供批量指定。
+ * 勾选明细上出现过的精确履约方案，供批量指定。
  *
- * 不要求所有勾选行都具备同一家供应商；应用到选中行时，没有该供给的行会跳过。
+ * 不要求所有勾选行都具备同一方案；应用到选中行时，不支持该方案的行会跳过。
  *
  * @param order 当前选源销售单。
  * @param lines 表单选源行。
- * @returns 勾选行可选供应商的并集；没有勾选时退回全部明细。
+ * @returns 勾选行可选履约方案的并集；没有勾选时退回全部明细。
  */
-export function commonSuppliersForSelected(
+export function commonSourcingOptionsForSelected(
     order: SourcingSalesOrder | undefined,
     lines: readonly SourcingLineInput[],
 ): SourcingSupplierOption[] {
@@ -457,8 +476,8 @@ function uniqueOptions(
     const seen = new Set<string>()
     const result: SourcingSupplierOption[] = []
     for (const option of options) {
-        if (!option.supplierId || seen.has(option.supplierId)) continue
-        seen.add(option.supplierId)
+        if (!option.basisId || seen.has(option.basisId)) continue
+        seen.add(option.basisId)
         result.push(option)
     }
     return result
@@ -477,7 +496,7 @@ function compareDecimalSafe(
 }
 
 /**
- * 把已选定供应商的明细按 §7.4 拆分维度预览成多张采购单。
+ * 把已选定履约方案的明细按 §7.4 拆分维度预览成多张采购单。
  *
  * @param order 当前选源销售单。
  * @param lines 表单选源行。
@@ -496,11 +515,11 @@ export function buildPurchaseOrderPreviews(
         }
     >()
     for (const input of lines) {
-        if (!input.selected || !input.supplierId) continue
+        if (!input.selected || !input.basisId) continue
         const product = order.lines.find(
             (line) => line.salesOrderLineId === input.salesOrderLineId,
         )
-        const option = findSourcingOption(product, input.supplierId)
+        const option = findSourcingOption(product, input.basisId)
         if (!product || !option) continue
         const amounts = previewLineAmounts(
             option.unitCostGross,
@@ -521,7 +540,7 @@ export function buildPurchaseOrderPreviews(
             quantity: input.quantity.trim(),
             unitCostGross: option.unitCostGross,
             inputTaxRate: option.inputTaxRate,
-            expectedDeliveryDate: option.expectedDeliveryDate,
+            expectedDeliveryDate: input.expectedDeliveryDate,
             grossAmount: amounts.gross,
             netAmount: amounts.net,
             taxAmount: amounts.tax,

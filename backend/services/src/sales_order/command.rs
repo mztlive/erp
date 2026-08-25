@@ -1489,7 +1489,6 @@ mod card_projection_input_tests {
                         "sku_revision_id": "sku-revision-1",
                         "welfare_scenario": null,
                         "service_region": null,
-                        "fulfillment_mode": "COMPANY_WAREHOUSE",
                         "fulfillment_due_at": 1800000000,
                         "quantity": "1",
                         "base_unit_code": "件",

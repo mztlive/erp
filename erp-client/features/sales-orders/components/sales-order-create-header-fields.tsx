@@ -8,7 +8,6 @@ import {
 } from "@/lib/business-options"
 import { toFieldErrors } from "@/components/form"
 import {
-    FULFILLMENT_MODE_OPTIONS,
     NATURE_OPTIONS,
     decimalAtMost,
     decimalInput,
@@ -115,38 +114,6 @@ export function SalesOrderCreateHeaderFields({
                     />
                 )}
             </form.AppField>
-            <form.Subscribe selector={(state) => state.values.nature}>
-                {(nature) =>
-                    nature === "physical_service" ? (
-                        <form.AppField name="fulfillmentMode">
-                            {(field) => (
-                                <field.SelectField
-                                    label="履约方式"
-                                    options={FULFILLMENT_MODE_OPTIONS}
-                                    description="实物/服务单的履约方式，应用到全部明细行"
-                                    onValueChange={(value: string) => {
-                                        // 单据头的选择必须同步到各明细，提交接口按行接收履约方式。
-                                        const lines =
-                                            form.state.values.lineItems
-                                        form.setFieldValue(
-                                            "lineItems",
-                                            lines.map((line) =>
-                                                line.fulfillmentMode
-                                                    ? {
-                                                          ...line,
-                                                          fulfillmentMode:
-                                                              value,
-                                                      }
-                                                    : line,
-                                            ),
-                                        )
-                                    }}
-                                />
-                            )}
-                        </form.AppField>
-                    ) : null
-                }
-            </form.Subscribe>
             <form.Subscribe selector={(state) => state.values.nature}>
                 {(nature) =>
                     nature === "card_voucher" ? (

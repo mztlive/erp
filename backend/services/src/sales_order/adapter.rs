@@ -686,8 +686,8 @@ mod tests {
     };
     use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::sales_order::{
-        FulfillmentMode, GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData,
-        SalesOrderSubmissionData, SalesOrderSubmissionLineData, WelfareScenario,
+        GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData, SalesOrderSubmissionData,
+        SalesOrderSubmissionLineData, WelfareScenario,
     };
     use std::str::FromStr;
 
@@ -715,7 +715,6 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             service_region: Some("EAST".into()),
-            fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str("2").expect("数量合法"),
             base_unit_code: "件".into(),

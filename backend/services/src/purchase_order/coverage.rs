@@ -6,10 +6,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{Executor, PurchaseOrderExt, SalesOrderExt};
+use database::{CatalogExt, Executor, PurchaseOrderExt, SalesOrderExt};
+use entities::catalog::ProductKind;
 use entities::ids::{
     PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderRevisionId,
-    SalesOrderRevisionLineId,
+    SalesOrderRevisionLineId, SkuId,
 };
 use entities::money::Quantity;
 use entities::purchase_order::{PurchaseLineType, PurchaseOrder, PurchaseOrderStatus};
@@ -28,6 +29,8 @@ pub(crate) struct SalesProcurementCoverageLine {
     pub revision_line: SalesOrderRevisionLine,
     /// 销售当前版本商品/服务子类型行。
     pub goods_line: SalesOrderGoodsServiceLineRevision,
+    /// SKU 所属商品的稳定业务类型。
+    pub product_kind: ProductKind,
     /// 单行目标、覆盖、剩余与进度。
     pub summary: ProcurementCoverageSummary,
 }
@@ -66,12 +69,62 @@ pub(crate) async fn load_sales_procurement_coverage(
 ) -> Result<SalesProcurementCoverage> {
     let revision = load_current_sales_revision(db, order, executor).await?;
     let target_lines = load_target_lines(db, &revision, executor).await?;
+    let product_kinds = load_product_kinds(db, &target_lines, executor).await?;
     let purchase_orders = db
         .purchase_orders()
         .find_covering_by_sales_order(&order.base.id.clone().into(), executor)
         .await?;
     let covered = load_covered_quantities(db, &target_lines, &purchase_orders, executor).await?;
-    build_coverage(revision, target_lines, covered)
+    build_coverage(revision, target_lines, covered, product_kinds)
+}
+
+/// 批量解析采购目标行 SKU 对应的商品业务类型。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库实例
+/// * `targets` - 当前版本商品目标行
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回以 SKU 稳定 ID 为键的商品业务类型。
+///
+/// # 错误
+/// SKU、商品缺失或仓储查询失败时返回错误。
+///
+/// # 关键业务约束
+/// 采购类型只读取商品稳定主表的 `product_kind`，不得从销售字段或分类名称推导。
+async fn load_product_kinds(
+    db: &mongodb::Database,
+    targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, ProductKind>> {
+    let sku_ids = targets
+        .iter()
+        .map(|(_, goods)| goods.sku_id.clone())
+        .collect::<Vec<SkuId>>();
+    let skus = db.skus().find_by_ids(&sku_ids, executor).await?;
+    let sku_to_product = skus
+        .into_iter()
+        .map(|sku| (sku.base.id, sku.product_id))
+        .collect::<HashMap<_, _>>();
+    let product_ids = sku_to_product.values().cloned().collect::<Vec<_>>();
+    let products = db.products().find_by_ids(&product_ids, executor).await?;
+    let product_kinds = products
+        .into_iter()
+        .map(|product| (product.base.id, product.product_kind))
+        .collect::<HashMap<_, _>>();
+    targets
+        .iter()
+        .map(|(_, goods)| {
+            let product_id = sku_to_product.get(goods.sku_id.as_ref()).ok_or_else(|| {
+                Error::BusinessLogicError(format!("销售当前版本 SKU {} 不存在", goods.sku_id))
+            })?;
+            let product_kind = product_kinds.get(product_id.as_ref()).copied().ok_or_else(|| {
+                Error::BusinessLogicError(format!("销售当前版本 SKU {} 所属商品不存在", goods.sku_id))
+            })?;
+            Ok((goods.sku_id.to_string(), product_kind))
+        })
+        .collect()
 }
 
 /// 加载销售单当前版本头。
@@ -502,11 +555,18 @@ fn build_coverage(
     revision: SalesOrderRevision,
     targets: Vec<(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)>,
     covered: HashMap<String, Quantity>,
+    product_kinds: HashMap<String, ProductKind>,
 ) -> Result<SalesProcurementCoverage> {
     let mut total = Decimal::ZERO;
     let mut total_covered = Decimal::ZERO;
     let mut lines = Vec::with_capacity(targets.len());
     for (revision_line, goods_line) in targets {
+        let product_kind = product_kinds
+            .get(goods_line.sku_id.as_ref())
+            .copied()
+            .ok_or_else(|| {
+                Error::BusinessLogicError(format!("销售当前版本 SKU {} 缺少商品类型", goods_line.sku_id))
+            })?;
         let covered_quantity = covered
             .get(&revision_line.sales_order_line_id.to_string())
             .copied()
@@ -517,6 +577,7 @@ fn build_coverage(
         lines.push(SalesProcurementCoverageLine {
             revision_line,
             goods_line,
+            product_kind,
             summary,
         });
     }
@@ -736,7 +797,6 @@ mod tests {
                 sku_revision_id: entities::ids::SkuRevisionId::new("skur-1"),
                 welfare_scenario: None,
                 service_region: None,
-                fulfillment_mode: entities::sales_order::FulfillmentMode::CompanyWarehouse,
                 fulfillment_due_at: entities::common::time::Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("2").unwrap(),
                 base_unit_code: "件".to_string(),

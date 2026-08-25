@@ -6,18 +6,19 @@ import { SparklesIcon } from "lucide-react"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
 import type { SourcingSupplierOption } from "@/features/purchase-orders/lib/purchase-order-create-model"
+import { FULFILLMENT_RESPONSIBILITY_LABEL } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderCreateBatchBarProps = {
     selectedCount: number
     options: readonly SourcingSupplierOption[]
     disabled?: boolean
     matchDisabled?: boolean
-    onApply: (supplierId: string) => void
+    onApply: (basisId: string) => void
     onMatchBest: () => void
 }
 
 /**
- * 批量指定共同供应商，或一键为全部明细匹配最优供应商。
+ * 批量指定共同履约方案，或一键为全部明细匹配最优方案。
  */
 export function PurchaseOrderCreateBatchBar({
     selectedCount,
@@ -27,12 +28,12 @@ export function PurchaseOrderCreateBatchBar({
     onApply,
     onMatchBest,
 }: PurchaseOrderCreateBatchBarProps) {
-    const [supplierId, setSupplierId] = React.useState<string | null>(null)
+    const [basisId, setBasisId] = React.useState<string | null>(null)
     React.useEffect(() => {
-        if (!options.some((option) => option.supplierId === supplierId)) {
-            setSupplierId(options[0]?.supplierId ?? null)
+        if (!options.some((option) => option.basisId === basisId)) {
+            setBasisId(options[0]?.basisId ?? null)
         }
-    }, [options, supplierId])
+    }, [basisId, options])
 
     return (
         <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2">
@@ -41,31 +42,31 @@ export function PurchaseOrderCreateBatchBar({
             </p>
             <OptionCombobox
                 className="w-64"
-                value={supplierId}
-                onValueChange={setSupplierId}
+                value={basisId}
+                onValueChange={setBasisId}
                 allowClear={false}
                 disabled={disabled || options.length === 0}
                 placeholder={
                     selectedCount === 0 && options.length === 0
                         ? "请先勾选明细"
                         : options.length === 0
-                          ? "选中行没有可指定的供应商"
-                          : "批量指定供应商"
+                          ? "选中行没有可指定的履约方案"
+                          : "批量指定履约方案"
                 }
-                aria-label="批量指定供应商"
+                aria-label="批量指定履约方案"
                 options={options.map((option) => ({
-                    value: option.supplierId,
-                    label: option.supplierName,
-                    keywords: option.supplierId,
+                    value: option.basisId,
+                    label: `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                    keywords: `${option.supplierId} ${option.fulfillmentResponsibility}`,
                 }))}
             />
             <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={disabled || !supplierId || options.length === 0}
+                disabled={disabled || !basisId || options.length === 0}
                 onClick={() => {
-                    if (supplierId) onApply(supplierId)
+                    if (basisId) onApply(basisId)
                 }}
                 data-testid="purchase-create-batch-apply"
             >
@@ -81,7 +82,7 @@ export function PurchaseOrderCreateBatchBar({
                 data-testid="purchase-create-match-best"
             >
                 <SparklesIcon data-icon="inline-start" />
-                匹配最优供应商
+                匹配最优方案
             </Button>
         </div>
     )

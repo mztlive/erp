@@ -23,8 +23,8 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 
 use super::snapshot::HeaderSnapshots;
 use super::types::{
-    build_line_groups, validate_line_list, BusinessType, FulfillmentMode, GoodsLineFields, LineSummary,
-    LineType, VoucherLineDraft, WelfareScenario,
+    build_line_groups, validate_line_list, BusinessType, GoodsLineFields, LineSummary, LineType,
+    VoucherLineDraft, WelfareScenario,
 };
 
 /// 提交人标识最大长度。
@@ -541,10 +541,6 @@ impl SalesChangeSubmissionLineData {
                     .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", line.line_no)))?,
                 welfare_scenario: line.welfare_scenario.map(Into::into),
                 service_region: line.service_region.clone(),
-                fulfillment_mode: line
-                    .fulfillment_mode
-                    .map(Into::into)
-                    .ok_or_else(|| Error::from(format!("第 {} 行缺少履约方式", line.line_no)))?,
                 fulfillment_due_at: line
                     .fulfillment_due_at
                     .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", line.line_no)))?,
@@ -640,9 +636,7 @@ pub struct SalesChangeSubmissionLine {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 履约方式。
-    pub fulfillment_mode: Option<FulfillmentMode>,
-    /// 本明细履约期限。
+    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
     pub quantity: Option<Quantity>,
@@ -718,7 +712,6 @@ impl SalesChangeSubmissionLine {
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
             service_region: built.goods.as_ref().and_then(|g| g.service_region.clone()),
-            fulfillment_mode: built.goods.as_ref().map(|g| g.fulfillment_mode),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -787,7 +780,6 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             service_region: Some("east".to_string()),
-            fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -912,7 +904,6 @@ mod tests {
             sku_revision_id: Some(crate::ids::SkuRevisionId::new("skurev-1")),
             welfare_scenario: Some(crate::sales_order::WelfareScenario::MealSubsidy),
             service_region: None,
-            fulfillment_mode: Some(crate::sales_order::FulfillmentMode::SupplierDirect),
             fulfillment_due_at: Some(Instant::from_unix_secs(1_800_000_000)),
             quantity: Some(qty("3.000000")),
             base_unit_code: Some("件".to_string()),
@@ -930,8 +921,6 @@ mod tests {
         let goods = mapped.goods.unwrap();
         assert_eq!(goods.sku_id.as_ref(), "sku-1");
         assert_eq!(goods.welfare_scenario, Some(WelfareScenario::MealSubsidy));
-        assert_eq!(goods.fulfillment_mode, FulfillmentMode::SupplierDirect);
-
         let change_order = super::super::SalesChangeOrder::new(
             SalesChangeOrderId::new("co-1"),
             super::super::SalesChangeOrderData {

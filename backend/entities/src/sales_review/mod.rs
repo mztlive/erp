@@ -6,7 +6,6 @@
 pub mod sales_change_order;
 pub mod sales_change_submission;
 pub mod snapshot;
-pub mod sourcing;
 pub mod types;
 
 pub use sales_change_order::{
@@ -20,12 +19,8 @@ pub use snapshot::{
     ContractSnapshot, CustomerSnapshot, HeaderSnapshotData, HeaderSnapshots, InvoiceRequirementSnapshot,
     PaymentTermSnapshot, SettlementPartySnapshot,
 };
-pub use sourcing::{
-    recommend_sourcing_line, SourcingAllocation, SourcingCandidate, SourcingLine, SourcingLinePlan,
-};
 pub use types::{
-    BusinessType, CardForm, FulfillmentMode, GoodsLineFields, LineType, VoucherLineDraft, VoucherLineFields,
-    WelfareScenario,
+    BusinessType, CardForm, GoodsLineFields, LineType, VoucherLineDraft, VoucherLineFields, WelfareScenario,
 };
 
 /// 域内仍保留的 ID newtype 出口。

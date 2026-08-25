@@ -264,7 +264,7 @@ export function buildSalesOrderCreateLineItemColumns(
             : ([
                   {
                       id: "fulfillment",
-                      header: "交付日期",
+                      header: "承诺交付日",
                       renderValue: ({ item }) => item.dueDate || "—",
                       renderEditor: ({ rowIndex }) => (
                           <div className="min-w-32">
@@ -273,7 +273,7 @@ export function buildSalesOrderCreateLineItemColumns(
                               >
                                   {(field) => (
                                       <field.DateField
-                                          label="交付日期"
+                                          label="承诺交付日"
                                           hideLabel
                                       />
                                   )}

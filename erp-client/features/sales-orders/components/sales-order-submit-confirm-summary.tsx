@@ -13,7 +13,6 @@ export type SalesOrderSubmitLineSnapshot = {
     unit: string
     unitPriceGross: string
     amountGross: string
-    fulfillmentMode: string
     dueDate: string
     faceValue: string
     giftRate: string
@@ -28,7 +27,6 @@ export type SalesOrderSubmitSnapshot = {
     nature: SalesOrderNature
     welfareScene: string
     paymentTerms: string
-    fulfillmentMode: string
     fulfillmentDeadline: string
     targetMallId: string
     taxRatePercent: string
@@ -66,7 +64,6 @@ export function buildSalesOrderSubmitSnapshot(
             unit: line.unit,
             unitPriceGross: line.unitPriceGross,
             amountGross: lineGross(line.quantity, line.unitPriceGross),
-            fulfillmentMode: line.fulfillmentMode || values.fulfillmentMode,
             dueDate: line.dueDate,
             faceValue: line.faceValue,
             giftRate: line.giftRate,
@@ -80,7 +77,6 @@ export function buildSalesOrderSubmitSnapshot(
         nature: values.nature,
         welfareScene: values.welfareScene,
         paymentTerms: values.paymentTerms,
-        fulfillmentMode: values.fulfillmentMode,
         fulfillmentDeadline: values.fulfillmentDeadline,
         targetMallId: values.targetMallId,
         taxRatePercent: values.taxRatePercent,

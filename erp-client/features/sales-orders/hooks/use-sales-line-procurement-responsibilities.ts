@@ -19,7 +19,6 @@ export const salesLineProcurementResponsibilityKeys = {
                 rowKey: line.rowKey,
                 sku: line.sku,
                 skuRevisionId: line.skuRevisionId,
-                fulfillmentMode: line.fulfillmentMode,
                 serviceRegion: (line.serviceRegion ?? "").trim(),
             })),
         ] as const,

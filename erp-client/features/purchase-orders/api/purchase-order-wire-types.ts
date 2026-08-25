@@ -144,6 +144,7 @@ export type BackendBasisLine = {
     latest_cost_gross: string
     input_tax_rate: string
     expected_delivery_date: string
+    sales_delivery_deadline?: string | null
     product_name?: string | null
     specification?: string | null
     unit?: string | null

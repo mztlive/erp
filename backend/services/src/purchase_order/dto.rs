@@ -601,8 +601,10 @@ pub struct CreationBasisLineView {
     pub latest_cost_gross: String,
     /// 进项税率。
     pub input_tax_rate: String,
-    /// 预计交期（`YYYY-MM-DD`）。
+    /// 采购预计交付日预填值（`YYYY-MM-DD`）。
     pub expected_delivery_date: String,
+    /// 销售对客户承诺的最晚交付日（`YYYY-MM-DD`）。
+    pub sales_delivery_deadline: String,
     /// 商品名称快照（销售提交行侧联查，缺失时为空）。
     pub product_name: Option<String>,
     /// 规格快照。
@@ -636,9 +638,9 @@ pub struct CreationBasisView {
     pub supplier_id: String,
     /// 供应商名称。
     pub supplier_name: String,
-    /// 采购类型（由首条明细履约方式推导）。
+    /// 采购类型（由商品稳定业务类型确定）。
     pub purchase_type: String,
-    /// 履约责任（由首条明细履约方式推导）。
+    /// 履约责任（由采购在商品类型允许范围内选择）。
     pub fulfillment_responsibility: String,
     /// 付款条件（供应商商业资料快照，缺省 `NET-30`）。
     pub payment_term_code: String,
@@ -658,6 +660,9 @@ pub struct CreatePurchaseOrderLineRequest {
     /// 本次创建数量；事务内必须大于零且不超过最新可创建数量。
     #[validate(custom(function = "non_blank", message = "本次数量不能为空"))]
     pub quantity: String,
+    /// 采购确认的预计交付日，不得晚于销售承诺期限。
+    #[validate(custom(function = "non_blank", message = "预计交付日不能为空"))]
+    pub expected_delivery_date: String,
 }
 
 /// 依据创建采购单请求（精确拆单维度 + 逐行本次数量）。
@@ -698,19 +703,22 @@ pub struct CreatePurchaseOrderResult {
     pub reference: String,
 }
 
-/// 选源建单的单行供应商与数量。
+/// 选源建单的一条履约分配与数量。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SourcingLineAssignment {
     /// 销售稳定行身份。
     #[validate(custom(function = "non_blank", message = "销售行不能为空"))]
     pub sales_order_line_id: String,
-    /// 本行选用的供应商。
-    #[validate(custom(function = "non_blank", message = "供应商不能为空"))]
-    pub supplier_id: String,
+    /// 本行选用的精确创建依据，绑定供应商、采购类型、付款条件与履约责任。
+    #[validate(custom(function = "non_blank", message = "履约方案不能为空"))]
+    pub basis_id: String,
     /// 本次创建数量；事务内必须大于零且不超过最新可创建数量。
     #[validate(custom(function = "non_blank", message = "本次数量不能为空"))]
     pub quantity: String,
+    /// 采购确认的预计交付日，不得晚于销售承诺期限。
+    #[validate(custom(function = "non_blank", message = "预计交付日不能为空"))]
+    pub expected_delivery_date: String,
 }
 
 /// 按选源结果一次创建多张采购单并提交审批的请求。
@@ -723,7 +731,7 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
     /// 来源销售单。
     #[validate(custom(function = "non_blank", message = "销售单不能为空"))]
     pub sales_order_id: String,
-    /// 已选定供应商的采购明细；同一销售行只能出现一次。
+    /// 已选定履约方案的采购分配；同一销售行允许按不同依据拆分。
     #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
     pub lines: Vec<SourcingLineAssignment>,
     /// 幂等键（同一命令重复创建并提交时返回同一批采购单）。
@@ -1195,7 +1203,11 @@ mod tests {
             "basis_id": "   ",
             "purchase_type": "PHYSICAL",
             "payment_term_code": "NET-30",
-            "lines": [{ "sales_order_line_id": "sol-1", "quantity": "1" }],
+            "lines": [{
+                "sales_order_line_id": "sol-1",
+                "quantity": "1",
+                "expected_delivery_date": "2026-09-01"
+            }],
             "idempotency_key": "k-1",
         }))
         .unwrap();

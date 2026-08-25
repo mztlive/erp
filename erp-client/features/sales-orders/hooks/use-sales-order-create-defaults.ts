@@ -44,10 +44,6 @@ export function useSalesOrderCreateDefaults({
             nature,
             ownerUserId: "",
             ownerName: "",
-            fulfillmentMode:
-                initialDraft?.lineItems.find((line) => line.fulfillmentMode)
-                    ?.fulfillmentMode ??
-                (nature === "physical_service" ? "公司仓发" : ""),
             welfareScene: initialDraft?.welfareScene ?? "",
             paymentTerms: initialDraft?.paymentTerms ?? "",
             fulfillmentDeadline: initialDraft?.fulfillmentDeadline ?? "",

@@ -182,24 +182,6 @@ function mapCloseEligibilityFromBackend(
     }
 }
 
-/** 后端履约方式码 → 建单/详情展示中文；无法识别时原样回退。 */
-export function mapFulfillmentModeFromBackend(
-    code: string | null | undefined,
-): string {
-    switch ((code ?? "").trim()) {
-        case "COMPANY_WAREHOUSE":
-            return "公司仓发"
-        case "SUPPLIER_DIRECT":
-            return "供应商直发"
-        case "ELECTRONIC_DELIVERY":
-            return "电子交付"
-        case "OFFLINE_SERVICE":
-            return "线下服务"
-        default:
-            return code?.trim() || ""
-    }
-}
-
 export function mapWorkingCopyLines(
     lines: BackendWorkingCopyLine[] | undefined,
 ): SalesOrderLineItem[] {
@@ -241,10 +223,6 @@ export function mapWorkingCopyLines(
                       ? "电子卡"
                       : (line.card_form ?? undefined)
         } else {
-            const fulfillmentMode = mapFulfillmentModeFromBackend(
-                line.fulfillment_mode,
-            )
-            if (fulfillmentMode) item.fulfillmentMode = fulfillmentMode
             const serviceRegion = line.service_region?.trim()
             if (serviceRegion) item.serviceRegion = serviceRegion
             const dueDate = formatEpochDate(line.fulfillment_due_at)

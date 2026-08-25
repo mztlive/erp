@@ -23,7 +23,7 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
-use super::types::{CardForm, FulfillmentMode, GoodsLineFields, LineType, WelfareScenario};
+use super::types::{CardForm, GoodsLineFields, LineType, WelfareScenario};
 use super::working_copy::SalesOrderWorkingCopyLineData;
 
 /// 内容指纹最大长度。
@@ -422,7 +422,6 @@ impl SalesOrderRevisionLine {
                 sku_revision_id: goods.sku_revision_id.clone(),
                 welfare_scenario: goods.welfare_scenario,
                 service_region: goods.service_region.clone(),
-                fulfillment_mode: goods.fulfillment_mode,
                 fulfillment_due_at: goods.fulfillment_due_at,
                 quantity: goods.quantity,
                 base_unit_code: goods.base_unit_code.clone(),
@@ -446,9 +445,7 @@ pub struct SalesOrderGoodsServiceLineRevisionData {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 履约方式。
-    pub fulfillment_mode: FulfillmentMode,
-    /// 本明细履约期限。
+    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
     pub quantity: Quantity,
@@ -473,9 +470,7 @@ pub struct SalesOrderGoodsServiceLineRevision {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 履约方式。
-    pub fulfillment_mode: FulfillmentMode,
-    /// 本明细履约期限。
+    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
     pub quantity: Quantity,
@@ -516,7 +511,6 @@ impl SalesOrderGoodsServiceLineRevision {
             sku_revision_id: data.sku_revision_id,
             welfare_scenario: data.welfare_scenario,
             service_region: data.service_region,
-            fulfillment_mode: data.fulfillment_mode,
             fulfillment_due_at: data.fulfillment_due_at,
             quantity: data.quantity,
             base_unit_code,
@@ -812,7 +806,6 @@ mod tests {
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
                 service_region: Some("EAST".to_string()),
-                fulfillment_mode: FulfillmentMode::SupplierDirect,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("3.000000").unwrap(),
                 base_unit_code: " 箱 ".to_string(),
@@ -822,7 +815,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(line.base_unit_code, "箱");
-        assert_eq!(line.fulfillment_mode, FulfillmentMode::SupplierDirect);
         assert_eq!(line.unit_price_gross, price("9.9900"));
 
         let blank_unit = SalesOrderGoodsServiceLineRevisionData {
@@ -843,7 +835,6 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
             service_region: None,
-            fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str("3.000000").unwrap(),
             base_unit_code: "箱".to_string(),

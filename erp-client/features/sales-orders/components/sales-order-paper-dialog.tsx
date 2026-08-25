@@ -141,7 +141,7 @@ export function SalesOrderPaperDocument({
                 },
                 {
                     id: "deadline",
-                    label: isCard ? "卡券履约期限" : "履约期限摘要",
+                    label: isCard ? "卡券履约期限" : "客户承诺期限摘要",
                     value: order.fulfillmentDeadline,
                     numeric: true,
                 },
@@ -239,13 +239,8 @@ export function SalesOrderPaperDocument({
                               ),
                           },
                           {
-                              id: "mode",
-                              header: "履约方式",
-                              cell: (row) => row.fulfillmentMode ?? "—",
-                          },
-                          {
                               id: "due",
-                              header: "履约期限",
+                              header: "承诺交付日",
                               numeric: true,
                               cell: (row) => row.dueDate ?? "—",
                           },

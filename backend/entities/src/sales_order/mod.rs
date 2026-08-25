@@ -49,8 +49,8 @@ pub use submission::{
     SubmissionStatus,
 };
 pub use types::{
-    BusinessType, CardForm, ExternalIdentityResolution, FulfillmentMode, GoodsLineFields, LineType,
-    OriginSystem, VoucherLineDraft, VoucherLineFields, WelfareScenario,
+    BusinessType, CardForm, ExternalIdentityResolution, GoodsLineFields, LineType, OriginSystem,
+    VoucherLineDraft, VoucherLineFields, WelfareScenario,
 };
 pub use working_copy::{
     SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine,

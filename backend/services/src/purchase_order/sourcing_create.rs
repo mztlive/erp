@@ -1,15 +1,17 @@
 //! 按选源结果一次创建多张采购单并提交审批。
 //!
-//! 销售明细选定供应商后，按供应商、采购类型、付款条件和履约责任拆成多张采购单，
+//! 采购为销售明细选定精确履约依据后，按供应商、采购类型、付款条件和履约责任拆成多张采购单，
 //! 并在同一事务内推进一次采购 guard 后写入全部采购单并启动审批。
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{AccessControlExt, Executor, NoTransaction, SalesOrderExt};
-use entities::ids::{SalesOrderId, SupplierAccountId};
+use entities::common::time::BusinessDate;
+use entities::ids::SalesOrderId;
 use entities::money::Quantity;
 use mongodb::ClientSession;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -68,7 +70,7 @@ impl PurchaseOrderService {
     /// 按选源行一次创建多张采购单并提交审批。
     ///
     /// # 参数
-    /// * `req` - 来源销售单、建单任务、逐行供应商与数量、幂等键
+    /// * `req` - 来源销售单、建单任务、逐行履约依据与数量、幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -79,7 +81,7 @@ impl PurchaseOrderService {
     /// 事务内最新剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 同一销售行只能指定一家供应商；供应商、采购类型、付款条件或履约责任任一不同即拆单；
+    /// 同一销售行可按不同精确依据拆分；供应商、采购类型、付款条件或履约责任任一不同即拆单；
     /// 操作人授权版本通过 policy CAS 与提交绑定，事务内只推进一次销售单采购 guard；
     /// 创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_sourcing(
@@ -205,10 +207,11 @@ async fn create_from_sourcing_in_transaction(
         load_owned_open_procurement_task(db, &req.work_item_id, sales_order_id, actor.id(), session).await?;
     let mut order = load_effective_sales_order(db, sales_order_id, session).await?;
     let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
-    let plans = plan_sourcing_drafts(&groups, assignments)?;
+    let plans = plan_sourcing_drafts(&order, &groups, &req.work_item_id, assignments)?;
     order.advance_procurement_guard(actor.id())?;
     db.sales_orders().update(&mut order, session).await?;
     let latest_groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    validate_sourcing_totals(&plans, &latest_groups)?;
     let mut orders = Vec::with_capacity(plans.len());
     for plan in plans {
         let latest = latest_groups
@@ -228,6 +231,7 @@ async fn create_from_sourcing_in_transaction(
                 .map(|line| CreatePurchaseOrderLineRequest {
                     sales_order_line_id: line.sales_order_line_id.clone(),
                     quantity: line.quantity.to_string(),
+                    expected_delivery_date: line.expected_delivery_date.to_string(),
                 })
                 .collect(),
             idempotency_key: req.idempotency_key.clone(),
@@ -271,10 +275,12 @@ async fn create_from_sourcing_in_transaction(
 struct RequestedSourcingLine {
     /// 稳定销售行。
     sales_order_line_id: String,
-    /// 本行选用的供应商。
-    supplier_id: String,
+    /// 本行选用的精确创建依据。
+    basis_id: String,
     /// 本次采购数量。
     quantity: Quantity,
+    /// 采购确认的预计交付日。
+    expected_delivery_date: BusinessDate,
 }
 
 /// 规范化并校验选源行。
@@ -283,13 +289,13 @@ struct RequestedSourcingLine {
 /// * `req` - 选源创建请求
 ///
 /// # 返回
-/// 返回稳定行去重、数量已类型化且按销售行排序的选源行。
+/// 返回履约分配去重、数量已类型化且稳定排序的选源行。
 ///
 /// # 错误
-/// 稳定行重复、供应商空白、数量非法或数量不大于零时返回校验错误。
+/// 同一销售行重复使用同一依据、依据空白、数量非法或数量不大于零时返回校验错误。
 ///
 /// # 关键业务约束
-/// 同一稳定销售行在一次选源命令中只能指定一家供应商。
+/// 同一稳定销售行可按不同依据拆分，但同一依据只能出现一次。
 fn normalize_sourcing_assignments(
     req: &CreatePurchaseOrdersFromSourcingRequest,
 ) -> Result<Vec<RequestedSourcingLine>> {
@@ -297,18 +303,22 @@ fn normalize_sourcing_assignments(
     let mut lines = Vec::with_capacity(req.lines.len());
     for line in &req.lines {
         let sales_order_line_id = line.sales_order_line_id.trim().to_string();
-        let supplier_id = line.supplier_id.trim().to_string();
+        let basis_id = line.basis_id.trim().to_string();
         if sales_order_line_id.is_empty() {
             return Err(Error::ValidationError("销售行不能为空".to_string()));
         }
-        if supplier_id.is_empty() {
-            return Err(Error::ValidationError("供应商不能为空".to_string()));
+        if basis_id.is_empty() {
+            return Err(Error::ValidationError("履约方案不能为空".to_string()));
         }
-        if !seen.insert(sales_order_line_id.clone()) {
-            return Err(Error::ValidationError("本次采购明细包含重复销售行".to_string()));
+        if !seen.insert((sales_order_line_id.clone(), basis_id.clone())) {
+            return Err(Error::ValidationError(
+                "同一销售行不能重复使用同一履约方案".to_string(),
+            ));
         }
         let quantity = Quantity::from_str(line.quantity.trim())
             .map_err(|error| Error::ValidationError(format!("本次数量非法: {error}")))?;
+        let expected_delivery_date = BusinessDate::from_str(line.expected_delivery_date.trim())
+            .map_err(|error| Error::ValidationError(format!("预计交付日非法: {error}")))?;
         let zero =
             Quantity::from_str("0").map_err(|error| Error::Internal(format!("零数量常量非法: {error}")))?;
         if quantity <= zero {
@@ -316,11 +326,16 @@ fn normalize_sourcing_assignments(
         }
         lines.push(RequestedSourcingLine {
             sales_order_line_id,
-            supplier_id,
+            basis_id,
             quantity,
+            expected_delivery_date,
         });
     }
-    lines.sort_by(|left, right| left.sales_order_line_id.cmp(&right.sales_order_line_id));
+    lines.sort_by(|left, right| {
+        left.sales_order_line_id
+            .cmp(&right.sales_order_line_id)
+            .then_with(|| left.basis_id.cmp(&right.basis_id))
+    });
     Ok(lines)
 }
 
@@ -339,16 +354,19 @@ fn normalize_sourcing_assignments(
 /// # 关键业务约束
 /// 同一拆分维度的选源行合并为一张采购单。
 fn plan_sourcing_drafts(
+    order: &entities::sales_order::SalesOrder,
     groups: &[BasisGroup],
+    work_item_id: &str,
     assignments: &[RequestedSourcingLine],
 ) -> Result<Vec<SourcingDraftPlan>> {
     let mut plans: BTreeMap<String, SourcingDraftPlan> = BTreeMap::new();
     for assignment in assignments {
-        let group = find_assignment_group(groups, assignment)?;
+        let group = find_assignment_group(order, groups, work_item_id, assignment)?;
         let key = basis_scope_key(&group.scope);
         let requested = RequestedLine {
             sales_order_line_id: assignment.sales_order_line_id.clone(),
             quantity: assignment.quantity,
+            expected_delivery_date: assignment.expected_delivery_date,
         };
         if let Some(plan) = plans.get_mut(&key) {
             plan.requested_lines.push(requested);
@@ -372,40 +390,94 @@ fn plan_sourcing_drafts(
 /// * `assignment` - 已规范化选源行
 ///
 /// # 返回
-/// 返回同时包含该销售行与该供应商的依据分组。
+/// 返回同时包含该销售行且 ID 与客户端选择一致的依据分组。
 ///
 /// # 错误
-/// 销售行不存在或供应商对该行没有合格供给时返回校验错误。
+/// 销售行不存在或依据已失效时返回校验错误。
 ///
 /// # 关键业务约束
-/// 不以 SKU 猜测供给，只接受当前合格依据中已确定的供应商。
+/// 不以供应商或 SKU 猜测路线，只接受当前开放任务生成的精确依据。
 fn find_assignment_group<'a>(
+    order: &entities::sales_order::SalesOrder,
     groups: &'a [BasisGroup],
+    work_item_id: &str,
     assignment: &RequestedSourcingLine,
 ) -> Result<&'a BasisGroup> {
-    let supplier_id = SupplierAccountId::new(assignment.supplier_id.clone());
-    let mut matched = None;
-    for group in groups {
-        let contains_line = group
-            .lines
+    groups
+        .iter()
+        .find(|group| {
+            basis_id_for(order, group, work_item_id) == assignment.basis_id
+                && group
+                    .lines
+                    .iter()
+                    .any(|line| stable_line_id(line) == assignment.sales_order_line_id)
+        })
+        .ok_or_else(procurement_quantity_changed)
+}
+
+/// 校验跨采购单拆分后的销售行总量与单一供给总量。
+///
+/// # 参数
+/// * `plans` - guard 推进前按精确依据形成的建单计划
+/// * `latest_groups` - guard 推进后重新计算的最新依据
+///
+/// # 返回
+/// 所有拆分数量均未超过最新销售剩余量和供给上限时返回 `Ok(())`。
+///
+/// # 错误
+/// 依据失效、销售行累计超量或同一供给跨履约责任累计超量时返回并发冲突。
+///
+/// # 关键业务约束
+/// 一条销售行可以拆到多个方案，但一次命令的总量不得突破同一份最新剩余量；
+/// 同一供应商供给跨销售行或履约责任时仍共享该供给的可用量。
+fn validate_sourcing_totals(plans: &[SourcingDraftPlan], latest_groups: &[BasisGroup]) -> Result<()> {
+    let mut line_totals = HashMap::<String, Decimal>::new();
+    let mut line_caps = HashMap::<String, Decimal>::new();
+    let mut supply_totals = HashMap::<String, Decimal>::new();
+    let mut supply_caps = HashMap::<String, Decimal>::new();
+    for plan in plans {
+        let latest = latest_groups
             .iter()
-            .any(|line| stable_line_id(line) == assignment.sales_order_line_id);
-        if !contains_line {
-            continue;
+            .find(|group| group.scope == plan.group.scope)
+            .ok_or_else(procurement_quantity_changed)?;
+        for requested in &plan.requested_lines {
+            let basis = latest
+                .lines
+                .iter()
+                .find(|line| stable_line_id(line) == requested.sales_order_line_id)
+                .ok_or_else(procurement_quantity_changed)?;
+            *line_totals
+                .entry(requested.sales_order_line_id.clone())
+                .or_insert(Decimal::ZERO) += requested.quantity.to_decimal();
+            line_caps.insert(
+                requested.sales_order_line_id.clone(),
+                basis.coverage.summary.remaining_quantity.to_decimal(),
+            );
+            let supply_key = basis.supply.offering.base.id.clone();
+            *supply_totals.entry(supply_key.clone()).or_insert(Decimal::ZERO) +=
+                requested.quantity.to_decimal();
+            supply_caps.insert(
+                supply_key,
+                basis
+                    .supply
+                    .availability
+                    .available_quantity
+                    .map(Quantity::to_decimal)
+                    .unwrap_or(Decimal::MAX),
+            );
         }
-        if group.scope.supplier_id != supplier_id {
-            continue;
-        }
-        if matched.is_some() {
-            return Err(Error::ConflictError(
-                "同一销售行对同一供应商存在多条创建依据，请刷新后重试".to_string(),
-            ));
-        }
-        matched = Some(group);
     }
-    matched.ok_or_else(|| {
-        Error::ValidationError("所选供应商对当前销售行没有合格供给，或该行不在当前采购任务范围内".to_string())
-    })
+    if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&supply_totals, &supply_caps) {
+        return Err(procurement_quantity_changed());
+    }
+    Ok(())
+}
+
+/// 判断任一累计数量是否缺少上限或超过上限。
+fn exceeds_any_cap(totals: &HashMap<String, Decimal>, caps: &HashMap<String, Decimal>) -> bool {
+    totals
+        .iter()
+        .any(|(key, total)| caps.get(key).is_none_or(|cap| total > cap))
 }
 
 /// 构造选源命令载荷指纹。
@@ -431,8 +503,9 @@ fn sourcing_request_fingerprint(
         .map(|line| {
             (
                 line.sales_order_line_id.clone(),
-                line.supplier_id.clone(),
+                line.basis_id.clone(),
                 line.quantity.to_string(),
+                line.expected_delivery_date.to_string(),
             )
         })
         .collect::<Vec<_>>();
@@ -547,23 +620,40 @@ async fn replay_sourcing(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
-    use super::{find_assignment_group_index, normalize_assignment_pairs, DedupError, RequestedSourcingLine};
+    use entities::common::time::BusinessDate;
+    use rust_decimal::Decimal;
 
-    /// 同一销售行不能指定两次供应商。
+    use super::{
+        exceeds_any_cap, find_assignment_group_index, normalize_assignment_pairs, DedupError,
+        RequestedSourcingLine,
+    };
+
+    /// 同一销售行可拆到不同履约方案。
     #[test]
-    fn duplicate_sales_lines_are_rejected() {
-        let error = normalize_assignment_pairs(&[("line-1", "sup-a", "1"), ("line-1", "sup-b", "1")])
-            .expect_err("重复销售行必须失败");
-        assert!(matches!(error, DedupError::DuplicateLine));
+    fn one_sales_line_can_use_different_bases() {
+        normalize_assignment_pairs(&[("line-1", "basis-a", "1"), ("line-1", "basis-b", "1")])
+            .expect("不同履约方案允许拆分");
     }
 
-    /// 不同销售行指定同一供应商时应归入同一分组下标。
+    /// 同一销售行不能重复使用同一履约方案。
     #[test]
-    fn same_supplier_lines_share_one_group() {
-        let groups = [("sup-a", &["line-1", "line-2"][..]), ("sup-b", &["line-1"][..])];
-        let assignments = [line("line-1", "sup-a"), line("line-2", "sup-a")];
+    fn duplicate_line_and_basis_are_rejected() {
+        let error = normalize_assignment_pairs(&[("line-1", "basis-a", "1"), ("line-1", "basis-a", "1")])
+            .expect_err("重复履约分配必须失败");
+        assert!(matches!(error, DedupError::DuplicateAllocation));
+    }
+
+    /// 不同销售行指定同一精确依据时应归入同一分组下标。
+    #[test]
+    fn same_basis_lines_share_one_group() {
+        let groups = [
+            ("basis-a", &["line-1", "line-2"][..]),
+            ("basis-b", &["line-1"][..]),
+        ];
+        let assignments = [line("line-1", "basis-a"), line("line-2", "basis-a")];
         let indexes = assignments
             .iter()
             .map(|assignment| find_assignment_group_index(&groups, assignment).expect("应命中供给"))
@@ -571,20 +661,29 @@ mod tests {
         assert_eq!(indexes, vec![0, 0]);
     }
 
-    /// 不同供应商必须拆到不同分组。
+    /// 不同精确依据必须拆到不同分组。
     #[test]
-    fn different_suppliers_split_groups() {
-        let groups = [("sup-a", &["line-1"][..]), ("sup-b", &["line-2"][..])];
-        let first = find_assignment_group_index(&groups, &line("line-1", "sup-a")).expect("A");
-        let second = find_assignment_group_index(&groups, &line("line-2", "sup-b")).expect("B");
+    fn different_bases_split_groups() {
+        let groups = [("basis-a", &["line-1"][..]), ("basis-b", &["line-2"][..])];
+        let first = find_assignment_group_index(&groups, &line("line-1", "basis-a")).expect("A");
+        let second = find_assignment_group_index(&groups, &line("line-2", "basis-b")).expect("B");
         assert_ne!(first, second);
     }
 
-    /// 销售行没有该供应商供给时不能建单。
+    /// 销售行不属于该精确依据时不能建单。
     #[test]
-    fn missing_supplier_option_is_rejected() {
-        let groups = [("sup-a", &["line-1"][..])];
-        assert!(find_assignment_group_index(&groups, &line("line-1", "sup-b")).is_none());
+    fn missing_basis_option_is_rejected() {
+        let groups = [("basis-a", &["line-1"][..])];
+        assert!(find_assignment_group_index(&groups, &line("line-1", "basis-b")).is_none());
+    }
+
+    /// 拆分数量合计不得超过事务内最新上限。
+    #[test]
+    fn split_totals_must_stay_within_latest_cap() {
+        let totals = HashMap::from([("line-1".to_string(), Decimal::from_str("11").unwrap())]);
+        let caps = HashMap::from([("line-1".to_string(), Decimal::from_str("10").unwrap())]);
+
+        assert!(exceeds_any_cap(&totals, &caps));
     }
 
     /// 验证选源创建的操作人授权提交栅栏。
@@ -602,11 +701,12 @@ mod tests {
     }
 
     /// 构造测试用选源行。
-    fn line(sales_order_line_id: &str, supplier_id: &str) -> RequestedSourcingLine {
+    fn line(sales_order_line_id: &str, basis_id: &str) -> RequestedSourcingLine {
         RequestedSourcingLine {
             sales_order_line_id: sales_order_line_id.to_string(),
-            supplier_id: supplier_id.to_string(),
+            basis_id: basis_id.to_string(),
             quantity: entities::money::Quantity::from_str("1").expect("测试数量合法"),
+            expected_delivery_date: BusinessDate::from_str("2026-09-01").expect("测试日期合法"),
         }
     }
 }
@@ -615,35 +715,35 @@ mod tests {
 #[cfg(test)]
 #[derive(Debug)]
 enum DedupError {
-    /// 同一销售行出现多次。
-    DuplicateLine,
+    /// 同一销售行与精确依据组合出现多次。
+    DuplicateAllocation,
 }
 
-/// 测试辅助：只校验销售行去重。
+/// 测试辅助：校验销售行与精确依据组合去重。
 ///
 /// # 参数
-/// * `pairs` - `(销售行, 供应商, 数量)` 三元组
+/// * `pairs` - `(销售行, 精确依据, 数量)` 三元组
 ///
 /// # 返回
 /// 无重复时返回 `Ok(())`。
 ///
 /// # 错误
-/// 销售行重复时返回 `DedupError::DuplicateLine`。
+/// 销售行与依据组合重复时返回 `DedupError::DuplicateAllocation`。
 #[cfg(test)]
 fn normalize_assignment_pairs(pairs: &[(&str, &str, &str)]) -> std::result::Result<(), DedupError> {
     let mut seen = HashSet::new();
-    for (line_id, _, _) in pairs {
-        if !seen.insert(*line_id) {
-            return Err(DedupError::DuplicateLine);
+    for (line_id, basis_id, _) in pairs {
+        if !seen.insert((*line_id, *basis_id)) {
+            return Err(DedupError::DuplicateAllocation);
         }
     }
     Ok(())
 }
 
-/// 测试辅助：按供应商与销售行查找分组下标。
+/// 测试辅助：按精确依据与销售行查找分组下标。
 ///
 /// # 参数
-/// * `groups` - `(供应商, 销售行列表)` 分组
+/// * `groups` - `(精确依据, 销售行列表)` 分组
 /// * `assignment` - 选源行
 ///
 /// # 返回
@@ -656,8 +756,8 @@ fn find_assignment_group_index(
     groups: &[(&str, &[&str])],
     assignment: &RequestedSourcingLine,
 ) -> Option<usize> {
-    groups.iter().position(|(supplier_id, lines)| {
-        *supplier_id == assignment.supplier_id
+    groups.iter().position(|(basis_id, lines)| {
+        *basis_id == assignment.basis_id
             && lines
                 .iter()
                 .any(|line_id| *line_id == assignment.sales_order_line_id)

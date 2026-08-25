@@ -141,6 +141,27 @@ impl Pagination for ProductFilter {
     }
 }
 
+impl<'a> Repository<'a, Product> {
+    /// 按稳定主键批量查询商品。
+    ///
+    /// # 参数
+    /// * `ids` - 商品稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回匹配的未删除商品实体。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_ids(&self, ids: &[ProductId], executor: &mut dyn Executor) -> Result<Vec<Product>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
+            .await
+    }
+}
+
 /// 商品修订列表投影行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProductRevisionRow {

@@ -4,7 +4,6 @@ export {
     formatEpochDate,
     formatInstant,
     formatIsoNow,
-    mapFulfillmentModeFromBackend,
     mapListItemFromBackend,
     mapNature,
     throwValidation,
@@ -121,14 +120,6 @@ export function mapSortBy(
     if (sortBy === "submittedAt") return "created_at"
     // amountGross / contractNumber / ownerName 不在后端白名单
     return "created_at"
-}
-
-export function mapFulfillmentMode(label: string): string {
-    const t = label.trim()
-    if (t.includes("直发")) return "SUPPLIER_DIRECT"
-    if (t.includes("电子")) return "ELECTRONIC_DELIVERY"
-    if (t.includes("服务") || t.includes("线下")) return "OFFLINE_SERVICE"
-    return "COMPANY_WAREHOUSE"
 }
 
 export function mapCardForm(label: string): string {

@@ -311,6 +311,7 @@ export async function createPurchaseOrderFromBasis(
                 lines: input.lines.map((line) => ({
                     sales_order_line_id: line.salesOrderLineId,
                     quantity: line.quantity,
+                    expected_delivery_date: line.expectedDeliveryDate,
                 })),
                 idempotency_key: input.idempotencyKey,
             },
@@ -358,7 +359,7 @@ function mapCreatedDraft(data: BackendCreateResult): CreatedPurchaseOrderDraft {
 /**
  * 按选源行一次创建多张采购单并提交审批。
  *
- * @param input 来源销售单、任务、逐行供应商与数量、幂等键。
+ * @param input 来源销售单、任务、逐行履约依据与数量、幂等键。
  * @returns 正式命令结果；409 视为可采购数量冲突。
  */
 export async function createPurchaseOrdersFromSourcing(
@@ -372,8 +373,9 @@ export async function createPurchaseOrdersFromSourcing(
                 sales_order_id: input.salesOrderId,
                 lines: input.lines.map((line) => ({
                     sales_order_line_id: line.salesOrderLineId,
-                    supplier_id: line.supplierId,
+                    basis_id: line.basisId,
                     quantity: line.quantity,
+                    expected_delivery_date: line.expectedDeliveryDate,
                 })),
                 idempotency_key: input.idempotencyKey,
             },

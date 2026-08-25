@@ -25,7 +25,6 @@ export type SalesOrderDraftLineInput = {
     quantity: string
     unit: string
     unitPriceGross: string
-    fulfillmentMode: string
     dueDate: string
     faceValue: string
     giftRate: string
@@ -96,11 +95,9 @@ export type SalesOrderLineItem = {
     giftRate?: string
     /** 卡券：电子卡 / 实体卡 */
     cardForm?: string
-    /** 实物服务：履约方式 */
-    fulfillmentMode?: string
     /** 采购责任解析使用的服务区域。 */
     serviceRegion?: string
-    /** 明细履约期限（实物） */
+    /** 对客户承诺的明细最晚交付日（实物/服务）。 */
     dueDate?: string
 }
 
@@ -254,7 +251,7 @@ export type SalesOrderListItem = {
     paymentTerms: string
     /** 建单时统一填写的销项税率百分数，如 13.00。 */
     taxRatePercent?: string
-    /** 表头履约期限（卡券全单；实物为摘要文案） */
+    /** 表头履约期限（卡券全单；实物为客户承诺期限摘要） */
     fulfillmentDeadline: string
     /** 卡券执行目标商城展示名；非卡券或无法解析时为空。 */
     targetMallName?: string

@@ -21,26 +21,6 @@ pub(super) fn convert_line_type_to_sales(
     }
 }
 
-/// D14 履约方式 → D13 同形类型转换。
-fn convert_fulfillment_mode_to_sales(
-    value: entities::sales_review::FulfillmentMode,
-) -> entities::sales_order::FulfillmentMode {
-    match value {
-        entities::sales_review::FulfillmentMode::CompanyWarehouse => {
-            entities::sales_order::FulfillmentMode::CompanyWarehouse
-        }
-        entities::sales_review::FulfillmentMode::SupplierDirect => {
-            entities::sales_order::FulfillmentMode::SupplierDirect
-        }
-        entities::sales_review::FulfillmentMode::ElectronicDelivery => {
-            entities::sales_order::FulfillmentMode::ElectronicDelivery
-        }
-        entities::sales_review::FulfillmentMode::OfflineService => {
-            entities::sales_order::FulfillmentMode::OfflineService
-        }
-    }
-}
-
 /// D14 福利场景 → D13 同形类型转换。
 fn convert_welfare_scenario_to_sales(
     value: entities::sales_review::WelfareScenario,
@@ -81,10 +61,6 @@ pub(super) fn change_submission_goods(line: &SalesChangeSubmissionLine) -> Resul
         .sku_revision_id
         .clone()
         .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU 修订", line.line_no)))?;
-    let fulfillment_mode = line
-        .fulfillment_mode
-        .map(convert_fulfillment_mode_to_sales)
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约方式", line.line_no)))?;
     let fulfillment_due_at = line
         .fulfillment_due_at
         .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约期限", line.line_no)))?;
@@ -103,7 +79,6 @@ pub(super) fn change_submission_goods(line: &SalesChangeSubmissionLine) -> Resul
         sku_revision_id,
         welfare_scenario: line.welfare_scenario.map(convert_welfare_scenario_to_sales),
         service_region: line.service_region.clone(),
-        fulfillment_mode,
         fulfillment_due_at,
         quantity,
         base_unit_code,

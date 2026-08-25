@@ -298,6 +298,8 @@ export type PurchaseCreationBasis = Readonly<{
         unitCostGross: string
         inputTaxRate: string
         expectedDeliveryDate: string
+        /** 销售对客户承诺的最晚交付日。 */
+        salesDeliveryDeadline: string
         salesAllocationLabel: string
     }[]
     estimatedGross: string
@@ -373,6 +375,7 @@ export type CreatePurchaseOrderFromBasisInput = {
     lines: Array<{
         salesOrderLineId: string
         quantity: string
+        expectedDeliveryDate: string
     }>
     idempotencyKey: string
 }
@@ -382,8 +385,9 @@ export type CreatePurchaseOrdersFromSourcingInput = {
     salesOrderId: string
     lines: Array<{
         salesOrderLineId: string
-        supplierId: string
+        basisId: string
         quantity: string
+        expectedDeliveryDate: string
     }>
     idempotencyKey: string
 }

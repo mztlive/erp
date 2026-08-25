@@ -12,6 +12,7 @@ use database::{
     AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PartyExt, PurchaseOrderExt,
     SalesOrderExt, SupplierExt, SupplierOfferingExt, WorkItemExt,
 };
+use entities::catalog::ProductKind;
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::DocumentType;
 use entities::ids::{
@@ -24,7 +25,6 @@ use entities::purchase_order::{
     PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseType,
     SupplierSnapshot,
 };
-use entities::sales_order::types::FulfillmentMode;
 use entities::sales_order::{CommercialStatus, SalesOrder, SalesOrderRevision};
 use entities::supplier_offering::{
     AvailabilityStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
@@ -64,24 +64,24 @@ const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 
 /// 单条销售当前版本明细的合格供应商供给。
 #[derive(Debug, Clone)]
-struct LineSupply {
+pub(super) struct LineSupply {
     /// 供给稳定身份。
-    offering: SupplierOffering,
+    pub(super) offering: SupplierOffering,
     /// 当前有效商业条款修订。
-    revision: SupplierOfferingRevision,
+    pub(super) revision: SupplierOfferingRevision,
     /// 当前可供投影。
-    availability: SupplierOfferingAvailability,
+    pub(super) availability: SupplierOfferingAvailability,
 }
 
 /// 一条可进入精确创建依据的销售当前版本行。
 #[derive(Debug, Clone)]
 pub(super) struct BasisLine {
     /// 当前销售版本行及采购覆盖摘要。
-    coverage: SalesProcurementCoverageLine,
+    pub(super) coverage: SalesProcurementCoverageLine,
     /// 本供应商被确定选用的供给。
-    supply: LineSupply,
+    pub(super) supply: LineSupply,
     /// 本供应商本次最多可创建数量。
-    max_create_quantity: Quantity,
+    pub(super) max_create_quantity: Quantity,
 }
 
 /// 一张采购单的精确拆分维度。
@@ -115,6 +115,8 @@ pub(super) struct RequestedLine {
     pub(super) sales_order_line_id: String,
     /// 本次采购数量。
     pub(super) quantity: Quantity,
+    /// 采购确认的预计交付日。
+    pub(super) expected_delivery_date: BusinessDate,
 }
 
 /// 已通过事务内最新剩余量校验的采购行。
@@ -124,6 +126,8 @@ pub(super) struct SelectedLine {
     pub(super) basis: BasisLine,
     /// 本次采购数量。
     pub(super) quantity: Quantity,
+    /// 采购确认的预计交付日。
+    pub(super) expected_delivery_date: BusinessDate,
 }
 
 /// 幂等命令收据载荷。
@@ -531,13 +535,7 @@ async fn append_line_supplies(
                 value
             }
         };
-        let mode = line.goods_line.fulfillment_mode;
-        let scope = BasisScope {
-            supplier_id,
-            purchase_type: purchase_type_from_mode(mode),
-            payment_term_code,
-            fulfillment_responsibility: fulfillment_from_mode(mode),
-        };
+        let purchase_type = purchase_type_from_product_kind(line.product_kind)?;
         let max_create_quantity = maximum_create_quantity(
             line.summary.remaining_quantity,
             supply.availability.available_quantity,
@@ -545,19 +543,27 @@ async fn append_line_supplies(
         if max_create_quantity <= zero_quantity() {
             continue;
         }
-        let basis_line = BasisLine {
-            coverage: line.clone(),
-            supply,
-            max_create_quantity,
-        };
-        if let Some(group) = groups.iter_mut().find(|group| group.scope == scope) {
-            group.lines.push(basis_line);
-        } else {
-            groups.push(BasisGroup {
-                revision: revision.clone(),
-                scope,
-                lines: vec![basis_line],
-            });
+        for &fulfillment_responsibility in fulfillment_options(line.product_kind)? {
+            let scope = BasisScope {
+                supplier_id: supplier_id.clone(),
+                purchase_type,
+                payment_term_code: payment_term_code.clone(),
+                fulfillment_responsibility,
+            };
+            let basis_line = BasisLine {
+                coverage: line.clone(),
+                supply: supply.clone(),
+                max_create_quantity,
+            };
+            if let Some(group) = groups.iter_mut().find(|group| group.scope == scope) {
+                group.lines.push(basis_line);
+            } else {
+                groups.push(BasisGroup {
+                    revision: revision.clone(),
+                    scope,
+                    lines: vec![basis_line],
+                });
+            }
         }
     }
     Ok(())
@@ -695,7 +701,7 @@ async fn build_basis_view(
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {
-        let cost = supply_cost(&line.supply.revision, line.coverage.goods_line.fulfillment_mode);
+        let cost = supply_cost(&line.supply.revision, group.scope.fulfillment_responsibility);
         let (gross, _, _) = line_amounts(
             cost,
             line.max_create_quantity,
@@ -749,6 +755,7 @@ fn basis_line_view(
     cost: UnitPrice,
     gross: Amount,
 ) -> Result<CreationBasisLineView> {
+    let sales_delivery_deadline = business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string();
     Ok(CreationBasisLineView {
         sales_order_line_id: stable_line_id(line).to_string(),
         sales_order_revision_line_id: line.coverage.revision_line.base.id.clone(),
@@ -761,7 +768,8 @@ fn basis_line_view(
         confirmed_quantity: line.max_create_quantity.to_string(),
         latest_cost_gross: cost.to_string(),
         input_tax_rate: line.supply.revision.input_tax_rate.to_string(),
-        expected_delivery_date: business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string(),
+        expected_delivery_date: sales_delivery_deadline.clone(),
+        sales_delivery_deadline,
         product_name: Some(line.coverage.revision_line.item_name_snapshot.clone()),
         specification: line.coverage.revision_line.spec_snapshot.clone(),
         unit: line.coverage.revision_line.unit_snapshot.clone(),
@@ -815,7 +823,7 @@ pub(super) async fn persist_basis_draft(
     let supplier_name = resolve_supplier_name(db, &group.scope.supplier_id, session)
         .await?
         .unwrap_or_else(|| group.scope.supplier_id.to_string());
-    let computed = compute_selected_lines(selected_lines);
+    let computed = compute_selected_lines(selected_lines, group.scope.fulfillment_responsibility);
     let submission = build_draft_submission(
         db,
         &order_id,
@@ -894,14 +902,16 @@ struct ComputedLine {
 ///
 /// # 关键业务约束
 /// 表头只汇总逐行舍入后的金额。
-fn compute_selected_lines(selected_lines: &[SelectedLine]) -> ComputedSelection {
+fn compute_selected_lines(
+    selected_lines: &[SelectedLine],
+    responsibility: FulfillmentResponsibility,
+) -> ComputedSelection {
     let mut gross_total = zero_amount();
     let mut net_total = zero_amount();
     let mut tax_total = zero_amount();
     let mut lines = Vec::with_capacity(selected_lines.len());
     for selected in selected_lines {
-        let mode = selected.basis.coverage.goods_line.fulfillment_mode;
-        let cost = supply_cost(&selected.basis.supply.revision, mode);
+        let cost = supply_cost(&selected.basis.supply.revision, responsibility);
         let (gross, net, tax) = line_amounts(
             cost,
             selected.quantity,
@@ -999,7 +1009,7 @@ async fn build_draft_submission(
 /// 返回带稳定销售行和销售当前版本行的采购提交行。
 ///
 /// # 错误
-/// 履约期限日期非法或实体不变式失败时返回错误。
+/// 实体不变式失败时返回错误。
 ///
 /// # 关键业务约束
 /// `quantity` 与 `allocated_quantity` 均等于本次事务内校验数量。
@@ -1029,7 +1039,7 @@ fn build_submission_line(
             net_amount: line.net,
             tax_amount: line.tax,
             input_tax_rate: Some(basis.supply.revision.input_tax_rate),
-            expected_delivery_date: Some(business_date_of(basis.coverage.goods_line.fulfillment_due_at)?),
+            expected_delivery_date: Some(line.selected.expected_delivery_date),
             sales_order_line_id: Some(basis.coverage.revision_line.sales_order_line_id.clone()),
             sales_order_revision_line_id: Some(entities::ids::SalesOrderRevisionLineId::new(
                 basis.coverage.revision_line.base.id.clone(),
@@ -1208,12 +1218,15 @@ fn normalize_requested_lines(req: &CreatePurchaseOrderFromBasisRequest) -> Resul
         }
         let quantity = Quantity::from_str(line.quantity.trim())
             .map_err(|error| Error::ValidationError(format!("本次数量非法: {error}")))?;
+        let expected_delivery_date = BusinessDate::from_str(line.expected_delivery_date.trim())
+            .map_err(|error| Error::ValidationError(format!("预计交付日非法: {error}")))?;
         if quantity <= zero_quantity() {
             return Err(Error::ValidationError("本次数量必须大于 0".to_string()));
         }
         lines.push(RequestedLine {
             sales_order_line_id,
             quantity,
+            expected_delivery_date,
         });
     }
     lines.sort_by(|left, right| left.sales_order_line_id.cmp(&right.sales_order_line_id));
@@ -1250,12 +1263,38 @@ pub(super) fn validate_requested_quantities(
         {
             return Err(procurement_quantity_changed());
         }
+        let sales_due = business_date_of(basis.coverage.goods_line.fulfillment_due_at)?;
+        ensure_expected_delivery_within_sales_due(requested_line.expected_delivery_date, sales_due)?;
         selected.push(SelectedLine {
             basis: basis.clone(),
             quantity: requested_line.quantity,
+            expected_delivery_date: requested_line.expected_delivery_date,
         });
     }
     Ok(selected)
+}
+
+/// 校验采购预计交付日不突破销售对客户的承诺期限。
+///
+/// # 参数
+/// * `expected_delivery_date` - 采购确认的预计交付日
+/// * `sales_due` - 销售对客户承诺的最晚交付日
+///
+/// # 返回
+/// 预计交付日不晚于销售承诺期限时返回 `Ok(())`。
+///
+/// # 错误
+/// 预计交付日晚于销售承诺期限时返回校验错误。
+fn ensure_expected_delivery_within_sales_due(
+    expected_delivery_date: BusinessDate,
+    sales_due: BusinessDate,
+) -> Result<()> {
+    if expected_delivery_date > sales_due {
+        return Err(Error::ValidationError(format!(
+            "预计交付日不能晚于销售承诺期限 {sales_due}"
+        )));
+    }
+    Ok(())
 }
 
 /// 从依据 ID 提取销售单稳定身份。
@@ -1429,11 +1468,12 @@ fn create_request_fingerprint(req: &CreatePurchaseOrderFromBasisRequest, lines: 
         req.purchase_type.as_str().to_string(),
         req.payment_term_code.trim().to_string(),
     ];
-    parts.extend(
-        lines
-            .iter()
-            .map(|line| format!("{}|{}", line.sales_order_line_id, line.quantity)),
-    );
+    parts.extend(lines.iter().map(|line| {
+        format!(
+            "{}|{}|{}",
+            line.sales_order_line_id, line.quantity, line.expected_delivery_date
+        )
+    }));
     digest_parts(&parts)
 }
 
@@ -1682,7 +1722,7 @@ async fn resolve_payment_term_code(
 ///
 /// # 参数
 /// * `revision` - 当前有效供给条款
-/// * `mode` - 销售当前版本履约方式
+/// * `responsibility` - 本采购依据选择的履约责任
 ///
 /// # 返回
 /// 入仓返回集采价，其他方式返回一件代发价。
@@ -1692,55 +1732,63 @@ async fn resolve_payment_term_code(
 ///
 /// # 关键业务约束
 /// 成本只从依据确定的当前供给修订读取。
-fn supply_cost(revision: &SupplierOfferingRevision, mode: FulfillmentMode) -> UnitPrice {
-    match mode {
-        FulfillmentMode::CompanyWarehouse => revision.bulk_supply_price_gross,
-        FulfillmentMode::SupplierDirect
-        | FulfillmentMode::ElectronicDelivery
-        | FulfillmentMode::OfflineService => revision.dropship_supply_price_gross,
+fn supply_cost(revision: &SupplierOfferingRevision, responsibility: FulfillmentResponsibility) -> UnitPrice {
+    match responsibility {
+        FulfillmentResponsibility::Warehouse => revision.bulk_supply_price_gross,
+        FulfillmentResponsibility::SupplierDirect
+        | FulfillmentResponsibility::Electronic
+        | FulfillmentResponsibility::Service => revision.dropship_supply_price_gross,
     }
 }
 
-/// 由销售履约方式推导采购类型。
+/// 由商品稳定业务类型确定采购类型。
 ///
 /// # 参数
-/// * `mode` - 销售履约方式
+/// * `kind` - 商品稳定业务类型
 ///
 /// # 返回
-/// 返回采购类型。
+/// 返回采购类型；卡券不得进入商品/服务采购路径。
 ///
 /// # 错误
-/// 无。
+/// 卡券进入商品/服务采购路径时返回业务错误。
 ///
 /// # 关键业务约束
-/// 同一依据只包含相同采购类型。
-fn purchase_type_from_mode(mode: FulfillmentMode) -> PurchaseType {
-    match mode {
-        FulfillmentMode::CompanyWarehouse | FulfillmentMode::SupplierDirect => PurchaseType::Physical,
-        FulfillmentMode::ElectronicDelivery => PurchaseType::Virtual,
-        FulfillmentMode::OfflineService => PurchaseType::Service,
+/// 销售不得提交或覆盖采购类型。
+fn purchase_type_from_product_kind(kind: ProductKind) -> Result<PurchaseType> {
+    match kind {
+        ProductKind::Physical => Ok(PurchaseType::Physical),
+        ProductKind::Virtual => Ok(PurchaseType::Virtual),
+        ProductKind::OfflineService => Ok(PurchaseType::Service),
+        ProductKind::Voucher => Err(Error::BusinessLogicError(
+            "卡券商品不能进入商品/服务采购建单路径".to_string(),
+        )),
     }
 }
 
-/// 由销售履约方式推导采购履约责任。
+/// 返回商品类型允许采购选择的履约责任。
 ///
 /// # 参数
-/// * `mode` - 销售履约方式
+/// * `kind` - 商品稳定业务类型
 ///
 /// # 返回
-/// 返回采购履约责任。
+/// 返回稳定顺序的履约责任集合。
 ///
 /// # 错误
-/// 无。
+/// 卡券进入商品/服务采购路径时返回业务错误。
 ///
 /// # 关键业务约束
-/// 履约责任是精确拆单维度，不在一条依据内暗中再拆单。
-fn fulfillment_from_mode(mode: FulfillmentMode) -> FulfillmentResponsibility {
-    match mode {
-        FulfillmentMode::CompanyWarehouse => FulfillmentResponsibility::Warehouse,
-        FulfillmentMode::SupplierDirect => FulfillmentResponsibility::SupplierDirect,
-        FulfillmentMode::ElectronicDelivery => FulfillmentResponsibility::Electronic,
-        FulfillmentMode::OfflineService => FulfillmentResponsibility::Service,
+/// 实物允许采购在入仓与供应商直发之间选择；其他类型由商品事实唯一限定。
+fn fulfillment_options(kind: ProductKind) -> Result<&'static [FulfillmentResponsibility]> {
+    match kind {
+        ProductKind::Physical => Ok(&[
+            FulfillmentResponsibility::Warehouse,
+            FulfillmentResponsibility::SupplierDirect,
+        ]),
+        ProductKind::Virtual => Ok(&[FulfillmentResponsibility::Electronic]),
+        ProductKind::OfflineService => Ok(&[FulfillmentResponsibility::Service]),
+        ProductKind::Voucher => Err(Error::BusinessLogicError(
+            "卡券商品不能进入商品/服务采购建单路径".to_string(),
+        )),
     }
 }
 
@@ -1800,12 +1848,14 @@ fn zero_quantity() -> Quantity {
 mod tests {
     use std::str::FromStr;
 
+    use entities::catalog::ProductKind;
     use entities::common::time::Instant;
     use entities::money::Quantity;
     use entities::purchase_order::{FulfillmentResponsibility, PurchaseType};
 
     use super::{
-        business_date_of, digest_parts, maximum_create_quantity, parse_basis_sales_order_id, BasisScope,
+        business_date_of, digest_parts, ensure_expected_delivery_within_sales_due, fulfillment_options,
+        maximum_create_quantity, parse_basis_sales_order_id, purchase_type_from_product_kind, BasisScope,
     };
 
     /// 上海零点对应前一日 UTC 时仍还原业务自然日。
@@ -1857,6 +1907,57 @@ mod tests {
         };
 
         assert_eq!(super::basis_scope_key(&scope), "sup-1|PHYSICAL|NET-30|WAREHOUSE");
+    }
+
+    /// 商品稳定类型决定采购类型，销售字段不得参与。
+    #[test]
+    fn product_kind_determines_purchase_type() {
+        assert_eq!(
+            purchase_type_from_product_kind(ProductKind::Physical).unwrap(),
+            PurchaseType::Physical
+        );
+        assert_eq!(
+            purchase_type_from_product_kind(ProductKind::Virtual).unwrap(),
+            PurchaseType::Virtual
+        );
+        assert_eq!(
+            purchase_type_from_product_kind(ProductKind::OfflineService).unwrap(),
+            PurchaseType::Service
+        );
+        assert!(purchase_type_from_product_kind(ProductKind::Voucher).is_err());
+    }
+
+    /// 实物由采购选择入仓或直发，其他商品类型只允许其固有路线。
+    #[test]
+    fn product_kind_limits_fulfillment_options() {
+        assert_eq!(
+            fulfillment_options(ProductKind::Physical).unwrap(),
+            &[
+                FulfillmentResponsibility::Warehouse,
+                FulfillmentResponsibility::SupplierDirect,
+            ]
+        );
+        assert_eq!(
+            fulfillment_options(ProductKind::Virtual).unwrap(),
+            &[FulfillmentResponsibility::Electronic]
+        );
+        assert_eq!(
+            fulfillment_options(ProductKind::OfflineService).unwrap(),
+            &[FulfillmentResponsibility::Service]
+        );
+        assert!(fulfillment_options(ProductKind::Voucher).is_err());
+    }
+
+    /// 采购预计交付日可以早于或等于销售承诺期限，但不得晚于该期限。
+    #[test]
+    fn expected_delivery_must_not_exceed_sales_due() {
+        let sales_due = entities::common::time::BusinessDate::from_str("2026-09-10").unwrap();
+        let earlier = entities::common::time::BusinessDate::from_str("2026-09-09").unwrap();
+        let later = entities::common::time::BusinessDate::from_str("2026-09-11").unwrap();
+
+        assert!(ensure_expected_delivery_within_sales_due(earlier, sales_due).is_ok());
+        assert!(ensure_expected_delivery_within_sales_due(sales_due, sales_due).is_ok());
+        assert!(ensure_expected_delivery_within_sales_due(later, sales_due).is_err());
     }
 
     /// 验证采购依据创建的操作人授权提交栅栏。

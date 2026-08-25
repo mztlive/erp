@@ -87,7 +87,7 @@ export function SalesOrderSubmitPaper({
                 },
                 {
                     id: "deadline",
-                    label: isCard ? "卡券履约期限" : "履约期限摘要",
+                    label: isCard ? "卡券履约期限" : "客户承诺期限摘要",
                     value: snapshot.fulfillmentDeadline || "—",
                     numeric: true,
                 },
@@ -96,13 +96,15 @@ export function SalesOrderSubmitPaper({
                     label: "福利场景",
                     value: welfareScenarioLabel(snapshot.welfareScene) || "—",
                 },
-                {
-                    id: "origin",
-                    label: isCard ? "目标商城" : "履约方式",
-                    value: isCard
-                        ? snapshot.targetMallId || "—"
-                        : snapshot.fulfillmentMode || "—",
-                },
+                ...(isCard
+                    ? [
+                          {
+                              id: "origin",
+                              label: "目标商城",
+                              value: snapshot.targetMallId || "—",
+                          },
+                      ]
+                    : []),
             ]}
             lineItemLabel={isCard ? "卡券明细（唯一）" : "销售明细"}
             columns={
@@ -184,13 +186,8 @@ export function SalesOrderSubmitPaper({
                               ),
                           },
                           {
-                              id: "mode",
-                              header: "履约方式",
-                              cell: (row) => row.fulfillmentMode || "—",
-                          },
-                          {
                               id: "due",
-                              header: "履约期限",
+                              header: "承诺交付日",
                               numeric: true,
                               cell: (row) => row.dueDate || "—",
                           },

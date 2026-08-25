@@ -385,9 +385,6 @@ fn working_copy_goods(line: &SalesOrderWorkingCopyLine) -> Result<Option<GoodsLi
         .sku_revision_id
         .clone()
         .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU 修订", line.line_no)))?;
-    let fulfillment_mode = line
-        .fulfillment_mode
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约方式", line.line_no)))?;
     let fulfillment_due_at = line
         .fulfillment_due_at
         .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约期限", line.line_no)))?;
@@ -406,7 +403,6 @@ fn working_copy_goods(line: &SalesOrderWorkingCopyLine) -> Result<Option<GoodsLi
         sku_revision_id,
         welfare_scenario: line.welfare_scenario,
         service_region: line.service_region.clone(),
-        fulfillment_mode,
         fulfillment_due_at,
         quantity,
         base_unit_code,
@@ -538,7 +534,6 @@ pub(super) fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOr
         sku_revision_id: line.sku_revision_id,
         welfare_scenario: line.welfare_scenario,
         service_region: line.service_region,
-        fulfillment_mode: line.fulfillment_mode,
         fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
         quantity: line.quantity,
         base_unit_code: line.base_unit_code,
@@ -673,7 +668,6 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
         sku_revision_id: line.sku_revision_id,
         welfare_scenario: line.welfare_scenario,
         service_region: line.service_region,
-        fulfillment_mode: line.fulfillment_mode,
         fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
         quantity: line.quantity,
         base_unit_code: line.base_unit_code,

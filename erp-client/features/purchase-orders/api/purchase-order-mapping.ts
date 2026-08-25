@@ -334,6 +334,10 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                 unitCostGross: String(line.latest_cost_gross ?? "0"),
                 inputTaxRate: String(line.input_tax_rate ?? "0"),
                 expectedDeliveryDate: line.expected_delivery_date ?? "",
+                salesDeliveryDeadline:
+                    line.sales_delivery_deadline ??
+                    line.expected_delivery_date ??
+                    "",
                 salesAllocationLabel: `销售明细 ${line.sales_line_no}`,
             }
         }),

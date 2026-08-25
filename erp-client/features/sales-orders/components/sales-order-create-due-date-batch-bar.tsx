@@ -36,7 +36,7 @@ export function SalesOrderCreateDueDateBatchBar({
                     id="sales-line-batch-due-date"
                     value={dueDate || undefined}
                     onValueChange={(next) => setDueDate(next ?? "")}
-                    placeholder="选择交付日期"
+                    placeholder="选择承诺交付日"
                     className="w-44"
                 />
             </Field>

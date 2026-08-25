@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
-    assignBestSuppliers,
+    assignBestSourcingOptions,
     buildDefaultSourcingLines,
-    commonSuppliersForSelected,
+    buildSourcingWorkspace,
+    commonSourcingOptionsForSelected,
     pickBestSourcingOption,
     sourcingFormLinesReady,
     summarizeSourcingOrder,
@@ -42,6 +43,7 @@ function line(
         salesQuantity: "10",
         coveredQuantity: "0",
         remainingQuantity: "10",
+        deliveryDeadline: "2026-09-01",
         salesAllocationLabel: "销售明细 1",
         ...overrides,
     }
@@ -58,6 +60,58 @@ function order(lines: readonly SourcingProductLine[]): SourcingSalesOrder {
         lines,
     }
 }
+
+describe("buildSourcingWorkspace", () => {
+    it("keeps two fulfillment routes from the same supplier", () => {
+        const shared = {
+            workItemId: "wi-1",
+            salesOrderId: "so-1",
+            salesOrderNo: "SO-1",
+            customerName: "示例客户",
+            salesOrderRevisionId: "sor-1",
+            supplierId: "s-1",
+            supplierName: "示例供应商",
+            purchaseType: "PHYSICAL" as const,
+            paymentTermCode: "POSTPAY_NET30",
+            paymentTermLabel: "货到 30 天",
+            lines: [
+                {
+                    salesOrderLineId: "l-1",
+                    salesOrderRevisionLineId: "sorl-1",
+                    itemName: "商品",
+                    salesQuantity: "10",
+                    coveredQuantity: "0",
+                    remainingQuantity: "10",
+                    maxCreateQuantity: "10",
+                    unit: "件",
+                    unitCostGross: "8.00",
+                    inputTaxRate: "0.13",
+                    expectedDeliveryDate: "2026-09-01",
+                    salesDeliveryDeadline: "2026-09-01",
+                    salesAllocationLabel: "销售明细 1",
+                },
+            ],
+            estimatedGross: "80.00",
+            consumed: false,
+        }
+        const workspace = buildSourcingWorkspace([
+            {
+                ...shared,
+                basisId: "basis-warehouse",
+                fulfillmentResponsibility: "WAREHOUSE",
+            },
+            {
+                ...shared,
+                basisId: "basis-direct",
+                fulfillmentResponsibility: "SUPPLIER_DIRECT",
+            },
+        ])
+
+        expect(
+            workspace[0]?.lines[0]?.options.map((item) => item.basisId),
+        ).toEqual(["basis-direct", "basis-warehouse"])
+    })
+})
 
 describe("pickBestSourcingOption", () => {
     it("picks the lowest gross cost", () => {
@@ -134,23 +188,27 @@ describe("pickBestSourcingOption", () => {
     })
 })
 
-describe("assignBestSuppliers", () => {
+describe("assignBestSourcingOptions", () => {
     it("fills every line with its best supplier and max quantity", () => {
         const current: SourcingLineInput[] = [
             {
+                rowKey: "l-1:0",
                 salesOrderLineId: "l-1",
                 selected: false,
                 quantity: "1",
-                supplierId: "",
+                basisId: "",
+                expectedDeliveryDate: "2026-09-01",
             },
             {
+                rowKey: "l-2:0",
                 salesOrderLineId: "l-2",
                 selected: true,
                 quantity: "1",
-                supplierId: "s-high",
+                basisId: "basis-s-high",
+                expectedDeliveryDate: "2026-09-01",
             },
         ]
-        const next = assignBestSuppliers(
+        const next = assignBestSourcingOptions(
             order([
                 line({
                     salesOrderLineId: "l-1",
@@ -185,16 +243,20 @@ describe("assignBestSuppliers", () => {
         )
         expect(next).toEqual([
             {
+                rowKey: "l-1:0",
                 salesOrderLineId: "l-1",
                 selected: true,
                 quantity: "8",
-                supplierId: "s-a",
+                basisId: "basis-s-a",
+                expectedDeliveryDate: "2026-09-01",
             },
             {
+                rowKey: "l-2:0",
                 salesOrderLineId: "l-2",
                 selected: true,
                 quantity: "10",
-                supplierId: "s-low",
+                basisId: "basis-s-low",
+                expectedDeliveryDate: "2026-09-01",
             },
         ])
     })
@@ -202,14 +264,16 @@ describe("assignBestSuppliers", () => {
     it("leaves a line unchanged when it has no qualified supply", () => {
         const current: SourcingLineInput[] = [
             {
+                rowKey: "l-empty:0",
                 salesOrderLineId: "l-empty",
                 selected: false,
                 quantity: "4",
-                supplierId: "",
+                basisId: "",
+                expectedDeliveryDate: "2026-09-01",
             },
         ]
         expect(
-            assignBestSuppliers(
+            assignBestSourcingOptions(
                 order([line({ salesOrderLineId: "l-empty", options: [] })]),
                 current,
             ),
@@ -217,23 +281,27 @@ describe("assignBestSuppliers", () => {
     })
 })
 
-describe("commonSuppliersForSelected", () => {
+describe("commonSourcingOptionsForSelected", () => {
     it("unions suppliers from selected lines instead of requiring an intersection", () => {
         const current: SourcingLineInput[] = [
             {
+                rowKey: "l-1:0",
                 salesOrderLineId: "l-1",
                 selected: true,
                 quantity: "1",
-                supplierId: "",
+                basisId: "",
+                expectedDeliveryDate: "2026-09-01",
             },
             {
+                rowKey: "l-2:0",
                 salesOrderLineId: "l-2",
                 selected: true,
                 quantity: "1",
-                supplierId: "",
+                basisId: "",
+                expectedDeliveryDate: "2026-09-01",
             },
         ]
-        const options = commonSuppliersForSelected(
+        const options = commonSourcingOptionsForSelected(
             order([
                 line({
                     salesOrderLineId: "l-1",
@@ -330,10 +398,12 @@ describe("buildDefaultSourcingLines", () => {
             ),
         ).toEqual([
             {
+                rowKey: "l-1:0",
                 salesOrderLineId: "l-1",
                 selected: true,
                 quantity: "1",
-                supplierId: "s-a",
+                basisId: "basis-s-a",
+                expectedDeliveryDate: "2026-09-01",
             },
         ])
     })

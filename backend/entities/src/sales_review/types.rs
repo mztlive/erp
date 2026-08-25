@@ -137,48 +137,6 @@ impl WelfareScenario {
     }
 }
 
-/// 履约方式（数据模型 §6.4：公司仓发、供应商直发、电子交付、线下服务）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum FulfillmentMode {
-    /// 公司仓发。
-    CompanyWarehouse,
-    /// 供应商直发。
-    SupplierDirect,
-    /// 电子交付。
-    ElectronicDelivery,
-    /// 线下服务。
-    OfflineService,
-}
-
-impl FulfillmentMode {
-    /// 返回履约方式的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::CompanyWarehouse => "公司仓发",
-            Self::SupplierDirect => "供应商直发",
-            Self::ElectronicDelivery => "电子交付",
-            Self::OfflineService => "线下服务",
-        }
-    }
-
-    /// 返回履约方式的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::CompanyWarehouse => "COMPANY_WAREHOUSE",
-            Self::SupplierDirect => "SUPPLIER_DIRECT",
-            Self::ElectronicDelivery => "ELECTRONIC_DELIVERY",
-            Self::OfflineService => "OFFLINE_SERVICE",
-        }
-    }
-}
-
 /// 卡券行卡形态（数据模型 §6.4：电子卡或实体卡）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -243,17 +201,6 @@ impl From<crate::sales_order::WelfareScenario> for WelfareScenario {
     }
 }
 
-impl From<crate::sales_order::FulfillmentMode> for FulfillmentMode {
-    fn from(value: crate::sales_order::FulfillmentMode) -> Self {
-        match value {
-            crate::sales_order::FulfillmentMode::CompanyWarehouse => Self::CompanyWarehouse,
-            crate::sales_order::FulfillmentMode::SupplierDirect => Self::SupplierDirect,
-            crate::sales_order::FulfillmentMode::ElectronicDelivery => Self::ElectronicDelivery,
-            crate::sales_order::FulfillmentMode::OfflineService => Self::OfflineService,
-        }
-    }
-}
-
 impl From<crate::sales_order::CardForm> for CardForm {
     fn from(value: crate::sales_order::CardForm) -> Self {
         match value {
@@ -274,9 +221,7 @@ pub struct GoodsLineFields {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 履约方式。
-    pub fulfillment_mode: FulfillmentMode,
-    /// 本明细履约期限。
+    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
     pub quantity: Quantity,
@@ -609,7 +554,6 @@ mod tests {
         );
         assert_eq!(LineType::Voucher.as_str(), "VOUCHER");
         assert_eq!(WelfareScenario::MealSubsidy.label(), "餐补");
-        assert_eq!(FulfillmentMode::SupplierDirect.as_str(), "SUPPLIER_DIRECT");
         assert_eq!(CardForm::Physical.label(), "实体卡");
         assert_eq!(
             serde_json::to_string(&CardForm::Electronic).unwrap(),
@@ -630,10 +574,6 @@ mod tests {
         assert_eq!(
             WelfareScenario::from(crate::sales_order::WelfareScenario::MealSubsidy),
             WelfareScenario::MealSubsidy
-        );
-        assert_eq!(
-            FulfillmentMode::from(crate::sales_order::FulfillmentMode::SupplierDirect),
-            FulfillmentMode::SupplierDirect
         );
         assert_eq!(
             CardForm::from(crate::sales_order::CardForm::Electronic),
@@ -809,7 +749,6 @@ mod tests {
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
                 service_region: None,
-                fulfillment_mode: FulfillmentMode::CompanyWarehouse,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: qty("3.000000"),
                 base_unit_code: " 箱 ".to_string(),
@@ -834,7 +773,6 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
             service_region: None,
-            fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("1.000000"),
             base_unit_code: "箱".to_string(),

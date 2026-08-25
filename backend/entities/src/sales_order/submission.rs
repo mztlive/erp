@@ -23,8 +23,8 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
 use super::types::{
-    build_line_groups, validate_line_list, BusinessType, FulfillmentMode, GoodsLineFields, LineSummary,
-    LineType, VoucherLineDraft, WelfareScenario,
+    build_line_groups, validate_line_list, BusinessType, GoodsLineFields, LineSummary, LineType,
+    VoucherLineDraft, WelfareScenario,
 };
 
 /// 提交人标识最大长度。
@@ -608,9 +608,7 @@ pub struct SalesOrderSubmissionLine {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 履约方式。
-    pub fulfillment_mode: Option<FulfillmentMode>,
-    /// 本明细履约期限。
+    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
     pub quantity: Option<Quantity>,
@@ -686,7 +684,6 @@ impl SalesOrderSubmissionLine {
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
             service_region: built.goods.as_ref().and_then(|g| g.service_region.clone()),
-            fulfillment_mode: built.goods.as_ref().map(|g| g.fulfillment_mode),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -727,9 +724,6 @@ impl SalesOrderSubmissionLine {
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
             welfare_scenario: self.welfare_scenario,
             service_region: self.service_region.clone(),
-            fulfillment_mode: self
-                .fulfillment_mode
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约方式", self.line_no)))?,
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
@@ -814,7 +808,6 @@ mod tests {
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
             service_region: Some("east".to_string()),
-            fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),

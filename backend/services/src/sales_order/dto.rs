@@ -12,8 +12,8 @@ use entities::common::time::BusinessDate;
 use entities::ids::{ContractId, CustomerAccountId, SkuId, SourceSystemId};
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::sales_order::{
-    BusinessType, CardForm, CommercialStatus, FulfillmentMode, GoodsLineFields, LineStatus, LineType,
-    OriginSystem, VoucherLineDraft, WelfareScenario,
+    BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
+    VoucherLineDraft, WelfareScenario,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -623,9 +623,7 @@ pub struct SalesOrderWorkingCopyLineView {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 销售提交承诺的履约方式。
-    pub fulfillment_mode: Option<FulfillmentMode>,
-    /// 销售提交承诺的履约期限（秒级时间戳）。
+    /// 销售对客户承诺完成明细交付或服务的最晚时间（秒级时间戳）。
     pub fulfillment_due_at: Option<u64>,
     /// 基础单位数量。
     pub quantity: Option<Quantity>,

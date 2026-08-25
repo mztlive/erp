@@ -6,6 +6,7 @@ import {
     type SourcingLineInput,
     type SourcingSalesOrder,
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
+import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 
 export type SourcingFormValues = {
     salesOrderId: string
@@ -32,10 +33,10 @@ const flagField = z
  * @returns 可挂到 TanStack Form 的 Zod schema。
  */
 export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
-    const maximumByLineId = new Map(
+    const maximumByBasisId = new Map(
         order?.lines.flatMap((line) =>
             line.options.map((option) => [
-                `${line.salesOrderLineId}:${option.supplierId}`,
+                `${line.salesOrderLineId}:${option.basisId}`,
                 option.maxCreateQuantity,
             ]),
         ) ?? [],
@@ -45,10 +46,12 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
             salesOrderId: textField.pipe(z.string().min(1, "请选择来源销售单")),
             lines: z.array(
                 z.object({
+                    rowKey: textField,
                     salesOrderLineId: textField,
                     selected: flagField,
                     quantity: textField,
-                    supplierId: textField,
+                    basisId: textField,
+                    expectedDeliveryDate: textField,
                 }),
             ),
         })
@@ -63,39 +66,49 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                 })
                 return
             }
-            selected.forEach((line) => {
-                const index = value.lines.findIndex(
-                    (candidate) =>
-                        candidate.salesOrderLineId === line.salesOrderLineId,
-                )
+            const seenAllocations = new Set<string>()
+            value.lines.forEach((line, index) => {
+                if (!line.selected) return
                 const product = order.lines.find(
                     (candidate) =>
                         candidate.salesOrderLineId === line.salesOrderLineId,
                 )
                 const itemLabel = product?.itemName
-                if (!line.supplierId) {
+                if (!line.basisId) {
                     context.addIssue({
                         code: "custom",
-                        path: ["lines", index, "supplierId"],
+                        path: ["lines", index, "basisId"],
                         message: itemLabel
-                            ? `${itemLabel}：请选择供应商`
-                            : "请选择供应商",
+                            ? `${itemLabel}：请选择履约方案`
+                            : "请选择履约方案",
                     })
                     return
                 }
-                if (!findSourcingOption(product, line.supplierId)) {
+                const allocationKey = `${line.salesOrderLineId}:${line.basisId}`
+                if (seenAllocations.has(allocationKey)) {
                     context.addIssue({
                         code: "custom",
-                        path: ["lines", index, "supplierId"],
+                        path: ["lines", index, "basisId"],
                         message: itemLabel
-                            ? `${itemLabel}：该供应商当前没有合格供给`
-                            : "该供应商当前没有合格供给",
+                            ? `${itemLabel}：同一履约方案不能重复选择`
+                            : "同一履约方案不能重复选择",
+                    })
+                    return
+                }
+                seenAllocations.add(allocationKey)
+                if (!findSourcingOption(product, line.basisId)) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lines", index, "basisId"],
+                        message: itemLabel
+                            ? `${itemLabel}：该履约方案已失效`
+                            : "该履约方案已失效",
                     })
                     return
                 }
                 const maximum =
-                    maximumByLineId.get(
-                        `${line.salesOrderLineId}:${line.supplierId}`,
+                    maximumByBasisId.get(
+                        `${line.salesOrderLineId}:${line.basisId}`,
                     ) ?? "0"
                 const quantityMessage = sourcingQuantityError(
                     line.quantity,
@@ -110,7 +123,52 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                             : quantityMessage,
                     })
                 }
+                if (!isBusinessDate(line.expectedDeliveryDate)) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lines", index, "expectedDeliveryDate"],
+                        message: itemLabel
+                            ? `${itemLabel}：请选择预计交付日`
+                            : "请选择预计交付日",
+                    })
+                } else if (
+                    product?.deliveryDeadline &&
+                    line.expectedDeliveryDate > product.deliveryDeadline
+                ) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lines", index, "expectedDeliveryDate"],
+                        message: `${itemLabel ?? "该明细"}：预计交付日不能晚于销售承诺期限 ${product.deliveryDeadline}`,
+                    })
+                }
             })
+            for (const product of order.lines) {
+                const indexes = value.lines
+                    .map((line, index) => ({ line, index }))
+                    .filter(
+                        ({ line }) =>
+                            line.selected &&
+                            line.salesOrderLineId === product.salesOrderLineId,
+                    )
+                if (indexes.length === 0) continue
+                try {
+                    const total = sumFixed(
+                        indexes.map(({ line }) => line.quantity),
+                        { maxScale: 6, outputScale: 6 },
+                    )
+                    if (
+                        compareDecimal(total, product.remainingQuantity, 6) > 0
+                    ) {
+                        context.addIssue({
+                            code: "custom",
+                            path: ["lines", indexes.at(-1)!.index, "quantity"],
+                            message: `${product.itemName}：拆分数量合计不能超过 ${product.remainingQuantity}`,
+                        })
+                    }
+                } catch {
+                    // 单行数值错误已在上方给出精确提示。
+                }
+            }
         })
 }
 
@@ -190,17 +248,27 @@ function humanizeIssueMessage(issue: {
         return issue.message
     }
     const key = String(issue.path.at(-1) ?? "")
-    if (key === "supplierId") return "请选择供应商"
+    if (key === "basisId") return "请选择履约方案"
     if (key === "quantity") return "请填写本次采购数量"
+    if (key === "expectedDeliveryDate") return "请选择预计交付日"
     if (key === "salesOrderId") return "请选择来源销售单"
-    return "填写内容不完整，请检查供应商和采购数量。"
+    return "填写内容不完整，请检查履约方案和采购数量。"
+}
+
+function isBusinessDate(value: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+    const date = new Date(`${value}T00:00:00Z`)
+    return (
+        !Number.isNaN(date.valueOf()) &&
+        date.toISOString().slice(0, 10) === value
+    )
 }
 
 function displayErrorText(value: string): string[] {
     const trimmed = value.trim()
     if (!trimmed) return []
     if (trimmed.startsWith("Invalid input")) {
-        return ["填写内容不完整，请检查供应商和采购数量。"]
+        return ["填写内容不完整，请检查履约方案和采购数量。"]
     }
     return [trimmed]
 }

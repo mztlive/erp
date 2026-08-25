@@ -41,11 +41,11 @@ import {
 } from "@/features/purchase-orders/hooks/queries"
 import type { PurchaseOrderCreateFormApi } from "@/features/purchase-orders/lib/purchase-order-create-form-types"
 import {
-    assignBestSuppliers,
+    assignBestSourcingOptions,
     buildDefaultSourcingLines,
     buildPurchaseOrderPreviews,
     buildSourcingWorkspace,
-    commonSuppliersForSelected,
+    commonSourcingOptionsForSelected,
     findSourcingOption,
     sourcingFormLinesReady,
     sumPreviewTotals,
@@ -112,15 +112,16 @@ export function PurchaseOrderCreatePage({
             )
             if (!order) return
             const selected = value.lines.filter(
-                (line) => line.selected && line.supplierId,
+                (line) => line.selected && line.basisId,
             )
             const fingerprint = JSON.stringify({
                 salesOrderId: order.salesOrderId,
                 workItemId: order.workItemId,
                 lines: selected.map((line) => ({
                     salesOrderLineId: line.salesOrderLineId,
-                    supplierId: line.supplierId,
+                    basisId: line.basisId,
                     quantity: line.quantity.trim(),
+                    expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
             })
             if (createIntentRef.current?.fingerprint !== fingerprint) {
@@ -134,8 +135,9 @@ export function PurchaseOrderCreatePage({
                 salesOrderId: order.salesOrderId,
                 lines: selected.map((line) => ({
                     salesOrderLineId: line.salesOrderLineId,
-                    supplierId: line.supplierId,
+                    basisId: line.basisId,
                     quantity: line.quantity.trim(),
+                    expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
                 idempotencyKey: createIntentRef.current.idempotencyKey,
             })
@@ -146,7 +148,7 @@ export function PurchaseOrderCreatePage({
                     title: "采购单已提交审批",
                     description:
                         count > 1
-                            ? `已按供应商拆成 ${count} 张采购单并提交审批。`
+                            ? `已按履约方案拆成 ${count} 张采购单并提交审批。`
                             : "已创建 1 张采购单并提交审批。",
                     type: "success",
                     timeout: 4000,
@@ -199,16 +201,18 @@ export function PurchaseOrderCreatePage({
         (next: SourcingLineInput[]) => {
             form.setFieldValue("lines", next)
             next.forEach((line, index) => {
+                form.setFieldValue(`lines[${index}].rowKey`, line.rowKey)
                 form.setFieldValue(
                     `lines[${index}].salesOrderLineId`,
                     line.salesOrderLineId,
                 )
                 form.setFieldValue(`lines[${index}].selected`, line.selected)
-                form.setFieldValue(
-                    `lines[${index}].supplierId`,
-                    line.supplierId,
-                )
+                form.setFieldValue(`lines[${index}].basisId`, line.basisId)
                 form.setFieldValue(`lines[${index}].quantity`, line.quantity)
+                form.setFieldValue(
+                    `lines[${index}].expectedDeliveryDate`,
+                    line.expectedDeliveryDate,
+                )
             })
         },
         [form],
@@ -231,49 +235,47 @@ export function PurchaseOrderCreatePage({
             sumPreviewTotals(previews.flatMap((preview) => [...preview.lines])),
         [previews],
     )
-    const commonSuppliers = React.useMemo(
-        () => commonSuppliersForSelected(selectedOrder, lines),
+    const commonSourcingOptions = React.useMemo(
+        () => commonSourcingOptionsForSelected(selectedOrder, lines),
         [lines, selectedOrder],
     )
     const selectedCount = lines.filter((line) => line.selected).length
 
     const applyBatchSupplier = React.useCallback(
-        (supplierId: string) => {
+        (basisId: string) => {
             if (!selectedOrder) return
             const selected = lines.filter((line) => line.selected)
             const targets = selected.length > 0 ? selected : lines
             let applied = 0
+            const targetKeys = new Set(targets.map((line) => line.rowKey))
             lines.forEach((line, index) => {
-                if (
-                    targets.length > 0 &&
-                    !targets.some(
-                        (candidate) =>
-                            candidate.salesOrderLineId ===
-                            line.salesOrderLineId,
-                    )
-                ) {
+                if (targets.length > 0 && !targetKeys.has(line.rowKey)) {
                     return
                 }
                 const product = selectedOrder.lines.find(
                     (candidate) =>
                         candidate.salesOrderLineId === line.salesOrderLineId,
                 )
-                const option = findSourcingOption(product, supplierId)
+                const option = findSourcingOption(product, basisId)
                 if (!option) return
                 form.setFieldValue(`lines[${index}].selected`, true)
-                form.setFieldValue(`lines[${index}].supplierId`, supplierId)
+                form.setFieldValue(`lines[${index}].basisId`, basisId)
                 form.setFieldValue(
                     `lines[${index}].quantity`,
                     option.maxCreateQuantity,
                 )
+                form.setFieldValue(
+                    `lines[${index}].expectedDeliveryDate`,
+                    option.expectedDeliveryDate,
+                )
                 applied += 1
             })
             toast.add({
-                title: applied > 0 ? "已批量指定供应商" : "没有可应用的明细",
+                title: applied > 0 ? "已批量指定履约方案" : "没有可应用的明细",
                 description:
                     applied > 0
-                        ? `已为 ${applied} 条明细填入该供应商。`
-                        : "选中行没有这家供应商的合格供给。",
+                        ? `已为 ${applied} 条明细填入该履约方案。`
+                        : "选中行不支持该履约方案。",
                 type: applied > 0 ? "success" : "warning",
                 timeout: 4000,
             })
@@ -281,25 +283,80 @@ export function PurchaseOrderCreatePage({
         [form, lines, selectedOrder],
     )
 
-    const applyBestSuppliers = React.useCallback(() => {
+    const applyBestSourcingOptions = React.useCallback(() => {
         if (!selectedOrder) return
-        const base =
-            lines.length === selectedOrder.lines.length
-                ? lines
-                : buildDefaultSourcingLines(selectedOrder)
-        const next = assignBestSuppliers(selectedOrder, base)
+        const base = buildDefaultSourcingLines(selectedOrder)
+        const next = assignBestSourcingOptions(selectedOrder, base)
         writeLines(next)
-        const filled = next.filter((line) => line.supplierId).length
+        const filled = next.filter((line) => line.basisId).length
         toast.add({
-            title: filled > 0 ? "已匹配最优供应商" : "没有可匹配的供应商",
+            title: filled > 0 ? "已匹配最优履约方案" : "没有可匹配的履约方案",
             description:
                 filled > 0
-                    ? `已为 ${filled} 条明细填入最低含税成本、可覆盖剩余数量的供应商。`
-                    : "当前明细没有合格供给。",
+                    ? `已为 ${filled} 条明细填入最低含税成本、可覆盖剩余数量的履约方案。`
+                    : "当前明细没有合格履约方案。",
             type: filled > 0 ? "success" : "warning",
             timeout: 4000,
         })
-    }, [lines, selectedOrder, writeLines])
+    }, [selectedOrder, writeLines])
+
+    const addSplitLine = React.useCallback(
+        (salesOrderLineId: string) => {
+            if (!selectedOrder) return
+            const product = selectedOrder.lines.find(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            )
+            if (!product) return
+            const used = new Set(
+                lines
+                    .filter(
+                        (line) =>
+                            line.salesOrderLineId === salesOrderLineId &&
+                            line.basisId,
+                    )
+                    .map((line) => line.basisId),
+            )
+            const option = product.options.find(
+                (candidate) => !used.has(candidate.basisId),
+            )
+            if (!option) {
+                toast.add({
+                    title: "没有更多履约方案",
+                    description: "该销售明细的可选履约方案都已添加。",
+                    type: "warning",
+                    timeout: 4000,
+                })
+                return
+            }
+            const lastIndex = lines.findLastIndex(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            )
+            const next = [...lines]
+            next.splice(lastIndex + 1, 0, {
+                rowKey: `${salesOrderLineId}:${crypto.randomUUID()}`,
+                salesOrderLineId,
+                selected: true,
+                quantity: "",
+                basisId: option.basisId,
+                expectedDeliveryDate: option.expectedDeliveryDate,
+            })
+            writeLines(next)
+        },
+        [lines, selectedOrder, writeLines],
+    )
+
+    const removeSplitLine = React.useCallback(
+        (rowKey: string) => {
+            const target = lines.find((line) => line.rowKey === rowKey)
+            if (!target) return
+            const siblings = lines.filter(
+                (line) => line.salesOrderLineId === target.salesOrderLineId,
+            )
+            if (siblings.length <= 1) return
+            writeLines(lines.filter((line) => line.rowKey !== rowKey))
+        },
+        [lines, writeLines],
+    )
 
     const canMatchBest = Boolean(
         selectedOrder?.lines.some((line) => line.options.length > 0),
@@ -319,7 +376,7 @@ export function PurchaseOrderCreatePage({
         }
         const description =
             collectSourcingErrorMessages(form.getAllErrors()).join("；") ||
-            "请检查本次采购数量和供应商后重试。"
+            "请检查本次采购数量和履约方案后重试。"
         setActionError({
             title: "无法预览采购单",
             description,
@@ -377,7 +434,7 @@ export function PurchaseOrderCreatePage({
         <PageScaffold className="pb-8">
             <PageHeader
                 title="新建采购单"
-                description="先为每条销售明细选择供应商，再预览将要创建并提交审批的采购单。"
+                description="先为每条销售明细选择履约方案，可按数量拆分，再预览将要创建并提交审批的采购单。"
                 actions={
                     <PageActions
                         actions={[
@@ -450,7 +507,7 @@ export function PurchaseOrderCreatePage({
                             <div className="flex flex-col gap-3 p-4 md:p-5">
                                 <div className="flex items-center justify-between gap-2">
                                     <h2 className="font-heading text-sm font-semibold">
-                                        销售明细与供应商
+                                        销售明细与履约方案
                                     </h2>
                                     <span className="text-xs text-muted-foreground">
                                         {selectedOrder.lines.length} 行
@@ -458,10 +515,10 @@ export function PurchaseOrderCreatePage({
                                 </div>
                                 <PurchaseOrderCreateBatchBar
                                     selectedCount={selectedCount}
-                                    options={commonSuppliers}
+                                    options={commonSourcingOptions}
                                     onApply={applyBatchSupplier}
                                     matchDisabled={!canMatchBest}
-                                    onMatchBest={applyBestSuppliers}
+                                    onMatchBest={applyBestSourcingOptions}
                                 />
                                 {sourcingFormLinesReady(
                                     lines,
@@ -472,12 +529,14 @@ export function PurchaseOrderCreatePage({
                                             form as unknown as PurchaseOrderCreateFormApi
                                         }
                                         order={selectedOrder}
+                                        onAddSplit={addSplitLine}
+                                        onRemoveSplit={removeSplitLine}
                                     />
                                 ) : (
                                     <Skeleton className="h-40" />
                                 )}
                                 <p className="text-xs text-muted-foreground">
-                                    可逐行选择供应商，一键按最低含税成本和最早交期匹配最优供应商，或勾选多行后批量指定共同可选供应商。同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单；确认创建后直接提交审批。
+                                    可逐行选择供应商与履约责任，也可拆分同一销售明细的数量。一键匹配会选择含税成本最低且可覆盖剩余数量的方案；同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单。
                                 </p>
                             </div>
                         </section>

@@ -117,6 +117,25 @@ impl Pagination for SkuFilter {
 }
 
 impl<'a> Repository<'a, Sku> {
+    /// 按稳定主键批量查询 SKU。
+    ///
+    /// # 参数
+    /// * `ids` - SKU 稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回匹配的未删除 SKU 实体。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_ids(&self, ids: &[SkuId], executor: &mut dyn Executor) -> Result<Vec<Sku>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(in_filter("id", ids.iter().map(ToString::to_string)), executor)
+            .await
+    }
+
     /// 批量查询一组商品下的全部 SKU。
     ///
     /// # 参数

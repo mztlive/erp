@@ -258,7 +258,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 1. `SalesOrder` 定义不再强制包含 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`。流程管理员按普通节点增删、排序、改名称和指定审批人；是否设置采购相关节点由管理员决定；
 2. 该节点的决定只有通过和驳回，请求体只允许第 14.3 节的五个字段。驳回按第 11 章处理：不改变销售单和 `subject_version`，实例轮次加一并回到入口节点；
 3. 原双向环 `PENDING_PROCUREMENT_CONFIRMATION ↔ PENDING_LOW_MARGIN_SUPERIOR` 随低毛利环节删除而消失，因此第 3.2 节「不交付条件分支和除驳回回入口以外的环路」的约束不再被违反，该环节成为合法审批节点；
-4. **选源事实后移到采购单**：原采购二次确认承载的「选择供应商供给、最新成本、供货数量、预计交期、履约方式」不再属于销售单审批，一律在销售单生效后创建采购单时录入（`erp-phase-1.md` §7.4）。因此审批决定不需要携带任何业务字段，第 14.3 节的决定请求合同保持不变；
+4. **选源与履约路线后移到采购单**：供应商供给、最新成本、供货数量、采购预计交付日和履约责任均不属于销售单或销售审批，一律在销售单生效后创建采购单时由采购确认（`erp-phase-1.md` §7.4）。销售仅保存客户承诺的明细履约期限；审批决定不携带任何选源或履约路线字段，第 14.3 节的决定请求合同保持不变；
 5. 必须删除：`ProcurementConfirmation`、`ProcurementConfirmationLine` 实体及其集合、`ProcurementConfirmationStatus`、`ProcurementRejectReasonCode`、`WorkItemType::ProcurementConfirmation` 及其全部 Repository、Service、Handler、路由、索引、前端类型与文案。驳回原因统一使用审批驳回原因文本，不保留独立的采购驳回原因代码枚举；
 6. 固定业务口径：销售单生效前不存在已选定的供应商成本，因此生效前的毛利只能是估算值，口径见第 4.4.6 节。
 7. `services::approval` 发布时不再要求销售单采购确认用途；其它类型仍不得带用途。运行时不得因用途改变 BPM 路由、决定字段、驳回规则或领域动作。

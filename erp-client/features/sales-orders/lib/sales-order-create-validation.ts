@@ -43,7 +43,6 @@ const draftLineSchema = z.object({
     quantity: decimalInput("数量", 6, { positive: true }),
     unit: z.string().trim().min(1, "请输入单位"),
     unitPriceGross: decimalInput("含税单价", 4, { positive: true }),
-    fulfillmentMode: z.string(),
     dueDate: z.string(),
     faceValue: z.string(),
     giftRate: z.string(),
@@ -59,7 +58,6 @@ const draftRowSchema = z.object({
     quantity: z.string(),
     unit: z.string(),
     unitPriceGross: z.string(),
-    fulfillmentMode: z.string(),
     dueDate: z.string(),
     faceValue: z.string(),
     giftRate: z.string(),
@@ -78,7 +76,6 @@ const createSalesOrderSchema = z
         nature: z.enum(["physical_service", "card_voucher"]),
         ownerUserId: z.string().trim().min(1, "负责销售未就绪，请刷新后重试"),
         ownerName: z.string().trim().min(1, "负责销售未就绪，请刷新后重试"),
-        fulfillmentMode: z.string(),
         welfareScene: z
             .string()
             .trim()
@@ -199,18 +196,11 @@ const createSalesOrderSchema = z
                         message: "请选择商品/SKU",
                     })
                 }
-                if (!line.fulfillmentMode.trim()) {
-                    context.addIssue({
-                        code: "custom",
-                        path: ["lineItems", index, "fulfillmentMode"],
-                        message: "请选择履约方式",
-                    })
-                }
                 if (!line.dueDate) {
                     context.addIssue({
                         code: "custom",
                         path: ["lineItems", index, "dueDate"],
-                        message: "请选择明细交付日期",
+                        message: "请选择承诺交付日",
                     })
                 }
             }
@@ -232,7 +222,6 @@ const draftSalesOrderSchema = z
         nature: z.enum(["physical_service", "card_voucher"]),
         ownerUserId: z.string(),
         ownerName: z.string(),
-        fulfillmentMode: z.string(),
         welfareScene: z.string(),
         paymentTerms: z.string(),
         fulfillmentDeadline: z.string(),

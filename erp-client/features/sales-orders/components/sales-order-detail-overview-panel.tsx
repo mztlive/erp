@@ -60,14 +60,9 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                 </th>
                             </>
                         ) : (
-                            <>
-                                <th className="whitespace-nowrap px-3 py-1.5 font-medium">
-                                    履约方式
-                                </th>
-                                <th className="whitespace-nowrap px-3 py-1.5 font-medium">
-                                    交付日期
-                                </th>
-                            </>
+                            <th className="whitespace-nowrap px-3 py-1.5 font-medium">
+                                承诺交付日
+                            </th>
                         )}
                         <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
                             含税小计
@@ -112,14 +107,9 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                     </td>
                                 </>
                             ) : (
-                                <>
-                                    <td className="px-3 py-1.5 text-sm text-muted-foreground">
-                                        {line.fulfillmentMode || "—"}
-                                    </td>
-                                    <td className="num px-3 py-1.5 text-sm text-muted-foreground">
-                                        {line.dueDate || "—"}
-                                    </td>
-                                </>
+                                <td className="num px-3 py-1.5 text-sm text-muted-foreground">
+                                    {line.dueDate || "—"}
+                                </td>
                             )}
                             <td className="px-3 py-1.5 text-right">
                                 <MoneyValue value={line.amountGross} />
@@ -173,7 +163,7 @@ export function OverviewPanel({ order }: { order: SalesOrderDetailView }) {
                     </>
                 ) : (
                     <OverviewField
-                        label="履约期限摘要"
+                        label="客户承诺期限摘要"
                         value={order.fulfillmentDeadline || "—"}
                         numeric
                     />

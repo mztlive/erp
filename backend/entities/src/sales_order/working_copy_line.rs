@@ -14,9 +14,7 @@ use crate::ids::{SalesOrderLineId, SalesOrderWorkingCopyId, SalesOrderWorkingCop
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
-use super::types::{
-    build_line_groups, FulfillmentMode, GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario,
-};
+use super::types::{build_line_groups, GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario};
 
 /// 销售项名称快照最大长度。
 const ITEM_NAME_MAX_LEN: usize = 256;
@@ -83,9 +81,7 @@ pub struct SalesOrderWorkingCopyLine {
     pub welfare_scenario: Option<WelfareScenario>,
     /// 采购责任解析使用的服务区域。
     pub service_region: Option<String>,
-    /// 履约方式。
-    pub fulfillment_mode: Option<FulfillmentMode>,
-    /// 本明细履约期限。
+    /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
     pub quantity: Option<Quantity>,
@@ -161,7 +157,6 @@ impl SalesOrderWorkingCopyLine {
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
             service_region: built.goods.as_ref().and_then(|g| g.service_region.clone()),
-            fulfillment_mode: built.goods.as_ref().map(|g| g.fulfillment_mode),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),

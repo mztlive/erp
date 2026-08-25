@@ -47,6 +47,7 @@ const sampleLine: SourcingProductLine = {
     salesQuantity: "10",
     coveredQuantity: "0",
     remainingQuantity: "10",
+    deliveryDeadline: "2026-09-01",
     salesAllocationLabel: "销售明细 1",
     options: [option({ maxCreateQuantity: "8" })],
 }
@@ -57,10 +58,12 @@ describe("sourcingFormValidationError", () => {
             salesOrderId: "so-1",
             lines: [
                 {
+                    rowKey: "l-1:0",
                     salesOrderLineId: "l-1",
                     selected: true,
-                    supplierId: "s-1",
+                    basisId: "basis-1",
                     quantity: "20",
+                    expectedDeliveryDate: "2026-09-01",
                 },
             ],
         })
@@ -69,20 +72,22 @@ describe("sourcingFormValidationError", () => {
         )
     })
 
-    it("maps a missing supplier onto the line supplier field", () => {
+    it("maps a missing basis onto the line basis field", () => {
         const error = sourcingFormValidationError(order([sampleLine]), {
             salesOrderId: "so-1",
             lines: [
                 {
+                    rowKey: "l-1:0",
                     salesOrderLineId: "l-1",
                     selected: true,
-                    supplierId: "",
+                    basisId: "",
                     quantity: "8",
+                    expectedDeliveryDate: "2026-09-01",
                 },
             ],
         })
-        expect(error?.fields["lines[0].supplierId"]).toBe(
-            "测试SKU：请选择供应商",
+        expect(error?.fields["lines[0].basisId"]).toBe(
+            "测试SKU：请选择履约方案",
         )
     })
 
@@ -91,10 +96,12 @@ describe("sourcingFormValidationError", () => {
             salesOrderId: "so-1",
             lines: [
                 {
+                    rowKey: "l-1:0",
                     salesOrderLineId: "l-1",
                     selected: false,
-                    supplierId: "s-1",
+                    basisId: "basis-1",
                     quantity: "8",
+                    expectedDeliveryDate: "2026-09-01",
                 },
             ],
         })
@@ -106,10 +113,12 @@ describe("sourcingFormValidationError", () => {
             salesOrderId: "so-1",
             lines: [
                 {
+                    rowKey: "l-1:0",
                     salesOrderLineId: "l-1",
                     selected: true,
-                    supplierId: "s-1",
+                    basisId: "basis-1",
                     quantity: undefined as unknown as string,
+                    expectedDeliveryDate: "2026-09-01",
                 },
             ],
         })
@@ -119,20 +128,22 @@ describe("sourcingFormValidationError", () => {
         expect(JSON.stringify(error)).not.toContain("Invalid input")
     })
 
-    it("maps undefined supplier to a Chinese supplier error", () => {
+    it("maps undefined basis to a Chinese basis error", () => {
         const error = sourcingFormValidationError(order([sampleLine]), {
             salesOrderId: "so-1",
             lines: [
                 {
+                    rowKey: "l-1:0",
                     salesOrderLineId: "l-1",
                     selected: true,
-                    supplierId: undefined as unknown as string,
+                    basisId: undefined as unknown as string,
                     quantity: "8",
+                    expectedDeliveryDate: "2026-09-01",
                 },
             ],
         })
-        expect(error?.fields["lines[0].supplierId"]).toBe(
-            "测试SKU：请选择供应商",
+        expect(error?.fields["lines[0].basisId"]).toBe(
+            "测试SKU：请选择履约方案",
         )
         expect(JSON.stringify(error)).not.toContain("Invalid input")
     })
@@ -143,14 +154,137 @@ describe("sourcingFormValidationError", () => {
                 salesOrderId: "so-1",
                 lines: [
                     {
+                        rowKey: "l-1:0",
                         salesOrderLineId: "l-1",
                         selected: true,
-                        supplierId: "s-1",
+                        basisId: "basis-1",
                         quantity: "8",
+                        expectedDeliveryDate: "2026-09-01",
                     },
                 ],
             }),
         ).toBeUndefined()
+    })
+
+    it("rejects an expected delivery date after the sales commitment", () => {
+        const error = sourcingFormValidationError(order([sampleLine]), {
+            salesOrderId: "so-1",
+            lines: [
+                {
+                    rowKey: "l-1:0",
+                    salesOrderLineId: "l-1",
+                    selected: true,
+                    basisId: "basis-1",
+                    quantity: "8",
+                    expectedDeliveryDate: "2026-09-02",
+                },
+            ],
+        })
+        expect(error?.fields["lines[0].expectedDeliveryDate"]).toBe(
+            "测试SKU：预计交付日不能晚于销售承诺期限 2026-09-01",
+        )
+    })
+
+    it("allows one sales line to split across different bases within remaining quantity", () => {
+        const splitLine = {
+            ...sampleLine,
+            options: [
+                option({ basisId: "basis-1", maxCreateQuantity: "10" }),
+                option({
+                    basisId: "basis-2",
+                    fulfillmentResponsibility: "SUPPLIER_DIRECT",
+                    maxCreateQuantity: "10",
+                }),
+            ],
+        }
+        expect(
+            sourcingFormValidationError(order([splitLine]), {
+                salesOrderId: "so-1",
+                lines: [
+                    {
+                        rowKey: "l-1:0",
+                        salesOrderLineId: "l-1",
+                        selected: true,
+                        basisId: "basis-1",
+                        quantity: "4",
+                        expectedDeliveryDate: "2026-09-01",
+                    },
+                    {
+                        rowKey: "l-1:1",
+                        salesOrderLineId: "l-1",
+                        selected: true,
+                        basisId: "basis-2",
+                        quantity: "6",
+                        expectedDeliveryDate: "2026-09-01",
+                    },
+                ],
+            }),
+        ).toBeUndefined()
+    })
+
+    it("rejects split quantities whose sum exceeds remaining quantity", () => {
+        const splitLine = {
+            ...sampleLine,
+            options: [
+                option({ basisId: "basis-1", maxCreateQuantity: "10" }),
+                option({
+                    basisId: "basis-2",
+                    fulfillmentResponsibility: "SUPPLIER_DIRECT",
+                    maxCreateQuantity: "10",
+                }),
+            ],
+        }
+        const error = sourcingFormValidationError(order([splitLine]), {
+            salesOrderId: "so-1",
+            lines: [
+                {
+                    rowKey: "l-1:0",
+                    salesOrderLineId: "l-1",
+                    selected: true,
+                    basisId: "basis-1",
+                    quantity: "6",
+                    expectedDeliveryDate: "2026-09-01",
+                },
+                {
+                    rowKey: "l-1:1",
+                    salesOrderLineId: "l-1",
+                    selected: true,
+                    basisId: "basis-2",
+                    quantity: "5",
+                    expectedDeliveryDate: "2026-09-01",
+                },
+            ],
+        })
+        expect(error?.fields["lines[1].quantity"]).toBe(
+            "测试SKU：拆分数量合计不能超过 10",
+        )
+    })
+
+    it("rejects the same basis twice for one sales line", () => {
+        const error = sourcingFormValidationError(order([sampleLine]), {
+            salesOrderId: "so-1",
+            lines: [
+                {
+                    rowKey: "l-1:0",
+                    salesOrderLineId: "l-1",
+                    selected: true,
+                    basisId: "basis-1",
+                    quantity: "4",
+                    expectedDeliveryDate: "2026-09-01",
+                },
+                {
+                    rowKey: "l-1:1",
+                    salesOrderLineId: "l-1",
+                    selected: true,
+                    basisId: "basis-1",
+                    quantity: "4",
+                    expectedDeliveryDate: "2026-09-01",
+                },
+            ],
+        })
+        expect(error?.fields["lines[1].basisId"]).toBe(
+            "测试SKU：同一履约方案不能重复选择",
+        )
     })
 })
 
