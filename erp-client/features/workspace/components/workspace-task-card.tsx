@@ -42,37 +42,41 @@ export function WorkspaceTaskCard({
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
-                "flex w-full flex-col gap-1 px-2 py-2.5 text-left transition-colors",
+                "flex w-full items-start gap-1.5 px-2 py-2.5 text-left transition-colors",
                 selected ? "bg-muted" : "hover:bg-muted/60",
             )}
         >
-            <div className="flex items-center justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-1.5">
-                    <WorkspaceDocumentBadge item={item} decorative />
+            <WorkspaceDocumentBadge item={item} decorative className="mt-0.5" />
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="flex items-center justify-between gap-3">
                     <span className="min-w-0 truncate font-medium">
                         {number}
                     </span>
-                </span>
-                {amount ? (
-                    <span className="num shrink-0 text-sm">{amount.value}</span>
-                ) : null}
-            </div>
-            {item.counterpartyName || dueOrStatus ? (
-                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span className="min-w-0 truncate">
-                        {item.counterpartyName ?? ""}
-                    </span>
-                    {blocked ? (
-                        <StatusBadge label="受阻" tone="warning" />
-                    ) : overdue ? (
-                        <StatusBadge label="已超期" tone="destructive" />
-                    ) : item.dueAt ? (
-                        <span className="shrink-0">
-                            <time dateTime={item.dueAt}>{item.dueAtLabel}</time>
+                    {amount ? (
+                        <span className="num shrink-0 text-sm">
+                            {amount.value}
                         </span>
                     ) : null}
-                </div>
-            ) : null}
+                </span>
+                {item.counterpartyName || dueOrStatus ? (
+                    <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                        <span className="min-w-0 truncate">
+                            {item.counterpartyName ?? ""}
+                        </span>
+                        {blocked ? (
+                            <StatusBadge label="受阻" tone="warning" />
+                        ) : overdue ? (
+                            <StatusBadge label="已超期" tone="destructive" />
+                        ) : item.dueAt ? (
+                            <span className="shrink-0">
+                                <time dateTime={item.dueAt}>
+                                    {item.dueAtLabel}
+                                </time>
+                            </span>
+                        ) : null}
+                    </span>
+                ) : null}
+            </span>
         </button>
     )
 }
