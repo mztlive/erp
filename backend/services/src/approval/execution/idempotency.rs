@@ -68,7 +68,7 @@ pub fn canonical_payload(fields: &[&str]) -> String {
 /// # 返回
 /// 返回不超过摘要长度上限的十六进制摘要。
 pub fn payload_digest(canonical: &str) -> String {
-    let digest = format!("{:x}", Sha256::digest(canonical.as_bytes()));
+    let digest = hex::encode(Sha256::digest(canonical.as_bytes()));
     if digest.len() <= DIGEST_MAX_LEN {
         digest
     } else {

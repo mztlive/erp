@@ -403,7 +403,8 @@ mod tests {
     #[test]
     fn bson_roundtrip() {
         let party = Party::new(PartyId::new("party-5"), party_data(), "admin-1").unwrap();
-        let roundtrip: Party = bson::from_document(bson::to_document(&party).unwrap()).unwrap();
+        let roundtrip: Party =
+            bson::deserialize_from_document(bson::serialize_to_document(&party).unwrap()).unwrap();
         assert_eq!(roundtrip, party);
     }
 }

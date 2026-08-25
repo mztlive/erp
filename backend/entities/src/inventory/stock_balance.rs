@@ -233,7 +233,8 @@ mod tests {
     #[test]
     fn serde_shapes_and_bson_roundtrip() {
         let balance = StockBalance::new(StockBalanceId::new("b-6"), data()).unwrap();
-        let roundtrip: StockBalance = bson::from_document(bson::to_document(&balance).unwrap()).unwrap();
+        let roundtrip: StockBalance =
+            bson::deserialize_from_document(bson::serialize_to_document(&balance).unwrap()).unwrap();
         assert_eq!(roundtrip, balance);
     }
 }

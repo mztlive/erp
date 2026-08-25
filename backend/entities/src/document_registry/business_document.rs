@@ -535,7 +535,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let doc = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
-        let roundtrip: BusinessDocument = bson::from_document(bson::to_document(&doc).unwrap()).unwrap();
+        let roundtrip: BusinessDocument =
+            bson::deserialize_from_document(bson::serialize_to_document(&doc).unwrap()).unwrap();
         assert_eq!(roundtrip, doc);
     }
 }

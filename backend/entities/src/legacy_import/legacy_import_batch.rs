@@ -520,7 +520,8 @@ mod tests {
     #[test]
     fn bson_roundtrip_preserves_entity() {
         let batch = LegacyImportBatch::new(LegacyImportBatchId::new("b-10"), batch_data()).unwrap();
-        let roundtrip: LegacyImportBatch = bson::from_document(bson::to_document(&batch).unwrap()).unwrap();
+        let roundtrip: LegacyImportBatch =
+            bson::deserialize_from_document(bson::serialize_to_document(&batch).unwrap()).unwrap();
         assert_eq!(roundtrip, batch);
     }
 

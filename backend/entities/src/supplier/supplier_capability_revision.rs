@@ -208,7 +208,7 @@ mod tests {
             SupplierCapabilityRevision::new(SupplierCapabilityRevisionId::new("cap-rev-3"), revision_data())
                 .unwrap();
         let roundtrip: SupplierCapabilityRevision =
-            bson::from_document(bson::to_document(&revision).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&revision).unwrap()).unwrap();
         assert_eq!(roundtrip, revision);
     }
 }

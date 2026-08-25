@@ -1736,7 +1736,7 @@ fn masked_last4(last4: &str) -> String {
 fn request_fingerprint(req: &SaveCustomerProfileRequest) -> Result<String> {
     let payload =
         serde_json::to_vec(req).map_err(|_| Error::Internal("客户资料请求指纹计算失败".to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(payload)))
+    Ok(hex::encode(Sha256::digest(payload)))
 }
 
 /// 重放已成功命令，并确保幂等键未被复用于其他请求。

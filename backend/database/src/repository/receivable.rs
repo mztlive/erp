@@ -23,8 +23,7 @@ use entities::receivable::{
     ReceivableEntryOffset, ReceivableFundsReview, SalesInvoiceAllocation,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::bson::ser::SerializerOptions;
-use mongodb::bson::{doc, to_bson_with_options, Bson, Document};
+use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
@@ -1030,9 +1029,9 @@ impl<'a> ReceivableRepository<'a> {
 
 /// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
 ///
-/// `bson::to_bson` 默认走 human-readable 字符串形态，与实体持久化的 Decimal128
-/// 形态不一致，`$add`/`$lte` 等表达式会因类型不匹配而失败；这里显式关闭
-/// human-readable 以保持与库内金额完全一致。
+/// `bson::serialize_to_bson` 默认走 human-readable 字符串形态，与实体持久化的
+/// Decimal128 形态不一致；这里直接构造 Decimal128，确保 `$add`/`$lte`
+/// 等表达式与库内金额类型一致。
 ///
 /// # 参数
 /// * `amount` - 定点金额
@@ -1041,11 +1040,9 @@ impl<'a> ReceivableRepository<'a> {
 /// 返回 Decimal128 形态的 BSON 值。
 ///
 /// # 错误
-/// 金额序列化失败时返回错误。
-#[allow(deprecated)] // bson 2.15 `human_readable` 设置项仍有效，替代方案 serde_helpers::HumanReadable 只适用于包装类型
+/// 金额无法表示为 Decimal128 时返回错误。
 fn amount_bson(amount: &Amount) -> Result<Bson> {
-    let options = SerializerOptions::builder().human_readable(false).build();
-    Ok(to_bson_with_options(amount, options)?)
+    Ok(Bson::Decimal128(amount.to_string().parse()?))
 }
 
 /// 构建排序文档：字段名经白名单映射，未命中回退 `created_at` 降序。

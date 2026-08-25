@@ -300,7 +300,7 @@ fn digest_parts(parts: &[&str]) -> String {
         hasher.update((part.len() as u64).to_be_bytes());
         hasher.update(part.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// 审计日志服务

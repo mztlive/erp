@@ -414,7 +414,7 @@ fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
         digest.update((line_id.len() as u64).to_be_bytes());
         digest.update(line_id.as_bytes());
     }
-    Ok(format!("sales-lines:{:x}", digest.finalize()))
+    Ok(format!("sales-lines:{}", hex::encode(digest.finalize())))
 }
 
 /// 幂等写入同一销售生效事务中的采购建单任务。

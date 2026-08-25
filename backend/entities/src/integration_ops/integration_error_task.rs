@@ -861,7 +861,7 @@ mod tests {
     fn entity_roundtrip_through_bson() {
         let created = task();
         let roundtrip: IntegrationErrorTask =
-            bson::from_document(bson::to_document(&created).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&created).unwrap()).unwrap();
         assert_eq!(roundtrip, created);
     }
 }

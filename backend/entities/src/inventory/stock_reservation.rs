@@ -551,7 +551,7 @@ mod tests {
 
         let reservation = StockReservation::new(StockReservationId::new("rsv-10"), data()).unwrap();
         let roundtrip: StockReservation =
-            bson::from_document(bson::to_document(&reservation).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&reservation).unwrap()).unwrap();
         assert_eq!(roundtrip, reservation);
     }
 }

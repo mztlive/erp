@@ -449,7 +449,8 @@ mod tests {
         assert_eq!(MovementType::StockLoss.label(), "盘亏");
 
         let movement = StockMovement::new(StockMovementId::new("m-8"), data()).unwrap();
-        let roundtrip: StockMovement = bson::from_document(bson::to_document(&movement).unwrap()).unwrap();
+        let roundtrip: StockMovement =
+            bson::deserialize_from_document(bson::serialize_to_document(&movement).unwrap()).unwrap();
         assert_eq!(roundtrip, movement);
     }
 }

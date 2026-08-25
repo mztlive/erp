@@ -450,7 +450,8 @@ mod tests {
     fn bson_roundtrip() {
         let address =
             PartyAddress::new(PartyAddressId::new("addr-4"), address_data(), KEY, "admin-1").unwrap();
-        let roundtrip: PartyAddress = bson::from_document(bson::to_document(&address).unwrap()).unwrap();
+        let roundtrip: PartyAddress =
+            bson::deserialize_from_document(bson::serialize_to_document(&address).unwrap()).unwrap();
         assert_eq!(roundtrip.base, address.base);
         assert_eq!(roundtrip.address_query_hmac, address.address_query_hmac);
     }

@@ -1848,7 +1848,7 @@ fn payload_digest(parts: &[&str]) -> String {
         }
         hasher.update(part.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// 配置状态。

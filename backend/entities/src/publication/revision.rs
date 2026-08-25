@@ -631,8 +631,8 @@ mod tests {
         )
         .unwrap();
 
-        let bytes = bson::to_vec(&revision).unwrap();
-        let wire_doc: bson::Document = bson::from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&revision).unwrap();
+        let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(
             wire_doc.get("minimum_purchase_quantity"),
             Some(bson::Bson::Decimal128(_))
@@ -646,7 +646,7 @@ mod tests {
             Some(bson::Bson::Decimal128(_))
         ));
 
-        let back: ProductPublicationRevision = bson::from_slice(&bytes).unwrap();
+        let back: ProductPublicationRevision = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, revision);
     }
 

@@ -654,7 +654,7 @@ mod tests {
 
         let fulfillment = ServiceFulfillment::new(ServiceFulfillmentId::new("sf-9"), data()).unwrap();
         let roundtrip: ServiceFulfillment =
-            bson::from_document(bson::to_document(&fulfillment).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&fulfillment).unwrap()).unwrap();
         assert_eq!(roundtrip, fulfillment);
     }
 }

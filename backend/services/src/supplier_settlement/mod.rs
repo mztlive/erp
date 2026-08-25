@@ -1530,7 +1530,7 @@ fn digest_parts(parts: &[String]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    format!("{:x}", digest.finalize())
+    hex::encode(digest.finalize())
 }
 
 /// 计算不可变结算来源快照摘要。

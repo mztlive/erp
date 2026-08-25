@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use casbin::{error::AdapterError, Adapter, Filter, Model};
 use futures_util::StreamExt;
 use mongodb::{
-    bson::{doc, to_document, Document},
+    bson::{doc, serialize_to_document, Document},
     options::FindOptions,
     ClientSession, Database,
 };
@@ -525,7 +525,7 @@ impl Adapter for MongoCasbinAdapter {
 
     async fn add_policy(&mut self, sec: &str, ptype: &str, rule: Vec<String>) -> casbin::Result<bool> {
         let rule = CasbinRule::new(sec, ptype, rule);
-        let rule_doc = to_document(&rule).map_err(Self::adapter_error)?;
+        let rule_doc = serialize_to_document(&rule).map_err(Self::adapter_error)?;
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {

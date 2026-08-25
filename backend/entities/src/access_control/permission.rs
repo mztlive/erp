@@ -232,7 +232,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let permission = Permission::new(PermissionId::new("perm-1"), data()).unwrap();
-        let roundtrip: Permission = bson::from_document(bson::to_document(&permission).unwrap()).unwrap();
+        let roundtrip: Permission =
+            bson::deserialize_from_document(bson::serialize_to_document(&permission).unwrap()).unwrap();
         assert_eq!(roundtrip, permission);
     }
 }

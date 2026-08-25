@@ -4,8 +4,8 @@
 //! 揭示令牌签名密钥。密钥只驻留在内存中，不进入实体、DTO、日志或 Debug。
 
 use aes_gcm::{
-    aead::{rand_core::RngCore, Aead, OsRng},
-    Aes256Gcm, KeyInit, Nonce,
+    aead::{Aead, Generate, Nonce},
+    Aes256Gcm, KeyInit,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use hmac::{Hmac, Mac};
@@ -86,14 +86,14 @@ impl SensitiveDataCodec {
     pub fn encrypt(&self, plaintext: &str) -> Result<String> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|_| Error::Internal("敏感数据加密初始化失败".to_string()))?;
-        let mut nonce_bytes = [0_u8; NONCE_LEN];
-        OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::<Aes256Gcm>::try_generate()
+            .map_err(|_| Error::Internal("敏感数据随机数生成失败".to_string()))?;
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_bytes())
+            .encrypt(&nonce, plaintext.as_bytes())
             .map_err(|_| Error::Internal("敏感数据加密失败".to_string()))?;
         Ok(format!(
             "{CIPHERTEXT_VERSION}.{}.{}",
-            URL_SAFE_NO_PAD.encode(nonce_bytes),
+            URL_SAFE_NO_PAD.encode(nonce.as_slice()),
             URL_SAFE_NO_PAD.encode(ciphertext)
         ))
     }
@@ -106,8 +106,10 @@ impl SensitiveDataCodec {
         let (nonce, ciphertext) = parse_ciphertext(encoded)?;
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|_| Error::Internal("敏感数据解密初始化失败".to_string()))?;
+        let nonce = Nonce::<Aes256Gcm>::try_from(nonce.as_slice())
+            .map_err(|_| Error::ValidationError("敏感数据格式非法".to_string()))?;
         let plaintext = cipher
-            .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+            .decrypt(&nonce, ciphertext.as_ref())
             .map_err(|_| Error::ValidationError("敏感数据不可用或密钥不匹配".to_string()))?;
         String::from_utf8(plaintext).map_err(|_| Error::ValidationError("敏感数据编码非法".to_string()))
     }
@@ -201,7 +203,7 @@ fn parse_ciphertext(encoded: &str) -> Result<([u8; NONCE_LEN], Vec<u8>)> {
 
 /// 为令牌正文计算 HMAC-SHA256。
 fn sign(key: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(key)
+    let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key)
         .map_err(|_| Error::Internal("敏感字段令牌签名初始化失败".to_string()))?;
     mac.update(payload);
     Ok(mac.finalize().into_bytes().to_vec())
@@ -209,7 +211,7 @@ fn sign(key: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
 
 /// 常量时间校验令牌签名。
 fn verify_signature(key: &[u8], payload: &[u8], signature: &[u8]) -> Result<()> {
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(key)
+    let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key)
         .map_err(|_| Error::Internal("敏感字段令牌验签初始化失败".to_string()))?;
     mac.update(payload);
     mac.verify_slice(signature)

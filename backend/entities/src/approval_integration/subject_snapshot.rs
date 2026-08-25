@@ -293,7 +293,7 @@ mod tests {
         )
         .unwrap();
         let roundtrip: ApprovalSubjectSnapshot =
-            bson::from_document(bson::to_document(&snapshot).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&snapshot).unwrap()).unwrap();
         assert_eq!(roundtrip, snapshot);
     }
 }

@@ -8,7 +8,7 @@
 use chrono::NaiveDate;
 use database::{Error as DatabaseError, Executor};
 use mongodb::{
-    bson::{doc, to_bson, Bson},
+    bson::{doc, serialize_to_bson, Bson},
     options::ReturnDocument,
     Collection, Database,
 };
@@ -134,7 +134,7 @@ impl DocumentNumberKind {
 
     /// 返回计数器文档 `_id`（即 serde snake_case 序列化名）。
     pub(crate) fn counter_id(self) -> String {
-        let Ok(Bson::String(id)) = to_bson(&self) else {
+        let Ok(Bson::String(id)) = serialize_to_bson(&self) else {
             unreachable!("unit variant must serialize to a bson string");
         };
         id
@@ -340,7 +340,7 @@ impl DocumentNumberGenerator {
 mod tests {
     use super::{format_number, DocumentNumberKind, NumberPhase, COUNTER_COLLECTION, SEQ_WIDTH};
     use chrono::NaiveDate;
-    use mongodb::bson::{from_bson, to_bson, Bson};
+    use mongodb::bson::{deserialize_from_bson, serialize_to_bson, Bson};
 
     const KIND_TABLE: [(DocumentNumberKind, &str, &str, NumberPhase); 13] = [
         (
@@ -436,9 +436,10 @@ mod tests {
             (DocumentNumberKind::Invoice, "invoice"),
         ];
         for (kind, expected) in cases {
-            let serialized = to_bson(&kind).expect("kind should serialize");
+            let serialized = serialize_to_bson(&kind).expect("kind should serialize");
             assert_eq!(serialized, Bson::String(expected.to_string()));
-            let deserialized = from_bson::<DocumentNumberKind>(serialized).expect("kind should deserialize");
+            let deserialized =
+                deserialize_from_bson::<DocumentNumberKind>(serialized).expect("kind should deserialize");
             assert_eq!(deserialized, kind);
         }
     }
@@ -446,7 +447,7 @@ mod tests {
     #[test]
     fn counter_id_matches_serialized_kind_name() {
         for (kind, _, _, _) in KIND_TABLE {
-            let Bson::String(name) = to_bson(&kind).expect("kind should serialize") else {
+            let Bson::String(name) = serialize_to_bson(&kind).expect("kind should serialize") else {
                 panic!("kind must serialize to a string");
             };
             assert_eq!(kind.counter_id(), name);

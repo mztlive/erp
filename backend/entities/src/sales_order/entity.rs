@@ -1062,7 +1062,8 @@ mod tests {
     #[test]
     fn entities_roundtrip_through_bson() {
         let order = SalesOrder::new(SalesOrderId::new("o-1"), data(), "admin-1").unwrap();
-        let roundtrip: SalesOrder = bson::from_document(bson::to_document(&order).unwrap()).unwrap();
+        let roundtrip: SalesOrder =
+            bson::deserialize_from_document(bson::serialize_to_document(&order).unwrap()).unwrap();
         assert_eq!(roundtrip, order);
 
         let line = SalesOrderLine::new(
@@ -1071,7 +1072,8 @@ mod tests {
             SalesOrderLineData { line_no: 1 },
         )
         .unwrap();
-        let roundtrip_line: SalesOrderLine = bson::from_document(bson::to_document(&line).unwrap()).unwrap();
+        let roundtrip_line: SalesOrderLine =
+            bson::deserialize_from_document(bson::serialize_to_document(&line).unwrap()).unwrap();
         assert_eq!(roundtrip_line, line);
     }
 

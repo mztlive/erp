@@ -283,7 +283,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let binding = UserRole::new(UserRoleId::new("ur-1"), data()).unwrap();
-        let roundtrip: UserRole = bson::from_document(bson::to_document(&binding).unwrap()).unwrap();
+        let roundtrip: UserRole =
+            bson::deserialize_from_document(bson::serialize_to_document(&binding).unwrap()).unwrap();
         assert_eq!(roundtrip, binding);
     }
 }

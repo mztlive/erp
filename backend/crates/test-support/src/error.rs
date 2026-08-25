@@ -11,7 +11,7 @@ pub enum Error {
 
     /// BSON 序列化失败。
     #[error("BSON 处理失败: {0}")]
-    Bson(#[from] bson::ser::Error),
+    Bson(#[from] bson::error::Error),
 
     /// 环境变量缺失。
     #[error("环境变量 {0} 未设置或为空")]
@@ -23,7 +23,7 @@ pub enum Error {
 
     /// HMAC 密钥不合法。
     #[error("JWT HMAC 密钥不合法: {0}")]
-    Hmac(#[from] hmac::digest::InvalidLength),
+    Hmac(#[from] jwt_hmac::digest::InvalidLength),
 
     /// JWT 密钥过短（与 web-api 一致，至少 32 字节）。
     #[error("JWT 密钥过短，至少需要 32 字节")]

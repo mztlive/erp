@@ -2205,10 +2205,9 @@ impl ReceivableService {
         let client = db.client().clone();
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
-        let digest = format!(
-            "{:x}",
-            Sha256::digest(format!("{}|{}|{}", actor.id(), id, req.idempotency_key.trim()).as_bytes())
-        );
+        let digest = hex::encode(Sha256::digest(
+            format!("{}|{}|{}", actor.id(), id, req.idempotency_key.trim()).as_bytes(),
+        ));
         let red_no = req
             .invoice_no
             .as_deref()
@@ -2916,10 +2915,7 @@ fn normalized_registration_no(value: Option<&str>) -> Option<String> {
 
 /// 按操作者与幂等键生成稳定且不泄漏原键的票款单号。
 fn stable_registration_no(prefix: &str, actor_id: &str, key: &str) -> String {
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(format!("{actor_id}|{}", key.trim()).as_bytes())
-    );
+    let digest = hex::encode(Sha256::digest(format!("{actor_id}|{}", key.trim()).as_bytes()));
     format!("{prefix}-{}", &digest[..12])
 }
 
@@ -2927,15 +2923,14 @@ fn stable_registration_no(prefix: &str, actor_id: &str, key: &str) -> String {
 fn card_funds_registration_fingerprint<T: serde::Serialize>(command: &T) -> Result<String> {
     let serialized = serde_json::to_vec(command)
         .map_err(|error| Error::Internal(format!("卡券票款登记命令序列化失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(serialized)))
+    Ok(hex::encode(Sha256::digest(serialized)))
 }
 
 /// 生成 W13 登记命令的稳定审计主键。
 fn card_funds_registration_audit_id(action: &str, actor_id: &str, key: &str) -> String {
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(format!("{action}|{actor_id}|{}", key.trim()).as_bytes())
-    );
+    let digest = hex::encode(Sha256::digest(
+        format!("{action}|{actor_id}|{}", key.trim()).as_bytes(),
+    ));
     format!("{CARD_FUNDS_REGISTRATION_RECEIPT_PREFIX}{digest}")
 }
 
@@ -3753,7 +3748,7 @@ fn review_chain_version(reviews: &[ReceivableFundsReview]) -> String {
                 .unwrap_or_default(),
         );
     }
-    format!("rcv:{:x}", digest.finalize())
+    format!("rcv:{}", hex::encode(digest.finalize()))
 }
 
 /// 计算账户及其全部当前票款正式事实的不透明版本。
@@ -3869,7 +3864,7 @@ fn funds_fact_version(account: &ReceivableAccount, snapshot: &CardFundsSnapshot)
             digest_part(&mut digest, value);
         }
     }
-    format!("ffv:{:x}", digest.finalize())
+    format!("ffv:{}", hex::encode(digest.finalize()))
 }
 
 /// 向摘要写入无拼接歧义的长度前缀字段。
@@ -3882,7 +3877,7 @@ fn digest_part(digest: &mut Sha256, value: &str) {
 fn card_funds_command_fingerprint(command: &CompleteCardFundsReviewCommand) -> Result<String> {
     let serialized = serde_json::to_vec(command)
         .map_err(|error| Error::Internal(format!("卡券票款复核命令序列化失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(serialized)))
+    Ok(hex::encode(Sha256::digest(serialized)))
 }
 
 /// 生成不泄漏原始幂等键的稳定审计主键。
@@ -3891,7 +3886,10 @@ fn card_funds_audit_id(actor_id: &str, key: &str) -> String {
     digest_part(&mut digest, CARD_FUNDS_REVIEW_ACTION);
     digest_part(&mut digest, actor_id);
     digest_part(&mut digest, key.trim());
-    format!("{CARD_FUNDS_REVIEW_RECEIPT_PREFIX}{:x}", digest.finalize())
+    format!(
+        "{CARD_FUNDS_REVIEW_RECEIPT_PREFIX}{}",
+        hex::encode(digest.finalize())
+    )
 }
 
 /// 将正式结果编码为受审计消息长度约束的幂等收据。

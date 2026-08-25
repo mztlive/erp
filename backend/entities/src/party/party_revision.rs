@@ -144,7 +144,8 @@ mod tests {
     #[test]
     fn bson_roundtrip() {
         let revision = PartyRevision::new(PartyRevisionId::new("rev-2"), revision_data()).unwrap();
-        let roundtrip: PartyRevision = bson::from_document(bson::to_document(&revision).unwrap()).unwrap();
+        let roundtrip: PartyRevision =
+            bson::deserialize_from_document(bson::serialize_to_document(&revision).unwrap()).unwrap();
         assert_eq!(roundtrip, revision);
     }
 }

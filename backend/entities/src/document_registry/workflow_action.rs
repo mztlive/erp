@@ -422,7 +422,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let action = WorkflowAction::new(WorkflowActionId::new("wa-1"), data()).unwrap();
-        let roundtrip: WorkflowAction = bson::from_document(bson::to_document(&action).unwrap()).unwrap();
+        let roundtrip: WorkflowAction =
+            bson::deserialize_from_document(bson::serialize_to_document(&action).unwrap()).unwrap();
         assert_eq!(roundtrip, action);
     }
 }

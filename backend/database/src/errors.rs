@@ -1,5 +1,5 @@
 use mongodb::{
-    bson::{self, document},
+    bson,
     error::{ErrorKind, WriteFailure, TRANSIENT_TRANSACTION_ERROR},
 };
 use thiserror::Error;
@@ -15,10 +15,7 @@ pub enum Error {
     DuplicateKey(mongodb::error::Error),
 
     #[error("bson error: {0}")]
-    BsonError(#[from] bson::ser::Error),
-
-    #[error("can not read value from document: {0}")]
-    AccessValueError(#[from] document::ValueAccessError),
+    BsonError(#[from] bson::error::Error),
 
     #[error("optimistic locking error")]
     OptimisticLockingError,
@@ -135,14 +132,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use mongodb::{
-        bson::{doc, from_document},
+        bson::{deserialize_from_document, doc},
         error::{Error as MongoError, ErrorKind, WriteError, WriteFailure},
     };
 
     use super::Error;
 
     fn write_error(code: i32) -> MongoError {
-        let write_error: WriteError = from_document(doc! {
+        let write_error: WriteError = deserialize_from_document(doc! {
             "code": code,
             "codeName": if code == 11000 { "DuplicateKey" } else { "Other" },
             "errmsg": "write failed",
@@ -168,7 +165,7 @@ mod tests {
 
     #[test]
     fn parses_duplicate_index_name_from_write_error_message() {
-        let write_error: WriteError = from_document(doc! {
+        let write_error: WriteError = deserialize_from_document(doc! {
             "code": 11000,
             "codeName": "DuplicateKey",
             "errmsg": "E11000 duplicate key error collection: erp.parties index: uk_parties_party_no dup key: { party_no: \"PTY-1\" }",

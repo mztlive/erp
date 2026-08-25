@@ -115,7 +115,7 @@ impl<'de> Visitor<'de> for ExternalOrderKeyVisitor {
         Ok(ExternalOrderKey(bytes))
     }
 
-    /// 接受 bson 以 human-readable 形态暴露的二进制值（`bson::from_document` 默认模式）。
+    /// 接受 bson 以 human-readable 形态暴露的二进制值（`bson::deserialize_from_document` 默认模式）。
     fn visit_byte_buf<E>(self, bytes: Vec<u8>) -> std::result::Result<Self::Value, E> {
         Ok(ExternalOrderKey(bytes))
     }
@@ -164,14 +164,14 @@ mod tests {
         let doc = Doc {
             key: ExternalOrderKey::from_trimmed("S1"),
         };
-        let bytes = bson::to_vec(&doc).unwrap();
-        let wire_doc: bson::Document = bson::from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&doc).unwrap();
+        let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         let bson::Bson::Binary(binary) = wire_doc.get("key").unwrap() else {
             panic!("key 必须以 BSON Binary 持久化");
         };
         assert_eq!(binary.bytes, b"S1");
 
-        let back: Doc = bson::from_slice(&bytes).unwrap();
+        let back: Doc = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, doc);
     }
 }

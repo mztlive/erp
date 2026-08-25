@@ -171,7 +171,7 @@ mod tests {
     fn entity_roundtrips_through_bson() {
         let attachment = DocumentAttachment::new(DocumentAttachmentId::new("da-1"), data()).unwrap();
         let roundtrip: DocumentAttachment =
-            bson::from_document(bson::to_document(&attachment).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&attachment).unwrap()).unwrap();
         assert_eq!(roundtrip, attachment);
     }
 }

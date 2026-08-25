@@ -1772,7 +1772,7 @@ fn digest(parts: &[&str]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    format!("{:x}", digest.finalize())
+    hex::encode(digest.finalize())
 }
 
 #[cfg(test)]

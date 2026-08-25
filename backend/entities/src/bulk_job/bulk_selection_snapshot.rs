@@ -403,7 +403,7 @@ mod tests {
     fn entity_roundtrips_through_bson() {
         let snapshot = BulkSelectionSnapshot::new(BulkSelectionSnapshotId::new("snap-1"), data()).unwrap();
         let roundtrip: BulkSelectionSnapshot =
-            bson::from_document(bson::to_document(&snapshot).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&snapshot).unwrap()).unwrap();
         assert_eq!(roundtrip, snapshot);
     }
 }

@@ -636,7 +636,7 @@ impl<'a> Repository<'a, StockBalance> {
             doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
             doc! {
                 "$set": {
-                    "last_movement_id": mongodb::bson::to_bson(movement_id)?,
+                    "last_movement_id": mongodb::bson::serialize_to_bson(movement_id)?,
                     "updated_at": Local::now().timestamp(),
                 },
                 "$inc": { "version": 1 },
@@ -966,7 +966,7 @@ impl<'a> InventoryRepository<'a> {
             "updated_at": Local::now().timestamp(),
         };
         if let Some(direction) = direction {
-            set.insert("direction", mongodb::bson::to_bson(&direction)?);
+            set.insert("direction", mongodb::bson::serialize_to_bson(&direction)?);
         }
         let result = mongo_ops::update_one(
             &self.db.collection::<StockAdjustmentLine>(STOCK_ADJUSTMENT_LINES),
@@ -1026,12 +1026,8 @@ where
 
 /// 把 `Quantity` 转为 BSON `Decimal128`（存储形态由 P0 固化，不做任何舍入/换算）。
 ///
-/// `bson::to_bson` 的人性化序列化器会把数量写成字符串（$numberDecimal 无法
-/// 参与 `$inc`/`$gte`），必须走非人性化序列化器产出真正的 `Decimal128` 变体。
-/// bson 2.15 对 `SerializerOptions::human_readable(false)` 标记了 deprecated
-/// （bson 自身代码也以 `#[allow(deprecated)]` 使用该配置），但官方文档仍以此
-/// 为「非人性化序列化」的唯一入口，且 `serde_helpers::HumanReadable` 只提供
-/// 反向（强制人性化）；此处按文档保留该配置。
+/// `bson::serialize_to_bson` 的人性化序列化器会把数量写成字符串，无法参与
+/// `$inc`/`$gte`；这里直接构造 Decimal128，确保与实体持久化形态一致。
 ///
 /// # 参数
 /// * `quantity` - 定点数量
@@ -1040,15 +1036,9 @@ where
 /// 返回 Decimal128 BSON 值。
 ///
 /// # 错误
-/// BSON 序列化失败时返回错误。
-#[allow(deprecated)]
+/// 数量无法表示为 Decimal128 时返回错误。
 fn to_bson(quantity: Quantity) -> Result<Bson> {
-    Ok(mongodb::bson::to_bson_with_options(
-        &quantity,
-        mongodb::bson::SerializerOptions::builder()
-            .human_readable(false)
-            .build(),
-    )?)
+    Ok(Bson::Decimal128(quantity.to_string().parse()?))
 }
 
 /// 对 `Quantity` 取相反数并转为 Decimal128 BSON（符号翻转，不改变精度与数值语义）。

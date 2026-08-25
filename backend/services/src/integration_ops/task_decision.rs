@@ -1263,7 +1263,7 @@ async fn store_receipt<T: Serialize>(
 }
 
 fn stable_digest(value: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(value))
+    hex::encode(Sha256::digest(value))
 }
 
 #[cfg(test)]

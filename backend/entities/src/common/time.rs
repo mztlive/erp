@@ -258,9 +258,9 @@ mod tests {
         let doc = Doc {
             at: Instant::from_unix_secs(1_700_000_000),
         };
-        let bson_doc = bson::to_document(&doc).unwrap();
+        let bson_doc = bson::serialize_to_document(&doc).unwrap();
         assert!(matches!(bson_doc.get("at"), Some(bson::Bson::Int64(_))));
-        let back: Doc = bson::from_document(bson_doc).unwrap();
+        let back: Doc = bson::deserialize_from_document(bson_doc).unwrap();
         assert_eq!(back, doc);
     }
 

@@ -1708,7 +1708,7 @@ fn next_revision_no(values: impl Iterator<Item = u32>) -> u32 {
 fn request_fingerprint(req: &SaveSupplierProfileRequest) -> Result<String> {
     let bytes =
         serde_json::to_vec(req).map_err(|error| Error::Internal(format!("供应商命令序列化失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(hex::encode(Sha256::digest(bytes)))
 }
 
 /// 解析供应商根命令中的临时资质文件引用。

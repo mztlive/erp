@@ -4,7 +4,7 @@ use std::fmt;
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -412,7 +412,7 @@ mod tests {
     use crate::common::state::ensure_transition;
     use crate::common::time::Instant;
     use crate::ids::FileAssetId;
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::{Digest, Sha256};
 
     fn hmac_value(plain: &str, key: &[u8]) -> ContentHmac {
@@ -614,7 +614,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
-        let roundtrip: FileAsset = bson::from_document(bson::to_document(&asset).unwrap()).unwrap();
+        let roundtrip: FileAsset =
+            bson::deserialize_from_document(bson::serialize_to_document(&asset).unwrap()).unwrap();
         assert_eq!(roundtrip, asset);
     }
 }

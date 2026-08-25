@@ -3331,7 +3331,7 @@ fn completion_result(
 fn serialized_fingerprint<T: Serialize>(command: &T) -> Result<String> {
     let bytes = serde_json::to_vec(command)
         .map_err(|error| Error::Internal(format!("命令指纹序列化失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(hex::encode(Sha256::digest(bytes)))
 }
 
 fn investigation_audit_id(actor_id: &str, action: &str, object_id: &str, key: &str) -> String {
@@ -3359,7 +3359,7 @@ fn stable_internal_idempotency_key(prefix: &str, audit_id: &str) -> String {
 }
 
 fn stable_digest(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    hex::encode(Sha256::digest(value.as_bytes()))
 }
 
 fn investigation_receipt_message(fingerprint: &str, receipt: &InvestigationReceipt) -> String {

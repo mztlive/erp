@@ -513,7 +513,7 @@ mod tests {
             SupplierCapability::new(SupplierCapabilityId::new("cap-4"), capability_data(), "admin-1")
                 .unwrap();
         let roundtrip: SupplierCapability =
-            bson::from_document(bson::to_document(&capability).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&capability).unwrap()).unwrap();
         assert_eq!(roundtrip, capability);
     }
 }

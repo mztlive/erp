@@ -1187,7 +1187,7 @@ fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
 fn command_fingerprint<T: Serialize>(operation: &str, request: &T) -> Result<String> {
     let payload = serde_json::to_vec(&(operation, request))
         .map_err(|error| Error::Internal(format!("序列化命令指纹失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(payload)))
+    Ok(hex::encode(Sha256::digest(payload)))
 }
 
 fn build_command<T: Serialize>(

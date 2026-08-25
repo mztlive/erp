@@ -62,10 +62,9 @@ pub struct ReturnsService {
 
 /// 由操作者与幂等键生成不泄露原键的稳定纠错单号。
 pub(super) fn return_command_no(prefix: &str, actor_id: &str, idempotency_key: &str) -> String {
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(format!("{actor_id}|{}", idempotency_key.trim()).as_bytes())
-    );
+    let digest = hex::encode(Sha256::digest(
+        format!("{actor_id}|{}", idempotency_key.trim()).as_bytes(),
+    ));
     format!("{prefix}-{}", &digest[..8])
 }
 

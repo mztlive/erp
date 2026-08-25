@@ -473,7 +473,8 @@ mod tests {
             "admin-1",
         )
         .unwrap();
-        let roundtrip: PartyBankAccount = bson::from_document(bson::to_document(&account).unwrap()).unwrap();
+        let roundtrip: PartyBankAccount =
+            bson::deserialize_from_document(bson::serialize_to_document(&account).unwrap()).unwrap();
         assert_eq!(roundtrip.base, account.base);
         assert_eq!(
             roundtrip.account_number_query_hmac,

@@ -624,7 +624,8 @@ mod tests {
     #[test]
     fn invoice_bson_roundtrip_preserves_fields() {
         let invoice = Invoice::new(InvoiceId::new("inv-1"), data(), "admin-1").unwrap();
-        let back: Invoice = bson::from_document(bson::to_document(&invoice).unwrap()).unwrap();
+        let back: Invoice =
+            bson::deserialize_from_document(bson::serialize_to_document(&invoice).unwrap()).unwrap();
         assert_eq!(back, invoice);
     }
 

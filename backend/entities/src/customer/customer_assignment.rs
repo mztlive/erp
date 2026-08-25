@@ -303,7 +303,7 @@ mod tests {
         let assignment =
             CustomerAssignment::new(CustomerAssignmentId::new("assign-5"), assignment_data()).unwrap();
         let roundtrip: CustomerAssignment =
-            bson::from_document(bson::to_document(&assignment).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&assignment).unwrap()).unwrap();
         assert_eq!(roundtrip, assignment);
     }
 }

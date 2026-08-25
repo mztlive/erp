@@ -284,7 +284,7 @@ mod tests {
         )
         .unwrap();
         let roundtrip: AcceptanceFulfillmentAllocation =
-            bson::from_document(bson::to_document(&allocation).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&allocation).unwrap()).unwrap();
         assert_eq!(roundtrip, allocation);
     }
 

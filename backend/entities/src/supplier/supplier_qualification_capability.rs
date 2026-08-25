@@ -89,7 +89,7 @@ mod tests {
         )
         .unwrap();
         let roundtrip: SupplierQualificationCapability =
-            bson::from_document(bson::to_document(&link).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&link).unwrap()).unwrap();
         assert_eq!(roundtrip, link);
     }
 }

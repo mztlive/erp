@@ -163,7 +163,7 @@ mod tests {
             Instant::from_unix_secs(1_700_000_000),
         );
         let roundtrip: MallSalesSyncCursor =
-            bson::from_document(bson::to_document(&cursor).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&cursor).unwrap()).unwrap();
         assert_eq!(roundtrip, cursor);
     }
 }

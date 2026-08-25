@@ -157,7 +157,7 @@ const K: [u32; 64] = [
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     type HmacSha256 = Hmac<Sha256>;

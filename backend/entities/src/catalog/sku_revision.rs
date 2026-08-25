@@ -370,8 +370,8 @@ mod tests {
     #[test]
     fn sku_revision_roundtrips_through_bson() {
         let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
-        let bytes = bson::to_vec(&revision).unwrap();
-        let wire_doc: bson::Document = bson::from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&revision).unwrap();
+        let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(
             wire_doc.get("sales_visible_price_gross"),
             Some(bson::Bson::Decimal128(_))
@@ -381,7 +381,7 @@ mod tests {
             Some(bson::Bson::Decimal128(_))
         ));
 
-        let back: SkuRevision = bson::from_slice(&bytes).unwrap();
+        let back: SkuRevision = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, revision);
     }
 }

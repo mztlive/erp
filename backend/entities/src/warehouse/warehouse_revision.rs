@@ -207,7 +207,7 @@ impl WarehouseRevision {
 mod tests {
     use super::*;
     use crate::ids::WarehouseRevisionId;
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     type HmacSha256 = Hmac<Sha256>;

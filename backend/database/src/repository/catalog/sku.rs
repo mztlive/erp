@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn legacy_sku_row_without_listing_status_is_treated_as_listed() {
-        let row: SkuRow = mongodb::bson::from_document(doc! {
+        let row: SkuRow = mongodb::bson::deserialize_from_document(doc! {
             "id": "sku-1",
             "sku_no": "SKU-001",
             "product_id": "product-1",

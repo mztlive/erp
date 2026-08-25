@@ -107,8 +107,10 @@ struct ApprovalSubmissionStart<'a> {
 /// 为销售提交幂等命令生成不泄露原始幂等键的稳定收据 ID。
 fn sales_submission_audit_id(actor_id: &str, sales_order_id: &str, idempotency_key: &str) -> String {
     format!(
-        "sales-order-submit-{:x}",
-        Sha256::digest(format!("{actor_id}|{sales_order_id}|{idempotency_key}").as_bytes())
+        "sales-order-submit-{}",
+        hex::encode(Sha256::digest(
+            format!("{actor_id}|{sales_order_id}|{idempotency_key}").as_bytes()
+        ))
     )
 }
 
@@ -120,7 +122,7 @@ fn sales_submission_fingerprint(
 ) -> Result<String> {
     let payload = serde_json::to_vec(&(actor_id, sales_order_id, request))
         .map_err(|error| Error::Internal(format!("销售提交命令序列化失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(payload)))
+    Ok(hex::encode(Sha256::digest(payload)))
 }
 
 /// 按业务性质构造创建时绑定命令。
@@ -175,14 +177,14 @@ fn sales_order_create_audit_id(actor_id: &str, idempotency_key: &str) -> String 
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    format!("sales-order-create-{:x}", digest.finalize())
+    format!("sales-order-create-{}", hex::encode(digest.finalize()))
 }
 
 /// 锁定销售建单命令的完整载荷与鉴权操作者。
 fn sales_order_create_fingerprint<T: serde::Serialize>(actor_id: &str, request: &T) -> Result<String> {
     let payload = serde_json::to_vec(&(actor_id, request))
         .map_err(|error| Error::Internal(format!("销售建单命令序列化失败: {error}")))?;
-    Ok(format!("{:x}", Sha256::digest(payload)))
+    Ok(hex::encode(Sha256::digest(payload)))
 }
 
 impl SalesOrderService {

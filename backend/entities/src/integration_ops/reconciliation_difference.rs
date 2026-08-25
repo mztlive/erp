@@ -237,7 +237,7 @@ mod tests {
             ReconciliationDifference::new(ReconciliationDifferenceId::new("diff-9"), difference_data())
                 .unwrap();
         let roundtrip: ReconciliationDifference =
-            bson::from_document(bson::to_document(&difference).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&difference).unwrap()).unwrap();
         assert_eq!(roundtrip, difference);
     }
 }

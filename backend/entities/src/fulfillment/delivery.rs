@@ -808,7 +808,8 @@ mod tests {
         delivery
             .mark_shipped(Instant::from_unix_secs(1_700_000_000))
             .unwrap();
-        let roundtrip: Delivery = bson::from_document(bson::to_document(&delivery).unwrap()).unwrap();
+        let roundtrip: Delivery =
+            bson::deserialize_from_document(bson::serialize_to_document(&delivery).unwrap()).unwrap();
         assert_eq!(roundtrip, delivery);
     }
 

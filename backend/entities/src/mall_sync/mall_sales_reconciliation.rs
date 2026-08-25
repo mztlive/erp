@@ -817,13 +817,13 @@ mod tests {
         let job =
             MallSalesReconciliationJob::new(MallSalesReconciliationJobId::new("j-7"), job_data()).unwrap();
         let job_back: MallSalesReconciliationJob =
-            bson::from_document(bson::to_document(&job).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&job).unwrap()).unwrap();
         assert_eq!(job_back, job);
 
         let item = MallSalesReconciliationItem::new(MallSalesReconciliationItemId::new("i-10"), item_data())
             .unwrap();
         let item_back: MallSalesReconciliationItem =
-            bson::from_document(bson::to_document(&item).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&item).unwrap()).unwrap();
         assert_eq!(item_back, item);
     }
 }

@@ -801,14 +801,14 @@ mod tests {
     fn entities_roundtrip_through_bson() {
         let revision = SalesOrderRevision::new(SalesOrderRevisionId::new("rev-1"), header_data()).unwrap();
         let roundtrip: SalesOrderRevision =
-            bson::from_document(bson::to_document(&revision).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&revision).unwrap()).unwrap();
         assert_eq!(roundtrip, revision);
 
         let line =
             SalesOrderVoucherLineRevision::new(SalesOrderVoucherLineRevisionId::new("v-1"), voucher_data())
                 .unwrap();
         let roundtrip_line: SalesOrderVoucherLineRevision =
-            bson::from_document(bson::to_document(&line).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&line).unwrap()).unwrap();
         assert_eq!(roundtrip_line, line);
     }
 }

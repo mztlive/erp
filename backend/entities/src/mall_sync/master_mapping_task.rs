@@ -445,7 +445,8 @@ mod tests {
     #[test]
     fn bson_roundtrip_preserves_entity() {
         let task = MasterMappingTask::new(MasterMappingTaskId::new("t-7"), task_data()).unwrap();
-        let roundtrip: MasterMappingTask = bson::from_document(bson::to_document(&task).unwrap()).unwrap();
+        let roundtrip: MasterMappingTask =
+            bson::deserialize_from_document(bson::serialize_to_document(&task).unwrap()).unwrap();
         assert_eq!(roundtrip, task);
     }
 }

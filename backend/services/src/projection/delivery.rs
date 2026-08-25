@@ -1303,7 +1303,7 @@ fn operation_id(actor_id: &str, action: &str, delivery_id: &str, request_id: &st
 }
 
 fn stable_entity_id(prefix: &str, identity: &str) -> String {
-    format!("{prefix}_{:x}", Sha256::digest(identity.as_bytes()))
+    format!("{prefix}_{}", hex::encode(Sha256::digest(identity.as_bytes())))
 }
 
 fn should_advance_acked_revision(current_revision_no: u32, incoming_revision_no: u32) -> bool {

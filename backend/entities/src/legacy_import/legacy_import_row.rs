@@ -744,7 +744,8 @@ mod tests {
     fn bson_roundtrip_preserves_entity() {
         let mut row = LegacyImportRow::new(LegacyImportRowId::new("row-11"), row_data()).unwrap();
         row.mark_parse_result(ParseStatus::Valid, None, None).unwrap();
-        let roundtrip: LegacyImportRow = bson::from_document(bson::to_document(&row).unwrap()).unwrap();
+        let roundtrip: LegacyImportRow =
+            bson::deserialize_from_document(bson::serialize_to_document(&row).unwrap()).unwrap();
         assert_eq!(roundtrip, row);
     }
 }

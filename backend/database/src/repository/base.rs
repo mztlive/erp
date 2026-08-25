@@ -7,7 +7,7 @@ use crate::mongo_ops;
 use crate::Executor;
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::{
-    bson::{doc, to_document, Document},
+    bson::{doc, serialize_to_document, Document},
     options::FindOptions,
     Database,
 };
@@ -221,7 +221,7 @@ where
 
         let metadata = write_metadata(entity.base())?;
         let filter = active_cas_filter(entity.base(), metadata);
-        let mut document = to_document(&*entity)?;
+        let mut document = serialize_to_document(&*entity)?;
         document.insert("version", metadata.next_version_bson);
         document.insert("updated_at", metadata.updated_at_bson);
 

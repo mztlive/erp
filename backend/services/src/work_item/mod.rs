@@ -3421,7 +3421,7 @@ fn command_fingerprint(parts: &[&str]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    format!("{:x}", digest.finalize())
+    hex::encode(digest.finalize())
 }
 
 fn command_audit_message(fingerprint: &str, reason: Option<&str>) -> String {
@@ -3439,7 +3439,7 @@ fn audit_command_fingerprint(message: &str) -> Option<&str> {
 }
 
 fn stable_digest(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    hex::encode(Sha256::digest(value.as_bytes()))
 }
 
 fn required_text(value: &str, message: &str) -> Result<String> {

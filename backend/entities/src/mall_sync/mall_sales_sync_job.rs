@@ -485,7 +485,8 @@ mod tests {
     #[test]
     fn bson_roundtrip_preserves_entity() {
         let job = MallSalesSyncJob::new(MallSalesSyncJobId::new("j-9"), job_data()).unwrap();
-        let roundtrip: MallSalesSyncJob = bson::from_document(bson::to_document(&job).unwrap()).unwrap();
+        let roundtrip: MallSalesSyncJob =
+            bson::deserialize_from_document(bson::serialize_to_document(&job).unwrap()).unwrap();
         assert_eq!(roundtrip, job);
     }
 }

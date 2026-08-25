@@ -2633,12 +2633,12 @@ fn command_fingerprint(parts: &[&str]) -> String {
         digest.update((part.len() as u64).to_be_bytes());
         digest.update(part.as_bytes());
     }
-    format!("{:x}", digest.finalize())
+    hex::encode(digest.finalize())
 }
 
 /// 计算稳定 SHA-256 十六进制摘要。
 fn stable_digest(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    hex::encode(Sha256::digest(value.as_bytes()))
 }
 
 /// 解析收据中的整数版本。

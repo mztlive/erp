@@ -379,8 +379,8 @@ mod tests {
     fn bson_wire_roundtrip_persists_external_order_key_as_binary() {
         let snapshot =
             MallSalesOrderSnapshot::new(MallSalesOrderSnapshotId::new("s-9"), snapshot_data()).unwrap();
-        let bytes = bson::to_vec(&snapshot).unwrap();
-        let wire_doc: bson::Document = bson::from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&snapshot).unwrap();
+        let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
 
         let stored = wire_doc.get("external_order_key").unwrap();
         let bson::Bson::Binary(binary) = stored else {
@@ -388,7 +388,7 @@ mod tests {
         };
         assert_eq!(binary.bytes, b"SO-2026-001");
 
-        let back: MallSalesOrderSnapshot = bson::from_slice(&bytes).unwrap();
+        let back: MallSalesOrderSnapshot = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, snapshot);
     }
 

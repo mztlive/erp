@@ -535,7 +535,7 @@ mod tests {
         let mut acceptance = CustomerAcceptance::new(CustomerAcceptanceId::new("a8"), data()).unwrap();
         acceptance.mark_posted().unwrap();
         let roundtrip: CustomerAcceptance =
-            bson::from_document(bson::to_document(&acceptance).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&acceptance).unwrap()).unwrap();
         assert_eq!(roundtrip, acceptance);
     }
 

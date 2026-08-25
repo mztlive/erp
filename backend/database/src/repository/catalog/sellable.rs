@@ -266,7 +266,7 @@ fn sellable_sku_match(
 
 /// 把可序列化枚举转换为 BSON 标量。
 fn bson_for<T: Serialize>(value: T) -> Bson {
-    mongodb::bson::to_bson(&value).expect("域枚举必须可序列化为 BSON")
+    mongodb::bson::serialize_to_bson(&value).expect("域枚举必须可序列化为 BSON")
 }
 
 /// 把查询金额转换为与库内价格一致的 BSON Decimal128。

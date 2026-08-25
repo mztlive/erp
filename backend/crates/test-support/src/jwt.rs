@@ -3,10 +3,10 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use jwt::{Claims, RegisteredClaims, SignWithKey};
+use jwt_hmac::{Hmac, Mac};
+use jwt_sha2::Sha256;
 use serde_json::Value;
-use sha2::Sha256;
 
 use crate::seed::{seed_login, ACCOUNT_VERSION};
 use crate::{Error, Result};

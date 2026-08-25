@@ -242,11 +242,11 @@ mod tests {
     #[test]
     fn known_party_duplicate_index_maps_to_field_message() {
         use mongodb::{
-            bson::{doc, from_document},
+            bson::{deserialize_from_document, doc},
             error::{ErrorKind, WriteError, WriteFailure},
         };
 
-        let write_error: WriteError = from_document(doc! {
+        let write_error: WriteError = deserialize_from_document(doc! {
             "code": 11000,
             "codeName": "DuplicateKey",
             "errmsg": "E11000 duplicate key error collection: erp.parties index: uk_parties_party_no dup key: { party_no: \"PTY-1\" }",
@@ -262,11 +262,11 @@ mod tests {
     #[test]
     fn contract_number_duplicate_index_maps_to_contract_message() {
         use mongodb::{
-            bson::{doc, from_document},
+            bson::{deserialize_from_document, doc},
             error::{ErrorKind, WriteError, WriteFailure},
         };
 
-        let write_error: WriteError = from_document(doc! {
+        let write_error: WriteError = deserialize_from_document(doc! {
             "code": 11000,
             "codeName": "DuplicateKey",
             "errmsg": "E11000 duplicate key error collection: erp.contracts index: uk_contracts_contract_no dup key: { contract_no: \"HT-1\" }",

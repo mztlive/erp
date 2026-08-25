@@ -336,7 +336,7 @@ mod tests {
             SupplierRatingRevision::new(SupplierRatingRevisionId::new("rating-rev-3"), rating_data())
                 .unwrap();
         let roundtrip: SupplierRatingRevision =
-            bson::from_document(bson::to_document(&revision).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&revision).unwrap()).unwrap();
         assert_eq!(roundtrip, revision);
     }
 }

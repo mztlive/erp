@@ -165,7 +165,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let relation = DocumentRelation::new(DocumentRelationId::new("rel-1"), data()).unwrap();
-        let roundtrip: DocumentRelation = bson::from_document(bson::to_document(&relation).unwrap()).unwrap();
+        let roundtrip: DocumentRelation =
+            bson::deserialize_from_document(bson::serialize_to_document(&relation).unwrap()).unwrap();
         assert_eq!(roundtrip, relation);
     }
 }

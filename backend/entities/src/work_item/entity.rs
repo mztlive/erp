@@ -1107,9 +1107,9 @@ mod tests {
             Instant::from_unix_secs(100),
         )
         .unwrap();
-        let document = bson::to_document(&item).unwrap();
+        let document = bson::serialize_to_document(&item).unwrap();
         assert_eq!(document.get_str("status").unwrap(), "OPEN");
-        let roundtrip: WorkItem = bson::from_document(document).unwrap();
+        let roundtrip: WorkItem = bson::deserialize_from_document(document).unwrap();
         assert_eq!(roundtrip, item);
     }
 

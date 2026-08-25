@@ -288,7 +288,8 @@ mod tests {
     fn bson_roundtrip() {
         let profile =
             PartyTaxProfile::new(PartyTaxProfileId::new("tax-3"), tax_profile_data(), "admin-1").unwrap();
-        let roundtrip: PartyTaxProfile = bson::from_document(bson::to_document(&profile).unwrap()).unwrap();
+        let roundtrip: PartyTaxProfile =
+            bson::deserialize_from_document(bson::serialize_to_document(&profile).unwrap()).unwrap();
         assert_eq!(roundtrip, profile);
     }
 }

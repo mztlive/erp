@@ -396,7 +396,7 @@ mod tests {
         )
         .unwrap();
         let decoded: ReconciliationDifferenceResolution =
-            bson::from_document(bson::to_document(&record).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&record).unwrap()).unwrap();
 
         assert_eq!(decoded, record);
         assert_eq!(record.evidence_reference.as_deref(), Some("audit://evidence-1"));

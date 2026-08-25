@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use chrono::{Duration, Utc};
-use hmac::{digest::InvalidLength, Hmac, Mac};
 use jwt::{Claims, RegisteredClaims, SignWithKey, VerifyWithKey};
+use jwt_hmac::{digest::InvalidLength, Hmac, Mac};
+use jwt_sha2::Sha256;
 use serde_json::Value;
-use sha2::Sha256;
 
 use entities::AccountKind;
 

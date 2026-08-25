@@ -372,7 +372,7 @@ mod tests {
         )
         .unwrap();
         let roundtrip: SupplierCommercialProfileRevision =
-            bson::from_document(bson::to_document(&profile).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&profile).unwrap()).unwrap();
         assert_eq!(roundtrip, profile);
     }
 

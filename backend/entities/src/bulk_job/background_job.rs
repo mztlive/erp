@@ -735,7 +735,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let job = BackgroundJob::new(BackgroundJobId::new("job-1"), data()).unwrap();
-        let roundtrip: BackgroundJob = bson::from_document(bson::to_document(&job).unwrap()).unwrap();
+        let roundtrip: BackgroundJob =
+            bson::deserialize_from_document(bson::serialize_to_document(&job).unwrap()).unwrap();
         assert_eq!(roundtrip, job);
     }
 }

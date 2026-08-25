@@ -510,7 +510,7 @@ mod tests {
             LegacyImportConfirmation::new(LegacyImportConfirmationId::new("c-10"), confirmation_data())
                 .unwrap();
         let roundtrip: LegacyImportConfirmation =
-            bson::from_document(bson::to_document(&confirmation).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&confirmation).unwrap()).unwrap();
         assert_eq!(roundtrip, confirmation);
     }
 }

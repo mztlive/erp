@@ -3246,11 +3246,11 @@ fn ensure_evidence_list(values: &[String]) -> Result<()> {
 fn serialized_fingerprint<T: Serialize>(value: &T) -> Result<String> {
     let bytes =
         serde_json::to_vec(value).map_err(|_| Error::Internal("无法形成 W17 命令指纹".to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(hex::encode(Sha256::digest(bytes)))
 }
 
 fn sha256_hex(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    hex::encode(Sha256::digest(value.as_bytes()))
 }
 
 fn ensure_reapply_receipt(
@@ -3268,7 +3268,7 @@ fn ensure_reapply_receipt(
 
 fn command_audit_id(actor_id: &str, action: &str, resource_id: &str, key: &str) -> String {
     let digest = Sha256::digest(format!("{actor_id}|{action}|{resource_id}|{}", key.trim()).as_bytes());
-    format!("{W17_RECEIPT_PREFIX}{digest:x}")
+    format!("{W17_RECEIPT_PREFIX}{}", hex::encode(digest))
 }
 
 fn command_audit_message(fingerprint: &str) -> String {
@@ -3276,13 +3276,13 @@ fn command_audit_message(fingerprint: &str) -> String {
 }
 
 fn sync_trigger_job_id(audit_id: &str) -> String {
-    let digest = format!("{:x}", Sha256::digest(format!("sync-job|{audit_id}").as_bytes()));
+    let digest = hex::encode(Sha256::digest(format!("sync-job|{audit_id}").as_bytes()));
     format!("w17-job-{}", &digest[..40])
 }
 
 fn mapping_lineage_ids(fingerprint: &str) -> (String, String) {
-    let map_digest = format!("{:x}", Sha256::digest(format!("map|{fingerprint}").as_bytes()));
-    let target_digest = format!("{:x}", Sha256::digest(format!("target|{fingerprint}").as_bytes()));
+    let map_digest = hex::encode(Sha256::digest(format!("map|{fingerprint}").as_bytes()));
+    let target_digest = hex::encode(Sha256::digest(format!("target|{fingerprint}").as_bytes()));
     (
         format!("w17-map-{}", &map_digest[..40]),
         format!("w17-target-{}", &target_digest[..40]),

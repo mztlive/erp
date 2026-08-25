@@ -1583,7 +1583,7 @@ fn digest_parts(parts: &[String]) -> String {
         hasher.update(part.len().to_be_bytes());
         hasher.update(part.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 /// 读取供应商主体当前法定名称。

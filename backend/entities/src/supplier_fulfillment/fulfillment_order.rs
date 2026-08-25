@@ -335,7 +335,7 @@ fn ensure_timestamp_consistency(
 /// 生成指纹，需经 `chore/erp-p0-amend-*` 地基修订把依赖提升为正式依赖（列为地基修订候选）。
 #[cfg(test)]
 pub fn fingerprint(plain: &str, key: &[u8]) -> String {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     type HmacSha256 = Hmac<Sha256>;

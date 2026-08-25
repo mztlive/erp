@@ -689,7 +689,7 @@ mod tests {
         let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a6"), data()).unwrap();
         adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
         let roundtrip: StockAdjustment =
-            bson::from_document(bson::to_document(&adjustment).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&adjustment).unwrap()).unwrap();
         assert_eq!(roundtrip, adjustment);
     }
 }

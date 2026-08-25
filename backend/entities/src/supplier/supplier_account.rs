@@ -396,7 +396,8 @@ mod tests {
     fn bson_roundtrip() {
         let account =
             SupplierAccount::new(SupplierAccountId::new("supplier-4"), account_data(), "admin-1").unwrap();
-        let roundtrip: SupplierAccount = bson::from_document(bson::to_document(&account).unwrap()).unwrap();
+        let roundtrip: SupplierAccount =
+            bson::deserialize_from_document(bson::serialize_to_document(&account).unwrap()).unwrap();
         assert_eq!(roundtrip, account);
     }
 }

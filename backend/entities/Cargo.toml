@@ -15,7 +15,7 @@ regex = { workspace = true }
 rust_decimal = { workspace = true }
 validator = { workspace = true }
 chrono = { workspace = true }
-# 与 workspace 的 mongodb 3.6 解析到同一版本（2.15.x），仅用于 money 的
+# 与 workspace 的 mongodb 驱动统一使用 BSON 3，仅用于 money 的
 # Decimal128 序列化委托（bson::Decimal128 的 Serialize/Deserialize 形态）。
 bson = { workspace = true }
 # P1 §2.1 敏感字段指纹：带密钥 HMAC（数据模型 §4.5.5，禁止裸摘要）。

@@ -6,7 +6,7 @@ use bpm::ApprovalNodeExecutionId;
 use entities::common::time::Instant;
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::bson::{doc, to_document, Document};
+use mongodb::bson::{doc, serialize_to_document, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
@@ -377,7 +377,7 @@ impl<'a> Repository<'a, WorkItem> {
         executor: &mut dyn Executor,
     ) -> Result<CasWriteOutcome<WorkItem>> {
         let next_version = next_task_version(expected_task_version)?;
-        let mut set_doc = to_document(item)?;
+        let mut set_doc = serialize_to_document(item)?;
         set_doc.insert("version", next_version);
         let matched = mongo_ops::update_one(
             &self.collection(),
@@ -819,7 +819,7 @@ mod tests {
             updated_at: 1,
         };
         assert_eq!(row.approval_node_execution_id.as_deref(), Some("exec-1"));
-        let decoded: WorkItemRow = mongodb::bson::from_document(doc! {
+        let decoded: WorkItemRow = mongodb::bson::deserialize_from_document(doc! {
             "id": "wi-2",
             "work_item_type": "CARD_FUNDS_DELTA_REVIEW",
             "business_object_type": "receivable_account",

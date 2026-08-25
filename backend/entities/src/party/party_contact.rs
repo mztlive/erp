@@ -461,7 +461,8 @@ mod tests {
     fn bson_roundtrip() {
         let contact =
             PartyContact::new(PartyContactId::new("contact-5"), contact_data(), KEY, "admin-1").unwrap();
-        let roundtrip: PartyContact = bson::from_document(bson::to_document(&contact).unwrap()).unwrap();
+        let roundtrip: PartyContact =
+            bson::deserialize_from_document(bson::serialize_to_document(&contact).unwrap()).unwrap();
         assert_eq!(roundtrip.base, contact.base);
         assert_eq!(roundtrip.mobile_query_hmac, contact.mobile_query_hmac);
     }

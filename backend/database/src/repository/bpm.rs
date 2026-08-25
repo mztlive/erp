@@ -12,7 +12,7 @@ use bpm::model::{
 };
 use bpm::{ProcessKind, SubjectRef};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
-use mongodb::bson::{doc, to_document, Document};
+use mongodb::bson::{doc, serialize_to_document, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
@@ -513,7 +513,7 @@ impl<'a> BpmWorkflowRepository<'a> {
                 filter,
                 entity: instance,
                 expected_version: expected_instance_version,
-                extra_set: Some(to_document(list_projection)?),
+                extra_set: Some(serialize_to_document(list_projection)?),
             },
             |current| {
                 matches!(
@@ -698,7 +698,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         F: Fn(&T) -> bool,
     {
         let next_version = next_version_i64(spec.expected_version)?;
-        let mut set_doc = to_document(spec.entity)?;
+        let mut set_doc = serialize_to_document(spec.entity)?;
         set_doc.insert("version", next_version);
         if let Some(extra_set) = spec.extra_set {
             merge_documents(&mut set_doc, extra_set);
@@ -947,8 +947,8 @@ fn instance_insert_document(
     instance: &ApprovalProcessInstance,
     list_projection: &ApprovalInstanceListProjection,
 ) -> Result<Document> {
-    let mut document = to_document(instance)?;
-    merge_documents(&mut document, to_document(list_projection)?);
+    let mut document = serialize_to_document(instance)?;
+    merge_documents(&mut document, serialize_to_document(list_projection)?);
     Ok(document)
 }
 
@@ -1173,7 +1173,7 @@ mod tests {
     use bpm::model::{ApprovalProcessInstance, NewProcessInstance, ParticipantId, Timestamp};
     use bpm::{ProcessKind, SubjectRef};
     use entity_core::{BaseModel, HasBaseModel};
-    use mongodb::bson::{doc, to_document, Bson};
+    use mongodb::bson::{doc, serialize_to_document, Bson};
 
     #[derive(Clone)]
     struct LockProbe {
@@ -1262,14 +1262,14 @@ mod tests {
         assert_eq!(document.get_str("current_assignee_participant_id").unwrap(), "u1");
         assert_eq!(document.get_i64("last_status_changed_at").unwrap(), 10);
         assert_eq!(
-            to_document(&projection)
+            serialize_to_document(&projection)
                 .unwrap()
                 .get_str("current_node_name")
                 .unwrap(),
             "仓储复核"
         );
         let mut merged = doc! { "id": "inst-1" };
-        merge_documents(&mut merged, to_document(&projection).unwrap());
+        merge_documents(&mut merged, serialize_to_document(&projection).unwrap());
         assert_eq!(merged.get_str("current_assignee_name").unwrap(), "张三");
     }
 

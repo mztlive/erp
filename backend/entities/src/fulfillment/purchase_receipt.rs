@@ -534,7 +534,8 @@ mod tests {
         receipt
             .mark_posted(Instant::from_unix_secs(1_700_000_000), "operator-1")
             .unwrap();
-        let roundtrip: PurchaseReceipt = bson::from_document(bson::to_document(&receipt).unwrap()).unwrap();
+        let roundtrip: PurchaseReceipt =
+            bson::deserialize_from_document(bson::serialize_to_document(&receipt).unwrap()).unwrap();
         assert_eq!(roundtrip, receipt);
     }
 

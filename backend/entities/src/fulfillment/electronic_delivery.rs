@@ -622,7 +622,7 @@ mod tests {
 
         let delivery = ElectronicDelivery::new(ElectronicDeliveryId::new("ed-9"), data()).unwrap();
         let roundtrip: ElectronicDelivery =
-            bson::from_document(bson::to_document(&delivery).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&delivery).unwrap()).unwrap();
         assert_eq!(roundtrip, delivery);
     }
 

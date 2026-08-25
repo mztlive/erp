@@ -193,7 +193,7 @@ mod tests {
     fn entity_roundtrips_through_bson() {
         let participant = DocumentParticipant::new(DocumentParticipantId::new("dp-1"), data()).unwrap();
         let roundtrip: DocumentParticipant =
-            bson::from_document(bson::to_document(&participant).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&participant).unwrap()).unwrap();
         assert_eq!(roundtrip, participant);
     }
 }

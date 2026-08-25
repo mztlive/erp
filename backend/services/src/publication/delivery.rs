@@ -1250,7 +1250,7 @@ fn publication_operation_id(actor_id: &str, action: &str, delivery_id: &str, req
 }
 
 fn publication_stable_id(prefix: &str, identity: &str) -> String {
-    format!("{prefix}_{:x}", Sha256::digest(identity.as_bytes()))
+    format!("{prefix}_{}", hex::encode(Sha256::digest(identity.as_bytes())))
 }
 
 #[cfg(test)]

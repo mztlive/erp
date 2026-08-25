@@ -461,7 +461,8 @@ mod tests {
     #[test]
     fn entity_roundtrip_through_bson() {
         let message = InboxMessage::new(InboxMessageId::new("msg-11"), message_data()).unwrap();
-        let roundtrip: InboxMessage = bson::from_document(bson::to_document(&message).unwrap()).unwrap();
+        let roundtrip: InboxMessage =
+            bson::deserialize_from_document(bson::serialize_to_document(&message).unwrap()).unwrap();
         assert_eq!(roundtrip, message);
     }
 }

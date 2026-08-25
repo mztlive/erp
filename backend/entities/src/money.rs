@@ -390,13 +390,13 @@ mod tests {
 
     /// Decimal128 往返（非 human-readable，mongodb 驱动 wire 路径）：
     /// 序列化为原始字节后，BSON 中必须为 Decimal128 变体，且 to_vec/from_slice
-    /// 与 from_document 两条路径均可还原。
+    /// 与 deserialize_from_document 两条路径均可还原。
     ///
-    /// 说明：bson 2.15 的 `to_document`（默认选项）以 human-readable 形态工作
-    /// （bson 文档明确：`to_document` 的 Serializer 表现为 human readable，
+    /// 说明：bson 2.15 的 `serialize_to_document`（默认选项）以 human-readable 形态工作
+    /// （bson 文档明确：`serialize_to_document` 的 Serializer 表现为 human readable，
     /// 与 `to_vec` 不同），因此这里用非 human-readable 的 `to_vec`/`from_slice`
     /// 精确对应 mongodb 驱动的持久化路径（`human_readable(false)` 选项的
-    /// builder 在 bson 2.15 已废弃）；`from_document` 默认形态也兼容
+    /// builder 在 bson 2.15 已废弃）；`deserialize_from_document` 默认形态也兼容
     /// Decimal128 变体。
     #[test]
     fn decimal128_wire_roundtrip() {
@@ -404,18 +404,18 @@ mod tests {
 
         let doc = sample_doc();
 
-        let bytes = bson::to_vec(&doc).unwrap();
-        let wire_doc: bson::Document = bson::from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&doc).unwrap();
+        let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
         assert!(matches!(wire_doc.get("amount"), Some(Bson::Decimal128(_))));
         assert!(matches!(wire_doc.get("unit_price"), Some(Bson::Decimal128(_))));
         assert!(matches!(wire_doc.get("quantity"), Some(Bson::Decimal128(_))));
         assert!(matches!(wire_doc.get("rate"), Some(Bson::Decimal128(_))));
 
-        let back_from_wire: MoneyDoc = bson::from_slice(&bytes).unwrap();
+        let back_from_wire: MoneyDoc = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back_from_wire, doc);
 
-        let bson_doc = bson::to_document(&doc).unwrap();
-        let back_from_doc: MoneyDoc = bson::from_document(bson_doc).unwrap();
+        let bson_doc = bson::serialize_to_document(&doc).unwrap();
+        let back_from_doc: MoneyDoc = bson::deserialize_from_document(bson_doc).unwrap();
         assert_eq!(back_from_doc, doc);
     }
 

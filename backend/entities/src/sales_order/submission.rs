@@ -988,7 +988,7 @@ mod tests {
         let submission =
             SalesOrderSubmission::new(SalesOrderSubmissionId::new("s-1"), header_data()).unwrap();
         let roundtrip: SalesOrderSubmission =
-            bson::from_document(bson::to_document(&submission).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&submission).unwrap()).unwrap();
         assert_eq!(roundtrip, submission);
     }
 }

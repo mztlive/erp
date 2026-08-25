@@ -317,7 +317,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let scope = DataScope::new(DataScopeId::new("ds-1"), data()).unwrap();
-        let roundtrip: DataScope = bson::from_document(bson::to_document(&scope).unwrap()).unwrap();
+        let roundtrip: DataScope =
+            bson::deserialize_from_document(bson::serialize_to_document(&scope).unwrap()).unwrap();
         assert_eq!(roundtrip, scope);
     }
 }

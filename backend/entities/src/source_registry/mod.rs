@@ -422,7 +422,7 @@ impl<'de> Visitor<'de> for ExternalIdKeyVisitor {
         Ok(ExternalIdKey(bytes))
     }
 
-    /// 接受 bson 以 human-readable 形态暴露的二进制值（`bson::from_document` 默认模式）。
+    /// 接受 bson 以 human-readable 形态暴露的二进制值（`bson::deserialize_from_document` 默认模式）。
     fn visit_byte_buf<E>(self, bytes: Vec<u8>) -> std::result::Result<Self::Value, E> {
         Ok(ExternalIdKey(bytes))
     }
@@ -1052,8 +1052,8 @@ mod tests {
         let map = ExternalIdentityMap::new(ExternalIdentityMapId::new("map-1"), map_data()).unwrap();
         // 非 human-readable 的 to_vec/from_slice 精确对应 mongodb 驱动持久化路径
         //（money.rs 同款约定；human_readable(false) builder 在 bson 2.15 已废弃）。
-        let bytes = bson::to_vec(&map).unwrap();
-        let wire_doc: bson::Document = bson::from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&map).unwrap();
+        let wire_doc: bson::Document = bson::deserialize_from_slice(&bytes).unwrap();
 
         let stored = wire_doc.get("external_id_key").unwrap();
         let bson::Bson::Binary(binary) = stored else {
@@ -1061,7 +1061,7 @@ mod tests {
         };
         assert_eq!(binary.bytes, b"SO-2025-001");
 
-        let back: ExternalIdentityMap = bson::from_slice(&bytes).unwrap();
+        let back: ExternalIdentityMap = bson::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(back, map);
     }
 
@@ -1069,7 +1069,8 @@ mod tests {
     fn entities_roundtrip_through_bson_including_ids() {
         let system =
             SourceSystem::new(SourceSystemId::new("sys-1"), source_system_data(), "admin-1").unwrap();
-        let roundtrip: SourceSystem = bson::from_document(bson::to_document(&system).unwrap()).unwrap();
+        let roundtrip: SourceSystem =
+            bson::deserialize_from_document(bson::serialize_to_document(&system).unwrap()).unwrap();
         assert_eq!(roundtrip, system);
 
         let target = ExternalIdentityTarget::new(
@@ -1088,7 +1089,7 @@ mod tests {
         )
         .unwrap();
         let roundtrip: ExternalIdentityTarget =
-            bson::from_document(bson::to_document(&target).unwrap()).unwrap();
+            bson::deserialize_from_document(bson::serialize_to_document(&target).unwrap()).unwrap();
         assert_eq!(roundtrip, target);
     }
 

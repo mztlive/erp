@@ -256,7 +256,8 @@ mod tests {
     #[test]
     fn entity_roundtrips_through_bson() {
         let item = BulkSelectionItem::new(BulkSelectionItemId::new("si-1"), data()).unwrap();
-        let roundtrip: BulkSelectionItem = bson::from_document(bson::to_document(&item).unwrap()).unwrap();
+        let roundtrip: BulkSelectionItem =
+            bson::deserialize_from_document(bson::serialize_to_document(&item).unwrap()).unwrap();
         assert_eq!(roundtrip, item);
     }
 }

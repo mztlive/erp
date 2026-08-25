@@ -513,8 +513,11 @@ mod tests {
             sort_ascending: false,
         }
         .to_doc();
-        assert_eq!(filter.get_str("source_type"), Ok("EXCEL"));
-        assert_eq!(filter.get_document("id"), Ok(&doc! { "$in": ["offering-1"] }));
+        assert_eq!(filter.get_str("source_type").unwrap(), "EXCEL");
+        assert_eq!(
+            filter.get_document("id").unwrap(),
+            &doc! { "$in": ["offering-1"] }
+        );
     }
 
     #[test]
