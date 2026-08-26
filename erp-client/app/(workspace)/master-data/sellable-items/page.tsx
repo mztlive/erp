@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { SellableItemsListPage } from "@/features/master-data/components/pages/sellable-items-list-page"
+import { SellableItemsListPage } from "@/features/master-data/pages/sellable-items-list-page"
 
 export const metadata: Metadata = {
     title: "公司商品池",

@@ -10,7 +10,8 @@
  *
  * 幂等：客户、合同、仓储账号、开发仓、财务三人、默认财务责任规则均按固定标识查找；
  * 已存在则跳过或只补绑定/校正。
- * 客户用 xiaoshou 创建，负责销售一开始就是开单账号（同一天不能把 OWNER 换人）。
+ * 客户用 xiaoshou 创建（不含银行账户：销售无权维护该字段），负责销售一开始就是开单账号。
+ * 银行账户由 admin 后补（财务有该字段权限，但客户资料修订还要 customer:update）。
  *
  * 用法: node scripts/seed-dev-foundation.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
@@ -119,6 +120,17 @@ async function findCustomer(adminToken) {
     return items.find((row) => row.legal_name === CUSTOMER.legalName) ?? null
 }
 
+function customerBankAccounts() {
+    return [
+        {
+            account_name: CUSTOMER.legalName,
+            bank_name: CUSTOMER.bankName,
+            account_number: CUSTOMER.accountNumber,
+            is_default: true,
+        },
+    ]
+}
+
 async function createCustomer(token, actor) {
     const today = todayBusinessDate()
     return call("POST", "/admin/customer-profiles", {
@@ -152,18 +164,33 @@ async function createCustomer(token, actor) {
                     is_default: true,
                 },
             ],
-            bank_accounts: [
-                {
-                    account_name: CUSTOMER.legalName,
-                    bank_name: CUSTOMER.bankName,
-                    account_number: CUSTOMER.accountNumber,
-                    is_default: true,
-                },
-            ],
             effective_from: today,
             change_reason: "开发开单底座首版建档",
         },
     })
+}
+
+async function ensureCustomerBankAccount(adminToken, customerId) {
+    const detail = await call("GET", `/admin/customer-profiles/${encodeURIComponent(customerId)}`, {
+        token: adminToken,
+    })
+    if ((detail.bank_accounts ?? []).length > 0) {
+        console.log("客户银行账户已存在，跳过")
+        return
+    }
+    await call("PUT", `/admin/customer-profiles/${encodeURIComponent(customerId)}`, {
+        token: adminToken,
+        body: {
+            idempotency_key: "dev-foundation-customer-bank-v1",
+            expected_party_version: detail.party_version,
+            expected_customer_version: detail.version,
+            legal_name: detail.legal_name || CUSTOMER.legalName,
+            bank_accounts: customerBankAccounts(),
+            effective_from: todayBusinessDate(),
+            change_reason: "开发开单底座：补录银行账户",
+        },
+    })
+    console.log("已补录客户银行账户")
 }
 
 async function ensureSalesOwner(adminToken, customerId, salesUserId) {
@@ -512,6 +539,7 @@ async function main() {
         legal_name:
             detail.legal_name ?? detail.current_revision?.legal_name ?? customer.legal_name,
     }
+    await ensureCustomerBankAccount(adminToken, customer.id)
 
     let contract = await findContract(adminToken, customer.id)
     if (contract) {

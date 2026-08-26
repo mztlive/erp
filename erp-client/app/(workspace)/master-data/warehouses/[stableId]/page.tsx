@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { WarehouseObjectPage } from "@/features/master-data/components/warehouse/warehouse-object-page"
+import { WarehouseObjectPage } from "@/features/master-data/pages/warehouse-object-page"
 
 export const metadata: Metadata = {
     title: "仓库详情",

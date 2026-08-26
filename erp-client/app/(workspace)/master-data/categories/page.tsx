@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { CategoryTreePage } from "@/features/master-data/components/category/category-tree-page"
+import { CategoryTreePage } from "@/features/master-data/pages/category-tree-page"
 
 export const metadata: Metadata = {
     title: "商品分类",

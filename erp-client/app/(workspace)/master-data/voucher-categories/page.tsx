@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { VoucherCategoriesListPage } from "@/features/master-data/components/pages/voucher-categories-list-page"
+import { VoucherCategoriesListPage } from "@/features/master-data/pages/voucher-categories-list-page"
 
 export const metadata: Metadata = {
     title: "卡券类目",

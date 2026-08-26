@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { ListRouteRedirect } from "@/features/master-data/components/pages/list-route-redirect"
+import { ListRouteRedirect } from "@/features/master-data/pages/list-route-redirect"
 
 export const metadata: Metadata = {
     title: "品牌",

@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { ProductsListPage } from "@/features/master-data/components/pages/products-list-page"
+import { ProductsListPage } from "@/features/master-data/pages/products-list-page"
 
 export const metadata: Metadata = {
     title: "商品与 SKU",

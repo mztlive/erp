@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { UnitOfMeasuresListPage } from "@/features/master-data/components/pages/unit-of-measures-list-page"
+import { UnitOfMeasuresListPage } from "@/features/master-data/pages/unit-of-measures-list-page"
 
 export const metadata: Metadata = {
     title: "计量单位",

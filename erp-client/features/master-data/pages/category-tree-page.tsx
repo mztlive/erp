@@ -208,7 +208,7 @@ export function CategoryTreePage() {
                 ) : null}
             </div>
 
-        <CategoryCreateDialog
+            <CategoryCreateDialog
                 key={`cat-create-${createParentId ?? "root"}-${createOpen}`}
                 open={createOpen}
                 onOpenChange={setCreateOpen}

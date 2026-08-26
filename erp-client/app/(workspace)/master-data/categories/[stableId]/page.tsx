@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { CategoryObjectPage } from "@/features/master-data/components/category/category-object-page"
+import { CategoryObjectPage } from "@/features/master-data/pages/category-object-page"
 
 export const metadata: Metadata = {
     title: "商品分类详情",

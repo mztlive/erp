@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { SuppliersListPage } from "@/features/master-data/components/pages/suppliers-list-page"
+import { SuppliersListPage } from "@/features/master-data/pages/suppliers-list-page"
 
 export const metadata: Metadata = {
     title: "供应商与资质",

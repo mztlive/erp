@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { BrandsListPage } from "@/features/master-data/components/pages/brands-list-page"
+import { BrandsListPage } from "@/features/master-data/pages/brands-list-page"
 
 export const metadata: Metadata = {
     title: "品牌",
