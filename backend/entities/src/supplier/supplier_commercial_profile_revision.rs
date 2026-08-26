@@ -7,6 +7,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
+use super::business_category::{normalize_business_category, split_encoded_payment_term_snapshot};
 use crate::common::revision::RevisionBase;
 use crate::errors::{Error, Result};
 use crate::money::Rate;
@@ -158,6 +159,8 @@ pub struct SupplierCommercialProfileRevisionData {
     pub reconciliation_cycle: ReconciliationCycle,
     /// 结构化付款条件快照（受控码表稳定代码，§2.2 内联快照）。
     pub payment_term_snapshot: String,
+    /// 经营类目；未登记时为空。
+    pub business_category: Option<String>,
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点（如 `0.13` 表示 13%；定点类型，§4.2）。
@@ -185,6 +188,9 @@ pub struct SupplierCommercialProfileRevision {
     pub reconciliation_cycle: ReconciliationCycle,
     /// 结构化付款条件快照。
     pub payment_term_snapshot: String,
+    /// 经营类目；历史修订可能缺省，读取时从付款条件快照拆出。
+    #[serde(default)]
+    pub business_category: Option<String>,
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。
@@ -202,6 +208,7 @@ impl SupplierCommercialProfileRevision {
     ///
     /// 完成付款条件快照与变更原因的必填校验与规范化（去首尾空白、
     /// 长度上限）；发票税点必须是 `[0, 1)` 的定点小数（§4.2 税率约定）。
+    /// 历史把经营类目编码进付款条件快照时，在此拆成独立字段。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::SupplierCommercialProfileRevisionId`）
@@ -211,17 +218,13 @@ impl SupplierCommercialProfileRevision {
     /// 返回新建的版本实体。
     ///
     /// # 错误
-    /// 当快照/原因为空或超长、税点越界时返回错误。
+    /// 当快照/原因为空或超长、经营类目超长、税点越界时返回错误。
     pub fn new(
         id: SupplierCommercialProfileRevisionId,
         data: SupplierCommercialProfileRevisionData,
     ) -> Result<Self> {
-        let payment_term_snapshot = normalize_required_text(
-            data.payment_term_snapshot,
-            "付款条件快照不能为空",
-            PAYMENT_TERM_SNAPSHOT_MAX_LEN,
-            "付款条件快照过长",
-        )?;
+        let (payment_term_snapshot, business_category) =
+            split_payment_term_fields(data.payment_term_snapshot, data.business_category)?;
         let change_reason = normalize_required_text(
             data.change_reason,
             "变更原因不能为空",
@@ -237,6 +240,7 @@ impl SupplierCommercialProfileRevision {
             settlement_mode: data.settlement_mode,
             reconciliation_cycle: data.reconciliation_cycle,
             payment_term_snapshot,
+            business_category,
             invoice_type: data.invoice_type,
             invoice_tax_rate: data.invoice_tax_rate,
             signing_entity_party_id: data.signing_entity_party_id,
@@ -244,6 +248,71 @@ impl SupplierCommercialProfileRevision {
             change_reason,
         })
     }
+
+    /// 返回不含经营类目编码的付款条件代码。
+    ///
+    /// 历史修订可能仍把类目写在快照里；调用方落采购单或展示时必须用本方法，
+    /// 不得直接使用 `payment_term_snapshot`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 去编码后的付款条件；无标记时原样返回去空白快照。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn effective_payment_term_code(&self) -> String {
+        split_encoded_payment_term_snapshot(&self.payment_term_snapshot).payment_term_code
+    }
+
+    /// 返回经营类目：独立字段优先，否则从历史付款条件快照拆出。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未登记时返回 `None`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn effective_business_category(&self) -> Option<String> {
+        self.business_category
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .or_else(|| split_encoded_payment_term_snapshot(&self.payment_term_snapshot).business_category)
+    }
+}
+
+/// 把付款条件快照与经营类目规范成两个独立字段。
+///
+/// 显式传入的经营类目优先于快照内历史编码。
+///
+/// # 参数
+/// * `payment_term_snapshot` - 原始付款条件快照
+/// * `business_category` - 显式经营类目
+///
+/// # 返回
+/// 不含类目编码的付款条件快照，以及独立经营类目。
+///
+/// # 错误
+/// 付款条件为空/超长，或经营类目超长时返回错误。
+fn split_payment_term_fields(
+    payment_term_snapshot: String,
+    business_category: Option<String>,
+) -> Result<(String, Option<String>)> {
+    let parts = split_encoded_payment_term_snapshot(&payment_term_snapshot);
+    let payment_term_snapshot = normalize_required_text(
+        parts.payment_term_code,
+        "付款条件快照不能为空",
+        PAYMENT_TERM_SNAPSHOT_MAX_LEN,
+        "付款条件快照过长",
+    )?;
+    let explicit = normalize_business_category(business_category)?;
+    let encoded = normalize_business_category(parts.business_category)?;
+    Ok((payment_term_snapshot, explicit.or(encoded)))
 }
 
 /// 校验发票税点是否落在合法区间。
@@ -282,6 +351,7 @@ mod tests {
             settlement_mode: SettlementMode::Prepayment,
             reconciliation_cycle: ReconciliationCycle::Monthly,
             payment_term_snapshot: " PREPAY_30 ".to_string(),
+            business_category: None,
             invoice_type: InvoiceType::VatSpecial,
             invoice_tax_rate: Rate::from_str("0.13").unwrap(),
             signing_entity_party_id: PartyId::new("party-internal-1"),
@@ -299,6 +369,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(profile.payment_term_snapshot, "PREPAY_30");
+        assert_eq!(profile.business_category, None);
         assert_eq!(profile.change_reason, "首次建档");
         assert_eq!(profile.settlement_mode, SettlementMode::Prepayment);
         assert_eq!(profile.reconciliation_cycle, ReconciliationCycle::Monthly);
@@ -361,6 +432,55 @@ mod tests {
             profile.invoice_tax_rate
         );
         assert_eq!(tax.to_decimal(), Amount::from_str("39.00").unwrap().to_decimal());
+    }
+
+    /// 历史编码快照在构造时拆成独立经营类目，显式类目优先于快照内编码。
+    #[test]
+    fn new_splits_encoded_snapshot_and_prefers_explicit_category() {
+        let encoded = SupplierCommercialProfileRevisionData {
+            payment_term_snapshot: "现结｜经营类目：礼盒".to_string(),
+            business_category: None,
+            ..profile_data()
+        };
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-encoded"),
+            encoded,
+        )
+        .unwrap();
+        assert_eq!(profile.payment_term_snapshot, "现结");
+        assert_eq!(profile.business_category.as_deref(), Some("礼盒"));
+        assert_eq!(profile.effective_payment_term_code(), "现结");
+        assert_eq!(profile.effective_business_category().as_deref(), Some("礼盒"));
+
+        let explicit = SupplierCommercialProfileRevisionData {
+            payment_term_snapshot: "现结｜经营类目：礼盒".to_string(),
+            business_category: Some(" 鲜花 ".to_string()),
+            ..profile_data()
+        };
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-explicit"),
+            explicit,
+        )
+        .unwrap();
+        assert_eq!(profile.payment_term_snapshot, "现结");
+        assert_eq!(profile.business_category.as_deref(), Some("鲜花"));
+    }
+
+    /// 缺省 `business_category` 的历史文档仍可反序列化，并从快照拆出类目。
+    #[test]
+    fn legacy_document_without_category_field_splits_on_read() {
+        let profile = SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("profile-rev-legacy"),
+            profile_data(),
+        )
+        .unwrap();
+        let mut doc = bson::serialize_to_document(&profile).unwrap();
+        doc.remove("business_category");
+        doc.insert("payment_term_snapshot", "现结｜经营类目：礼盒".to_string());
+        let loaded: SupplierCommercialProfileRevision = bson::deserialize_from_document(doc).unwrap();
+        assert_eq!(loaded.business_category, None);
+        assert_eq!(loaded.effective_payment_term_code(), "现结");
+        assert_eq!(loaded.effective_business_category().as_deref(), Some("礼盒"));
     }
 
     /// 实体 BSON 往返（含 Rate 与 ID）。

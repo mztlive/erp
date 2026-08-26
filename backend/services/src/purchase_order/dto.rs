@@ -663,8 +663,10 @@ pub struct CreationBasisView {
     pub purchase_type: String,
     /// 履约责任（由采购在商品类型允许范围内选择）。
     pub fulfillment_responsibility: String,
-    /// 付款条件（供应商商业资料快照，缺省 `NET-30`）。
+    /// 付款条件（供应商商业资料快照，缺省 `NET-30`；不含经营类目）。
     pub payment_term_code: String,
+    /// 供应商经营类目；未登记时为空。
+    pub business_category: Option<String>,
     /// 可拆入本单的已确认分行。
     pub lines: Vec<CreationBasisLineView>,
     /// 含税行汇总（只汇总已舍入行金额）。

@@ -174,33 +174,17 @@ export const ratingToBackend = (label: string | undefined): string => {
     return m ? m[1].toUpperCase() : "C"
 }
 
-/**
- * 经营类目暂无独立后端字段；编码进商务版本 `payment_term_snapshot`
- *（结算方式本身走 `settlement_mode` 枚举，快照仅作展示/回填载体）。
- * 标记串需稳定，加载时原样解析。
- */
-export const BUSINESS_CATEGORY_MARK = "｜经营类目："
+/** 付款条件快照只保存结算文案，经营类目走独立字段。 */
+export const paymentTermSnapshotOf = (settlement: string | undefined): string =>
+    (settlement?.trim() || "默认付款条件").slice(0, 64)
 
-/** 结算文案 + 经营类目 → 付款条件快照（≤64 字）。 */
-export const buildPaymentTermSnapshot = (
-    settlement: string | undefined,
-    businessCategory: string | undefined,
-): string => {
-    const base = (settlement?.trim() || "默认付款条件").slice(0, 64)
-    const cat = businessCategory?.trim()
-    if (!cat) return base
-    const encoded = `${base}${BUSINESS_CATEGORY_MARK}${cat}`
-    return [...encoded].slice(0, 64).join("")
-}
-
-/** 从付款条件快照解析经营类目（无标记则空）。 */
+/** 从历史付款条件快照解析经营类目（无标记则空）。 */
 export const parseBusinessCategoryFromSnapshot = (
     snapshot: string | null | undefined,
 ): string => {
     if (!snapshot) return ""
-    const idx = snapshot.indexOf(BUSINESS_CATEGORY_MARK)
-    if (idx < 0) return ""
-    return snapshot.slice(idx + BUSINESS_CATEGORY_MARK.length).trim()
+    const match = snapshot.match(/[|｜]\s*经营类目：\s*(.*)$/)
+    return match?.[1]?.trim() ?? ""
 }
 
 /** 百分制评分：合法则返回 0–100 整数，否则 undefined。 */

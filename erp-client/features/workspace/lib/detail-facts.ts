@@ -29,6 +29,7 @@ const COUNTERPARTY_LABELS = new Set(["客户", "供应商", "往来方"])
 const KEY_LABELS = new Set([
     "业务性质",
     "付款条件",
+    "经营类目",
     "来源销售单",
     "提交来源",
     "到账日",

@@ -326,7 +326,9 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         businessCategory:
             sourceType === "EXISTING_STOCK"
                 ? undefined
-                : paymentTerm.businessCategory || undefined,
+                : basis.business_category?.trim() ||
+                  paymentTerm.businessCategory ||
+                  undefined,
         lines: (basis.lines ?? []).map((line) => {
             const salesQuantity = String(
                 line.sales_quantity ?? line.confirmed_quantity ?? "0",

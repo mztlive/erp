@@ -369,8 +369,10 @@ pub struct CommercialProfileView {
     pub settlement_mode: SettlementMode,
     /// 对账周期。
     pub reconciliation_cycle: ReconciliationCycle,
-    /// 付款条件快照。
+    /// 付款条件快照（不含经营类目编码）。
     pub payment_term_snapshot: String,
+    /// 经营类目；未登记时为空。
+    pub business_category: Option<String>,
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点（详情返回，列表为 `None`）。
@@ -394,13 +396,16 @@ pub struct CommercialProfileView {
 impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
     /// 从实体构造响应视图。
     fn from(revision: SupplierCommercialProfileRevision) -> Self {
+        let payment_term_snapshot = revision.effective_payment_term_code();
+        let business_category = revision.effective_business_category();
         Self {
             id: revision.base.id,
             supplier_id: revision.supplier_id.to_string(),
             revision_no: revision.revision.revision_no,
             settlement_mode: revision.settlement_mode,
             reconciliation_cycle: revision.reconciliation_cycle,
-            payment_term_snapshot: revision.payment_term_snapshot,
+            payment_term_snapshot,
+            business_category,
             invoice_type: revision.invoice_type,
             invoice_tax_rate: Some(revision.invoice_tax_rate),
             signing_entity_party_id: Some(revision.signing_entity_party_id.to_string()),
@@ -672,9 +677,12 @@ pub struct SaveSupplierProfileRequest {
     pub settlement_mode: SettlementMode,
     /// 对账周期。
     pub reconciliation_cycle: ReconciliationCycle,
-    /// 付款条件结构化快照。
+    /// 付款条件结构化快照（不得再编码经营类目）。
     #[validate(custom(function = "non_blank", message = "付款条件快照不能为空"))]
     pub payment_term_snapshot: String,
+    /// 经营类目；空白表示未登记。旧客户端可能把类目编码进付款条件快照，实体构造时会拆出。
+    #[serde(default)]
+    pub business_category: Option<String>,
     /// 发票类型。
     pub invoice_type: InvoiceType,
     /// 发票税点。

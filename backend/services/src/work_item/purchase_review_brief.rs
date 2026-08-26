@@ -12,6 +12,7 @@ use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
 };
+use entities::supplier::split_encoded_payment_term_snapshot;
 
 use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
@@ -495,7 +496,7 @@ fn purchase_review_brief_source(
 /// * `origin` - 提交来源
 ///
 /// # 返回
-/// 返回供应商、销售单、金额三元组、付款条件和提交号等段。销售单段携带可跳转身份。
+/// 返回供应商、销售单、金额三元组、付款条件、经营类目和提交号等段。销售单段携带可跳转身份。
 ///
 /// # 错误
 /// 无。
@@ -536,6 +537,9 @@ fn purchase_review_sections(
         );
     }
     push_section(&mut sections, "付款条件", payment, false);
+    let category = split_encoded_payment_term_snapshot(&submission.payment_term_snapshot.payment_term_code)
+        .business_category;
+    push_section(&mut sections, "经营类目", category.as_deref(), false);
     push_section(
         &mut sections,
         "采购类型",
@@ -728,12 +732,13 @@ fn purchase_item_quantity(quantity: Option<&Quantity>, unit: Option<&str>, gross
 ///
 /// # 返回
 /// 返回先款比例、货到天数或合同约定；未知代码回退原码，先款门禁单独补「先款后货」。
+/// 历史把经营类目编进付款条件代码时，只展示付款条件本身。
 ///
 /// # 错误
 /// 无。
 fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
-    let code = snapshot.payment_term_code.trim();
-    let named = match code {
+    let code = split_encoded_payment_term_snapshot(&snapshot.payment_term_code).payment_term_code;
+    let named = match code.as_str() {
         "PREPAY_100" => "先款 100%",
         "PREPAY_50" => "先款 50%",
         "PREPAY_30" => "先款 30%",
@@ -841,6 +846,10 @@ mod tests {
         assert_eq!(
             payment_term_label(&payment("CUSTOM", false)).as_deref(),
             Some("CUSTOM")
+        );
+        assert_eq!(
+            payment_term_label(&payment("现结｜经营类目：礼盒", false)).as_deref(),
+            Some("现结")
         );
     }
 

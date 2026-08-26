@@ -13,6 +13,7 @@
 //! - `supplier_qualification_capability` 是资质 ↔ 能力的纯关联行（§6.2）；
 //! - 跨聚合校验（资质失效不得用于新供给/采购单等）留给 P3，注释标注条目号。
 
+pub mod business_category;
 pub mod supplier_account;
 pub mod supplier_capability;
 pub mod supplier_capability_revision;
@@ -27,6 +28,9 @@ pub use crate::ids::{
     SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
+};
+pub use business_category::{
+    normalize_business_category, split_encoded_payment_term_snapshot, PaymentTermSnapshotParts,
 };
 pub use supplier_account::{
     SupplierAccount, SupplierAccountData, SupplierAccountStatus, SupplierAccountUpdate,

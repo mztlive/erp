@@ -85,8 +85,9 @@ export async function centerSupplier(
         ]),
     )
 
-    // 经营类目：商务快照编码；兼容早期写入 capability.fulfillment_note 的数据
+    // 经营类目：独立字段优先；兼容历史付款条件快照编码与早期 fulfillment_note
     const businessCategory =
+        profile?.business_category?.trim() ||
         parseBusinessCategoryFromSnapshot(profile?.payment_term_snapshot) ||
         capabilities.map((c) => c.fulfillment_note?.trim()).find(Boolean) ||
         ""

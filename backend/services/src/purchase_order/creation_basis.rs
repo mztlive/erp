@@ -105,8 +105,38 @@ pub(super) struct BasisGroup {
     pub(super) revision: SalesOrderRevision,
     /// 精确拆分维度。
     pub(super) scope: BasisScope,
+    /// 供应商经营类目（不参与拆单，仅随依据展示）。
+    pub(super) business_category: Option<String>,
     /// 可采购明细。
     pub(super) lines: Vec<BasisLine>,
+}
+
+/// 供应商当前商务资料中的付款条件与经营类目。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SupplierSettlementTerms {
+    /// 不含经营类目编码的付款条件代码。
+    payment_term_code: String,
+    /// 经营类目；未登记时为空。
+    business_category: Option<String>,
+}
+
+impl SupplierSettlementTerms {
+    /// 商务资料缺失时的缺省付款条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `NET-30` 且无经营类目。
+    ///
+    /// # 错误
+    /// 无。
+    fn net30() -> Self {
+        Self {
+            payment_term_code: "NET-30".to_string(),
+            business_category: None,
+        }
+    }
 }
 
 /// 一条可由现有库存直接满足的销售行。
@@ -488,7 +518,7 @@ pub(super) async fn basis_groups_for_order(
         .map(String::as_str)
         .collect::<HashSet<_>>();
     let coverage = load_sales_procurement_coverage(db, order, executor).await?;
-    let mut payment_terms = HashMap::new();
+    let mut settlement_terms = HashMap::new();
     let mut groups: Vec<BasisGroup> = Vec::new();
     for line in coverage.lines {
         if !responsibility_scope_ids.contains(line.revision_line.sales_order_line_id.as_ref())
@@ -502,7 +532,7 @@ pub(super) async fn basis_groups_for_order(
             &coverage.revision,
             line,
             supplies,
-            &mut payment_terms,
+            &mut settlement_terms,
             &mut groups,
             executor,
         )
@@ -649,7 +679,7 @@ fn normalized_optional_filter(value: Option<&str>) -> Option<String> {
 /// * `revision` - 销售当前版本
 /// * `line` - 当前销售版本目标行
 /// * `supplies` - 每供应商一条确定供给
-/// * `payment_terms` - 供应商付款条件缓存
+/// * `settlement_terms` - 供应商付款条件与经营类目缓存
 /// * `groups` - 待追加依据集合
 /// * `executor` - 数据访问执行器
 ///
@@ -666,21 +696,13 @@ async fn append_line_supplies(
     revision: &SalesOrderRevision,
     line: SalesProcurementCoverageLine,
     supplies: Vec<LineSupply>,
-    payment_terms: &mut HashMap<String, String>,
+    settlement_terms: &mut HashMap<String, SupplierSettlementTerms>,
     groups: &mut Vec<BasisGroup>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     for supply in supplies {
         let supplier_id = supply.offering.supplier_id.clone();
-        let supplier_key = supplier_id.to_string();
-        let payment_term_code = match payment_terms.get(&supplier_key) {
-            Some(value) => value.clone(),
-            None => {
-                let value = resolve_payment_term_code(db, &supplier_id, executor).await?;
-                payment_terms.insert(supplier_key, value.clone());
-                value
-            }
-        };
+        let terms = cached_settlement_terms(db, &supplier_id, settlement_terms, executor).await?;
         let purchase_type = purchase_type_from_product_kind(line.product_kind)?;
         let max_create_quantity = maximum_create_quantity(
             line.summary.remaining_quantity,
@@ -693,7 +715,7 @@ async fn append_line_supplies(
             let scope = BasisScope {
                 supplier_id: supplier_id.clone(),
                 purchase_type,
-                payment_term_code: payment_term_code.clone(),
+                payment_term_code: terms.payment_term_code.clone(),
                 fulfillment_responsibility,
             };
             let basis_line = BasisLine {
@@ -707,12 +729,41 @@ async fn append_line_supplies(
                 groups.push(BasisGroup {
                     revision: revision.clone(),
                     scope,
+                    business_category: terms.business_category.clone(),
                     lines: vec![basis_line],
                 });
             }
         }
     }
     Ok(())
+}
+
+/// 读取并缓存供应商当前付款条件与经营类目。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `supplier_id` - 供应商身份
+/// * `settlement_terms` - 按供应商缓存
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回该供应商已拆开的付款条件与经营类目。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
+async fn cached_settlement_terms(
+    db: &mongodb::Database,
+    supplier_id: &SupplierAccountId,
+    settlement_terms: &mut HashMap<String, SupplierSettlementTerms>,
+    executor: &mut dyn Executor,
+) -> Result<SupplierSettlementTerms> {
+    let supplier_key = supplier_id.to_string();
+    if let Some(value) = settlement_terms.get(&supplier_key) {
+        return Ok(value.clone());
+    }
+    let value = resolve_supplier_settlement_terms(db, supplier_id, executor).await?;
+    settlement_terms.insert(supplier_key, value.clone());
+    Ok(value)
 }
 
 /// 查询一条销售当前版本行的合格供给，并为每个供应商确定一条稳定供给。
@@ -879,6 +930,7 @@ async fn build_basis_view(
         purchase_type: group.scope.purchase_type.as_str().to_string(),
         fulfillment_responsibility: group.scope.fulfillment_responsibility.as_str().to_string(),
         payment_term_code: group.scope.payment_term_code.clone(),
+        business_category: group.business_category.clone(),
         lines,
         estimated_gross: estimated.to_string(),
     })
@@ -938,6 +990,7 @@ fn build_stock_basis_view(
         purchase_type: PurchaseType::Physical.as_str().to_string(),
         fulfillment_responsibility: FulfillmentResponsibility::Warehouse.as_str().to_string(),
         payment_term_code: String::new(),
+        business_category: None,
         lines,
         estimated_gross: "0".to_string(),
     })
@@ -1916,7 +1969,7 @@ async fn resolve_supplier_name(
     Ok(revision.map(|revision| revision.legal_name))
 }
 
-/// 读取供应商当前商务结算版本付款条件。
+/// 读取供应商当前付款条件与经营类目，并去掉历史编码。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -1924,31 +1977,40 @@ async fn resolve_supplier_name(
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
-/// 返回当前付款条件；供应商或商务版本缺失时返回 `NET-30`。
+/// 返回当前付款条件与经营类目；供应商或商务版本缺失时付款条件为 `NET-30`。
 ///
 /// # 错误
 /// 仓储读取失败时返回错误。
 ///
 /// # 关键业务约束
-/// 付款条件是精确拆单维度的一部分。
-async fn resolve_payment_term_code(
+/// 付款条件是精确拆单维度的一部分；经营类目不得写入付款条件代码。
+async fn resolve_supplier_settlement_terms(
     db: &mongodb::Database,
     supplier_id: &SupplierAccountId,
     executor: &mut dyn Executor,
-) -> Result<String> {
+) -> Result<SupplierSettlementTerms> {
     let Some(supplier) = db.supplier_accounts().find_by_id(supplier_id, executor).await? else {
-        return Ok("NET-30".to_string());
+        return Ok(SupplierSettlementTerms::net30());
     };
     let Some(revision_id) = supplier.current_commercial_profile_revision_id.clone() else {
-        return Ok("NET-30".to_string());
+        return Ok(SupplierSettlementTerms::net30());
     };
     let revision = db
         .supplier_commercial_profile_revisions()
         .find_by_id(&revision_id, executor)
         .await?;
-    Ok(revision
-        .map(|revision| revision.payment_term_snapshot)
-        .unwrap_or_else(|| "NET-30".to_string()))
+    let Some(revision) = revision else {
+        return Ok(SupplierSettlementTerms::net30());
+    };
+    let payment_term_code = revision.effective_payment_term_code();
+    Ok(SupplierSettlementTerms {
+        payment_term_code: if payment_term_code.is_empty() {
+            "NET-30".to_string()
+        } else {
+            payment_term_code
+        },
+        business_category: revision.effective_business_category(),
+    })
 }
 
 /// 取供给含税成本。

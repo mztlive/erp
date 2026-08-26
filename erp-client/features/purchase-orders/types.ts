@@ -289,7 +289,7 @@ export type PurchaseCreationBasis = Readonly<{
     fulfillmentResponsibility: FulfillmentResponsibility
     paymentTermCode: string
     paymentTermLabel: string
-    /** 供应商经营类目；从付款条件快照拆出，未登记时为空。 */
+    /** 供应商经营类目；优先来自商务资料独立字段，兼容旧付款条件快照。 */
     businessCategory?: string
     /** 可拆入本单的销售当前版本行 */
     lines: readonly {

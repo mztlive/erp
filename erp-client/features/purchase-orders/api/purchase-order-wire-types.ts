@@ -170,6 +170,7 @@ export type BackendBasis = {
     purchase_type?: string | null
     fulfillment_responsibility?: string | null
     payment_term_code: string
+    business_category?: string | null
     lines: BackendBasisLine[]
     estimated_gross: string
 }

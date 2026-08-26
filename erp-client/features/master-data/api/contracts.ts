@@ -224,6 +224,7 @@ export type CommercialProfileDto = {
     settlement_mode: string
     reconciliation_cycle: string
     payment_term_snapshot: string
+    business_category?: string | null
     invoice_type: string
     invoice_tax_rate: string | null
     signing_entity_party_id: string | null

@@ -99,15 +99,20 @@ export function progressDisplay(
 }
 
 export function paymentTermLabel(code: string): string {
+    const term =
+        code
+            .trim()
+            .split(/\s*[|｜]\s*经营类目：/)[0]
+            ?.trim() ?? ""
     return (
-        PAYMENT_TERM_OPTIONS.find((o) => o.value === code)?.label ??
-        (code === "NET-30" ? "货到 30 天" : code || "—")
+        PAYMENT_TERM_OPTIONS.find((o) => o.value === term)?.label ??
+        (term === "NET-30" ? "货到 30 天" : term || "—")
     )
 }
 
 /**
- * 供应商商务快照把结算方式和经营类目编进同一字符串。
- * 展示付款条件时必须拆开，避免标题与内容错位。
+ * 历史供应商商务快照把结算方式和经营类目编进同一字符串。
+ * 新数据已拆字段；解析仍用于已落单的付款条件代码。
  */
 export function parsePaymentTermSnapshot(raw: string): {
     paymentTerm: string

@@ -6,10 +6,10 @@ import type {
     SupplierProfileMutationDto,
 } from "@/features/master-data/api/contracts"
 import {
-    buildPaymentTermSnapshot,
     capabilityToBackend,
     genBusinessCode,
     invoiceToBackend,
+    paymentTermSnapshotOf,
     isoNow,
     normalizeTaxRate,
     parseScore100,
@@ -175,10 +175,8 @@ export async function createSupplier(
             clear_bank_account: false,
             settlement_mode: settlementToBackend(fields.settlement),
             reconciliation_cycle: "monthly",
-            payment_term_snapshot: buildPaymentTermSnapshot(
-                fields.settlement,
-                fields.businessCategory,
-            ),
+            payment_term_snapshot: paymentTermSnapshotOf(fields.settlement),
+            business_category: fields.businessCategory?.trim() || null,
             invoice_type: invoiceToBackend(fields.invoiceType),
             invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
             signing_entity_party_id: fields.signingEntity.trim(),
@@ -291,10 +289,8 @@ export async function updateSupplierRevision(
             clear_bank_account: fields.clearBankAccount === true,
             settlement_mode: settlementToBackend(fields.settlement),
             reconciliation_cycle: "monthly",
-            payment_term_snapshot: buildPaymentTermSnapshot(
-                fields.settlement,
-                fields.businessCategory,
-            ),
+            payment_term_snapshot: paymentTermSnapshotOf(fields.settlement),
+            business_category: fields.businessCategory?.trim() || null,
             invoice_type: invoiceToBackend(fields.invoiceType),
             invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
             signing_entity_party_id: fields.signingEntity.trim(),
