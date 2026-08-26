@@ -43,12 +43,18 @@ export function useAllocationSession({
     onPosted,
     canOperate = true,
     permissionReason,
+    workItemId,
+    expectedTaskVersion,
+    taskReceivableAccountId,
 }: {
     session: AllocationSessionView
     onClose: () => void
     onPosted: () => void
     canOperate?: boolean
     permissionReason?: string
+    workItemId?: string
+    expectedTaskVersion?: string
+    taskReceivableAccountId?: string
 }) {
     const saveMutation = useSaveAllocationDraftMutation()
     const postMutation = usePostAllocationMutation()
@@ -168,6 +174,16 @@ export function useAllocationSession({
             message: "权限已收回或处理已失效，禁止提交",
         })
     }
+    if (
+        !isReceipt &&
+        (!workItemId || !expectedTaskVersion || !taskReceivableAccountId)
+    ) {
+        issues.push({
+            id: "work-item",
+            label: "开票任务",
+            message: "销项开票必须由当前负责人从工作台开票任务进入。",
+        })
+    }
     for (const line of allocations) {
         if (parseAmt(line.amount) < 0) {
             issues.push({
@@ -181,6 +197,13 @@ export function useAllocationSession({
                 id: `over-${line.lineKey}`,
                 label: line.label,
                 message: `拟分配不可超过开放余额 ${line.openAmount}`,
+            })
+        }
+        if (!isReceipt && line.targetId !== taskReceivableAccountId) {
+            issues.push({
+                id: `task-target-${line.lineKey}`,
+                label: line.label,
+                message: "一次销项开票只能分配到当前任务绑定的应收子账",
             })
         }
     }
@@ -213,6 +236,10 @@ export function useAllocationSession({
         if (allocations.some((a) => a.targetId === target.targetId)) return
         if (target.counterpartyPartyId !== session.counterpartyPartyId) {
             setActionError("跨主体目标不能分配，请选择同主体目标。")
+            return
+        }
+        if (!isReceipt && target.targetId !== taskReceivableAccountId) {
+            setActionError("一次销项开票只能选择当前任务绑定的应收子账。")
             return
         }
         const alreadyAllocated = allocations.reduce(
@@ -296,6 +323,14 @@ export function useAllocationSession({
             setConfirmOpen(false)
             return
         }
+        if (
+            !isReceipt &&
+            (!workItemId || !expectedTaskVersion || !taskReceivableAccountId)
+        ) {
+            setActionError("销项开票必须由当前负责人从工作台开票任务进入。")
+            setConfirmOpen(false)
+            return
+        }
         setActionError(null)
         if (!idempotencyRef.current) {
             idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
@@ -303,6 +338,10 @@ export function useAllocationSession({
         try {
             const fact = factFromValues(form.state.values, isReceipt)
             const res = await postMutation.mutateAsync({
+                workItemId: isReceipt ? undefined : workItemId,
+                expectedTaskVersion: isReceipt
+                    ? undefined
+                    : expectedTaskVersion,
                 draftSessionId: session.draftSessionId,
                 editVersion,
                 idempotencyKey: idempotencyRef.current,

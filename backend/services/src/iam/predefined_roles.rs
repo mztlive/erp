@@ -385,6 +385,8 @@ const WAREHOUSE_PERMISSIONS: &[&str] = &[
 
 /// 财务推荐权限。
 const FINANCE_PERMISSIONS: &[&str] = &[
+    "finance_responsibility:list",
+    "finance_responsibility:manage",
     "work_item:list",
     "work_item:detail",
     "approval_instance:read",
@@ -466,6 +468,7 @@ const FINANCE_PERMISSIONS: &[&str] = &[
 /// 管理层业务只读与待办责任管理推荐权限。
 const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "procurement_responsibility:list",
+    "finance_responsibility:list",
     "admin:list",
     "product_category:list",
     "sku:list",
@@ -528,6 +531,8 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
 const SYSADMIN_PERMISSIONS: &[&str] = &[
     "procurement_responsibility:list",
     "procurement_responsibility:manage",
+    "finance_responsibility:list",
+    "finance_responsibility:manage",
     "admin:list",
     "product_category:list",
     "sku:list",

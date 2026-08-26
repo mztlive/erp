@@ -27,6 +27,7 @@ use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
+#[cfg(test)]
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
 /// 已注册的供应商付款单适配器规格。
@@ -187,6 +188,7 @@ pub fn require_frozen_binding(
 ///
 /// 字段与合同 §14.2 对齐；不得包含定义 ID 或审批人。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg(test)]
 pub struct SupplierPaymentStartCommand {
     /// 业务对象种类。
     pub subject_kind: String,
@@ -211,6 +213,7 @@ pub struct SupplierPaymentStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+#[cfg(test)]
 pub fn supplier_payment_start_command(
     payment_id: &str,
     subject_version: u32,
@@ -235,6 +238,7 @@ pub fn supplier_payment_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+#[cfg(test)]
 pub fn start_approval_command_kind(
     _command: &SupplierPaymentStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {

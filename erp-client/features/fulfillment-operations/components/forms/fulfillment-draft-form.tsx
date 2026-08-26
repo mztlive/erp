@@ -9,14 +9,14 @@ import type {
 /**
  * 切到下一条时把光标放在「第一个真的要动手填的框」上。
  * 入库的数量是带出来的，聚焦后全选即可直接改写；
- * 仓发/直发的物流单号是空的；服务的完成说明是空的且必填。
+ * 仓发/直发的物流单号是空的；服务的地点是空的且必填。
  */
 export const FIRST_INPUT_ID: Record<FulfillmentOperationType, string> = {
     RECEIPT: "receipt-recv-0",
     WAREHOUSE_SHIP: "ship-carrier",
     SUPPLIER_DIRECT: "direct-tracking",
     ELECTRONIC: "el-qty-0",
-    SERVICE: "service-note",
+    SERVICE: "service-loc",
 }
 import { FulfillmentDirectForm } from "./fulfillment-direct-form"
 import { FulfillmentElectronicForm } from "./fulfillment-electronic-form"

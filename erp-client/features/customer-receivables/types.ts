@@ -365,6 +365,8 @@ export type SaveAllocationDraftInput = {
 }
 
 export type PostAllocationInput = {
+    workItemId?: string
+    expectedTaskVersion?: string
     draftSessionId: string
     editVersion: number
     idempotencyKey: string

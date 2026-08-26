@@ -15,6 +15,9 @@ type AllocationSessionScreenProps = {
     onPosted: () => void
     canOperate?: boolean
     permissionReason?: string
+    workItemId?: string
+    expectedTaskVersion?: string
+    taskReceivableAccountId?: string
     /** 已由对象详情承载页面框架时，只渲染会话内容。 */
     embedded?: boolean
 }
@@ -28,6 +31,9 @@ export function AllocationSessionScreen({
     onPosted,
     canOperate = true,
     permissionReason,
+    workItemId,
+    expectedTaskVersion,
+    taskReceivableAccountId,
     embedded = false,
 }: AllocationSessionScreenProps) {
     const wrap = (content: React.ReactNode) =>
@@ -62,6 +68,9 @@ export function AllocationSessionScreen({
             onPosted={onPosted}
             canOperate={canOperate}
             permissionReason={permissionReason}
+            workItemId={workItemId}
+            expectedTaskVersion={expectedTaskVersion}
+            taskReceivableAccountId={taskReceivableAccountId}
         />,
     )
 }

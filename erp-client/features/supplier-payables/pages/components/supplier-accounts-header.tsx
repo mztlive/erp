@@ -12,6 +12,8 @@ export interface SupplierAccountsHeaderProps {
     onRefresh: () => void
     onRegisterInvoice: () => void
     onRegisterPayment: () => void
+    canRegisterPayment: boolean
+    paymentBlockedReason?: string
     onSettle: () => void
 }
 
@@ -22,6 +24,8 @@ export function SupplierAccountsHeader({
     onRefresh,
     onRegisterInvoice,
     onRegisterPayment,
+    canRegisterPayment,
+    paymentBlockedReason,
     onSettle,
 }: SupplierAccountsHeaderProps) {
     const queriedAt = data?.queriedAt
@@ -79,10 +83,14 @@ export function SupplierAccountsHeader({
                             label: "登记付款",
                             icon: WalletCardsIcon,
                             mobileVisibility: "hide",
-                            disabled: !data?.canRegisterPayment,
-                            title: data?.canRegisterPayment
-                                ? undefined
-                                : "当前无付款登记权限",
+                            disabled:
+                                !data?.canRegisterPayment ||
+                                !canRegisterPayment,
+                            title:
+                                data?.canRegisterPayment && canRegisterPayment
+                                    ? undefined
+                                    : (paymentBlockedReason ??
+                                      "当前无付款登记权限"),
                             onClick: onRegisterPayment,
                         },
                         {

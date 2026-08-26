@@ -867,7 +867,14 @@ pub struct SalesInvoiceAllocationLineRequest {
 
 /// 发票登记过账请求（资金入口，规范化号码唯一索引构成去重机制）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct PostInvoiceRequest {
+    /// 当前开放销项开票执行任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
     /// 发票分配行（合计必须等于发票含税金额）。
     #[validate(length(min = 1, message = "至少提供一条发票分配"))]
     pub allocations: Vec<SalesInvoiceAllocationLineRequest>,
@@ -880,6 +887,12 @@ pub struct PostInvoiceRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CommitInvoiceRequest {
+    /// 当前开放销项开票执行任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
     /// 已有发票草稿主键。
     pub invoice_id: Option<String>,
     /// 已有草稿期望乐观锁版本。

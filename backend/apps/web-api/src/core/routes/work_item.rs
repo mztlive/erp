@@ -3,7 +3,7 @@
 //! 已删除 `/work-items/{id}/start-processing`、`release-to-team` 与 `claim`。
 
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use services::iam::SharedRbacService;
@@ -65,6 +65,38 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(work_item::work_item_close),
                 rbac,
                 work_item::work_item_close_permission_key(),
+            ),
+        )
+        .route(
+            "/finance-responsibility-rules",
+            with_permission(
+                get(work_item::finance_responsibility::finance_responsibility_rule_list),
+                rbac,
+                work_item::finance_responsibility::finance_responsibility_rule_list_permission_key(),
+            ),
+        )
+        .route(
+            "/finance-responsibility-rules",
+            with_permission(
+                post(work_item::finance_responsibility::finance_responsibility_rule_create),
+                rbac,
+                work_item::finance_responsibility::finance_responsibility_rule_create_permission_key(),
+            ),
+        )
+        .route(
+            "/finance-responsibility-rules/{id}",
+            with_permission(
+                put(work_item::finance_responsibility::finance_responsibility_rule_update),
+                rbac,
+                work_item::finance_responsibility::finance_responsibility_rule_update_permission_key(),
+            ),
+        )
+        .route(
+            "/finance-responsibility-owner-options",
+            with_permission(
+                get(work_item::finance_responsibility::finance_responsibility_owner_options),
+                rbac,
+                work_item::finance_responsibility::finance_responsibility_owner_options_permission_key(),
             ),
         )
 }

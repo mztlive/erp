@@ -337,7 +337,7 @@ async fn persist_formalized_order(
                     .create_payable_with_entry(&payable.0, &payable.1, session)
                     .await?;
                 crate::payable::payment_task::ensure_purchase_payment_task(
-                    &db, &payable.0, &payable.1, &actor_id, session,
+                    &db, &payable.0, &payable.1, session,
                 )
                 .await?;
                 for entry in &cost_entries {

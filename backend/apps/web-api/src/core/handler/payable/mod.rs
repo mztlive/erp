@@ -376,6 +376,8 @@ mod tests {
         assert!(!production.contains("PENDING_REVIEW"));
         assert!(
             serde_json::from_value::<SubmitSupplierPaymentRequest>(serde_json::json!({
+                "work_item_id": "wi-1",
+                "expected_task_version": "1",
                 "expected_version": 1,
                 "idempotency_key": "k1",
                 "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],

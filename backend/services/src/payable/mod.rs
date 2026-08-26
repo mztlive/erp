@@ -61,9 +61,8 @@ pub use self::adapter::supplier_payment_object_readable;
 use self::adapter::{
     build_supplier_payment_snapshot, document_approval_view, ensure_final_approve_posting,
     execute_supplier_payment_domain_action, pending_allocations_from_request, require_frozen_binding,
-    start_approval_command_kind, start_supplier_payment_approval, supplier_payment_adapter,
-    supplier_payment_responsible_org_id, supplier_payment_start_command, supplier_payment_subject_ref,
-    RECENT_HISTORY_LIMIT,
+    start_supplier_payment_approval, supplier_payment_adapter, supplier_payment_responsible_org_id,
+    supplier_payment_subject_ref,
 };
 use self::cancel_approval::{
     build_supplier_payment_cancel_input, load_cancel_runtime, persist_supplier_payment_cancel,
@@ -79,10 +78,9 @@ pub use self::dto::{
     SupplierPaymentView,
 };
 use self::start_approval::{
-    build_supplier_payment_start_input, load_bound_definition_graph,
-    load_bound_definition_graph_with_executor, load_start_receipt, load_start_receipt_with_executor,
-    persist_supplier_payment_start, persist_supplier_payment_start_in_transaction, SupplierPaymentStartInput,
-    SupplierPaymentStartPersistInput,
+    build_supplier_payment_start_input, load_bound_definition_graph_with_executor,
+    load_start_receipt_with_executor, persist_supplier_payment_start_in_transaction,
+    SupplierPaymentStartInput, SupplierPaymentStartPersistInput,
 };
 
 /// 应付往来子账列表筛选条件类型（经 `PayableExt` 关联类型跨 crate 可达）。
@@ -379,6 +377,8 @@ impl PayableService {
         if let Some(payment_id) = command_receipt.committed_resource_id(&self.db).await? {
             return self.supplier_payment_detail(&payment_id).await;
         }
+        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let work_item_id = req.work_item_id.clone();
         let new_payment = match (&req.payment_id, req.expected_version, req.payment) {
             (None, None, Some(create)) => {
                 create.validate()?;
@@ -405,13 +405,14 @@ impl PayableService {
         let allocations = pending_allocations_from_request(&req.allocations)?;
         let idempotency_key = req.idempotency_key;
         let adapter = supplier_payment_adapter()?;
+        let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let client = db.client().clone();
         let actor_owned = actor.clone();
         let command_receipt_for_tx = command_receipt.clone();
-        let transaction_result = client
-            .with_transaction(move |session| {
+        let transaction_result = rbac
+            .clone()
+            .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
                     let (mut payment, binding, organization_id) = match new_payment {
                         Some(candidate) => {
@@ -493,6 +494,16 @@ impl PayableService {
                         }
                     };
                     let binding = require_frozen_binding(Some(&binding))?.clone();
+                    payment_task::record_payment_execution(
+                        &db,
+                        &work_item_id,
+                        expected_task_version,
+                        &payment.supplier_id,
+                        &allocations,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
                     start_supplier_payment_approval(&mut payment, allocations)?;
                     let id = payment.base.id.clone();
                     let subject = supplier_payment_subject_ref(&id)?;
@@ -577,14 +588,19 @@ impl PayableService {
         req: SubmitSupplierPaymentRequest,
         actor: &AuditActor,
     ) -> Result<SupplierPaymentView> {
-        req.validate()?;
-        let adapter = supplier_payment_adapter()?;
-        let mut payment = self.load_supplier_payment(id).await?;
-        ensure_expected_version(payment.base.version, req.expected_version)?;
-        let allocations = pending_allocations_from_request(&req.allocations)?;
-        start_supplier_payment_approval(&mut payment, allocations)?;
-        self.dispatch_supplier_payment_start(id, payment, req.idempotency_key, actor, adapter)
-            .await
+        self.commit_supplier_payment(
+            CommitSupplierPaymentRequest {
+                work_item_id: req.work_item_id,
+                expected_task_version: req.expected_task_version,
+                payment_id: Some(id.to_string()),
+                expected_version: Some(req.expected_version),
+                payment: None,
+                allocations: req.allocations,
+                idempotency_key: req.idempotency_key,
+            },
+            actor,
+        )
+        .await
     }
 
     /// 撤回供应商付款审批，成功后回到草稿且 `subject_version` 不回退。
@@ -627,69 +643,6 @@ impl PayableService {
         Err(Error::ConflictError(
             "供应商付款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string(),
         ))
-    }
-
-    /// 从绑定读取定义并持久化启动事实。
-    ///
-    /// # 错误
-    /// 无绑定、定义缺失或写入失败时返回错误。
-    async fn dispatch_supplier_payment_start(
-        &self,
-        id: &str,
-        payment: SupplierPayment,
-        idempotency_key: String,
-        actor: &AuditActor,
-        adapter: adapter::SupplierPaymentAdapter,
-    ) -> Result<SupplierPaymentView> {
-        let subject = supplier_payment_subject_ref(id)?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
-        let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let now = Instant::now();
-        let organization_id = self.supplier_responsible_org_id(&payment.supplier_id).await?;
-        let snapshot = build_supplier_payment_snapshot(&payment, &organization_id, actor.id(), now)?;
-        let start = supplier_payment_start_command(
-            id,
-            payment.approval_subject_version,
-            actor.id(),
-            &idempotency_key,
-        );
-        let _ = (start_approval_command_kind(&start), RECENT_HISTORY_LIMIT);
-        let _ = supplier_payment_object_readable(&organization_id, actor.id())?;
-        let graph = load_bound_definition_graph(&self.db, &binding).await?;
-        let existing_receipt = load_start_receipt(
-            &self.db,
-            &subject,
-            payment.approval_subject_version,
-            &idempotency_key,
-        )
-        .await?;
-        let start_input = build_supplier_payment_start_input(SupplierPaymentStartInput {
-            graph,
-            binding: &binding,
-            subject,
-            subject_version: payment.approval_subject_version,
-            actor_id: actor.id(),
-            organization_id: &organization_id,
-            idempotency_key: &idempotency_key,
-            receipt: existing_receipt,
-            now,
-        })?;
-        let prepared = prepare_start(start_input)?;
-        persist_supplier_payment_start(
-            &self.db,
-            SupplierPaymentStartPersistInput {
-                payment,
-                actor: actor.clone(),
-                id: id.to_string(),
-                snapshot_payload: snapshot,
-                prepared,
-                owner_role: adapter.owner_role,
-                organization_id,
-                now,
-            },
-        )
-        .await?;
-        self.supplier_payment_detail(id).await
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -750,20 +703,6 @@ impl PayableService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
-    }
-
-    /// 读取供应商往来主体作为责任组织。
-    ///
-    /// # 错误
-    /// 供应商不存在或往来主体为空时返回错误。
-    async fn supplier_responsible_org_id(&self, supplier_id: &SupplierAccountId) -> Result<String> {
-        let supplier = self
-            .db
-            .supplier_accounts()
-            .find_by_id(supplier_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-        supplier_payment_responsible_org_id(supplier.party_id.as_ref())
     }
 
     /// 最终通过过账并核销（§8.3-1 事务不变量）。
@@ -903,8 +842,7 @@ impl PayableService {
                         affected_accounts.insert(entry.payable_account_id);
                     }
                     for account_id in affected_accounts {
-                        payment_task::sync_purchase_payment_task(&db, &account_id, &actor_id, session)
-                            .await?;
+                        payment_task::sync_purchase_payment_task(&db, &account_id, session).await?;
                     }
                     payment.mark_posted()?;
                     db.supplier_payments().update(&mut payment, session).await?;
@@ -1577,12 +1515,12 @@ mod supplier_payment_approval_tests {
         .expect("组织覆盖时不得报对象读取权未接线");
     }
 
-    /// 提交必须锁定单据、递增 approval_subject_version 并调用 start_approval。
+    /// 提交必须绑定付款执行任务并在同一事务启动审批。
     #[test]
     fn submit_calls_start_approval_with_subject_version() {
         let source = include_str!("mod.rs");
         assert!(source.contains("pub async fn submit_supplier_payment"));
-        assert!(source.contains("supplier_payment_start_command"));
+        assert!(source.contains("record_payment_execution"));
         assert!(source.contains("payment.approval_subject_version"));
         assert!(source.contains("prepare_start"));
     }

@@ -477,6 +477,8 @@ export function useSupplierAccountsPage() {
                     fromWorkspace,
                     existingPaymentId,
                     existingInvoiceId,
+                    preselectPayableAccountId:
+                        previewKind === "payable" ? detailId : undefined,
                 })
                 return
             }

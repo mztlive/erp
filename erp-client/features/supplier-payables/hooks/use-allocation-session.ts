@@ -37,6 +37,9 @@ export type AllocationSessionParams = {
     existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
+    paymentWorkItemId?: string
+    expectedPaymentTaskVersion?: string
+    paymentPayableAccountId?: string
 }
 
 export type AllocationSessionOptions = {
@@ -57,6 +60,9 @@ export function useAllocationSession(
         existingPaymentId,
         existingInvoiceId,
         preselectPayableAccountId,
+        paymentWorkItemId,
+        expectedPaymentTaskVersion,
+        paymentPayableAccountId,
     }: AllocationSessionParams,
     { onCompleted, onDraftSessionIdChange }: AllocationSessionOptions = {},
 ) {
@@ -78,6 +84,16 @@ export function useAllocationSession(
 
     const session = sessionQuery.data
     const policy = session?.payablePriorityPolicy
+    const pool = React.useMemo(
+        () =>
+            track === "payment" && paymentPayableAccountId
+                ? (session?.pool.filter(
+                      (item) =>
+                          item.payableAccountId === paymentPayableAccountId,
+                  ) ?? [])
+                : (session?.pool ?? []),
+        [paymentPayableAccountId, session?.pool, track],
+    )
 
     const [amounts, setAmounts] = React.useState<Record<string, string>>({})
     const [selected, setSelected] = React.useState<Set<string>>(new Set())
@@ -119,7 +135,10 @@ export function useAllocationSession(
         },
     })
 
-    const preselectKey = session?.preselectedPayableAccountIds.join("|")
+    const preselectKey = [
+        ...(session?.preselectedPayableAccountIds ?? []),
+        paymentPayableAccountId ?? "",
+    ].join("|")
 
     // 订阅表单 store：记录金额/校验问题/提交按钮随输入实时更新
     const paymentValues = useStore(paymentForm.store, (s) => s.values)
@@ -137,12 +156,16 @@ export function useAllocationSession(
 
     React.useEffect(() => {
         if (!session) return
-        const next = new Set(session.preselectedPayableAccountIds)
+        const next = new Set(
+            track === "payment" && paymentPayableAccountId
+                ? pool.map((item) => item.payableAccountId)
+                : session.preselectedPayableAccountIds,
+        )
         setSelected(next)
         const am: Record<string, string> = {}
         let prefillSum = 0
         for (const id of next) {
-            const item = session.pool.find((p) => p.payableAccountId === id)
+            const item = pool.find((p) => p.payableAccountId === id)
             if (!item) continue
             const open =
                 track === "payment" ? item.openTotal : item.openInvoiceableTotal
@@ -201,12 +224,12 @@ export function useAllocationSession(
 
     const mixedSources = React.useMemo(() => {
         const types = new Set(
-            session?.pool
+            pool
                 .filter((p) => selected.has(p.payableAccountId))
                 .map((p) => p.sourceType) ?? [],
         )
         return types.size > 1
-    }, [session?.pool, selected])
+    }, [pool, selected])
 
     const policyBlocksAuto =
         mixedSources &&
@@ -218,7 +241,7 @@ export function useAllocationSession(
         track,
         selected,
         amounts,
-        pool: session?.pool,
+        pool,
         allocatedHint,
         factAmount,
         existingPaymentId: session?.existingPaymentId,
@@ -227,13 +250,26 @@ export function useAllocationSession(
         existingAmount: session?.existingAmount,
     })
 
-    const canSubmit = issues.length === 0 && !result
+    const hasPaymentTask =
+        track !== "payment" ||
+        Boolean(
+            paymentWorkItemId &&
+            expectedPaymentTaskVersion &&
+            paymentPayableAccountId,
+        )
+    const canSubmit = issues.length === 0 && !result && hasPaymentTask
 
     function toggleItem(
         payableAccountId: string,
         checked: boolean | "indeterminate",
         open: string,
     ) {
+        if (
+            track === "payment" &&
+            payableAccountId !== paymentPayableAccountId
+        ) {
+            return
+        }
         setSelected((prev) => {
             const next = new Set(prev)
             if (checked) next.add(payableAccountId)
@@ -250,14 +286,14 @@ export function useAllocationSession(
     }
 
     function toggleSelectAll() {
-        const ids = session?.pool.map((p) => p.payableAccountId) ?? []
+        const ids = pool.map((p) => p.payableAccountId)
         const allSelected =
             ids.length > 0 && ids.every((id) => selected.has(id))
         setSelected(new Set(allSelected ? [] : ids))
         if (!allSelected && session) {
             setAmounts((m) => {
                 const next = { ...m }
-                for (const p of session.pool) {
+                for (const p of pool) {
                     next[p.payableAccountId] =
                         track === "payment"
                             ? p.openTotal
@@ -272,7 +308,7 @@ export function useAllocationSession(
         if (!session) return
         setAmounts((m) => {
             const next = { ...m }
-            for (const p of session.pool) {
+            for (const p of pool) {
                 if (selected.has(p.payableAccountId)) {
                     next[p.payableAccountId] =
                         track === "payment"
@@ -316,11 +352,19 @@ export function useAllocationSession(
 
     async function doSubmit() {
         if (!session) return
+        if (
+            track === "payment" &&
+            (!paymentWorkItemId ||
+                !expectedPaymentTaskVersion ||
+                !paymentPayableAccountId)
+        ) {
+            return
+        }
         if (!idempotencyRef.current) {
             idempotencyRef.current = `w12_${track}_${session.draftSessionId}_${Date.now()}`
         }
         const targets = [...selected].map((payableAccountId) => {
-            const item = session.pool.find(
+            const item = pool.find(
                 (p) => p.payableAccountId === payableAccountId,
             )!
             return {
@@ -338,6 +382,8 @@ export function useAllocationSession(
         if (track === "payment") {
             const v = paymentForm.state.values
             res = await submitPayment.mutateAsync({
+                workItemId: paymentWorkItemId!,
+                expectedTaskVersion: expectedPaymentTaskVersion!,
                 draftSessionId: session.draftSessionId,
                 supplierId,
                 paidAt: v.paidAt,
@@ -434,6 +480,7 @@ export function useAllocationSession(
         sessionQuery,
         session,
         policy,
+        pool,
         amounts,
         selected,
         confirmOpen,

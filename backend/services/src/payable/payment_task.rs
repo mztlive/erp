@@ -1,23 +1,26 @@
 //! 已确认采购应付与 W01 付款执行任务的原子生命周期编排。
 //!
-//! 任务对象固定为 `payable_account`，责任人固定为形成应付的最终审批人；付款单
-//! 自身的审批任务仍由统一审批运行时维护，不与本任务合并。付款部分核销只更新
-//! 摘要，开放余额归零自动完成；冲正重新产生余额时创建新任务身份。
+//! 任务对象固定为 `payable_account`，负责人由供应商精确责任规则或付款默认规则
+//! 解析并冻结；付款单自身的审批任务仍由统一审批运行时维护，不与本任务合并。
+//! 付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按当前
+//! 责任规则创建新任务身份。
 
 use chrono::{FixedOffset, TimeZone};
-use database::{AccessControlExt, Executor, PayableExt, SupplierExt, WorkItemExt};
+use database::{Executor, PayableExt, SupplierExt, WorkItemExt};
 use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{PayableAccountId, WorkItemId};
-use entities::payable::{EntryDirection, PayableAccount, PayableEntry, PayableSourceType};
-use entities::work_item::{
-    AssignmentSource, AvailableWorkItemAccount, WorkItem, WorkItemData, WorkItemPriority, WorkItemStatus,
-    WorkItemType,
+use entities::ids::{PayableAccountId, SupplierAccountId, WorkItemId};
+use entities::payable::{
+    EntryDirection, PayableAccount, PayableEntry, PayableSourceType, PendingPaymentAllocation,
 };
-use entities::{Permission, PermissionSet};
+use entities::work_item::{
+    AssignmentSource, FinanceResponsibilityOperation, WorkItem, WorkItemData, WorkItemPriority,
+    WorkItemStatus, WorkItemType,
+};
 use id_generator::next_id;
 
+use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
+use crate::work_item::WorkItemService;
 
 const PAYMENT_OWNER_ROLE: &str = "role-finance";
 const PAYMENT_REASON: &str = "PAYABLE_PAYMENT_REQUIRED";
@@ -29,7 +32,6 @@ const PAYABLE_OBJECT_TYPE: &str = "payable_account";
 /// * `db` - MongoDB 数据库
 /// * `account` - 已在当前事务形成的采购应付子账
 /// * `entry` - 与子账一同形成的原始应付分录
-/// * `owner_user_id` - 最终通过采购单的具体财务账号
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
@@ -44,21 +46,31 @@ pub(crate) async fn ensure_purchase_payment_task(
     db: &mongodb::Database,
     account: &PayableAccount,
     entry: &PayableEntry,
-    owner_user_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     ensure_purchase_payable(account, entry)?;
     let tasks = payment_tasks(db, &account.base.id, executor).await?;
     let open = open_tasks(&tasks);
     match open.as_slice() {
-        [] => {}
+        [] if tasks.is_empty() => {}
+        [] => {
+            return Err(Error::BusinessLogicError(
+                "应付子账已存在付款任务历史，不能重复建立初始任务".to_string(),
+            ));
+        }
         [task] => return ensure_task_identity(task, account),
         _ => return Err(duplicate_open_task_error()),
     }
     let owner_organization_id = supplier_organization_id(db, account, executor).await?;
-    let rbac = crate::iam::shared_rbac_service(db.clone());
-    ensure_payment_owner_eligible(db, &rbac, owner_user_id, executor).await?;
-    let task = new_payment_task(account, entry.due_date, owner_user_id, owner_organization_id)?;
+    let responsibility = resolve_payment_responsibility(db, account, executor).await?;
+    let task = new_payment_task(
+        account,
+        entry.due_date,
+        &responsibility.owner_user_id,
+        owner_organization_id,
+        &responsibility.responsibility_key,
+        PAYMENT_REASON,
+    )?;
     db.work_items().create(&task, executor).await?;
     Ok(())
 }
@@ -68,7 +80,6 @@ pub(crate) async fn ensure_purchase_payment_task(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `account_id` - 本次核销进度发生变化的应付子账
-/// * `fallback_owner_user_id` - 旧数据没有任务历史时使用的当前财务操作人
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
@@ -82,7 +93,6 @@ pub(crate) async fn ensure_purchase_payment_task(
 pub(crate) async fn sync_purchase_payment_task(
     db: &mongodb::Database,
     account_id: &PayableAccountId,
-    fallback_owner_user_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let account = db
@@ -94,6 +104,11 @@ pub(crate) async fn sync_purchase_payment_task(
         return Ok(());
     }
     let tasks = payment_tasks(db, &account.base.id, executor).await?;
+    if tasks.is_empty() {
+        return Err(Error::BusinessLogicError(
+            "应付子账缺少付款执行任务，无法处理付款进度，请联系管理员修复数据".to_string(),
+        ));
+    }
     let open = open_tasks(&tasks);
     if open.len() > 1 {
         return Err(duplicate_open_task_error());
@@ -104,7 +119,71 @@ pub(crate) async fn sync_purchase_payment_task(
     if let Some(task) = open.into_iter().next() {
         return update_open_task_summary(db, task, &account, executor).await;
     }
-    create_reopened_or_legacy_task(db, &account, &tasks, fallback_owner_user_id, executor).await
+    create_reopened_task(db, &account, &tasks, executor).await
+}
+
+/// 在付款正式提交事务内校验并记录当前付款执行任务活动。
+///
+/// # 错误
+/// 任务版本、当前责任人、应付子账、供应商或任一核销分录不属于同一任务时失败关闭。
+pub(crate) async fn record_payment_execution(
+    db: &mongodb::Database,
+    work_item_id: &WorkItemId,
+    expected_task_version: u64,
+    supplier_id: &SupplierAccountId,
+    allocations: &[PendingPaymentAllocation],
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut task = db
+        .work_items()
+        .find_by_id(work_item_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
+    if task.base.version != expected_task_version {
+        return Err(Error::ConflictError(
+            "付款任务版本已变化，请刷新工作台任务后重试".to_string(),
+        ));
+    }
+    let account = db
+        .payable_accounts()
+        .find_by_id(&task.business_object_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("付款任务关联的应付往来子账不存在".to_string()))?;
+    ensure_task_identity(&task, &account)?;
+    if !task.is_owned_by(actor.id()) {
+        return Err(Error::Forbidden(
+            "当前账号不是开放付款任务的当前责任人".to_string(),
+        ));
+    }
+    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
+        .ensure_domain_decision_access(actor, &task, executor)
+        .await?;
+    if &account.supplier_id != supplier_id {
+        return Err(Error::BusinessLogicError(
+            "付款供应商与当前任务的应付子账不一致".to_string(),
+        ));
+    }
+    let account_entries = db
+        .payable_entries()
+        .find_entries_by_account(&PayableAccountId::new(account.base.id.as_str()), executor)
+        .await?;
+    let entry_ids: std::collections::HashSet<&str> = account_entries
+        .iter()
+        .map(|entry| entry.base.id.as_str())
+        .collect();
+    if allocations
+        .iter()
+        .any(|line| !entry_ids.contains(line.payable_entry_id.as_ref()))
+    {
+        return Err(Error::BusinessLogicError(
+            "一次付款只能核销当前任务绑定应付子账中的分录".to_string(),
+        ));
+    }
+    task.record_activity(actor.id(), Instant::now())
+        .map_err(Error::Logic)?;
+    db.work_items().update(&mut task, executor).await?;
+    Ok(())
 }
 
 /// 校验采购应付与原始分录属于同一正式事实。
@@ -121,32 +200,30 @@ fn ensure_purchase_payable(account: &PayableAccount, entry: &PayableEntry) -> Re
     ))
 }
 
-/// 创建冲正后继任务；旧数据没有历史时按当前财务操作人补建。
-async fn create_reopened_or_legacy_task(
+/// 按当前责任规则创建冲正后继任务；没有历史任务属于损坏事实并失败关闭。
+async fn create_reopened_task(
     db: &mongodb::Database,
     account: &PayableAccount,
     tasks: &[WorkItem],
-    fallback_owner_user_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let impact = Some(payment_impact_summary(account));
-    if let Some(previous) = tasks.first() {
-        ensure_task_identity(previous, account)?;
-        let task = previous
-            .successor_for_reopened_payable(
-                WorkItemId::new(next_id()),
-                account.base.version.to_string(),
-                impact,
-            )
-            .map_err(Error::Logic)?;
-        db.work_items().create(&task, executor).await?;
-        return Ok(());
-    }
+    let previous = tasks.first().ok_or_else(|| {
+        Error::BusinessLogicError(
+            "应付子账缺少付款执行任务，无法处理付款进度，请联系管理员修复数据".to_string(),
+        )
+    })?;
+    ensure_task_identity(previous, account)?;
     let due_date = earliest_increase_due_date(db, account, executor).await?;
     let owner_organization_id = supplier_organization_id(db, account, executor).await?;
-    let rbac = crate::iam::shared_rbac_service(db.clone());
-    ensure_payment_owner_eligible(db, &rbac, fallback_owner_user_id, executor).await?;
-    let task = new_payment_task(account, due_date, fallback_owner_user_id, owner_organization_id)?;
+    let responsibility = resolve_payment_responsibility(db, account, executor).await?;
+    let task = new_payment_task(
+        account,
+        due_date,
+        &responsibility.owner_user_id,
+        owner_organization_id,
+        &responsibility.responsibility_key,
+        "PAYABLE_REOPENED_BY_REVERSAL",
+    )?;
     db.work_items().create(&task, executor).await?;
     Ok(())
 }
@@ -178,10 +255,12 @@ async fn update_open_task_summary(
 ) -> Result<()> {
     ensure_task_identity(task, account)?;
     let impact = payment_impact_summary(account);
-    if task.impact_summary.as_deref() == Some(impact.as_str()) {
+    let subject_version = account.base.version.to_string();
+    if task.impact_summary.as_deref() == Some(impact.as_str()) && task.subject_version == subject_version {
         return Ok(());
     }
     let mut task = task.clone();
+    task.subject_version = subject_version;
     task.update_impact_summary(Some(impact)).map_err(Error::Logic)?;
     db.work_items().update(&mut task, executor).await?;
     Ok(())
@@ -193,6 +272,8 @@ fn new_payment_task(
     due_date: BusinessDate,
     owner_user_id: &str,
     owner_organization_id: String,
+    responsibility_key: &str,
+    reason_code: &str,
 ) -> Result<WorkItem> {
     WorkItem::new_with_responsibility_key(
         WorkItemId::new(next_id()),
@@ -207,10 +288,10 @@ fn new_payment_task(
             assignment_source: AssignmentSource::SystemRule,
             priority: WorkItemPriority::Normal,
             due_at: Some(payment_due_at(due_date)?),
-            reason_code: Some(PAYMENT_REASON.to_string()),
+            reason_code: Some(reason_code.to_string()),
             impact_summary: Some(payment_impact_summary(account)),
         },
-        payment_responsibility_key(&account.base.id),
+        responsibility_key,
     )
     .map_err(Error::Logic)
 }
@@ -241,7 +322,9 @@ fn ensure_task_identity(task: &WorkItem, account: &PayableAccount) -> Result<()>
         && task.business_object_type == PAYABLE_OBJECT_TYPE
         && task.business_object_id == account.base.id
         && task.owner_role == PAYMENT_OWNER_ROLE
-        && task.responsibility_key() == Some(payment_responsibility_key(&account.base.id).as_str())
+        && task
+            .responsibility_key()
+            .is_some_and(|key| key.starts_with("finance:SUPPLIER_PAYMENT:"))
         && matches!(
             task.reason_code.as_deref(),
             Some(PAYMENT_REASON | "PAYABLE_REOPENED_BY_REVERSAL")
@@ -268,7 +351,7 @@ async fn supplier_organization_id(
     Ok(supplier.party_id.to_string())
 }
 
-/// 读取子账最早的增加分录到期日，供旧数据补建任务。
+/// 读取子账最早的增加分录到期日，供冲正后继任务沿用付款时限。
 async fn earliest_increase_due_date(
     db: &mongodb::Database,
     account: &PayableAccount,
@@ -284,35 +367,19 @@ async fn earliest_increase_due_date(
         .ok_or_else(|| Error::BusinessLogicError("应付子账缺少增加分录，无法形成付款任务".to_string()))
 }
 
-/// 校验付款任务具体负责人可登录且具备完整 W12 登记、查看和提交权限。
-async fn ensure_payment_owner_eligible(
+/// 按供应商精确规则、付款默认规则顺序解析当前具体负责人。
+async fn resolve_payment_responsibility(
     db: &mongodb::Database,
-    rbac: &SharedRbacService,
-    owner_user_id: &str,
+    account: &PayableAccount,
     executor: &mut dyn Executor,
-) -> Result<()> {
-    let required_codes = WorkItemType::SupplierPaymentExecution
-        .supplier_payment_execution_permissions(PAYABLE_OBJECT_TYPE)
-        .ok_or_else(|| Error::Internal("付款执行权限合同未注册".to_string()))?;
-    let account = db
-        .accounts()
-        .find_work_item_account(owner_user_id, executor)
-        .await?
-        .ok_or_else(|| Error::BusinessLogicError("付款责任人账号不存在，请调整审批责任后重试".to_string()))?;
-    AvailableWorkItemAccount::from_account(&account)
-        .map_err(|_| Error::BusinessLogicError("付款责任人账号不可用，请调整审批责任后重试".to_string()))?;
-    let granted = PermissionSet::new(rbac.permissions(account.kind, owner_user_id).await?);
-    let required = PermissionSet::new(
-        required_codes
-            .iter()
-            .map(|code| Permission::parse(code).expect("固定付款执行权限必须合法")),
-    );
-    if granted.covers(&required) {
-        return Ok(());
-    }
-    Err(Error::BusinessLogicError(
-        "付款责任人缺少登记或提交付款所需权限，请先调整财务角色后重试".to_string(),
-    ))
+) -> Result<crate::work_item::ResolvedFinanceResponsibility> {
+    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
+        .resolve_finance_responsibility(
+            FinanceResponsibilityOperation::SupplierPayment,
+            account.supplier_id.as_ref(),
+            executor,
+        )
+        .await
 }
 
 /// 把业务自然日转换为上海时区当日 23:59:59 的工作项时限。
@@ -324,11 +391,6 @@ fn payment_due_at(due_date: BusinessDate) -> Result<Instant> {
         .single()
         .ok_or_else(|| Error::Internal("计划付款日无法转换为工作项时限".to_string()))?;
     Ok(Instant::from_unix_secs(due_at.timestamp()))
-}
-
-/// 返回稳定的一子账一责任键。
-fn payment_responsibility_key(payable_account_id: &str) -> String {
-    format!("payable_account:{payable_account_id}")
 }
 
 /// 返回随开放余额变化的付款影响摘要。

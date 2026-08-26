@@ -165,6 +165,38 @@ test("supplier payment execution opens W12 with the exact payable preselected", 
     )
 })
 
+test("sales invoice execution opens W11 with the exact receivable preselected", () => {
+    const url = parsedHref(
+        buildHandlerHref({
+            ...REQUIRED_CONTEXT,
+            businessObjectId: "receivable / 42",
+            rootBusinessObjectId: "sales / 7",
+            handlerKey: "sales_invoice_execution",
+            destinationWorkspaceId: "W11",
+        }),
+    )
+
+    assert.equal(url.pathname, "/finance/customer-accounts")
+    assert.equal(url.searchParams.get("from"), "W01")
+    assert.equal(url.searchParams.get("view"), "sales_invoice")
+    assert.equal(url.searchParams.get("register"), "invoice")
+    assert.equal(url.searchParams.get("receivableAccountId"), "receivable / 42")
+    assert.equal(url.searchParams.get("salesOrderId"), "sales / 7")
+    assert.equal(url.searchParams.get("previewKind"), "receivable")
+    assert.equal(url.searchParams.get("previewId"), "receivable / 42")
+    assert.equal(url.searchParams.get("currentWorkItemId"), "wi-42")
+    assert.equal(url.searchParams.get("queueContextId"), "queue-42")
+
+    assert.equal(
+        buildHandlerHref({
+            ...REQUIRED_CONTEXT,
+            handlerKey: "sales_invoice_execution",
+            destinationWorkspaceId: "W11",
+        }),
+        null,
+    )
+})
+
 test("supplier settlement review opens the exact W27 statement", () => {
     const url = parsedHref(
         buildHandlerHref({

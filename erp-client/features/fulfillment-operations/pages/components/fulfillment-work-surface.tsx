@@ -239,27 +239,29 @@ export function FulfillmentWorkSurface({
                                     先跳过
                                 </Button>
                             ) : null}
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                disabled={formalPending || !dirty}
-                                onClick={onDiscard}
-                            >
-                                <Undo2Icon data-icon="inline-start" />
-                                放弃修改
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                className="rounded-lg shadow-none"
-                                disabled={
-                                    formalPending || !dirty || !supportsSave
-                                }
-                                onClick={() => void onSave()}
-                            >
-                                <SaveIcon data-icon="inline-start" />
-                                保存
-                            </Button>
+                            {dirty ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    disabled={formalPending}
+                                    onClick={onDiscard}
+                                >
+                                    <Undo2Icon data-icon="inline-start" />
+                                    放弃修改
+                                </Button>
+                            ) : null}
+                            {supportsSave ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="rounded-lg shadow-none"
+                                    disabled={formalPending || !dirty}
+                                    onClick={() => void onSave()}
+                                >
+                                    <SaveIcon data-icon="inline-start" />
+                                    保存
+                                </Button>
+                            ) : null}
                             <Button
                                 type="button"
                                 disabled={formalPending || !canPost}

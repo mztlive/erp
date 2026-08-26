@@ -12,11 +12,12 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 17] = [
+const WORK_ITEM_TYPES: [WorkItemType; 18] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::FulfillmentOperation,
     WorkItemType::SupplierPaymentExecution,
+    WorkItemType::SalesInvoiceExecution,
     WorkItemType::PurchaseOrderReview,
     WorkItemType::SalesChangeImpactReview,
     WorkItemType::SalesChangeFinanceReview,
@@ -805,6 +806,12 @@ fn handler_route(
         (WorkItemType::SupplierPaymentExecution, _) => {
             return Err(Error::ValidationError("付款执行任务业务对象未注册".to_string()));
         }
+        (WorkItemType::SalesInvoiceExecution, "receivable_account") => ("sales_invoice_execution", "W11"),
+        (WorkItemType::SalesInvoiceExecution, _) => {
+            return Err(Error::ValidationError(
+                "销项开票执行任务业务对象未注册".to_string(),
+            ));
+        }
         (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
         (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
         (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
@@ -863,6 +870,7 @@ fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview
         | WorkItemType::SupplierPaymentExecution
+        | WorkItemType::SalesInvoiceExecution
         | WorkItemType::PurchaseOrderReview
         | WorkItemType::SalesChangeFinanceReview
         | WorkItemType::OwnershipMigrationFinanceConfirmation
@@ -1091,6 +1099,20 @@ mod tests {
         assert_eq!(delta.destination_workspace_id, "W13");
         assert!(opening.route_context.is_none());
         assert!(delta.route_context.is_none());
+    }
+
+    #[test]
+    fn sales_invoice_execution_routes_to_w11() {
+        let route = handler_route(
+            WorkItemType::SalesInvoiceExecution,
+            "receivable_account",
+            "role-finance",
+        )
+        .unwrap();
+
+        assert_eq!(route.handler_key, "sales_invoice_execution");
+        assert_eq!(route.destination_workspace_id, "W11");
+        assert!(route.route_context.is_none());
     }
 
     #[test]

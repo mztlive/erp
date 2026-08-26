@@ -35,6 +35,8 @@ pub enum WorkItemType {
     FulfillmentOperation,
     /// 已确认应付的供应商付款执行。
     SupplierPaymentExecution,
+    /// 应收子账尚有可开票额度时的销项开票执行。
+    SalesInvoiceExecution,
     /// 采购单财务审核。
     PurchaseOrderReview,
     /// 销售变更履约影响复核。
@@ -361,6 +363,12 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         read_permission: "payable_account:detail",
     },
     WorkItemBriefRelation {
+        work_item_type: WorkItemType::SalesInvoiceExecution,
+        object_kind: WorkItemBriefObjectKind::ReceivableAccount,
+        business_object_type: "receivable_account",
+        read_permission: "receivable_account:detail",
+    },
+    WorkItemBriefRelation {
         work_item_type: WorkItemType::InventoryAdjustmentReview,
         object_kind: WorkItemBriefObjectKind::StockAdjustment,
         business_object_type: "stock_adjustment",
@@ -504,6 +512,7 @@ impl WorkItemType {
             Self::ProcurementOrderCreation => "供给分配",
             Self::FulfillmentOperation => "履约处理",
             Self::SupplierPaymentExecution => "供应商付款处理",
+            Self::SalesInvoiceExecution => "销项开票处理",
             Self::PurchaseOrderReview => "采购单财务审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
             Self::SalesChangeFinanceReview => "销售变更财务影响复核",
@@ -530,6 +539,7 @@ impl WorkItemType {
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
             Self::FulfillmentOperation => "FULFILLMENT_OPERATION",
             Self::SupplierPaymentExecution => "SUPPLIER_PAYMENT_EXECUTION",
+            Self::SalesInvoiceExecution => "SALES_INVOICE_EXECUTION",
             Self::PurchaseOrderReview => "PURCHASE_ORDER_REVIEW",
             Self::SalesChangeImpactReview => "SALES_CHANGE_IMPACT_REVIEW",
             Self::SalesChangeFinanceReview => "SALES_CHANGE_FINANCE_REVIEW",
@@ -577,7 +587,9 @@ impl WorkItemType {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
             Self::ProcurementOrderCreation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
             Self::FulfillmentOperation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
-            Self::SupplierPaymentExecution => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
+            Self::SupplierPaymentExecution | Self::SalesInvoiceExecution => {
+                WorkItemAssignmentSeparationPolicy::RoleAndParticipation
+            }
             Self::ImportBusinessConfirmation
             | Self::PurchaseOrderReview
             | Self::SalesChangeImpactReview
@@ -617,6 +629,14 @@ impl WorkItemType {
     /// 已确认应付的付款执行任务返回 `true`。
     pub fn is_supplier_payment_execution(self) -> bool {
         self == Self::SupplierPaymentExecution
+    }
+
+    /// 判断任务是否为销项开票执行。
+    ///
+    /// # 返回
+    /// 应收子账开票执行任务返回 `true`。
+    pub fn is_sales_invoice_execution(self) -> bool {
+        self == Self::SalesInvoiceExecution
     }
 
     /// 返回具体履约对象在 W01 完整执行所需的权限集合。
@@ -679,14 +699,41 @@ impl WorkItemType {
         ])
     }
 
+    /// 返回 W11 销项开票执行所需的完整权限集合。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 开票执行任务固定对象类型
+    ///
+    /// # 返回
+    /// `SALES_INVOICE_EXECUTION + receivable_account` 返回完整权限；其它组合返回 `None`。
+    pub fn sales_invoice_execution_permissions(
+        self,
+        business_object_type: &str,
+    ) -> Option<&'static [&'static str]> {
+        if !self.is_sales_invoice_execution() || business_object_type != "receivable_account" {
+            return None;
+        }
+        Some(&[
+            "receivable_account:list",
+            "receivable_account:detail",
+            "invoice:list",
+            "invoice:detail",
+            "invoice:create",
+            "invoice:post",
+        ])
+    }
+
     /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
     ///
     /// # 返回
-    /// 供给分配、履约操作与付款执行返回 `true`；这些任务不依赖团队池或创建人回退。
+    /// 供给分配、履约操作、付款与开票执行返回 `true`；这些任务不依赖团队池或创建人回退。
     pub fn uses_explicit_owner_authorization(self) -> bool {
         matches!(
             self,
-            Self::ProcurementOrderCreation | Self::FulfillmentOperation | Self::SupplierPaymentExecution
+            Self::ProcurementOrderCreation
+                | Self::FulfillmentOperation
+                | Self::SupplierPaymentExecution
+                | Self::SalesInvoiceExecution
         )
     }
 
@@ -1122,7 +1169,9 @@ impl WorkItem {
         }
         if matches!(
             normalized.work_item_type,
-            WorkItemType::FulfillmentOperation | WorkItemType::SupplierPaymentExecution
+            WorkItemType::FulfillmentOperation
+                | WorkItemType::SupplierPaymentExecution
+                | WorkItemType::SalesInvoiceExecution
         ) && responsibility_key.is_none()
         {
             return Err(Error::from("执行任务必须冻结责任键"));
@@ -1242,6 +1291,29 @@ impl WorkItem {
         Ok(())
     }
 
+    /// 在应收剩余可开票额度归零时自动完成销项开票执行任务。
+    ///
+    /// # 参数
+    /// * `at` - 系统确认可开票额度归零的时间
+    ///
+    /// # 返回
+    /// 自动完成成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非销项开票执行任务或任务已不是开放状态时返回错误。
+    pub fn complete_when_fully_invoiced(&mut self, at: Instant) -> Result<()> {
+        self.ensure_generic_mutation()?;
+        if self.work_item_type != WorkItemType::SalesInvoiceExecution {
+            return Err(Error::from("只有销项开票执行任务可以按可开票额度归零自动完成"));
+        }
+        self.ensure_open()?;
+        self.status = WorkItemStatus::Completed;
+        self.completed_at = Some(at);
+        self.completed_by = Some("__system__".to_string());
+        self.last_activity_at = Some(at);
+        Ok(())
+    }
+
     /// 为重新释放的采购需求创建一条新的开放任务。
     ///
     /// # 参数
@@ -1295,61 +1367,6 @@ impl WorkItem {
             },
             responsibility_key,
             self.responsibility_scope_ids.clone(),
-        )
-    }
-
-    /// 为冲正后重新出现的应付余额创建新的付款执行任务。
-    ///
-    /// # 参数
-    /// * `id` - 新任务主键
-    /// * `subject_version` - 冲正后的应付子账版本
-    /// * `impact_summary` - 当前未付金额摘要
-    ///
-    /// # 返回
-    /// 返回复制历史责任人与时限、但使用新任务身份的开放付款任务。
-    ///
-    /// # 错误
-    /// 当前任务不是付款执行终态，或历史责任事实缺失时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 已完成任务保持不可变；付款冲正必须建立后继任务，不得重开历史任务。
-    pub fn successor_for_reopened_payable(
-        &self,
-        id: WorkItemId,
-        subject_version: String,
-        impact_summary: Option<String>,
-    ) -> Result<Self> {
-        if self.work_item_type != WorkItemType::SupplierPaymentExecution {
-            return Err(Error::from("只有付款执行任务可以创建冲正后继任务"));
-        }
-        if self.status == WorkItemStatus::Open {
-            return Err(Error::from("开放付款执行任务不能创建冲正后继任务"));
-        }
-        let responsibility_key = self
-            .responsibility_key()
-            .ok_or_else(|| Error::from("历史付款执行任务缺少责任键"))?
-            .to_string();
-        let owner_user_id = self
-            .owner_user_id
-            .clone()
-            .ok_or_else(|| Error::from("历史付款执行任务缺少具体责任人"))?;
-        Self::new_with_responsibility_key(
-            id,
-            WorkItemData {
-                work_item_type: WorkItemType::SupplierPaymentExecution,
-                business_object_type: self.business_object_type.clone(),
-                business_object_id: self.business_object_id.clone(),
-                subject_version,
-                owner_role: self.owner_role.clone(),
-                owner_organization_id: self.owner_organization_id.clone(),
-                owner_user_id,
-                assignment_source: self.assignment_source,
-                priority: self.priority,
-                due_at: self.due_at,
-                reason_code: Some("PAYABLE_REOPENED_BY_REVERSAL".to_string()),
-                impact_summary,
-            },
-            responsibility_key,
         )
     }
 
@@ -2040,7 +2057,7 @@ mod tests {
     }
 
     #[test]
-    fn payment_task_requires_key_and_creates_successor_after_settlement() {
+    fn payment_task_requires_key_and_completes_after_settlement() {
         let data = WorkItemData {
             work_item_type: WorkItemType::SupplierPaymentExecution,
             business_object_type: "payable_account".to_string(),
@@ -2057,27 +2074,14 @@ mod tests {
         let mut task = WorkItem::new_with_responsibility_key(
             WorkItemId::new("wi-payment"),
             data,
-            "payable_account:payable-1",
+            "finance:SUPPLIER_PAYMENT:rule-1",
         )
         .unwrap();
         task.complete_when_payable_settled(Instant::from_unix_secs(120))
             .unwrap();
-        let successor = task
-            .successor_for_reopened_payable(
-                WorkItemId::new("wi-payment-reopened"),
-                "2".to_string(),
-                Some("未付金额 ¥100.00".to_string()),
-            )
-            .unwrap();
 
         assert_eq!(task.status, WorkItemStatus::Completed);
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
-        assert_eq!(successor.status, WorkItemStatus::Open);
-        assert_eq!(successor.owner_user_id.as_deref(), Some("alice"));
-        assert_eq!(
-            successor.reason_code.as_deref(),
-            Some("PAYABLE_REOPENED_BY_REVERSAL")
-        );
         assert_eq!(
             WorkItemType::SupplierPaymentExecution
                 .supplier_payment_execution_permissions("payable_account")
@@ -2087,6 +2091,44 @@ mod tests {
             Some("supplier_payment:submit")
         );
         assert!(WorkItemType::SupplierPaymentExecution.uses_explicit_owner_authorization());
+    }
+
+    #[test]
+    fn sales_invoice_task_requires_key_and_completes_when_fully_invoiced() {
+        let data = WorkItemData {
+            work_item_type: WorkItemType::SalesInvoiceExecution,
+            business_object_type: "receivable_account".to_string(),
+            owner_role: "role-finance".to_string(),
+            reason_code: Some("RECEIVABLE_INVOICE_REQUIRED".to_string()),
+            ..direct_data()
+        };
+        assert!(WorkItem::new_at(
+            WorkItemId::new("wi-invoice-missing-key"),
+            data.clone(),
+            Instant::from_unix_secs(100),
+        )
+        .is_err());
+        let mut task = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-invoice"),
+            data,
+            "finance:SALES_INVOICE:rule-2",
+        )
+        .unwrap();
+
+        task.complete_when_fully_invoiced(Instant::from_unix_secs(120))
+            .unwrap();
+
+        assert_eq!(task.status, WorkItemStatus::Completed);
+        assert_eq!(task.completed_by.as_deref(), Some("__system__"));
+        assert!(WorkItemType::SalesInvoiceExecution.uses_explicit_owner_authorization());
+        assert_eq!(
+            WorkItemType::SalesInvoiceExecution
+                .sales_invoice_execution_permissions("receivable_account")
+                .unwrap()
+                .last()
+                .copied(),
+            Some("invoice:post")
+        );
     }
 
     #[test]

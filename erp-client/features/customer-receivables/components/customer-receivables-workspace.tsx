@@ -130,6 +130,19 @@ export function CustomerReceivablesWorkspace({
     const focusedWorkItem = workItemQuery.data
         ? mapWorkItemDto(workItemQuery.data)
         : undefined
+    const invoiceExecutionTask =
+        focusedWorkItem?.workItemType === "SALES_INVOICE_EXECUTION" &&
+        focusedWorkItem.handlerKey === "sales_invoice_execution" &&
+        focusedWorkItem.businessObjectType === "receivable_account" &&
+        focusedWorkItem.status === "OPEN" &&
+        focusedWorkItem.allowedActions.includes("PROCESS")
+            ? focusedWorkItem
+            : undefined
+    const invoiceTaskBlockedReason =
+        "销项开票必须由当前负责人从工作台的开票任务进入"
+    const canStartAssignedSession = (mode: AllocationMode) =>
+        permissions.canStartSession(mode) &&
+        (mode !== "invoice" || Boolean(invoiceExecutionTask))
     const workItemReceiptId = isCustomerReceiptWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
@@ -159,6 +172,23 @@ export function CustomerReceivablesWorkspace({
     const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
     const sessionQuery = useAllocationSessionQuery(urlState.sessionId ?? null)
     const createSession = useCreateAllocationSessionMutation()
+    const invoiceSessionMatchesTask =
+        sessionQuery.data?.mode !== "invoice" ||
+        Boolean(
+            invoiceExecutionTask &&
+            sessionQuery.data?.pool.some(
+                (target) =>
+                    target.targetId === invoiceExecutionTask.businessObjectId,
+            ),
+        )
+    const sessionCanOperate = sessionQuery.data
+        ? permissions.canStartSession(sessionQuery.data.mode) &&
+          invoiceSessionMatchesTask
+        : false
+    const sessionPermissionReason =
+        sessionQuery.data?.mode === "invoice" && !invoiceSessionMatchesTask
+            ? invoiceTaskBlockedReason
+            : permissions.reason
 
     const data = listQuery.data
 
@@ -264,7 +294,7 @@ export function CustomerReceivablesWorkspace({
         salesOrderId: urlState.salesOrderId,
         registerMode: urlState.registerMode,
         receivableAccountId: urlState.receivableAccountId,
-        canRegister: permissions.canStartSession(
+        canRegister: canStartAssignedSession(
             urlState.registerMode ?? "receipt",
         ),
         createSession,
@@ -278,8 +308,23 @@ export function CustomerReceivablesWorkspace({
         existingFactId?: string,
         target?: { salesOrderId?: string; receivableAccountId?: string },
     ) {
-        if (!permissions.canStartSession(mode)) {
-            setActionError(permissions.reason)
+        if (!canStartAssignedSession(mode)) {
+            setActionError(
+                mode === "invoice"
+                    ? invoiceTaskBlockedReason
+                    : permissions.reason,
+            )
+            return
+        }
+        if (
+            mode === "invoice" &&
+            target?.receivableAccountId &&
+            target.receivableAccountId !==
+                invoiceExecutionTask?.businessObjectId
+        ) {
+            setActionError(
+                "当前开票任务不属于所选应收子账，请从工作台重新进入。",
+            )
             return
         }
         setActionError(null)
@@ -294,7 +339,10 @@ export function CustomerReceivablesWorkspace({
                 existingFactId,
                 salesOrderId: target?.salesOrderId ?? urlState.salesOrderId,
                 receivableAccountId:
-                    target?.receivableAccountId ?? urlState.receivableAccountId,
+                    mode === "invoice"
+                        ? invoiceExecutionTask?.businessObjectId
+                        : (target?.receivableAccountId ??
+                          urlState.receivableAccountId),
                 returnTo: urlState.returnTo,
                 from: urlState.from,
             })
@@ -312,6 +360,13 @@ export function CustomerReceivablesWorkspace({
         const uniqueParty =
             counterpartyPartyId ??
             urlState.counterpartyPartyId ??
+            (mode === "invoice"
+                ? data?.receivables.find(
+                      (row) =>
+                          row.accountId ===
+                          invoiceExecutionTask?.businessObjectId,
+                  )?.counterpartyPartyId
+                : undefined) ??
             data?.receivables.find(
                 (row) => row.salesOrderId === urlState.salesOrderId,
             )?.counterpartyPartyId ??
@@ -338,11 +393,16 @@ export function CustomerReceivablesWorkspace({
             createReceivableColumns({
                 onPreview: openPreview,
                 onStartSession: startSession,
-                canStartSession: permissions.canStartSession,
+                canStartSession: canStartAssignedSession,
                 permissionReason: permissions.reason,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [permissions.canRegisterReceipt, permissions.reason],
+        [
+            invoiceExecutionTask?.workItemId,
+            permissions.canRegisterInvoice,
+            permissions.canRegisterReceipt,
+            permissions.reason,
+        ],
     )
 
     const receiptColumns = React.useMemo(
@@ -350,11 +410,16 @@ export function CustomerReceivablesWorkspace({
             createReceiptColumns({
                 onPreview: openPreview,
                 onStartSession: startSession,
-                canStartSession: permissions.canStartSession,
+                canStartSession: canStartAssignedSession,
                 permissionReason: permissions.reason,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [permissions.canRegisterReceipt, permissions.reason],
+        [
+            invoiceExecutionTask?.workItemId,
+            permissions.canRegisterInvoice,
+            permissions.canRegisterReceipt,
+            permissions.reason,
+        ],
     )
 
     const invoiceColumns = React.useMemo(
@@ -362,11 +427,15 @@ export function CustomerReceivablesWorkspace({
             createInvoiceColumns({
                 onPreview: openPreview,
                 onStartSession: startSession,
-                canStartSession: permissions.canStartSession,
+                canStartSession: canStartAssignedSession,
                 permissionReason: permissions.reason,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [permissions.canRegisterInvoice, permissions.reason],
+        [
+            invoiceExecutionTask?.workItemId,
+            permissions.canRegisterInvoice,
+            permissions.reason,
+        ],
     )
 
     // 核销会话全屏
@@ -388,12 +457,11 @@ export function CustomerReceivablesWorkspace({
                     void listQuery.refetch()
                     onSalesOrderChanged?.()
                 }}
-                canOperate={
-                    sessionQuery.data
-                        ? permissions.canStartSession(sessionQuery.data.mode)
-                        : false
-                }
-                permissionReason={permissions.reason}
+                canOperate={sessionCanOperate}
+                permissionReason={sessionPermissionReason}
+                workItemId={invoiceExecutionTask?.workItemId}
+                expectedTaskVersion={invoiceExecutionTask?.taskVersion}
+                taskReceivableAccountId={invoiceExecutionTask?.businessObjectId}
                 embedded={embedded}
             />
         )
@@ -418,10 +486,14 @@ export function CustomerReceivablesWorkspace({
                 }}
                 onRegisterInvoice={() => openRegister("invoice")}
                 onRegisterReceipt={() => openRegister("receipt")}
-                canRegisterInvoice={permissions.canRegisterInvoice}
+                canRegisterInvoice={
+                    permissions.canRegisterInvoice &&
+                    Boolean(invoiceExecutionTask)
+                }
                 canRegisterReceipt={permissions.canRegisterReceipt}
                 canExport={permissions.canExport}
                 permissionReason={permissions.reason}
+                invoiceBlockedReason={invoiceTaskBlockedReason}
             />
 
             {urlState.from === "W05" && urlState.returnTo ? (

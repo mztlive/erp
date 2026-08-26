@@ -75,6 +75,9 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::SupplierPaymentExecution => {
             "进入供应商往来，核对计划付款日和未付金额，登记付款并提交审批。"
         }
+        WorkItemType::SalesInvoiceExecution => {
+            "进入客户往来，核对客户、销售单和待开金额，登记销项发票并完成分配。"
+        }
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
         }
@@ -175,6 +178,9 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "purchase_order_review_resubmitted" => "采购已按驳回意见重提，需要重新核对成本与付款条件",
         "payable_payment_required" => "采购应付已确认，需要安排付款",
         "payable_reopened_by_reversal" => "付款已冲正，应付余额需要重新安排付款",
+        "receivable_invoice_required" => "销售应收已确认，需要安排销项开票",
+        "invoiceable_reopened_by_red_invoice" => "销项发票已红冲，需要重新安排开票",
+        "invoiceable_reopened_by_sales_change" => "销售变更增加了可开票金额，需要继续安排开票",
         other if other.ends_with("_active") => "当前审批步骤等待处理",
         _ => return None,
     })
@@ -185,6 +191,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::ProcurementOrderCreation => "销售单已生效，需要分配供给",
         WorkItemType::FulfillmentOperation => "当前履约单据等待确认",
         WorkItemType::SupplierPaymentExecution => "采购应付已确认，需要安排付款",
+        WorkItemType::SalesInvoiceExecution => "销售应收已确认，需要安排销项开票",
         WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
         WorkItemType::SalesChangeImpactReview => "销售变更待核对履约影响",
         WorkItemType::SalesChangeFinanceReview => "销售变更待核对财务影响",
@@ -207,6 +214,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
         WorkItemType::FulfillmentOperation => "不确认则本次收货、发货或交付不能形成正式事实",
         WorkItemType::SupplierPaymentExecution => "不登记则应付无法进入付款审批与核销",
+        WorkItemType::SalesInvoiceExecution => "不登记则销售应收无法完成销项开票",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",

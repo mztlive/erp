@@ -5,7 +5,7 @@
 use std::str::FromStr;
 
 use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{ReceivableAccountId, ReceivableEntryId, SalesOrderRevisionId, SalesOrderRevisionLineId};
+use entities::ids::{ReceivableEntryId, SalesOrderRevisionId, SalesOrderRevisionLineId};
 use entities::money::Amount;
 use entities::sales_order::{
     RevisionSource, SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderGoodsServiceLineRevisionData,
@@ -31,41 +31,6 @@ pub(super) struct RevisionAggregate {
     pub(super) goods_lines: Vec<SalesOrderGoodsServiceLineRevision>,
     /// 卡券行版本。
     pub(super) voucher_lines: Vec<SalesOrderVoucherLineRevision>,
-}
-
-/// 构建应收往来子账（§8.1.1 原始应收）。
-///
-/// # 参数
-/// * `order` - 已生效的销售单
-/// * `revision` - 生效版本
-///
-/// # 返回
-/// 返回子账实体。
-pub(super) fn build_receivable_account(
-    order: &SalesOrder,
-    revision: &RevisionAggregate,
-) -> entities::receivable::ReceivableAccount {
-    let revision_id = revision.revision.base.id.clone().into();
-    entities::receivable::ReceivableAccount::new(
-        ReceivableAccountId::new(next_id()),
-        entities::receivable::ReceivableAccountData {
-            sales_order_id: order.base.id.clone().into(),
-            account_seq: 1,
-            customer_id: order.customer_id.clone(),
-            counterparty_party_id: order.settlement_party_id.clone(),
-            source_sales_order_revision_id: revision_id,
-            review_status: entities::receivable::AccountReviewStatus::NotApplicable,
-            reviewed_by: None,
-            reviewed_at: None,
-            review_evidence_reference: None,
-            gross_total: Amount::from_str("0.00").expect("静态零值必须合法"),
-            settled_total: Amount::from_str("0.00").expect("静态零值必须合法"),
-            invoiceable_total: Amount::from_str("0.00").expect("静态零值必须合法"),
-            invoiced_total: Amount::from_str("0.00").expect("静态零值必须合法"),
-        },
-        "system",
-    )
-    .expect("新建应收子账必须通过实体校验")
 }
 
 /// 汇总版本聚合的含税金额（取公共行合计；与版本头金额一致由实体保证）。
@@ -210,8 +175,8 @@ pub(super) fn build_change_revision(
 
 /// 构建应收差额分录（§8.1.3：新版本金额减当前版本金额，零差额不写）。
 ///
-/// 差额必须挂到销售单既有应收子账（`account_seq = 1`）；子账缺失时按新版本
-/// 新建（初始审批未形成应收的历史数据兜底）。
+/// 差额必须挂到销售单既有应收子账（`account_seq = 1`）；子账缺失说明正式
+/// 事实链已损坏，必须拒绝变更，不得补造兼容数据。
 ///
 /// # 参数
 /// * `order` - 销售单（含当前生效版本）
@@ -219,6 +184,7 @@ pub(super) fn build_change_revision(
 /// * `current_gross` - 当前生效版本含税合计（差额基准）
 /// * `existing_account` - 既有应收子账（按销售单查询）
 /// * `posted_at` - 入账时间
+/// * `updated_by` - 生效变更执行人
 ///
 /// # 返回
 /// 返回 `(应收子账, 差额分录)`；差额为零时返回 `None`。
@@ -231,11 +197,11 @@ pub(super) fn build_receivable_delta(
     current_gross: Amount,
     existing_account: Option<entities::receivable::ReceivableAccount>,
     posted_at: Instant,
+    updated_by: &str,
 ) -> Result<
     Option<(
         entities::receivable::ReceivableAccount,
         entities::receivable::ReceivableEntry,
-        bool,
     )>,
 > {
     let new_gross = revision_gross(revision)?;
@@ -243,11 +209,18 @@ pub(super) fn build_receivable_delta(
     if delta.is_zero() {
         return Ok(None);
     }
-    let account_existed = existing_account.is_some();
-    let account = match existing_account {
-        Some(account) => account,
-        None => build_receivable_account(order, revision),
-    };
+    let mut account = existing_account
+        .ok_or_else(|| Error::BusinessLogicError("销售单缺少正式应收子账，不能生效销售变更".to_string()))?;
+    account
+        .update(
+            entities::receivable::ReceivableAccountUpdate {
+                gross_total: Some(new_gross),
+                invoiceable_total: Some(new_gross),
+                ..Default::default()
+            },
+            updated_by,
+        )
+        .map_err(Error::Logic)?;
     let entry = entities::receivable::ReceivableEntry::new(
         ReceivableEntryId::new(next_id()),
         entities::receivable::ReceivableEntryData {
@@ -268,5 +241,5 @@ pub(super) fn build_receivable_delta(
         },
     )
     .map_err(Error::Logic)?;
-    Ok(Some((account, entry, account_existed)))
+    Ok(Some((account, entry)))
 }

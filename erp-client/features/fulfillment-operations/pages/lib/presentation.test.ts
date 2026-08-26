@@ -27,6 +27,22 @@ describe("sourceContextFields", () => {
         ).toBe(false)
     })
 
+    it("does not show warehouse on service jobs and labels remaining as 待服务", () => {
+        const operation = makeOperation({
+            operationType: "SERVICE",
+            source: {
+                salesOrderNo: "XS-1",
+                purchaseNo: "",
+                customerLabel: "开发开单客户",
+                supplierLabel: "",
+                warehouseLabel: "开发开单仓",
+            },
+        })
+        expect(
+            sourceContextFields(operation).map((field) => field.label),
+        ).toEqual(["销售单", "客户", "待服务"])
+    })
+
     it("keeps readable sales order and counterparty", () => {
         const operation = makeOperation({
             source: {
@@ -40,7 +56,7 @@ describe("sourceContextFields", () => {
             sourceContextFields(operation, "/sales/orders/so_1").map(
                 (field) => field.label,
             ),
-        ).toEqual(["销售单", "采购单", "客户", "供应商", "仓库", "还剩多少"])
+        ).toEqual(["销售单", "采购单", "客户", "供应商", "仓库", "待入库"])
         expect(sourceContextFields(operation, "/sales/orders/so_1")[0]).toEqual(
             {
                 label: "销售单",

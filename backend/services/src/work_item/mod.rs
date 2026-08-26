@@ -42,6 +42,7 @@ use crate::{
 mod brief;
 mod change_order_brief;
 mod dto;
+mod finance_responsibility;
 mod fulfillment_operation_brief;
 mod funds_document_brief;
 mod inventory_settlement_brief;
@@ -57,6 +58,11 @@ pub use dto::{
     WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView, WorkItemPartyView,
     WorkItemReassignCandidateView, WorkItemScope, WorkItemSort, WorkItemStatsParams, WorkItemStatsView,
     WorkItemView,
+};
+pub(crate) use finance_responsibility::ResolvedFinanceResponsibility;
+pub use finance_responsibility::{
+    CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
+    FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
 };
 type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
@@ -1335,6 +1341,7 @@ impl WorkItemService {
             .await?;
         if item.work_item_type.is_fulfillment_operation()
             || item.work_item_type.is_supplier_payment_execution()
+            || item.work_item_type.is_sales_invoice_execution()
         {
             // 执行任务除注册表读取权限外，还要求目标工作面使用的完整操作权限。
             // 该快照由同一 policy revision 形成，外层授权事务会以该 revision
@@ -1903,6 +1910,20 @@ impl WorkItemService {
             .policy_revision(executor)
             .await?;
         let role_ids = active_role_ids(&self.db, actor.kind(), actor.id(), executor).await?;
+        let execution_permissions =
+            execution_permission_codes(item.work_item_type, &item.business_object_type)
+                .ok_or_else(|| Error::Forbidden("任务类型未注册完整执行权限".to_string()))?;
+        for code in execution_permissions {
+            let permission = Permission::parse(code).map_err(|error| Error::Internal(error.to_string()))?;
+            let granting_roles = self
+                .roles_granting_permission(&role_ids, &permission, true)
+                .await?;
+            if granting_roles.is_empty() {
+                return Err(Error::Forbidden(
+                    "当前账号已不具备任务所需的完整执行权限".to_string(),
+                ));
+            }
+        }
         let read_role_ids = self
             .roles_granting_permission(&role_ids, &read_permission, true)
             .await?;
@@ -3166,43 +3187,40 @@ fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts:
         return false;
     };
     has_permission(access, policy.read_permission)
-        && has_fulfillment_execution_permissions(item, access)
-        && has_supplier_payment_execution_permissions(item, access)
+        && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
         && (item.work_item_type.uses_explicit_owner_authorization()
             || has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact))
         && fact.subject_versions.accepts(&item.subject_version)
 }
 
-/// 判断转交目标是否具备 W01 内嵌履约作业所需的完整权限集合。
-fn has_fulfillment_execution_permissions(item: &WorkItem, access: &ActorAccess) -> bool {
-    if !item.work_item_type.is_fulfillment_operation() {
-        return true;
+/// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
+fn execution_permission_codes(
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+) -> Option<&'static [&'static str]> {
+    if work_item_type.is_fulfillment_operation() {
+        return work_item_type.fulfillment_execution_permissions(business_object_type);
     }
-    let Some(required) = item
-        .work_item_type
-        .fulfillment_execution_permissions(&item.business_object_type)
-    else {
-        return false;
-    };
-    required
-        .iter()
-        .all(|permission| has_permission(access, permission))
+    if work_item_type.is_supplier_payment_execution() {
+        return work_item_type.supplier_payment_execution_permissions(business_object_type);
+    }
+    if work_item_type.is_sales_invoice_execution() {
+        return work_item_type.sales_invoice_execution_permissions(business_object_type);
+    }
+    Some(&[])
 }
 
-/// 判断转交目标是否具备 W12 付款登记与提交所需的完整权限集合。
-fn has_supplier_payment_execution_permissions(item: &WorkItem, access: &ActorAccess) -> bool {
-    if !item.work_item_type.is_supplier_payment_execution() {
-        return true;
-    }
-    let Some(required) = item
-        .work_item_type
-        .supplier_payment_execution_permissions(&item.business_object_type)
-    else {
-        return false;
-    };
-    required
-        .iter()
-        .all(|permission| has_permission(access, permission))
+/// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
+fn has_execution_permissions(
+    work_item_type: WorkItemType,
+    business_object_type: &str,
+    access: &ActorAccess,
+) -> bool {
+    execution_permission_codes(work_item_type, business_object_type).is_some_and(|required| {
+        required
+            .iter()
+            .all(|permission| has_permission(access, permission))
+    })
 }
 
 /// 把对象事实中的标题、往来方和影响写回任务投影字段。
@@ -3372,6 +3390,7 @@ fn allowed_actions(
     let is_explicit_owner = item.work_item_type.uses_explicit_owner_authorization()
         && item.owner_user_id.as_deref() == Some(actor_id);
     if item.owner_user_id.as_deref() == Some(actor_id)
+        && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
         && (is_explicit_owner
             || covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
             || item.status != WorkItemStatus::Open)
@@ -3669,7 +3688,8 @@ fn required_text(value: &str, message: &str) -> Result<String> {
     Ok(value.to_string())
 }
 
-fn expected_task_version(value: &str) -> Result<u64> {
+/// 将 HTTP 任务版本解析为正整数乐观锁版本。
+pub(crate) fn expected_task_version(value: &str) -> Result<u64> {
     let value = value.trim();
     let version = value
         .parse::<u64>()
@@ -3873,7 +3893,7 @@ mod tests {
     fn w13_facts() -> ObjectFactMap {
         HashMap::from([(
             (ObjectKind::ReceivableAccount, "account-1".to_string()),
-            ObjectFact::new("sales-order-1", "卡券应收子账 2", "sales-user"),
+            ObjectFact::new("sales-order-1", "应收子账 2", "sales-user"),
         )])
     }
 
@@ -4002,6 +4022,61 @@ mod tests {
         .unwrap()
     }
 
+    fn invoice_execution_item(owner_user_id: &str) -> WorkItem {
+        WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-invoice-execution"),
+            WorkItemData {
+                work_item_type: WorkItemType::SalesInvoiceExecution,
+                business_object_type: "receivable_account".to_string(),
+                business_object_id: "account-invoice-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "role-finance".to_string(),
+                owner_organization_id: "party-1".to_string(),
+                owner_user_id: owner_user_id.to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: Some("RECEIVABLE_INVOICE_REQUIRED".to_string()),
+                impact_summary: Some("待开票金额 ¥100.00".to_string()),
+            },
+            "finance:SALES_INVOICE:rule-1",
+        )
+        .unwrap()
+    }
+
+    fn invoice_execution_facts() -> ObjectFactMap {
+        HashMap::from([(
+            (ObjectKind::ReceivableAccount, "account-invoice-1".to_string()),
+            ObjectFact::new("sales-order-1", "应收子账 1", "sales-user"),
+        )])
+    }
+
+    fn invoice_execution_access(actor_id: &str, full: bool) -> ActorAccess {
+        let codes: &[&str] = if full {
+            &[
+                "receivable_account:list",
+                "receivable_account:detail",
+                "invoice:list",
+                "invoice:detail",
+                "invoice:create",
+                "invoice:post",
+            ]
+        } else {
+            &["receivable_account:detail"]
+        };
+        ActorAccess {
+            actor_id: actor_id.to_string(),
+            permissions: codes
+                .iter()
+                .map(|code| Permission::parse(code).unwrap())
+                .collect(),
+            participant_document_ids: HashSet::new(),
+            organization_ids: Vec::new(),
+            responsibility_scopes: Vec::new(),
+            can_manage: false,
+        }
+    }
+
     #[test]
     fn idempotency_digest_never_contains_raw_key() {
         let digest = stable_digest("actor|action|item|secret-request-key");
@@ -4055,7 +4130,7 @@ mod tests {
         )));
         let fields = authorized_fields(vec![w13_delta_row()], &access, &facts);
         assert_eq!(fields.len(), 1);
-        assert_eq!(fields[0].business_object_label, "卡券应收子账 2");
+        assert_eq!(fields[0].business_object_label, "应收子账 2");
     }
 
     #[test]
@@ -4063,7 +4138,7 @@ mod tests {
         let fields = authorized_item_fields(w13_delta_item(), &w13_access(), &w13_facts()).unwrap();
 
         assert_eq!(fields.work_item_type, WorkItemType::CardFundsDeltaReview);
-        assert_eq!(fields.business_object_label, "卡券应收子账 2");
+        assert_eq!(fields.business_object_label, "应收子账 2");
     }
 
     #[test]
@@ -4165,6 +4240,26 @@ mod tests {
             ]),
             &facts,
         ));
+    }
+
+    #[test]
+    fn invoice_owner_can_view_but_cannot_process_after_execution_permission_is_revoked() {
+        let item = invoice_execution_item("finance-1");
+        let facts = invoice_execution_facts();
+        let revoked = invoice_execution_access("finance-1", false);
+        let fields = authorized_item_fields(item.clone(), &revoked, &facts).unwrap();
+
+        assert!(
+            !allowed_actions(&fields, WorkItemScope::Mine, "finance-1", &revoked)
+                .contains(&WorkItemAllowedAction::Process)
+        );
+        assert!(!has_assignment_candidate_access(&item, &revoked, &facts));
+
+        let full = invoice_execution_access("finance-1", true);
+        let fields = authorized_item_fields(item.clone(), &full, &facts).unwrap();
+        assert!(allowed_actions(&fields, WorkItemScope::Mine, "finance-1", &full)
+            .contains(&WorkItemAllowedAction::Process));
+        assert!(has_assignment_candidate_access(&item, &full, &facts));
     }
 
     #[test]

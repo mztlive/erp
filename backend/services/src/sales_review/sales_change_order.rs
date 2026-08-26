@@ -11,8 +11,9 @@ use entities::document_registry::{
     BusinessDocument, WorkflowAction, WorkflowActionData, WorkflowActionId, WorkflowActionType,
 };
 use entities::ids::{
-    BusinessDocumentId, SalesChangeOrderId, SalesChangeSubmissionId, SalesChangeSubmissionLineId,
-    SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderWorkingCopyId,
+    BusinessDocumentId, ReceivableAccountId, SalesChangeOrderId, SalesChangeSubmissionId,
+    SalesChangeSubmissionLineId, SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId,
+    SalesOrderWorkingCopyId,
 };
 use entities::sales_order::{SalesOrderWorkingCopyLineData, WorkingPurpose};
 use entities::sales_review::{
@@ -1007,6 +1008,7 @@ async fn write_effective_revision(
         current_revision.gross_amount,
         existing_account,
         now,
+        actor.id(),
     )?;
     let audit = actor.clone().resource_log(
         "sales_change_order.effective",
@@ -1028,7 +1030,6 @@ async fn persist_effective_writes(
     delta: Option<(
         entities::receivable::ReceivableAccount,
         entities::receivable::ReceivableEntry,
-        bool,
     )>,
     audit: entities::AuditLog,
 ) -> Result<()> {
@@ -1047,8 +1048,8 @@ async fn persist_effective_writes(
                         session,
                     )
                     .await?;
-                if let Some((account, entry, is_existing_account)) = delta {
-                    write_receivable_delta(&db, account, entry, is_existing_account, session).await?;
+                if let Some((account, entry)) = delta {
+                    write_receivable_delta(&db, account, entry, session).await?;
                 }
                 db.sales_change_orders()
                     .update(&mut change_for_tx, session)
@@ -1068,18 +1069,18 @@ async fn write_receivable_delta(
     db: &mongodb::Database,
     mut account: entities::receivable::ReceivableAccount,
     entry: entities::receivable::ReceivableEntry,
-    is_existing_account: bool,
     session: &mut ClientSession,
 ) -> Result<()> {
-    if is_existing_account {
-        db.receivable_entries().create(&entry, session).await?;
-        db.receivable_accounts().update(&mut account, session).await?;
-        return Ok(());
-    }
-    db.receivable()
-        .create_receivable_with_entry(&account, &entry, session)
-        .await
-        .map_err(Into::into)
+    db.receivable_entries().create(&entry, session).await?;
+    db.receivable_accounts().update(&mut account, session).await?;
+    let account_id = ReceivableAccountId::new(account.base.id.clone());
+    crate::receivable::invoice_task::sync_sales_invoice_task(
+        db,
+        &account_id,
+        crate::receivable::invoice_task::SalesInvoiceTaskChange::ReceivableChanged,
+        session,
+    )
+    .await
 }
 
 #[cfg(test)]

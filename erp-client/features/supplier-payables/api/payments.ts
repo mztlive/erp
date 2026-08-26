@@ -64,6 +64,8 @@ export async function submitPayment(
         const submitted = await apiPost<BackendSupplierPayment>(
             "/admin/supplier-payments/commit",
             {
+                work_item_id: commandInput.workItemId,
+                expected_task_version: commandInput.expectedTaskVersion,
                 payment_id: commandInput.existingPaymentId ?? null,
                 expected_version: commandInput.existingPaymentId
                     ? (commandInput.expectedVersion ?? null)

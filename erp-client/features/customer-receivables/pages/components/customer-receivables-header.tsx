@@ -21,6 +21,7 @@ type CustomerReceivablesHeaderProps = {
     canRegisterReceipt?: boolean
     canExport?: boolean
     permissionReason?: string
+    invoiceBlockedReason?: string
     embedded?: boolean
     salesOrderNo?: string
 }
@@ -37,6 +38,7 @@ export function CustomerReceivablesHeader({
     canRegisterReceipt = Boolean(data?.canRegister),
     canExport = Boolean(data?.canExport),
     permissionReason,
+    invoiceBlockedReason,
     embedded = false,
     salesOrderNo,
 }: CustomerReceivablesHeaderProps) {
@@ -62,7 +64,9 @@ export function CustomerReceivablesHeader({
                     disabled: !canRegisterInvoice,
                     title: canRegisterInvoice
                         ? undefined
-                        : (permissionReason ?? "当前无销项发票登记权限"),
+                        : (invoiceBlockedReason ??
+                          permissionReason ??
+                          "当前无销项发票登记权限"),
                     onClick: onRegisterInvoice,
                 },
                 {

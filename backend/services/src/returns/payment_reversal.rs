@@ -789,7 +789,7 @@ async fn revert_payment_settlements(
         affected_accounts.insert(entry.payable_account_id);
     }
     for account_id in affected_accounts {
-        crate::payable::payment_task::sync_purchase_payment_task(db, &account_id, actor_id, session).await?;
+        crate::payable::payment_task::sync_purchase_payment_task(db, &account_id, session).await?;
     }
     Ok(())
 }

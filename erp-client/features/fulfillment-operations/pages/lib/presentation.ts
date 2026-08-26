@@ -7,7 +7,10 @@ import {
     displayText,
     formatRemainingLines,
 } from "@/features/fulfillment-operations/lib/readable-label"
-import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
+import type {
+    FulfillmentOperation,
+    FulfillmentOperationType,
+} from "@/features/fulfillment-operations/types"
 
 export type ResponsibilityStatus =
     | "blocked"
@@ -83,14 +86,33 @@ export function sourceContextFields(
     if (
         warehouse &&
         warehouse !== "不涉及仓库" &&
-        operation.operationType !== "SUPPLIER_DIRECT"
+        operation.operationType !== "SUPPLIER_DIRECT" &&
+        operation.operationType !== "SERVICE" &&
+        operation.operationType !== "ELECTRONIC"
     ) {
         fields.push({ label: "仓库", value: warehouse })
     }
     if (remaining) {
-        fields.push({ label: "还剩多少", value: remaining, numeric: true })
+        fields.push({
+            label: remainingLabel(operation.operationType),
+            value: remaining,
+            numeric: true,
+        })
     }
     return fields
+}
+
+function remainingLabel(operationType: FulfillmentOperationType): string {
+    switch (operationType) {
+        case "RECEIPT":
+            return "待入库"
+        case "SERVICE":
+            return "待服务"
+        case "ELECTRONIC":
+            return "待交付"
+        default:
+            return "还剩多少"
+    }
 }
 
 export function sourceReturnHref(

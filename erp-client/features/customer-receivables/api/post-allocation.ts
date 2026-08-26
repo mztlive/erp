@@ -182,6 +182,12 @@ export async function postAllocation(
                 "登记销项发票至少需要一条正式分配。",
             )
         }
+        if (!commandInput.workItemId || !commandInput.expectedTaskVersion) {
+            return failedResult(
+                "WORK_ITEM_REQUIRED",
+                "销项开票必须由当前负责人从工作台开票任务进入。",
+            )
+        }
         pendingPostCommands.set(commandInput.idempotencyKey, {
             input: commandInput,
             session: s,
@@ -192,6 +198,8 @@ export async function postAllocation(
         const tax = s.fact.taxAmount || "0"
         const posted = stripInvoiceApprovalField(
             await apiPost<BackendInvoice>("/admin/invoices/commit", {
+                work_item_id: commandInput.workItemId,
+                expected_task_version: commandInput.expectedTaskVersion,
                 invoice_id: s.existingFactId ?? null,
                 expected_version: s.existingFactId
                     ? (s.existingFactVersion ?? null)

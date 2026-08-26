@@ -28,6 +28,8 @@ use crate::{
     },
 };
 
+pub mod finance_responsibility;
+
 /// 线协议责任类型。
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

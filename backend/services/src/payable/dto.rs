@@ -5,7 +5,7 @@
 //! 契约来源：`erp-client/features/supplier-payables/types.ts`（W12）。
 
 use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{PayableAccountId, PayableEntryId, SupplierAccountId};
+use entities::ids::{PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
 use entities::money::Amount;
 use entities::payable::{
     AllocationAction, EntryDirection, PayableAccountStatus, PayableEntryType, PayableSourceType,
@@ -302,6 +302,12 @@ pub struct PostSupplierPaymentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SubmitSupplierPaymentRequest {
+    /// 当前开放付款执行任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
@@ -320,6 +326,12 @@ pub struct SubmitSupplierPaymentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CommitSupplierPaymentRequest {
+    /// 当前开放付款执行任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
     /// 已有付款草稿主键。
     pub payment_id: Option<String>,
     /// 已有草稿期望乐观锁版本。
@@ -760,6 +772,8 @@ mod tests {
 
         assert!(
             serde_json::from_value::<SubmitSupplierPaymentRequest>(serde_json::json!({
+                "work_item_id": "wi-1",
+                "expected_task_version": "3",
                 "expected_version": 1,
                 "idempotency_key": "k1",
                 "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
@@ -768,11 +782,15 @@ mod tests {
             .is_err()
         );
         let submit: SubmitSupplierPaymentRequest = serde_json::from_value(serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "3",
             "expected_version": 1,
             "idempotency_key": "k1",
             "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}]
         }))
         .unwrap();
+        assert_eq!(submit.work_item_id.to_string(), "wi-1");
+        assert_eq!(submit.expected_task_version, "3");
         assert_eq!(submit.expected_version, 1);
         assert!(
             serde_json::from_value::<CancelSupplierPaymentApprovalRequest>(serde_json::json!({

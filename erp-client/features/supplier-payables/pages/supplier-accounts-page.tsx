@@ -137,6 +137,18 @@ export function SupplierAccountsPage() {
     const focusedWorkItem = workItemQuery.data
         ? mapWorkItemDto(workItemQuery.data)
         : undefined
+    const paymentExecutionTask =
+        focusedWorkItem?.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
+        focusedWorkItem.handlerKey === "supplier_payment_execution" &&
+        focusedWorkItem.businessObjectType === "payable_account" &&
+        focusedWorkItem.status === "OPEN" &&
+        focusedWorkItem.allowedActions.includes("PROCESS")
+            ? focusedWorkItem
+            : undefined
+    const paymentTaskPayable = data?.payables.find(
+        (item) =>
+            item.payableAccountId === paymentExecutionTask?.businessObjectId,
+    )
     const workItemPaymentId = isSupplierPaymentWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
@@ -185,6 +197,12 @@ export function SupplierAccountsPage() {
         return (
             <SupplierAllocationSessionPage
                 {...session}
+                paymentWorkItemId={paymentExecutionTask?.workItemId}
+                expectedPaymentTaskVersion={paymentExecutionTask?.taskVersion}
+                paymentPayableAccountId={paymentExecutionTask?.businessObjectId}
+                paymentTaskPending={
+                    Boolean(workItemId) && workItemQuery.isPending
+                }
                 onClose={closeSession}
                 onDraftSessionIdChange={syncSessionId}
                 onGoToInvoiceView={() => {
@@ -238,11 +256,22 @@ export function SupplierAccountsPage() {
                     setPickSupplierOpen("purchase_invoice")
                 }}
                 onRegisterPayment={() => {
-                    setPickSupplierId(
-                        supplierId ?? data?.suppliers[0]?.supplierId ?? "",
-                    )
-                    setPickSupplierOpen("payment")
+                    if (!paymentTaskPayable) return
+                    openSession({
+                        track: "payment",
+                        supplierId: paymentTaskPayable.supplierId,
+                        preselectPayableAccountId:
+                            paymentTaskPayable.payableAccountId,
+                        purchaseOrderId:
+                            paymentTaskPayable.sourceType === "PURCHASE_ORDER"
+                                ? paymentTaskPayable.sourceDocumentId
+                                : undefined,
+                        returnTo,
+                        fromWorkspace,
+                    })
                 }}
+                canRegisterPayment={Boolean(paymentTaskPayable)}
+                paymentBlockedReason="付款必须由当前负责人从工作台的供应商付款任务进入"
                 onSettle={openSettlements}
             />
 

@@ -326,6 +326,8 @@ type AllocationTargetInput = {
 }
 
 export type PostPaymentInput = {
+    workItemId: string
+    expectedTaskVersion: string
     draftSessionId: string
     supplierId: string
     paidAt: string
@@ -425,19 +427,13 @@ export const PAYABLE_STATUS_TONE: Record<PayableStatus, StatusTone> = {
     SETTLED: "success",
 }
 
-export const DUE_LABEL: Record<
-    "not_due" | "due_today" | "overdue",
-    string
-> = {
+export const DUE_LABEL: Record<"not_due" | "due_today" | "overdue", string> = {
     not_due: "未到期",
     due_today: "今日到期",
     overdue: "已到期",
 }
 
-export const PAYMENT_GATE_LABEL: Record<
-    "satisfied" | "unsatisfied",
-    string
-> = {
+export const PAYMENT_GATE_LABEL: Record<"satisfied" | "unsatisfied", string> = {
     satisfied: "已满足",
     unsatisfied: "未满足",
 }

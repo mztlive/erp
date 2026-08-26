@@ -308,12 +308,8 @@ export function serviceToOperation(
         ],
         draft: {
             type: "SERVICE",
-            startedAt:
-                secsToIso(service.occurred_at).slice(0, 16) ||
-                nowIso().slice(0, 16),
-            endedAt:
-                secsToIso(service.occurred_at).slice(0, 16) ||
-                nowIso().slice(0, 16),
+            startedAt: "",
+            endedAt: "",
             serviceLocation: "",
             result:
                 (service.result as "SUCCESS" | "PARTIAL" | "FAILED") ||

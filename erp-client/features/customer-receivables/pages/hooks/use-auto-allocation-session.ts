@@ -6,7 +6,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 import type { CustomerAccountsListView } from "@/features/customer-receivables/types"
 import type { CustomerReceivablesPatchUrl } from "./use-customer-receivables-url-state"
 
-/** W05 链入：自动打开核销会话（有 salesOrderId + counterparty 或可推断） */
+/** W05 销售单或 W01 开票任务链入时自动打开受控核销会话。 */
 export function useAutoAllocationSession(args: {
     data: CustomerAccountsListView | undefined
     from: string | undefined
@@ -50,7 +50,12 @@ export function useAutoAllocationSession(args: {
 
     React.useEffect(() => {
         if (autoSessionRef.current || sessionId || !data) return
-        if (from !== "W05" || !returnTo) return
+        const fromSalesOrder = from === "W05" && Boolean(returnTo)
+        const fromInvoiceTask =
+            from === "W01" &&
+            registerMode === "invoice" &&
+            Boolean(receivableAccountId)
+        if (!fromSalesOrder && !fromInvoiceTask) return
         if (!data.canRegister || !canRegister) return
         const party =
             counterpartyPartyId ??
@@ -78,5 +83,13 @@ export function useAutoAllocationSession(args: {
             }
         })()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data, from, returnTo, sessionId])
+    }, [
+        canRegister,
+        data,
+        from,
+        receivableAccountId,
+        registerMode,
+        returnTo,
+        sessionId,
+    ])
 }

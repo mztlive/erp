@@ -8,8 +8,7 @@ use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, PayableExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, PayableExt, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -86,28 +85,6 @@ fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> Definition
         nodes: graph.nodes,
         transitions: graph.transitions,
     }
-}
-
-/// 读取同载荷启动收据；不存在时返回 `None`。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `subject` - 业务对象引用
-/// * `subject_version` - 冻结提交版本
-/// * `idempotency_key` - 调用方幂等键
-///
-/// # 返回
-/// 已提交收据或空。
-///
-/// # 错误
-/// 幂等键非法或仓储失败时返回错误。
-pub(super) async fn load_start_receipt(
-    db: &Database,
-    subject: &SubjectRef,
-    subject_version: u32,
-    idempotency_key: &str,
-) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    load_start_receipt_with_executor(db, subject, subject_version, idempotency_key, &mut NoTransaction).await
 }
 
 /// 使用调用方执行器读取同载荷启动收据。
@@ -324,36 +301,6 @@ pub(super) struct SupplierPaymentStartPersistInput {
     pub organization_id: String,
     /// 调用方时间。
     pub now: Instant,
-}
-
-/// 在同一事务中写入单据迁移、快照、BPM 运行事实与入口任务。
-///
-/// # 用途
-/// 提交启动后原子写入付款单、快照与运行事实。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `input` - 付款单、快照与启动计划
-///
-/// # 返回
-/// 返回提交后的付款单实体，由调用方装配视图。
-///
-/// # 错误
-/// 仓储写入失败或计划不完整时返回错误，事务回滚。
-///
-/// # 关键业务约束
-/// Replay 不得重复写运行事实；Apply 必须写入快照与入口任务。
-pub(super) async fn persist_supplier_payment_start(
-    db: &Database,
-    input: SupplierPaymentStartPersistInput,
-) -> Result<SupplierPayment> {
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move { persist_supplier_payment_start_in_transaction(&db, input, session).await })
-        })
-        .await
 }
 
 /// 在调用方事务内写入供应商付款审批启动事实。

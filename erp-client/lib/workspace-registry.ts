@@ -578,6 +578,16 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     routeId: "W13",
                     icon: ScaleIcon,
                 },
+                {
+                    routeId: "W12",
+                    href: "/finance/responsibilities",
+                    label: "财务责任配置",
+                    icon: UsersIcon,
+                    requiredPermissions: [
+                        "finance_responsibility:list",
+                        "finance_responsibility:manage",
+                    ],
+                },
             ],
         },
         {

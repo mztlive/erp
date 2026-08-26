@@ -449,7 +449,7 @@ impl WorkItemService {
         Ok(())
     }
 
-    /// 应收子账票款复核任务的对象事实。
+    /// 应收子账票款复核与销项开票任务共用的对象事实。
     ///
     /// # 参数
     /// * `keys` - 本批任务引用的对象键
@@ -496,7 +496,7 @@ impl WorkItemService {
                 .cloned();
             let mut fact = ObjectFact::new(
                 account.sales_order_id.to_string(),
-                format!("卡券应收子账 {}", account.account_seq),
+                format!("应收子账 {}", account.account_seq),
                 account.stable.created_by,
             );
             fact.counterparty_label = counterparty.clone();
@@ -516,6 +516,12 @@ impl WorkItemService {
                 Some(format_yuan(&account.gross_total)).as_deref(),
                 true,
             );
+            push_section(
+                &mut sections,
+                "待开票金额",
+                Some(format_yuan(&account.open_invoiceable_total)).as_deref(),
+                true,
+            );
             fact.brief_source = Some(ObjectBriefSource {
                 customer: counterparty.clone(),
                 amount_label: Some(format_yuan(&account.open_total)),
@@ -524,6 +530,7 @@ impl WorkItemService {
                     counterparty,
                     sales_no.map(|no| format!("销售单 {no}")),
                     Some(format!("开放 {}", format_yuan(&account.open_total))),
+                    Some(format!("待开票 {}", format_yuan(&account.open_invoiceable_total))),
                 ]),
                 lines: Vec::new(),
                 more_count: 0,

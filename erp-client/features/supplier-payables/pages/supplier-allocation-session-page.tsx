@@ -37,6 +37,10 @@ export type SupplierAllocationSessionPageProps = {
     existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
+    paymentWorkItemId?: string
+    expectedPaymentTaskVersion?: string
+    paymentPayableAccountId?: string
+    paymentTaskPending?: boolean
     onClose: () => void
     onCompleted?: (result: FormalSubmitResult) => void
     onGoToInvoiceView?: () => void
@@ -57,6 +61,10 @@ export function SupplierAllocationSessionPage({
     existingPaymentId,
     existingInvoiceId,
     preselectPayableAccountId,
+    paymentWorkItemId,
+    expectedPaymentTaskVersion,
+    paymentPayableAccountId,
+    paymentTaskPending = false,
     onClose,
     onCompleted,
     onGoToInvoiceView,
@@ -66,6 +74,7 @@ export function SupplierAllocationSessionPage({
         sessionQuery,
         session,
         policy,
+        pool,
         selected,
         amounts,
         confirmOpen,
@@ -104,6 +113,9 @@ export function SupplierAllocationSessionPage({
             existingPaymentId,
             existingInvoiceId,
             preselectPayableAccountId,
+            paymentWorkItemId,
+            expectedPaymentTaskVersion,
+            paymentPayableAccountId,
         },
         { onCompleted, onDraftSessionIdChange },
     )
@@ -230,6 +242,42 @@ export function SupplierAllocationSessionPage({
         )
     }
 
+    if (track === "payment" && paymentTaskPending) {
+        return (
+            <PageScaffold density="compact">
+                {header}
+                <div className="h-72 animate-pulse rounded-lg bg-muted" />
+            </PageScaffold>
+        )
+    }
+
+    if (
+        track === "payment" &&
+        (!paymentWorkItemId ||
+            !expectedPaymentTaskVersion ||
+            !paymentPayableAccountId)
+    ) {
+        return (
+            <PageScaffold density="compact">
+                {header}
+                <BusinessEmptyState
+                    kind="no-scope"
+                    title="请从付款任务进入"
+                    description="付款执行已按负责人分派。请回到工作台打开分配给你的供应商付款任务；普通列表入口只能查看，不能提交付款。"
+                    action={
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                        >
+                            返回列表
+                        </Button>
+                    }
+                />
+            </PageScaffold>
+        )
+    }
+
     return (
         <PageScaffold density="compact">
             {header}
@@ -286,7 +334,7 @@ export function SupplierAllocationSessionPage({
                 <div className="grid items-start gap-4 lg:grid-cols-2">
                     <AllocationPoolCard
                         supplierName={session.supplierName}
-                        pool={session.pool}
+                        pool={pool}
                         track={track}
                         selected={selected}
                         amounts={amounts}

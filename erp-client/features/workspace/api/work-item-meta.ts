@@ -77,6 +77,13 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "cyan",
         openActionLabel: "去登记付款",
     },
+    SALES_INVOICE_EXECUTION: {
+        label: "销项开票处理",
+        family: "finance",
+        badgeLabel: "待开票",
+        badgeVariant: "violet",
+        openActionLabel: "去登记销项发票",
+    },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
         family: "approval",
@@ -248,6 +255,12 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         badgeLabel: "待付款",
         documentName: "应付账户",
         badgeVariant: "cyan",
+    },
+    receivable_account: {
+        approvalLabel: "销项开票处理",
+        badgeLabel: "待开票",
+        documentName: "应收账户",
+        badgeVariant: "violet",
     },
     customer_refund: {
         approvalLabel: "客户退款审批",

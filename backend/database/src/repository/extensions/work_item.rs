@@ -5,7 +5,7 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as WorkItemExt>::WORK_ITEMS`。
 
-use entities::work_item::WorkItem;
+use entities::work_item::{FinanceResponsibilityRule, WorkItem};
 use mongodb::Database;
 
 use super::super::work_item::WorkItemFilter;
@@ -15,6 +15,8 @@ use crate::Repository;
 pub trait WorkItemExt {
     /// `work_item` 集合名。
     const WORK_ITEMS: &'static str = "work_items";
+    /// 财务执行负责人规则集合名。
+    const FINANCE_RESPONSIBILITY_RULES: &'static str = "finance_responsibility_rules";
 
     /// 责任队列筛选条件类型（定义见 `repository::work_item`）。
     type WorkItemFilter;
@@ -24,6 +26,12 @@ pub trait WorkItemExt {
     /// # 返回
     /// 返回 `Repository<'_, entities::work_item::WorkItem>`。
     fn work_items(&self) -> Repository<'_, WorkItem>;
+
+    /// 获取财务执行负责人规则 Repository。
+    ///
+    /// # 返回
+    /// 返回 `Repository<'_, entities::work_item::FinanceResponsibilityRule>`。
+    fn finance_responsibility_rules(&self) -> Repository<'_, FinanceResponsibilityRule>;
 }
 
 impl WorkItemExt for Database {
@@ -31,5 +39,9 @@ impl WorkItemExt for Database {
 
     fn work_items(&self) -> Repository<'_, WorkItem> {
         Repository::new(self, Self::WORK_ITEMS)
+    }
+
+    fn finance_responsibility_rules(&self) -> Repository<'_, FinanceResponsibilityRule> {
+        Repository::new(self, Self::FINANCE_RESPONSIBILITY_RULES)
     }
 }

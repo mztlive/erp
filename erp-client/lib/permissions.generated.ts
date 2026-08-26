@@ -410,6 +410,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "财务责任管理",
+        description: "维护付款与销项开票的具体负责人规则",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/finance-responsibility-rules",
+                description: "查询财务责任规则",
+                permission: {
+                    resource: "finance_responsibility",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/finance-responsibility-rules",
+                description: "创建财务责任规则",
+                permission: {
+                    resource: "finance_responsibility",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/finance-responsibility-rules/{id}",
+                description: "更新财务责任规则",
+                permission: {
+                    resource: "finance_responsibility",
+                    action: "manage",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/finance-responsibility-owner-options",
+                description: "查询财务负责人候选",
+                permission: {
+                    resource: "finance_responsibility",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
         name: "审批实例",
         description: "审批运行、决定、恢复与取消",
         permissions: [

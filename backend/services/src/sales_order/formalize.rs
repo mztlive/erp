@@ -482,6 +482,7 @@ async fn create_original_receivable(
     db.receivable()
         .create_receivable_with_entry(&account, &entry, session)
         .await?;
+    crate::receivable::invoice_task::ensure_sales_invoice_task(db, &account, session).await?;
     Ok(())
 }
 

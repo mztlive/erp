@@ -35,12 +35,18 @@ export function AllocationSessionPanel({
     onPosted,
     canOperate = true,
     permissionReason,
+    workItemId,
+    expectedTaskVersion,
+    taskReceivableAccountId,
 }: {
     session: AllocationSessionView
     onClose: () => void
     onPosted: () => void
     canOperate?: boolean
     permissionReason?: string
+    workItemId?: string
+    expectedTaskVersion?: string
+    taskReceivableAccountId?: string
 }) {
     const {
         form,
@@ -81,6 +87,9 @@ export function AllocationSessionPanel({
         onPosted,
         canOperate,
         permissionReason,
+        workItemId,
+        expectedTaskVersion,
+        taskReceivableAccountId,
     })
     const receiptPhase = customerReceiptApprovalPhase(
         receiptApproval,
