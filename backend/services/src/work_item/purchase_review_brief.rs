@@ -363,7 +363,7 @@ fn purchase_order_fact(
     fact
 }
 
-/// 按采购单内提交序号判断初次提交或驳回后重提。
+/// 按采购单正式提交序号判断初次提交或再次提交。
 ///
 /// # 参数
 /// * `submissions` - 本批采购提交
@@ -376,17 +376,14 @@ fn purchase_order_fact(
 fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String, &'static str> {
     submissions
         .iter()
-        .map(|current| {
-            let has_earlier = submissions.iter().any(|item| {
-                item.purchase_order_id == current.purchase_order_id
-                    && item.submission_no.as_str() < current.submission_no.as_str()
-            });
-            let origin = if has_earlier {
-                "驳回后重提"
-            } else {
+        .filter_map(|submission| {
+            let sequence = submission.formal_sequence()?;
+            let origin = if sequence == 1 {
                 "初次提交"
+            } else {
+                "再次提交"
             };
-            (current.base.id.clone(), origin)
+            Some((submission.base.id.clone(), origin))
         })
         .collect()
 }
@@ -398,7 +395,7 @@ fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String
 /// * `source_sales_order` - 来源销售单 ID 与单号
 /// * `lines` - 已按行号排好的简报行
 /// * `submitter_name` - 已解析的提交人姓名
-/// * `origin` - 初次提交或驳回后重提
+/// * `origin` - 初次提交或再次提交
 ///
 /// # 返回
 /// 返回供应商、影响和事项简报。
@@ -795,29 +792,15 @@ fn non_empty(value: &str) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
 }
 
-/// 采购审核待办创建时使用的稳定原因码。
-///
-/// # 参数
-/// * `submission_no` - 提交序号
-///
-/// # 返回
-/// 首个提交返回初次审核码，其后视为驳回重提。
-///
-/// # 错误
-/// 无。
-#[cfg(test)]
-pub(crate) fn purchase_review_reason_code(submission_no: &str) -> &'static str {
-    if submission_no.trim() == "SUB-000001" {
-        "purchase_order_review_dispatched"
-    } else {
-        "purchase_order_review_resubmitted"
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use entities::common::time::BusinessDate;
-    use entities::purchase_order::{FulfillmentResponsibility, PurchaseType};
+    use entities::common::time::{BusinessDate, Instant};
+    use entities::ids::{
+        PurchaseOrderId, PurchaseOrderSubmissionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+    };
+    use entities::purchase_order::{
+        FulfillmentResponsibility, PurchaseOrderSubmissionData, PurchaseType, SupplierSnapshot,
+    };
 
     use super::*;
 
@@ -831,6 +814,30 @@ mod tests {
 
     fn qty(value: &str) -> Quantity {
         value.parse().expect("测试数量必须合法")
+    }
+
+    fn purchase_submission(
+        id: &str,
+        purchase_order_id: &str,
+        submission_no: &str,
+    ) -> PurchaseOrderSubmission {
+        PurchaseOrderSubmission::new(
+            PurchaseOrderSubmissionId::new(id),
+            PurchaseOrderSubmissionData {
+                purchase_order_id: PurchaseOrderId::new(purchase_order_id),
+                submission_no: submission_no.to_string(),
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                purchase_type: PurchaseType::Service,
+                fulfillment_responsibility: FulfillmentResponsibility::Service,
+                supplier_revision_id: SupplierCommercialProfileRevisionId::new("supplier-revision-1"),
+                supplier_snapshot: SupplierSnapshot::new("云桦有礼".to_string()).expect("供应商快照必须合法"),
+                payment_term_snapshot: payment("现结", false),
+                gross_amount: amount("100"),
+                net_amount: amount("87"),
+                tax_amount: amount("13"),
+            },
+        )
+        .expect("采购提交必须合法")
     }
 
     #[test]
@@ -854,15 +861,49 @@ mod tests {
     }
 
     #[test]
-    fn reason_code_distinguishes_first_and_resubmitted() {
-        assert_eq!(
-            purchase_review_reason_code("SUB-000001"),
-            "purchase_order_review_dispatched"
-        );
-        assert_eq!(
-            purchase_review_reason_code("SUB-000002"),
-            "purchase_order_review_resubmitted"
-        );
+    fn first_formal_submission_ignores_superseded_draft() {
+        let mut draft = purchase_submission("draft-1", "purchase-order-1", "DRAFT-12345678");
+        let formal = PurchaseOrderSubmission::freeze_from_draft(
+            PurchaseOrderSubmissionId::new("submission-1"),
+            "SUB-000001".to_string(),
+            &draft,
+            Instant::from_unix_secs(1_700_000_000),
+            "buyer-1",
+        )
+        .expect("首次正式提交必须可冻结");
+        draft.mark_superseded().expect("冻结后草稿必须可失效");
+
+        let origins = submission_origins(&[draft, formal]);
+
+        assert!(!origins.contains_key("draft-1"));
+        assert_eq!(origins.get("submission-1"), Some(&"初次提交"));
+    }
+
+    #[test]
+    fn later_formal_submission_is_not_described_as_rejection() {
+        let draft = purchase_submission("draft-1", "purchase-order-1", "DRAFT-12345678");
+        let mut first = PurchaseOrderSubmission::freeze_from_draft(
+            PurchaseOrderSubmissionId::new("submission-1"),
+            "SUB-000001".to_string(),
+            &draft,
+            Instant::from_unix_secs(1_700_000_000),
+            "buyer-1",
+        )
+        .expect("首次正式提交必须可冻结");
+        first.mark_superseded().expect("撤回后的提交必须可失效");
+        let second = PurchaseOrderSubmission::freeze_from_draft(
+            PurchaseOrderSubmissionId::new("submission-2"),
+            "SUB-000002".to_string(),
+            &draft,
+            Instant::from_unix_secs(1_700_000_100),
+            "buyer-1",
+        )
+        .expect("再次正式提交必须可冻结");
+
+        let origins = submission_origins(&[first, second]);
+
+        assert_eq!(origins.get("submission-1"), Some(&"初次提交"));
+        assert_eq!(origins.get("submission-2"), Some(&"再次提交"));
     }
 
     #[test]

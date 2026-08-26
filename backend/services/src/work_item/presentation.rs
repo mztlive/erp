@@ -175,7 +175,7 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "import_trial_confirmation" => "导入试算已完成，需要业务确认范围",
         "supplier_stopped" => "供应已停止，商城在售发布已暂停",
         "purchase_order_review_dispatched" => "采购已提交，需要核对成本、进项税和付款条件",
-        "purchase_order_review_resubmitted" => "采购已按驳回意见重提，需要重新核对成本与付款条件",
+        "purchase_order_review_resubmitted" => "采购已再次提交，需要重新核对成本与付款条件",
         "payable_payment_required" => "采购应付已确认，需要安排付款",
         "payable_reopened_by_reversal" => "付款已冲正，应付余额需要重新安排付款",
         "receivable_invoice_required" => "销售应收已确认，需要安排销项开票",
@@ -328,7 +328,7 @@ mod tests {
                 Some("purchase_order_review_resubmitted"),
                 WorkItemType::PurchaseOrderReview
             ),
-            "采购已按驳回意见重提，需要重新核对成本与付款条件"
+            "采购已再次提交，需要重新核对成本与付款条件"
         );
         assert_eq!(
             reason_label(Some("客户资料缺失"), WorkItemType::ImportBusinessConfirmation),

@@ -61,6 +61,10 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
    RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml
    # LOG_FORMAT=json to emit JSON tracing
    ```
+   OTLP trace export is opt-in. Set a non-empty `OTEL_EXPORTER_OTLP_ENDPOINT` and
+   `OTEL_SDK_DISABLED=false` to send the existing `tracing` spans to an OpenTelemetry Collector.
+   The required environment variables, sampling rules, and method instrumentation contract are in
+   [`docs/opentelemetry.md`](docs/opentelemetry.md).
 3. Initialize or rotate the super admin (password from `--password`, `ERP_ADMIN_PASSWORD`, or a prompt):
    ```bash
    cargo run -p cli -- init-admin --account admin --name "System Admin"

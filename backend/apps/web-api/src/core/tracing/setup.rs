@@ -1,5 +1,8 @@
 //! 进程级 tracing subscriber 配置。
 
+use opentelemetry::{global, trace::TracerProvider as _, KeyValue};
+use opentelemetry_otlp::SpanExporter;
+use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
 use tracing::info;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -22,6 +25,10 @@ pub struct TracingConfig {
     pub log_file_prefix: String,
     /// 是否输出 JSON 格式日志。
     pub json_format: bool,
+    /// 是否启用 OTLP trace 导出。
+    pub otel_enabled: bool,
+    /// OpenTelemetry `service.name`。
+    pub service_name: String,
 }
 
 impl Default for TracingConfig {
@@ -36,6 +43,29 @@ impl Default for TracingConfig {
             log_directory: "logs".to_string(),
             log_file_prefix: "app".to_string(),
             json_format: false,
+            otel_enabled: false,
+            service_name: "erp-web-api".to_string(),
+        }
+    }
+}
+
+/// 持有日志写线程与 OpenTelemetry provider 的进程级生命周期。
+///
+/// guard 被释放时会先关闭 tracer provider，确保批量缓存中的 span 在运行时退出前完成导出。
+pub struct TracingGuard {
+    _file_guard: Option<WorkerGuard>,
+    tracer_provider: Option<SdkTracerProvider>,
+}
+
+impl Drop for TracingGuard {
+    /// 关闭 tracer provider 并刷新仍在批量队列中的 span。
+    fn drop(&mut self) {
+        let Some(provider) = self.tracer_provider.take() else {
+            return;
+        };
+
+        if let Err(error) = provider.shutdown() {
+            tracing::warn!(%error, "OpenTelemetry tracer provider shutdown failed");
         }
     }
 }
@@ -44,15 +74,12 @@ impl Default for TracingConfig {
 ///
 /// `RUST_LOG` 存在时优先使用环境变量，否则回退到 `config.env_filter`。
 ///
-/// # 错误
 /// # 返回值
-/// 返回必须由进程入口持有的文件日志工作线程 guard；未启用文件日志时为 `None`。
+/// 返回必须由进程入口持有至退出的 tracing 生命周期 guard。
 ///
 /// # 错误
-/// 创建滚动日志文件失败时返回错误。
-pub fn init_tracing(
-    config: TracingConfig,
-) -> Result<Option<WorkerGuard>, Box<dyn std::error::Error + Send + Sync>> {
+/// 创建滚动日志文件或 OTLP exporter 失败时返回错误。
+pub fn init_tracing(config: TracingConfig) -> Result<TracingGuard, Box<dyn std::error::Error + Send + Sync>> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.env_filter));
 
     let stdout_layer = if config.json_format {
@@ -123,17 +150,63 @@ pub fn init_tracing(
         None
     };
 
+    global::set_text_map_propagator(TraceContextPropagator::new());
+    let tracer_provider = build_tracer_provider(&config)?;
+    let telemetry_layer = tracer_provider.as_ref().map(|provider| {
+        let tracer = provider.tracer("web-api");
+        tracing_opentelemetry::layer().with_tracer(tracer)
+    });
+
     tracing_subscriber::registry()
         .with(env_filter)
         .with(layers)
+        .with(telemetry_layer)
         .init();
 
     info!(
-        "Tracing initialized with configuration: json_format={}, log_to_file={}, log_directory={}",
-        config.json_format, config.log_to_file, config.log_directory
+        json_format = config.json_format,
+        log_to_file = config.log_to_file,
+        log_directory = %config.log_directory,
+        otel_enabled = config.otel_enabled,
+        service_name = %config.service_name,
+        "Tracing initialized"
     );
 
-    Ok(file_guard)
+    Ok(TracingGuard {
+        _file_guard: file_guard,
+        tracer_provider,
+    })
+}
+
+/// 按配置创建 OTLP tracer provider；禁用时不构建网络 exporter。
+///
+/// # 参数
+/// * `config` - 日志与 OpenTelemetry 进程配置
+///
+/// # 返回值
+/// 启用时返回批量导出的 provider，禁用时返回 `None`。
+///
+/// # 错误
+/// OTLP exporter 参数无效时返回构建错误。
+fn build_tracer_provider(
+    config: &TracingConfig,
+) -> Result<Option<SdkTracerProvider>, Box<dyn std::error::Error + Send + Sync>> {
+    if !config.otel_enabled {
+        return Ok(None);
+    }
+
+    let exporter = SpanExporter::builder().with_tonic().build()?;
+    let resource = Resource::builder()
+        .with_service_name(config.service_name.clone())
+        .with_attribute(KeyValue::new("service.version", env!("CARGO_PKG_VERSION")))
+        .build();
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .with_resource(resource)
+        .build();
+    global::set_tracer_provider(provider.clone());
+
+    Ok(Some(provider))
 }
 
 #[cfg(test)]
@@ -149,5 +222,7 @@ mod tests {
         assert_eq!(config.log_directory, "logs");
         assert_eq!(config.log_file_prefix, "app");
         assert!(!config.json_format);
+        assert!(!config.otel_enabled);
+        assert_eq!(config.service_name, "erp-web-api");
     }
 }

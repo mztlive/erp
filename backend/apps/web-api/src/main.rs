@@ -57,6 +57,8 @@ async fn main() -> Result<()> {
         log_directory: "logs".to_string(),
         log_file_prefix: "web-api".to_string(),
         json_format: std::env::var("LOG_FORMAT").unwrap_or_default() == "json",
+        otel_enabled: otel_exporter_enabled(),
+        service_name: non_empty_env("OTEL_SERVICE_NAME").unwrap_or_else(|| "erp-web-api".to_string()),
     };
 
     let _tracing_guard = init_tracing(tracing_config)?;
@@ -73,7 +75,36 @@ async fn main() -> Result<()> {
 fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .ok()
-        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+}
+
+/// 读取非空环境变量；空白值按未配置处理。
+fn non_empty_env(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// 按标准 OTLP endpoint 与 SDK 禁用开关决定是否创建 exporter。
+///
+/// 未配置 endpoint 时保持原有纯日志模式，避免本地开发默认连接固定 Collector。
+fn otel_exporter_enabled() -> bool {
+    let traces_endpoint = non_empty_env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT");
+    let endpoint = non_empty_env("OTEL_EXPORTER_OTLP_ENDPOINT");
+    should_enable_otel(
+        env_flag("OTEL_SDK_DISABLED"),
+        traces_endpoint.as_deref(),
+        endpoint.as_deref(),
+    )
+}
+
+/// 对已解析的 OpenTelemetry 开关与 endpoint 执行确定性判定。
+fn should_enable_otel(sdk_disabled: bool, traces_endpoint: Option<&str>, endpoint: Option<&str>) -> bool {
+    !sdk_disabled
+        && traces_endpoint
+            .or(endpoint)
+            .is_some_and(|value| !value.trim().is_empty())
 }
 
 /// 启动应用程序。
@@ -295,15 +326,53 @@ async fn run_app(app_port: u16, state: AppState) -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", app_port)).await?;
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     Ok(())
+}
+
+/// 等待进程终止信号，使 HTTP 服务、后台任务和 telemetry 按顺序关闭。
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    wait_for_unix_shutdown().await;
+
+    #[cfg(not(unix))]
+    wait_for_ctrl_c().await;
+
+    info!("Shutdown signal received");
+}
+
+/// 等待跨平台 Ctrl-C 信号；注册失败时记录错误并触发安全关闭。
+async fn wait_for_ctrl_c() {
+    if let Err(error) = tokio::signal::ctrl_c().await {
+        warn!(%error, "Failed to install Ctrl-C signal handler");
+    }
+}
+
+/// 在 Unix 环境同时等待 SIGTERM 与 Ctrl-C，覆盖容器标准停止流程。
+#[cfg(unix)]
+async fn wait_for_unix_shutdown() {
+    let terminate = async {
+        let Ok(mut signal) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) else {
+            warn!("Failed to install SIGTERM signal handler");
+            std::future::pending::<()>().await;
+            return;
+        };
+        signal.recv().await;
+    };
+
+    tokio::select! {
+        _ = wait_for_ctrl_c() => {}
+        _ = terminate => {}
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         database_change_requires_restart, ensure_registered_approval_policies, env_flag, jwt_secret_changed,
-        storage_change_requires_restart, DbConfigKey,
+        should_enable_otel, storage_change_requires_restart, DbConfigKey,
     };
     use config::S3Config;
 
@@ -341,6 +410,15 @@ mod tests {
     fn missing_environment_flag_is_disabled() {
         let name = format!("RS_PROJECT_TEMPLATE_MISSING_FLAG_{}", std::process::id());
         assert!(!env_flag(&name));
+    }
+
+    #[test]
+    fn otel_exporter_requires_endpoint_and_enabled_sdk() {
+        assert!(!should_enable_otel(false, None, None));
+        assert!(!should_enable_otel(true, None, Some("http://collector:4317")));
+        assert!(!should_enable_otel(false, Some("   "), None));
+        assert!(should_enable_otel(false, Some("http://collector:4317"), None));
+        assert!(should_enable_otel(false, None, Some("http://collector:4317")));
     }
 
     #[test]

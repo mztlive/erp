@@ -17,7 +17,7 @@ const KNOWN_REASON_LABELS: Record<string, string> = {
     purchase_order_review_dispatched:
         "采购已提交，需要核对成本、进项税和付款条件",
     purchase_order_review_resubmitted:
-        "采购已按驳回意见重提，需要重新核对成本与付款条件",
+        "采购已再次提交，需要重新核对成本与付款条件",
 }
 
 const LEGACY_OWNER_PLACEHOLDERS = new Set(["当前处理人", "处理人待确认"])

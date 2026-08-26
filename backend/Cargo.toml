@@ -62,7 +62,16 @@ regex = "1.13.1"
 validator = { version = "0.21.0", features = ["derive"] }
 
 # 日志和追踪
+opentelemetry = { version = "0.32.0", default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
+    "grpc-tonic",
+    "tls-ring",
+    "tls-roots",
+    "trace",
+] }
+opentelemetry_sdk = { version = "0.32.1", default-features = false, features = ["trace"] }
 tracing = "0.1.44"
+tracing-opentelemetry = { version = "0.33.0", default-features = false }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2.5"
 uuid = { version = "1.25.0", features = ["v4"] }

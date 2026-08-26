@@ -243,13 +243,24 @@ impl PurchaseOrderSubmission {
     pub fn next_submission_no(existing: &[Self]) -> Result<String> {
         let max_no = existing
             .iter()
-            .filter_map(|submission| parse_sequence(&submission.submission_no, "SUB-"))
+            .filter_map(Self::formal_sequence)
             .max()
             .unwrap_or(0);
         let next = max_no
             .checked_add(1)
             .ok_or_else(|| Error::from("采购提交序号溢出"))?;
         Ok(format!("SUB-{next:06}"))
+    }
+
+    /// 返回正式提交号中的递增序号。
+    ///
+    /// 仅识别 `SUB-{n}`；`DRAFT-*` 草稿和其它旧格式不属于正式提交，返回
+    /// `None`。该序号用于区分首次提交与撤回后的再次提交，不表达审批轮次。
+    ///
+    /// # 返回
+    /// 正式提交号中的 `u32` 序号，或 `None`。
+    pub fn formal_sequence(&self) -> Option<u32> {
+        parse_sequence(&self.submission_no, "SUB-")
     }
 
     /// 从可编辑草稿派生并冻结一个新的正式提交。
@@ -893,8 +904,13 @@ mod tests {
         let draft =
             PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("draft-1"), submission_data())
                 .unwrap();
+        assert_eq!(draft.formal_sequence(), Some(1));
+        let mut unnumbered_draft = draft.clone();
+        unnumbered_draft.submission_no = "DRAFT-12345678".to_string();
+        assert_eq!(unnumbered_draft.formal_sequence(), None);
         let mut numbered = draft.clone();
         numbered.submission_no = "SUB-000009".to_string();
+        assert_eq!(numbered.formal_sequence(), Some(9));
         assert_eq!(
             PurchaseOrderSubmission::next_submission_no(std::slice::from_ref(&numbered)).unwrap(),
             "SUB-000010"
