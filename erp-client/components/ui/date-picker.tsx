@@ -92,6 +92,14 @@ function formatDatetimeLocalValue(value?: ZonedDateTimeValue) {
     return `${value.date}T${normalizeTimeValue(value.time)}`
 }
 
+type DatePickerSize = "sm" | "default" | "lg"
+
+const DATE_PICKER_CLEAR_SIZE = {
+    sm: "icon-sm",
+    default: "icon",
+    lg: "icon-lg",
+} as const satisfies Record<DatePickerSize, "icon-sm" | "icon" | "icon-lg">
+
 function DatePicker({
     id,
     value,
@@ -100,6 +108,7 @@ function DatePicker({
     disabled,
     disabledDates,
     clearable = true,
+    size = "lg",
     className,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
@@ -111,6 +120,7 @@ function DatePicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     clearable?: boolean
+    size?: DatePickerSize
     className?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -127,7 +137,7 @@ function DatePicker({
                             id={id}
                             type="button"
                             variant="outline"
-                            size="lg"
+                            size={size}
                             className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
@@ -155,7 +165,7 @@ function DatePicker({
                     <Button
                         type="button"
                         variant="ghost"
-                        size="icon-lg"
+                        size={DATE_PICKER_CLEAR_SIZE[size]}
                         onClick={() => onValueChange?.(undefined)}
                         disabled={disabled}
                         aria-label="清除日期"

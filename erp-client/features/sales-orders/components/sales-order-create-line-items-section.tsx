@@ -66,8 +66,8 @@ export function SalesOrderCreateLineItemsSection({
             id="sales-line-items-section"
             className="border-b border-grid p-4 md:p-5 lg:p-6"
         >
-            <div className="mb-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <div className="flex min-w-0 items-center gap-2">
                     <h2 className="font-heading text-sm font-semibold">
                         销售明细
                     </h2>

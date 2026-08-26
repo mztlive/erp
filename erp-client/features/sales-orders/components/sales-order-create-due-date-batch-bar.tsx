@@ -22,22 +22,24 @@ export function SalesOrderCreateDueDateBatchBar({
 
     return (
         <div
-            className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
+            className="flex items-center gap-1.5"
             data-testid="sales-create-batch-due-date-bar"
         >
-            <Field orientation="horizontal" className="w-auto gap-2">
+            <Field orientation="horizontal" className="w-auto gap-1.5">
                 <FieldLabel
                     htmlFor="sales-line-batch-due-date"
-                    className="text-sm text-muted-foreground"
+                    className="shrink-0 text-xs text-muted-foreground"
                 >
                     批量交期
                 </FieldLabel>
                 <DatePicker
                     id="sales-line-batch-due-date"
+                    size="sm"
                     value={dueDate || undefined}
                     onValueChange={(next) => setDueDate(next ?? "")}
-                    placeholder="选择承诺交付日"
-                    className="w-44"
+                    placeholder="选择日期"
+                    clearable={false}
+                    className="w-40"
                 />
             </Field>
             <Button
@@ -48,7 +50,7 @@ export function SalesOrderCreateDueDateBatchBar({
                 onClick={() => onApply(dueDate)}
                 data-testid="sales-create-batch-due-date-apply"
             >
-                应用到全部明细
+                应用到全部
             </Button>
         </div>
     )
