@@ -24,6 +24,7 @@ import type {
     PurchaseOrderPreview,
     PurchaseOrderPreviewLine,
     SourcingSalesOrder,
+    StockAllocationPreviewLine,
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
@@ -36,6 +37,7 @@ import { multiplyFixed } from "@/lib/fixed-decimal"
 export type PurchaseOrderCreatePreviewDialogProps = {
     open: boolean
     previews: readonly PurchaseOrderPreview[]
+    stockAllocations: readonly StockAllocationPreviewLine[]
     sourceOrder?: SourcingSalesOrder
     creating?: boolean
     actionError?: { title: string; description: string } | null
@@ -44,11 +46,12 @@ export type PurchaseOrderCreatePreviewDialogProps = {
 }
 
 /**
- * 弹出式采购单预览：按拆单结果切换，并用纸质单据展示将要创建并提交审批的采购单。
+ * 弹出式供给分配预览：展示库存预留，并按拆单结果预览待提交采购单。
  */
 export function PurchaseOrderCreatePreviewDialog({
     open,
     previews,
+    stockAllocations,
     sourceOrder,
     creating,
     actionError,
@@ -61,6 +64,18 @@ export function PurchaseOrderCreatePreviewDialog({
     const activeIndex = activePreview
         ? previews.findIndex((preview) => preview.key === activePreview.key)
         : -1
+    const allocationSummary =
+        stockAllocations.length > 0 && previews.length > 0
+            ? `将建立 ${stockAllocations.length} 条库存预留，并按供应商创建 ${previews.length} 张采购单提交审批。`
+            : stockAllocations.length > 0
+              ? `将建立 ${stockAllocations.length} 条库存预留，本次无需创建采购单。`
+              : `将按供应商创建 ${previews.length} 张采购单提交审批，本次不占用现有库存。`
+    const confirmLabel =
+        stockAllocations.length > 0 && previews.length > 0
+            ? `确认库存分配并提交 ${previews.length} 张采购单`
+            : stockAllocations.length > 0
+              ? "确认库存分配"
+              : `确认提交 ${previews.length} 张采购单`
 
     React.useEffect(() => {
         if (!open) return
@@ -72,12 +87,32 @@ export function PurchaseOrderCreatePreviewDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
-                    <DialogTitle>预览采购单</DialogTitle>
+                    <DialogTitle>预览供给分配</DialogTitle>
                     <DialogDescription>
-                        将按供应商拆成 {previews.length}{" "}
-                        张采购单并提交审批。可切换查看每张单，确认后再创建。
+                        {allocationSummary}确认后由一个后端事务统一处理。
                     </DialogDescription>
                 </DialogHeader>
+
+                {stockAllocations.length > 0 ? (
+                    <div className="shrink-0 px-6 pt-4">
+                        <Alert>
+                            <AlertTitle>现有库存分配</AlertTitle>
+                            <AlertDescription>
+                                <ul className="mt-2 space-y-1">
+                                    {stockAllocations.map((line, index) => (
+                                        <li
+                                            key={`${line.salesOrderLineId}:${line.warehouseName}:${index}`}
+                                        >
+                                            {line.itemName} ·{" "}
+                                            {line.warehouseName} ·{" "}
+                                            {line.quantity} {line.unit}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+                ) : null}
 
                 {actionError ? (
                     <div className="shrink-0 px-6 pt-4">
@@ -115,7 +150,7 @@ export function PurchaseOrderCreatePreviewDialog({
                             />
                         ) : (
                             <p className="text-sm text-muted-foreground">
-                                当前没有可预览的采购单。
+                                本次全部由现有库存满足，不会创建采购单。
                             </p>
                         )}
                     </PaperDocumentViewport>
@@ -132,12 +167,14 @@ export function PurchaseOrderCreatePreviewDialog({
                     <Button
                         type="button"
                         data-testid="purchase-create-from-basis"
-                        disabled={previews.length === 0 || creating}
+                        disabled={
+                            (previews.length === 0 &&
+                                stockAllocations.length === 0) ||
+                            creating
+                        }
                         onClick={onConfirm}
                     >
-                        {creating
-                            ? "提交中…"
-                            : `确认创建并提交 ${previews.length} 张采购单`}
+                        {creating ? "提交中…" : confirmLabel}
                     </Button>
                 </DialogFooter>
             </DialogContent>

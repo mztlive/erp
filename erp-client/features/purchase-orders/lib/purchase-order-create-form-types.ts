@@ -9,7 +9,7 @@ export type PurchaseOrderCreateFormValues = {
 }
 
 /**
- * 采购建单表单实例的共享类型。校验槽位用 `any`：拆分组件只关心字段与值。
+ * 供给分配表单实例的共享类型。校验槽位用 `any`：拆分组件只关心字段与值。
  */
 export type PurchaseOrderCreateFormApi = ReactFormExtendedApi<
     PurchaseOrderCreateFormValues,

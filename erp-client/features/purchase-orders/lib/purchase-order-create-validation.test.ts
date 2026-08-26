@@ -14,6 +14,7 @@ function option(
     overrides: Partial<SourcingSupplierOption> = {},
 ): SourcingSupplierOption {
     return {
+        sourceType: "PURCHASE",
         supplierId: "s-1",
         supplierName: "示例供应商",
         basisId: "basis-1",
@@ -68,7 +69,7 @@ describe("sourcingFormValidationError", () => {
             ],
         })
         expect(error?.fields["lines[0].quantity"]).toBe(
-            "测试SKU：本次采购数量不能超过 8",
+            "测试SKU：本次分配数量不能超过 8",
         )
     })
 
@@ -105,7 +106,7 @@ describe("sourcingFormValidationError", () => {
                 },
             ],
         })
-        expect(error?.fields.lines).toBe("请至少选择一条本次采购明细")
+        expect(error?.fields.lines).toBe("请至少选择一条本次供给分配明细")
     })
 
     it("maps missing quantity to a Chinese quantity error instead of a Zod type message", () => {
@@ -123,7 +124,7 @@ describe("sourcingFormValidationError", () => {
             ],
         })
         expect(error?.fields["lines[0].quantity"]).toBe(
-            "测试SKU：本次采购数量必须是大于 0、最多 6 位小数的数值",
+            "测试SKU：本次分配数量必须是大于 0、最多 6 位小数的数值",
         )
         expect(JSON.stringify(error)).not.toContain("Invalid input")
     })
@@ -164,6 +165,52 @@ describe("sourcingFormValidationError", () => {
                 ],
             }),
         ).toBeUndefined()
+    })
+
+    it("rejects allocations that overdraw one shared stock balance", () => {
+        const stock = option({
+            sourceType: "EXISTING_STOCK",
+            supplierId: "",
+            supplierName: "现有库存 · 上海仓",
+            basisId: "stock-balance-1",
+            warehouseName: "上海仓",
+            sourceAvailableQuantity: "10",
+            maxCreateQuantity: "10",
+        })
+        const secondLine: SourcingProductLine = {
+            ...sampleLine,
+            salesOrderLineId: "l-2",
+            itemName: "测试SKU二",
+            salesAllocationLabel: "销售明细 2",
+            options: [stock],
+        }
+        const error = sourcingFormValidationError(
+            order([{ ...sampleLine, options: [stock] }, secondLine]),
+            {
+                salesOrderId: "so-1",
+                lines: [
+                    {
+                        rowKey: "l-1:0",
+                        salesOrderLineId: "l-1",
+                        selected: true,
+                        basisId: stock.basisId,
+                        quantity: "6",
+                        expectedDeliveryDate: "2026-09-01",
+                    },
+                    {
+                        rowKey: "l-2:0",
+                        salesOrderLineId: "l-2",
+                        selected: true,
+                        basisId: stock.basisId,
+                        quantity: "6",
+                        expectedDeliveryDate: "2026-09-01",
+                    },
+                ],
+            },
+        )
+        expect(error?.fields["lines[1].quantity"]).toBe(
+            "上海仓：库存分配合计不能超过 10",
+        )
     })
 
     it("rejects an expected delivery date after the sales commitment", () => {
@@ -294,21 +341,25 @@ describe("collectSourcingErrorMessages", () => {
             collectSourcingErrorMessages({
                 form: {
                     errors: [
-                        { fields: { lines: "请至少选择一条本次采购明细" } },
+                        {
+                            fields: {
+                                lines: "请至少选择一条本次供给分配明细",
+                            },
+                        },
                     ],
                 },
                 fields: {
                     "lines[0].quantity": {
-                        errors: ["测试SKU：本次采购数量不能超过 8"],
+                        errors: ["测试SKU：本次分配数量不能超过 8"],
                     },
                     "lines[1].quantity": {
-                        errors: ["测试SKU：本次采购数量不能超过 8"],
+                        errors: ["测试SKU：本次分配数量不能超过 8"],
                     },
                 },
             }),
         ).toEqual([
-            "请至少选择一条本次采购明细",
-            "测试SKU：本次采购数量不能超过 8",
+            "请至少选择一条本次供给分配明细",
+            "测试SKU：本次分配数量不能超过 8",
         ])
     })
 })

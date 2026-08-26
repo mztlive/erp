@@ -11,9 +11,11 @@
 //!   禁止重复入账；`source_line_id` 为可空，缺失时按 null 参与唯一判定，
 //!   同一业务动作必须携带行级来源（实体构造已要求来源单据标识非空）；
 //! - `stock_balance` 的 `(warehouse_id, sku_id)` 是全局唯一库存维度（§6.7）；
-//! - `stock_reservation` 的建立动作唯一（合格入库来源 + 采购分配，§6.7）；
+//! - `stock_reservation` 按来源保证建立动作唯一：采购入库使用「入库行 + 采购分配」，
+//!   现有库存使用独立的供给分配动作身份；
 //! - 事实类集合（movement/entry）不设业务软删除，无需部分唯一索引。
 
+use futures_util::TryStreamExt;
 use mongodb::{
     bson::{doc, Document},
     options::IndexOptions,
@@ -47,10 +49,39 @@ pub(crate) const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryE
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, STOCK_MOVEMENTS, stock_movement_indexes()).await?;
     create_indexes(db, STOCK_BALANCES, stock_balance_indexes()).await?;
+    reconcile_stock_reservation_source_indexes(db).await?;
     create_indexes(db, STOCK_RESERVATIONS, stock_reservation_indexes()).await?;
     create_indexes(db, STOCK_RESERVATION_ENTRIES, stock_reservation_entry_indexes()).await?;
     create_indexes(db, STOCK_ADJUSTMENTS, stock_adjustment_indexes()).await?;
     create_indexes(db, STOCK_ADJUSTMENT_LINES, stock_adjustment_line_indexes()).await?;
+    Ok(())
+}
+
+/// 升级库存预占来源字段及唯一索引。
+///
+/// 旧文档没有 `source_type`，其业务语义均为采购合格入库；先回填来源，再移除旧的
+/// 全量复合唯一索引。目标索引由 [`stock_reservation_indexes`] 以两个部分唯一索引重建，
+/// 使现有库存分配不需要伪造采购引用。
+async fn reconcile_stock_reservation_source_indexes(db: &Database) -> Result<()> {
+    let collection_names = db.list_collection_names().await?;
+    if !collection_names.iter().any(|name| name == STOCK_RESERVATIONS) {
+        return Ok(());
+    }
+    let collection = db.collection::<Document>(STOCK_RESERVATIONS);
+    collection
+        .update_many(
+            doc! { "source_type": { "$exists": false } },
+            doc! { "$set": { "source_type": "PURCHASE_RECEIPT" } },
+        )
+        .await?;
+    let mut indexes = collection.list_indexes().await?;
+    while let Some(index) = indexes.try_next().await? {
+        let name = index.options.as_ref().and_then(|options| options.name.as_deref());
+        if name == Some("uk_stock_reservations_establish") {
+            collection.drop_index("uk_stock_reservations_establish").await?;
+            break;
+        }
+    }
     Ok(())
 }
 
@@ -87,9 +118,15 @@ fn stock_balance_indexes() -> Vec<IndexModel> {
 /// 返回 `stock_reservation` 的建立动作唯一与预占查询索引（§6.7）。
 fn stock_reservation_indexes() -> Vec<IndexModel> {
     vec![
-        unique_index(
-            "uk_stock_reservations_establish",
+        unique_partial_index(
+            "uk_stock_reservations_purchase_establish",
             doc! { "source_receipt_line_id": 1, "purchase_line_sales_allocation_id": 1 },
+            doc! { "source_type": "PURCHASE_RECEIPT" },
+        ),
+        unique_partial_index(
+            "uk_stock_reservations_existing_stock_establish",
+            doc! { "source_allocation_id": 1 },
+            doc! { "source_type": "EXISTING_STOCK" },
         ),
         named_index(
             "idx_stock_reservations_warehouse_sku_status",
@@ -145,6 +182,20 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
         .build()
 }
 
+/// 构建命名部分唯一索引。
+fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Document) -> IndexModel {
+    IndexModel::builder()
+        .keys(keys)
+        .options(
+            IndexOptions::builder()
+                .name(name.into())
+                .unique(true)
+                .partial_filter_expression(filter)
+                .build(),
+        )
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
     use mongodb::bson::doc;
@@ -191,18 +242,35 @@ mod tests {
     #[test]
     fn stock_reservation_indexes_cover_establish_uniqueness_and_queries() {
         let indexes = stock_reservation_indexes();
-        let establish = indexes
+        let purchase = indexes
             .iter()
             .find(|index| {
                 index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("uk_stock_reservations_establish")
+                    == Some("uk_stock_reservations_purchase_establish")
             })
             .unwrap();
         assert_eq!(
-            establish.keys,
+            purchase.keys,
             doc! { "source_receipt_line_id": 1, "purchase_line_sales_allocation_id": 1 }
         );
-        assert_eq!(establish.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(purchase.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            purchase.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! { "source_type": "PURCHASE_RECEIPT" })
+        );
+        let direct = indexes
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("uk_stock_reservations_existing_stock_establish")
+            })
+            .unwrap();
+        assert_eq!(direct.keys, doc! { "source_allocation_id": 1 });
+        assert_eq!(direct.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            direct.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! { "source_type": "EXISTING_STOCK" })
+        );
         assert!(indexes
             .iter()
             .any(|index| { index.keys == doc! { "warehouse_id": 1, "sku_id": 1, "status": 1 } }));

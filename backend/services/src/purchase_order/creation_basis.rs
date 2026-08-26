@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use chrono::{Datelike, FixedOffset};
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, PartyExt, PurchaseOrderExt,
+    AccessControlExt, DocumentRegistryExt, Executor, InventoryExt, NoTransaction, PartyExt, PurchaseOrderExt,
     SalesOrderExt, SupplierExt, SupplierOfferingExt, WorkItemExt,
 };
 use entities::catalog::ProductKind;
@@ -19,6 +19,7 @@ use entities::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
     SupplierAccountId,
 };
+use entities::inventory::StockBalance;
 use entities::money::{line_amounts, Amount, Quantity, UnitPrice};
 use entities::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
@@ -41,7 +42,7 @@ use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverageL
 use super::create_submit::submit_created_draft_in_session;
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView,
-    CreationBasisListParams, CreationBasisView,
+    CreationBasisListParams, CreationBasisView, SupplySourceType,
 };
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
@@ -106,6 +107,28 @@ pub(super) struct BasisGroup {
     pub(super) scope: BasisScope,
     /// 可采购明细。
     pub(super) lines: Vec<BasisLine>,
+}
+
+/// 一条可由现有库存直接满足的销售行。
+#[derive(Debug, Clone)]
+pub(super) struct StockBasisLine {
+    /// 当前销售版本行及统一供给覆盖摘要。
+    pub(super) coverage: SalesProcurementCoverageLine,
+    /// 本余额本次最多可分配数量。
+    pub(super) max_create_quantity: Quantity,
+}
+
+/// 一个仓库库存余额形成的现有库存供给依据。
+#[derive(Debug, Clone)]
+pub(super) struct StockBasisGroup {
+    /// 销售当前版本。
+    pub(super) revision: SalesOrderRevision,
+    /// 被分配的库存余额。
+    pub(super) balance: StockBalance,
+    /// 仓库当前名称；基础资料缺失时回退仓库 ID。
+    pub(super) warehouse_name: String,
+    /// 该余额可满足的销售行。
+    pub(super) lines: Vec<StockBasisLine>,
 }
 
 /// 已规范化的本次采购行请求。
@@ -175,7 +198,7 @@ impl PurchaseOrderService {
     /// 查询当前账号开放采购任务范围内仍有剩余量的精确采购创建依据。
     ///
     /// # 参数
-    /// * `params` - 可选销售单与采购建单任务筛选
+    /// * `params` - 可选销售单与供给分配任务筛选
     /// * `actor` - 当前已认证账号
     ///
     /// # 返回
@@ -232,7 +255,7 @@ impl PurchaseOrderService {
         let mut views = Vec::new();
         for task in tasks {
             if task.responsibility_key().is_none() || task.responsibility_scope_ids().is_empty() {
-                return Err(Error::ConflictError("采购建单任务缺少冻结责任范围".to_string()));
+                return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
             }
             let Some(order) = orders.get(&task.business_object_id) else {
                 continue;
@@ -249,6 +272,21 @@ impl PurchaseOrderService {
                 views.push(
                     build_basis_view(&self.db, order, &group, owner_name.clone(), &task.base.id).await?,
                 );
+            }
+            let stock_groups = stock_basis_groups_for_order(
+                &self.db,
+                order,
+                task.responsibility_scope_ids(),
+                &mut NoTransaction,
+            )
+            .await?;
+            for group in stock_groups {
+                views.push(build_stock_basis_view(
+                    order,
+                    &group,
+                    owner_name.clone(),
+                    &task.base.id,
+                )?);
             }
         }
         Ok(views)
@@ -479,6 +517,114 @@ pub(super) async fn basis_groups_for_order(
     Ok(groups)
 }
 
+/// 由销售当前版本、统一覆盖与公司可用库存形成现有库存供给依据。
+pub(super) async fn stock_basis_groups_for_order(
+    db: &mongodb::Database,
+    order: &SalesOrder,
+    responsibility_scope_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<StockBasisGroup>> {
+    if order.commercial_status != CommercialStatus::Effective {
+        return Ok(Vec::new());
+    }
+    let scope = responsibility_scope_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let coverage = load_sales_procurement_coverage(db, order, executor).await?;
+    let physical_lines = coverage
+        .lines
+        .iter()
+        .filter(|line| {
+            line.product_kind == ProductKind::Physical
+                && scope.contains(line.revision_line.sales_order_line_id.as_ref())
+                && line.summary.remaining_quantity > zero_quantity()
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let sku_ids = physical_lines
+        .iter()
+        .map(|line| line.goods_line.sku_id.clone())
+        .collect::<Vec<_>>();
+    let balances = db
+        .inventory()
+        .available_balances_for_skus(&sku_ids, executor)
+        .await?;
+    let warehouse_ids = balances
+        .iter()
+        .map(|balance| balance.warehouse_id.to_string())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let warehouses = db.inventory().warehouses_by_ids(&warehouse_ids, executor).await?;
+    let active_warehouses = warehouses
+        .into_iter()
+        .filter(|warehouse| warehouse.is_active())
+        .collect::<Vec<_>>();
+    let active_warehouse_ids = active_warehouses
+        .iter()
+        .map(|warehouse| warehouse.base.id.clone())
+        .collect::<HashSet<_>>();
+    let revision_ids = active_warehouses
+        .iter()
+        .filter_map(|warehouse| warehouse.stable.current_revision_id.clone())
+        .collect::<Vec<_>>();
+    let revisions = db
+        .inventory()
+        .warehouse_revisions_by_ids(&revision_ids, executor)
+        .await?;
+    let names = active_warehouses
+        .into_iter()
+        .map(|warehouse| {
+            let name = warehouse
+                .stable
+                .current_revision_id
+                .as_deref()
+                .and_then(|revision_id| revisions.iter().find(|revision| revision.base.id == revision_id))
+                .map(|revision| revision.name.clone())
+                .unwrap_or_else(|| warehouse.base.id.clone());
+            (warehouse.base.id, name)
+        })
+        .collect::<HashMap<_, _>>();
+    let mut groups = balances
+        .into_iter()
+        .filter(|balance| active_warehouse_ids.contains(balance.warehouse_id.as_ref()))
+        .filter_map(|balance| {
+            let lines = physical_lines
+                .iter()
+                .filter(|line| line.goods_line.sku_id == balance.sku_id)
+                .cloned()
+                .map(|coverage| StockBasisLine {
+                    max_create_quantity: coverage
+                        .summary
+                        .remaining_quantity
+                        .min(balance.available_quantity),
+                    coverage,
+                })
+                .collect::<Vec<_>>();
+            (!lines.is_empty()).then(|| StockBasisGroup {
+                warehouse_name: names
+                    .get(balance.warehouse_id.as_ref())
+                    .cloned()
+                    .unwrap_or_else(|| balance.warehouse_id.to_string()),
+                revision: coverage.revision.clone(),
+                balance,
+                lines,
+            })
+        })
+        .collect::<Vec<_>>();
+    for group in &mut groups {
+        group.lines.sort_by(|left, right| {
+            left.coverage
+                .revision_line
+                .sales_order_line_id
+                .cmp(&right.coverage.revision_line.sales_order_line_id)
+        });
+    }
+    groups.sort_by(|left, right| left.balance.base.id.cmp(&right.balance.base.id));
+    Ok(groups)
+}
+
 /// 将可选查询文本规范化为空或去除首尾空白后的值。
 ///
 /// # 参数
@@ -678,7 +824,7 @@ async fn qualified_supply(
 /// * `order` - 销售稳定单
 /// * `group` - 精确依据分组
 /// * `sales_owner_name` - 销售负责人展示名
-/// * `work_item_id` - 冻结本依据责任范围的开放采购建单任务
+/// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
 ///
 /// # 返回
 /// 返回前端可直接选择逐行数量的依据视图。
@@ -713,6 +859,7 @@ async fn build_basis_view(
     Ok(CreationBasisView {
         work_item_id: work_item_id.to_string(),
         basis_id: basis_id_for(order, group, work_item_id),
+        source_type: SupplySourceType::Purchase,
         sales_order_id: order.base.id.clone(),
         sales_order_no: order.order_no.clone(),
         customer_name: group.revision.customer_snapshot.customer_name.clone(),
@@ -725,11 +872,74 @@ async fn build_basis_view(
         sales_order_revision_id: group.revision.base.id.clone(),
         supplier_id: group.scope.supplier_id.to_string(),
         supplier_name,
+        stock_balance_id: None,
+        warehouse_id: None,
+        warehouse_name: None,
+        source_available_quantity: None,
         purchase_type: group.scope.purchase_type.as_str().to_string(),
         fulfillment_responsibility: group.scope.fulfillment_responsibility.as_str().to_string(),
         payment_term_code: group.scope.payment_term_code.clone(),
         lines,
         estimated_gross: estimated.to_string(),
+    })
+}
+
+/// 构造一个现有库存供给依据视图。
+fn build_stock_basis_view(
+    order: &SalesOrder,
+    group: &StockBasisGroup,
+    sales_owner_name: Option<String>,
+    work_item_id: &str,
+) -> Result<CreationBasisView> {
+    let mut lines = Vec::with_capacity(group.lines.len());
+    for line in &group.lines {
+        let sales_delivery_deadline =
+            business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string();
+        lines.push(CreationBasisLineView {
+            sales_order_line_id: line.coverage.revision_line.sales_order_line_id.to_string(),
+            sales_order_revision_line_id: line.coverage.revision_line.base.id.clone(),
+            sales_line_no: line.coverage.revision_line.line_no,
+            supplier_id: String::new(),
+            sales_quantity: line.coverage.summary.total_quantity.to_string(),
+            covered_quantity: line.coverage.summary.covered_quantity.to_string(),
+            remaining_quantity: line.coverage.summary.remaining_quantity.to_string(),
+            max_create_quantity: line.max_create_quantity.to_string(),
+            confirmed_quantity: line.max_create_quantity.to_string(),
+            latest_cost_gross: "0".to_string(),
+            input_tax_rate: "0".to_string(),
+            expected_delivery_date: sales_delivery_deadline.clone(),
+            sales_delivery_deadline,
+            product_name: Some(line.coverage.revision_line.item_name_snapshot.clone()),
+            specification: line.coverage.revision_line.spec_snapshot.clone(),
+            unit: line.coverage.revision_line.unit_snapshot.clone(),
+            gross_amount: "0".to_string(),
+        });
+    }
+    Ok(CreationBasisView {
+        work_item_id: work_item_id.to_string(),
+        basis_id: stock_basis_id_for(order, group, work_item_id),
+        source_type: SupplySourceType::ExistingStock,
+        sales_order_id: order.base.id.clone(),
+        sales_order_no: order.order_no.clone(),
+        customer_name: group.revision.customer_snapshot.customer_name.clone(),
+        contract_no: group
+            .revision
+            .contract_snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.contract_no.clone()),
+        sales_owner_name,
+        sales_order_revision_id: group.revision.base.id.clone(),
+        supplier_id: String::new(),
+        supplier_name: format!("现有库存 · {}", group.warehouse_name),
+        stock_balance_id: Some(group.balance.base.id.clone()),
+        warehouse_id: Some(group.balance.warehouse_id.to_string()),
+        warehouse_name: Some(group.warehouse_name.clone()),
+        source_available_quantity: Some(group.balance.available_quantity.to_string()),
+        purchase_type: PurchaseType::Physical.as_str().to_string(),
+        fulfillment_responsibility: FulfillmentResponsibility::Warehouse.as_str().to_string(),
+        payment_term_code: String::new(),
+        lines,
+        estimated_gross: "0".to_string(),
     })
 }
 
@@ -1149,7 +1359,7 @@ async fn write_creation_receipt(
 /// * `order` - 销售稳定单
 /// * `groups` - 当前可用依据集合
 /// * `basis_id` - 客户端依据 ID
-/// * `work_item_id` - 当前开放采购建单任务
+/// * `work_item_id` - 当前开放供给分配任务
 ///
 /// # 返回
 /// 返回与当前 guard、当前版本及精确范围完全匹配的依据。
@@ -1348,6 +1558,29 @@ pub(super) fn basis_id_for(order: &SalesOrder, group: &BasisGroup, work_item_id:
         basis_scope_key(&group.scope),
     ];
     parts.extend(group.lines.iter().map(basis_line_fingerprint));
+    format!("{}:{}", order.base.id, digest_parts(&parts))
+}
+
+/// 形成绑定销售 guard、库存余额版本与逐行剩余量的现有库存依据 ID。
+pub(super) fn stock_basis_id_for(order: &SalesOrder, group: &StockBasisGroup, work_item_id: &str) -> String {
+    let mut parts = vec![
+        order.base.id.clone(),
+        work_item_id.to_string(),
+        order.procurement_guard_version.to_string(),
+        group.revision.base.id.clone(),
+        group.balance.base.id.clone(),
+        group.balance.base.version.to_string(),
+        group.balance.available_quantity.to_string(),
+    ];
+    parts.extend(group.lines.iter().map(|line| {
+        format!(
+            "{}|{}|{}|{}",
+            line.coverage.revision_line.sales_order_line_id,
+            line.coverage.revision_line.base.id,
+            line.coverage.summary.remaining_quantity,
+            line.max_create_quantity,
+        )
+    }));
     format!("{}:{}", order.base.id, digest_parts(&parts))
 }
 
@@ -1824,7 +2057,7 @@ fn business_date_of(instant: Instant) -> Result<BusinessDate> {
 /// # 错误
 /// 无。
 pub(super) fn procurement_quantity_changed() -> Error {
-    Error::ConflictError("可采购数量已更新，请刷新后重试".to_string())
+    Error::ConflictError("可分配供给数量已更新，请刷新后重试".to_string())
 }
 
 /// 返回合法采购数量零值。

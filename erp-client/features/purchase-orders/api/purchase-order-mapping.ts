@@ -290,11 +290,14 @@ export function mapPurchaseChangeOrder(
 }
 
 export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
+    const sourceType =
+        basis.source_type === "EXISTING_STOCK" ? "EXISTING_STOCK" : "PURCHASE"
     const paymentTerm = parsePaymentTermSnapshot(
         basis.payment_term_code || "POSTPAY_NET30",
     )
     return {
         basisId: basis.basis_id,
+        sourceType,
         workItemId: basis.work_item_id,
         salesOrderId: basis.sales_order_id,
         salesOrderNo: basis.sales_order_no,
@@ -304,13 +307,26 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         salesOrderRevisionId: basis.sales_order_revision_id,
         supplierId: basis.supplier_id,
         supplierName: basis.supplier_name,
+        stockBalanceId: basis.stock_balance_id ?? undefined,
+        warehouseId: basis.warehouse_id ?? undefined,
+        warehouseName: basis.warehouse_name ?? undefined,
+        sourceAvailableQuantity: basis.source_available_quantity ?? undefined,
         purchaseType: mapPurchaseType(basis.purchase_type ?? "PHYSICAL"),
         fulfillmentResponsibility: mapFulfillment(
             basis.fulfillment_responsibility ?? "WAREHOUSE",
         ),
-        paymentTermCode: basis.payment_term_code || "POSTPAY_NET30",
-        paymentTermLabel: paymentTerm.paymentTerm,
-        businessCategory: paymentTerm.businessCategory || undefined,
+        paymentTermCode:
+            sourceType === "EXISTING_STOCK"
+                ? ""
+                : basis.payment_term_code || "POSTPAY_NET30",
+        paymentTermLabel:
+            sourceType === "EXISTING_STOCK"
+                ? "不适用"
+                : paymentTerm.paymentTerm,
+        businessCategory:
+            sourceType === "EXISTING_STOCK"
+                ? undefined
+                : paymentTerm.businessCategory || undefined,
         lines: (basis.lines ?? []).map((line) => {
             const salesQuantity = String(
                 line.sales_quantity ?? line.confirmed_quantity ?? "0",

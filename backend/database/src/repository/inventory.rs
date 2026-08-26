@@ -37,6 +37,7 @@ use entities::ids::{SalesOrderLineId, SkuId, StockAdjustmentId, StockMovementId,
 use entities::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustment,
     StockAdjustmentLine, StockAdjustmentState, StockBalance, StockMovement, StockReservation,
+    StockReservationSourceType,
 };
 use entities::money::Quantity;
 use entities::warehouse::{Warehouse, WarehouseRevision};
@@ -934,6 +935,72 @@ impl<'a> InventoryRepository<'a> {
                 "sku_id": sku_id.to_string(),
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },
+            executor,
+        )
+        .await
+    }
+
+    /// 按 SKU 集合批量读取存在可用量的库存余额。
+    ///
+    /// # 参数
+    /// * `sku_ids` - SKU 主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回可用数量大于零的全部余额，按仓库与 SKU 稳定排序。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn available_balances_for_skus(
+        &self,
+        sku_ids: &[SkuId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockBalance>> {
+        if sku_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        mongo_ops::find_many(
+            &self.db.collection::<StockBalance>(STOCK_BALANCES),
+            doc! {
+                "sku_id": { "$in": ids_to_strings(sku_ids) },
+                "available_quantity": { "$gt": 0 },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .sort(doc! { "warehouse_id": 1, "sku_id": 1, "id": 1 })
+                .build(),
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取销售稳定行的现有库存预占。
+    ///
+    /// # 参数
+    /// * `sales_order_line_ids` - 销售稳定行主键集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回由现有库存分配建立的全部未删除预占；采购入库预占不进入结果。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    pub async fn existing_stock_reservations_for_sales_lines(
+        &self,
+        sales_order_line_ids: &[SalesOrderLineId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<StockReservation>> {
+        if sales_order_line_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        mongo_ops::find_many(
+            &self.db.collection::<StockReservation>(STOCK_RESERVATIONS),
+            doc! {
+                "sales_order_line_id": { "$in": ids_to_strings(sales_order_line_ids) },
+                "source_type": StockReservationSourceType::ExistingStock.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::default(),
             executor,
         )
         .await

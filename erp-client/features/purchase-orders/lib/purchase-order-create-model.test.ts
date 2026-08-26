@@ -19,6 +19,7 @@ function option(
         Pick<SourcingSupplierOption, "supplierId" | "supplierName">,
 ): SourcingSupplierOption {
     return {
+        sourceType: "PURCHASE",
         basisId: `basis-${overrides.supplierId}`,
         workItemId: "wi-1",
         purchaseType: "PHYSICAL",
@@ -64,6 +65,7 @@ function order(lines: readonly SourcingProductLine[]): SourcingSalesOrder {
 describe("buildSourcingWorkspace", () => {
     it("keeps two fulfillment routes from the same supplier", () => {
         const shared = {
+            sourceType: "PURCHASE" as const,
             workItemId: "wi-1",
             salesOrderId: "so-1",
             salesOrderNo: "SO-1",
@@ -372,6 +374,39 @@ describe("summarizeSourcingOrder", () => {
         expect(summary.businessCategories).toEqual([])
         expect(summary.minEstimatedGross).toBe("39.00")
     })
+
+    it("estimates only the purchase residual after existing stock", () => {
+        const summary = summarizeSourcingOrder(
+            order([
+                line({
+                    salesOrderLineId: "l-1",
+                    remainingQuantity: "10",
+                    options: [
+                        option({
+                            sourceType: "EXISTING_STOCK",
+                            supplierId: "",
+                            supplierName: "现有库存 · 上海仓",
+                            basisId: "stock-balance-1",
+                            warehouseName: "上海仓",
+                            sourceAvailableQuantity: "4",
+                            maxCreateQuantity: "4",
+                            unitCostGross: "0",
+                            inputTaxRate: "0",
+                        }),
+                        option({
+                            supplierId: "s-a",
+                            supplierName: "甲",
+                            unitCostGross: "10.00",
+                            maxCreateQuantity: "10",
+                        }),
+                    ],
+                }),
+            ]),
+        )
+
+        expect(summary.uniqueSupplierCount).toBe(1)
+        expect(summary.minEstimatedGross).toBe("60.00")
+    })
 })
 
 describe("buildDefaultSourcingLines", () => {
@@ -405,6 +440,87 @@ describe("buildDefaultSourcingLines", () => {
                 basisId: "basis-s-a",
                 expectedDeliveryDate: "2026-09-01",
             },
+        ])
+    })
+
+    it("allocates existing stock first and assigns only the residual to purchase", () => {
+        const rows = buildDefaultSourcingLines(
+            order([
+                line({
+                    salesOrderLineId: "l-1",
+                    remainingQuantity: "10",
+                    options: [
+                        option({
+                            sourceType: "EXISTING_STOCK",
+                            supplierId: "",
+                            supplierName: "现有库存 · 上海仓",
+                            basisId: "stock-balance-1",
+                            warehouseName: "上海仓",
+                            sourceAvailableQuantity: "4",
+                            maxCreateQuantity: "4",
+                            unitCostGross: "0",
+                            inputTaxRate: "0",
+                        }),
+                        option({
+                            supplierId: "s-a",
+                            supplierName: "甲供应商",
+                            maxCreateQuantity: "10",
+                        }),
+                    ],
+                }),
+            ]),
+        )
+
+        expect(rows.map((row) => [row.basisId, row.quantity])).toEqual([
+            ["stock-balance-1", "4"],
+            ["basis-s-a", "6"],
+        ])
+    })
+
+    it("shares one stock balance capacity across multiple sales lines", () => {
+        const stock = option({
+            sourceType: "EXISTING_STOCK",
+            supplierId: "",
+            supplierName: "现有库存 · 上海仓",
+            basisId: "stock-balance-1",
+            warehouseName: "上海仓",
+            sourceAvailableQuantity: "6",
+            maxCreateQuantity: "5",
+            unitCostGross: "0",
+            inputTaxRate: "0",
+        })
+        const rows = buildDefaultSourcingLines(
+            order([
+                line({
+                    salesOrderLineId: "l-1",
+                    remainingQuantity: "5",
+                    options: [stock],
+                }),
+                line({
+                    salesOrderLineId: "l-2",
+                    remainingQuantity: "5",
+                    options: [
+                        stock,
+                        option({
+                            supplierId: "s-a",
+                            supplierName: "甲供应商",
+                            maxCreateQuantity: "5",
+                        }),
+                    ],
+                }),
+            ]),
+        )
+
+        expect(
+            rows.map((row) => [
+                row.salesOrderLineId,
+                row.basisId,
+                row.quantity,
+            ]),
+        ).toEqual([
+            ["l-1", "stock-balance-1", "5"],
+            ["l-2", "stock-balance-1", "1"],
+            ["l-2", "basis-s-a", "4"],
         ])
     })
 })

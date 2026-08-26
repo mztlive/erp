@@ -525,7 +525,7 @@ impl SalesOrderService {
             .collect())
     }
 
-    /// 计算当前账号从销售单继续创建采购单的访问投影。
+    /// 计算当前账号从销售单继续执行供给分配的访问投影。
     ///
     /// # 参数
     /// * `order` - 当前销售稳定单
@@ -533,14 +533,14 @@ impl SalesOrderService {
     /// * `actor` - 当前已认证账号；内部无账号上下文时为空
     ///
     /// # 返回
-    /// 返回账号状态、静态采购建单权限与开放采购责任任务共同决定的访问投影。
+    /// 返回账号状态、静态供给分配权限与开放责任任务共同决定的访问投影。
     ///
     /// # 错误
     /// 账号、任务或 RBAC 查询失败，以及权限值对象不合法时返回错误。
     ///
     /// # 关键业务约束
     /// `allowed` 只在账号仍可登录、身份未变化、拥有 `purchase_order:create`
-    /// 且持有该销售单开放采购建单任务时为真，与 basis/create 接口的认证和
+    /// 且持有该销售单开放供给分配任务时为真，与 basis/create 接口的认证和
     /// 授权边界一致。
     async fn purchase_creation_access(
         &self,
@@ -552,7 +552,7 @@ impl SalesOrderService {
             return Ok(blocked_purchase_creation_access(message));
         }
         let Some(actor) = actor else {
-            return Ok(blocked_purchase_creation_access("当前调用缺少采购责任上下文"));
+            return Ok(blocked_purchase_creation_access("当前调用缺少供给分配责任上下文"));
         };
         if let Some(message) = self.purchase_creation_actor_blocker(actor).await? {
             return Ok(blocked_purchase_creation_access(message));
@@ -562,7 +562,7 @@ impl SalesOrderService {
             .await?;
         if task_count == 0 {
             return Ok(blocked_purchase_creation_access(
-                "当前账号不是该销售单待采购任务负责人",
+                "当前账号不是该销售单供给分配任务负责人",
             ));
         }
         Ok(PurchaseCreationAccessView {
@@ -572,7 +572,7 @@ impl SalesOrderService {
         })
     }
 
-    /// 重验当前账号的登录状态、身份与采购建单权限。
+    /// 重验当前账号的登录状态、身份与供给分配权限。
     ///
     /// # 参数
     /// * `actor` - JWT 已认证但需要按当前账号和 RBAC 事实重验的操作人
@@ -594,7 +594,7 @@ impl SalesOrderService {
             .await?;
         let Some(account) = account.filter(|account| account.kind == actor.kind() && account.can_login())
         else {
-            return Ok(Some("当前账号不存在、已停用或身份已变化，不能创建采购单"));
+            return Ok(Some("当前账号不存在、已停用或身份已变化，不能分配供给"));
         };
         let permission = Permission::parse("purchase_order:create")?;
         let allowed = self
@@ -604,20 +604,20 @@ impl SalesOrderService {
         Ok((!allowed).then_some("当前账号缺少 purchase_order:create 权限"))
     }
 
-    /// 统计当前账号在指定销售单下拥有的开放采购建单任务。
+    /// 统计当前账号在指定销售单下拥有的开放供给分配任务。
     ///
     /// # 参数
     /// * `sales_order_id` - 销售单稳定主键
     /// * `actor_id` - 已通过当前账号与采购建单权限重验的账号主键
     ///
     /// # 返回
-    /// 返回该账号拥有的开放采购建单任务数量。
+    /// 返回该账号拥有的开放供给分配任务数量。
     ///
     /// # 错误
     /// 工作项查询失败时返回仓储错误。
     ///
     /// # 关键业务约束
-    /// 只统计任务仓储认定为开放且由当前账号负责的采购建单任务。
+    /// 只统计任务仓储认定为开放且由当前账号负责的供给分配任务。
     async fn purchase_creation_task_count(&self, sales_order_id: &str, actor_id: &str) -> Result<usize> {
         Ok(self
             .db
@@ -964,7 +964,7 @@ mod tests {
         assert!(account < can_login);
         assert!(can_login < permission);
         assert!(permission < enforce);
-        let inactive_blocker = "当前账号不存在、已停用或身份已变化，不能创建采购单";
+        let inactive_blocker = "当前账号不存在、已停用或身份已变化，不能分配供给";
         assert!(actor_check.contains(inactive_blocker));
         assert!(actor_check.contains("当前账号缺少 purchase_order:create 权限"));
     }

@@ -113,19 +113,19 @@ pub async fn purchase_order_create(
 #[permission_macros::permission(
     group = "采购单",
     group_desc = "采购单、采购提交与采购变更管理",
-    desc = "按选源结果创建采购单",
+    desc = "确认供给分配",
     resource = "purchase_order",
     action = "create"
 )]
-/// 按选源行一次创建多张采购单并提交审批（幂等：同键同载荷回放原结果）。
+/// 一次确认库存与采购供给分配（幂等：同键同载荷回放原结果）。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 选源创建请求（销售单、任务、逐行供应商与数量、幂等键）
+/// * `req` - 供给分配请求（销售单、任务、逐行库存或采购依据、数量、幂等键）
 ///
 /// # 返回
-/// 返回本次创建并提交或回放的全部采购单。
+/// 返回本次建立或回放的库存预占与采购单。
 pub async fn purchase_order_create_from_sourcing(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -291,19 +291,19 @@ pub async fn purchase_order_review(
 #[permission_macros::permission(
     group = "采购单",
     group_desc = "采购单、采购提交与采购变更管理",
-    desc = "查询采购创建依据",
+    desc = "查询供给分配依据",
     resource = "purchase_order",
     action = "create"
 )]
-/// 查询当前账号开放采购任务范围内的采购创建依据。
+/// 查询当前账号开放任务范围内的库存与采购供给依据。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 当前已认证账号
-/// * `params` - 可选销售单和采购建单任务筛选
+/// * `params` - 可选销售单和供给分配任务筛选
 ///
 /// # 返回
-/// 返回当前账号可处理的精确采购创建依据。
+/// 返回当前账号可处理的精确库存与采购供给依据。
 pub async fn purchase_creation_basis_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,

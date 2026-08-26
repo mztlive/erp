@@ -1,15 +1,25 @@
-//! 按选源结果一次创建多张采购单并提交审批。
+//! 按供给分配结果一次落地现有库存预占和采购缺口。
 //!
-//! 采购为销售明细选定精确履约依据后，按供应商、采购类型、付款条件和履约责任拆成多张采购单，
-//! 并在同一事务内推进一次采购 guard 后写入全部采购单并启动审批。
+//! 操作人确认库存优先的推荐结果后，本模块在同一事务内推进一次供给 guard、
+//! 原子预占现有库存并生成仓发草稿，再把剩余采购分配按供应商、采购类型、
+//! 付款条件和履约责任拆成采购单并启动审批。
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, Executor, NoTransaction, SalesOrderExt};
+use database::{AccessControlExt, Executor, FulfillmentExt, InventoryExt, NoTransaction, SalesOrderExt};
 use entities::common::time::BusinessDate;
-use entities::ids::SalesOrderId;
+use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
+use entities::ids::{
+    DeliveryId, DeliveryLineId, SalesOrderId, SalesOrderLineId, StockReservationEntryId, StockReservationId,
+    WarehouseId,
+};
+use entities::inventory::{
+    ReservationEntryType, ReservationStatus, StockReservation, StockReservationData, StockReservationEntry,
+    StockReservationEntryData, StockReservationSourceType,
+};
 use entities::money::Quantity;
+use id_generator::next_id;
 use mongodb::ClientSession;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -21,14 +31,17 @@ use super::command_receipt::{
 };
 use super::creation_basis::{
     basis_groups_for_order, basis_id_for, basis_scope_key, load_effective_sales_order, persist_basis_draft,
-    procurement_quantity_changed, stable_line_id, validate_requested_quantities, BasisGroup,
-    CreateBasisCommand, RequestedLine,
+    procurement_quantity_changed, stable_line_id, stock_basis_groups_for_order, stock_basis_id_for,
+    validate_requested_quantities, BasisGroup, CreateBasisCommand, RequestedLine, StockBasisGroup,
 };
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
     CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
+    ExistingStockReservationResult, SupplySourceType,
 };
-use super::procurement_task_sync::load_owned_open_procurement_task;
+use super::procurement_task_sync::{
+    load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
+};
 use super::PurchaseOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -55,6 +68,9 @@ struct SourcingOrderReceipt {
 struct SourcingReceipt {
     /// 本次创建并已提交审批的全部采购单。
     orders: Vec<SourcingOrderReceipt>,
+    /// 本次建立的现有库存预占。
+    #[serde(default)]
+    stock_reservations: Vec<ExistingStockReservationResult>,
 }
 
 /// 已归入一张采购单的选源计划。
@@ -66,24 +82,50 @@ struct SourcingDraftPlan {
     requested_lines: Vec<RequestedLine>,
 }
 
+/// 已归入一个库存余额的现有库存分配计划。
+#[derive(Debug, Clone)]
+struct StockAllocationPlan {
+    /// 命中的现有库存依据。
+    group: StockBasisGroup,
+    /// 本余额逐销售行分配数量。
+    requested_lines: Vec<RequestedStockLine>,
+}
+
+/// 已规范化的现有库存分配行。
+#[derive(Debug, Clone)]
+struct RequestedStockLine {
+    /// 稳定销售行。
+    sales_order_line_id: String,
+    /// 本次预占数量。
+    quantity: Quantity,
+}
+
+/// 已持久化的现有库存分配及其公开结果。
+struct PersistedStockAllocation {
+    /// 新建库存预占。
+    reservation: StockReservation,
+    /// API 返回投影。
+    result: ExistingStockReservationResult,
+}
+
 impl PurchaseOrderService {
-    /// 按选源行一次创建多张采购单并提交审批。
+    /// 按供给分配行一次预占现有库存并创建采购缺口单。
     ///
     /// # 参数
-    /// * `req` - 来源销售单、建单任务、逐行履约依据与数量、幂等键
+    /// * `req` - 来源销售单、供给分配任务、逐行供给依据与数量、幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回按精确拆分维度创建并已提交审批的全部采购单；同一幂等键与同一载荷重复提交时返回原结果。
+    /// 返回本次库存预占和按精确拆分维度创建并已提交审批的采购单；同一幂等键与同一载荷重复提交时返回原结果。
     ///
     /// # 错误
-    /// 操作账号不可登录或缺少采购创建权限、选源行重复或无合格供给、数量非正或超过
+    /// 操作账号不可登录或缺少采购创建权限、供给行重复或依据失效、数量非正或超过
     /// 事务内最新剩余/可供量、幂等键载荷冲突、并发冲突、审批绑定、启动审批或仓储写入失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 同一销售行可按不同精确依据拆分；供应商、采购类型、付款条件或履约责任任一不同即拆单；
-    /// 操作人授权版本通过 policy CAS 与提交绑定，事务内只推进一次销售单采购 guard；
-    /// 创建成功即进入审批中，不得留下可编辑草稿。
+    /// 同一销售行可按库存与采购精确依据拆分；库存直接形成预占与仓发草稿，采购缺口按拆分维度建单；
+    /// 操作人授权版本通过 policy CAS 与提交绑定，事务内只推进一次销售单供给 guard；
+    /// 采购单创建成功即进入审批中，不得留下可编辑草稿。
     pub async fn create_from_sourcing(
         &self,
         req: CreatePurchaseOrdersFromSourcingRequest,
@@ -158,7 +200,7 @@ impl PurchaseOrderService {
     }
 }
 
-/// 在 MongoDB 事务内按选源计划写入多张采购单并提交审批。
+/// 在 MongoDB 事务内按供给计划写入库存预占、仓发草稿和采购单。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -178,7 +220,7 @@ impl PurchaseOrderService {
 /// 任务、依据、数量、并发 guard、审批绑定或持久化失败时返回错误。
 ///
 /// # 关键业务约束
-/// guard CAS 成功后必须再次按采购当前指针计算剩余量，且本函数只推进一次 guard。
+/// guard CAS 成功后必须再次按统一供给覆盖计算剩余量，且本函数只推进一次 guard。
 #[allow(clippy::too_many_arguments)]
 async fn create_from_sourcing_in_transaction(
     db: &mongodb::Database,
@@ -207,9 +249,31 @@ async fn create_from_sourcing_in_transaction(
         load_owned_open_procurement_task(db, &req.work_item_id, sales_order_id, actor.id(), session).await?;
     let mut order = load_effective_sales_order(db, sales_order_id, session).await?;
     let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    let stock_groups =
+        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
     let plans = plan_sourcing_drafts(&order, &groups, &req.work_item_id, assignments)?;
+    let stock_plans = plan_stock_allocations(&order, &stock_groups, &req.work_item_id, assignments)?;
+    validate_combined_line_totals(&plans, &stock_plans)?;
     order.advance_procurement_guard(actor.id())?;
     db.sales_orders().update(&mut order, session).await?;
+    let latest_stock_groups =
+        stock_basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
+    validate_stock_totals(&stock_plans, &latest_stock_groups)?;
+    let persisted_stock = persist_stock_allocations(
+        db,
+        &stock_plans,
+        &latest_stock_groups,
+        sales_order_id,
+        audit_id,
+        request_fingerprint,
+        session,
+    )
+    .await?;
+    create_stock_delivery_drafts(db, sales_order_id, &persisted_stock, session).await?;
+    let stock_reservations = persisted_stock
+        .into_iter()
+        .map(|allocation| allocation.result)
+        .collect::<Vec<_>>();
     let latest_groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), session).await?;
     validate_sourcing_totals(&plans, &latest_groups)?;
     let mut orders = Vec::with_capacity(plans.len());
@@ -253,18 +317,31 @@ async fn create_from_sourcing_in_transaction(
         };
         orders.push(persist_basis_draft(db, rbac, &order, latest, &selected_lines, &command, session).await?);
     }
+    sync_procurement_tasks_for_sales_order(db, sales_order_id, session).await?;
+    let receipt = SourcingReceipt {
+        orders: orders
+            .iter()
+            .map(|order| SourcingOrderReceipt {
+                purchase_order_id: order.purchase_order_id.clone(),
+                purchase_no: order.purchase_no.clone(),
+                lock_version: order.lock_version,
+            })
+            .collect(),
+        stock_reservations: stock_reservations.clone(),
+    };
     write_sourcing_receipt(
         db,
         audit_id,
         request_fingerprint,
         sales_order_id.as_ref(),
-        &orders,
+        &receipt,
         actor,
         session,
     )
     .await?;
     Ok(CreatePurchaseOrdersFromSourcingResult {
         orders,
+        stock_reservations,
         replayed: false,
         reference: sales_order_id.to_string(),
     })
@@ -277,7 +354,9 @@ struct RequestedSourcingLine {
     sales_order_line_id: String,
     /// 本行选用的精确创建依据。
     basis_id: String,
-    /// 本次采购数量。
+    /// 供给来源。
+    source_type: SupplySourceType,
+    /// 本次分配数量。
     quantity: Quantity,
     /// 采购确认的预计交付日。
     expected_delivery_date: BusinessDate,
@@ -316,17 +395,18 @@ fn normalize_sourcing_assignments(
             ));
         }
         let quantity = Quantity::from_str(line.quantity.trim())
-            .map_err(|error| Error::ValidationError(format!("本次数量非法: {error}")))?;
+            .map_err(|error| Error::ValidationError(format!("本次分配数量非法: {error}")))?;
         let expected_delivery_date = BusinessDate::from_str(line.expected_delivery_date.trim())
             .map_err(|error| Error::ValidationError(format!("预计交付日非法: {error}")))?;
         let zero =
             Quantity::from_str("0").map_err(|error| Error::Internal(format!("零数量常量非法: {error}")))?;
         if quantity <= zero {
-            return Err(Error::ValidationError("本次数量必须大于 0".to_string()));
+            return Err(Error::ValidationError("本次分配数量必须大于 0".to_string()));
         }
         lines.push(RequestedSourcingLine {
             sales_order_line_id,
             basis_id,
+            source_type: line.source_type,
             quantity,
             expected_delivery_date,
         });
@@ -339,7 +419,7 @@ fn normalize_sourcing_assignments(
     Ok(lines)
 }
 
-/// 把选源行归入精确依据分组，形成待创建采购单计划。
+/// 把采购来源行归入精确依据分组，形成待创建采购单计划。
 ///
 /// # 参数
 /// * `groups` - 当前任务范围内的精确依据
@@ -360,7 +440,10 @@ fn plan_sourcing_drafts(
     assignments: &[RequestedSourcingLine],
 ) -> Result<Vec<SourcingDraftPlan>> {
     let mut plans: BTreeMap<String, SourcingDraftPlan> = BTreeMap::new();
-    for assignment in assignments {
+    for assignment in assignments
+        .iter()
+        .filter(|assignment| assignment.source_type == SupplySourceType::Purchase)
+    {
         let group = find_assignment_group(order, groups, work_item_id, assignment)?;
         let key = basis_scope_key(&group.scope);
         let requested = RequestedLine {
@@ -381,6 +464,149 @@ fn plan_sourcing_drafts(
         }
     }
     Ok(plans.into_values().collect())
+}
+
+/// 把现有库存选源行按库存余额归组。
+fn plan_stock_allocations(
+    order: &entities::sales_order::SalesOrder,
+    groups: &[StockBasisGroup],
+    work_item_id: &str,
+    assignments: &[RequestedSourcingLine],
+) -> Result<Vec<StockAllocationPlan>> {
+    let mut plans = BTreeMap::<String, StockAllocationPlan>::new();
+    for assignment in assignments
+        .iter()
+        .filter(|assignment| assignment.source_type == SupplySourceType::ExistingStock)
+    {
+        let group = groups
+            .iter()
+            .find(|group| {
+                stock_basis_id_for(order, group, work_item_id) == assignment.basis_id
+                    && group.lines.iter().any(|line| {
+                        line.coverage.revision_line.sales_order_line_id.as_ref()
+                            == assignment.sales_order_line_id
+                    })
+            })
+            .ok_or_else(procurement_quantity_changed)?;
+        let requested = RequestedStockLine {
+            sales_order_line_id: assignment.sales_order_line_id.clone(),
+            quantity: assignment.quantity,
+        };
+        plans
+            .entry(group.balance.base.id.clone())
+            .and_modify(|plan| plan.requested_lines.push(requested.clone()))
+            .or_insert_with(|| StockAllocationPlan {
+                group: group.clone(),
+                requested_lines: vec![requested],
+            });
+    }
+    Ok(plans.into_values().collect())
+}
+
+/// 校验同一命令内库存和采购拆分合计不超过当前销售缺口。
+fn validate_combined_line_totals(
+    purchase_plans: &[SourcingDraftPlan],
+    stock_plans: &[StockAllocationPlan],
+) -> Result<()> {
+    let mut totals = HashMap::<String, Decimal>::new();
+    let mut caps = HashMap::<String, Decimal>::new();
+    for plan in purchase_plans {
+        for requested in &plan.requested_lines {
+            let line = plan
+                .group
+                .lines
+                .iter()
+                .find(|line| stable_line_id(line) == requested.sales_order_line_id)
+                .ok_or_else(procurement_quantity_changed)?;
+            add_requested_total(
+                &mut totals,
+                &mut caps,
+                &requested.sales_order_line_id,
+                requested.quantity,
+                line.coverage.summary.remaining_quantity,
+            );
+        }
+    }
+    for plan in stock_plans {
+        for requested in &plan.requested_lines {
+            let line = stock_line(&plan.group, &requested.sales_order_line_id)?;
+            add_requested_total(
+                &mut totals,
+                &mut caps,
+                &requested.sales_order_line_id,
+                requested.quantity,
+                line.coverage.summary.remaining_quantity,
+            );
+        }
+    }
+    if exceeds_any_cap(&totals, &caps) {
+        return Err(procurement_quantity_changed());
+    }
+    Ok(())
+}
+
+/// 校验 guard 推进后的库存余额与销售缺口仍可承载本次分配。
+fn validate_stock_totals(plans: &[StockAllocationPlan], latest_groups: &[StockBasisGroup]) -> Result<()> {
+    let mut line_totals = HashMap::<String, Decimal>::new();
+    let mut line_caps = HashMap::<String, Decimal>::new();
+    let mut balance_totals = HashMap::<String, Decimal>::new();
+    let mut balance_caps = HashMap::<String, Decimal>::new();
+    for plan in plans {
+        let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
+        for requested in &plan.requested_lines {
+            let line = stock_line(latest, &requested.sales_order_line_id)?;
+            add_requested_total(
+                &mut line_totals,
+                &mut line_caps,
+                &requested.sales_order_line_id,
+                requested.quantity,
+                line.coverage.summary.remaining_quantity,
+            );
+            *balance_totals
+                .entry(latest.balance.base.id.clone())
+                .or_insert(Decimal::ZERO) += requested.quantity.to_decimal();
+            balance_caps.insert(
+                latest.balance.base.id.clone(),
+                latest.balance.available_quantity.to_decimal(),
+            );
+        }
+    }
+    if exceeds_any_cap(&line_totals, &line_caps) || exceeds_any_cap(&balance_totals, &balance_caps) {
+        return Err(procurement_quantity_changed());
+    }
+    Ok(())
+}
+
+/// 累加一条请求数量并登记该稳定销售行的统一上限。
+fn add_requested_total(
+    totals: &mut HashMap<String, Decimal>,
+    caps: &mut HashMap<String, Decimal>,
+    line_id: &str,
+    quantity: Quantity,
+    cap: Quantity,
+) {
+    *totals.entry(line_id.to_string()).or_insert(Decimal::ZERO) += quantity.to_decimal();
+    caps.insert(line_id.to_string(), cap.to_decimal());
+}
+
+/// 查找 guard 后仍有效的库存余额依据。
+fn latest_stock_group<'a>(groups: &'a [StockBasisGroup], balance_id: &str) -> Result<&'a StockBasisGroup> {
+    groups
+        .iter()
+        .find(|group| group.balance.base.id == balance_id)
+        .ok_or_else(procurement_quantity_changed)
+}
+
+/// 查找库存依据中的稳定销售行。
+fn stock_line<'a>(
+    group: &'a StockBasisGroup,
+    sales_order_line_id: &str,
+) -> Result<&'a super::creation_basis::StockBasisLine> {
+    group
+        .lines
+        .iter()
+        .find(|line| line.coverage.revision_line.sales_order_line_id.as_ref() == sales_order_line_id)
+        .ok_or_else(procurement_quantity_changed)
 }
 
 /// 查找一条选源行命中的精确依据。
@@ -480,6 +706,202 @@ fn exceeds_any_cap(totals: &HashMap<String, Decimal>, caps: &HashMap<String, Dec
         .any(|(key, total)| caps.get(key).is_none_or(|cap| total > cap))
 }
 
+/// 在事务内原子预占现有库存并写入预占建立流水。
+#[allow(clippy::too_many_arguments)]
+async fn persist_stock_allocations(
+    db: &mongodb::Database,
+    plans: &[StockAllocationPlan],
+    latest_groups: &[StockBasisGroup],
+    sales_order_id: &SalesOrderId,
+    audit_id: &str,
+    request_fingerprint: &str,
+    session: &mut ClientSession,
+) -> Result<Vec<PersistedStockAllocation>> {
+    let zero = Quantity::from_str("0").map_err(Error::Logic)?;
+    let mut persisted = Vec::new();
+    for plan in plans {
+        let latest = latest_stock_group(latest_groups, &plan.group.balance.base.id)?;
+        for requested in &plan.requested_lines {
+            let line = stock_line(latest, &requested.sales_order_line_id)?;
+            if !db
+                .stock_balances()
+                .reserve_quantity(&latest.balance.base.id, requested.quantity, session)
+                .await?
+            {
+                return Err(procurement_quantity_changed());
+            }
+            let source_allocation_id = command_request_fingerprint(
+                "inventory.allocate_existing_stock",
+                sales_order_id.as_ref(),
+                &(
+                    request_fingerprint,
+                    latest.balance.base.id.as_str(),
+                    requested.sales_order_line_id.as_str(),
+                    requested.quantity.to_string(),
+                ),
+            )?;
+            let reservation = StockReservation::new(
+                StockReservationId::new(next_id()),
+                StockReservationData {
+                    warehouse_id: latest.balance.warehouse_id.clone(),
+                    sku_id: line.coverage.goods_line.sku_id.clone(),
+                    sales_order_line_id: SalesOrderLineId::new(requested.sales_order_line_id.clone()),
+                    source_type: StockReservationSourceType::ExistingStock,
+                    purchase_line_sales_allocation_id: None,
+                    source_receipt_line_id: None,
+                    source_allocation_id: Some(source_allocation_id),
+                    reserved_quantity: requested.quantity,
+                    consumed_quantity: zero,
+                    released_quantity: zero,
+                    status: ReservationStatus::Active,
+                },
+            )?;
+            db.stock_reservations().create(&reservation, session).await?;
+            let entry = StockReservationEntry::new(
+                StockReservationEntryId::new(next_id()),
+                StockReservationEntryData {
+                    reservation_id: reservation.base.id.clone().into(),
+                    entry_type: ReservationEntryType::Establish,
+                    quantity: requested.quantity,
+                    source_document_id: audit_id.to_string(),
+                },
+            )?;
+            db.stock_reservation_entries().create(&entry, session).await?;
+            persisted.push(PersistedStockAllocation {
+                result: ExistingStockReservationResult {
+                    stock_reservation_id: reservation.base.id.clone(),
+                    sales_order_line_id: requested.sales_order_line_id.clone(),
+                    stock_balance_id: latest.balance.base.id.clone(),
+                    warehouse_id: latest.balance.warehouse_id.to_string(),
+                    quantity: requested.quantity.to_string(),
+                },
+                reservation,
+            });
+        }
+    }
+    Ok(persisted)
+}
+
+/// 为现有库存预占创建或补充同仓仓发草稿。
+async fn create_stock_delivery_drafts(
+    db: &mongodb::Database,
+    sales_order_id: &SalesOrderId,
+    allocations: &[PersistedStockAllocation],
+    session: &mut ClientSession,
+) -> Result<()> {
+    let mut by_warehouse = BTreeMap::<String, Vec<&StockReservation>>::new();
+    for allocation in allocations {
+        by_warehouse
+            .entry(allocation.reservation.warehouse_id.to_string())
+            .or_default()
+            .push(&allocation.reservation);
+    }
+    for (warehouse_id, reservations) in by_warehouse {
+        ensure_stock_delivery_for_warehouse(
+            db,
+            sales_order_id,
+            &WarehouseId::new(warehouse_id),
+            &reservations,
+            session,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// 创建一个仓发草稿，或向同销售单同仓草稿补入新的预占行。
+async fn ensure_stock_delivery_for_warehouse(
+    db: &mongodb::Database,
+    sales_order_id: &SalesOrderId,
+    warehouse_id: &WarehouseId,
+    reservations: &[&StockReservation],
+    session: &mut ClientSession,
+) -> Result<()> {
+    let existing = db
+        .fulfillment()
+        .draft_warehouse_delivery(sales_order_id, warehouse_id, session)
+        .await?;
+    if let Some(delivery) = existing {
+        append_stock_delivery_lines(db, &delivery, reservations, session).await?;
+        return Ok(());
+    }
+    let delivery_id = DeliveryId::new(next_id());
+    let delivery = Delivery::new(
+        delivery_id.clone(),
+        DeliveryData {
+            delivery_no: format!("FH-{}", delivery_id.as_ref()),
+            delivery_type: DeliveryType::WarehouseShip,
+            sales_order_id: sales_order_id.clone(),
+            purchase_order_id: None,
+            warehouse_id: Some(warehouse_id.clone()),
+            carrier: None,
+            tracking_no: None,
+            address_snapshot_encrypted: None,
+            address_snapshot_fingerprint: None,
+        },
+    )?;
+    let lines = build_stock_delivery_lines(&delivery_id, reservations, 1)?;
+    db.fulfillment()
+        .create_delivery_with_lines(&delivery, &lines, session)
+        .await
+        .map_err(Into::into)
+}
+
+/// 向现有仓发草稿追加尚未出现的库存预占行。
+async fn append_stock_delivery_lines(
+    db: &mongodb::Database,
+    delivery: &Delivery,
+    reservations: &[&StockReservation],
+    session: &mut ClientSession,
+) -> Result<()> {
+    let delivery_id = DeliveryId::new(delivery.base.id.clone());
+    let existing = db
+        .fulfillment()
+        .delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session)
+        .await?;
+    let existing_reservations = existing
+        .iter()
+        .filter_map(|line| line.stock_reservation_id.as_ref().map(ToString::to_string))
+        .collect::<HashSet<_>>();
+    let pending = reservations
+        .iter()
+        .copied()
+        .filter(|reservation| !existing_reservations.contains(&reservation.base.id))
+        .collect::<Vec<_>>();
+    let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
+    for line in build_stock_delivery_lines(&delivery_id, &pending, next_line_no)? {
+        db.delivery_lines().create(&line, session).await?;
+    }
+    Ok(())
+}
+
+/// 将库存预占投影为仓发草稿行。
+fn build_stock_delivery_lines(
+    delivery_id: &DeliveryId,
+    reservations: &[&StockReservation],
+    first_line_no: u32,
+) -> Result<Vec<DeliveryLine>> {
+    reservations
+        .iter()
+        .enumerate()
+        .map(|(index, reservation)| {
+            DeliveryLine::new(
+                DeliveryLineId::new(next_id()),
+                DeliveryLineData {
+                    delivery_id: delivery_id.clone(),
+                    line_no: first_line_no + index as u32,
+                    sales_order_line_id: reservation.sales_order_line_id.clone(),
+                    quantity: reservation.reserved_quantity,
+                    stock_reservation_id: Some(reservation.base.id.clone().into()),
+                    purchase_line_sales_allocation_id: None,
+                },
+                DeliveryType::WarehouseShip,
+            )
+            .map_err(Error::Logic)
+        })
+        .collect()
+}
+
 /// 构造选源命令载荷指纹。
 ///
 /// # 参数
@@ -504,6 +926,7 @@ fn sourcing_request_fingerprint(
             (
                 line.sales_order_line_id.clone(),
                 line.basis_id.clone(),
+                line.source_type,
                 line.quantity.to_string(),
                 line.expected_delivery_date.to_string(),
             )
@@ -523,7 +946,7 @@ fn sourcing_request_fingerprint(
 /// * `audit_id` - 稳定收据 ID
 /// * `request_fingerprint` - 当前命令载荷指纹
 /// * `sales_order_id` - 来源销售单，作为收据资源身份
-/// * `orders` - 已提交审批的采购单
+/// * `receipt` - 采购单与库存预留的完整命令结果
 /// * `actor` - 审计操作人
 /// * `session` - MongoDB 事务会话
 ///
@@ -534,32 +957,22 @@ fn sourcing_request_fingerprint(
 /// 收据序列化或仓储写入失败时返回错误。
 ///
 /// # 关键业务约束
-/// 收据与全部已提交采购单必须同事务提交。
+/// 收据与全部采购单及库存预留必须同事务提交。
 async fn write_sourcing_receipt(
     db: &mongodb::Database,
     audit_id: &str,
     request_fingerprint: &str,
     sales_order_id: &str,
-    orders: &[CreatePurchaseOrderResult],
+    receipt: &SourcingReceipt,
     actor: &AuditActor,
     session: &mut ClientSession,
 ) -> Result<()> {
-    let receipt = SourcingReceipt {
-        orders: orders
-            .iter()
-            .map(|order| SourcingOrderReceipt {
-                purchase_order_id: order.purchase_order_id.clone(),
-                purchase_no: order.purchase_no.clone(),
-                lock_version: order.lock_version,
-            })
-            .collect(),
-    };
     let audit = actor.clone().resource_log_with_id(
         audit_id.to_string(),
         CREATE_SOURCING_ACTION,
         "purchase_order",
         sales_order_id.to_string(),
-        Some(command_receipt_message(request_fingerprint, &receipt)?),
+        Some(command_receipt_message(request_fingerprint, receipt)?),
     )?;
     db.audit_logs().create(&audit, session).await?;
     Ok(())
@@ -613,6 +1026,7 @@ async fn replay_sourcing(
                 reference: order.purchase_order_id,
             })
             .collect(),
+        stock_reservations: receipt.stock_reservations,
         replayed: true,
         reference: sales_order_id.to_string(),
     }))
@@ -628,7 +1042,7 @@ mod tests {
 
     use super::{
         exceeds_any_cap, find_assignment_group_index, normalize_assignment_pairs, DedupError,
-        RequestedSourcingLine,
+        RequestedSourcingLine, SupplySourceType,
     };
 
     /// 同一销售行可拆到不同履约方案。
@@ -697,7 +1111,11 @@ mod tests {
         assert!(production.contains("ensure_purchase_order_actor_account"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(production.contains("advance_procurement_guard"));
+        assert!(production.contains("reserve_quantity"));
+        assert!(production.contains("StockReservationSourceType::ExistingStock"));
+        assert!(production.contains("create_stock_delivery_drafts"));
         assert!(production.contains("persist_basis_draft"));
+        assert!(production.contains("sync_procurement_tasks_for_sales_order"));
     }
 
     /// 构造测试用选源行。
@@ -705,6 +1123,7 @@ mod tests {
         RequestedSourcingLine {
             sales_order_line_id: sales_order_line_id.to_string(),
             basis_id: basis_id.to_string(),
+            source_type: SupplySourceType::Purchase,
             quantity: entities::money::Quantity::from_str("1").expect("测试数量合法"),
             expected_delivery_date: BusinessDate::from_str("2026-09-01").expect("测试日期合法"),
         }

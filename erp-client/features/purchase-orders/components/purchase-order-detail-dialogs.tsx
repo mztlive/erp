@@ -110,8 +110,8 @@ export function PurchaseOrderDetailDialogs({
                     `来源销售单 ${order.header.salesOrderNo}`,
                 ]}
                 effects={[
-                    "释放本草稿占用的销售待采购数量",
-                    "同步更新采购任务和继续建单依据",
+                    "释放本草稿占用的销售待分配供给数量",
+                    "同步更新供给分配任务和可选依据",
                 ]}
                 irreversibleEffects={["作废后的采购草稿不能恢复或再次提交"]}
                 pending={voidPending}

@@ -23,6 +23,27 @@ use crate::validation::normalize_required_text;
 /// 来源单据标识最大长度。
 const SOURCE_DOCUMENT_MAX_LEN: usize = 256;
 
+/// 库存预占来源。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum StockReservationSourceType {
+    /// 采购合格入库沿采购销售分配建立。
+    #[default]
+    PurchaseReceipt,
+    /// 供给分配确认时直接从公司现有库存建立。
+    ExistingStock,
+}
+
+impl StockReservationSourceType {
+    /// 返回用于持久化与查询的稳定代码。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PurchaseReceipt => "PURCHASE_RECEIPT",
+            Self::ExistingStock => "EXISTING_STOCK",
+        }
+    }
+}
+
 /// 预占状态（数据模型 §6.7：有效、部分消耗、已消耗、已释放）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -132,10 +153,18 @@ pub struct StockReservationData {
     pub sku_id: SkuId,
     /// 唯一归属销售明细。
     pub sales_order_line_id: SalesOrderLineId,
-    /// 来源采购分配。
-    pub purchase_line_sales_allocation_id: PurchaseLineSalesAllocationId,
-    /// 合格入库来源。
-    pub source_receipt_line_id: PurchaseReceiptLineId,
+    /// 预占来源；旧数据缺省为采购合格入库。
+    #[serde(default)]
+    pub source_type: StockReservationSourceType,
+    /// 来源采购分配；采购合格入库来源必填。
+    #[serde(default)]
+    pub purchase_line_sales_allocation_id: Option<PurchaseLineSalesAllocationId>,
+    /// 合格入库来源；采购合格入库来源必填。
+    #[serde(default)]
+    pub source_receipt_line_id: Option<PurchaseReceiptLineId>,
+    /// 现有库存分配动作身份；现有库存来源必填且全局唯一。
+    #[serde(default)]
+    pub source_allocation_id: Option<String>,
     /// 当前有效预占。
     pub reserved_quantity: Quantity,
     /// 已消耗数量。
@@ -173,10 +202,18 @@ pub struct StockReservation {
     pub sku_id: SkuId,
     /// 唯一归属销售明细。
     pub sales_order_line_id: SalesOrderLineId,
-    /// 来源采购分配。
-    pub purchase_line_sales_allocation_id: PurchaseLineSalesAllocationId,
-    /// 合格入库来源。
-    pub source_receipt_line_id: PurchaseReceiptLineId,
+    /// 预占来源；旧数据缺省为采购合格入库。
+    #[serde(default)]
+    pub source_type: StockReservationSourceType,
+    /// 来源采购分配；采购合格入库来源必填。
+    #[serde(default)]
+    pub purchase_line_sales_allocation_id: Option<PurchaseLineSalesAllocationId>,
+    /// 合格入库来源；采购合格入库来源必填。
+    #[serde(default)]
+    pub source_receipt_line_id: Option<PurchaseReceiptLineId>,
+    /// 现有库存分配动作身份；现有库存来源必填且全局唯一。
+    #[serde(default)]
+    pub source_allocation_id: Option<String>,
     /// 当前有效预占。
     pub reserved_quantity: Quantity,
     /// 已消耗数量。
@@ -217,13 +254,16 @@ impl StockReservation {
             data.consumed_quantity,
             data.released_quantity,
         )?;
+        let source_allocation_id = normalize_reservation_source(&data)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             warehouse_id: data.warehouse_id,
             sku_id: data.sku_id,
             sales_order_line_id: data.sales_order_line_id,
+            source_type: data.source_type,
             purchase_line_sales_allocation_id: data.purchase_line_sales_allocation_id,
             source_receipt_line_id: data.source_receipt_line_id,
+            source_allocation_id,
             reserved_quantity: data.reserved_quantity,
             consumed_quantity: data.consumed_quantity,
             released_quantity: data.released_quantity,
@@ -257,6 +297,41 @@ impl StockReservation {
         self.released_quantity = released;
         self.status = status;
         Ok(())
+    }
+}
+
+/// 校验并规范化预占来源字段。
+fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<String>> {
+    match data.source_type {
+        StockReservationSourceType::PurchaseReceipt => {
+            if data.purchase_line_sales_allocation_id.is_none() || data.source_receipt_line_id.is_none() {
+                return Err(Error::from("采购入库预占必须关联采购销售分配和入库行"));
+            }
+            if data.source_allocation_id.is_some() {
+                return Err(Error::from("采购入库预占不得携带现有库存分配身份"));
+            }
+            Ok(None)
+        }
+        StockReservationSourceType::ExistingStock => {
+            if data.purchase_line_sales_allocation_id.is_some() || data.source_receipt_line_id.is_some() {
+                return Err(Error::from("现有库存预占不得关联采购销售分配或入库行"));
+            }
+            data.source_allocation_id
+                .clone()
+                .map(|value| {
+                    normalize_required_text(
+                        value,
+                        "现有库存分配身份不能为空",
+                        SOURCE_DOCUMENT_MAX_LEN,
+                        "现有库存分配身份过长",
+                    )
+                })
+                .transpose()?
+                .map_or_else(
+                    || Err(Error::from("现有库存预占必须关联分配动作")),
+                    |value| Ok(Some(value)),
+                )
+        }
     }
 }
 
@@ -395,8 +470,10 @@ mod tests {
             warehouse_id: WarehouseId::new("wh-1"),
             sku_id: SkuId::new("sku-1"),
             sales_order_line_id: SalesOrderLineId::new("so-line-1"),
-            purchase_line_sales_allocation_id: PurchaseLineSalesAllocationId::new("pla-1"),
-            source_receipt_line_id: PurchaseReceiptLineId::new("receipt-line-1"),
+            source_type: StockReservationSourceType::PurchaseReceipt,
+            purchase_line_sales_allocation_id: Some(PurchaseLineSalesAllocationId::new("pla-1")),
+            source_receipt_line_id: Some(PurchaseReceiptLineId::new("receipt-line-1")),
+            source_allocation_id: None,
             reserved_quantity: Quantity::from_str("10").unwrap(),
             consumed_quantity: Quantity::from_str("0").unwrap(),
             released_quantity: Quantity::from_str("0").unwrap(),
@@ -419,6 +496,49 @@ mod tests {
         let reservation = StockReservation::new(StockReservationId::new("rsv-1"), data()).unwrap();
         assert_eq!(reservation.reserved_quantity, Quantity::from_str("10").unwrap());
         assert_eq!(reservation.status, ReservationStatus::Active);
+    }
+
+    /// 现有库存来源必须使用独立分配身份，不能伪造采购引用。
+    #[test]
+    fn existing_stock_source_has_exclusive_identity() {
+        let direct = StockReservationData {
+            source_type: StockReservationSourceType::ExistingStock,
+            purchase_line_sales_allocation_id: None,
+            source_receipt_line_id: None,
+            source_allocation_id: Some(" stock-allocation-1 ".to_string()),
+            ..data()
+        };
+        let reservation = StockReservation::new(StockReservationId::new("direct-1"), direct).unwrap();
+        assert_eq!(
+            reservation.source_allocation_id.as_deref(),
+            Some("stock-allocation-1")
+        );
+
+        let invalid = StockReservationData {
+            source_type: StockReservationSourceType::ExistingStock,
+            source_allocation_id: Some("stock-allocation-2".to_string()),
+            ..data()
+        };
+        assert!(StockReservation::new(StockReservationId::new("direct-2"), invalid).is_err());
+    }
+
+    /// 旧库存预占没有来源字段时必须按采购入库来源读取。
+    #[test]
+    fn legacy_reservation_data_defaults_to_purchase_receipt() {
+        let legacy: StockReservationData = serde_json::from_value(serde_json::json!({
+            "warehouse_id": "wh-1",
+            "sku_id": "sku-1",
+            "sales_order_line_id": "so-line-1",
+            "purchase_line_sales_allocation_id": "pla-1",
+            "source_receipt_line_id": "receipt-line-1",
+            "reserved_quantity": "10",
+            "consumed_quantity": "0",
+            "released_quantity": "0",
+            "status": "ACTIVE"
+        }))
+        .unwrap();
+        assert_eq!(legacy.source_type, StockReservationSourceType::PurchaseReceipt);
+        assert!(StockReservation::new(StockReservationId::new("legacy-1"), legacy).is_ok());
     }
 
     /// 状态一致性：全部状态 × 数量组合的合法与非法判定。

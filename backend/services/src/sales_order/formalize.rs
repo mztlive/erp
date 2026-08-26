@@ -313,7 +313,7 @@ async fn persist_formalized_submission_write(
     Ok(())
 }
 
-/// 按负责人分组构造采购建单任务。
+/// 按负责人分组构造供给分配任务。
 ///
 /// # 参数
 /// * `order` - 待生效销售单
@@ -359,10 +359,7 @@ fn build_procurement_work_items(
                     priority: WorkItemPriority::Normal,
                     due_at: None,
                     reason_code: Some("SALES_ORDER_EFFECTIVE".to_string()),
-                    impact_summary: Some(format!(
-                        "销售单 {} 的 {line_count} 行待创建采购单",
-                        order.order_no
-                    )),
+                    impact_summary: Some(format!("销售单 {} 的 {line_count} 行待分配供给", order.order_no)),
                 },
                 responsibility_key,
                 line_ids,
@@ -372,7 +369,7 @@ fn build_procurement_work_items(
         .collect()
 }
 
-/// 幂等写入同一销售生效事务中的采购建单任务。
+/// 幂等写入同一销售生效事务中的供给分配任务。
 ///
 /// # 参数
 /// * `db` - 数据库
@@ -392,7 +389,7 @@ async fn persist_procurement_work_items(
     for item in items {
         let responsibility_key = item
             .responsibility_key()
-            .ok_or_else(|| Error::Internal("采购建单任务缺少责任键".to_string()))?;
+            .ok_or_else(|| Error::Internal("供给分配任务缺少责任键".to_string()))?;
         let existing = db
             .work_items()
             .list_open_procurement_by_responsibility(
@@ -403,13 +400,13 @@ async fn persist_procurement_work_items(
             .await?;
         if existing.len() > 1 {
             return Err(Error::ConflictError(
-                "同一销售责任行集合存在多条开放采购建单任务".to_string(),
+                "同一销售责任行集合存在多条开放供给分配任务".to_string(),
             ));
         }
         if let Some(existing) = existing.first() {
             if existing.responsibility_scope_ids() != item.responsibility_scope_ids() {
                 return Err(Error::ConflictError(
-                    "开放采购建单任务的冻结责任范围与当前解析不一致".to_string(),
+                    "开放供给分配任务的冻结责任范围与当前解析不一致".to_string(),
                 ));
             }
         }

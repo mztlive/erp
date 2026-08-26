@@ -119,7 +119,7 @@ export function RelatedLanes({
     if (lanes.includes("purchase")) {
         const createPurchase = canCreatePurchaseFromSalesOrder(order)
         const gate = createPurchase
-            ? permissions.createPurchase(true, "当前不能从本单创建采购单")
+            ? permissions.createPurchase(true, "当前不能从本单分配供给")
             : permissions.openPurchase
         const progress = order.related.procurementProgress
         items.push(
@@ -131,13 +131,7 @@ export function RelatedLanes({
                 progressDetail={`销售总数量 ${progress.salesQuantity} · 已覆盖 ${progress.coveredQuantity} · 剩余 ${progress.remainingQuantity}`}
                 progressTestId="sales-order-procurement-progress"
                 href={purchaseOrdersWorkspaceHref(order, selfReturn)}
-                actionLabel={
-                    createPurchase
-                        ? order.related.purchaseOrders > 0
-                            ? "继续建单"
-                            : "去建单"
-                        : undefined
-                }
+                actionLabel={createPurchase ? "继续分配供给" : undefined}
                 actionTestId={
                     createPurchase ? "sales-order-continue-purchase" : undefined
                 }

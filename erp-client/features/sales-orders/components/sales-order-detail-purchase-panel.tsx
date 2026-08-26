@@ -80,7 +80,7 @@ export function PurchasePanel({
     const canPreview = permissions.previewPurchase.enabled
     const createPurchase = canCreatePurchaseFromSalesOrder(order)
     const createGate = createPurchase
-        ? permissions.createPurchase(true, "当前不能从本单创建采购单")
+        ? permissions.createPurchase(true, "当前不能从本单分配供给")
         : { enabled: false, reason: undefined }
     const purchaseCount = order.related.purchaseOrders
     const progress = order.related.procurementProgress
@@ -101,13 +101,13 @@ export function PurchasePanel({
     return (
         <div className="flex flex-col gap-4">
             <SectionLead>
-                本销售单已创建的采购单。销售重点看每张单是否已生效，以及履约、付款有没有卡住。
+                本销售单的供给覆盖与已创建采购单。现有库存可直接形成预占，采购缺口继续查看审批、履约和付款进度。
             </SectionLead>
 
             <div className={cn(surfaceInsetClassName, "px-3 py-3")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <h3 className="text-sm font-medium">本单采购</h3>
+                        <h3 className="text-sm font-medium">本单供给与采购</h3>
                         <p
                             className="mt-1 text-xs text-muted-foreground"
                             data-testid="sales-order-purchase-status"
@@ -121,7 +121,7 @@ export function PurchasePanel({
                             className="num mt-1 text-xs text-muted-foreground"
                             data-testid="sales-order-purchase-progress"
                         >
-                            数量覆盖 {progress.salesQuantity} · 已覆盖{" "}
+                            供给目标 {progress.salesQuantity} · 已覆盖{" "}
                             {progress.coveredQuantity} · 剩余{" "}
                             {progress.remainingQuantity}
                             {statusSummary ? ` · ${progress.label}` : null}
@@ -143,7 +143,7 @@ export function PurchasePanel({
                                     />
                                 }
                             >
-                                {purchaseCount > 0 ? "继续建单" : "去建单"}
+                                继续分配供给
                             </Button>
                         ) : (
                             <Button
@@ -154,7 +154,7 @@ export function PurchasePanel({
                                 disabled
                                 title={createGate.reason}
                             >
-                                {purchaseCount > 0 ? "继续建单" : "去建单"}
+                                继续分配供给
                             </Button>
                         )
                     ) : null}

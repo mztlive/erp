@@ -63,7 +63,7 @@ impl ProcurementCoverageSummary {
 /// 行集合为空时返回领域错误。
 pub fn procurement_responsibility_key(line_ids: &[String]) -> Result<String> {
     if line_ids.is_empty() {
-        return Err(Error::from("采购建单任务责任行不能为空"));
+        return Err(Error::from("供给分配任务责任行不能为空"));
     }
     let mut digest = Sha256::new();
     for line_id in line_ids {

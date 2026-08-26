@@ -1758,7 +1758,7 @@ impl WorkItemService {
     /// 对象未注册、不存在、版本变化或目标账号访问条件不足时返回错误。
     ///
     /// # 关键业务约束
-    /// 采购建单任务按具体账号和 `purchase_order:create` 授权，不额外引入团队池或固定角色约束。
+    /// 供给分配任务按具体账号和 `purchase_order:create` 授权，不额外引入团队池或固定角色约束。
     async fn ensure_assignment_candidate_access_with_executor(
         &self,
         item: &WorkItem,
@@ -2876,7 +2876,7 @@ fn apply_subject_display(
 /// * `fact` - 业务对象事实
 ///
 /// # 返回
-/// 具备对象参与关系，或是采购建单任务的具体负责人时返回 `true`。
+/// 具备对象参与关系，或是供给分配任务的具体负责人时返回 `true`。
 ///
 /// # 错误
 /// 无；调用方必须另行验证对象权限。
@@ -3568,7 +3568,7 @@ mod tests {
                 priority: WorkItemPriority::Normal,
                 due_at: None,
                 reason_code: Some("SALES_ORDER_EFFECTIVE".to_string()),
-                impact_summary: Some("1 行待创建采购单".to_string()),
+                impact_summary: Some("1 行待分配供给".to_string()),
             },
             "sales-lines:digest".to_string(),
             vec!["sales-line-1".to_string()],

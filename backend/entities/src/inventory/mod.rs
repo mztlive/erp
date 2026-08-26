@@ -31,5 +31,5 @@ pub use stock_balance::{StockBalance, StockBalanceData, StockBalanceUpdate};
 pub use stock_movement::{MovementDirection, MovementType, StockMovement, StockMovementData};
 pub use stock_reservation::{
     ReservationEntryType, ReservationStatus, StockReservation, StockReservationData, StockReservationEntry,
-    StockReservationEntryData, StockReservationUpdate,
+    StockReservationEntryData, StockReservationSourceType, StockReservationUpdate,
 };

@@ -3,6 +3,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalActionResponse } from "@/features/purchase-orders/types"
 import type {
     CreatePurchaseOrderFromBasisInput,
+    CreatedStockReservation,
     CreatePurchaseOrdersFromSourcingInput,
     CreatedPurchaseOrderDraft,
     PurchaseChangeOrderSummary,
@@ -333,7 +334,7 @@ export async function createPurchaseOrderFromBasis(
                 // 后端冲突码自带具体原因，前端透传不再改写
                 message: getErrorMessage(
                     error,
-                    "可采购数量已更新，请刷新后重试",
+                    "可分配供给数量已更新，请刷新后重试",
                 ),
                 code: "CONFLICT",
             }
@@ -364,7 +365,12 @@ function mapCreatedDraft(data: BackendCreateResult): CreatedPurchaseOrderDraft {
  */
 export async function createPurchaseOrdersFromSourcing(
     input: CreatePurchaseOrdersFromSourcingInput,
-): Promise<FormalActionResponse<{ orders: CreatedPurchaseOrderDraft[] }>> {
+): Promise<
+    FormalActionResponse<{
+        orders: CreatedPurchaseOrderDraft[]
+        stockReservations: CreatedStockReservation[]
+    }>
+> {
     try {
         const data = await apiPost<BackendSourcingCreateResult>(
             "/admin/purchase-orders/from-sourcing",
@@ -374,6 +380,7 @@ export async function createPurchaseOrdersFromSourcing(
                 lines: input.lines.map((line) => ({
                     sales_order_line_id: line.salesOrderLineId,
                     basis_id: line.basisId,
+                    source_type: line.sourceType,
                     quantity: line.quantity,
                     expected_delivery_date: line.expectedDeliveryDate,
                 })),
@@ -384,6 +391,15 @@ export async function createPurchaseOrdersFromSourcing(
             status: "succeeded",
             data: {
                 orders: (data.orders ?? []).map(mapCreatedDraft),
+                stockReservations: (data.stock_reservations ?? []).map(
+                    (reservation) => ({
+                        stockReservationId: reservation.stock_reservation_id,
+                        salesOrderLineId: reservation.sales_order_line_id,
+                        stockBalanceId: reservation.stock_balance_id,
+                        warehouseId: reservation.warehouse_id,
+                        quantity: reservation.quantity,
+                    }),
+                ),
             },
             reference: data.reference,
         }
@@ -393,7 +409,7 @@ export async function createPurchaseOrdersFromSourcing(
                 status: "failed",
                 message: getErrorMessage(
                     error,
-                    "可采购数量已更新，请刷新后重试",
+                    "可分配供给数量已更新，请刷新后重试",
                 ),
                 code: "CONFLICT",
             }

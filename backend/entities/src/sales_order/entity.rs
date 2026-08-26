@@ -645,23 +645,23 @@ impl SalesOrder {
         self.stable.current_revision_id.as_deref() == Some(base_revision_id.as_ref())
     }
 
-    /// 返回采购建单前的实体内阻塞原因。
+    /// 返回供给分配前的实体内阻塞原因。
     ///
     /// # 参数
-    /// * `remaining_quantity` - 当前销售版本尚未被采购覆盖的数量
+    /// * `remaining_quantity` - 当前销售版本尚未被供给覆盖的数量
     ///
     /// # 返回
     /// 非实物服务、未生效或无剩余数量时返回稳定阻塞说明；实体状态允许时返回
     /// `None`。权限与责任任务仍由 Service 校验。
     pub fn procurement_creation_blocker(&self, remaining_quantity: Quantity) -> Option<&'static str> {
         if !self.business_type.is_goods_service() {
-            return Some("非实物及服务销售单无需创建采购单");
+            return Some("非实物及服务销售单无需供给分配");
         }
         if self.commercial_status != CommercialStatus::Effective {
-            return Some("销售单最终生效后才能创建采购单");
+            return Some("销售单最终生效后才能分配供给");
         }
         (remaining_quantity.to_decimal() <= rust_decimal::Decimal::ZERO)
-            .then_some("当前销售单待采购数量已全部覆盖")
+            .then_some("当前销售单待分配供给已全部覆盖")
     }
 
     /// 刷新履约、回款、开票与关闭进度。
@@ -1090,7 +1090,7 @@ mod tests {
         );
         assert_eq!(
             order.procurement_creation_blocker(Quantity::from_str("1").unwrap()),
-            Some("销售单最终生效后才能创建采购单")
+            Some("销售单最终生效后才能分配供给")
         );
 
         order.start_approval_submission("admin-1").unwrap();
@@ -1106,7 +1106,7 @@ mod tests {
             .is_none());
         assert_eq!(
             order.procurement_creation_blocker(Quantity::from_str("0").unwrap()),
-            Some("当前销售单待采购数量已全部覆盖")
+            Some("当前销售单待分配供给已全部覆盖")
         );
     }
 

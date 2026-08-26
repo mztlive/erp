@@ -58,11 +58,11 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "去确认采购计划",
     },
     PROCUREMENT_ORDER_CREATION: {
-        label: "待采购建单",
+        label: "待供给分配",
         family: "fulfillment",
-        badgeLabel: "待建采购",
+        badgeLabel: "供给分配",
         badgeVariant: "lime",
-        openActionLabel: "去建采购单",
+        openActionLabel: "去分配供给",
     },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
@@ -401,7 +401,7 @@ export function workspaceReadActionLabel(businessObjectType: string): string {
 }
 
 /**
- * 跳转目标工作面的按钮。专项任务用「去建采购单」等；通用审批用「打开销售单」。
+ * 跳转目标工作面的按钮。专项任务使用对应业务动作；通用审批使用「打开销售单」。
  */
 export function workspaceOpenActionLabel(
     workItemType: string,

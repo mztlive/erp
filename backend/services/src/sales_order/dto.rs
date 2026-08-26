@@ -827,23 +827,23 @@ pub struct ActiveCardSalesApprovalView {
     pub action_blockers: Vec<ProcessingBlockerView>,
 }
 
-/// 销售当前版本的采购数量进度。
+/// 销售当前版本的统一供给覆盖进度。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesProcurementCoverageView {
     /// 当前销售版本商品/服务目标总数量。
     pub total_quantity: Quantity,
-    /// 未作废采购单按当前指针覆盖数量。
+    /// 有效采购与现有库存直接分配的覆盖数量。
     pub covered_quantity: Quantity,
-    /// 当前仍可继续创建采购单的数量。
+    /// 当前仍待分配供给的数量。
     pub remaining_quantity: Quantity,
     /// 覆盖进度，范围 `0..=1`。
     pub progress: Rate,
 }
 
-/// 当前账号从销售单继续创建采购单的访问投影。
+/// 当前账号从销售单继续执行供给分配的访问投影。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseCreationAccessView {
-    /// 当前账号是否拥有该销售单的开放采购建单任务。
+    /// 当前账号是否拥有该销售单的开放供给分配任务。
     pub allowed: bool,
     /// 当前账号拥有的开放任务数量。
     pub task_count: usize,
@@ -894,9 +894,9 @@ pub struct SalesOrderDetailView {
     pub owner_user_name: Option<String>,
     /// 当前关联的未作废采购单数量。
     pub purchase_order_count: u64,
-    /// 当前销售版本采购目标、覆盖、剩余与进度。
+    /// 当前销售版本供给目标、覆盖、剩余与进度。
     pub purchase_coverage: SalesProcurementCoverageView,
-    /// 当前账号是否可以从该销售单继续创建采购单。
+    /// 当前账号是否可以从该销售单继续执行供给分配。
     pub purchase_creation_access: PurchaseCreationAccessView,
     /// 应收子账已核销含税合计。
     pub settled_total: Amount,

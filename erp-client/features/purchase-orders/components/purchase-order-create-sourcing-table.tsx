@@ -48,8 +48,8 @@ export function PurchaseOrderCreateSourcingTable({
                         <TableHead data-align="end">销售数量</TableHead>
                         <TableHead data-align="end">已覆盖</TableHead>
                         <TableHead data-align="end">剩余数量</TableHead>
-                        <TableHead>供应商 / 履约责任</TableHead>
-                        <TableHead data-align="end">本次采购数量</TableHead>
+                        <TableHead>供给来源 / 履约责任</TableHead>
+                        <TableHead data-align="end">本次分配数量</TableHead>
                         <TableHead data-align="end">含税成本</TableHead>
                         <TableHead data-align="end">进项税率</TableHead>
                         <TableHead data-align="end">预计交期</TableHead>
@@ -93,7 +93,7 @@ export function PurchaseOrderCreateSourcingTable({
                                                             checked === true,
                                                         )
                                                     }
-                                                    aria-label={`本单采购 ${product.itemName}`}
+                                                    aria-label={`本次供给分配 ${product.itemName}`}
                                                     data-testid={`purchase-sourcing-selected-${input.rowKey}`}
                                                 />
                                             </label>
@@ -149,8 +149,12 @@ export function PurchaseOrderCreateSourcingTable({
                                                 options={product.options.map(
                                                     (option) => ({
                                                         value: option.basisId,
-                                                        label: `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
-                                                        keywords: `${option.supplierId} ${option.fulfillmentResponsibility}`,
+                                                        label:
+                                                            option.sourceType ===
+                                                            "EXISTING_STOCK"
+                                                                ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
+                                                                : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                                                        keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
                                                     }),
                                                 )}
                                                 onValueChange={(
@@ -192,7 +196,7 @@ export function PurchaseOrderCreateSourcingTable({
                                     >
                                         {(field) => (
                                             <field.TextField
-                                                label="本次采购数量"
+                                                label="本次分配数量"
                                                 hideLabel
                                                 type="number"
                                                 inputMode="decimal"
@@ -211,16 +215,14 @@ export function PurchaseOrderCreateSourcingTable({
                                     salesOrderLineId={input.salesOrderLineId}
                                 />
                                 <TableCell className="min-w-36">
-                                    <form.AppField
-                                        name={`lines[${index}].expectedDeliveryDate`}
-                                    >
-                                        {(field) => (
-                                            <field.DateField
-                                                label="预计交付日"
-                                                hideLabel
-                                            />
-                                        )}
-                                    </form.AppField>
+                                    <SourcingExpectedDeliveryField
+                                        form={form}
+                                        index={index}
+                                        order={order}
+                                        salesOrderLineId={
+                                            input.salesOrderLineId
+                                        }
+                                    />
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-1">
@@ -262,6 +264,48 @@ export function PurchaseOrderCreateSourcingTable({
     )
 }
 
+/** 采购来源可确认预计交期；现有库存只建立预留，不伪造采购交期。 */
+function SourcingExpectedDeliveryField({
+    form,
+    index,
+    order,
+    salesOrderLineId,
+}: {
+    form: PurchaseOrderCreateFormApi
+    index: number
+    order: SourcingSalesOrder
+    salesOrderLineId: string
+}) {
+    return (
+        <form.Subscribe
+            selector={(state) => state.values.lines[index]?.basisId ?? ""}
+        >
+            {(basisId) => {
+                const product = order.lines.find(
+                    (line) => line.salesOrderLineId === salesOrderLineId,
+                )
+                const option = findSourcingOption(product, basisId)
+                if (option?.sourceType === "EXISTING_STOCK") {
+                    return (
+                        <span className="text-xs text-muted-foreground">
+                            不适用
+                        </span>
+                    )
+                }
+                return (
+                    <form.AppField
+                        name={`lines[${index}].expectedDeliveryDate`}
+                    >
+                        {(field) => (
+                            <field.DateField label="预计交付日" hideLabel />
+                        )}
+                    </form.AppField>
+                )
+            }}
+        </form.Subscribe>
+    )
+}
+
 /**
  * 按当前选用履约方案展示成本与税率。
  */
@@ -291,14 +335,20 @@ function SourcingOptionFacts({
                 return (
                     <>
                         <TableCell data-align="end">
-                            {option ? (
+                            {option?.sourceType === "EXISTING_STOCK" ? (
+                                <span className="text-xs text-muted-foreground">
+                                    按库存核算
+                                </span>
+                            ) : option ? (
                                 <MoneyValue value={option.unitCostGross} />
                             ) : (
                                 "—"
                             )}
                         </TableCell>
                         <TableCell data-align="end">
-                            {option ? (
+                            {option?.sourceType === "EXISTING_STOCK" ? (
+                                "—"
+                            ) : option ? (
                                 <RateValue
                                     value={multiplyFixed(
                                         option.inputTaxRate,

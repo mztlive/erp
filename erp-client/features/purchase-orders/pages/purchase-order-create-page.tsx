@@ -44,6 +44,7 @@ import {
     assignBestSourcingOptions,
     buildDefaultSourcingLines,
     buildPurchaseOrderPreviews,
+    buildStockAllocationPreviews,
     buildSourcingWorkspace,
     commonSourcingOptionsForSelected,
     findSourcingOption,
@@ -111,15 +112,23 @@ export function PurchaseOrderCreatePage({
                 (candidate) => candidate.salesOrderId === value.salesOrderId,
             )
             if (!order) return
-            const selected = value.lines.filter(
-                (line) => line.selected && line.basisId,
-            )
+            const selected = value.lines.flatMap((line) => {
+                if (!line.selected || !line.basisId) return []
+                const product = order.lines.find(
+                    (candidate) =>
+                        candidate.salesOrderLineId === line.salesOrderLineId,
+                )
+                const option = findSourcingOption(product, line.basisId)
+                if (!option) return []
+                return [{ line, option }]
+            })
             const fingerprint = JSON.stringify({
                 salesOrderId: order.salesOrderId,
                 workItemId: order.workItemId,
-                lines: selected.map((line) => ({
+                lines: selected.map(({ line, option }) => ({
                     salesOrderLineId: line.salesOrderLineId,
                     basisId: line.basisId,
+                    sourceType: option.sourceType,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
@@ -133,9 +142,10 @@ export function PurchaseOrderCreatePage({
             const result = await createMutation.mutateAsync({
                 workItemId: order.workItemId,
                 salesOrderId: order.salesOrderId,
-                lines: selected.map((line) => ({
+                lines: selected.map(({ line, option }) => ({
                     salesOrderLineId: line.salesOrderLineId,
                     basisId: line.basisId,
+                    sourceType: option.sourceType,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
@@ -144,12 +154,17 @@ export function PurchaseOrderCreatePage({
             if (result.status === "succeeded") {
                 createIntentRef.current = null
                 const count = result.data.orders.length
+                const stockCount = result.data.stockReservations.length
                 toast.add({
-                    title: "采购单已提交审批",
+                    title: "供给分配已完成",
                     description:
-                        count > 1
-                            ? `已按履约方案拆成 ${count} 张采购单并提交审批。`
-                            : "已创建 1 张采购单并提交审批。",
+                        count === 0
+                            ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
+                            : stockCount > 0
+                              ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
+                              : count > 1
+                                ? `已将缺口拆成 ${count} 张采购单并提交审批。`
+                                : "已创建 1 张采购单并提交审批。",
                     type: "success",
                     timeout: 4000,
                 })
@@ -162,7 +177,7 @@ export function PurchaseOrderCreatePage({
                     await basesQuery.refetch()
                 }
                 setActionError({
-                    title: "建单失败",
+                    title: "供给分配失败",
                     description:
                         result.code === "CONFLICT"
                             ? `${result.message} 创建依据已刷新，请核对后重试。`
@@ -171,7 +186,7 @@ export function PurchaseOrderCreatePage({
                 return
             }
             setActionError({
-                title: "建单结果待确认",
+                title: "供给分配结果待确认",
                 description: `${result.message} 请保留当前页面并使用同一操作重试，系统会复用本次幂等键。`,
             })
         },
@@ -230,11 +245,21 @@ export function PurchaseOrderCreatePage({
         () => buildPurchaseOrderPreviews(selectedOrder, lines),
         [lines, selectedOrder],
     )
+    const stockPreviews = React.useMemo(
+        () => buildStockAllocationPreviews(selectedOrder, lines),
+        [lines, selectedOrder],
+    )
     const previewTotals = React.useMemo(
         () =>
             sumPreviewTotals(previews.flatMap((preview) => [...preview.lines])),
         [previews],
     )
+    const confirmationDescription =
+        stockPreviews.length > 0 && previews.length > 0
+            ? `将建立 ${stockPreviews.length} 条库存预留，并为剩余缺口创建 ${previews.length} 张采购单提交审批，采购含税合计 ${previewTotals.gross}。`
+            : stockPreviews.length > 0
+              ? `将建立 ${stockPreviews.length} 条库存预留；现有库存已满足本次分配，无需创建采购单。`
+              : `将为供给缺口创建 ${previews.length} 张采购单提交审批，采购含税合计 ${previewTotals.gross}。`
     const commonSourcingOptions = React.useMemo(
         () => commonSourcingOptionsForSelected(selectedOrder, lines),
         [lines, selectedOrder],
@@ -290,11 +315,11 @@ export function PurchaseOrderCreatePage({
         writeLines(next)
         const filled = next.filter((line) => line.basisId).length
         toast.add({
-            title: filled > 0 ? "已匹配最优履约方案" : "没有可匹配的履约方案",
+            title: filled > 0 ? "已重新分配供给" : "没有可匹配的供给方案",
             description:
                 filled > 0
-                    ? `已为 ${filled} 条明细填入最低含税成本、可覆盖剩余数量的履约方案。`
-                    : "当前明细没有合格履约方案。",
+                    ? "已优先分配现有库存，并为剩余缺口推荐采购方案。"
+                    : "当前明细没有可用库存或合格采购供给。",
             type: filled > 0 ? "success" : "warning",
             timeout: 4000,
         })
@@ -376,13 +401,13 @@ export function PurchaseOrderCreatePage({
         }
         const description =
             collectSourcingErrorMessages(form.getAllErrors()).join("；") ||
-            "请检查本次采购数量和履约方案后重试。"
+            "请检查本次分配数量和供给方案后重试。"
         setActionError({
-            title: "无法预览采购单",
+            title: "无法预览供给分配",
             description,
         })
         toast.add({
-            title: "无法预览采购单",
+            title: "无法预览供给分配",
             description,
             type: "error",
             timeout: 6000,
@@ -393,8 +418,8 @@ export function PurchaseOrderCreatePage({
         return (
             <PageScaffold>
                 <PageHeader
-                    title="新建采购单"
-                    description="正在加载可采购明细…"
+                    title="供给分配"
+                    description="正在加载库存与采购供给…"
                 />
                 <div
                     className="flex flex-col gap-3"
@@ -411,7 +436,7 @@ export function PurchaseOrderCreatePage({
     if (basesQuery.isError) {
         return (
             <PageScaffold>
-                <PageHeader title="新建采购单" description="创建依据加载失败" />
+                <PageHeader title="供给分配" description="供给依据加载失败" />
                 <BusinessFailureState
                     error={basesQuery.error}
                     onRetry={() => void basesQuery.refetch()}
@@ -433,8 +458,8 @@ export function PurchaseOrderCreatePage({
     return (
         <PageScaffold className="pb-8">
             <PageHeader
-                title="新建采购单"
-                description="先为每条销售明细选择履约方案，可按数量拆分，再预览将要创建并提交审批的采购单。"
+                title="供给分配"
+                description="系统优先推荐现有库存，不足部分再推荐采购；确认后一次完成库存预留和采购缺口建单。"
                 actions={
                     <PageActions
                         actions={[
@@ -463,11 +488,11 @@ export function PurchaseOrderCreatePage({
             {workspace.length === 0 ? (
                 <BusinessEmptyState
                     kind="no-data"
-                    title="当前没有可建采购依据"
+                    title="当前没有待分配供给"
                     description={
                         initialSalesOrderId
-                            ? "该销售单当前没有可建采购依据。可能尚未生效、没有合格供给，或待采购数量已覆盖。"
-                            : "当前没有可建采购依据。请从已生效销售单的履约页进入，或检查商品是否存在合格供给。"
+                            ? "该销售单可能尚未生效、供给已覆盖，或既无可用库存也无合格采购供给。"
+                            : "当前没有待分配供给。请检查已生效销售单、库存余额和供应商供给。"
                     }
                     action={
                         <Button
@@ -507,7 +532,7 @@ export function PurchaseOrderCreatePage({
                             <div className="flex flex-col gap-3 p-4 md:p-5">
                                 <div className="flex items-center justify-between gap-2">
                                     <h2 className="font-heading text-sm font-semibold">
-                                        销售明细与履约方案
+                                        销售明细与供给方案
                                     </h2>
                                     <span className="text-xs text-muted-foreground">
                                         {selectedOrder.lines.length} 行
@@ -536,7 +561,7 @@ export function PurchaseOrderCreatePage({
                                     <Skeleton className="h-40" />
                                 )}
                                 <p className="text-xs text-muted-foreground">
-                                    可逐行选择供应商与履约责任，也可拆分同一销售明细的数量。一键匹配会选择含税成本最低且可覆盖剩余数量的方案；同一供应商、采购类型、付款条件和履约责任的明细会合并为一张采购单。
+                                    页面已自动优先分配现有库存；库存不足时，再按可覆盖数量、成本和交期推荐采购。可调整或拆分，同一采购维度会合并为一张采购单。
                                 </p>
                             </div>
                         </section>
@@ -550,13 +575,18 @@ export function PurchaseOrderCreatePage({
                                 value: `${previews.length} 张`,
                             },
                             {
+                                id: "stock",
+                                label: "将建立库存预留",
+                                value: `${stockPreviews.length} 条`,
+                            },
+                            {
                                 id: "lines",
-                                label: "本次采购明细",
+                                label: "采购缺口明细",
                                 value: `${previews.reduce((count, preview) => count + preview.lines.length, 0)} 行`,
                             },
                             {
                                 id: "gross",
-                                label: "含税合计",
+                                label: "采购含税合计",
                                 value: (
                                     <MoneyValue value={previewTotals.gross} />
                                 ),
@@ -568,7 +598,7 @@ export function PurchaseOrderCreatePage({
                                 data-testid="purchase-create-preview"
                                 onClick={() => void openPreview()}
                             >
-                                预览采购单
+                                预览供给分配
                             </Button>
                         }
                     />
@@ -578,6 +608,7 @@ export function PurchaseOrderCreatePage({
             <PurchaseOrderCreatePreviewDialog
                 open={previewOpen}
                 previews={previews}
+                stockAllocations={stockPreviews}
                 sourceOrder={selectedOrder}
                 creating={createMutation.isPending}
                 actionError={actionError}
@@ -603,11 +634,10 @@ export function PurchaseOrderCreatePage({
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>确认创建并提交审批</AlertDialogTitle>
+                        <AlertDialogTitle>确认供给分配</AlertDialogTitle>
                         <AlertDialogDescription>
-                            将按当前选源结果创建 {previews.length}{" "}
-                            张采购单并提交审批，含税合计 {previewTotals.gross}
-                            。提交成功后将回到采购单列表。
+                            {confirmationDescription}
+                            库存和采购会在同一次提交中生效。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

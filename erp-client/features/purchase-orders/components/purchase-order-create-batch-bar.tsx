@@ -56,8 +56,11 @@ export function PurchaseOrderCreateBatchBar({
                 aria-label="批量指定履约方案"
                 options={options.map((option) => ({
                     value: option.basisId,
-                    label: `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
-                    keywords: `${option.supplierId} ${option.fulfillmentResponsibility}`,
+                    label:
+                        option.sourceType === "EXISTING_STOCK"
+                            ? `${option.supplierName} · 现货`
+                            : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                    keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
                 }))}
             />
             <Button
@@ -82,7 +85,7 @@ export function PurchaseOrderCreateBatchBar({
                 data-testid="purchase-create-match-best"
             >
                 <SparklesIcon data-icon="inline-start" />
-                匹配最优方案
+                重新自动分配
             </Button>
         </div>
     )

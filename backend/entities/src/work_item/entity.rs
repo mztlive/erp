@@ -29,7 +29,7 @@ const CLOSE_REASON_MAX_LEN: usize = 512;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkItemType {
-    /// 销售单生效后的采购建单。
+    /// 销售单生效后的供给分配（现有库存优先，缺口采购）。
     ProcurementOrderCreation,
     /// 采购单财务审核。
     PurchaseOrderReview,
@@ -457,7 +457,7 @@ impl WorkItemType {
     /// 返回稳定中文展示名。
     pub fn label(&self) -> &'static str {
         match self {
-            Self::ProcurementOrderCreation => "采购建单",
+            Self::ProcurementOrderCreation => "供给分配",
             Self::PurchaseOrderReview => "采购单财务审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
             Self::SalesChangeFinanceReview => "销售变更财务影响复核",
@@ -548,7 +548,7 @@ impl WorkItemType {
     /// 判断任务是否为采购建单责任。
     ///
     /// # 返回
-    /// 采购建单任务返回 `true`。
+    /// 供给分配任务返回 `true`。
     pub fn is_procurement_order_creation(self) -> bool {
         self == Self::ProcurementOrderCreation
     }
@@ -981,12 +981,12 @@ impl WorkItem {
         if normalized.work_item_type == WorkItemType::ProcurementOrderCreation
             && (responsibility_key.is_none() || responsibility_scope_ids.is_empty())
         {
-            return Err(Error::from("采购建单任务必须冻结责任键和责任行范围"));
+            return Err(Error::from("供给分配任务必须冻结责任键和责任行范围"));
         }
         if normalized.work_item_type != WorkItemType::ProcurementOrderCreation
             && !responsibility_scope_ids.is_empty()
         {
-            return Err(Error::from("只有采购建单任务可以冻结责任行范围"));
+            return Err(Error::from("只有供给分配任务可以冻结责任行范围"));
         }
         let responsibility_actor_ids = vec![normalized.owner_user_id.clone()];
         Ok(Self {
@@ -1065,7 +1065,7 @@ impl WorkItem {
     pub fn complete_when_requirement_satisfied(&mut self, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type != WorkItemType::ProcurementOrderCreation {
-            return Err(Error::from("只有采购建单任务可以按需求归零自动完成"));
+            return Err(Error::from("只有供给分配任务可以按需求归零自动完成"));
         }
         self.ensure_open()?;
         self.status = WorkItemStatus::Completed;
@@ -1097,19 +1097,19 @@ impl WorkItem {
         impact_summary: Option<String>,
     ) -> Result<Self> {
         if self.work_item_type != WorkItemType::ProcurementOrderCreation {
-            return Err(Error::from("只有采购建单任务可以创建释放后继任务"));
+            return Err(Error::from("只有供给分配任务可以创建释放后继任务"));
         }
         if self.status == WorkItemStatus::Open {
-            return Err(Error::from("开放采购建单任务不能创建释放后继任务"));
+            return Err(Error::from("开放供给分配任务不能创建释放后继任务"));
         }
         let responsibility_key = self
             .responsibility_key()
-            .ok_or_else(|| Error::from("历史采购建单任务缺少责任键"))?
+            .ok_or_else(|| Error::from("历史供给分配任务缺少责任键"))?
             .to_string();
         let owner_user_id = self
             .owner_user_id
             .clone()
-            .ok_or_else(|| Error::from("历史采购建单任务缺少具体责任人"))?;
+            .ok_or_else(|| Error::from("历史供给分配任务缺少具体责任人"))?;
         Self::new_with_responsibility_scope(
             id,
             WorkItemData {

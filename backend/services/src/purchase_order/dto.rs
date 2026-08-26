@@ -572,8 +572,19 @@ pub struct TotalsView {
 pub struct CreationBasisListParams {
     /// 可选来源销售单；从销售详情或工作台进入时用于收窄范围。
     pub sales_order_id: Option<String>,
-    /// 可选采购建单任务；提供时必须是当前账号拥有的开放任务。
+    /// 可选供给分配任务；提供时必须是当前账号拥有的开放任务。
     pub work_item_id: Option<String>,
+}
+
+/// 销售供给来源。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplySourceType {
+    /// 供应商采购。
+    #[default]
+    Purchase,
+    /// 公司现有库存。
+    ExistingStock,
 }
 
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
@@ -618,10 +629,12 @@ pub struct CreationBasisLineView {
 /// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
-    /// 当前账号拥有且冻结本依据销售行范围的开放采购建单任务。
+    /// 当前账号拥有且冻结本依据销售行范围的开放供给分配任务。
     pub work_item_id: String,
     /// 精确创建依据（任务、销售当前版本、供应商、采购类型、付款条件、履约责任及剩余量指纹）。
     pub basis_id: String,
+    /// 供给来源。
+    pub source_type: SupplySourceType,
     /// 被确认的销售单。
     pub sales_order_id: String,
     /// 销售单号。
@@ -638,6 +651,14 @@ pub struct CreationBasisView {
     pub supplier_id: String,
     /// 供应商名称。
     pub supplier_name: String,
+    /// 现有库存来源的余额主键；采购来源为空。
+    pub stock_balance_id: Option<String>,
+    /// 现有库存来源的仓库主键；采购来源为空。
+    pub warehouse_id: Option<String>,
+    /// 现有库存来源的仓库名称；采购来源为空。
+    pub warehouse_name: Option<String>,
+    /// 来源当前总可供量；库存为余额可用量，未声明上限的采购来源为空。
+    pub source_available_quantity: Option<String>,
     /// 采购类型（由商品稳定业务类型确定）。
     pub purchase_type: String,
     /// 履约责任（由采购在商品类型允许范围内选择）。
@@ -669,8 +690,8 @@ pub struct CreatePurchaseOrderLineRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePurchaseOrderFromBasisRequest {
-    /// 冻结本次销售行责任范围的开放采购建单任务。
-    #[validate(custom(function = "non_blank", message = "采购建单任务不能为空"))]
+    /// 冻结本次销售行责任范围的开放供给分配任务。
+    #[validate(custom(function = "non_blank", message = "供给分配任务不能为空"))]
     pub work_item_id: String,
     /// 采购创建依据（当前任务范围内的精确供应商拆分）。
     #[validate(custom(function = "non_blank", message = "创建依据不能为空"))]
@@ -703,51 +724,74 @@ pub struct CreatePurchaseOrderResult {
     pub reference: String,
 }
 
-/// 选源建单的一条履约分配与数量。
+/// 供给分配的一条精确来源与数量。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SourcingLineAssignment {
     /// 销售稳定行身份。
     #[validate(custom(function = "non_blank", message = "销售行不能为空"))]
     pub sales_order_line_id: String,
-    /// 本行选用的精确创建依据，绑定供应商、采购类型、付款条件与履约责任。
+    /// 本行选用的精确依据，绑定库存余额或采购供给及其履约责任。
     #[validate(custom(function = "non_blank", message = "履约方案不能为空"))]
     pub basis_id: String,
-    /// 本次创建数量；事务内必须大于零且不超过最新可创建数量。
-    #[validate(custom(function = "non_blank", message = "本次数量不能为空"))]
+    /// 供给来源；旧客户端缺省为供应商采购。
+    #[serde(default)]
+    pub source_type: SupplySourceType,
+    /// 本次分配数量；事务内必须大于零且不超过最新可分配数量。
+    #[validate(custom(function = "non_blank", message = "本次分配数量不能为空"))]
     pub quantity: String,
-    /// 采购确认的预计交付日，不得晚于销售承诺期限。
+    /// 预计交付日；采购来源不得晚于销售承诺期限，库存来源保留同一请求形状。
     #[validate(custom(function = "non_blank", message = "预计交付日不能为空"))]
     pub expected_delivery_date: String,
 }
 
-/// 按选源结果一次创建多张采购单并提交审批的请求。
+/// 一次确认库存与采购供给分配的请求。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePurchaseOrdersFromSourcingRequest {
-    /// 冻结本次销售行责任范围的开放采购建单任务。
-    #[validate(custom(function = "non_blank", message = "采购建单任务不能为空"))]
+    /// 冻结本次销售行责任范围的开放供给分配任务。
+    #[validate(custom(function = "non_blank", message = "供给分配任务不能为空"))]
     pub work_item_id: String,
     /// 来源销售单。
     #[validate(custom(function = "non_blank", message = "销售单不能为空"))]
     pub sales_order_id: String,
-    /// 已选定履约方案的采购分配；同一销售行允许按不同依据拆分。
-    #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
+    /// 已选定的供给分配；同一销售行允许按库存与采购依据拆分。
+    #[validate(
+        length(min = 1, max = 200, message = "本次供给分配明细必须在1-200行之间"),
+        nested
+    )]
     pub lines: Vec<SourcingLineAssignment>,
-    /// 幂等键（同一命令重复创建并提交时返回同一批采购单）。
+    /// 幂等键（同一命令重复提交时返回原库存预占与采购单）。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
 }
 
-/// 按选源结果一次创建多张采购单并提交审批的结果。
+/// 供给分配确认结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreatePurchaseOrdersFromSourcingResult {
     /// 本次创建并提交或幂等回放的采购单。
     pub orders: Vec<CreatePurchaseOrderResult>,
-    /// 是否复用已有创建并提交结果（幂等重放）。
+    /// 本次建立或幂等回放的现有库存销售预占。
+    pub stock_reservations: Vec<ExistingStockReservationResult>,
+    /// 是否复用已有供给分配结果（幂等重放）。
     pub replayed: bool,
     /// 业务引用，指向来源销售单。
     pub reference: String,
+}
+
+/// 现有库存供给分配结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExistingStockReservationResult {
+    /// 库存预占主键。
+    pub stock_reservation_id: String,
+    /// 销售稳定行主键。
+    pub sales_order_line_id: String,
+    /// 库存余额主键。
+    pub stock_balance_id: String,
+    /// 仓库主键。
+    pub warehouse_id: String,
+    /// 本次预占数量。
+    pub quantity: String,
 }
 
 /// 保存采购草稿请求（表头 + 完整行替换；金额由服务端逐行计算）。
@@ -1133,7 +1177,7 @@ pub struct PurchaseChangeOrderView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, PurchaseOrderListParams, SortDir};
+    use super::{normalize_sort, PurchaseOrderListParams, SortDir, SupplySourceType};
     use entities::purchase_order::PurchaseOrderStatus;
     use serde_json::json;
     use validator::Validate;
@@ -1212,5 +1256,17 @@ mod tests {
         }))
         .unwrap();
         assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn sourcing_line_defaults_legacy_requests_to_purchase() {
+        let line: super::SourcingLineAssignment = serde_json::from_value(json!({
+            "sales_order_line_id": "sol-1",
+            "basis_id": "basis-1",
+            "quantity": "1",
+            "expected_delivery_date": "2026-09-01"
+        }))
+        .unwrap();
+        assert_eq!(line.source_type, SupplySourceType::Purchase);
     }
 }

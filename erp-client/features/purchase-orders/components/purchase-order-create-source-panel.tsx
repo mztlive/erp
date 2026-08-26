@@ -36,7 +36,7 @@ function joinLabels(labels: readonly string[]): string {
 }
 
 /**
- * 来源销售单选择与密集摘要：单号、客户、合同、覆盖与最低含税估算。
+ * 来源销售单选择与密集摘要：单号、客户、合同、供给覆盖与推荐采购估算。
  */
 export function PurchaseOrderCreateSourcePanel({
     workspace,
@@ -95,22 +95,22 @@ export function PurchaseOrderCreateSourcePanel({
                             value={selectedOrder.salesOwnerName ?? "—"}
                         />
                         <SourceFact
-                            term="待采购明细"
+                            term="待分配明细"
                             numeric
                             value={`${summary.lineCount} 行`}
                         />
                         <SourceFact
-                            term="已覆盖明细"
+                            term="已供给覆盖"
                             numeric
                             value={`${summary.coveredLineCount} 行`}
                         />
                         <SourceFact
-                            term="可选供应商"
+                            term="可选采购供应商"
                             numeric
                             value={`${summary.uniqueSupplierCount} 家`}
                         />
                         <SourceFact
-                            term="最低含税估算"
+                            term="推荐采购估算"
                             value={
                                 <MoneyValue value={summary.minEstimatedGross} />
                             }

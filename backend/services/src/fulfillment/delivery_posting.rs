@@ -154,6 +154,11 @@ async fn post_warehouse_ship_line(
         .warehouse_id
         .clone()
         .ok_or_else(|| Error::BusinessLogicError("仓发缺少发货仓".to_string()))?;
+    if reservation.warehouse_id != warehouse_id {
+        return Err(Error::BusinessLogicError(
+            "库存预占不属于本发货仓，无法发货".to_string(),
+        ));
+    }
     let balance = db
         .stock_balances()
         .find_by_dimensions(&warehouse_id, &reservation.sku_id, session)

@@ -62,7 +62,7 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                 context.addIssue({
                     code: "custom",
                     path: ["lines"],
-                    message: "请至少选择一条本次采购明细",
+                    message: "请至少选择一条本次供给分配明细",
                 })
                 return
             }
@@ -169,6 +169,55 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     // 单行数值错误已在上方给出精确提示。
                 }
             }
+            const stockByBasis = new Map<
+                string,
+                {
+                    quantities: string[]
+                    maximum: string
+                    warehouseName: string
+                    lastIndex: number
+                }
+            >()
+            value.lines.forEach((line, index) => {
+                if (!line.selected || !line.basisId) return
+                const product = order.lines.find(
+                    (candidate) =>
+                        candidate.salesOrderLineId === line.salesOrderLineId,
+                )
+                const option = findSourcingOption(product, line.basisId)
+                if (!option || option.sourceType !== "EXISTING_STOCK") return
+                const current = stockByBasis.get(option.basisId)
+                if (current) {
+                    current.quantities.push(line.quantity)
+                    current.lastIndex = index
+                    return
+                }
+                stockByBasis.set(option.basisId, {
+                    quantities: [line.quantity],
+                    maximum:
+                        option.sourceAvailableQuantity ??
+                        option.maxCreateQuantity,
+                    warehouseName: option.warehouseName ?? option.supplierName,
+                    lastIndex: index,
+                })
+            })
+            for (const stock of stockByBasis.values()) {
+                try {
+                    const total = sumFixed(stock.quantities, {
+                        maxScale: 6,
+                        outputScale: 6,
+                    })
+                    if (compareDecimal(total, stock.maximum, 6) > 0) {
+                        context.addIssue({
+                            code: "custom",
+                            path: ["lines", stock.lastIndex, "quantity"],
+                            message: `${stock.warehouseName}：库存分配合计不能超过 ${stock.maximum}`,
+                        })
+                    }
+                } catch {
+                    // 单行数值错误已在上方给出精确提示。
+                }
+            }
         })
 }
 
@@ -249,10 +298,10 @@ function humanizeIssueMessage(issue: {
     }
     const key = String(issue.path.at(-1) ?? "")
     if (key === "basisId") return "请选择履约方案"
-    if (key === "quantity") return "请填写本次采购数量"
+    if (key === "quantity") return "请填写本次分配数量"
     if (key === "expectedDeliveryDate") return "请选择预计交付日"
     if (key === "salesOrderId") return "请选择来源销售单"
-    return "填写内容不完整，请检查履约方案和采购数量。"
+    return "填写内容不完整，请检查供给方案和分配数量。"
 }
 
 function isBusinessDate(value: string): boolean {
@@ -268,7 +317,7 @@ function displayErrorText(value: string): string[] {
     const trimmed = value.trim()
     if (!trimmed) return []
     if (trimmed.startsWith("Invalid input")) {
-        return ["填写内容不完整，请检查履约方案和采购数量。"]
+        return ["填写内容不完整，请检查供给方案和分配数量。"]
     }
     return [trimmed]
 }

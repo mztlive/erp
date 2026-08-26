@@ -304,7 +304,7 @@ impl<'a> Repository<'a, ReceivableAccount> {
 }
 
 impl<'a> Repository<'a, WorkItem> {
-    /// 列出指定销售责任范围的开放采购建单任务。
+    /// 列出指定销售责任范围的开放供给分配任务。
     ///
     /// # 参数
     /// * `sales_order_id` - 来源销售单

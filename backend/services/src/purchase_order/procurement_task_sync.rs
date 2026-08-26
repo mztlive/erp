@@ -1,4 +1,4 @@
-//! 采购覆盖变化后的采购建单任务范围校验与生命周期同步。
+//! 统一供给覆盖变化后的供给分配任务范围校验与生命周期同步。
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,7 +14,7 @@ use rust_decimal::Decimal;
 use super::coverage::load_sales_procurement_coverage;
 use crate::errors::{Error, Result};
 
-/// 加载当前账号可执行的开放采购建单任务。
+/// 加载当前账号可执行的开放供给分配任务。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -47,7 +47,7 @@ pub(super) async fn load_owned_open_procurement_task(
     Ok(item)
 }
 
-/// 校验采购建单任务的业务对象、当前责任人、开放状态与冻结范围。
+/// 校验供给分配任务的业务对象、当前责任人、开放状态与冻结范围。
 ///
 /// # 参数
 /// * `item` - 已按客户端任务 ID 读取的持久化任务
@@ -81,12 +81,12 @@ fn validate_procurement_task_access(
         return Err(procurement_task_not_found());
     }
     if item.responsibility_key().is_none() || item.responsibility_scope_ids().is_empty() {
-        return Err(Error::ConflictError("采购建单任务缺少冻结责任范围".to_string()));
+        return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
     }
     Ok(())
 }
 
-/// 按销售单当前采购覆盖同步全部采购建单任务。
+/// 按销售单当前统一供给覆盖同步全部供给分配任务。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -144,7 +144,7 @@ pub(super) async fn sync_procurement_tasks_for_sales_order(
 /// * `order` - 来源销售单
 /// * `subject_version` - 当前销售修订 ID
 /// * `remaining_by_line` - 稳定销售行到当前剩余数量的映射
-/// * `tasks` - 该销售单全部采购建单任务，按更新时间倒序
+/// * `tasks` - 该销售单全部供给分配任务，按更新时间倒序
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
@@ -165,13 +165,13 @@ async fn synchronize_tasks(
     for mut task in tasks {
         let key = task
             .responsibility_key()
-            .ok_or_else(|| Error::ConflictError("采购建单任务缺少责任键".to_string()))?
+            .ok_or_else(|| Error::ConflictError("供给分配任务缺少责任键".to_string()))?
             .to_string();
         let remaining = remaining_for_scope(task.responsibility_scope_ids(), remaining_by_line)?;
         if task.status == WorkItemStatus::Open {
             if !open_keys.insert(key) {
                 return Err(Error::ConflictError(
-                    "同一责任范围存在多条开放采购建单任务".to_string(),
+                    "同一责任范围存在多条开放供给分配任务".to_string(),
                 ));
             }
             if remaining.to_decimal().is_zero() {
@@ -225,7 +225,7 @@ fn remaining_for_scope(
     remaining_by_line: &HashMap<String, Quantity>,
 ) -> Result<Quantity> {
     if scope_ids.is_empty() {
-        return Err(Error::ConflictError("采购建单任务责任范围为空".to_string()));
+        return Err(Error::ConflictError("供给分配任务责任范围为空".to_string()));
     }
     let total = scope_ids.iter().fold(Decimal::ZERO, |sum, line_id| {
         sum + remaining_by_line
@@ -237,7 +237,7 @@ fn remaining_for_scope(
     Quantity::try_from(total).map_err(Error::Logic)
 }
 
-/// 生成采购建单任务当前影响摘要。
+/// 生成供给分配任务当前影响摘要。
 ///
 /// # 参数
 /// * `order` - 来源销售单
@@ -251,7 +251,7 @@ fn remaining_for_scope(
 /// 无。
 fn procurement_impact_summary(order: &SalesOrder, line_count: usize, remaining: Quantity) -> String {
     format!(
-        "销售单 {} 的 {line_count} 行待创建采购单，剩余数量 {remaining}",
+        "销售单 {} 的 {line_count} 行待分配供给，剩余数量 {remaining}",
         order.order_no
     )
 }
@@ -267,7 +267,7 @@ fn procurement_impact_summary(order: &SalesOrder, line_count: usize, remaining: 
 /// # 错误
 /// 无。
 fn procurement_quantity_changed() -> Error {
-    Error::ConflictError("可采购数量已更新，请刷新后重试".to_string())
+    Error::ConflictError("可分配供给数量已更新，请刷新后重试".to_string())
 }
 
 /// 返回不泄露他人任务存在性的统一未找到错误。
@@ -281,7 +281,7 @@ fn procurement_quantity_changed() -> Error {
 /// # 错误
 /// 无。
 fn procurement_task_not_found() -> Error {
-    Error::NotFound("采购建单任务不存在或不可处理".to_string())
+    Error::NotFound("供给分配任务不存在或不可处理".to_string())
 }
 
 #[cfg(test)]
@@ -297,7 +297,7 @@ mod tests {
     use super::{remaining_for_scope, validate_procurement_task_access};
     use crate::errors::Error;
 
-    /// 构造带稳定销售行范围的采购建单任务。
+    /// 构造带稳定销售行范围的供给分配任务。
     fn procurement_task(owner_user_id: &str) -> WorkItem {
         WorkItem::new_with_responsibility_scope(
             WorkItemId::new("task-1"),
@@ -332,7 +332,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            Error::ConflictError(message) if message == "可采购数量已更新，请刷新后重试"
+            Error::ConflictError(message) if message == "可分配供给数量已更新，请刷新后重试"
         ));
     }
 

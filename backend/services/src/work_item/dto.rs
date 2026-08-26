@@ -779,7 +779,7 @@ fn handler_route(
         }
         (WorkItemType::ProcurementOrderCreation, "sales_order") => ("procurement_order_creation", "W08"),
         (WorkItemType::ProcurementOrderCreation, _) => {
-            return Err(Error::ValidationError("采购建单任务业务对象未注册".to_string()));
+            return Err(Error::ValidationError("供给分配任务业务对象未注册".to_string()));
         }
         (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
         (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),

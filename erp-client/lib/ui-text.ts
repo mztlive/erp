@@ -159,6 +159,7 @@ const actionLabels = {
 const WORK_ITEM_ACTION_BY_TYPE_LABEL: Record<string, string> = {
     采购二次确认: actionLabels.confirmProcurement,
     待采购建单: "打开单据",
+    待供给分配: "去分配供给",
     卡券票款复核: actionLabels.reviewCardFunds,
     卡券票款差异复核: "去复核票款差额",
     映射异常处理: actionLabels.handleMappingException,
@@ -203,6 +204,7 @@ export function actionLabelForWorkItemType(
 const NEXT_ACTION_HINT_BY_TYPE_LABEL: Record<string, string> = {
     采购二次确认: "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。",
     待采购建单: "打开采购单页，按销售明细剩余数量选择本次采购数量并创建草稿。",
+    待供给分配: "进入供给分配页后确认库存优先的自动推荐；库存不足部分再创建采购单。",
     低毛利销售审批:
         "进入销售单后，确认是否按原条件承接；通过后仍需采购再次确认供货。",
     采购单财务审核:

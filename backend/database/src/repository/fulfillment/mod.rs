@@ -45,8 +45,8 @@ use serde::{Deserialize, Serialize};
 
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine, Delivery, DeliveryLine,
-    DeliveryState, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType, PurchaseReceipt,
-    PurchaseReceiptLine, PurchaseReceiptState, ServiceFulfillment, ServiceFulfillmentState,
+    DeliveryState, DeliveryType, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType,
+    PurchaseReceipt, PurchaseReceiptLine, PurchaseReceiptState, ServiceFulfillment, ServiceFulfillmentState,
 };
 use entities::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
@@ -489,6 +489,40 @@ impl<'a> FulfillmentRepository<'a> {
                 .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
             doc! {
                 "sales_order_id": sales_order_id.to_string(),
+                "status": DeliveryState::Draft.as_str(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 查询销售单与仓库维度的现有仓发草稿。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单主键
+    /// * `warehouse_id` - 发货仓库主键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配的未删除仓发草稿；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn draft_warehouse_delivery(
+        &self,
+        sales_order_id: &entities::ids::SalesOrderId,
+        warehouse_id: &entities::ids::WarehouseId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Delivery>> {
+        mongo_ops::find_one(
+            &self
+                .db
+                .collection::<Delivery>(<mongodb::Database as FulfillmentExt>::DELIVERIES),
+            doc! {
+                "sales_order_id": sales_order_id.to_string(),
+                "warehouse_id": warehouse_id.to_string(),
+                "delivery_type": DeliveryType::WarehouseShip.as_str(),
                 "status": DeliveryState::Draft.as_str(),
                 "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
             },

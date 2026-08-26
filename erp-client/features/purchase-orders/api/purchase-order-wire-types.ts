@@ -153,6 +153,7 @@ export type BackendBasisLine = {
 
 export type BackendBasis = {
     basis_id: string
+    source_type?: "PURCHASE" | "EXISTING_STOCK" | string
     work_item_id: string
     sales_order_id: string
     sales_order_no: string
@@ -162,6 +163,10 @@ export type BackendBasis = {
     sales_order_revision_id: string
     supplier_id: string
     supplier_name: string
+    stock_balance_id?: string | null
+    warehouse_id?: string | null
+    warehouse_name?: string | null
+    source_available_quantity?: string | null
     purchase_type?: string | null
     fulfillment_responsibility?: string | null
     payment_term_code: string
@@ -179,6 +184,13 @@ export type BackendCreateResult = {
 
 export type BackendSourcingCreateResult = {
     orders: BackendCreateResult[]
+    stock_reservations?: Array<{
+        stock_reservation_id: string
+        sales_order_line_id: string
+        stock_balance_id: string
+        warehouse_id: string
+        quantity: string
+    }>
     replayed?: boolean
     reference: string
 }

@@ -1,5 +1,6 @@
 import {
     compareDecimal,
+    formatScaled,
     multiplyFixed,
     parseDecimal,
     splitGrossByPercentRate,
@@ -9,10 +10,12 @@ import type {
     FulfillmentResponsibility,
     PurchaseCreationBasis,
     PurchaseType,
+    SupplySourceType,
 } from "@/features/purchase-orders/types"
 
 /** 一条销售明细可选的合格履约方案。 */
 export type SourcingSupplierOption = Readonly<{
+    sourceType: SupplySourceType
     supplierId: string
     supplierName: string
     basisId: string
@@ -22,6 +25,10 @@ export type SourcingSupplierOption = Readonly<{
     paymentTermCode: string
     paymentTermLabel: string
     businessCategory?: string
+    stockBalanceId?: string
+    warehouseId?: string
+    warehouseName?: string
+    sourceAvailableQuantity?: string
     unitCostGross: string
     inputTaxRate: string
     maxCreateQuantity: string
@@ -43,7 +50,7 @@ export type SourcingProductLine = Readonly<{
     options: readonly SourcingSupplierOption[]
 }>
 
-/** 一张可建采购的销售单及其剩余明细。 */
+/** 一张可分配供给的销售单及其剩余明细。 */
 export type SourcingSalesOrder = Readonly<{
     salesOrderId: string
     salesOrderNo: string
@@ -94,6 +101,15 @@ export type PurchaseOrderPreviewLine = Readonly<{
     taxAmount: string
 }>
 
+/** 确认前展示的一条现有库存分配。 */
+export type StockAllocationPreviewLine = Readonly<{
+    salesOrderLineId: string
+    itemName: string
+    warehouseName: string
+    quantity: string
+    unit: string
+}>
+
 /**
  * 把精确创建依据转成按销售单聚合的选源工作区。
  *
@@ -129,6 +145,7 @@ export function buildSourcingWorkspace(
         }
         for (const line of basis.lines) {
             const option: SourcingSupplierOption = {
+                sourceType: basis.sourceType,
                 supplierId: basis.supplierId,
                 supplierName: basis.supplierName,
                 basisId: basis.basisId,
@@ -138,6 +155,10 @@ export function buildSourcingWorkspace(
                 paymentTermCode: basis.paymentTermCode,
                 paymentTermLabel: basis.paymentTermLabel,
                 businessCategory: basis.businessCategory,
+                stockBalanceId: basis.stockBalanceId,
+                warehouseId: basis.warehouseId,
+                warehouseName: basis.warehouseName,
+                sourceAvailableQuantity: basis.sourceAvailableQuantity,
                 unitCostGross: line.unitCostGross,
                 inputTaxRate: line.inputTaxRate,
                 maxCreateQuantity: line.maxCreateQuantity,
@@ -199,7 +220,7 @@ export function buildSourcingWorkspace(
 }
 
 /**
- * 为当前销售单生成默认选源行：勾选全部明细，数量取最大可采购量。
+ * 为当前销售单生成默认供给分配：现有库存优先，剩余缺口再匹配采购。
  *
  * @param order 当前选源销售单。
  * @returns 可写入表单的选源行。
@@ -207,21 +228,127 @@ export function buildSourcingWorkspace(
 export function buildDefaultSourcingLines(
     order?: SourcingSalesOrder,
 ): SourcingLineInput[] {
-    return (
-        order?.lines.map((line) => ({
-            rowKey: `${line.salesOrderLineId}:0`,
-            salesOrderLineId: line.salesOrderLineId,
-            selected: true,
-            quantity:
-                line.options.length === 1
-                    ? line.options[0]!.maxCreateQuantity
-                    : line.remainingQuantity,
-            basisId: line.options.length === 1 ? line.options[0]!.basisId : "",
-            expectedDeliveryDate:
-                line.options.length === 1
-                    ? line.options[0]!.expectedDeliveryDate
-                    : line.deliveryDeadline,
-        })) ?? []
+    if (!order) return []
+    const stockCapacity = new Map<string, bigint>()
+    const result: SourcingLineInput[] = []
+    for (const line of order.lines) {
+        let remaining = quantityUnits(line.remainingQuantity)
+        let allocationIndex = 0
+        const stockOptions = line.options
+            .filter((option) => option.sourceType === "EXISTING_STOCK")
+            .sort(compareStockOptions)
+        for (const option of stockOptions) {
+            if (remaining <= BigInt(0)) break
+            const sourceCapacity =
+                stockCapacity.get(option.basisId) ??
+                quantityUnits(
+                    option.sourceAvailableQuantity ?? option.maxCreateQuantity,
+                )
+            const allocated = minimumUnits(
+                remaining,
+                sourceCapacity,
+                quantityUnits(option.maxCreateQuantity),
+            )
+            if (allocated <= BigInt(0)) continue
+            result.push(
+                sourcingInput(
+                    line.salesOrderLineId,
+                    allocationIndex,
+                    option,
+                    allocated,
+                ),
+            )
+            allocationIndex += 1
+            remaining -= allocated
+            stockCapacity.set(option.basisId, sourceCapacity - allocated)
+        }
+        if (remaining > BigInt(0)) {
+            const purchase = pickBestSourcingOption(
+                line.options.filter(
+                    (option) => option.sourceType === "PURCHASE",
+                ),
+                formatScaled(remaining, 6),
+            )
+            if (purchase) {
+                const allocated = minimumUnits(
+                    remaining,
+                    quantityUnits(purchase.maxCreateQuantity),
+                )
+                result.push(
+                    sourcingInput(
+                        line.salesOrderLineId,
+                        allocationIndex,
+                        purchase,
+                        allocated,
+                    ),
+                )
+            }
+        }
+        if (
+            !result.some(
+                (input) => input.salesOrderLineId === line.salesOrderLineId,
+            )
+        ) {
+            result.push({
+                rowKey: `${line.salesOrderLineId}:0`,
+                salesOrderLineId: line.salesOrderLineId,
+                selected: true,
+                quantity: line.remainingQuantity,
+                basisId: "",
+                expectedDeliveryDate: line.deliveryDeadline,
+            })
+        }
+    }
+    return result
+}
+
+/** 把推荐供给与定点数量投影为表单行。 */
+const sourcingInput = (
+    salesOrderLineId: string,
+    index: number,
+    option: SourcingSupplierOption,
+    quantity: bigint,
+): SourcingLineInput => ({
+    rowKey: `${salesOrderLineId}:${index}`,
+    salesOrderLineId,
+    selected: true,
+    quantity: formatQuantityUnits(quantity),
+    basisId: option.basisId,
+    expectedDeliveryDate: option.expectedDeliveryDate,
+})
+
+/** 将最多六位小数的数量转成六位定点整数。 */
+const quantityUnits = (value: string): bigint => {
+    const parsed = parseDecimal(value, { maxScale: 6 })
+    return parsed.unscaled * BigInt(10) ** BigInt(6 - parsed.scale)
+}
+
+/** 将六位定点整数格式化为不带无意义尾零的数量文本。 */
+const formatQuantityUnits = (value: bigint): string => {
+    const fixed = formatScaled(value, 6)
+    const [integer, fraction = ""] = fixed.split(".")
+    const trimmed = fraction.replace(/0+$/, "")
+    return trimmed ? `${integer}.${trimmed}` : integer!
+}
+
+/** 返回多个非负定点整数中的最小值。 */
+const minimumUnits = (...values: bigint[]): bigint =>
+    values.reduce((minimum, value) => (value < minimum ? value : minimum))
+
+/** 现有库存推荐按可覆盖量降序，再按仓库名称稳定排序。 */
+const compareStockOptions = (
+    left: SourcingSupplierOption,
+    right: SourcingSupplierOption,
+): number => {
+    const quantity = compareDecimalSafe(
+        right.maxCreateQuantity,
+        left.maxCreateQuantity,
+        6,
+    )
+    if (quantity !== 0) return quantity
+    return (left.warehouseName ?? left.supplierName).localeCompare(
+        right.warehouseName ?? right.supplierName,
+        "zh-CN",
     )
 }
 
@@ -250,7 +377,7 @@ export function sourcingFormLinesReady(
 }
 
 /**
- * 查找一行当前选用的供应商选项。
+ * 查找一行当前选用的供给选项。
  *
  * @param line 选源明细。
  * @param basisId 当前选用的精确履约依据。
@@ -265,13 +392,13 @@ export function findSourcingOption(
 }
 
 /**
- * 为一条销售明细选出最优供应商。
+ * 为一条销售明细选出最优供给。
  *
  * 排序：能覆盖剩余数量优先，其次最低含税成本、最早交期、最大可创建量，
- * 再按供应商名称稳定排序。
+ * 再按供给方名称稳定排序。
  *
- * @param options 该明细的合格供应商。
- * @param remainingQuantity 销售剩余待采购数量；缺省时不比较覆盖能力。
+ * @param options 该明细的可用供给。
+ * @param remainingQuantity 销售剩余待分配数量；缺省时不比较覆盖能力。
  * @returns 最优选项；无合格供给时为空。
  */
 export function pickBestSourcingOption(
@@ -280,6 +407,9 @@ export function pickBestSourcingOption(
 ): SourcingSupplierOption | undefined {
     if (options.length === 0) return undefined
     return [...options].sort((left, right) => {
+        if (left.sourceType !== right.sourceType) {
+            return left.sourceType === "EXISTING_STOCK" ? -1 : 1
+        }
         const leftCovers = optionCoversRemaining(left, remainingQuantity)
         const rightCovers = optionCoversRemaining(right, remainingQuantity)
         if (leftCovers !== rightCovers) return leftCovers ? -1 : 1
@@ -307,7 +437,7 @@ export function pickBestSourcingOption(
 }
 
 /**
- * 为全部选源行填充各自最优供应商和对应最大可创建量。
+ * 为全部选源行填充库存优先的推荐供给和对应可分配量。
  *
  * 没有合格供给的行保持原值，不改勾选状态。
  *
@@ -320,6 +450,8 @@ export function assignBestSourcingOptions(
     lines: readonly SourcingLineInput[],
 ): SourcingLineInput[] {
     if (!order) return lines.map((line) => ({ ...line }))
+    const recommended = buildDefaultSourcingLines(order)
+    if (recommended.some((line) => line.basisId)) return recommended
     return lines.map((line) => {
         const product = order.lines.find(
             (candidate) => candidate.salesOrderLineId === line.salesOrderLineId,
@@ -352,7 +484,7 @@ export type SourcingOrderSummary = Readonly<{
 }>
 
 /**
- * 汇总一张选源销售单的行数、供给和最低含税估算。
+ * 汇总一张选源销售单的行数、供给和推荐采购含税估算。
  *
  * @param order 当前选源销售单。
  * @returns 用于来源区展示的汇总。
@@ -361,15 +493,19 @@ export function summarizeSourcingOrder(
     order: SourcingSalesOrder,
 ): SourcingOrderSummary {
     const options = order.lines.flatMap((line) => [...line.options])
-    const amounts = order.lines.flatMap((line) => {
-        const option = pickBestSourcingOption(
-            line.options,
-            line.remainingQuantity,
+    const purchaseOptions = options.filter(
+        (option) => option.sourceType === "PURCHASE",
+    )
+    const recommended = buildDefaultSourcingLines(order)
+    const amounts = recommended.flatMap((input) => {
+        const product = order.lines.find(
+            (line) => line.salesOrderLineId === input.salesOrderLineId,
         )
-        if (!option) return []
+        const option = findSourcingOption(product, input.basisId)
+        if (!option || option.sourceType !== "PURCHASE") return []
         try {
             return [
-                multiplyFixed(option.unitCostGross, line.remainingQuantity, {
+                multiplyFixed(option.unitCostGross, input.quantity, {
                     leftMaxScale: 4,
                     rightMaxScale: 6,
                     outputScale: 2,
@@ -385,19 +521,19 @@ export function summarizeSourcingOrder(
             isPositiveQuantity(line.coveredQuantity),
         ).length,
         uniqueSupplierCount: uniqueStable(
-            options.map((option) => option.supplierId),
+            purchaseOptions.map((option) => option.supplierId).filter(Boolean),
         ).length,
         purchaseTypes: uniqueStable(
-            options.map((option) => option.purchaseType),
+            purchaseOptions.map((option) => option.purchaseType),
         ),
         fulfillmentResponsibilities: uniqueStable(
             options.map((option) => option.fulfillmentResponsibility),
         ),
         paymentTermLabels: uniqueStable(
-            options.map((option) => option.paymentTermLabel),
+            purchaseOptions.map((option) => option.paymentTermLabel),
         ),
         businessCategories: uniqueStable(
-            options
+            purchaseOptions
                 .map((option) => option.businessCategory?.trim() ?? "")
                 .filter(Boolean),
         ),
@@ -521,6 +657,7 @@ export function buildPurchaseOrderPreviews(
         )
         const option = findSourcingOption(product, input.basisId)
         if (!product || !option) continue
+        if (option.sourceType === "EXISTING_STOCK") continue
         const amounts = previewLineAmounts(
             option.unitCostGross,
             option.inputTaxRate,
@@ -572,12 +709,38 @@ export function buildPurchaseOrderPreviews(
     }))
 }
 
+/** 把已选现有库存方案投影为确认清单。 */
+export function buildStockAllocationPreviews(
+    order: SourcingSalesOrder | undefined,
+    lines: readonly SourcingLineInput[],
+): StockAllocationPreviewLine[] {
+    if (!order) return []
+    return lines.flatMap((input) => {
+        if (!input.selected || !input.basisId) return []
+        const product = order.lines.find(
+            (line) => line.salesOrderLineId === input.salesOrderLineId,
+        )
+        const option = findSourcingOption(product, input.basisId)
+        if (!product || option?.sourceType !== "EXISTING_STOCK") return []
+        return [
+            {
+                salesOrderLineId: product.salesOrderLineId,
+                itemName: product.itemName,
+                warehouseName:
+                    option.warehouseName ?? option.supplierName ?? "公司仓库",
+                quantity: input.quantity.trim(),
+                unit: product.unit,
+            },
+        ]
+    })
+}
+
 /**
  * 按含税成本和进项税率预估一行金额。
  *
  * @param unitCostGross 含税成本。
  * @param inputTaxRate 进项税率（小数，如 `0.13`）。
- * @param quantity 本次采购数量。
+ * @param quantity 本次分配数量。
  * @returns 行含税、不含税和税额；非法数值时返回零。
  */
 export function previewLineAmounts(
@@ -630,7 +793,7 @@ export function sumPreviewTotals(lines: readonly PurchaseOrderPreviewLine[]): {
 }
 
 /**
- * 校验本次采购数量是否大于 0 且不超过该供应商最大可创建量。
+ * 校验本次分配数量是否大于 0 且不超过该供给方案最大可分配量。
  *
  * @param quantity 用户输入数量。
  * @param maximum 该供应商最大可创建数量。
@@ -643,13 +806,13 @@ export function sourcingQuantityError(
     try {
         const parsed = parseDecimal(quantity, { maxScale: 6 })
         if (parsed.unscaled <= BigInt(0)) {
-            return "本次采购数量必须大于 0"
+            return "本次分配数量必须大于 0"
         }
         if (compareDecimal(quantity, maximum, 6) > 0) {
-            return `本次采购数量不能超过 ${maximum}`
+            return `本次分配数量不能超过 ${maximum}`
         }
         return undefined
     } catch {
-        return "本次采购数量必须是大于 0、最多 6 位小数的数值"
+        return "本次分配数量必须是大于 0、最多 6 位小数的数值"
     }
 }

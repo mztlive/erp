@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{AccessControlExt, FulfillmentExt, InventoryExt, PurchaseOrderExt, Transactional};
@@ -11,12 +11,12 @@ use entities::fulfillment::{
 use entities::ids::{
     DeliveryId, DeliveryLineId, PurchaseOrderId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId,
     SalesOrderLineId, SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId,
-    StockReservationId,
+    StockReservationId, WarehouseId,
 };
 use entities::inventory::{
     MovementDirection, MovementType, ReservationEntryType, ReservationStatus, StockBalance, StockBalanceData,
     StockMovement, StockMovementData, StockReservation, StockReservationData, StockReservationEntry,
-    StockReservationEntryData,
+    StockReservationEntryData, StockReservationSourceType,
 };
 use entities::money::Quantity;
 use id_generator::next_id;
@@ -398,8 +398,10 @@ async fn establish_reservations(
                 warehouse_id: receipt.warehouse_id.clone(),
                 sku_id: sku_id.clone(),
                 sales_order_line_id: sales_line_id,
-                purchase_line_sales_allocation_id: allocation.base.id.clone().into(),
-                source_receipt_line_id: line.base.id.clone().into(),
+                source_type: StockReservationSourceType::PurchaseReceipt,
+                purchase_line_sales_allocation_id: Some(allocation.base.id.clone().into()),
+                source_receipt_line_id: Some(line.base.id.clone().into()),
+                source_allocation_id: None,
                 reserved_quantity: quantity,
                 consumed_quantity: Quantity::from_str("0").map_err(Error::Logic)?,
                 released_quantity: Quantity::from_str("0").map_err(Error::Logic)?,
@@ -430,11 +432,11 @@ async fn establish_reservations(
     Ok(())
 }
 
-/// 入库过账后为涉及的销售单自动创建仓发草稿（幂等：已有 DRAFT 草稿则跳过）。
+/// 入库过账后按销售单与仓库创建或补充仓发草稿。
 ///
 /// 仓发草稿行引用本次入库沿采购销售分配建立的预占：`delivery_line` 的
-/// `stock_reservation_id` 指向预占，数量取预占数量；销售单已存在草稿时不
-/// 重复创建（同一采购单多次入库只补新预占行由后续批量创建补充）。
+/// `stock_reservation_id` 指向预占，数量取预占数量。同一销售单同一仓库只复用
+/// 一个草稿；不同仓库必须分别建草稿，现有库存分配与后续采购入库可以共同补行。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -462,90 +464,134 @@ async fn create_warehouse_ship_drafts(
     if reservations.is_empty() {
         return Ok(());
     }
-    // 按销售明细分组（一个销售明细可能对应多条预占/多次入库）
-    let mut by_line: HashMap<String, Vec<&StockReservation>> = HashMap::new();
-    for reservation in &reservations {
-        by_line
-            .entry(reservation.sales_order_line_id.to_string())
-            .or_default()
-            .push(reservation);
-    }
-    let line_ids: Vec<SalesOrderLineId> = by_line
-        .keys()
-        .map(|line_id| SalesOrderLineId::new(line_id.clone()))
-        .collect();
+    let line_ids = reservations
+        .iter()
+        .map(|reservation| reservation.sales_order_line_id.clone())
+        .collect::<HashSet<SalesOrderLineId>>()
+        .into_iter()
+        .collect::<Vec<_>>();
     let sales_lines = db
         .fulfillment()
         .list_sales_order_lines_by_ids(&line_ids, session)
         .await?;
-    // 按销售单分组
-    let mut by_order: HashMap<String, Vec<(&String, Vec<&StockReservation>)>> = HashMap::new();
-    for (line_id, reservations) in &by_line {
-        let sales_line = sales_lines
-            .iter()
-            .find(|line| line.base.id == **line_id)
+    let sales_order_by_line = sales_lines
+        .into_iter()
+        .map(|line| (line.base.id, line.sales_order_id.to_string()))
+        .collect::<HashMap<_, _>>();
+    let mut by_order_warehouse = BTreeMap::<(String, String), Vec<&StockReservation>>::new();
+    for reservation in &reservations {
+        let sales_order_id = sales_order_by_line
+            .get(reservation.sales_order_line_id.as_ref())
             .ok_or_else(|| Error::BusinessLogicError("销售明细不存在，无法生成仓发草稿".to_string()))?;
-        by_order
-            .entry(sales_line.sales_order_id.to_string())
+        by_order_warehouse
+            .entry((sales_order_id.clone(), reservation.warehouse_id.to_string()))
             .or_default()
-            .push((line_id, reservations.clone()));
+            .push(reservation);
     }
-    for (order_id, line_reservations) in by_order {
-        let sales_order_id = SalesOrderId::new(order_id.clone());
-        let existing = db
-            .fulfillment()
-            .draft_delivery_for_sales_order(&sales_order_id, session)
-            .await?;
-        if existing.is_some() {
-            continue;
-        }
-        let delivery_id = DeliveryId::new(next_id());
-        let warehouse_id = line_reservations
-            .first()
-            .and_then(|(_, reservations)| reservations.first())
-            .map(|reservation| reservation.warehouse_id.clone())
-            .ok_or_else(|| Error::BusinessLogicError("仓发草稿缺少仓库".to_string()))?;
-        let delivery = Delivery::new(
-            delivery_id.clone(),
-            DeliveryData {
-                delivery_no: format!("FH-{}", delivery_id.as_ref()),
-                delivery_type: DeliveryType::WarehouseShip,
-                sales_order_id,
-                purchase_order_id: None,
-                warehouse_id: Some(warehouse_id),
-                carrier: None,
-                tracking_no: None,
-                address_snapshot_encrypted: None,
-                address_snapshot_fingerprint: None,
-            },
-        )?;
-        let mut lines = Vec::new();
-        let mut line_no = 1u32;
-        for (line_id, reservations) in &line_reservations {
-            for reservation in reservations {
-                lines.push(
-                    DeliveryLine::new(
-                        DeliveryLineId::new(next_id()),
-                        DeliveryLineData {
-                            delivery_id: delivery_id.clone(),
-                            line_no,
-                            sales_order_line_id: SalesOrderLineId::new((*line_id).clone()),
-                            quantity: reservation.reserved_quantity,
-                            stock_reservation_id: Some(reservation.base.id.clone().into()),
-                            purchase_line_sales_allocation_id: None,
-                        },
-                        DeliveryType::WarehouseShip,
-                    )
-                    .map_err(Error::Logic)?,
-                );
-                line_no += 1;
-            }
-        }
-        db.fulfillment()
-            .create_delivery_with_lines(&delivery, &lines, session)
-            .await?;
+    for ((order_id, warehouse_id), reservations) in by_order_warehouse {
+        ensure_receipt_stock_delivery(
+            db,
+            &SalesOrderId::new(order_id),
+            &WarehouseId::new(warehouse_id),
+            &reservations,
+            session,
+        )
+        .await?;
     }
     Ok(())
+}
+
+/// 将本次采购入库预占合并到同销售单同仓库的仓发草稿。
+async fn ensure_receipt_stock_delivery(
+    db: &Database,
+    sales_order_id: &SalesOrderId,
+    warehouse_id: &WarehouseId,
+    reservations: &[&StockReservation],
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let existing = db
+        .fulfillment()
+        .draft_warehouse_delivery(sales_order_id, warehouse_id, session)
+        .await?;
+    if let Some(delivery) = existing {
+        append_receipt_stock_delivery_lines(db, &delivery, reservations, session).await?;
+        return Ok(());
+    }
+    let delivery_id = DeliveryId::new(next_id());
+    let delivery = Delivery::new(
+        delivery_id.clone(),
+        DeliveryData {
+            delivery_no: format!("FH-{}", delivery_id.as_ref()),
+            delivery_type: DeliveryType::WarehouseShip,
+            sales_order_id: sales_order_id.clone(),
+            purchase_order_id: None,
+            warehouse_id: Some(warehouse_id.clone()),
+            carrier: None,
+            tracking_no: None,
+            address_snapshot_encrypted: None,
+            address_snapshot_fingerprint: None,
+        },
+    )?;
+    let lines = build_receipt_stock_delivery_lines(&delivery_id, reservations, 1)?;
+    db.fulfillment()
+        .create_delivery_with_lines(&delivery, &lines, session)
+        .await?;
+    Ok(())
+}
+
+/// 向既有仓发草稿追加尚未引用的采购入库预占。
+async fn append_receipt_stock_delivery_lines(
+    db: &Database,
+    delivery: &Delivery,
+    reservations: &[&StockReservation],
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let delivery_id = DeliveryId::new(delivery.base.id.clone());
+    let existing = db
+        .fulfillment()
+        .delivery_lines_by_delivery_ids(std::slice::from_ref(&delivery_id), session)
+        .await?;
+    let existing_reservations = existing
+        .iter()
+        .filter_map(|line| line.stock_reservation_id.as_ref().map(ToString::to_string))
+        .collect::<HashSet<_>>();
+    let pending = reservations
+        .iter()
+        .copied()
+        .filter(|reservation| !existing_reservations.contains(&reservation.base.id))
+        .collect::<Vec<_>>();
+    let next_line_no = existing.iter().map(|line| line.line_no).max().unwrap_or(0) + 1;
+    for line in build_receipt_stock_delivery_lines(&delivery_id, &pending, next_line_no)? {
+        db.delivery_lines().create(&line, session).await?;
+    }
+    Ok(())
+}
+
+/// 将采购入库预占投影为仓发草稿行。
+fn build_receipt_stock_delivery_lines(
+    delivery_id: &DeliveryId,
+    reservations: &[&StockReservation],
+    first_line_no: u32,
+) -> Result<Vec<DeliveryLine>> {
+    reservations
+        .iter()
+        .enumerate()
+        .map(|(index, reservation)| {
+            DeliveryLine::new(
+                DeliveryLineId::new(next_id()),
+                DeliveryLineData {
+                    delivery_id: delivery_id.clone(),
+                    line_no: first_line_no + index as u32,
+                    sales_order_line_id: reservation.sales_order_line_id.clone(),
+                    quantity: reservation.reserved_quantity,
+                    stock_reservation_id: Some(reservation.base.id.clone().into()),
+                    purchase_line_sales_allocation_id: None,
+                },
+                DeliveryType::WarehouseShip,
+            )
+            .map_err(Error::Logic)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -572,5 +618,22 @@ mod tests {
         assert!(post.contains("mark_posted"));
         assert!(!post.contains("submit_"));
         assert!(!post.contains("start_approval"));
+    }
+
+    /// 入库预占必须按销售单与仓库复用草稿，并把新预占补成发货行。
+    #[test]
+    fn receipt_reservations_merge_into_exact_warehouse_draft() {
+        let production = include_str!("purchase_receipt_posting.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let draft_flow = production
+            .split("async fn create_warehouse_ship_drafts")
+            .nth(1)
+            .expect("仓发草稿流程");
+        assert!(draft_flow.contains("by_order_warehouse"));
+        assert!(draft_flow.contains("draft_warehouse_delivery"));
+        assert!(draft_flow.contains("append_receipt_stock_delivery_lines"));
+        assert!(!draft_flow.contains("draft_delivery_for_sales_order"));
     }
 }

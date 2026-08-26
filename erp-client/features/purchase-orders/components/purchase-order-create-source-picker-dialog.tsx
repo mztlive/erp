@@ -69,14 +69,14 @@ export function PurchaseOrderCreateSourcePickerDialog({
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <DialogTitle>选择来源销售单</DialogTitle>
                     <DialogDescription>
-                        预览可建采购的销售单，选定后作为本次建单来源。
+                        预览待分配供给的销售单，选定后作为本次供给分配来源。
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
                     {workspace.length > 1 ? (
                         <PurchaseOrderCreateSwitchList
-                            label="可建采购销售单"
+                            label="待分配供给销售单"
                             activeId={draftOrder?.salesOrderId ?? ""}
                             items={workspace.map((order) => ({
                                 id: order.salesOrderId,
@@ -127,7 +127,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
 }
 
 /**
- * 用来源销售单的可建采购数据投影成纸质单据，不补全未加载的销售详情。
+ * 用来源销售单的可分配供给数据投影成纸质单据，不补全未加载的销售详情。
  */
 function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
     const summary = summarizeSourcingOrder(order)
@@ -145,7 +145,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
             frame="bare"
             className="min-w-3xl w-3xl max-w-3xl"
             title="销售单"
-            subtitle="采购来源"
+            subtitle="供给分配来源"
             documentNumber={order.salesOrderNo}
             parties={[
                 {
@@ -169,13 +169,13 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
                     fields: [
                         {
                             id: "pending",
-                            label: "待采购明细",
+                            label: "待分配明细",
                             value: `${summary.lineCount} 行`,
                             numeric: true,
                         },
                         {
                             id: "suppliers",
-                            label: "可选供应商",
+                            label: "可选采购供应商",
                             value: `${summary.uniqueSupplierCount} 家`,
                             numeric: true,
                         },
@@ -185,7 +185,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
             metadata={[
                 {
                     id: "covered",
-                    label: "已覆盖明细",
+                    label: "已供给覆盖",
                     value: `${summary.coveredLineCount} 行`,
                     numeric: true,
                 },
@@ -214,7 +214,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
                       ]
                     : []),
             ]}
-            lineItemLabel="待采购明细"
+            lineItemLabel="待分配明细"
             columns={[
                 {
                     id: "item",
@@ -268,10 +268,10 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
                 },
                 {
                     id: "options",
-                    header: "可选供应商",
+                    header: "可用供给",
                     align: "end",
                     numeric: true,
-                    cell: (row) => `${row.options.length} 家`,
+                    cell: (row) => `${row.options.length} 项`,
                 },
             ]}
             rows={order.lines}
@@ -279,18 +279,18 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
             totals={[
                 {
                     id: "lines",
-                    label: "待采购明细",
+                    label: "待分配明细",
                     value: `${summary.lineCount} 行`,
                 },
                 {
                     id: "estimate",
-                    label: "最低含税估算",
+                    label: "推荐采购含税估算",
                     value: <MoneyValue value={summary.minEstimatedGross} />,
                     emphasized: true,
-                    description: "按每条明细最低含税成本估算",
+                    description: "扣除推荐库存分配后，按采购推荐方案估算",
                 },
             ]}
-            remarks="本预览展示该销售单当前可建采购的明细，含税金额为按最低成本估算。"
+            remarks="本预览展示该销售单当前待分配供给的明细；库存优先，含税金额仅估算推荐采购缺口。"
         />
     )
 }

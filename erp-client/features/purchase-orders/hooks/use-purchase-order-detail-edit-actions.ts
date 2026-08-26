@@ -305,7 +305,7 @@ export function usePurchaseOrderDetailEditActions({
                 status: "succeeded",
                 title: "采购草稿已作废",
                 description:
-                    "该采购草稿不再占用销售待采购数量；如原任务已经完成，系统已建立新的待采购任务。",
+                    "该采购草稿不再占用销售待分配供给数量；如原任务已经完成，系统已建立新的供给分配任务。",
                 reference: response.reference,
                 facts: [
                     {

@@ -35,7 +35,7 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         baseHref: "/procurement/confirm",
     },
     procurement_order_creation: {
-        workItemTypeLabel: "待采购建单",
+        workItemTypeLabel: "待供给分配",
         family: "fulfillment",
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",

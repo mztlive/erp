@@ -31,7 +31,7 @@ export type PermissionGate = {
 const REASON: Record<SalesOrderDetailPermissionKind, string> = {
     openPurchase: "当前账号没有采购单列表权限",
     previewPurchase: "当前账号没有采购单详情权限，无法预览",
-    createPurchase: "当前账号没有创建采购单权限",
+    createPurchase: "当前账号没有供给分配权限",
     openFulfillment: "当前账号没有履约/交付工作面权限",
     openReceivable: "当前账号没有客户往来权限",
     registerAcceptance: "当前账号没有登记客户验收权限",

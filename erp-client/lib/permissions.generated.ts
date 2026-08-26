@@ -2009,7 +2009,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/purchase-orders/from-sourcing",
-                description: "按选源结果创建采购单",
+                description: "确认供给分配",
                 permission: {
                     resource: "purchase_order",
                     action: "create",
@@ -2079,7 +2079,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "GET",
                 path: "/admin/purchase-creation-bases",
-                description: "查询采购创建依据",
+                description: "查询供给分配依据",
                 permission: {
                     resource: "purchase_order",
                     action: "create",

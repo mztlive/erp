@@ -267,8 +267,11 @@ export type PurchaseOrderCenterView = Readonly<{
     }
 }>
 
+export type SupplySourceType = "PURCHASE" | "EXISTING_STOCK"
+
 export type PurchaseCreationBasis = Readonly<{
     basisId: string
+    sourceType: SupplySourceType
     workItemId: string
     salesOrderId: string
     salesOrderNo: string
@@ -278,6 +281,10 @@ export type PurchaseCreationBasis = Readonly<{
     salesOrderRevisionId: string
     supplierId: string
     supplierName: string
+    stockBalanceId?: string
+    warehouseId?: string
+    warehouseName?: string
+    sourceAvailableQuantity?: string
     purchaseType: PurchaseType
     fulfillmentResponsibility: FulfillmentResponsibility
     paymentTermCode: string
@@ -386,6 +393,7 @@ export type CreatePurchaseOrdersFromSourcingInput = {
     lines: Array<{
         salesOrderLineId: string
         basisId: string
+        sourceType: SupplySourceType
         quantity: string
         expectedDeliveryDate: string
     }>
@@ -396,6 +404,14 @@ export type CreatedPurchaseOrderDraft = {
     purchaseOrderId: string
     draftLabel: string
     lockVersion: number
+}
+
+export type CreatedStockReservation = {
+    stockReservationId: string
+    salesOrderLineId: string
+    stockBalanceId: string
+    warehouseId: string
+    quantity: string
 }
 
 export type FormalActionResponse<T = unknown> =

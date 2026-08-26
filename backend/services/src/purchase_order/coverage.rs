@@ -6,12 +6,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{CatalogExt, Executor, PurchaseOrderExt, SalesOrderExt};
+use database::{CatalogExt, Executor, InventoryExt, PurchaseOrderExt, SalesOrderExt};
 use entities::catalog::ProductKind;
 use entities::ids::{
-    PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderRevisionId,
-    SalesOrderRevisionLineId, SkuId,
+    PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseOrderSubmissionId, SalesOrderLineId,
+    SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId,
 };
+use entities::inventory::StockReservation;
 use entities::money::Quantity;
 use entities::purchase_order::{PurchaseLineType, PurchaseOrder, PurchaseOrderStatus};
 use entities::sales_order::{
@@ -74,8 +75,43 @@ pub(crate) async fn load_sales_procurement_coverage(
         .purchase_orders()
         .find_covering_by_sales_order(&order.base.id.clone().into(), executor)
         .await?;
-    let covered = load_covered_quantities(db, &target_lines, &purchase_orders, executor).await?;
+    let mut covered = load_covered_quantities(db, &target_lines, &purchase_orders, executor).await?;
+    add_existing_stock_coverage(db, &target_lines, &mut covered, executor).await?;
     build_coverage(revision, target_lines, covered, product_kinds)
+}
+
+/// 将现有库存直接分配形成的预占计入供给覆盖。
+///
+/// 采购入库形成的预占已经由采购单覆盖量承载，必须排除以免重复累计。现有库存
+/// 预占按 `reserved + consumed` 计入：仍锁定和已经仓发的数量都已满足供给；释放
+/// 数量不再覆盖，释放后任务同步会重新出现缺口。
+async fn add_existing_stock_coverage(
+    db: &mongodb::Database,
+    targets: &[(SalesOrderRevisionLine, SalesOrderGoodsServiceLineRevision)],
+    covered: &mut HashMap<String, Quantity>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let line_ids = targets
+        .iter()
+        .map(|(line, _)| line.sales_order_line_id.clone())
+        .collect::<Vec<SalesOrderLineId>>();
+    let reservations = db
+        .inventory()
+        .existing_stock_reservations_for_sales_lines(&line_ids, executor)
+        .await?;
+    for reservation in reservations {
+        add_covered(
+            covered,
+            reservation.sales_order_line_id.as_ref(),
+            reservation_covered_quantity(&reservation)?,
+        )?;
+    }
+    Ok(())
+}
+
+/// 返回一条现有库存预占仍然满足销售供给的数量。
+fn reservation_covered_quantity(reservation: &StockReservation) -> Result<Quantity> {
+    quantity_of(reservation.reserved_quantity.to_decimal() + reservation.consumed_quantity.to_decimal())
 }
 
 /// 批量解析采购目标行 SKU 对应的商品业务类型。
@@ -648,7 +684,10 @@ mod tests {
 
     use entities::ids::{
         PurchaseOrderId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId,
-        SupplierAccountId,
+        SkuId, StockReservationId, SupplierAccountId, WarehouseId,
+    };
+    use entities::inventory::{
+        ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
     use entities::money::{Amount, Quantity, Rate};
     use entities::purchase_order::{
@@ -659,7 +698,10 @@ mod tests {
         SalesOrderGoodsServiceLineRevisionData, SalesOrderRevisionLine, SalesOrderRevisionLineData,
     };
 
-    use super::{add_covered, coverage_summary, current_revision_ids, current_submission_ids, zero_quantity};
+    use super::{
+        add_covered, coverage_summary, current_revision_ids, current_submission_ids,
+        reservation_covered_quantity, zero_quantity,
+    };
 
     /// 构造指定状态和当前指针的采购单。
     fn purchase_order(
@@ -698,6 +740,33 @@ mod tests {
 
         assert_eq!(covered["sol-1"], Quantity::from_str("2").unwrap());
         assert_eq!(zero_quantity(), Quantity::from_str("0").unwrap());
+    }
+
+    /// 现有库存覆盖保留已仓发数量，并排除已经释放的剩余部分。
+    #[test]
+    fn existing_stock_coverage_is_reserved_plus_consumed() {
+        let reservation = StockReservation::new(
+            StockReservationId::new("rsv-direct-1"),
+            StockReservationData {
+                warehouse_id: WarehouseId::new("warehouse-1"),
+                sku_id: SkuId::new("sku-1"),
+                sales_order_line_id: SalesOrderLineId::new("line-1"),
+                source_type: StockReservationSourceType::ExistingStock,
+                purchase_line_sales_allocation_id: None,
+                source_receipt_line_id: None,
+                source_allocation_id: Some("allocation-1".to_string()),
+                reserved_quantity: Quantity::from_str("6").unwrap(),
+                consumed_quantity: Quantity::from_str("4").unwrap(),
+                released_quantity: Quantity::from_str("0").unwrap(),
+                status: ReservationStatus::PartiallyConsumed,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            reservation_covered_quantity(&reservation).unwrap(),
+            Quantity::from_str("10").unwrap()
+        );
     }
 
     /// 覆盖超过销售当前版本数量时统一返回业务一致性错误。
