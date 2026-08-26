@@ -88,7 +88,11 @@ export function OptionCombobox({
     onBlur,
 }: OptionComboboxProps) {
     const items = React.useMemo(() => toInternal(options), [options])
-    const selected = useStickySelected(items, value ?? undefined, (item) => item.value)
+    const selected = useStickySelected(
+        items,
+        value ?? undefined,
+        (item) => item.value,
+    )
 
     return (
         <Combobox
@@ -147,8 +151,11 @@ export function OptionCombobox({
                                 key={item.value}
                                 value={item}
                                 disabled={item.disabled}
+                                className="w-max min-w-full"
                             >
-                                <span className="truncate">{item.label}</span>
+                                <span className="shrink-0 whitespace-nowrap">
+                                    {item.label}
+                                </span>
                             </ComboboxItem>
                         ))}
                     </ComboboxList>

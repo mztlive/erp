@@ -3,41 +3,37 @@
 import * as React from "react"
 
 import {
-    PRODUCT_EDITOR_SECTIONS,
+    parseProductSectionId,
     type ProductEditorSectionId,
 } from "@/features/master-data/lib/product-editor-model"
 
-/** 商品编辑分区 Tab 的滚动高亮（P2-19 scroll spy）。 */
+/**
+ * 商品编辑分区 Tab。从 URL hash 恢复（如供给关系 returnTo），
+ * 切换时写入 `#product-section-{id}`，不再做滚动 spy。
+ */
 export function useProductSectionSpy(
     isCreate: boolean,
     stableId: string | undefined,
 ) {
-    const [activeSection, setActiveSection] =
+    const [activeSection, setActiveSectionState] =
         React.useState<ProductEditorSectionId>("basic")
 
-    React.useEffect(() => {
-        if (isCreate) return
-        const sections = PRODUCT_EDITOR_SECTIONS.map((s) =>
-            document.getElementById(`product-section-${s.id}`),
-        ).filter((el): el is HTMLElement => el !== null)
-        if (sections.length === 0) return
-        const observer = new IntersectionObserver(
-            (entries) => {
-                for (const entry of entries) {
-                    if (entry.isIntersecting) {
-                        const id = entry.target.id.replace(
-                            "product-section-",
-                            "",
-                        )
-                        setActiveSection(id as ProductEditorSectionId)
-                    }
-                }
-            },
-            { rootMargin: "-20% 0px -65% 0px", threshold: 0 },
+    React.useLayoutEffect(() => {
+        setActiveSectionState(
+            parseProductSectionId(window.location.hash, isCreate),
         )
-        for (const section of sections) observer.observe(section)
-        return () => observer.disconnect()
     }, [isCreate, stableId])
+
+    const setActiveSection = React.useCallback((id: ProductEditorSectionId) => {
+        setActiveSectionState(id)
+        const nextHash = `#product-section-${id}`
+        if (window.location.hash === nextHash) return
+        window.history.replaceState(
+            window.history.state,
+            "",
+            `${window.location.pathname}${window.location.search}${nextHash}`,
+        )
+    }, [])
 
     return { activeSection, setActiveSection }
 }

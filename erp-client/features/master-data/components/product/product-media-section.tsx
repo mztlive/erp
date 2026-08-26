@@ -2,9 +2,9 @@
 
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { MediaListEditor } from "@/features/master-data/components/product/product-editor-media"
+import { ProductSectionFrame } from "@/features/master-data/components/product/product-section-frame"
 import type { SetProductFields } from "@/features/master-data/components/product/product-editor-sections"
 import type { ProductFields } from "@/features/master-data/types"
-import { cn } from "@/lib/utils"
 
 type ProductMediaSectionProps = {
     canRevise: boolean
@@ -20,22 +20,12 @@ function ProductMediaSection({
     rememberPendingFiles,
 }: ProductMediaSectionProps) {
     return (
-        <fieldset
+        <ProductSectionFrame
             id="product-section-media"
-            className={cn(
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-5 border-b border-grid p-5 last:border-b-0",
-            )}
+            title={masterDataCopy.fieldMediaSection}
+            description={masterDataCopy.productSpuMediaHint}
             disabled={!canRevise}
         >
-            <legend className="sr-only">
-                {masterDataCopy.fieldMediaSection}
-            </legend>
-            <div className="text-base font-semibold">
-                {masterDataCopy.fieldMediaSection}
-            </div>
-            <p className="text-xs text-muted-foreground">
-                {masterDataCopy.productSpuMediaHint}
-            </p>
             <section className="space-y-3">
                 <MediaListEditor
                     label={masterDataCopy.fCarouselImages}
@@ -106,7 +96,7 @@ function ProductMediaSection({
                     }
                 />
             </section>
-        </fieldset>
+        </ProductSectionFrame>
     )
 }
 

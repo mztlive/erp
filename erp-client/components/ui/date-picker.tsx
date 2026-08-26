@@ -287,6 +287,7 @@ function DateTimePicker({
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
+    showTimeZone = true,
     placeholder = "选择日期和时间",
     disabled,
     disabledDates,
@@ -299,6 +300,7 @@ function DateTimePicker({
     value?: ZonedDateTimeValue
     onValueChange?: (value?: ZonedDateTimeValue) => void
     timeZone?: string
+    showTimeZone?: boolean
     placeholder?: string
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
@@ -310,7 +312,9 @@ function DateTimePicker({
     const [open, setOpen] = React.useState(false)
     const selected = parseDateValue(value?.date)
     const label = value
-        ? `${value.date} ${normalizeTimeValue(value.time)} · ${value.timeZone}`
+        ? `${value.date} ${normalizeTimeValue(value.time)}${
+              showTimeZone ? ` · ${value.timeZone}` : ""
+          }`
         : placeholder
 
     const update = (next: Partial<ZonedDateTimeValue>) => {
@@ -397,9 +401,11 @@ function DateTimePicker({
                         disabled={disabled || !value?.date}
                         aria-label="时间，精确到秒"
                     />
-                    <span className="whitespace-nowrap text-xs text-muted-foreground">
-                        {timeZone}
-                    </span>
+                    {showTimeZone ? (
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">
+                            {timeZone}
+                        </span>
+                    ) : null}
                     <Button
                         type="button"
                         size="sm"
@@ -423,6 +429,7 @@ function DateTimeLocalPicker({
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
+    showTimeZone = true,
     placeholder = "选择日期和时间",
     disabled,
     disabledDates,
@@ -435,6 +442,7 @@ function DateTimeLocalPicker({
     value?: string
     onValueChange?: (value?: string) => void
     timeZone?: string
+    showTimeZone?: boolean
     placeholder?: string
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
@@ -453,6 +461,7 @@ function DateTimeLocalPicker({
                 )
             }
             timeZone={timeZone}
+            showTimeZone={showTimeZone}
             placeholder={placeholder}
             disabled={disabled}
             disabledDates={disabledDates}

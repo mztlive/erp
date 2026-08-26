@@ -12,9 +12,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ProductSectionFrame } from "@/features/master-data/components/product/product-section-frame"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { moveListItem } from "@/features/master-data/lib/move-list-item"
 import type { ProductSpecDraft } from "@/features/master-data/lib/product-editor-model"
-import { cn } from "@/lib/utils"
 
 type ProductSpecDraftsEditorProps = {
     canRevise: boolean
@@ -30,24 +31,16 @@ function ProductSpecDraftsEditor({
     syncSpecDrafts,
 }: ProductSpecDraftsEditorProps) {
     return (
-        <fieldset
-            id="product-section-sku"
-            className={cn(
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 border-b border-grid p-5 last:border-b-0",
-            )}
+        <ProductSectionFrame
+            title="商品规格"
+            description={masterDataCopy.productSpecsHint}
             disabled={!canRevise}
-        >
-            <legend className="sr-only">商品规格</legend>
-            <div className="text-base font-semibold">商品规格</div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                    规格值会自动组合成 SKU；调整规格顺序时保留可匹配的原 SKU
-                    数据。
-                </p>
+            extra={
                 <Badge variant="secondary">
                     {specDrafts.length} 个规格项 · {skuCount} 个 SKU
                 </Badge>
-            </div>
+            }
+        >
             <div className="space-y-3">
                 {specDrafts.map((draft, index) => (
                     <div
@@ -109,9 +102,7 @@ function ProductSpecDraftsEditor({
                                     type="button"
                                     variant="ghost"
                                     size="icon-xs"
-                                    disabled={
-                                        index === specDrafts.length - 1
-                                    }
+                                    disabled={index === specDrafts.length - 1}
                                     aria-label={`规格项 ${index + 1} 下移`}
                                     onClick={() =>
                                         syncSpecDrafts(
@@ -235,16 +226,13 @@ function ProductSpecDraftsEditor({
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                    syncSpecDrafts([
-                        ...specDrafts,
-                        { name: "", values: [""] },
-                    ])
+                    syncSpecDrafts([...specDrafts, { name: "", values: [""] }])
                 }
             >
                 <PlusIcon data-icon="inline-start" aria-hidden />
                 添加规格项
             </Button>
-        </fieldset>
+        </ProductSectionFrame>
     )
 }
 

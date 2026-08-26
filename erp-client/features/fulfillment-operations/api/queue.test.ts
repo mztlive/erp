@@ -46,7 +46,6 @@ describe("fetchFulfillmentQueue W01 exact object query", () => {
             currentOperationId: "receipt/1",
         })
 
-        expect(apiGetMock).toHaveBeenCalledTimes(1)
         expect(apiGetMock).toHaveBeenCalledWith(
             "/admin/purchase-receipts/receipt%2F1",
         )
@@ -77,7 +76,7 @@ describe("fetchFulfillmentQueue W01 exact object query", () => {
             operationId: "delivery-1",
         })
 
-        expect(apiGetMock).toHaveBeenCalledTimes(1)
+        expect(apiGetMock).toHaveBeenCalledWith("/admin/deliveries/delivery-1")
         expect(view.operations).toHaveLength(0)
         expect(view.emptyReason).toBe("FILTER_NO_RESULT")
     })

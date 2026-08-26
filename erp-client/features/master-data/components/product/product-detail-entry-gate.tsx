@@ -43,7 +43,7 @@ function ProductDetailEntryGate({
 }: ProductDetailEntryGateProps) {
     if (!isCreate && detailQuery.isPending) {
         return (
-            <PageScaffold>
+            <PageScaffold density="compact">
                 <PageHeader
                     title="商品详情"
                     description={masterDataCopy.centerLoading}
@@ -58,7 +58,7 @@ function ProductDetailEntryGate({
 
     if (!isCreate && (detailQuery.isError || !hasDetailData)) {
         return (
-            <PageScaffold>
+            <PageScaffold density="compact">
                 <PageHeader title="商品详情" />
                 <BusinessFailureState
                     error={detailQuery.isError ? detailQuery.error : undefined}
@@ -88,7 +88,7 @@ function ProductDetailEntryGate({
 
     if (isCreate && accountQuery.isPending) {
         return (
-            <PageScaffold>
+            <PageScaffold density="compact">
                 <PageHeader title="新建商品" description="正在核对创建权限" />
                 <div
                     className="h-40 animate-pulse rounded-lg bg-muted"
@@ -100,7 +100,7 @@ function ProductDetailEntryGate({
 
     if (isCreate && accountQuery.isError) {
         return (
-            <PageScaffold>
+            <PageScaffold density="compact">
                 <PageHeader title="新建商品" />
                 <BusinessFailureState
                     error={accountQuery.error}
@@ -112,7 +112,7 @@ function ProductDetailEntryGate({
 
     if (isCreate && !canCreate) {
         return (
-            <PageScaffold>
+            <PageScaffold density="compact">
                 <PageHeader title="新建商品" />
                 <BusinessFailureState
                     kind="permission"

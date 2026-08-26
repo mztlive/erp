@@ -16,7 +16,7 @@
 //! - D18 `invoices()` 复用发票仓储（`invoice` 由 D18 拥有实体与仓储，
 //!   D19 只拥有 `purchase_invoice_allocation`，禁止复制发票实体）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
@@ -54,6 +54,7 @@ use crate::iam::{self, SharedRbacService};
 mod adapter;
 mod cancel_approval;
 mod dto;
+pub(crate) mod payment_task;
 mod start_approval;
 
 pub use self::adapter::supplier_payment_object_readable;
@@ -878,6 +879,7 @@ impl PayableService {
                         )?);
                     }
 
+                    let mut affected_accounts = HashSet::new();
                     for (line_index, line) in new_allocations.iter().enumerate() {
                         let entry = db
                             .payable_entries()
@@ -898,6 +900,11 @@ impl PayableService {
                                 "子账剩余开放余额不足，核销被拒绝".to_string(),
                             ));
                         }
+                        affected_accounts.insert(entry.payable_account_id);
+                    }
+                    for account_id in affected_accounts {
+                        payment_task::sync_purchase_payment_task(&db, &account_id, &actor_id, session)
+                            .await?;
                     }
                     payment.mark_posted()?;
                     db.supplier_payments().update(&mut payment, session).await?;

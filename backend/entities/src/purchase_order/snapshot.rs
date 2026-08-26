@@ -2,10 +2,13 @@
 //!
 //! 快照字段由 P3 在形成提交/版本时填充，P1 只负责定义与校验。
 
+use chrono::{Datelike, Days};
 use serde::{Deserialize, Serialize};
 
+use crate::common::time::BusinessDate;
 use crate::errors::{Error, Result};
 use crate::money::{Amount, Rate};
+use crate::supplier::business_category::split_encoded_payment_term_snapshot;
 use crate::validation::normalize_required_text;
 
 /// 供应商名称最大长度。
@@ -107,11 +110,55 @@ impl PaymentTermSnapshot {
             prepay_minimum_ratio,
         })
     }
+
+    /// 计算采购应付的计划付款日。
+    ///
+    /// 先款/现结条件以采购最终通过日为付款日；货到 15/30 天条件以提交行中
+    /// 最晚预计交付日为基准。未知付款条件不得静默回退为当天。
+    ///
+    /// # 参数
+    /// * `approved_on` - 采购单最终通过的业务日期
+    /// * `expected_delivery_on` - 商品/服务行最晚预计交付日
+    ///
+    /// # 返回
+    /// 返回由冻结付款条件确定的计划付款日。
+    ///
+    /// # 错误
+    /// 后付条件缺少预计交付日、条件未登记规则或日期溢出时返回错误。
+    pub fn payable_due_date(
+        &self,
+        approved_on: BusinessDate,
+        expected_delivery_on: Option<BusinessDate>,
+    ) -> Result<BusinessDate> {
+        let code = split_encoded_payment_term_snapshot(&self.payment_term_code)
+            .payment_term_code
+            .trim()
+            .to_uppercase();
+        if self.prepay_gate
+            || code.starts_with("PREPAY")
+            || matches!(code.as_str(), "现结" | "预付款" | "先款")
+        {
+            return Ok(approved_on);
+        }
+        let days = match code.as_str() {
+            "POSTPAY_NET15" | "POSTPAY-NET15" | "NET15" | "NET-15" => 15,
+            "POSTPAY_NET30" | "POSTPAY-NET30" | "NET30" | "NET-30" => 30,
+            _ => return Err(Error::from("付款条件未登记计划付款日规则")),
+        };
+        let delivery_on = expected_delivery_on.ok_or("后付条件缺少预计交付日")?;
+        let due = delivery_on
+            .as_naive_date()
+            .checked_add_days(Days::new(days))
+            .ok_or("计划付款日超出支持范围")?;
+        BusinessDate::from_ymd(due.year(), due.month(), due.day())
+            .ok_or_else(|| Error::from("计划付款日无效"))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{PaymentTermSnapshot, SupplierSnapshot};
+    use crate::common::time::BusinessDate;
 
     #[test]
     fn supplier_snapshot_trims_and_requires_name() {
@@ -141,5 +188,29 @@ mod tests {
             None,
         );
         assert!(negative.is_err());
+    }
+
+    #[test]
+    fn payment_term_computes_prepay_and_postpay_due_dates() {
+        let approved = BusinessDate::from_ymd(2026, 8, 26).unwrap();
+        let delivery = BusinessDate::from_ymd(2026, 9, 1).unwrap();
+        let prepay = PaymentTermSnapshot::new("PREPAY_30".to_string(), true, None, None).unwrap();
+        let postpay = PaymentTermSnapshot::new("POSTPAY_NET15".to_string(), false, None, None).unwrap();
+
+        assert_eq!(prepay.payable_due_date(approved, None).unwrap(), approved);
+        assert_eq!(
+            postpay.payable_due_date(approved, Some(delivery)).unwrap(),
+            BusinessDate::from_ymd(2026, 9, 16).unwrap()
+        );
+    }
+
+    #[test]
+    fn payment_term_fails_closed_without_a_registered_due_rule() {
+        let approved = BusinessDate::from_ymd(2026, 8, 26).unwrap();
+        let postpay = PaymentTermSnapshot::new("NET-30".to_string(), false, None, None).unwrap();
+        let unknown = PaymentTermSnapshot::new("先用后付".to_string(), false, None, None).unwrap();
+
+        assert!(postpay.payable_due_date(approved, None).is_err());
+        assert!(unknown.payable_due_date(approved, Some(approved)).is_err());
     }
 }

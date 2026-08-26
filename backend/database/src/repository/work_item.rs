@@ -575,6 +575,34 @@ impl<'a> Repository<'a, WorkItem> {
         .await
     }
 
+    /// 查询应付子账全部付款执行任务并把最新任务排在前面。
+    ///
+    /// # 参数
+    /// * `payable_account_id` - 应付子账稳定身份
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按更新时间、创建时间倒序排列的全部生命周期任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_payment_execution_by_payable_newest_first(
+        &self,
+        payable_account_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "business_object_type": "payable_account",
+                "business_object_id": payable_account_id,
+                "work_item_type": WorkItemType::SupplierPaymentExecution.as_str(),
+            },
+            doc! { "updated_at": -1, "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+
     async fn persist_open_approval_task(
         &self,
         item: &WorkItem,

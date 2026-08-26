@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * 开发开单底座：在业务数据已清空、web-api 已就绪后，补齐开单所需的客户与合同。
+ * 开发开单底座：在业务数据已清空、web-api 已就绪后，补齐开单所需底座。
  *
- * 不写入销售单/采购单/库存/票款。账号、供应商、商品/SKU、仓库由 reset 保留。
+ * 不写入销售单/采购单/库存/票款。账号、供应商、商品/SKU 由 reset 保留。
+ * 仓库主数据也会保留，但空库或未绑定收发经办人时本脚本会补齐。
  * 审批定义由 publish-approval-definitions.mjs 单独发布。
  *
- * 幂等：按固定法定名称查找客户、按固定合同编号查找合同；已存在则跳过。
+ * 幂等：客户、合同、仓储账号、开发仓均按固定标识查找；已存在则跳过或只补绑定。
  * 客户用 xiaoshou 创建，负责销售一开始就是开单账号（同一天不能把 OWNER 换人）。
  *
  * 用法: node scripts/seed-dev-foundation.mjs
@@ -16,6 +17,15 @@ const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001"
 const ACCOUNTS = {
     admin: { account: "admin", password: "123456" },
     sales: { account: "xiaoshou", password: "123456" },
+    warehouse: { account: "cangchu", password: "123456", name: "仓储" },
+}
+
+const ROLE_WAREHOUSE = "role-warehouse"
+const WAREHOUSE = {
+    code: "DEV-WH-01",
+    name: "开发开单仓",
+    address: "北京市朝阳区开发路 1 号仓库",
+    contact: "仓储",
 }
 
 const CUSTOMER = {
@@ -240,6 +250,117 @@ async function uploadContract(token, customer) {
     return call("POST", "/admin/contracts/upload", { token, form })
 }
 
+async function listAdmins(adminToken) {
+    const rows = await call("GET", "/admin/admins", { token: adminToken })
+    return Array.isArray(rows) ? rows : []
+}
+
+async function ensureWarehouseAccount(adminToken) {
+    const roles = await call("GET", "/admin/roles", { token: adminToken })
+    const warehouseRole = (Array.isArray(roles) ? roles : []).find((row) => row.id === ROLE_WAREHOUSE)
+    if (!warehouseRole) {
+        throw new Error("未找到预定义角色 role-warehouse，无法创建仓储账号")
+    }
+
+    let account = (await listAdmins(adminToken)).find((row) => row.account === ACCOUNTS.warehouse.account)
+    if (!account) {
+        await call("POST", "/admin/admins", {
+            token: adminToken,
+            body: {
+                account: ACCOUNTS.warehouse.account,
+                password: ACCOUNTS.warehouse.password,
+                name: ACCOUNTS.warehouse.name,
+                role_ids: [ROLE_WAREHOUSE],
+            },
+        })
+        account = (await listAdmins(adminToken)).find((row) => row.account === ACCOUNTS.warehouse.account)
+        if (!account) throw new Error("仓储账号已创建但列表中找不到 cangchu")
+        console.log("仓储账号已创建: cangchu")
+    } else {
+        console.log("仓储账号已存在: cangchu")
+    }
+
+    const roleIds = Array.isArray(account.role_ids) ? account.role_ids : []
+    if (!roleIds.includes(ROLE_WAREHOUSE)) {
+        await call("PUT", `/admin/admins/${encodeURIComponent(account.id)}/role`, {
+            token: adminToken,
+            body: { role_ids: [...roleIds, ROLE_WAREHOUSE] },
+        })
+        console.log("已为 cangchu 补上仓储角色")
+    }
+
+    const options = await call("GET", "/admin/warehouse-fulfillment-handler-options", {
+        token: adminToken,
+    })
+    const option = (Array.isArray(options) ? options : []).find((row) => row.user_id === account.id)
+    if (!option?.inbound_eligible || !option?.outbound_eligible) {
+        throw new Error("cangchu 不具备入库或仓发完整执行权限，无法绑定仓库")
+    }
+    return account
+}
+
+async function listWarehouses(adminToken) {
+    const page = await call("GET", "/admin/warehouses?page=1&page_size=100&sort_by=warehouse_code&sort_dir=asc", {
+        token: adminToken,
+    })
+    return page?.items ?? []
+}
+
+async function bindWarehouseHandlers(adminToken, warehouse, handlerUserId) {
+    const inbound = warehouse.inbound_handler_user_id?.trim()
+    const outbound = warehouse.outbound_handler_user_id?.trim()
+    if (inbound === handlerUserId && outbound === handlerUserId) return warehouse
+    return call("PUT", `/admin/warehouses/${encodeURIComponent(warehouse.id)}/fulfillment-handlers`, {
+        token: adminToken,
+        body: {
+            version: warehouse.version,
+            inbound_handler_user_id: handlerUserId,
+            outbound_handler_user_id: handlerUserId,
+        },
+    })
+}
+
+async function ensureWarehouse(adminToken, handlerUserId) {
+    let warehouses = await listWarehouses(adminToken)
+    let warehouse = warehouses.find((row) => row.warehouse_code === WAREHOUSE.code)
+    if (!warehouse) {
+        warehouse = await call("POST", "/admin/warehouses", {
+            token: adminToken,
+            body: {
+                warehouse_code: WAREHOUSE.code,
+                name: WAREHOUSE.name,
+                address: WAREHOUSE.address,
+                contact: WAREHOUSE.contact,
+                effective_from: todayBusinessDate(),
+                change_reason: "开发开单底座",
+                status: "active",
+                inbound_handler_user_id: handlerUserId,
+                outbound_handler_user_id: handlerUserId,
+            },
+        })
+        console.log("仓库已创建:", warehouse.warehouse_code, WAREHOUSE.name)
+        warehouses = await listWarehouses(adminToken)
+        warehouse = warehouses.find((row) => row.id === warehouse.id) ?? warehouse
+    } else {
+        console.log("仓库已存在:", warehouse.warehouse_code)
+        const bound = await bindWarehouseHandlers(adminToken, warehouse, handlerUserId)
+        if (bound.inbound_handler_user_id !== warehouse.inbound_handler_user_id) {
+            console.log("已将", warehouse.warehouse_code, "收发经办人绑定为 cangchu")
+        }
+        warehouse = bound
+    }
+
+    warehouses = await listWarehouses(adminToken)
+    for (const row of warehouses) {
+        if (row.id === warehouse.id) continue
+        if (row.status && row.status !== "active") continue
+        if (row.inbound_handler_user_id?.trim() && row.outbound_handler_user_id?.trim()) continue
+        const bound = await bindWarehouseHandlers(adminToken, row, handlerUserId)
+        console.log("已为已有仓库补绑定收发经办人:", bound.warehouse_code)
+    }
+    return warehouse
+}
+
 async function skuCount(adminToken, productKind) {
     try {
         const page = await call(
@@ -260,6 +381,9 @@ async function main() {
     const salesProfile = await call("GET", "/account/profile", { token: salesToken })
     const salesUserId = salesProfile.userid
     console.log("登录成功；销售账号 id:", salesUserId)
+
+    const warehouseAccount = await ensureWarehouseAccount(adminToken)
+    const warehouse = await ensureWarehouse(adminToken, warehouseAccount.id)
 
     let customer = await findCustomer(adminToken)
     if (customer) {
@@ -309,11 +433,12 @@ async function main() {
     console.log("== 开发开单底座已就绪 ==")
     console.log(`客户: ${customer.legal_name}（${customer.customer_no}）`)
     console.log(`合同: ${contract.contract_no}`)
+    console.log(`仓库: ${warehouse.warehouse_code}（收发经办人 cangchu）`)
     console.log("销售负责人: xiaoshou")
     console.log(
         `可售 SKU: PHYSICAL ${physical ?? "?"} / VOUCHER ${voucher ?? "?"} / OFFLINE_SERVICE ${service ?? "?"}`,
     )
-    console.log("登录账号: admin / xiaoshou / caigou    密码: 123456")
+    console.log("登录账号: admin / xiaoshou / caigou / cangchu    密码: 123456")
     console.log("下一步: 用 xiaoshou 打开销售开单页，选择该合同")
     if (service === 0) {
         console.log("线下服务开单另需: node scripts/seed-service-sku.mjs")

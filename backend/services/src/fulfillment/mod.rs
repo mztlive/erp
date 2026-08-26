@@ -27,6 +27,7 @@ mod customer_acceptance;
 mod customer_acceptance_posting;
 mod delivery;
 mod delivery_posting;
+pub(crate) mod document_number;
 mod dto;
 mod electronic_delivery;
 mod purchase_context;

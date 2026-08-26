@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataCenterView } from "@/features/master-data/types"
-import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
 
 type ProductHistorySectionProps = {
@@ -17,9 +16,7 @@ function ProductHistorySection({ data }: ProductHistorySectionProps) {
         <section
             id="product-section-history"
             aria-label="历史与引用"
-            className={cn(
-                "scroll-mt-[var(--product-section-scroll-margin)] px-5",
-            )}
+            className="[&_[data-slot=document-section]:first-of-type]:pt-0"
         >
             <DocumentSection
                 title={masterDataCopy.centerVersions}

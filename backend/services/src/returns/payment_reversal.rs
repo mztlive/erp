@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::adapter::{
     build_payment_reversal_snapshot, ensure_payment_reversal_final_approve_posting,
     execute_payment_reversal_domain_action, payment_reversal_adapter, payment_reversal_approval_view,
@@ -770,6 +772,7 @@ async fn revert_payment_settlements(
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
+    let mut affected_accounts = HashSet::new();
     for chunk in chunks {
         let entry = db
             .payable_entries()
@@ -783,6 +786,10 @@ async fn revert_payment_settlements(
         if !reverted {
             return Err(Error::BusinessLogicError("冲正冲减超过已核销金额".to_string()));
         }
+        affected_accounts.insert(entry.payable_account_id);
+    }
+    for account_id in affected_accounts {
+        crate::payable::payment_task::sync_purchase_payment_task(db, &account_id, actor_id, session).await?;
     }
     Ok(())
 }

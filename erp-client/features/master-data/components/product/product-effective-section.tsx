@@ -3,8 +3,8 @@
 import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ProductSectionFrame } from "@/features/master-data/components/product/product-section-frame"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
-import { cn } from "@/lib/utils"
 
 type ProductEffectiveSectionProps = {
     isCreate: boolean
@@ -28,16 +28,12 @@ function ProductEffectiveSection({
     setChangeReason,
 }: ProductEffectiveSectionProps) {
     return (
-        <fieldset
+        <ProductSectionFrame
             id="product-section-effective"
-            className={cn(
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 border-b border-grid p-5 last:border-b-0",
-            )}
+            title="生效与原因"
             disabled={!canRevise}
         >
-            <legend className="sr-only">生效与原因</legend>
-            <div className="text-base font-semibold">生效与原因</div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                     <Label htmlFor="ef-from">
                         {masterDataCopy.fieldEffectiveFrom}
@@ -75,7 +71,7 @@ function ProductEffectiveSection({
                     />
                 </div>
             </div>
-        </fieldset>
+        </ProductSectionFrame>
     )
 }
 

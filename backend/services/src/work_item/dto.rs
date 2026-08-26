@@ -12,10 +12,11 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 16] = [
+const WORK_ITEM_TYPES: [WorkItemType; 17] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::FulfillmentOperation,
+    WorkItemType::SupplierPaymentExecution,
     WorkItemType::PurchaseOrderReview,
     WorkItemType::SalesChangeImpactReview,
     WorkItemType::SalesChangeFinanceReview,
@@ -800,6 +801,10 @@ fn handler_route(
         (WorkItemType::FulfillmentOperation, _) => {
             return Err(Error::ValidationError("履约任务业务对象未注册".to_string()));
         }
+        (WorkItemType::SupplierPaymentExecution, "payable_account") => ("supplier_payment_execution", "W12"),
+        (WorkItemType::SupplierPaymentExecution, _) => {
+            return Err(Error::ValidationError("付款执行任务业务对象未注册".to_string()));
+        }
         (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
         (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
         (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
@@ -857,6 +862,7 @@ fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
         }
         WorkItemType::CardFundsReview
         | WorkItemType::CardFundsDeltaReview
+        | WorkItemType::SupplierPaymentExecution
         | WorkItemType::PurchaseOrderReview
         | WorkItemType::SalesChangeFinanceReview
         | WorkItemType::OwnershipMigrationFinanceConfirmation
@@ -1140,6 +1146,31 @@ mod tests {
             WorkItemType::ProcurementOrderCreation,
             "purchase_order",
             "role-procurement"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn supplier_payment_execution_maps_to_w12_finance_family() {
+        let route = handler_route(
+            WorkItemType::SupplierPaymentExecution,
+            "payable_account",
+            "role-finance",
+        )
+        .unwrap();
+
+        assert_eq!(route.handler_key, "supplier_payment_execution");
+        assert_eq!(route.destination_workspace_id, "W12");
+        assert!(route.route_context.is_none());
+        assert_eq!(
+            family_of(WorkItemType::SupplierPaymentExecution),
+            WorkItemFamily::Finance
+        );
+        assert!(WORK_ITEM_TYPES.contains(&WorkItemType::SupplierPaymentExecution));
+        assert!(handler_route(
+            WorkItemType::SupplierPaymentExecution,
+            "supplier_payment",
+            "role-finance"
         )
         .is_err());
     }

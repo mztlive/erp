@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { ProductSectionFrame } from "@/features/master-data/components/product/product-section-frame"
 import { ProductSpecDraftsEditor } from "@/features/master-data/components/product/product-spec-drafts"
 import { ProductSkuTable } from "@/features/master-data/components/product/product-sku-table"
 import { SkuBulkPriceBar } from "@/features/master-data/components/product/product-sku-bulk-bar"
@@ -13,7 +14,6 @@ import type {
     ProductSpecDimension,
 } from "@/features/master-data/types"
 import type { FixedSku } from "@/features/supplier-offerings/types"
-import { cn } from "@/lib/utils"
 
 type ProductSkuSectionProps = {
     isCreate: boolean
@@ -68,30 +68,22 @@ function ProductSkuSection({
     stableId,
 }: ProductSkuSectionProps) {
     return (
-        <>
+        <div id="product-section-sku" className="min-w-0 max-w-full space-y-8">
             <ProductSpecDraftsEditor
                 canRevise={canRevise}
                 specDrafts={specDrafts}
                 skuCount={fields.skus.length}
                 syncSpecDrafts={syncSpecDrafts}
             />
-            <fieldset
-                className={cn(
-                    "min-w-0 max-w-full space-y-4 overflow-hidden border-b border-grid p-5 last:border-b-0",
-                )}
-            >
-                <legend className="sr-only">SKU</legend>
-                <div className="text-base font-semibold">SKU</div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                        <p className="text-xs text-muted-foreground">
-                            {masterDataCopy.productSkuHint}
-                        </p>
-                    </div>
+            <ProductSectionFrame
+                title="SKU"
+                description={masterDataCopy.productSkuHint}
+                extra={
                     <Badge variant="success">
                         共 {fields.skus.length} 个 SKU
                     </Badge>
-                </div>
+                }
+            >
                 <SkuBulkPriceBar
                     canRevise={canRevise}
                     batchSalePrice={batchSalePrice}
@@ -124,8 +116,8 @@ function ProductSkuSection({
                         stableId={stableId}
                     />
                 )}
-            </fieldset>
-        </>
+            </ProductSectionFrame>
+        </div>
     )
 }
 

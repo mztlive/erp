@@ -10,6 +10,10 @@ import type {
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { withDerivedQualified } from "@/features/fulfillment-operations/lib/validation"
+import {
+    displayText,
+    lineItemTitle,
+} from "@/features/fulfillment-operations/lib/readable-label"
 
 /**
  * 采购入库表单。PurchaseReceipt 为 NO_APPROVAL，只收集仓、时间与到货数量，
@@ -37,13 +41,20 @@ export function FulfillmentReceiptForm({
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                     <Label>入库仓</Label>
-                    <Input value={draft.warehouseLabel} disabled readOnly />
+                    <Input
+                        value={
+                            displayText(draft.warehouseLabel) || "待核对仓库"
+                        }
+                        disabled
+                        readOnly
+                    />
                 </div>
                 <div className="space-y-1.5">
                     <Label htmlFor="receipt-at">入库时间</Label>
                     <DateTimeLocalPicker
                         value={draft.occurredAt || undefined}
                         disabled={disabled}
+                        showTimeZone={false}
                         onValueChange={(next) =>
                             onChange({ ...draft, occurredAt: next ?? "" })
                         }
@@ -62,12 +73,10 @@ export function FulfillmentReceiptForm({
                         className="space-y-3 rounded-xl border border-border p-3"
                     >
                         <p className="text-sm font-medium">
-                            {src?.itemName ?? line.purchaseRevisionLineId} ·
-                            剩余可收{" "}
-                            <span className="num">
-                                {src?.remainingQuantity}
-                            </span>
-                            {src?.unitCode}
+                            {lineItemTitle(src?.itemName, i)}
+                            {displayText(src?.remainingQuantity)
+                                ? ` · 剩余可收 ${src?.remainingQuantity}${displayText(src?.unitCode)}`
+                                : ""}
                         </p>
                         <div className="grid gap-3 sm:grid-cols-3">
                             <div className="space-y-1.5">

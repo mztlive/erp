@@ -134,6 +134,37 @@ test("purchase order review opens the exact W08 review mode", () => {
     assertStableContext(url)
 })
 
+test("supplier payment execution opens W12 with the exact payable preselected", () => {
+    const url = parsedHref(
+        buildHandlerHref({
+            ...REQUIRED_CONTEXT,
+            businessObjectId: "payable / 42",
+            rootBusinessObjectId: "purchase / 7",
+            handlerKey: "supplier_payment_execution",
+            destinationWorkspaceId: "W12",
+        }),
+    )
+
+    assert.equal(url.pathname, "/finance/supplier-accounts")
+    assert.equal(url.searchParams.get("from"), "W01")
+    assert.equal(url.searchParams.get("view"), "payable")
+    assert.equal(url.searchParams.get("session"), "payment")
+    assert.equal(url.searchParams.get("purchaseOrderId"), "purchase / 7")
+    assert.equal(url.searchParams.get("detailId"), "payable / 42")
+    assert.equal(url.searchParams.get("previewKind"), "payable")
+    assert.equal(url.searchParams.get("currentWorkItemId"), "wi-42")
+    assert.equal(url.searchParams.get("queueContextId"), "queue-42")
+
+    assert.equal(
+        buildHandlerHref({
+            ...REQUIRED_CONTEXT,
+            handlerKey: "supplier_payment_execution",
+            destinationWorkspaceId: "W12",
+        }),
+        null,
+    )
+})
+
 test("supplier settlement review opens the exact W27 statement", () => {
     const url = parsedHref(
         buildHandlerHref({

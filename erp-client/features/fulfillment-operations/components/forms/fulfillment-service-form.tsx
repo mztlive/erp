@@ -12,6 +12,10 @@ import type {
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
+import {
+    displayText,
+    lineItemTitle,
+} from "@/features/fulfillment-operations/lib/readable-label"
 
 /** 本地时区 YYYY-MM-DDTHH:mm，用于「填当前时间」快捷填充。 */
 function nowLocal(): string {
@@ -76,6 +80,7 @@ export function FulfillmentServiceForm({
                     <DateTimeLocalPicker
                         value={draft.startedAt || undefined}
                         disabled={disabled}
+                        showTimeZone={false}
                         onValueChange={(next) =>
                             onChange({ ...draft, startedAt: next ?? "" })
                         }
@@ -99,6 +104,7 @@ export function FulfillmentServiceForm({
                     <DateTimeLocalPicker
                         value={draft.endedAt || undefined}
                         disabled={disabled}
+                        showTimeZone={false}
                         onValueChange={(next) =>
                             onChange({ ...draft, endedAt: next ?? "" })
                         }
@@ -148,10 +154,15 @@ export function FulfillmentServiceForm({
                         key={line.salesOrderLineId}
                         className="space-y-2 rounded-xl border border-border p-3"
                     >
-                        <p className="text-sm font-medium">{src?.itemName}</p>
-                        <p className="text-xs text-muted-foreground">
-                            对应 {operation.source.salesOrderNo}
+                        <p className="text-sm font-medium">
+                            {lineItemTitle(src?.itemName, i)}
                         </p>
+                        {displayText(operation.source.salesOrderNo) ? (
+                            <p className="text-xs text-muted-foreground">
+                                对应销售单{" "}
+                                {displayText(operation.source.salesOrderNo)}
+                            </p>
+                        ) : null}
                         <div className="space-y-1.5">
                             <Label htmlFor={`svc-qty-${i}`}>服务数量</Label>
                             <Input

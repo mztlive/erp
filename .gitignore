@@ -1,0 +1,13 @@
+/target
+*.png
+/assets
+/data
+/logs
+/uploads
+/config.toml
+/.docker-deps
+/.release-state
+/release-artifacts
+/releases
+.DS_Store
+/node_modules

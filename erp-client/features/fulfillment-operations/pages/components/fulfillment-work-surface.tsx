@@ -25,7 +25,6 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
 import { FulfillmentDraftForm } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
@@ -35,6 +34,8 @@ import {
     type FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { salesOrderHref } from "@/features/fulfillment-operations/pages/lib/gate-copy"
+import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
+import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib/presentation"
 import { cn } from "@/lib/utils"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
 
@@ -105,6 +106,16 @@ export function FulfillmentWorkSurface({
     onBack,
     onToggleShortcuts,
 }: FulfillmentWorkSurfaceProps) {
+    const headerSubtitle = [
+        displayText(operation.source.customerLabel),
+        displayText(operation.source.purchaseNo)
+            ? `采购 ${displayText(operation.source.purchaseNo)}`
+            : "",
+        displayText(operation.source.supplierLabel),
+    ]
+        .filter(Boolean)
+        .join(" · ")
+
     return (
         <div className="min-w-0 space-y-3">
             <SequentialProcessBar
@@ -150,106 +161,50 @@ export function FulfillmentWorkSurface({
             ) : null}
 
             <Card size="sm" className={surfacePanelClassName}>
-                <CardHeader className="border-b border-grid">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                            <CardTitle
-                                ref={headingRef}
-                                tabIndex={-1}
-                                aria-live="polite"
-                                className="outline-none"
-                            >
-                                {OPERATION_TYPE_LABEL[operation.operationType]}{" "}
-                                · {operation.source.salesOrderNo}
-                            </CardTitle>
-                            <CardDescription>
-                                {operation.source.customerLabel}
-                                {operation.source.purchaseNo
-                                    ? ` · 采购 ${operation.source.purchaseNo}`
-                                    : ""}
-                                {operation.source.supplierLabel
-                                    ? ` · ${operation.source.supplierLabel}`
-                                    : ""}
-                            </CardDescription>
+                {singleOperation ? null : (
+                    <CardHeader className="border-b border-grid">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                                <CardTitle
+                                    ref={headingRef}
+                                    tabIndex={-1}
+                                    aria-live="polite"
+                                    className="outline-none"
+                                >
+                                    {
+                                        OPERATION_TYPE_LABEL[
+                                            operation.operationType
+                                        ]
+                                    }
+                                    {displayText(operation.source.salesOrderNo)
+                                        ? ` · ${displayText(operation.source.salesOrderNo)}`
+                                        : ""}
+                                </CardTitle>
+                                {headerSubtitle ? (
+                                    <CardDescription>
+                                        {headerSubtitle}
+                                    </CardDescription>
+                                ) : null}
+                            </div>
+                            <BusinessStatusBadge
+                                context="list"
+                                label={operation.statusLabel}
+                                tone={operation.statusTone}
+                            />
                         </div>
-                        <BusinessStatusBadge
-                            context="list"
-                            label={operation.statusLabel}
-                            tone={operation.statusTone}
-                        />
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <section aria-label="来源上下文">
-                        <dl className="grid gap-px overflow-hidden rounded-lg border border-grid bg-grid sm:grid-cols-2 lg:grid-cols-3">
-                            {[
-                                {
-                                    label: "销售单",
-                                    value: operation.source.salesOrderNo,
-                                    href: salesOrderHref(
-                                        operation.source.salesOrderId,
-                                        currentUrl,
-                                    ),
-                                },
-                                {
-                                    label: "采购单",
-                                    value: operation.source.purchaseNo ?? "—",
-                                },
-                                {
-                                    label: "仓库",
-                                    value:
-                                        operation.source.warehouseLabel ??
-                                        "不涉及仓库",
-                                },
-                                {
-                                    label: "还剩多少",
-                                    value: operation.lines
-                                        .map(
-                                            (l) =>
-                                                `${l.itemName} ${l.remainingQuantity}${l.unitCode}`,
-                                        )
-                                        .join("；"),
-                                    numeric: true,
-                                },
-                                {
-                                    label: "供应商",
-                                    value:
-                                        operation.source.supplierLabel ?? "—",
-                                },
-                                {
-                                    label: "客户",
-                                    value: operation.source.customerLabel,
-                                },
-                            ].map((field) => (
-                                <div key={field.label} className="bg-card p-3">
-                                    <dt className="text-xs text-muted-foreground">
-                                        {field.label}
-                                    </dt>
-                                    <dd
-                                        className={cn(
-                                            "mt-1 font-medium",
-                                            field.numeric && "num",
-                                        )}
-                                    >
-                                        {showSalesOrderLinks &&
-                                        field.href &&
-                                        field.value !== "—" ? (
-                                            <Link
-                                                href={field.href}
-                                                className="text-primary underline-offset-4 hover:underline"
-                                            >
-                                                {field.value}
-                                            </Link>
-                                        ) : (
-                                            field.value
-                                        )}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </section>
-
-                    <Separator />
+                    </CardHeader>
+                )}
+                <CardContent className="space-y-5">
+                    {singleOperation ? (
+                        <h3 ref={headingRef} tabIndex={-1} className="sr-only">
+                            {OPERATION_TYPE_LABEL[operation.operationType]}
+                        </h3>
+                    ) : null}
+                    <FulfillmentSourceContext
+                        operation={operation}
+                        currentUrl={currentUrl}
+                        showSalesOrderLinks={showSalesOrderLinks}
+                    />
 
                     <FulfillmentDraftForm
                         operation={operation}
@@ -303,7 +258,7 @@ export function FulfillmentWorkSurface({
                                 onClick={() => void onSave()}
                             >
                                 <SaveIcon data-icon="inline-start" />
-                                保存草稿
+                                保存
                             </Button>
                             <Button
                                 type="button"
@@ -352,5 +307,60 @@ export function FulfillmentWorkSurface({
                 </CardContent>
             </Card>
         </div>
+    )
+}
+
+function FulfillmentSourceContext({
+    operation,
+    currentUrl,
+    showSalesOrderLinks,
+}: {
+    operation: FulfillmentOperation
+    currentUrl: string
+    showSalesOrderLinks: boolean
+}) {
+    const fields = sourceContextFields(
+        operation,
+        salesOrderHref(operation.source.salesOrderId, currentUrl),
+    )
+    if (fields.length === 0) return null
+    return (
+        <section aria-label="来源单据">
+            <dl
+                className={cn(
+                    "grid gap-px overflow-hidden rounded-lg border border-grid bg-grid",
+                    fields.length === 1
+                        ? "grid-cols-1"
+                        : "sm:grid-cols-2 lg:grid-cols-3",
+                )}
+            >
+                {fields.map((field) => (
+                    <div key={field.label} className="bg-card px-3 py-2.5">
+                        <dt className="text-xs text-muted-foreground">
+                            {field.label}
+                        </dt>
+                        <dd
+                            className={cn(
+                                "mt-1 text-sm font-medium",
+                                field.numeric && "num",
+                            )}
+                        >
+                            {showSalesOrderLinks &&
+                            field.href &&
+                            operation.source.salesOrderId ? (
+                                <Link
+                                    href={field.href}
+                                    className="text-primary underline-offset-4 hover:underline"
+                                >
+                                    {field.value}
+                                </Link>
+                            ) : (
+                                field.value
+                            )}
+                        </dd>
+                    </div>
+                ))}
+            </dl>
+        </section>
     )
 }

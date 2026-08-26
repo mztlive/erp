@@ -7,6 +7,7 @@ type HandlerWorkspaceId =
     | "W07"
     | "W08"
     | "W10"
+    | "W12"
     | "W13"
     | "W17"
     | "W18"
@@ -46,6 +47,12 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         family: "fulfillment",
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",
+    },
+    supplier_payment_execution: {
+        workItemTypeLabel: "供应商付款处理",
+        family: "finance",
+        destinationWorkspaceId: "W12",
+        baseHref: "/finance/supplier-accounts",
     },
     low_margin_manager: {
         workItemTypeLabel: "低毛利销售审批",
@@ -334,6 +341,20 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
                 `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
                 params,
             )
+        case "supplier_payment_execution": {
+            const purchaseOrderId = requiredValue(item.rootBusinessObjectId)
+            if (!purchaseOrderId || purchaseOrderId === businessObjectId) {
+                return null
+            }
+            params.set("from", "W01")
+            params.set("view", "payable")
+            params.set("session", "payment")
+            params.set("purchaseOrderId", purchaseOrderId)
+            params.set("detailId", businessObjectId)
+            params.set("previewKind", "payable")
+            params.set("currentWorkItemId", workItemId)
+            return withParams(registration.baseHref, params)
+        }
         case "supplier_settlement":
             params.set("section", "review")
             return withParams(

@@ -10,10 +10,10 @@ use std::{
 
 use chrono::{Datelike, FixedOffset, TimeZone, Utc};
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, IntegrationOpsExt, InventoryExt,
-    LegacyImportExt, MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
-    SalesOrderExt, SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt,
-    Transactional, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt, LegacyImportExt,
+    MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
+    SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt, Transactional,
+    WorkItemExt,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::{
@@ -42,6 +42,7 @@ use crate::{
 mod brief;
 mod change_order_brief;
 mod dto;
+mod fulfillment_operation_brief;
 mod funds_document_brief;
 mod inventory_settlement_brief;
 mod party_names;
@@ -466,6 +467,8 @@ impl WorkItemService {
             .await?;
         self.load_receivable_account_facts(keys, &mut facts, executor)
             .await?;
+        self.load_payable_account_facts(keys, &mut facts, executor)
+            .await?;
         self.load_customer_receipt_facts(keys, &mut facts, executor)
             .await?;
         self.load_customer_refund_facts(keys, &mut facts, executor)
@@ -483,107 +486,6 @@ impl WorkItemService {
         self.load_master_mapping_task_facts(keys, &mut facts, executor)
             .await?;
         Ok(facts)
-    }
-
-    /// 装载入库、发货、电子交付与服务履约工作项的权威对象事实。
-    ///
-    /// # 参数
-    /// * `keys` - 本批任务引用的对象键
-    /// * `facts` - 输出对象事实表
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 成功时写入全部存在的履约对象事实。
-    ///
-    /// # 错误
-    /// 任一仓储查询失败时返回错误。
-    async fn load_fulfillment_operation_facts(
-        &self,
-        keys: &HashSet<(ObjectKind, String)>,
-        facts: &mut ObjectFactMap,
-        executor: &mut dyn Executor,
-    ) -> Result<()> {
-        let receipt_ids = object_ids(keys, ObjectKind::PurchaseReceipt);
-        for receipt in self
-            .db
-            .purchase_receipts()
-            .list_work_item_brief_entities_by_ids(&receipt_ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::PurchaseReceipt, receipt.base.id.clone()),
-                ObjectFact::new(
-                    receipt.purchase_order_id.to_string(),
-                    format!("采购入库单 {} · {}", receipt.receipt_no, receipt.status.label()),
-                    SYSTEM_OBJECT_OWNER,
-                ),
-            );
-        }
-
-        let delivery_ids = object_ids(keys, ObjectKind::Delivery);
-        for delivery in self
-            .db
-            .deliveries()
-            .list_work_item_brief_entities_by_ids(&delivery_ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::Delivery, delivery.base.id.clone()),
-                ObjectFact::new(
-                    delivery.sales_order_id.to_string(),
-                    format!(
-                        "{} {} · {}",
-                        delivery.delivery_type.label(),
-                        delivery.delivery_no,
-                        delivery.status.label()
-                    ),
-                    SYSTEM_OBJECT_OWNER,
-                ),
-            );
-        }
-
-        let electronic_ids = object_ids(keys, ObjectKind::ElectronicDelivery);
-        for delivery in self
-            .db
-            .electronic_deliveries()
-            .list_work_item_brief_entities_by_ids(&electronic_ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::ElectronicDelivery, delivery.base.id.clone()),
-                ObjectFact::new(
-                    delivery.purchase_order_id.to_string(),
-                    format!(
-                        "电子交付 {} · {}",
-                        delivery.fulfillment_no,
-                        delivery.status.label()
-                    ),
-                    SYSTEM_OBJECT_OWNER,
-                ),
-            );
-        }
-
-        let service_ids = object_ids(keys, ObjectKind::ServiceFulfillment);
-        for fulfillment in self
-            .db
-            .service_fulfillments()
-            .list_work_item_brief_entities_by_ids(&service_ids, executor)
-            .await?
-        {
-            facts.insert(
-                (ObjectKind::ServiceFulfillment, fulfillment.base.id.clone()),
-                ObjectFact::new(
-                    fulfillment.purchase_order_id.to_string(),
-                    format!(
-                        "服务履约 {} · {}",
-                        fulfillment.fulfillment_no,
-                        fulfillment.status.label()
-                    ),
-                    SYSTEM_OBJECT_OWNER,
-                ),
-            );
-        }
-        Ok(())
     }
 
     /// 装载库存、结算、导入、集成和供应侧对象事实。
@@ -1431,10 +1333,12 @@ impl WorkItemService {
                 executor,
             )
             .await?;
-        if item.work_item_type.is_fulfillment_operation() {
-            // 履约任务不仅要求注册表中的读取/确认权限，还要求 W01 内嵌作业面
-            // 使用的完整列表、详情、编辑与正式命令权限。该快照由同一 policy
-            // revision 形成，外层授权事务会以该 revision 做 CAS 后才允许提交。
+        if item.work_item_type.is_fulfillment_operation()
+            || item.work_item_type.is_supplier_payment_execution()
+        {
+            // 执行任务除注册表读取权限外，还要求目标工作面使用的完整操作权限。
+            // 该快照由同一 policy revision 形成，外层授权事务会以该 revision
+            // 做 CAS 后才允许提交。
             access.permissions = authorization.assignee_permissions.clone();
         }
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
@@ -3263,6 +3167,7 @@ fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts:
     };
     has_permission(access, policy.read_permission)
         && has_fulfillment_execution_permissions(item, access)
+        && has_supplier_payment_execution_permissions(item, access)
         && (item.work_item_type.uses_explicit_owner_authorization()
             || has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact))
         && fact.subject_versions.accepts(&item.subject_version)
@@ -3276,6 +3181,22 @@ fn has_fulfillment_execution_permissions(item: &WorkItem, access: &ActorAccess) 
     let Some(required) = item
         .work_item_type
         .fulfillment_execution_permissions(&item.business_object_type)
+    else {
+        return false;
+    };
+    required
+        .iter()
+        .all(|permission| has_permission(access, permission))
+}
+
+/// 判断转交目标是否具备 W12 付款登记与提交所需的完整权限集合。
+fn has_supplier_payment_execution_permissions(item: &WorkItem, access: &ActorAccess) -> bool {
+    if !item.work_item_type.is_supplier_payment_execution() {
+        return true;
+    }
+    let Some(required) = item
+        .work_item_type
+        .supplier_payment_execution_permissions(&item.business_object_type)
     else {
         return false;
     };

@@ -6,9 +6,12 @@
 use std::collections::{HashMap, HashSet};
 
 use database::{
-    AccessControlExt, Executor, PartyExt, PayableExt, ReceivableExt, ReturnsExt, SalesOrderExt, SupplierExt,
+    AccessControlExt, Executor, PartyExt, PayableExt, PurchaseOrderExt, ReceivableExt, ReturnsExt,
+    SalesOrderExt, SupplierExt,
 };
+use entities::ids::PayableAccountId;
 use entities::party::Party;
+use entities::payable::PayableAccount;
 use entities::receivable::{CustomerReceipt, PendingReceiptAllocation, ReceivableAccount, ReceivableEntry};
 
 use super::brief::{
@@ -531,6 +534,109 @@ impl WorkItemService {
         Ok(())
     }
 
+    /// 付款执行任务的应付子账对象事实。
+    ///
+    /// # 参数
+    /// * `keys` - 本批任务引用的对象键
+    /// * `facts` - 输出的对象事实表
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 成功时写入供应商、采购单、计划付款日与开放金额摘要。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回错误。
+    pub(super) async fn load_payable_account_facts(
+        &self,
+        keys: &HashSet<(ObjectKind, String)>,
+        facts: &mut ObjectFactMap,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let ids = object_ids(keys, ObjectKind::PayableAccount);
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let accounts = self
+            .db
+            .payable_accounts()
+            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .await?;
+        let supplier_names = self.payable_supplier_names(&accounts, executor).await?;
+        let purchase_nos = self.payable_purchase_numbers(&accounts, executor).await?;
+        let due_dates = self.payable_due_dates(&accounts, executor).await?;
+        for account in accounts {
+            let supplier = supplier_names.get(&account.supplier_id.to_string()).cloned();
+            let purchase_no = purchase_nos.get(&account.source_document_id).cloned();
+            let due_date = due_dates.get(&account.base.id).map(ToString::to_string);
+            let id = account.base.id.clone();
+            facts.insert(
+                (ObjectKind::PayableAccount, id),
+                payable_account_fact(account, supplier, purchase_no, due_date),
+            );
+        }
+        Ok(())
+    }
+
+    /// 批量读取应付供应商展示名。
+    async fn payable_supplier_names(
+        &self,
+        accounts: &[PayableAccount],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        let ids = accounts
+            .iter()
+            .map(|account| account.supplier_id.to_string())
+            .collect::<Vec<_>>();
+        self.supplier_display_names(&ids, executor).await
+    }
+
+    /// 批量读取应付来源采购单号。
+    async fn payable_purchase_numbers(
+        &self,
+        accounts: &[PayableAccount],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        let ids = accounts
+            .iter()
+            .map(|account| account.source_document_id.clone())
+            .collect::<Vec<_>>();
+        Ok(self
+            .db
+            .purchase_orders()
+            .list_work_item_brief_entities_by_ids(&ids, executor)
+            .await?
+            .into_iter()
+            .map(|order| (order.base.id, order.purchase_no))
+            .collect())
+    }
+
+    /// 批量汇总每个应付子账最早分录到期日。
+    async fn payable_due_dates(
+        &self,
+        accounts: &[PayableAccount],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, entities::common::time::BusinessDate>> {
+        let ids = accounts
+            .iter()
+            .map(|account| PayableAccountId::new(account.base.id.clone()))
+            .collect::<Vec<_>>();
+        let mut due_dates = HashMap::new();
+        for entry in self
+            .db
+            .payable_entries()
+            .find_entries_by_accounts(&ids, executor)
+            .await?
+        {
+            due_dates
+                .entry(entry.payable_account_id.to_string())
+                .and_modify(|due: &mut entities::common::time::BusinessDate| {
+                    *due = (*due).min(entry.due_date)
+                })
+                .or_insert(entry.due_date);
+        }
+        Ok(due_dates)
+    }
+
     /// 按主体 ID 批量读取当前修订法定名称。
     ///
     /// # 参数
@@ -738,6 +844,64 @@ impl WorkItemService {
                 )
             })
             .collect())
+    }
+}
+
+/// 组装付款执行任务的应付对象事实。
+fn payable_account_fact(
+    account: PayableAccount,
+    supplier: Option<String>,
+    purchase_no: Option<String>,
+    due_date: Option<String>,
+) -> ObjectFact {
+    let brief_source = payable_brief_source(&account, supplier.clone(), purchase_no.clone(), due_date);
+    let label = purchase_no
+        .as_ref()
+        .map(|no| format!("采购应付 {no}"))
+        .unwrap_or_else(|| "采购应付".to_string());
+    let mut fact = ObjectFact::new(account.source_document_id, label, account.stable.created_by);
+    fact.counterparty_label = supplier;
+    fact.impact_summary = Some(format!("未付金额 {}", format_yuan(&account.open_total)));
+    fact.brief_source = Some(brief_source);
+    fact
+}
+
+/// 组装付款执行任务的结构化应付简报。
+fn payable_brief_source(
+    account: &PayableAccount,
+    supplier: Option<String>,
+    purchase_no: Option<String>,
+    due_date: Option<String>,
+) -> ObjectBriefSource {
+    let mut sections = Vec::new();
+    push_section(&mut sections, "供应商", supplier.as_deref(), false);
+    push_section(&mut sections, "采购单", purchase_no.as_deref(), false);
+    push_section(
+        &mut sections,
+        "未付金额",
+        Some(format_yuan(&account.open_total)).as_deref(),
+        true,
+    );
+    push_section(
+        &mut sections,
+        "已付金额",
+        Some(format_yuan(&account.settled_total)).as_deref(),
+        true,
+    );
+    push_section(&mut sections, "计划付款日", due_date.as_deref(), false);
+    ObjectBriefSource {
+        customer: supplier.clone(),
+        amount_label: Some(format_yuan(&account.open_total)),
+        extra_sections: sections,
+        list_summary: join_list_summary([
+            supplier,
+            purchase_no.map(|no| format!("采购单 {no}")),
+            due_date.map(|date| format!("计划付款 {date}")),
+            Some(format!("未付 {}", format_yuan(&account.open_total))),
+        ]),
+        lines: Vec::new(),
+        more_count: 0,
+        submitter_name: None,
     }
 }
 

@@ -3,6 +3,10 @@
  * 全部为无副作用函数，便于单独验证。
  */
 
+import {
+    displayText,
+    formatRemainingLines,
+} from "@/features/fulfillment-operations/lib/readable-label"
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
 
 export type ResponsibilityStatus =
@@ -43,6 +47,50 @@ export function readOnlyNote(
                   : `预计 ${operation.dueLabel} 前完成`
           }。`
         : "你只能查看这些单据的进度。"
+}
+
+export type SourceContextField = Readonly<{
+    label: string
+    value: string
+    href?: string
+    numeric?: boolean
+}>
+
+/**
+ * 作业面来源摘要。空值和内部 id 不上屏，避免六宫格里一排破折号。
+ */
+export function sourceContextFields(
+    operation: FulfillmentOperation,
+    salesOrderHref?: string,
+): readonly SourceContextField[] {
+    const remaining = formatRemainingLines(operation.lines)
+    const warehouse = displayText(operation.source.warehouseLabel)
+    const fields: SourceContextField[] = []
+    const salesOrderNo = displayText(operation.source.salesOrderNo)
+    if (salesOrderNo) {
+        fields.push({
+            label: "销售单",
+            value: salesOrderNo,
+            href: salesOrderHref,
+        })
+    }
+    const purchaseNo = displayText(operation.source.purchaseNo)
+    if (purchaseNo) fields.push({ label: "采购单", value: purchaseNo })
+    const customer = displayText(operation.source.customerLabel)
+    if (customer) fields.push({ label: "客户", value: customer })
+    const supplier = displayText(operation.source.supplierLabel)
+    if (supplier) fields.push({ label: "供应商", value: supplier })
+    if (
+        warehouse &&
+        warehouse !== "不涉及仓库" &&
+        operation.operationType !== "SUPPLIER_DIRECT"
+    ) {
+        fields.push({ label: "仓库", value: warehouse })
+    }
+    if (remaining) {
+        fields.push({ label: "还剩多少", value: remaining, numeric: true })
+    }
+    return fields
 }
 
 export function sourceReturnHref(

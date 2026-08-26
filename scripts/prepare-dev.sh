@@ -4,9 +4,10 @@
 # 编排：
 #   1. 停止 web-api（停写）
 #   2. 调用 reset-db.sh（清业务数据，保留账号/主数据，不填种子）
-#   3. 重启 web-api 并确保前端可用
+#   3. 临时拉起 web-api（只为发布审批定义和写种子）
 #   4. 发布审批定义
-#   5. 创建开发客户与合同（幂等）
+#   5. 创建仓储账号、开发仓（绑定收发经办人）、客户与合同（幂等）
+#   6. 再次停止 web-api，交给用户自行启动
 #
 # 不创建销售单、采购单、库存或票款。E2E（run-flow.sh）不得调用本脚本。
 #
@@ -32,16 +33,16 @@ bash "${SCRIPT_DIR}/stop-backend.sh"
 echo "-- 数据库 reset --"
 E2E_RESET=1 bash "${SCRIPT_DIR}/reset-db.sh"
 
-echo "-- 重启 web-api --"
+echo "-- 临时启动 web-api（写种子） --"
 bash "${SCRIPT_DIR}/restart-backend.sh"
-
-echo "-- 确保前后端可用 --"
-bash "${SCRIPT_DIR}/ensure-services.sh"
 
 echo "-- 发布审批定义 --"
 node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
 
-echo "-- 种子：客户 + 合同 --"
+echo "-- 种子：仓储账号 + 仓库 + 客户 + 合同 --"
 node "${SCRIPT_DIR}/seed-dev-foundation.mjs"
 
-echo "== 准备完成：可从开单开始 =="
+echo "-- 停止 web-api --"
+bash "${SCRIPT_DIR}/stop-backend.sh"
+
+echo "== 准备完成：请自行启动后端后再开单 =="

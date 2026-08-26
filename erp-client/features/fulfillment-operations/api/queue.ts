@@ -235,7 +235,7 @@ async function loadExactOperation(
                 `/admin/purchase-receipts/${encodedId}`,
             )
             return detail.receipt.status === "DRAFT"
-                ? receiptDetailToOperation(detail)
+                ? await receiptDetailToOperation(detail)
                 : undefined
         }
         case "WAREHOUSE_SHIP":
@@ -244,7 +244,7 @@ async function loadExactOperation(
                 `/admin/deliveries/${encodedId}`,
             )
             return detail.delivery.status === "DRAFT"
-                ? deliveryDetailToOperation(detail)
+                ? await deliveryDetailToOperation(detail)
                 : undefined
         }
         case "ELECTRONIC": {
@@ -252,7 +252,7 @@ async function loadExactOperation(
                 `/admin/electronic-deliveries/${encodedId}`,
             )
             return delivery.status === "DRAFT"
-                ? electronicToOperation(delivery)
+                ? await hydrateOperationDetail(electronicToOperation(delivery))
                 : undefined
         }
         case "SERVICE": {
@@ -260,7 +260,7 @@ async function loadExactOperation(
                 `/admin/service-fulfillments/${encodedId}`,
             )
             return fulfillment.status === "DRAFT"
-                ? serviceToOperation(fulfillment)
+                ? await hydrateOperationDetail(serviceToOperation(fulfillment))
                 : undefined
         }
     }
@@ -548,8 +548,7 @@ export async function fetchFulfillmentQueue(
                     source: {
                         ...operation.source,
                         salesOrderId: linkedSalesOrderId,
-                        salesOrderNo:
-                            operation.source.salesOrderNo || linkedSalesOrderId,
+                        salesOrderNo: operation.source.salesOrderNo,
                     },
                 }
             }

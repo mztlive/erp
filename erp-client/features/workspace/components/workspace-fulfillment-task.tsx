@@ -27,6 +27,8 @@ import {
 } from "@/features/work-items/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 
+import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
+import { fulfillmentTaskTitle } from "../lib/fulfillment-title"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
@@ -88,10 +90,17 @@ export function WorkspaceFulfillmentTask({
                 <div className="flex min-w-0 flex-col gap-2">
                     <WorkspaceDocumentBadge item={item} />
                     <h2 className="text-xl font-semibold tracking-tight">
-                        {item.objectTitle}
+                        {fulfillmentTaskTitle(item, controller.operation)}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                        {item.ownerRoleLabel} · {item.ownerUserLabel}
+                        {[
+                            `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
+                            displayText(
+                                controller.operation?.source.customerLabel,
+                            ),
+                        ]
+                            .filter(Boolean)
+                            .join(" · ")}
                     </p>
                 </div>
                 {item.allowedActions.includes("REASSIGN") ? (

@@ -44,7 +44,7 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
 }> = [
     { id: "basic", label: "基础信息" },
     { id: "media", label: "图文信息" },
-    { id: "sku", label: "SKU" },
+    { id: "sku", label: "规格与 SKU" },
     { id: "effective", label: "生效信息" },
     { id: "history", label: "历史与引用" },
 ]
@@ -94,11 +94,37 @@ function validateProductEditor(
     return validateProductFields(fields)
 }
 
-function scrollToProductSection(id: ProductEditorSectionId) {
-    document.getElementById(`product-section-${id}`)?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-    })
+function productSectionForValidationError(
+    message: string,
+): ProductEditorSectionId {
+    if (message.includes("变更原因") || message.includes("生效")) {
+        return "effective"
+    }
+    if (
+        message.includes("SKU") ||
+        message.includes("规格") ||
+        message.includes("主图") ||
+        message.includes("销售价") ||
+        message.includes("市场价")
+    ) {
+        return "sku"
+    }
+    return "basic"
+}
+
+function parseProductSectionId(
+    hash: string,
+    isCreate: boolean,
+): ProductEditorSectionId {
+    const raw = hash.replace(/^#/, "")
+    const id = raw.startsWith("product-section-")
+        ? raw.slice("product-section-".length)
+        : raw
+    const match = PRODUCT_EDITOR_SECTIONS.find((section) => section.id === id)
+    if (!match || (isCreate && match.id === "history")) {
+        return "basic"
+    }
+    return match.id
 }
 
 function productDetailToFields(detail: ProductDetailView): ProductFields {
@@ -177,8 +203,9 @@ export {
     createProductDefaults,
     hydrateFromCenter,
     newIdempotencyKey,
+    parseProductSectionId,
     PRODUCT_EDITOR_SECTIONS,
-    scrollToProductSection,
+    productSectionForValidationError,
     validateProductEditor,
 }
 export type {

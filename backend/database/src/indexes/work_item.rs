@@ -86,6 +86,7 @@ fn work_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_open_object_type_index(),
         unique_open_fulfillment_object_index(),
+        unique_open_payment_execution_object_index(),
         unique_approval_execution_index(),
         named_index(
             "idx_work_items_mine",
@@ -171,6 +172,27 @@ fn unique_open_fulfillment_object_index() -> IndexModel {
         .build()
 }
 
+/// 同一应付子账只允许一条开放付款执行任务。
+fn unique_open_payment_execution_object_index() -> IndexModel {
+    IndexModel::builder()
+        .keys(doc! {
+            "business_object_type": 1,
+            "business_object_id": 1,
+            "work_item_type": 1,
+        })
+        .options(
+            IndexOptions::builder()
+                .name("uk_work_items_open_payment_execution_object".to_string())
+                .unique(true)
+                .partial_filter_expression(doc! {
+                    "status": "OPEN",
+                    "work_item_type": "SUPPLIER_PAYMENT_EXECUTION",
+                })
+                .build(),
+        )
+        .build()
+}
+
 fn unique_approval_execution_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! { "approval_node_execution_id": 1 })
@@ -228,6 +250,24 @@ mod tests {
             Some(doc! {
                 "status": "OPEN",
                 "work_item_type": "FULFILLMENT_OPERATION",
+            })
+        );
+
+        let payment = index_named(&indexes, "uk_work_items_open_payment_execution_object");
+        assert_eq!(
+            payment.keys,
+            doc! {
+                "business_object_type": 1,
+                "business_object_id": 1,
+                "work_item_type": 1,
+            }
+        );
+        assert_eq!(payment.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            payment.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! {
+                "status": "OPEN",
+                "work_item_type": "SUPPLIER_PAYMENT_EXECUTION",
             })
         );
 

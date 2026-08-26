@@ -106,7 +106,9 @@ impl PurchaseOrderService {
         let (revision, revision_lines) = self
             .build_effective_revision(&order, &submission, &submission_lines, revision_no)
             .await?;
-        let payable = self.build_payable(&order, &submission).await?;
+        let payable = self
+            .build_payable(&order, &submission, &submission_lines, actor.id())
+            .await?;
         let cost_entries = self
             .build_confirmed_cost_entries(&submission, &submission_lines, revision_no)
             .await?;
@@ -148,7 +150,21 @@ impl PurchaseOrderService {
         &self,
         order: &PurchaseOrder,
         submission: &PurchaseOrderSubmission,
+        submission_lines: &[PurchaseOrderSubmissionLine],
+        actor_id: &str,
     ) -> Result<(entities::payable::PayableAccount, entities::payable::PayableEntry)> {
+        let expected_delivery_on = submission_lines
+            .iter()
+            .filter(|line| line.line_type == PurchaseLineType::ItemService)
+            .filter_map(|line| line.expected_delivery_date)
+            .max();
+        let due_date = submission
+            .payment_term_snapshot
+            .payable_due_date(
+                entities::common::time::BusinessDate::today(),
+                expected_delivery_on,
+            )
+            .map_err(Error::Logic)?;
         let account = entities::payable::PayableAccount::new(
             entities::ids::PayableAccountId::new(next_id()),
             entities::payable::PayableAccountData {
@@ -160,7 +176,7 @@ impl PurchaseOrderService {
                 invoiceable_total: submission.gross_amount,
                 invoiced_total: zero_amount(),
             },
-            "system",
+            actor_id,
         )?;
         let entry = entities::payable::PayableEntry::new(
             PayableEntryId::new(next_id()),
@@ -169,7 +185,7 @@ impl PurchaseOrderService {
                 entry_type: entities::payable::PayableEntryType::Original,
                 direction: entities::payable::EntryDirection::Increase,
                 amount: submission.gross_amount,
-                due_date: entities::common::time::BusinessDate::today(),
+                due_date,
                 source_fact_type: "purchase_order".to_string(),
                 source_document_id: order.base.id.clone(),
                 source_revision_id: submission.base.id.clone(),
@@ -320,6 +336,10 @@ async fn persist_formalized_order(
                 db.payable()
                     .create_payable_with_entry(&payable.0, &payable.1, session)
                     .await?;
+                crate::payable::payment_task::ensure_purchase_payment_task(
+                    &db, &payable.0, &payable.1, &actor_id, session,
+                )
+                .await?;
                 for entry in &cost_entries {
                     db.cost()
                         .create_cost_entry_with_allocations(entry, Vec::new(), session)
@@ -372,7 +392,7 @@ async fn create_receipt_draft_for_order(
     let receipt = PurchaseReceipt::new(
         receipt_id.clone(),
         PurchaseReceiptData {
-            receipt_no: format!("GRN-{}", receipt_id.as_ref()),
+            receipt_no: crate::fulfillment::document_number::next_purchase_receipt_no(db).await?,
             purchase_order_id: entities::ids::PurchaseOrderId::new(order.base.id.clone()),
             warehouse_id,
         },
@@ -430,7 +450,7 @@ async fn create_delivery_draft_for_order(
     let delivery = Delivery::new(
         delivery_id.clone(),
         DeliveryData {
-            delivery_no: format!("DLV-{}", delivery_id.as_ref()),
+            delivery_no: crate::fulfillment::document_number::next_delivery_no(db).await?,
             delivery_type: entities::fulfillment::DeliveryType::SupplierDirect,
             sales_order_id: order.sales_order_id.clone(),
             purchase_order_id: Some(PurchaseOrderId::new(order.base.id.clone())),

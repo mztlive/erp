@@ -21,12 +21,8 @@ import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import type { FormalSubmitResult } from "@/features/supplier-payables/types"
 import { useSupplierAccountsPage } from "./hooks/use-supplier-accounts-page"
 import { SupplierAllocationSessionPage } from "./supplier-allocation-session-page"
-import {
-    SupplierAccountsAlerts,
-    SupplierAccountsResultBanner,
-} from "./components/supplier-accounts-alerts"
+import { SupplierAccountsResultBanner } from "./components/supplier-accounts-alerts"
 import { SupplierAccountsHeader } from "./components/supplier-accounts-header"
-import { SupplierAccountsMetrics } from "./components/supplier-accounts-metrics"
 import { SupplierAccountsPreview } from "./components/supplier-accounts-preview"
 import { SupplierAccountsTable } from "./components/supplier-accounts-table"
 import { SupplierAccountsToolbar } from "./components/supplier-accounts-toolbar"
@@ -39,9 +35,6 @@ export function SupplierAccountsPage() {
     const {
         view,
         supplierId,
-        status,
-        due,
-        paymentGate,
         purchaseOrderId,
         fromWorkspace,
         returnTo,
@@ -253,15 +246,6 @@ export function SupplierAccountsPage() {
                 onSettle={openSettlements}
             />
 
-            {data ? (
-                <SupplierAccountsAlerts
-                    fromWorkspace={fromWorkspace}
-                    purchaseOrderId={purchaseOrderId}
-                    returnTo={returnTo}
-                    policy={data.payablePriorityPolicy}
-                />
-            ) : null}
-
             <SupplierAccountsResultBanner
                 lastResult={lastResult}
                 onDismiss={() => setLastResult(null)}
@@ -281,18 +265,6 @@ export function SupplierAccountsPage() {
                 />
             ) : (
                 <>
-                    {!(listQuery.isError && !data) ? (
-                        <SupplierAccountsMetrics
-                            metrics={data?.metrics}
-                            view={view}
-                            status={status}
-                            due={due}
-                            trackFilter={trackFilter}
-                            paymentGate={paymentGate}
-                            onFilter={patchUrl}
-                        />
-                    ) : null}
-
                     <SupplierAccountsTable
                         view={view}
                         data={data}

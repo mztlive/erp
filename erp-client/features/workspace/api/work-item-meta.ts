@@ -70,6 +70,13 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeLabel: "收发履约",
         badgeVariant: "teal",
     },
+    SUPPLIER_PAYMENT_EXECUTION: {
+        label: "供应商付款处理",
+        family: "finance",
+        badgeLabel: "待付款",
+        badgeVariant: "cyan",
+        openActionLabel: "去登记付款",
+    },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
         family: "approval",
@@ -234,6 +241,12 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
     supplier_payment: {
         approvalLabel: "付款审批",
         badgeLabel: "付款",
+        badgeVariant: "cyan",
+    },
+    payable_account: {
+        approvalLabel: "供应商付款处理",
+        badgeLabel: "待付款",
+        documentName: "应付账户",
         badgeVariant: "cyan",
     },
     customer_refund: {

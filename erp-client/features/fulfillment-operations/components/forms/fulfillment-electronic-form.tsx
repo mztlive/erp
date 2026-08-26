@@ -10,6 +10,10 @@ import type {
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
+import {
+    displayText,
+    lineItemTitle,
+} from "@/features/fulfillment-operations/lib/readable-label"
 
 /**
  * 电子交付表单。ElectronicDelivery 为 NO_APPROVAL，只收集交付对象、时间、
@@ -47,6 +51,7 @@ export function FulfillmentElectronicForm({
                     <DateTimeLocalPicker
                         value={draft.occurredAt || undefined}
                         disabled={disabled}
+                        showTimeZone={false}
                         onValueChange={(next) =>
                             onChange({ ...draft, occurredAt: next ?? "" })
                         }
@@ -81,10 +86,15 @@ export function FulfillmentElectronicForm({
                         key={line.salesOrderLineId}
                         className="space-y-2 rounded-xl border border-border p-3"
                     >
-                        <p className="text-sm font-medium">{src?.itemName}</p>
-                        <p className="text-xs text-muted-foreground">
-                            对应 {operation.source.salesOrderNo}
+                        <p className="text-sm font-medium">
+                            {lineItemTitle(src?.itemName, i)}
                         </p>
+                        {displayText(operation.source.salesOrderNo) ? (
+                            <p className="text-xs text-muted-foreground">
+                                对应销售单{" "}
+                                {displayText(operation.source.salesOrderNo)}
+                            </p>
+                        ) : null}
                         <div className="space-y-1.5">
                             <Label htmlFor={`el-qty-${i}`}>交付数量</Label>
                             <Input

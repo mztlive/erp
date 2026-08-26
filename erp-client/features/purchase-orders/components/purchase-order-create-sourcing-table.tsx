@@ -51,7 +51,9 @@ export function PurchaseOrderCreateSourcingTable({
                         <TableHead data-align="end">销售数量</TableHead>
                         <TableHead data-align="end">已覆盖</TableHead>
                         <TableHead data-align="end">剩余数量</TableHead>
-                        <TableHead>供给来源 / 履约责任</TableHead>
+                        <TableHead className="min-w-64">
+                            供给来源 / 履约责任
+                        </TableHead>
                         <TableHead>采购入库目标仓</TableHead>
                         <TableHead data-align="end">本次分配数量</TableHead>
                         <TableHead data-align="end">含税成本</TableHead>
@@ -138,7 +140,7 @@ export function PurchaseOrderCreateSourcingTable({
                                         unit={product.unit}
                                     />
                                 </TableCell>
-                                <TableCell className="min-w-48">
+                                <TableCell className="min-w-64">
                                     <form.AppField
                                         name={`lines[${index}].basisId`}
                                     >

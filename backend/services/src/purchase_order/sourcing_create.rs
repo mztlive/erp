@@ -894,7 +894,7 @@ async fn ensure_stock_delivery_for_warehouse(
     let delivery = Delivery::new(
         delivery_id.clone(),
         DeliveryData {
-            delivery_no: format!("FH-{}", delivery_id.as_ref()),
+            delivery_no: crate::fulfillment::document_number::next_delivery_no(db).await?,
             delivery_type: DeliveryType::WarehouseShip,
             sales_order_id: sales_order_id.clone(),
             purchase_order_id: None,

@@ -2,15 +2,22 @@
 
 import * as React from "react"
 
-import { BrandCombobox, CategoryCombobox, OptionCombobox } from "@/components/business"
+import {
+    BrandCombobox,
+    CategoryCombobox,
+    OptionCombobox,
+} from "@/components/business"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ProductSectionFrame } from "@/features/master-data/components/product/product-section-frame"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { SetProductFields } from "@/features/master-data/components/product/product-editor-sections"
 import type { ProductFields, ProductKind } from "@/features/master-data/types"
-import { PRODUCT_KIND_LABELS, PRODUCT_KIND_VALUES } from "@/features/master-data/types"
-import { cn } from "@/lib/utils"
+import {
+    PRODUCT_KIND_LABELS,
+    PRODUCT_KIND_VALUES,
+} from "@/features/master-data/types"
 
 type UnitOption = {
     id: string
@@ -46,24 +53,18 @@ function ProductBasicSection({
     brandLoading,
 }: ProductBasicSectionProps) {
     return (
-        <fieldset
+        <ProductSectionFrame
             id="product-section-basic"
-            className={cn(
-                "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 border-b border-grid p-5 last:border-b-0",
-            )}
+            title={masterDataCopy.fieldIdentitySection}
+            description={
+                isCreate
+                    ? masterDataCopy.productCreateDesc
+                    : masterDataCopy.productEditDesc
+            }
             disabled={!canRevise}
         >
-            <legend className="sr-only">
-                {masterDataCopy.fieldIdentitySection}
-            </legend>
-            <div className="text-base font-semibold">
-                {masterDataCopy.fieldIdentitySection}
-            </div>
-            <p className="text-xs text-muted-foreground">
-                {masterDataCopy.productEditDesc}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
                     <Label htmlFor="product-no">商品编号</Label>
                     <Input
                         id="product-no"
@@ -83,7 +84,7 @@ function ProductBasicSection({
                         </p>
                     ) : null}
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5">
                     <Label htmlFor="product-name">名称</Label>
                     <Input
                         id="product-name"
@@ -104,9 +105,10 @@ function ProductBasicSection({
                             }))
                         }
                         placeholder="公司审核后的商品描述"
+                        rows={3}
                     />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5">
                     <Label>商品类型</Label>
                     {isCreate ? (
                         <OptionCombobox
@@ -126,11 +128,11 @@ function ProductBasicSection({
                             className="w-full"
                         />
                     ) : (
-                        <div className="flex h-9 items-center rounded-md border border-border bg-muted/40 px-3 text-sm">
+                        <p className="flex h-9 items-center text-sm font-medium">
                             {fields.productKind
                                 ? PRODUCT_KIND_LABELS[fields.productKind]
                                 : "—"}
-                        </div>
+                        </p>
                     )}
                     <p className="text-xs text-muted-foreground">
                         决定商品业务作用；创建后不可变，也不随分类变化。
@@ -207,7 +209,7 @@ function ProductBasicSection({
                     />
                 </div>
             </div>
-        </fieldset>
+        </ProductSectionFrame>
     )
 }
 

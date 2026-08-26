@@ -76,14 +76,10 @@ impl FulfillmentTaskObject<'_> {
 
     fn impact_summary(&self) -> String {
         match self {
-            Self::PurchaseReceipt(receipt) => format!("采购入库单 {} 待过账", receipt.receipt_no),
-            Self::Delivery(delivery) => format!("发货单 {} 待发货", delivery.delivery_no),
-            Self::ElectronicDelivery(delivery) => {
-                format!("电子交付记录 {} 待确认", delivery.fulfillment_no)
-            }
-            Self::ServiceFulfillment(fulfillment) => {
-                format!("服务履约记录 {} 待确认", fulfillment.fulfillment_no)
-            }
+            Self::PurchaseReceipt(_) => "采购入库待确认".to_string(),
+            Self::Delivery(delivery) => format!("{}待发货", delivery.delivery_type.label()),
+            Self::ElectronicDelivery(_) => "电子交付待确认".to_string(),
+            Self::ServiceFulfillment(_) => "服务履约待确认".to_string(),
         }
     }
 

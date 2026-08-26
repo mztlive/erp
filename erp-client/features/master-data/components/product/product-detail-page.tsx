@@ -4,14 +4,18 @@
  * 商品详情页 = 查看 + 编辑（同一页面）。
  * - /master-data/products/new  新建
  * - /master-data/products/:id  查看并直接改，保存即形成新版本
- * 不使用侧边 sheet，也不再有单独的 ?mode=edit。
- * 中间态在 ProductDetailEntryGate，值绑定在 createProductFormBindings，
- * 分区 UI 在 product-detail-{header,feedback,dialogs}.tsx 与 product-editor-sections。
+ * 壳层对齐供应商对象中心：PageHeader + DocumentHeader + 摘要条 + line tabs。
+ * 中间态在 ProductDetailEntryGate，值绑定在 createProductFormBindings。
  */
 
-import * as React from "react"
+import { ArrowLeftIcon } from "lucide-react"
 
-import { PageScaffold, surfacePanelClassName } from "@/components/business"
+import {
+    PageHeader,
+    PageScaffold,
+    surfacePanelClassName,
+} from "@/components/business"
+import { Button } from "@/components/ui/button"
 import {
     ProductBasicSection,
     ProductEffectiveSection,
@@ -23,8 +27,14 @@ import { ProductDetailDialogs } from "@/features/master-data/components/product/
 import { ProductDetailEntryGate } from "@/features/master-data/components/product/product-detail-entry-gate"
 import { ProductDetailFeedback } from "@/features/master-data/components/product/product-detail-feedback"
 import { ProductDetailHeader } from "@/features/master-data/components/product/product-detail-header"
+import {
+    ProductSectionTabs,
+    ProductSummaryStrip,
+} from "@/features/master-data/components/product/product-detail-navigation"
 import { createProductFormBindings } from "@/features/master-data/lib/product-form-bindings"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
+import { productKindLabel } from "@/features/master-data/api/presentation"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { cn } from "@/lib/utils"
 
 export function ProductDetailPage({ stableId }: { stableId: string }) {
@@ -60,14 +70,12 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         setActiveSection,
         errorRef,
         checkedSnapshotRef,
-        stickyHeaderRef,
         rememberPendingFiles,
         rememberSkuFile,
         navigateAway,
         openInventoryPreview,
         handleInventoryOpenChange,
         listHref,
-        sectionScrollMarginPx,
         pending,
         canCreate,
         hasUpdatePermission,
@@ -119,16 +127,28 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         applyBatchReferencePrices,
                     } = bindings
                     return (
-                        <PageScaffold
-                            style={
-                                {
-                                    "--product-section-scroll-margin": `${sectionScrollMarginPx}px`,
-                                } as React.CSSProperties
-                            }
-                        >
+                        <PageScaffold density="compact">
+                            <PageHeader
+                                variant="object-chrome"
+                                actions={
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => navigateAway(listHref)}
+                                    >
+                                        <ArrowLeftIcon
+                                            data-icon="inline-start"
+                                            aria-hidden
+                                        />
+                                        返回列表
+                                    </Button>
+                                }
+                            />
+
                             <form
                                 id={formId}
-                                className="flex flex-col gap-4"
+                                className="space-y-4"
                                 onSubmit={handleSubmit}
                             >
                                 <ProductDetailHeader
@@ -143,13 +163,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     pending={pending}
                                     runLocalCheck={runLocalCheck}
                                     values={values}
-                                    onBack={() => navigateAway(listHref)}
-                                    activeSection={activeSection}
-                                    setActiveSection={setActiveSection}
-                                    stickyHeaderRef={stickyHeaderRef}
                                 />
 
-                                <div className="flex min-w-0 flex-col gap-4">
+                                <div className="space-y-3">
                                     <ProductDetailFeedback
                                         isCreate={isCreate}
                                         canRevise={canRevise}
@@ -164,109 +180,177 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         errorRef={errorRef}
                                     />
 
+                                    <ProductSummaryStrip
+                                        rows={[
+                                            {
+                                                label: masterDataCopy.fBaseUnit,
+                                                value:
+                                                    fields.baseUnit || "待选择",
+                                            },
+                                            {
+                                                label: masterDataCopy.fSkuCount,
+                                                value: `${fields.skus.length} 个`,
+                                            },
+                                            {
+                                                label: "商品类型",
+                                                value:
+                                                    productKindLabel(
+                                                        fields.productKind,
+                                                    ) || "待选择",
+                                            },
+                                            {
+                                                label: "引用",
+                                                value: isCreate
+                                                    ? "新建未引用"
+                                                    : data?.productConstraints
+                                                            ?.hasFormalReferences
+                                                      ? "已被业务单据引用"
+                                                      : "尚未被引用",
+                                            },
+                                        ]}
+                                    />
+
                                     <div
                                         className={cn(
                                             surfacePanelClassName,
                                             "overflow-hidden",
                                         )}
                                     >
-                                        <ProductBasicSection
+                                        <ProductSectionTabs
+                                            value={activeSection}
                                             isCreate={isCreate}
-                                            canRevise={canRevise}
-                                            name={name}
-                                            setName={setName}
-                                            fields={fields}
-                                            setFields={setFields}
-                                            unitOptions={unitOptionsQuery.data}
-                                            categoryOptions={categoryOptions}
-                                            brandOptions={brandOptions}
-                                            categoryLoading={
-                                                categoryListQuery.isPending
-                                            }
-                                            brandLoading={
-                                                brandListQuery.isPending
-                                            }
+                                            onValueChange={setActiveSection}
                                         />
 
-                                        <ProductMediaSection
-                                            canRevise={canRevise}
-                                            fields={fields}
-                                            setFields={setFields}
-                                            rememberPendingFiles={
-                                                rememberPendingFiles
-                                            }
-                                        />
-                                        <ProductSkuSection
-                                            isCreate={isCreate}
-                                            canRevise={canRevise}
-                                            name={name}
-                                            fields={fields}
-                                            specDrafts={specDrafts}
-                                            activeSpecs={activeSpecs}
-                                            inventoryPreviewSkus={
-                                                inventoryPreviewSkus
-                                            }
-                                            syncSpecDrafts={syncSpecDrafts}
-                                            updateSku={updateSku}
-                                            batchSalePrice={
-                                                values.batchSalePrice
-                                            }
-                                            batchMarketPrice={
-                                                values.batchMarketPrice
-                                            }
-                                            setBatchSalePrice={(next) =>
-                                                form.setFieldValue(
-                                                    "batchSalePrice",
-                                                    next,
-                                                )
-                                            }
-                                            setBatchMarketPrice={(next) =>
-                                                form.setFieldValue(
-                                                    "batchMarketPrice",
-                                                    next,
-                                                )
-                                            }
-                                            onApplyBatchReferencePrices={
-                                                applyBatchReferencePrices
-                                            }
-                                            inventoryActionHint={
-                                                inventoryActionHint
-                                            }
-                                            onOpenInventory={
-                                                openInventoryPreview
-                                            }
-                                            rememberSkuFile={rememberSkuFile}
-                                            supplierCounts={
-                                                supplierCountsQuery.data
-                                            }
-                                            supplierCountsPending={
-                                                supplierCountsQuery.isPending
-                                            }
-                                            supplierCountsError={
-                                                supplierCountsQuery.isError
-                                                    ? supplierCountsQuery.error
-                                                    : null
-                                            }
-                                            onRegisterSupply={
-                                                setSupplierDialogSku
-                                            }
-                                            stableId={stableId}
-                                        />
+                                        <div className="p-4 md:p-5">
+                                            {activeSection === "basic" ? (
+                                                <ProductBasicSection
+                                                    isCreate={isCreate}
+                                                    canRevise={canRevise}
+                                                    name={name}
+                                                    setName={setName}
+                                                    fields={fields}
+                                                    setFields={setFields}
+                                                    unitOptions={
+                                                        unitOptionsQuery.data
+                                                    }
+                                                    categoryOptions={
+                                                        categoryOptions
+                                                    }
+                                                    brandOptions={brandOptions}
+                                                    categoryLoading={
+                                                        categoryListQuery.isPending
+                                                    }
+                                                    brandLoading={
+                                                        brandListQuery.isPending
+                                                    }
+                                                />
+                                            ) : null}
 
-                                        <ProductEffectiveSection
-                                            isCreate={isCreate}
-                                            canRevise={canRevise}
-                                            effectiveFrom={effectiveFrom}
-                                            effectiveTo={effectiveTo}
-                                            changeReason={changeReason}
-                                            setEffectiveFrom={setEffectiveFrom}
-                                            setEffectiveTo={setEffectiveTo}
-                                            setChangeReason={setChangeReason}
-                                        />
+                                            {activeSection === "media" ? (
+                                                <ProductMediaSection
+                                                    canRevise={canRevise}
+                                                    fields={fields}
+                                                    setFields={setFields}
+                                                    rememberPendingFiles={
+                                                        rememberPendingFiles
+                                                    }
+                                                />
+                                            ) : null}
 
-                                        {!isCreate ? (
-                                            <ProductHistorySection data={data} />
-                                        ) : null}
+                                            {activeSection === "sku" ? (
+                                                <ProductSkuSection
+                                                    isCreate={isCreate}
+                                                    canRevise={canRevise}
+                                                    name={name}
+                                                    fields={fields}
+                                                    specDrafts={specDrafts}
+                                                    activeSpecs={activeSpecs}
+                                                    inventoryPreviewSkus={
+                                                        inventoryPreviewSkus
+                                                    }
+                                                    syncSpecDrafts={
+                                                        syncSpecDrafts
+                                                    }
+                                                    updateSku={updateSku}
+                                                    batchSalePrice={
+                                                        values.batchSalePrice
+                                                    }
+                                                    batchMarketPrice={
+                                                        values.batchMarketPrice
+                                                    }
+                                                    setBatchSalePrice={(next) =>
+                                                        form.setFieldValue(
+                                                            "batchSalePrice",
+                                                            next,
+                                                        )
+                                                    }
+                                                    setBatchMarketPrice={(
+                                                        next,
+                                                    ) =>
+                                                        form.setFieldValue(
+                                                            "batchMarketPrice",
+                                                            next,
+                                                        )
+                                                    }
+                                                    onApplyBatchReferencePrices={
+                                                        applyBatchReferencePrices
+                                                    }
+                                                    inventoryActionHint={
+                                                        inventoryActionHint
+                                                    }
+                                                    onOpenInventory={
+                                                        openInventoryPreview
+                                                    }
+                                                    rememberSkuFile={
+                                                        rememberSkuFile
+                                                    }
+                                                    supplierCounts={
+                                                        supplierCountsQuery.data
+                                                    }
+                                                    supplierCountsPending={
+                                                        supplierCountsQuery.isPending
+                                                    }
+                                                    supplierCountsError={
+                                                        supplierCountsQuery.isError
+                                                            ? supplierCountsQuery.error
+                                                            : null
+                                                    }
+                                                    onRegisterSupply={
+                                                        setSupplierDialogSku
+                                                    }
+                                                    stableId={stableId}
+                                                />
+                                            ) : null}
+
+                                            {activeSection === "effective" ? (
+                                                <ProductEffectiveSection
+                                                    isCreate={isCreate}
+                                                    canRevise={canRevise}
+                                                    effectiveFrom={
+                                                        effectiveFrom
+                                                    }
+                                                    effectiveTo={effectiveTo}
+                                                    changeReason={changeReason}
+                                                    setEffectiveFrom={
+                                                        setEffectiveFrom
+                                                    }
+                                                    setEffectiveTo={
+                                                        setEffectiveTo
+                                                    }
+                                                    setChangeReason={
+                                                        setChangeReason
+                                                    }
+                                                />
+                                            ) : null}
+
+                                            {activeSection === "history" &&
+                                            !isCreate ? (
+                                                <ProductHistorySection
+                                                    data={data}
+                                                />
+                                            ) : null}
+                                        </div>
                                     </div>
                                 </div>
                             </form>
@@ -279,7 +363,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 supplierDialogSku={supplierDialogSku}
                                 setSupplierDialogSku={setSupplierDialogSku}
                                 inventoryOpen={inventoryOpen}
-                                onInventoryOpenChange={handleInventoryOpenChange}
+                                onInventoryOpenChange={
+                                    handleInventoryOpenChange
+                                }
                                 productName={title}
                                 productKind={fields.productKind}
                                 inventoryPreviewSkus={inventoryPreviewSkus}

@@ -18,6 +18,7 @@ import {
     type BackendDeliveryDetail,
     type BackendPurchaseReceiptDetail,
 } from "./documents"
+import { enrichOperationDisplay } from "./hydrate-source"
 
 function applyPurchaseReceiptDetail(
     operation: FulfillmentOperation,
@@ -49,7 +50,7 @@ function applyPurchaseReceiptDetail(
         draft: {
             type: "RECEIPT",
             warehouseId: receipt.warehouse_id,
-            warehouseLabel: receipt.warehouse_id,
+            warehouseLabel: "",
             occurredAt:
                 operation.draft.type === "RECEIPT"
                     ? operation.draft.occurredAt
@@ -88,7 +89,7 @@ function applyDeliveryDetail(
             draft: {
                 type: "WAREHOUSE_SHIP",
                 warehouseId: delivery.warehouse_id ?? "",
-                warehouseLabel: delivery.warehouse_id ?? "",
+                warehouseLabel: "",
                 carrier: delivery.carrier ?? "",
                 trackingNo: delivery.tracking_no ?? "",
                 shippedAt: nowIso().slice(0, 16),
@@ -121,20 +122,21 @@ function applyDeliveryDetail(
 }
 
 /** 把采购收货详情直接投影为 W01 可执行作业。 */
-export function receiptDetailToOperation(
+export async function receiptDetailToOperation(
     detail: BackendPurchaseReceiptDetail,
-): FulfillmentOperation {
-    return applyPurchaseReceiptDetail(
-        receiptToOperation(detail.receipt),
-        detail,
+): Promise<FulfillmentOperation> {
+    return enrichOperationDisplay(
+        applyPurchaseReceiptDetail(receiptToOperation(detail.receipt), detail),
     )
 }
 
 /** 把发货详情直接投影为 W01 可执行作业。 */
-export function deliveryDetailToOperation(
+export async function deliveryDetailToOperation(
     detail: BackendDeliveryDetail,
-): FulfillmentOperation {
-    return applyDeliveryDetail(deliveryToOperation(detail.delivery), detail)
+): Promise<FulfillmentOperation> {
+    return enrichOperationDisplay(
+        applyDeliveryDetail(deliveryToOperation(detail.delivery), detail),
+    )
 }
 
 /**
@@ -151,7 +153,9 @@ export async function hydrateOperationDetail(
             const detail = await apiGet<BackendPurchaseReceiptDetail>(
                 `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
             )
-            return applyPurchaseReceiptDetail(operation, detail)
+            return enrichOperationDisplay(
+                applyPurchaseReceiptDetail(operation, detail),
+            )
         }
         if (
             operation.operationType === "WAREHOUSE_SHIP" ||
@@ -160,10 +164,12 @@ export async function hydrateOperationDetail(
             const detail = await apiGet<BackendDeliveryDetail>(
                 `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
             )
-            return applyDeliveryDetail(operation, detail)
+            return enrichOperationDisplay(
+                applyDeliveryDetail(operation, detail),
+            )
         }
     } catch {
         // 保留列表投影，队列仍可继续展示。
     }
-    return operation
+    return enrichOperationDisplay(operation)
 }

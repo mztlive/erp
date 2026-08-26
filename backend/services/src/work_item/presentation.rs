@@ -72,6 +72,9 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
         WorkItemType::FulfillmentOperation => "核对来源、数量和履约信息后，提交本次确认。",
+        WorkItemType::SupplierPaymentExecution => {
+            "进入供应商往来，核对计划付款日和未付金额，登记付款并提交审批。"
+        }
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
         }
@@ -170,6 +173,8 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "supplier_stopped" => "供应已停止，商城在售发布已暂停",
         "purchase_order_review_dispatched" => "采购已提交，需要核对成本、进项税和付款条件",
         "purchase_order_review_resubmitted" => "采购已按驳回意见重提，需要重新核对成本与付款条件",
+        "payable_payment_required" => "采购应付已确认，需要安排付款",
+        "payable_reopened_by_reversal" => "付款已冲正，应付余额需要重新安排付款",
         other if other.ends_with("_active") => "当前审批步骤等待处理",
         _ => return None,
     })
@@ -179,6 +184,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "销售单已生效，需要分配供给",
         WorkItemType::FulfillmentOperation => "当前履约单据等待确认",
+        WorkItemType::SupplierPaymentExecution => "采购应付已确认，需要安排付款",
         WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
         WorkItemType::SalesChangeImpactReview => "销售变更待核对履约影响",
         WorkItemType::SalesChangeFinanceReview => "销售变更待核对财务影响",
@@ -200,6 +206,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
         WorkItemType::FulfillmentOperation => "不确认则本次收货、发货或交付不能形成正式事实",
+        WorkItemType::SupplierPaymentExecution => "不登记则应付无法进入付款审批与核销",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
         WorkItemType::SalesChangeFinanceReview => "不复核则销售变更金额不能入账",

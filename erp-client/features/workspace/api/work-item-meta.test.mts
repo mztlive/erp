@@ -62,10 +62,10 @@ test("started approval instances use the document type badge", () => {
     )
 })
 
-test("procurement creation stays a purchase badge even when the object is a sales order", () => {
+test("procurement creation stays a supply allocation badge for a sales order", () => {
     assert.deepEqual(
         workspaceDocumentBadge("PROCUREMENT_ORDER_CREATION", "sales_order"),
-        { label: "待建采购", variant: "lime" },
+        { label: "供给分配", variant: "lime" },
     )
 })
 
@@ -83,6 +83,24 @@ test("sales change impact and finance reviews keep distinct badges", () => {
             "sales_change_review",
         ),
         { label: "变更财务", variant: "violet" },
+    )
+})
+
+test("supplier payment execution is a finance payable action", () => {
+    assert.deepEqual(
+        workspaceDocumentBadge("SUPPLIER_PAYMENT_EXECUTION", "payable_account"),
+        { label: "待付款", variant: "cyan" },
+    )
+    assert.equal(
+        workspaceTypeLabel("SUPPLIER_PAYMENT_EXECUTION", "payable_account"),
+        "供应商付款处理",
+    )
+    assert.equal(
+        workspaceOpenActionLabel(
+            "SUPPLIER_PAYMENT_EXECUTION",
+            "payable_account",
+        ),
+        "去登记付款",
     )
 })
 
@@ -111,7 +129,7 @@ test("read and open actions are named by document and task", () => {
     )
     assert.equal(
         workspaceOpenActionLabel("PROCUREMENT_ORDER_CREATION", "sales_order"),
-        "去建采购单",
+        "去分配供给",
     )
     assert.equal(
         workspaceOpenActionLabel("PURCHASE_ORDER_REVIEW", "purchase_order"),

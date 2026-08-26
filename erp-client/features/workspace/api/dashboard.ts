@@ -23,6 +23,10 @@ import type {
     WorkspaceWorkItem,
 } from "../types"
 import {
+    fulfillmentListNumber,
+    fulfillmentObjectTitle,
+} from "../lib/fulfillment-title"
+import {
     PRIORITY_RANK,
     STATUS_LABEL,
     TYPE_META,
@@ -93,6 +97,30 @@ function formatRelativeLabel(iso: string, timezone: string): string {
     }
 }
 
+function fulfillmentStableNumber(
+    workItemType: string,
+    label: string | null | undefined,
+    typeLabel: string,
+    businessObjectId: string,
+): string {
+    if (workItemType === "FULFILLMENT_OPERATION") {
+        return fulfillmentListNumber(label ?? undefined, typeLabel)
+    }
+    return label?.trim() || typeLabel || businessObjectId
+}
+
+function fulfillmentTitle(
+    workItemType: string,
+    label: string | null | undefined,
+    typeLabel: string,
+    businessObjectId: string,
+): string {
+    if (workItemType === "FULFILLMENT_OPERATION") {
+        return fulfillmentObjectTitle(label ?? undefined, typeLabel)
+    }
+    return label?.trim() || `${typeLabel} · ${businessObjectId}`
+}
+
 function dueBucket(
     dueAtIso: string,
     timezone: string,
@@ -148,11 +176,18 @@ export function mapWorkspaceWorkItem(
         businessObjectType: task.businessObjectType,
         businessObjectId: task.businessObjectId,
         subjectVersion: task.subjectVersion,
-        stableNumber:
-            dto.business_object_label?.trim() || task.businessObjectId,
-        objectTitle:
-            dto.business_object_label ??
-            `${workspaceTypeLabel(dto.work_item_type, dto.business_object_type)} · ${task.businessObjectId}`,
+        stableNumber: fulfillmentStableNumber(
+            dto.work_item_type,
+            dto.business_object_label,
+            workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
+            task.businessObjectId,
+        ),
+        objectTitle: fulfillmentTitle(
+            dto.work_item_type,
+            dto.business_object_label,
+            workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
+            task.businessObjectId,
+        ),
         counterpartyName: task.counterpartyLabel,
         listSummary: task.listSummary,
         status: task.status,

@@ -10,6 +10,7 @@ import {
     createProductDefaults,
     hydrateFromCenter,
     newIdempotencyKey,
+    productSectionForValidationError,
     type ProductEditorFormValues,
     validateProductEditor,
 } from "@/features/master-data/lib/product-editor-model"
@@ -28,7 +29,6 @@ import {
 } from "@/features/master-data/hooks/queries"
 import { useProductDirtyGuard } from "@/features/master-data/hooks/use-product-dirty-guard"
 import { useProductSectionSpy } from "@/features/master-data/hooks/use-product-section-spy"
-import { useProductStickyHeader } from "@/features/master-data/hooks/use-product-sticky-header"
 import { useProductUploads } from "@/features/master-data/hooks/use-product-uploads"
 import type { MasterDataMutationResult } from "@/features/master-data/types"
 import { getErrorPresentation } from "@/lib/api/errors"
@@ -106,8 +106,6 @@ export function useProductEditor(stableId: string) {
         isCreate,
         data?.stableId,
     )
-    const { stickyHeaderRef, stickyHeaderHeight, sectionScrollMarginPx } =
-        useProductStickyHeader(isCreate, data?.stableId, data?.lockVersion)
     useProductDirtyGuard(() => form.state.isDirty)
 
     const initialFormValues = React.useMemo(
@@ -134,6 +132,7 @@ export function useProductEditor(stableId: string) {
             if (validation) {
                 setFormErrorTitle("填写检查未通过")
                 setFormError(validation)
+                setActiveSection(productSectionForValidationError(validation))
                 return
             }
 
@@ -288,6 +287,7 @@ export function useProductEditor(stableId: string) {
         if (validation) {
             setFormErrorTitle("填写检查未通过")
             setFormError(validation)
+            setActiveSection(productSectionForValidationError(validation))
             return
         }
         // 记录检查通过时的内容快照；后续任何字段变更都会让「通过」态失效
@@ -331,15 +331,12 @@ export function useProductEditor(stableId: string) {
         setActiveSection,
         errorRef,
         checkedSnapshotRef,
-        stickyHeaderRef,
-        stickyHeaderHeight,
         rememberPendingFiles,
         rememberSkuFile,
         navigateAway,
         openInventoryPreview,
         handleInventoryOpenChange,
         listHref,
-        sectionScrollMarginPx,
         pending,
         canCreate,
         hasUpdatePermission,
