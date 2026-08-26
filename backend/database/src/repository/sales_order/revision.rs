@@ -60,6 +60,17 @@ impl<'a> Repository<'a, SalesOrderRevision> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.list_revisions",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_revisions",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_by_order(
         &self,
         sales_order_id: &SalesOrderId,
@@ -113,6 +124,17 @@ impl<'a> Repository<'a, SalesOrderRevisionLine> {
     ///
     /// # 关键业务约束
     /// 空集合直接返回空列表，不发查询。
+    #[tracing::instrument(
+        name = "repository.sales_order.list_revision_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_revision_lines",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_lines_by_revisions(
         &self,
         revision_ids: &[SalesOrderRevisionId],
@@ -207,6 +229,16 @@ impl<'a> SalesOrderRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.formalize_submission",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.operation.name = "formalize_submission"
+        )
+    )]
     pub async fn formalize_submission(
         &self,
         order: &mut entities::sales_order::SalesOrder,

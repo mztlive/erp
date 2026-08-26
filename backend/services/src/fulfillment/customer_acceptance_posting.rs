@@ -46,6 +46,15 @@ impl FulfillmentService {
     /// * `ConflictError` - 草稿、销售单版本或状态冲突
     /// * `NotFound` - 草稿、销售单或履约事实不存在
     /// * `OutcomeUnknown` - 事务提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.customer_acceptance_commit",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "customer_acceptance_commit"
+        )
+    )]
     pub async fn commit_customer_acceptance(
         &self,
         req: CommitCustomerAcceptanceRequest,
@@ -237,6 +246,15 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许过账或重复过账
     /// * `ValidationError` - 分配不守恒或超上限
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.customer_acceptance_post",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "customer_acceptance_post"
+        )
+    )]
     pub async fn post_customer_acceptance(
         &self,
         id: &str,
@@ -334,6 +352,15 @@ impl FulfillmentService {
     /// * `NotFound` - 验收单不存在
     /// * `ConflictError` - 版本不符或状态不允许冲正
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.customer_acceptance_reverse",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "customer_acceptance_reverse"
+        )
+    )]
     pub async fn reverse_customer_acceptance(
         &self,
         id: &str,

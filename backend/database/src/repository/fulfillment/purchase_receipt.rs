@@ -96,6 +96,17 @@ impl<'a> Repository<'a, PurchaseReceipt> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.search_purchase_receipts",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.collection.name = "purchase_receipts",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_purchase_receipts(
         &self,
         filter: &PurchaseReceiptFilter,

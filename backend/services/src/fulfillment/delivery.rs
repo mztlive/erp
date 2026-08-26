@@ -44,6 +44,11 @@ impl FulfillmentService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.delivery_list",
+        skip_all,
+        fields(layer = "service", domain = "fulfillment", operation = "delivery_list")
+    )]
     pub async fn delivery_list(&self, params: &DeliveryListParams) -> Result<PageView<DeliveryView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -104,6 +109,11 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 发货单不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.delivery_detail",
+        skip_all,
+        fields(layer = "service", domain = "fulfillment", operation = "delivery_detail")
+    )]
     pub async fn delivery_detail(&self, id: &str) -> Result<DeliveryDetailView> {
         let delivery = self
             .db
@@ -139,6 +149,11 @@ impl FulfillmentService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - 单号重复（唯一索引透出）
     /// * `RepositoryError` - 数据库写入失败
+    #[tracing::instrument(
+        name = "fulfillment.delivery_create",
+        skip_all,
+        fields(layer = "service", domain = "fulfillment", operation = "delivery_create")
+    )]
     pub async fn create_delivery(
         &self,
         req: CreateDeliveryRequest,
@@ -178,6 +193,11 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 发货单不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    #[tracing::instrument(
+        name = "fulfillment.delivery_update",
+        skip_all,
+        fields(layer = "service", domain = "fulfillment", operation = "delivery_update")
+    )]
     pub async fn update_delivery(
         &self,
         id: &str,

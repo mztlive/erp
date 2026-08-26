@@ -48,6 +48,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.service_fulfillment_list",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "service_fulfillment_list"
+        )
+    )]
     pub async fn service_fulfillment_list(
         &self,
         params: &ServiceFulfillmentListParams,
@@ -111,6 +120,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 服务履约记录不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.service_fulfillment_detail",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "service_fulfillment_detail"
+        )
+    )]
     pub async fn service_fulfillment_detail(&self, id: &str) -> Result<ServiceFulfillmentView> {
         let record = self
             .db
@@ -139,6 +157,15 @@ impl FulfillmentService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - 履约记录号重复（唯一索引透出）
     /// * `RepositoryError` - 数据库写入失败
+    #[tracing::instrument(
+        name = "fulfillment.service_fulfillment_create",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "service_fulfillment_create"
+        )
+    )]
     pub async fn create_service_fulfillment(
         &self,
         req: CreateServiceFulfillmentRequest,
@@ -166,6 +193,15 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许确认或重复确认
     /// * `BusinessLogicError` - 门槛未满足或分配无效
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.service_fulfillment_confirm",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "service_fulfillment_confirm"
+        )
+    )]
     pub async fn confirm_service_fulfillment(
         &self,
         id: &str,

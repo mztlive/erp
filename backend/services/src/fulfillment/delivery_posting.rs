@@ -39,6 +39,11 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许过账或重复过账
     /// * `BusinessLogicError` - 预占归属不符、数量不足或门槛未满足
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.delivery_post",
+        skip_all,
+        fields(layer = "service", domain = "fulfillment", operation = "delivery_post")
+    )]
     pub async fn post_delivery(
         &self,
         id: &str,

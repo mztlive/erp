@@ -203,6 +203,17 @@ impl<'a> Repository<'a, SalesOrder> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.search",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_orders",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_sales_orders(
         &self,
         filter: &SalesOrderFilter,
@@ -237,6 +248,17 @@ impl<'a> Repository<'a, SalesOrderLine> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.list_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_lines",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_lines_by_order(
         &self,
         sales_order_id: &SalesOrderId,

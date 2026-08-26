@@ -110,6 +110,11 @@ impl InventoryService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "inventory.stock_balance_list",
+        skip_all,
+        fields(layer = "service", domain = "inventory", operation = "stock_balance_list")
+    )]
     pub async fn stock_balance_list(
         &self,
         params: &StockBalanceListParams,
@@ -208,6 +213,11 @@ impl InventoryService {
     /// # 错误
     /// * `NotFound` - 余额不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "inventory.stock_balance_detail",
+        skip_all,
+        fields(layer = "service", domain = "inventory", operation = "stock_balance_detail")
+    )]
     pub async fn stock_balance_detail(&self, id: &str) -> Result<StockBalanceDetailView> {
         let balance = self
             .db
@@ -291,6 +301,11 @@ impl InventoryService {
     /// # 错误
     /// * `ValidationError` - 分页/时间区间/排序参数非法
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "inventory.stock_movement_list",
+        skip_all,
+        fields(layer = "service", domain = "inventory", operation = "stock_movement_list")
+    )]
     pub async fn stock_movement_list(
         &self,
         params: &StockMovementListParams,
@@ -355,6 +370,11 @@ impl InventoryService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "inventory.stock_reservation_list",
+        skip_all,
+        fields(layer = "service", domain = "inventory", operation = "stock_reservation_list")
+    )]
     pub async fn stock_reservation_list(
         &self,
         params: &StockReservationListParams,
@@ -410,6 +430,11 @@ impl InventoryService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_list",
+        skip_all,
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_list")
+    )]
     pub async fn stock_adjustment_list(
         &self,
         params: &StockAdjustmentListParams,
@@ -466,6 +491,15 @@ impl InventoryService {
     /// # 错误
     /// * `NotFound` - 调整单不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_detail",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "inventory",
+            operation = "stock_adjustment_detail"
+        )
+    )]
     pub async fn stock_adjustment_detail(&self, id: &str) -> Result<StockAdjustmentDetailView> {
         let adjustment = self
             .db
@@ -511,6 +545,15 @@ impl InventoryService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - 调整单号重复或流程未配置
     /// * `RepositoryError` - 数据库写入失败
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_create",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "inventory",
+            operation = "stock_adjustment_create"
+        )
+    )]
     pub async fn create_stock_adjustment(
         &self,
         req: CreateStockAdjustmentRequest,
@@ -582,6 +625,15 @@ impl InventoryService {
     /// * `NotFound` - 调整单不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
     /// * `ValidationError` - 请求体校验失败
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_update",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "inventory",
+            operation = "stock_adjustment_update"
+        )
+    )]
     pub async fn update_stock_adjustment(
         &self,
         id: &str,
@@ -656,6 +708,15 @@ impl InventoryService {
     /// # 错误
     /// * `NotFound` - 调整单不存在
     /// * `ConflictError` - 非草稿、无绑定或并发冲突
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_submit",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "inventory",
+            operation = "stock_adjustment_submit"
+        )
+    )]
     pub async fn submit_stock_adjustment(
         &self,
         id: &str,
@@ -753,6 +814,15 @@ impl InventoryService {
     /// # 错误
     /// * `NotFound` - 调整单不存在
     /// * `ConflictError` - 非审批中或并发冲突
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_cancel_approval",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "inventory",
+            operation = "stock_adjustment_cancel_approval"
+        )
+    )]
     pub async fn cancel_stock_adjustment_approval(
         &self,
         id: &str,
@@ -793,6 +863,11 @@ impl InventoryService {
     /// * `NotFound` - 调整单不存在
     /// * `ConflictError` - 状态不允许过账、余额不足或重复过账
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "inventory.stock_adjustment_post",
+        skip_all,
+        fields(layer = "service", domain = "inventory", operation = "stock_adjustment_post")
+    )]
     pub async fn post_stock_adjustment(&self, id: &str, actor: &AuditActor) -> Result<StockAdjustmentView> {
         let adjustment_id = StockAdjustmentId::new(id.to_string());
         let actor = actor.clone();

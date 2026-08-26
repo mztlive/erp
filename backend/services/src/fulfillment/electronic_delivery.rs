@@ -48,6 +48,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.electronic_delivery_list",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "electronic_delivery_list"
+        )
+    )]
     pub async fn electronic_delivery_list(
         &self,
         params: &ElectronicDeliveryListParams,
@@ -111,6 +120,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 电子交付记录不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.electronic_delivery_detail",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "electronic_delivery_detail"
+        )
+    )]
     pub async fn electronic_delivery_detail(&self, id: &str) -> Result<ElectronicDeliveryView> {
         let record = self
             .db
@@ -139,6 +157,15 @@ impl FulfillmentService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - 履约记录号重复（唯一索引透出）
     /// * `RepositoryError` - 数据库写入失败
+    #[tracing::instrument(
+        name = "fulfillment.electronic_delivery_create",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "electronic_delivery_create"
+        )
+    )]
     pub async fn create_electronic_delivery(
         &self,
         req: CreateElectronicDeliveryRequest,
@@ -168,6 +195,15 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许确认或重复确认
     /// * `BusinessLogicError` - 门槛未满足或分配无效
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.electronic_delivery_confirm",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "electronic_delivery_confirm"
+        )
+    )]
     pub async fn confirm_electronic_delivery(
         &self,
         id: &str,

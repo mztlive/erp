@@ -395,6 +395,17 @@ impl<'a> Repository<'a, StockMovement> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_movements",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_movements",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_stock_movements(
         &self,
         filter: &StockMovementFilter,
@@ -457,6 +468,17 @@ impl<'a> Repository<'a, StockBalance> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_balances",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_stock_balances(
         &self,
         filter: &StockBalanceFilter,
@@ -525,6 +547,17 @@ impl<'a> Repository<'a, StockBalance> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.increase_on_hand",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn increase_on_hand(
         &self,
         id: &str,
@@ -553,6 +586,17 @@ impl<'a> Repository<'a, StockBalance> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.reserve_quantity",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn reserve_quantity(
         &self,
         id: &str,
@@ -586,6 +630,17 @@ impl<'a> Repository<'a, StockBalance> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.deduct_available",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn deduct_available(
         &self,
         id: &str,
@@ -619,6 +674,17 @@ impl<'a> Repository<'a, StockBalance> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.release_reserved",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn release_reserved(
         &self,
         id: &str,
@@ -650,6 +716,17 @@ impl<'a> Repository<'a, StockBalance> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.apply_last_movement",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn apply_last_movement(
         &self,
         id: &str,
@@ -689,6 +766,17 @@ impl<'a> Repository<'a, StockReservation> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_reservations",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_reservations",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_stock_reservations(
         &self,
         filter: &StockReservationFilter,
@@ -732,6 +820,17 @@ impl<'a> Repository<'a, StockReservation> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.consume_reservation",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_reservations",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn consume_quantity(
         &self,
         id: &str,
@@ -801,6 +900,17 @@ impl<'a> Repository<'a, StockReservation> {
     ///
     /// # 错误
     /// 当 MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.release_reservation",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_reservations",
+            db.operation.name = "update"
+        )
+    )]
     pub async fn release_quantity(
         &self,
         id: &str,
@@ -850,6 +960,17 @@ impl<'a> Repository<'a, StockAdjustment> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.search_stock_adjustments",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_adjustments",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_stock_adjustments(
         &self,
         filter: &StockAdjustmentFilter,
@@ -951,6 +1072,17 @@ impl<'a> InventoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.available_balances_for_skus",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_balances",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn available_balances_for_skus(
         &self,
         sku_ids: &[SkuId],
@@ -985,6 +1117,17 @@ impl<'a> InventoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.existing_reservations_for_sales_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_reservations",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn existing_stock_reservations_for_sales_lines(
         &self,
         sales_order_line_ids: &[SalesOrderLineId],
@@ -1119,6 +1262,17 @@ impl<'a> InventoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.oldest_operable_reservations",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_reservations",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn oldest_operable_reservations(
         &self,
         warehouse_id: &WarehouseId,
@@ -1148,6 +1302,17 @@ impl<'a> InventoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.pending_adjustments_for_warehouse",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_adjustments",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn pending_adjustments_for_warehouse(
         &self,
         warehouse_id: &WarehouseId,
@@ -1178,6 +1343,17 @@ impl<'a> InventoryRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.movements_for_source_document",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.collection.name = "stock_movements",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn movements_for_source_document(
         &self,
         source_document_id: &str,
@@ -1368,6 +1544,16 @@ impl<'a> InventoryRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.inventory.create_stock_adjustment_with_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "inventory",
+            db.system.name = "mongodb",
+            db.operation.name = "create_stock_adjustment_with_lines"
+        )
+    )]
     pub async fn create_stock_adjustment_with_lines(
         &self,
         adjustment: &StockAdjustment,

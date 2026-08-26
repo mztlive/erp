@@ -51,6 +51,15 @@ impl FulfillmentService {
     /// * `ConflictError` - 状态不允许过账或重复过账
     /// * `BusinessLogicError` - 门槛未满足、超收或采购单不可履约
     /// * `OutcomeUnknown` - 提交结果无法确认
+    #[tracing::instrument(
+        name = "fulfillment.purchase_receipt_post",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "purchase_receipt_post"
+        )
+    )]
     pub async fn post_purchase_receipt(
         &self,
         id: &str,

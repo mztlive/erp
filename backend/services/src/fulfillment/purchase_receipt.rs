@@ -45,6 +45,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.purchase_receipt_list",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "purchase_receipt_list"
+        )
+    )]
     pub async fn purchase_receipt_list(
         &self,
         params: &PurchaseReceiptListParams,
@@ -97,6 +106,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 入库单不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.purchase_receipt_detail",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "purchase_receipt_detail"
+        )
+    )]
     pub async fn purchase_receipt_detail(&self, id: &str) -> Result<PurchaseReceiptDetailView> {
         let receipt = self
             .db
@@ -132,6 +150,15 @@ impl FulfillmentService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - 单号重复（唯一索引透出）
     /// * `RepositoryError` - 数据库写入失败
+    #[tracing::instrument(
+        name = "fulfillment.purchase_receipt_create",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "purchase_receipt_create"
+        )
+    )]
     pub async fn create_purchase_receipt(
         &self,
         req: CreatePurchaseReceiptRequest,
@@ -166,6 +193,15 @@ impl FulfillmentService {
     /// * `NotFound` - 入库单不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
     /// * `ValidationError` - 请求体校验失败
+    #[tracing::instrument(
+        name = "fulfillment.purchase_receipt_update",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "purchase_receipt_update"
+        )
+    )]
     pub async fn update_purchase_receipt(
         &self,
         id: &str,

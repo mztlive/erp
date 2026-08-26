@@ -39,6 +39,15 @@ use crate::errors::Result;
 ///
 /// # 错误
 /// 主体引用非法或仓储失败时返回错误。
+#[tracing::instrument(
+    name = "sales_order.load_document_approval",
+    skip_all,
+    fields(
+        layer = "service",
+        domain = "sales_order",
+        operation = "load_document_approval"
+    )
+)]
 pub async fn load_document_approval(
     db: &Database,
     business_type: BusinessType,

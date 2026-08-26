@@ -101,6 +101,17 @@ impl<'a> Repository<'a, ServiceFulfillment> {
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.search_service_fulfillments",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.collection.name = "service_fulfillments",
+            db.operation.name = "search"
+        )
+    )]
     pub async fn search_service_fulfillments(
         &self,
         filter: &ServiceFulfillmentFilter,

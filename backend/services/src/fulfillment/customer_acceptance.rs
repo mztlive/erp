@@ -46,6 +46,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.customer_acceptance_list",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "customer_acceptance_list"
+        )
+    )]
     pub async fn customer_acceptance_list(
         &self,
         params: &CustomerAcceptanceListParams,
@@ -99,6 +108,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 验收单不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.customer_acceptance_detail",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "customer_acceptance_detail"
+        )
+    )]
     pub async fn customer_acceptance_detail(&self, id: &str) -> Result<CustomerAcceptanceDetailView> {
         let acceptance = self
             .db
@@ -143,6 +161,15 @@ impl FulfillmentService {
     /// * `ValidationError` - 请求体校验失败
     /// * `ConflictError` - 单号重复（唯一索引透出）
     /// * `RepositoryError` - 数据库写入失败
+    #[tracing::instrument(
+        name = "fulfillment.customer_acceptance_create",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "customer_acceptance_create"
+        )
+    )]
     pub async fn create_customer_acceptance(
         &self,
         req: CreateCustomerAcceptanceRequest,

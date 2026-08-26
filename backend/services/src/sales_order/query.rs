@@ -134,6 +134,11 @@ impl SalesOrderService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "sales_order.list",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "list")
+    )]
     pub async fn sales_order_list(&self, params: &SalesOrderListParams) -> Result<PageView<SalesOrderView>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -249,6 +254,11 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// * `NotFound` - 销售单不存在
+    #[tracing::instrument(
+        name = "sales_order.detail",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "detail")
+    )]
     pub async fn sales_order_detail(
         &self,
         id: &str,

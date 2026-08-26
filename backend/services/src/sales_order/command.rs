@@ -198,6 +198,15 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 合同不存在时返回 `NotFound`。
+    #[tracing::instrument(
+        name = "sales_order.resolve_customer_scope",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "sales_order",
+            operation = "resolve_customer_scope"
+        )
+    )]
     pub async fn sales_command_customer_id(&self, contract_id: &ContractId) -> Result<CustomerAccountId> {
         let contract = self
             .db
@@ -301,6 +310,11 @@ impl SalesOrderService {
     /// * `NotFound` - 客户/合同不存在
     /// * `BusinessLogicError` - 客户已停用
     /// * `ConflictError` - order_no 重复
+    #[tracing::instrument(
+        name = "sales_order.create",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "create")
+    )]
     pub async fn create_sales_order(
         &self,
         mut req: CreateSalesOrderRequest,
@@ -644,6 +658,11 @@ impl SalesOrderService {
     /// # 错误
     /// * `NotFound` - 销售单不存在
     /// * `ConflictError` - 非草稿，或已有副本但期望版本不一致
+    #[tracing::instrument(
+        name = "sales_order.save_working_copy",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "save_working_copy")
+    )]
     pub async fn save_working_copy(
         &self,
         id: &str,
@@ -770,6 +789,11 @@ impl SalesOrderService {
     /// # 错误
     /// * `NotFound` - 销售单或有效工作副本不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    #[tracing::instrument(
+        name = "sales_order.submit",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "submit")
+    )]
     pub async fn submit_sales_order(
         &self,
         id: &str,
@@ -1087,6 +1111,11 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 非审批中、已最终通过、原因缺失或并发冲突时返回错误。
+    #[tracing::instrument(
+        name = "sales_order.cancel_approval",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "cancel_approval")
+    )]
     pub async fn cancel_approval_submission(
         &self,
         id: &str,
@@ -1367,6 +1396,11 @@ impl SalesOrderService {
     /// # 错误
     /// * `NotFound` - 销售单不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    #[tracing::instrument(
+        name = "sales_order.void",
+        skip_all,
+        fields(layer = "service", domain = "sales_order", operation = "void")
+    )]
     pub async fn void_sales_order(
         &self,
         id: &str,

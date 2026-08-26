@@ -84,6 +84,17 @@ impl<'a> Repository<'a, SalesOrderWorkingCopy> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.find_active_working_copy",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_working_copies",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn find_active_by_order_and_purpose(
         &self,
         sales_order_id: &SalesOrderId,
@@ -176,6 +187,17 @@ impl<'a> Repository<'a, SalesOrderWorkingCopyLine> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.list_working_copy_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_working_copy_lines",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_lines_by_working_copy(
         &self,
         working_copy_id: &SalesOrderWorkingCopyId,
@@ -210,6 +232,16 @@ impl<'a> SalesOrderRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.submit_working_copy",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.operation.name = "submit_working_copy"
+        )
+    )]
     pub async fn submit_working_copy(
         &self,
         working_copy: &mut SalesOrderWorkingCopy,

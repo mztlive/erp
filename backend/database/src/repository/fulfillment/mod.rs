@@ -111,6 +111,16 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.list_acceptance_eligible_deliveries",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_acceptance_eligible_deliveries(
         &self,
         sales_order_id: &entities::ids::SalesOrderId,
@@ -146,6 +156,17 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.list_confirmed_electronic_deliveries",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.collection.name = "electronic_deliveries",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_confirmed_electronic_deliveries(
         &self,
         sales_order_line_ids: &[SalesOrderLineId],
@@ -173,6 +194,17 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.list_confirmed_service_fulfillments",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.collection.name = "service_fulfillments",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_confirmed_service_fulfillments(
         &self,
         sales_order_line_ids: &[SalesOrderLineId],
@@ -200,6 +232,16 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.list_customer_acceptance_history",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_customer_acceptance_history(
         &self,
         sales_order_id: &entities::ids::SalesOrderId,
@@ -478,6 +520,16 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.draft_delivery_for_sales_order",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn draft_delivery_for_sales_order(
         &self,
         sales_order_id: &entities::ids::SalesOrderId,
@@ -509,6 +561,16 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// MongoDB 查询失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.draft_warehouse_delivery",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn draft_warehouse_delivery(
         &self,
         sales_order_id: &entities::ids::SalesOrderId,
@@ -705,6 +767,16 @@ impl<'a> FulfillmentRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.create_purchase_receipt_with_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "create_purchase_receipt_with_lines"
+        )
+    )]
     pub async fn create_purchase_receipt_with_lines(
         &self,
         receipt: &PurchaseReceipt,
@@ -742,6 +814,16 @@ impl<'a> FulfillmentRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.create_delivery_with_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "create_delivery_with_lines"
+        )
+    )]
     pub async fn create_delivery_with_lines(
         &self,
         delivery: &Delivery,
@@ -780,6 +862,16 @@ impl<'a> FulfillmentRepository<'a> {
     /// # 错误
     /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.create_customer_acceptance_with_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.operation.name = "create_customer_acceptance_with_lines"
+        )
+    )]
     pub async fn create_customer_acceptance_with_lines(
         &self,
         acceptance: &CustomerAcceptance,
@@ -816,6 +908,17 @@ impl<'a> FulfillmentRepository<'a> {
     ///
     /// # 错误
     /// 当删除或批量插入失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.fulfillment.replace_customer_acceptance_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "fulfillment",
+            db.system.name = "mongodb",
+            db.collection.name = "customer_acceptance_lines",
+            db.operation.name = "replace"
+        )
+    )]
     pub async fn replace_customer_acceptance_lines(
         &self,
         acceptance_id: &CustomerAcceptanceId,

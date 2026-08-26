@@ -96,6 +96,15 @@ impl SalesOrderService {
     ///
     /// # 错误
     /// 非审批中、缺少提交、卡券投影字段缺失或仓储失败时返回错误。
+    #[tracing::instrument(
+        name = "sales_order.formalize_approved_submission",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "sales_order",
+            operation = "formalize_approved_submission"
+        )
+    )]
     pub async fn formalize_approved_submission(
         &self,
         id: &str,

@@ -33,6 +33,15 @@ impl FulfillmentService {
     /// # 错误
     /// * `NotFound` - 销售单或其生效版本不存在
     /// * `RepositoryError` - 数据库查询失败
+    #[tracing::instrument(
+        name = "fulfillment.acceptance_eligibility",
+        skip_all,
+        fields(
+            layer = "service",
+            domain = "fulfillment",
+            operation = "acceptance_eligibility"
+        )
+    )]
     pub async fn acceptance_eligibility(&self, sales_order_id: &str) -> Result<AcceptanceEligibilityView> {
         let so_id = SalesOrderId::new(sales_order_id.to_string());
         let so = self

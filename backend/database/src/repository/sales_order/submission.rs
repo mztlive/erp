@@ -90,6 +90,17 @@ impl<'a> Repository<'a, SalesOrderSubmission> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.list_submissions",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_submissions",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_by_order_newest_first(
         &self,
         sales_order_id: &SalesOrderId,
@@ -170,6 +181,17 @@ impl<'a> Repository<'a, SalesOrderSubmissionLine> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    #[tracing::instrument(
+        name = "repository.sales_order.list_submission_lines",
+        skip_all,
+        fields(
+            layer = "repository",
+            domain = "sales_order",
+            db.system.name = "mongodb",
+            db.collection.name = "sales_order_submission_lines",
+            db.operation.name = "find"
+        )
+    )]
     pub async fn list_lines_by_submissions(
         &self,
         submission_ids: &[SalesOrderSubmissionId],
