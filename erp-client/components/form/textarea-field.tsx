@@ -17,6 +17,7 @@ type TextareaFieldProps = {
     placeholder?: string
     disabled?: boolean
     rows?: number
+    maxLength?: number
     className?: string
     textareaClassName?: string
 }
@@ -31,6 +32,7 @@ export function TextareaField({
     placeholder,
     disabled,
     rows,
+    maxLength,
     className,
     textareaClassName,
 }: TextareaFieldProps) {
@@ -56,6 +58,7 @@ export function TextareaField({
                 placeholder={placeholder}
                 disabled={disabled}
                 rows={rows}
+                maxLength={maxLength}
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}
                 className={textareaClassName}

@@ -7,8 +7,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BACKEND_DIR="$(cd "${E2E_DIR}/../backend" && pwd)"
-CLIENT_DIR="$(cd "${E2E_DIR}/../erp-client" && pwd)"
+BACKEND_DIR="$(cd "${E2E_DIR}/backend" && pwd)"
+CLIENT_DIR="$(cd "${E2E_DIR}/erp-client" && pwd)"
 
 API_PORT=10001
 FRONT_PORT=3000

@@ -29,6 +29,7 @@ export type BackendListItem = {
     supplier_name: string
     purchase_type: PurchaseType | string
     payment_term_code?: string | null
+    owner_user_id?: string | null
     owner_name?: string | null
     status: string
     review_status: string
@@ -80,6 +81,9 @@ export type BackendCenter = {
     purchase_type: PurchaseType | string
     payment_term_code: string
     fulfillment_responsibility: FulfillmentResponsibility | string
+    owner_user_id: string
+    owner_name: string
+    target_warehouse_id?: string | null
     payment_progress: string
     invoice_progress: string
     fulfillment_progress: string

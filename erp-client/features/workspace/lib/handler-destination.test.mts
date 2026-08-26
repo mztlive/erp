@@ -104,6 +104,22 @@ test("procurement creation opens W08 with sales order and work item context", ()
     assert.equal(url.searchParams.has("queueContextId"), false)
 })
 
+test("fulfillment operation stays in W01 and focuses the exact task", () => {
+    const url = parsedHref(
+        buildHandlerHref({
+            businessObjectId: "delivery / 7",
+            workItemId: "wi-42",
+            handlerKey: "fulfillment_operation",
+            destinationWorkspaceId: "W01",
+        }),
+    )
+
+    assert.equal(url.pathname, "/workspace")
+    assert.equal(url.searchParams.get("family"), "fulfillment")
+    assert.equal(url.searchParams.get("currentWorkItemId"), "wi-42")
+    assert.equal(url.searchParams.has("queueContextId"), false)
+})
+
 test("purchase order review opens the exact W08 review mode", () => {
     const url = parsedHref(
         buildHandlerHref({

@@ -59,6 +59,8 @@ export type FulfillmentWorkSurfaceProps = {
     shortcutsOpen: boolean
     headingRef: React.Ref<HTMLHeadingElement>
     resultUnknown: boolean
+    /** W01 内联作业面只处理任务绑定的单个对象。 */
+    singleOperation?: boolean
     showBack?: boolean
     showSalesOrderLinks?: boolean
     onDraftChange: (next: FulfillmentDraft) => void
@@ -92,6 +94,7 @@ export function FulfillmentWorkSurface({
     shortcutsOpen,
     headingRef,
     resultUnknown,
+    singleOperation = false,
     showBack = true,
     showSalesOrderLinks = true,
     onDraftChange,
@@ -129,18 +132,22 @@ export function FulfillmentWorkSurface({
                 onProcessNext={onConfirm}
             />
 
-            <button
-                type="button"
-                onClick={onToggleShortcuts}
-                aria-expanded={shortcutsOpen}
-                className="self-start text-xs text-muted-foreground hover:text-foreground"
-            >
-                {shortcutsOpen
-                    ? `快捷键：J / K 上下条${
-                          canExecute ? " · Ctrl+S 保存 · Ctrl+Enter 确认" : ""
-                      } · 再按 ? 收起`
-                    : "按 ? 看快捷键"}
-            </button>
+            {!singleOperation ? (
+                <button
+                    type="button"
+                    onClick={onToggleShortcuts}
+                    aria-expanded={shortcutsOpen}
+                    className="self-start text-xs text-muted-foreground hover:text-foreground"
+                >
+                    {shortcutsOpen
+                        ? `快捷键：J / K 上下条${
+                              canExecute
+                                  ? " · Ctrl+S 保存 · Ctrl+Enter 确认"
+                                  : ""
+                          } · 再按 ? 收起`
+                        : "按 ? 看快捷键"}
+                </button>
+            ) : null}
 
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="border-b border-grid">
@@ -266,15 +273,17 @@ export function FulfillmentWorkSurface({
 
                     {canExecute ? (
                         <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                disabled={formalPending}
-                                onClick={onSkip}
-                            >
-                                <SkipForwardIcon data-icon="inline-start" />
-                                先跳过
-                            </Button>
+                            {!singleOperation ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    disabled={formalPending}
+                                    onClick={onSkip}
+                                >
+                                    <SkipForwardIcon data-icon="inline-start" />
+                                    先跳过
+                                </Button>
+                            ) : null}
                             <Button
                                 type="button"
                                 variant="ghost"

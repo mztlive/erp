@@ -3,8 +3,11 @@
 import { PlusIcon, Trash2Icon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import { toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { FieldError } from "@/components/ui/field"
+import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import {
     Table,
     TableBody,
@@ -49,6 +52,7 @@ export function PurchaseOrderCreateSourcingTable({
                         <TableHead data-align="end">已覆盖</TableHead>
                         <TableHead data-align="end">剩余数量</TableHead>
                         <TableHead>供给来源 / 履约责任</TableHead>
+                        <TableHead>采购入库目标仓</TableHead>
                         <TableHead data-align="end">本次分配数量</TableHead>
                         <TableHead data-align="end">含税成本</TableHead>
                         <TableHead data-align="end">进项税率</TableHead>
@@ -185,10 +189,35 @@ export function PurchaseOrderCreateSourcingTable({
                                                         `lines[${index}].expectedDeliveryDate`,
                                                         option.expectedDeliveryDate,
                                                     )
+                                                    if (
+                                                        option.sourceType !==
+                                                            "PURCHASE" ||
+                                                        option.fulfillmentResponsibility !==
+                                                            "WAREHOUSE"
+                                                    ) {
+                                                        form.setFieldValue(
+                                                            `lines[${index}].targetWarehouseId`,
+                                                            "",
+                                                        )
+                                                        form.setFieldValue(
+                                                            `lines[${index}].targetWarehouseName`,
+                                                            "",
+                                                        )
+                                                    }
                                                 }}
                                             />
                                         )}
                                     </form.AppField>
+                                </TableCell>
+                                <TableCell className="min-w-52">
+                                    <SourcingTargetWarehouseField
+                                        form={form}
+                                        index={index}
+                                        order={order}
+                                        salesOrderLineId={
+                                            input.salesOrderLineId
+                                        }
+                                    />
                                 </TableCell>
                                 <TableCell className="min-w-36">
                                     <form.AppField
@@ -261,6 +290,83 @@ export function PurchaseOrderCreateSourcingTable({
                 </TableBody>
             </Table>
         </div>
+    )
+}
+
+/** 只有「采购 + 入仓」方案必须在建单前选定目标仓。 */
+function SourcingTargetWarehouseField({
+    form,
+    index,
+    order,
+    salesOrderLineId,
+}: {
+    form: PurchaseOrderCreateFormApi
+    index: number
+    order: SourcingSalesOrder
+    salesOrderLineId: string
+}) {
+    return (
+        <form.Subscribe
+            selector={(state) => state.values.lines[index]?.basisId ?? ""}
+        >
+            {(basisId) => {
+                const product = order.lines.find(
+                    (line) => line.salesOrderLineId === salesOrderLineId,
+                )
+                const option = findSourcingOption(product, basisId)
+                if (
+                    option?.sourceType !== "PURCHASE" ||
+                    option.fulfillmentResponsibility !== "WAREHOUSE"
+                ) {
+                    return (
+                        <span className="text-xs text-muted-foreground">
+                            不适用
+                        </span>
+                    )
+                }
+                return (
+                    <form.AppField name={`lines[${index}].targetWarehouseId`}>
+                        {(field) => {
+                            const invalid =
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid
+                            return (
+                                <div className="space-y-1">
+                                    <WarehouseSearchCombobox
+                                        value={field.state.value || undefined}
+                                        onValueChange={(warehouseId) =>
+                                            field.handleChange(
+                                                warehouseId ?? "",
+                                            )
+                                        }
+                                        onItemChange={(warehouse) =>
+                                            form.setFieldValue(
+                                                `lines[${index}].targetWarehouseName`,
+                                                warehouse
+                                                    ? `${warehouse.warehouseCode} · ${warehouse.warehouseName}`
+                                                    : "",
+                                            )
+                                        }
+                                        purpose="purchase-receipt"
+                                        placeholder="选择目标仓"
+                                        emptyLabel="没有可用仓库"
+                                        aria-label={`采购入库目标仓，${product?.itemName ?? "采购明细"}`}
+                                        aria-invalid={invalid || undefined}
+                                    />
+                                    {invalid ? (
+                                        <FieldError
+                                            errors={toFieldErrors(
+                                                field.state.meta.errors,
+                                            )}
+                                        />
+                                    ) : null}
+                                </div>
+                            )
+                        }}
+                    </form.AppField>
+                )
+            }}
+        </form.Subscribe>
     )
 }
 

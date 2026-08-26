@@ -9,6 +9,7 @@ import {
 
 import {
     getWorkItem,
+    getWorkItemReassignCandidates,
     getWorkItemStats,
     listWorkItems,
     parseWorkItemConflict,
@@ -22,6 +23,8 @@ export const workItemKeys = {
     all: ["work-items"] as const,
     detail: (workItemId: string) =>
         [...workItemKeys.all, "detail", workItemId] as const,
+    reassignCandidates: (workItemId: string) =>
+        [...workItemKeys.all, "reassign-candidates", workItemId] as const,
     list: (params: WorkItemListParams) =>
         [...workItemKeys.all, "list", params] as const,
     stats: (params: WorkItemStatsParams) =>
@@ -72,6 +75,17 @@ export const useWorkItemDetailQuery = (workItemId: string) =>
         queryKey: workItemKeys.detail(workItemId),
         queryFn: () => getWorkItem(workItemId),
         enabled: workItemId.trim().length > 0,
+    })
+
+/** 仅在管理员打开转交对话框时查询当前合格候选人。 */
+export const useWorkItemReassignCandidatesQuery = (
+    workItemId: string,
+    enabled: boolean,
+) =>
+    useQuery({
+        queryKey: workItemKeys.reassignCandidates(workItemId),
+        queryFn: () => getWorkItemReassignCandidates(workItemId),
+        enabled: enabled && workItemId.trim().length > 0,
     })
 
 /** 查询与队列使用同一授权边界的任务统计。 */

@@ -50,6 +50,11 @@ export type MasterDataListItem = Readonly<{
     actionBlockers: readonly ActionBlocker[]
     lockVersion: number
     ownerName?: string
+    /** 仓库专用：新履约任务的收发责任配置。 */
+    warehouseFulfillmentHandlers?: Readonly<{
+        inboundUserId?: string
+        outboundUserId?: string
+    }>
     metricTags: readonly string[]
     /**
      * 字典稳定代码（分类代码 / 品牌代码等）。

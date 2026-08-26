@@ -60,6 +60,7 @@ export function useSalesOrderDetailUrlState({
     const fromQueue =
         Boolean(returnTo) &&
         (fromWorkspace === "W07" ||
+            fromWorkspace === "W01" ||
             fromWorkspace === "W08" ||
             fromWorkspace === "W09")
     const backHref = fromQueue && returnTo ? returnTo : "/sales/orders"
@@ -68,7 +69,7 @@ export function useSalesOrderDetailUrlState({
             ? "返回工作台"
             : fromWorkspace === "W08"
               ? "返回采购单列表"
-              : fromWorkspace === "W09"
+              : fromWorkspace === "W01" || fromWorkspace === "W09"
                 ? "返回履约处理"
                 : "返回列表"
 

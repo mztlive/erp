@@ -52,8 +52,14 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "party", "detail", id] as const,
     warehouse: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "warehouse", input] as const,
-    warehouseDetail: (id: string) =>
-        [...entitySelectorKeys.all, "warehouse", "detail", id] as const,
+    warehouseDetail: (id: string, purpose: EntitySearch["purpose"]) =>
+        [
+            ...entitySelectorKeys.all,
+            "warehouse",
+            "detail",
+            id,
+            purpose,
+        ] as const,
     contract: (input: ContractSearch) =>
         [...entitySelectorKeys.all, "contract", input] as const,
     contractDetail: (id: string, scope?: ContractSearch["scope"]) =>
@@ -157,8 +163,11 @@ export function useWarehouseSelectorQuery(
         ...commonQueryOptions(),
     })
     const selected = useQuery({
-        queryKey: entitySelectorKeys.warehouseDetail(selectedId ?? ""),
-        queryFn: () => fetchWarehouseOption(selectedId ?? ""),
+        queryKey: entitySelectorKeys.warehouseDetail(
+            selectedId ?? "",
+            input.purpose,
+        ),
+        queryFn: () => fetchWarehouseOption(selectedId ?? "", input.purpose),
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
     })

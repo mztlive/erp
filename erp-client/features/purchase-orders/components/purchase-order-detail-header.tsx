@@ -27,6 +27,7 @@ import {
 } from "@/features/purchase-orders/types"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 
 export function PurchaseOrderDetailHeader({
     order,
@@ -133,7 +134,10 @@ export function PurchaseOrderDetailHeader({
                                               variant: "outline" as const,
                                               onClick: () =>
                                                   router.push(
-                                                      `/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`,
+                                                      fulfillmentTasksHref(
+                                                          order.identity
+                                                              .purchaseOrderId,
+                                                      ),
                                                   ),
                                           },
                                       ]

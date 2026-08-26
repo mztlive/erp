@@ -76,6 +76,11 @@ export type MasterDataCenterView = Readonly<{
         w10Href: string
         policyNote: string
     }
+    /** 仓库专用：新入库与仓发任务取用的具体账号。 */
+    warehouseFulfillmentHandlers?: Readonly<{
+        inboundUserId?: string
+        outboundUserId?: string
+    }>
     /**
      * 商品 SPU 约束摘要（不含规格标识：签名由属性组合系统派生，UI 不展示）。
      */

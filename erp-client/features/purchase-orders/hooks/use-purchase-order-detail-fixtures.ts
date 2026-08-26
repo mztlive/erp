@@ -27,6 +27,7 @@ export function makePurchaseOrderCenter(
             fulfillmentResponsibility: "WAREHOUSE",
             paymentTermCode: "POSTPAY_NET15",
             paymentTermLabel: "货到 15 天",
+            ownerUserId: "fixture-owner",
             ownerName: "经办人",
             submittedBy: "张三",
             submittedAt: "2026-08-01T08:00:00.000Z",

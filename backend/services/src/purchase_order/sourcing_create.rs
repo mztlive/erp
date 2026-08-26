@@ -78,6 +78,8 @@ struct SourcingReceipt {
 struct SourcingDraftPlan {
     /// 命中的精确依据分组。
     group: BasisGroup,
+    /// 仓库履约采购的目标收货仓。
+    target_warehouse_id: Option<WarehouseId>,
     /// 本单规范化后的逐行数量。
     requested_lines: Vec<RequestedLine>,
 }
@@ -283,12 +285,18 @@ async fn create_from_sourcing_in_transaction(
             .find(|group| group.scope == plan.group.scope)
             .ok_or_else(procurement_quantity_changed)?;
         let selected_lines = validate_requested_quantities(&plan.requested_lines, latest)?;
-        let basis_id = basis_id_for(&order, latest, &req.work_item_id);
+        let basis_id = basis_id_for(
+            &order,
+            latest,
+            &req.work_item_id,
+            plan.target_warehouse_id.as_ref(),
+        );
         let item_req = CreatePurchaseOrderFromBasisRequest {
             work_item_id: req.work_item_id.clone(),
             basis_id: basis_id.clone(),
             purchase_type: latest.scope.purchase_type,
             payment_term_code: latest.scope.payment_term_code.clone(),
+            target_warehouse_id: plan.target_warehouse_id.as_ref().map(ToString::to_string),
             lines: plan
                 .requested_lines
                 .iter()
@@ -356,6 +364,8 @@ struct RequestedSourcingLine {
     basis_id: String,
     /// 供给来源。
     source_type: SupplySourceType,
+    /// 仓库履约采购的目标收货仓。
+    target_warehouse_id: Option<String>,
     /// 本次分配数量。
     quantity: Quantity,
     /// 采购确认的预计交付日。
@@ -398,6 +408,17 @@ fn normalize_sourcing_assignments(
             .map_err(|error| Error::ValidationError(format!("本次分配数量非法: {error}")))?;
         let expected_delivery_date = BusinessDate::from_str(line.expected_delivery_date.trim())
             .map_err(|error| Error::ValidationError(format!("预计交付日非法: {error}")))?;
+        let target_warehouse_id = line
+            .target_warehouse_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        if line.source_type == SupplySourceType::ExistingStock && target_warehouse_id.is_some() {
+            return Err(Error::ValidationError(
+                "现有库存由所选库存余额确定仓库，不能另行指定目标仓".to_string(),
+            ));
+        }
         let zero =
             Quantity::from_str("0").map_err(|error| Error::Internal(format!("零数量常量非法: {error}")))?;
         if quantity <= zero {
@@ -407,6 +428,7 @@ fn normalize_sourcing_assignments(
             sales_order_line_id,
             basis_id,
             source_type: line.source_type,
+            target_warehouse_id,
             quantity,
             expected_delivery_date,
         });
@@ -445,7 +467,15 @@ fn plan_sourcing_drafts(
         .filter(|assignment| assignment.source_type == SupplySourceType::Purchase)
     {
         let group = find_assignment_group(order, groups, work_item_id, assignment)?;
-        let key = basis_scope_key(&group.scope);
+        let target_warehouse_id = target_warehouse_for_assignment(group, assignment)?;
+        let key = format!(
+            "{}|{}",
+            basis_scope_key(&group.scope),
+            target_warehouse_id
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default()
+        );
         let requested = RequestedLine {
             sales_order_line_id: assignment.sales_order_line_id.clone(),
             quantity: assignment.quantity,
@@ -458,12 +488,41 @@ fn plan_sourcing_drafts(
                 key,
                 SourcingDraftPlan {
                     group: group.clone(),
+                    target_warehouse_id,
                     requested_lines: vec![requested],
                 },
             );
         }
     }
     Ok(plans.into_values().collect())
+}
+
+/// 校验采购选源行的目标仓库契约。
+///
+/// # 参数
+/// * `group` - 选源行命中的采购依据
+/// * `assignment` - 已规范化选源行
+///
+/// # 返回
+/// 仓库履约返回目标仓库，其他履约返回空。
+///
+/// # 错误
+/// 仓库履约缺少目标仓，或非仓库履约携带目标仓时返回校验错误。
+fn target_warehouse_for_assignment(
+    group: &BasisGroup,
+    assignment: &RequestedSourcingLine,
+) -> Result<Option<WarehouseId>> {
+    match group.scope.fulfillment_responsibility {
+        entities::purchase_order::FulfillmentResponsibility::Warehouse => assignment
+            .target_warehouse_id
+            .as_ref()
+            .map(|value| Some(WarehouseId::new(value.clone())))
+            .ok_or_else(|| Error::ValidationError("仓库履约必须先选择目标收货仓".to_string())),
+        _ if assignment.target_warehouse_id.is_some() => {
+            Err(Error::ValidationError("非仓库履约不能指定目标收货仓".to_string()))
+        }
+        _ => Ok(None),
+    }
 }
 
 /// 把现有库存选源行按库存余额归组。
@@ -632,7 +691,7 @@ fn find_assignment_group<'a>(
     groups
         .iter()
         .find(|group| {
-            basis_id_for(order, group, work_item_id) == assignment.basis_id
+            basis_id_for(order, group, work_item_id, None) == assignment.basis_id
                 && group
                     .lines
                     .iter()
@@ -823,6 +882,12 @@ async fn ensure_stock_delivery_for_warehouse(
         .await?;
     if let Some(delivery) = existing {
         append_stock_delivery_lines(db, &delivery, reservations, session).await?;
+        crate::fulfillment::task::ensure_fulfillment_task(
+            db,
+            crate::fulfillment::task::FulfillmentTaskObject::Delivery(&delivery),
+            session,
+        )
+        .await?;
         return Ok(());
     }
     let delivery_id = DeliveryId::new(next_id());
@@ -843,8 +908,13 @@ async fn ensure_stock_delivery_for_warehouse(
     let lines = build_stock_delivery_lines(&delivery_id, reservations, 1)?;
     db.fulfillment()
         .create_delivery_with_lines(&delivery, &lines, session)
-        .await
-        .map_err(Into::into)
+        .await?;
+    crate::fulfillment::task::ensure_fulfillment_task(
+        db,
+        crate::fulfillment::task::FulfillmentTaskObject::Delivery(&delivery),
+        session,
+    )
+    .await
 }
 
 /// 向现有仓发草稿追加尚未出现的库存预占行。
@@ -927,6 +997,7 @@ fn sourcing_request_fingerprint(
                 line.sales_order_line_id.clone(),
                 line.basis_id.clone(),
                 line.source_type,
+                line.target_warehouse_id.clone(),
                 line.quantity.to_string(),
                 line.expected_delivery_date.to_string(),
             )
@@ -1114,6 +1185,7 @@ mod tests {
         assert!(production.contains("reserve_quantity"));
         assert!(production.contains("StockReservationSourceType::ExistingStock"));
         assert!(production.contains("create_stock_delivery_drafts"));
+        assert!(production.contains("plan.target_warehouse_id.as_ref()"));
         assert!(production.contains("persist_basis_draft"));
         assert!(production.contains("sync_procurement_tasks_for_sales_order"));
     }
@@ -1124,6 +1196,7 @@ mod tests {
             sales_order_line_id: sales_order_line_id.to_string(),
             basis_id: basis_id.to_string(),
             source_type: SupplySourceType::Purchase,
+            target_warehouse_id: Some("warehouse-1".to_string()),
             quantity: entities::money::Quantity::from_str("1").expect("测试数量合法"),
             expected_delivery_date: BusinessDate::from_str("2026-09-01").expect("测试日期合法"),
         }

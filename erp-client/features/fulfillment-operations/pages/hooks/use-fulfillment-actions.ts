@@ -53,6 +53,7 @@ export type FulfillmentActionsOptions = {
     setConfirmOpen: React.Dispatch<React.SetStateAction<boolean>>
     setLastResult: React.Dispatch<React.SetStateAction<ResultState>>
     onPosted?: (salesOrderId: string) => void
+    onOperationCompleted?: (operationId: string) => void
 }
 
 /**
@@ -78,6 +79,7 @@ export function useFulfillmentActions({
     setConfirmOpen,
     setLastResult,
     onPosted,
+    onOperationCompleted,
 }: FulfillmentActionsOptions) {
     const supportsSave =
         draft?.type === "RECEIPT" ||
@@ -184,6 +186,7 @@ export function useFulfillmentActions({
                 stayOnItem: !autoNext,
             })
             onPosted?.(outcome.salesOrderId)
+            onOperationCompleted?.(outcome.operationId)
             if (autoNext) {
                 advanceIfNeeded(true, nextId, true)
             }
@@ -197,6 +200,7 @@ export function useFulfillmentActions({
         draft,
         neighborId,
         onPosted,
+        onOperationCompleted,
         postMutation,
         operation,
         setActionError,
@@ -253,6 +257,7 @@ export function useFulfillmentActions({
                 stayOnItem: !autoNext,
             })
             onPosted?.(response.outcome.salesOrderId)
+            onOperationCompleted?.(response.outcome.operationId)
             if (autoNext) advanceIfNeeded(true)
         }
     }, [
@@ -263,6 +268,7 @@ export function useFulfillmentActions({
         resolveUnknownMutation,
         operation,
         onPosted,
+        onOperationCompleted,
         setActionError,
         setLastResult,
     ])

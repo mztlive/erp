@@ -75,6 +75,14 @@ impl FulfillmentService {
                     receipt
                         .ensure_draft_version(expected_version)
                         .map_err(|error| Error::ConflictError(error.to_string()))?;
+                    if warehouse_id
+                        .as_ref()
+                        .is_some_and(|requested| requested != &receipt.warehouse_id)
+                    {
+                        return Err(Error::ValidationError(
+                            "采购入库单的目标仓库已冻结，不能在过账时变更".to_string(),
+                        ));
+                    }
                     receipt.update(entities::fulfillment::PurchaseReceiptUpdate {
                         warehouse_id: warehouse_id.or(Some(receipt.warehouse_id.clone())),
                     })?;
@@ -135,11 +143,18 @@ impl FulfillmentService {
                     }
                     receipt.mark_posted(occurred_at, actor.id().to_string())?;
                     db.purchase_receipts().update(&mut receipt, session).await?;
+                    super::task::complete_fulfillment_task(
+                        &db,
+                        super::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
+                        actor.id(),
+                        session,
+                    )
+                    .await?;
                     let progress = PurchaseReceipt::fulfillment_progress(&revision_lines, &received);
                     po.set_fulfillment_progress(progress, actor.id().to_string());
                     db.purchase_orders().update(&mut po, session).await?;
-                    // 入库过账后自动生成仓发草稿：W09 仓储队列按 DRAFT 发货单
-                    // 投影「公司仓发」待办，行引用本次入库建立的销售预占。
+                    // 入库过账后自动生成仓发草稿与 W01 指定到人的仓发任务，
+                    // 行引用本次入库建立的销售预占。
                     create_warehouse_ship_drafts(&db, session, &lines).await?;
                     let audit = actor.resource_log(
                         "purchase_receipt.post",
@@ -515,6 +530,12 @@ async fn ensure_receipt_stock_delivery(
         .await?;
     if let Some(delivery) = existing {
         append_receipt_stock_delivery_lines(db, &delivery, reservations, session).await?;
+        super::task::ensure_fulfillment_task(
+            db,
+            super::task::FulfillmentTaskObject::Delivery(&delivery),
+            session,
+        )
+        .await?;
         return Ok(());
     }
     let delivery_id = DeliveryId::new(next_id());
@@ -536,6 +557,12 @@ async fn ensure_receipt_stock_delivery(
     db.fulfillment()
         .create_delivery_with_lines(&delivery, &lines, session)
         .await?;
+    super::task::ensure_fulfillment_task(
+        db,
+        super::task::FulfillmentTaskObject::Delivery(&delivery),
+        session,
+    )
+    .await?;
     Ok(())
 }
 

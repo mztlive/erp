@@ -51,6 +51,8 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     selected: flagField,
                     quantity: textField,
                     basisId: textField,
+                    targetWarehouseId: textField.optional().default(""),
+                    targetWarehouseName: textField.optional().default(""),
                     expectedDeliveryDate: textField,
                 }),
             ),
@@ -96,7 +98,8 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     return
                 }
                 seenAllocations.add(allocationKey)
-                if (!findSourcingOption(product, line.basisId)) {
+                const option = findSourcingOption(product, line.basisId)
+                if (!option) {
                     context.addIssue({
                         code: "custom",
                         path: ["lines", index, "basisId"],
@@ -105,6 +108,26 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                             : "该履约方案已失效",
                     })
                     return
+                }
+                const requiresTargetWarehouse =
+                    option.sourceType === "PURCHASE" &&
+                    option.fulfillmentResponsibility === "WAREHOUSE"
+                if (requiresTargetWarehouse && !line.targetWarehouseId) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lines", index, "targetWarehouseId"],
+                        message: itemLabel
+                            ? `${itemLabel}：请选择采购入库目标仓`
+                            : "请选择采购入库目标仓",
+                    })
+                } else if (!requiresTargetWarehouse && line.targetWarehouseId) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lines", index, "targetWarehouseId"],
+                        message: itemLabel
+                            ? `${itemLabel}：当前履约方式不应指定采购入库仓`
+                            : "当前履约方式不应指定采购入库仓",
+                    })
                 }
                 const maximum =
                     maximumByBasisId.get(

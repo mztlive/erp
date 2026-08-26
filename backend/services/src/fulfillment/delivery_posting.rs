@@ -98,6 +98,13 @@ impl FulfillmentService {
                     }
                     delivery.mark_shipped(occurred_at)?;
                     db.deliveries().update(&mut delivery, session).await?;
+                    super::task::complete_fulfillment_task(
+                        &db,
+                        super::task::FulfillmentTaskObject::Delivery(&delivery),
+                        actor.id(),
+                        session,
+                    )
+                    .await?;
                     let audit = actor.resource_log("delivery.post", "delivery", delivery_id.to_string())?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<Delivery, crate::errors::Error>(delivery)

@@ -33,7 +33,7 @@ type DeliveryFilter = <mongodb::Database as FulfillmentExt>::DeliveryFilter;
 impl FulfillmentService {
     // ------------------------------------------------------------------- delivery
 
-    /// 分页查询发货单列表（W09 发货视图）。
+    /// 分页查询发货单列表（W01 履约任务作业面）。
     ///
     /// # 参数
     /// * `params` - 查询参数（`sales_order_id`/`status` 扁平筛选）
@@ -204,11 +204,19 @@ impl FulfillmentService {
             .clone()
             .resource_log("delivery.update", "delivery", id.to_string())?;
         let db = self.db.clone();
+        let actor_id = actor.id().to_string();
         let client = db.client().clone();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.deliveries().update(&mut delivery, session).await?;
+                    super::task::record_fulfillment_activity(
+                        &db,
+                        super::task::FulfillmentTaskObject::Delivery(&delivery),
+                        &actor_id,
+                        session,
+                    )
+                    .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<Delivery, crate::errors::Error>(delivery)
                 })
@@ -463,6 +471,12 @@ async fn persist_created_delivery(
                 db.fulfillment()
                     .create_delivery_with_lines(&delivery, &lines, session)
                     .await?;
+                super::task::ensure_fulfillment_task(
+                    &db,
+                    super::task::FulfillmentTaskObject::Delivery(&delivery),
+                    session,
+                )
+                .await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })

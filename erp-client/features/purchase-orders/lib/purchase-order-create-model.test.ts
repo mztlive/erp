@@ -250,6 +250,8 @@ describe("assignBestSourcingOptions", () => {
                 selected: true,
                 quantity: "8",
                 basisId: "basis-s-a",
+                targetWarehouseId: "",
+                targetWarehouseName: "",
                 expectedDeliveryDate: "2026-09-01",
             },
             {
@@ -258,6 +260,8 @@ describe("assignBestSourcingOptions", () => {
                 selected: true,
                 quantity: "10",
                 basisId: "basis-s-low",
+                targetWarehouseId: "",
+                targetWarehouseName: "",
                 expectedDeliveryDate: "2026-09-01",
             },
         ])
@@ -438,6 +442,8 @@ describe("buildDefaultSourcingLines", () => {
                 selected: true,
                 quantity: "1",
                 basisId: "basis-s-a",
+                targetWarehouseId: "",
+                targetWarehouseName: "",
                 expectedDeliveryDate: "2026-09-01",
             },
         ])

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { BanIcon, HistoryIcon } from "lucide-react"
+import { BanIcon, HistoryIcon, UsersIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge } from "@/components/business"
@@ -303,6 +303,64 @@ export function fullActionsColumn({
                         >
                             <BanIcon data-icon="inline-start" aria-hidden />
                             {masterDataCopy.actionDisable}
+                        </Button>
+                    </DisabledActionHint>
+                </div>
+            )
+        },
+    }
+}
+
+/** 仓库专用动作：查看与收发责任配置，不冒充仓库资料修订。 */
+export function warehouseActionsColumn({
+    lastFocusedRowId,
+    onPreview,
+    onReviseTarget,
+    canMaintainHandlers,
+}: ActionColumnInput & {
+    canMaintainHandlers: boolean
+}): ColumnDef<MasterDataListItem> {
+    return {
+        id: "actions",
+        header: masterDataCopy.colActions,
+        meta: { label: masterDataCopy.colActions },
+        cell: ({ row }) => {
+            const item = row.original
+            const allowed =
+                canMaintainHandlers &&
+                item.allowedActions.includes("MAINTAIN_FULFILLMENT_HANDLERS")
+            const message = canMaintainHandlers
+                ? undefined
+                : "当前账号没有仓库更新权限"
+            return (
+                <div className="flex flex-wrap gap-1">
+                    <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        onClick={(event) => {
+                            event.stopPropagation()
+                            markFocused(lastFocusedRowId, item)
+                            onPreview?.(item.stableId)
+                        }}
+                    >
+                        {masterDataCopy.actionView}
+                    </Button>
+                    <DisabledActionHint message={message}>
+                        <Button
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            disabled={!allowed}
+                            title={message}
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                markFocused(lastFocusedRowId, item)
+                                onReviseTarget?.(item)
+                            }}
+                        >
+                            <UsersIcon data-icon="inline-start" aria-hidden />
+                            配置收发责任
                         </Button>
                     </DisabledActionHint>
                 </div>

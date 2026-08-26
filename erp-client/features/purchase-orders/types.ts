@@ -174,6 +174,7 @@ export type PurchaseOrderListItem = Readonly<{
     fulfillmentResponsibility: FulfillmentResponsibility
     paymentTermCode: string
     paymentTermLabel: string
+    ownerUserId?: string
     ownerName: string
     /** 服务端汇总；无成本权限时为掩码标记 */
     grossAmount: string
@@ -215,7 +216,9 @@ export type PurchaseOrderCenterView = Readonly<{
         fulfillmentResponsibility: FulfillmentResponsibility
         paymentTermCode: string
         paymentTermLabel: string
+        ownerUserId: string
         ownerName: string
+        targetWarehouseId?: string
         submittedBy?: string
         submittedAt?: string
         expectedDate?: string
@@ -379,6 +382,7 @@ export type CreatePurchaseOrderFromBasisInput = {
     workItemId: string
     purchaseType: PurchaseType
     paymentTermCode: string
+    targetWarehouseId?: string
     lines: Array<{
         salesOrderLineId: string
         quantity: string
@@ -394,6 +398,7 @@ export type CreatePurchaseOrdersFromSourcingInput = {
         salesOrderLineId: string
         basisId: string
         sourceType: SupplySourceType
+        targetWarehouseId?: string
         quantity: string
         expectedDeliveryDate: string
     }>

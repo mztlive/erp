@@ -21,6 +21,7 @@ export function WarehousePreviewSheet({
     onClose,
     onRevise,
     onDisable,
+    canMaintainHandlers,
 }: {
     previewRow: MasterDataListItem | null
     lastFocusedRowId: { current: string | null }
@@ -29,6 +30,7 @@ export function WarehousePreviewSheet({
     onClose: () => void
     onRevise: (row: MasterDataListItem) => void
     onDisable: (row: MasterDataListItem) => void
+    canMaintainHandlers: boolean
 }) {
     return (
         <QuickPreviewSheet
@@ -85,23 +87,23 @@ export function WarehousePreviewSheet({
                         </Button>
                         <DisabledActionHint
                             message={
-                                previewRow.actionBlockers.find(
-                                    (blocker) =>
-                                        blocker.action === "CREATE_REVISION",
-                                )?.message
+                                canMaintainHandlers
+                                    ? undefined
+                                    : "当前账号没有仓库更新权限"
                             }
                         >
                             <Button
                                 type="button"
                                 variant="outline"
                                 disabled={
+                                    !canMaintainHandlers ||
                                     !previewRow.allowedActions.includes(
-                                        "CREATE_REVISION",
+                                        "MAINTAIN_FULFILLMENT_HANDLERS",
                                     )
                                 }
                                 onClick={() => onRevise(previewRow)}
                             >
-                                {masterDataCopy.actionUpdate}
+                                配置收发责任
                             </Button>
                         </DisabledActionHint>
                         <DisabledActionHint

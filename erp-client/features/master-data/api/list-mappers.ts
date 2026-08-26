@@ -313,14 +313,29 @@ export function mapWarehouseRow(
         effectiveTo: revision?.effective_to ?? undefined,
         keyFacts: [
             { label: "仓库代码", value: wh.warehouse_code },
+            {
+                label: "入库经办人",
+                value: wh.inbound_handler_user_id ? "已配置" : "未配置",
+            },
+            {
+                label: "仓发经办人",
+                value: wh.outbound_handler_user_id ? "已配置" : "未配置",
+            },
             ...(revision
                 ? [{ label: "变更原因", value: revision.change_reason }]
                 : []),
         ],
-        primaryBlocker: "暂不可维护（本期）",
+        primaryBlocker:
+            wh.inbound_handler_user_id && wh.outbound_handler_user_id
+                ? undefined
+                : "缺少收发责任配置",
         selectorEligibility: [],
         ...commonActions("warehouses", lifecycle),
         lockVersion: wh.version,
+        warehouseFulfillmentHandlers: {
+            inboundUserId: wh.inbound_handler_user_id ?? undefined,
+            outboundUserId: wh.outbound_handler_user_id ?? undefined,
+        },
         metricTags: [
             lifecycle === "ENABLED" ? "enabled" : "disabled",
             "pending",

@@ -98,6 +98,7 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         Some("uk_procurement_responsibility_active_selector") => {
             "同一采购责任选择器只能有一条启用规则".to_string()
         }
+        Some("uk_work_items_open_fulfillment_object") => "该履约对象已存在开放任务，请刷新后重试".to_string(),
         _ => "数据已存在，请勿重复提交".to_string(),
     }
 }
@@ -265,6 +266,13 @@ mod tests {
         let message = duplicate_index_conflict_message(Some("uk_contracts_contract_no"));
 
         assert_eq!(message, "合同编号已存在");
+    }
+
+    #[test]
+    fn fulfillment_open_task_duplicate_maps_to_refresh_message() {
+        let message = duplicate_index_conflict_message(Some("uk_work_items_open_fulfillment_object"));
+
+        assert_eq!(message, "该履约对象已存在开放任务，请刷新后重试");
     }
 
     #[test]

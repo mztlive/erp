@@ -81,6 +81,25 @@ impl FulfillmentResponsibility {
             Self::Service => "SERVICE",
         }
     }
+
+    /// 返回采购单责任人后续直接执行的履约对象类型。
+    ///
+    /// # 返回
+    /// 供应商直发、电子交付和线下服务返回对应履约对象；入仓由仓库入库经办人负责，返回 `None`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 该映射只描述采购单责任人承担的履约操作，不把仓库入库错误归给采购责任人。
+    pub fn owner_fulfillment_object_type(self) -> Option<&'static str> {
+        match self {
+            Self::Warehouse => None,
+            Self::SupplierDirect => Some("delivery"),
+            Self::Electronic => Some("electronic_delivery"),
+            Self::Service => Some("service_fulfillment"),
+        }
+    }
 }
 
 /// 采购行类型（§6.6：商品/服务成本或物流费用）。
@@ -135,6 +154,26 @@ mod tests {
         assert_eq!(PurchaseType::Physical.as_str(), "PHYSICAL");
         assert_eq!(FulfillmentResponsibility::Warehouse.as_str(), "WAREHOUSE");
         assert_eq!(PurchaseLineType::ItemService.as_str(), "ITEM_SERVICE");
+    }
+
+    #[test]
+    fn purchase_owner_fulfillment_object_matches_responsibility() {
+        assert_eq!(
+            FulfillmentResponsibility::SupplierDirect.owner_fulfillment_object_type(),
+            Some("delivery")
+        );
+        assert_eq!(
+            FulfillmentResponsibility::Electronic.owner_fulfillment_object_type(),
+            Some("electronic_delivery")
+        );
+        assert_eq!(
+            FulfillmentResponsibility::Service.owner_fulfillment_object_type(),
+            Some("service_fulfillment")
+        );
+        assert_eq!(
+            FulfillmentResponsibility::Warehouse.owner_fulfillment_object_type(),
+            None
+        );
     }
 
     #[test]

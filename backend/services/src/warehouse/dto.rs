@@ -141,6 +141,12 @@ pub struct CreateWarehouseRequest {
     /// 启停状态；缺省视为启用。
     #[serde(default)]
     pub status: Option<EnableStatus>,
+    /// 入库经办人账号；必须是当前有效且具备入库完整执行权限的具体人员。
+    #[validate(custom(function = "non_blank", message = "请选择入库经办人"))]
+    pub inbound_handler_user_id: String,
+    /// 仓发经办人账号；必须是当前有效且具备发货完整执行权限的具体人员。
+    #[validate(custom(function = "non_blank", message = "请选择仓发经办人"))]
+    pub outbound_handler_user_id: String,
 }
 
 /// 仓库更新请求（追加新修订：名称/地址/联系人/有效期/变更原因 + 状态）。
@@ -167,6 +173,41 @@ pub struct UpdateWarehouseRequest {
     pub change_reason: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 入库经办人账号。
+    #[validate(custom(function = "non_blank", message = "请选择入库经办人"))]
+    pub inbound_handler_user_id: String,
+    /// 仓发经办人账号。
+    #[validate(custom(function = "non_blank", message = "请选择仓发经办人"))]
+    pub outbound_handler_user_id: String,
+}
+
+/// 仓库收发责任配置命令。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct UpdateWarehouseFulfillmentHandlersRequest {
+    /// 期望的仓库乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 入库经办人账号。
+    #[validate(custom(function = "non_blank", message = "请选择入库经办人"))]
+    pub inbound_handler_user_id: String,
+    /// 仓发经办人账号。
+    #[validate(custom(function = "non_blank", message = "请选择仓发经办人"))]
+    pub outbound_handler_user_id: String,
+}
+
+/// 可配置为仓库收发经办人的账号选项。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WarehouseFulfillmentHandlerOptionView {
+    /// 账号稳定 ID。
+    pub user_id: String,
+    /// 账号显示名称。
+    pub display_name: String,
+    /// 用户可识别的登录账号。
+    pub account: String,
+    /// 是否具备入库完整执行权限。
+    pub inbound_eligible: bool,
+    /// 是否具备仓发完整执行权限。
+    pub outbound_eligible: bool,
 }
 
 /// 仓库响应视图。
@@ -178,6 +219,10 @@ pub struct WarehouseView {
     pub warehouse_code: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 入库经办人账号；旧仓库尚未配置时为空。
+    pub inbound_handler_user_id: Option<String>,
+    /// 仓发经办人账号；旧仓库尚未配置时为空。
+    pub outbound_handler_user_id: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
@@ -197,6 +242,8 @@ impl From<Warehouse> for WarehouseView {
             id: warehouse.base.id,
             warehouse_code: warehouse.warehouse_code,
             status: warehouse.stable.status,
+            inbound_handler_user_id: warehouse.inbound_handler_user_id,
+            outbound_handler_user_id: warehouse.outbound_handler_user_id,
             created_at: warehouse.base.created_at,
             version: warehouse.base.version,
         }
@@ -534,6 +581,8 @@ mod tests {
             "name": "一号仓",
             "address": "  ",
             "contact": "张三",
+            "inbound_handler_user_id": "user-inbound",
+            "outbound_handler_user_id": "user-outbound",
             "effective_from": "2026-01-01",
             "change_reason": "期初建仓",
         }))

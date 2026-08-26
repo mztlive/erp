@@ -20,7 +20,7 @@ function option(
         basisId: "basis-1",
         workItemId: "wi-1",
         purchaseType: "PHYSICAL",
-        fulfillmentResponsibility: "WAREHOUSE",
+        fulfillmentResponsibility: "SUPPLIER_DIRECT",
         paymentTermCode: "POSTPAY_NET30",
         paymentTermLabel: "货到 30 天",
         unitCostGross: "10.00",
@@ -159,6 +159,63 @@ describe("sourcingFormValidationError", () => {
                         salesOrderLineId: "l-1",
                         selected: true,
                         basisId: "basis-1",
+                        quantity: "8",
+                        expectedDeliveryDate: "2026-09-01",
+                    },
+                ],
+            }),
+        ).toBeUndefined()
+    })
+
+    it("requires a target warehouse for warehouse purchase fulfillment", () => {
+        const warehouseLine = {
+            ...sampleLine,
+            options: [
+                option({
+                    fulfillmentResponsibility: "WAREHOUSE",
+                }),
+            ],
+        }
+        const error = sourcingFormValidationError(order([warehouseLine]), {
+            salesOrderId: "so-1",
+            lines: [
+                {
+                    rowKey: "l-1:0",
+                    salesOrderLineId: "l-1",
+                    selected: true,
+                    basisId: "basis-1",
+                    quantity: "8",
+                    expectedDeliveryDate: "2026-09-01",
+                },
+            ],
+        })
+
+        expect(error?.fields["lines[0].targetWarehouseId"]).toBe(
+            "测试SKU：请选择采购入库目标仓",
+        )
+    })
+
+    it("accepts a configured target warehouse for warehouse purchase fulfillment", () => {
+        const warehouseLine = {
+            ...sampleLine,
+            options: [
+                option({
+                    fulfillmentResponsibility: "WAREHOUSE",
+                }),
+            ],
+        }
+
+        expect(
+            sourcingFormValidationError(order([warehouseLine]), {
+                salesOrderId: "so-1",
+                lines: [
+                    {
+                        rowKey: "l-1:0",
+                        salesOrderLineId: "l-1",
+                        selected: true,
+                        basisId: "basis-1",
+                        targetWarehouseId: "warehouse-1",
+                        targetWarehouseName: "WH-01 · 上海仓",
                         quantity: "8",
                         expectedDeliveryDate: "2026-09-01",
                     },

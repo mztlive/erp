@@ -107,11 +107,11 @@ export function useSupplierAccountsPage() {
     // UI：面板展开态只由结构化条件决定初始值；回填不得改写它
     const hasStructuredFilters = Boolean(
         supplierId ||
-            validSourceType ||
-            validStatus ||
-            validDue ||
-            validPaymentGate ||
-            validTrack,
+        validSourceType ||
+        validStatus ||
+        validDue ||
+        validPaymentGate ||
+        validTrack,
     )
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
 
@@ -131,9 +131,9 @@ export function useSupplierAccountsPage() {
     const [paymentGateDraft, setPaymentGateDraft] = React.useState<
         "satisfied" | "unsatisfied" | "all"
     >(validPaymentGate ?? "all")
-    const [trackDraft, setTrackDraft] = React.useState<
-        AllocationTrack | "all"
-    >(validTrack ?? "all")
+    const [trackDraft, setTrackDraft] = React.useState<AllocationTrack | "all">(
+        validTrack ?? "all",
+    )
 
     // D23：分页写 URL（page），URL 最小化——第 1 页省略参数；本地不再持有分页副本。
     // 排序保留本地实现（服务端列表无排序参数，仅应付视图做客户端排序），记录在案。
@@ -234,13 +234,13 @@ export function useSupplierAccountsPage() {
     // （session/detailId/returnTo/from 等）。
     const hasActiveFilters = Boolean(
         qParam.trim() ||
-            supplierId ||
-            validSourceType ||
-            validStatus ||
-            validDue ||
-            validPaymentGate ||
-            validTrack ||
-            purchaseOrderId,
+        supplierId ||
+        validSourceType ||
+        validStatus ||
+        validDue ||
+        validPaymentGate ||
+        validTrack ||
+        purchaseOrderId,
     )
 
     /** 单一提交入口：收起态 Enter / 搜索框尾部箭头 / 展开态「应用全部筛选」共用。 */
@@ -252,7 +252,8 @@ export function useSupplierAccountsPage() {
                 sourceType: sourceTypeDraft === "all" ? null : sourceTypeDraft,
                 status: statusDraft === "all" ? null : statusDraft,
                 due: dueDraft === "all" ? null : dueDraft,
-                paymentGate: paymentGateDraft === "all" ? null : paymentGateDraft,
+                paymentGate:
+                    paymentGateDraft === "all" ? null : paymentGateDraft,
                 track: trackDraft === "all" ? null : trackDraft,
                 page: null,
             },
@@ -376,7 +377,10 @@ export function useSupplierAccountsPage() {
             })
         }
         if (validTrack) {
-            chips.push({ key: "track", label: `轨道：${TRACK_LABEL[validTrack]}` })
+            chips.push({
+                key: "track",
+                label: `轨道：${TRACK_LABEL[validTrack]}`,
+            })
         }
         if (purchaseOrderId) {
             chips.push({
@@ -445,7 +449,9 @@ export function useSupplierAccountsPage() {
             ) {
                 return
             }
-            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+            if (
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
+            ) {
                 return
             }
             event.preventDefault()
@@ -455,7 +461,7 @@ export function useSupplierAccountsPage() {
         return () => window.removeEventListener("keydown", onKey)
     }, [])
 
-    // Deep-link from W08/W09: open payment session with PO preselected
+    // Deep-link from W01/W08/W09: open payment session with PO preselected
     React.useEffect(() => {
         if (deepLinkHandled.current) return
         if (!data?.moduleAllowed) return
@@ -475,9 +481,11 @@ export function useSupplierAccountsPage() {
                 return
             }
         }
-        // from=W08/W09 without session: auto open payment if we can resolve supplier
+        // from=W01/W08/W09 without session: auto open payment if we can resolve supplier
         if (
-            (fromWorkspace === "W08" || fromWorkspace === "W09") &&
+            (fromWorkspace === "W01" ||
+                fromWorkspace === "W08" ||
+                fromWorkspace === "W09") &&
             purchaseOrderId
         ) {
             const match = data.payables.find(

@@ -22,6 +22,7 @@ export type WorkspaceMetricKey = "inbox" | "overdue" | "blocked" | "started"
 export type WorkspaceActionCode =
     | "VIEW"
     | "PROCESS"
+    | "REASSIGN"
     | "OPEN_DOCUMENT"
     | "APPROVE"
     | "REJECT"
@@ -47,10 +48,12 @@ export type WorkspaceWorkItem = Readonly<{
     priority: number
     createdAt: string
     dueAt?: string
+    ownerRole: string
     ownerRoleLabel: string
     ownerOrganizationLabel: string
     ownerUserLabel: string
     reasonLabel: string
+    reasonCode?: string
     impactSummary: string
     nextActionHint: string
     allowedActions: readonly WorkspaceActionCode[]

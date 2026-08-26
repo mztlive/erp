@@ -129,6 +129,7 @@ export function PurchaseOrderCreatePage({
                     salesOrderLineId: line.salesOrderLineId,
                     basisId: line.basisId,
                     sourceType: option.sourceType,
+                    targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
@@ -146,6 +147,7 @@ export function PurchaseOrderCreatePage({
                     salesOrderLineId: line.salesOrderLineId,
                     basisId: line.basisId,
                     sourceType: option.sourceType,
+                    targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
                 })),
@@ -223,6 +225,14 @@ export function PurchaseOrderCreatePage({
                 )
                 form.setFieldValue(`lines[${index}].selected`, line.selected)
                 form.setFieldValue(`lines[${index}].basisId`, line.basisId)
+                form.setFieldValue(
+                    `lines[${index}].targetWarehouseId`,
+                    line.targetWarehouseId,
+                )
+                form.setFieldValue(
+                    `lines[${index}].targetWarehouseName`,
+                    line.targetWarehouseName,
+                )
                 form.setFieldValue(`lines[${index}].quantity`, line.quantity)
                 form.setFieldValue(
                     `lines[${index}].expectedDeliveryDate`,
@@ -285,6 +295,16 @@ export function PurchaseOrderCreatePage({
                 if (!option) return
                 form.setFieldValue(`lines[${index}].selected`, true)
                 form.setFieldValue(`lines[${index}].basisId`, basisId)
+                if (
+                    option.sourceType !== "PURCHASE" ||
+                    option.fulfillmentResponsibility !== "WAREHOUSE"
+                ) {
+                    form.setFieldValue(`lines[${index}].targetWarehouseId`, "")
+                    form.setFieldValue(
+                        `lines[${index}].targetWarehouseName`,
+                        "",
+                    )
+                }
                 form.setFieldValue(
                     `lines[${index}].quantity`,
                     option.maxCreateQuantity,
@@ -363,6 +383,8 @@ export function PurchaseOrderCreatePage({
                 selected: true,
                 quantity: "",
                 basisId: option.basisId,
+                targetWarehouseId: "",
+                targetWarehouseName: "",
                 expectedDeliveryDate: option.expectedDeliveryDate,
             })
             writeLines(next)

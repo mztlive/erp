@@ -22,7 +22,6 @@ import {
     StoreIcon,
     TagsIcon,
     TicketIcon,
-    TruckIcon,
     UploadIcon,
     UsersIcon,
     WalletCardsIcon,
@@ -355,10 +354,9 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     {
         id: "W09",
         name: "收货与发货 / 交付与代发",
-        mode: "M3+M5",
-        mainRoute: "/fulfillment",
-        /** 双入口之一；侧栏另有 procurement lane，见 WORKSPACE_NAV_GROUPS */
-        navHref: "/fulfillment?lane=warehouse",
+        mode: "M1",
+        mainRoute: "/workspace?family=fulfillment&type=FULFILLMENT_OPERATION",
+        navHref: "/workspace?family=fulfillment&type=FULFILLMENT_OPERATION",
     },
     {
         id: "W10",
@@ -550,14 +548,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     icon: ClipboardListIcon,
                 },
                 {
-                    routeId: "W09",
-                    href: "/fulfillment?lane=procurement",
-                    label: "交付与代发",
-                    icon: TruckIcon,
-                    // 采购岗位「仅我的」待处理数：由 Shell 从 W09 队列计数实时计算。
-                    badge: "delivery-count",
-                },
-                {
                     routeId: "W21",
                     label: "供应商供给",
                     icon: PackageSearchIcon,
@@ -567,13 +557,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         {
             label: "仓储",
             items: [
-                {
-                    routeId: "W09",
-                    label: "收货与发货",
-                    icon: PackageIcon,
-                    // 仓储岗位「仅我的」待处理数：由 Shell 从 W09 队列计数实时计算。
-                    badge: "warehouse-count",
-                },
                 {
                     routeId: "W10",
                     icon: WarehouseIcon,

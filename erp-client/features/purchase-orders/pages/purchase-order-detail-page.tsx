@@ -312,7 +312,6 @@ export function PurchaseOrderDetailPage({
                 fulfillBlocker={permissions.fulfillBlocker}
                 canChange={permissions.canChange}
                 changeBlocker={permissions.changeBlocker}
-                baseHref={baseHref}
                 w12PayHref={w12PayHref}
                 onRequestChange={() => editActions.setChangeConfirmOpen(true)}
                 changeWorkItemId={

@@ -1,6 +1,7 @@
 export type EntitySelectorPurpose =
     | "filter"
     | "form"
+    | "purchase-receipt"
     | "sales-order"
     | "supplier-offering"
 

@@ -20,7 +20,7 @@ pub mod warehouse_revision;
 pub mod warehouse_sku_policy;
 
 pub use status::EnableStatus;
-pub use warehouse_entity::Warehouse;
+pub use warehouse_entity::{Warehouse, WarehouseFulfillmentOperation};
 pub use warehouse_revision::SensitiveText;
 pub use warehouse_revision::WarehouseRevision;
 pub use warehouse_sku_policy::{WarehouseSkuPolicy, WarehouseSkuPolicyPeriod};

@@ -22,8 +22,11 @@ type SelectFieldProps = {
     label: string
     options: readonly SelectFieldOption[]
     placeholder?: string
+    emptyLabel?: string
     description?: string
     disabled?: boolean
+    loading?: boolean
+    required?: boolean
     hideLabel?: boolean
     className?: string
     /** 输入框宽度等；历史 prop 名 selectClassName 仍可用 */
@@ -41,8 +44,11 @@ export function SelectField({
     label,
     options,
     placeholder,
+    emptyLabel,
     description,
     disabled,
+    loading,
+    required,
     hideLabel = false,
     className,
     selectClassName,
@@ -75,8 +81,11 @@ export function SelectField({
                 options={options}
                 value={field.state.value || null}
                 disabled={disabled}
+                loading={loading}
                 placeholder={placeholder ?? "请选择"}
+                emptyLabel={emptyLabel}
                 allowClear={allowClear}
+                required={required}
                 aria-label={label}
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}

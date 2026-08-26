@@ -5,15 +5,15 @@ export interface PermissionItem {
     path: string
     description: string
     permission: {
-      resource: string
-      action: string
+        resource: string
+        action: string
     }
 }
 
 export interface PermissionGroup {
-    name: string;
-    description: string;
-    permissions: PermissionItem[];
+    name: string
+    description: string
+    permissions: PermissionItem[]
 }
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
@@ -382,6 +382,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "POST",
                 path: "/admin/work-items/{id}/reassign",
                 description: "在授权范围内受控转交非审批任务",
+                permission: {
+                    resource: "work_item",
+                    action: "reassign",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/work-items/{id}/reassign-candidates",
+                description: "查询非审批任务可转交人员",
                 permission: {
                     resource: "work_item",
                     action: "reassign",
@@ -1723,6 +1733,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "PUT",
+                path: "/admin/warehouses/{id}/fulfillment-handlers",
+                description: "配置仓库收发经办人",
+                permission: {
+                    resource: "warehouse",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-fulfillment-handler-options",
+                description: "查询仓库收发经办人选项",
+                permission: {
+                    resource: "warehouse",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/warehouse-revisions",
                 description: "查询仓库修订列表",
@@ -2273,6 +2303,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/electronic-deliveries/{id}",
+                description: "查询电子交付记录详情",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/electronic-deliveries/{id}/confirm",
                 description: "确认电子交付",
@@ -2299,6 +2339,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "service_fulfillment",
                     action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/service-fulfillments/{id}",
+                description: "查询服务履约记录详情",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "list",
                 },
             },
             {
@@ -4465,4 +4515,4 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
-];
+]

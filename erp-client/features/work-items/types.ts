@@ -116,6 +116,13 @@ export type WorkItemConflict = Readonly<{
     currentWorkItem: WorkItemDto | null
 }>
 
+/** 服务端按当前任务完整责任约束筛出的转交候选人。 */
+export type WorkItemReassignCandidate = Readonly<{
+    user_id: string
+    display_name: string
+    account: string
+}>
+
 export type WorkItemProjection = Readonly<{
     workItemId: string
     workItemType: string

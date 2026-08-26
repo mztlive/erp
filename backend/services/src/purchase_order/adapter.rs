@@ -512,6 +512,8 @@ mod tests {
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: "NET-30".into(),
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                owner_user_id: "user-1".to_string(),
+                target_warehouse_id: Some(entities::ids::WarehouseId::new("wh-1")),
             },
             "user-1",
         )

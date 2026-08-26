@@ -18,6 +18,12 @@ import {
     fetchSkuSupplierCounts,
     updateProductListingStatus,
 } from "@/features/master-data/api"
+import {
+    fetchWarehouseFulfillmentHandlerOptions,
+    updateWarehouseFulfillmentHandlers,
+    type UpdateWarehouseFulfillmentHandlersInput,
+} from "@/features/master-data/api/warehouse-fulfillment"
+import { entitySelectorKeys } from "@/features/entity-selectors/hooks/queries"
 import type {
     CreateMasterDataInput,
     CreateRevisionInput,
@@ -34,6 +40,39 @@ export const masterDataKeys = {
         [...masterDataKeys.all, "list", query] as const,
     detail: (resource: MasterDataResource, stableId: string) =>
         [...masterDataKeys.all, "detail", resource, stableId] as const,
+}
+
+const warehouseFulfillmentHandlerOptionsKey = [
+    ...masterDataKeys.all,
+    "warehouse-fulfillment-handler-options",
+] as const
+
+/** 仓库责任配置候选；仅打开配置对话框时读取。 */
+export function useWarehouseFulfillmentHandlerOptionsQuery(enabled: boolean) {
+    return useQuery({
+        queryKey: warehouseFulfillmentHandlerOptionsKey,
+        queryFn: fetchWarehouseFulfillmentHandlerOptions,
+        enabled,
+    })
+}
+
+/** 更新仓库收发责任后刷新列表与对象中心。 */
+export function useUpdateWarehouseFulfillmentHandlersMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: UpdateWarehouseFulfillmentHandlersInput) =>
+            updateWarehouseFulfillmentHandlers(input),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: masterDataKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: [...entitySelectorKeys.all, "warehouse"],
+                }),
+            ])
+        },
+    })
 }
 
 export function useMasterDataListQuery(query: MasterDataListQuery) {

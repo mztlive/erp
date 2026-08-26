@@ -27,6 +27,7 @@ type FulfillmentOperationsWorkspaceProps = {
     operationTypes?: FulfillmentOperationType[]
     roleLabel: string
     embedded?: boolean
+    singleOperation?: boolean
     onBack: () => void
     onOpenAcceptance?: () => void
 }
@@ -38,6 +39,7 @@ export function FulfillmentOperationsWorkspace({
     operationTypes,
     roleLabel,
     embedded = false,
+    singleOperation = false,
     onBack,
     onOpenAcceptance,
 }: FulfillmentOperationsWorkspaceProps) {
@@ -72,6 +74,7 @@ export function FulfillmentOperationsWorkspace({
                         }}
                         onContinueWarehouseShip={controller.goToWarehouseShip}
                         onOpenAcceptance={onOpenAcceptance}
+                        showNext={!singleOperation}
                     />
                 </div>
             ) : null}
@@ -102,32 +105,40 @@ export function FulfillmentOperationsWorkspace({
                     embedded={embedded}
                 />
             ) : (
-                <div className="grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]">
-                    <FulfillmentQueueList
-                        operations={controller.operations}
-                        currentIndex={controller.currentIndex}
-                        position={
-                            controller.context?.position ??
-                            controller.currentIndex + 1
-                        }
-                        total={
-                            controller.context?.total ??
-                            controller.operations.length
-                        }
-                        onSelect={(operationId) => {
-                            if (
-                                controller.dirty &&
-                                operationId !==
-                                    controller.operation?.operationId
-                            ) {
-                                controller.setActionError(
-                                    "有未保存修改，请先保存或放弃后再切换",
-                                )
-                                return
+                <div
+                    className={
+                        singleOperation
+                            ? "min-h-[28rem] min-w-0"
+                            : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
+                    }
+                >
+                    {!singleOperation ? (
+                        <FulfillmentQueueList
+                            operations={controller.operations}
+                            currentIndex={controller.currentIndex}
+                            position={
+                                controller.context?.position ??
+                                controller.currentIndex + 1
                             }
-                            controller.goToOperation(operationId)
-                        }}
-                    />
+                            total={
+                                controller.context?.total ??
+                                controller.operations.length
+                            }
+                            onSelect={(operationId) => {
+                                if (
+                                    controller.dirty &&
+                                    operationId !==
+                                        controller.operation?.operationId
+                                ) {
+                                    controller.setActionError(
+                                        "有未保存修改，请先保存或放弃后再切换",
+                                    )
+                                    return
+                                }
+                                controller.goToOperation(operationId)
+                            }}
+                        />
+                    ) : null}
 
                     <FulfillmentWorkSurface
                         operation={controller.operation}
@@ -166,8 +177,9 @@ export function FulfillmentOperationsWorkspace({
                         resultUnknown={
                             controller.lastResult?.status === "unknown"
                         }
-                        showBack={!embedded}
-                        showSalesOrderLinks={!embedded}
+                        singleOperation={singleOperation}
+                        showBack={!embedded && !singleOperation}
+                        showSalesOrderLinks={!embedded && !singleOperation}
                         onDraftChange={controller.updateDraft}
                         onSkip={controller.handleSkip}
                         onDiscard={controller.handleDiscard}

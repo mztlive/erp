@@ -122,6 +122,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/electronic-deliveries/{id}",
+            with_permission(
+                get(fulfillment::electronic_delivery_detail),
+                rbac,
+                fulfillment::electronic_delivery_detail_permission_key(),
+            ),
+        )
+        .route(
             "/electronic-deliveries/{id}/confirm",
             with_permission(
                 post(fulfillment::electronic_delivery_confirm),
@@ -143,6 +151,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(fulfillment::service_fulfillment_create),
                 rbac,
                 fulfillment::service_fulfillment_create_permission_key(),
+            ),
+        )
+        .route(
+            "/service-fulfillments/{id}",
+            with_permission(
+                get(fulfillment::service_fulfillment_detail),
+                rbac,
+                fulfillment::service_fulfillment_detail_permission_key(),
             ),
         )
         .route(

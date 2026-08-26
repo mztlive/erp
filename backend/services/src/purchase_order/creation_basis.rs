@@ -10,14 +10,14 @@ use std::str::FromStr;
 use chrono::{Datelike, FixedOffset};
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, InventoryExt, NoTransaction, PartyExt, PurchaseOrderExt,
-    SalesOrderExt, SupplierExt, SupplierOfferingExt, WorkItemExt,
+    SalesOrderExt, SupplierExt, SupplierOfferingExt, WarehouseExt, WorkItemExt,
 };
 use entities::catalog::ProductKind;
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::DocumentType;
 use entities::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
-    SupplierAccountId,
+    SupplierAccountId, WarehouseId,
 };
 use entities::inventory::StockBalance;
 use entities::money::{line_amounts, Amount, Quantity, UnitPrice};
@@ -30,6 +30,7 @@ use entities::sales_order::{CommercialStatus, SalesOrder, SalesOrderRevision};
 use entities::supplier_offering::{
     AvailabilityStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
+use entities::warehouse::WarehouseFulfillmentOperation;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use serde::{Deserialize, Serialize};
@@ -909,7 +910,7 @@ async fn build_basis_view(
     }
     Ok(CreationBasisView {
         work_item_id: work_item_id.to_string(),
-        basis_id: basis_id_for(order, group, work_item_id),
+        basis_id: basis_id_for(order, group, work_item_id, None),
         source_type: SupplySourceType::Purchase,
         sales_order_id: order.base.id.clone(),
         sales_order_no: order.order_no.clone(),
@@ -1068,6 +1069,28 @@ pub(super) async fn persist_basis_draft(
     command: &CreateBasisCommand<'_>,
     session: &mut ClientSession,
 ) -> Result<CreatePurchaseOrderResult> {
+    let target_warehouse_id = resolve_target_warehouse(
+        db,
+        rbac,
+        group.scope.fulfillment_responsibility,
+        command.req.target_warehouse_id.as_deref(),
+        session,
+    )
+    .await?;
+    ensure_initial_purchase_order_owner(
+        db,
+        rbac,
+        group.scope.fulfillment_responsibility,
+        command.actor.id(),
+        session,
+    )
+    .await?;
+    let creation_basis_id = basis_id_for(
+        sales_order,
+        group,
+        &command.req.work_item_id,
+        target_warehouse_id.as_ref(),
+    );
     let order_id = PurchaseOrderId::new(next_id());
     let mut order = PurchaseOrder::new(
         order_id.clone(),
@@ -1075,11 +1098,13 @@ pub(super) async fn persist_basis_draft(
             purchase_no: String::new(),
             sales_order_id: SalesOrderId::new(sales_order.base.id.clone()),
             sales_order_revision_id: group.revision.base.id.clone().into(),
-            creation_basis_id: command.req.basis_id.clone(),
+            creation_basis_id,
             supplier_id: group.scope.supplier_id.clone(),
             purchase_type: group.scope.purchase_type,
             payment_term_code: group.scope.payment_term_code.clone(),
             fulfillment_responsibility: group.scope.fulfillment_responsibility,
+            owner_user_id: command.actor.id().to_string(),
+            target_warehouse_id,
         },
         command.actor.id(),
     )?;
@@ -1430,7 +1455,7 @@ fn find_requested_group<'a>(
 ) -> Result<&'a BasisGroup> {
     groups
         .iter()
-        .find(|group| basis_id_for(order, group, work_item_id) == basis_id)
+        .find(|group| basis_id_for(order, group, work_item_id, None) == basis_id)
         .ok_or_else(procurement_quantity_changed)
 }
 
@@ -1456,6 +1481,118 @@ fn ensure_request_scope(req: &CreatePurchaseOrderFromBasisRequest, scope: &Basis
         return Err(Error::ValidationError("付款条件与创建依据不一致".to_string()));
     }
     Ok(())
+}
+
+/// 校验采购单初始责任人可以完成其责任类型对应的后续履约操作。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 与采购创建事务授权版本一致的 RBAC 服务
+/// * `responsibility` - 本单履约责任
+/// * `owner_user_id` - 创建后冻结为采购单责任人的账号
+/// * `executor` - 当前事务执行器
+///
+/// # 返回
+/// 入仓责任或责任人具备完整履约权限时返回成功。
+///
+/// # 错误
+/// 责任人账号不可用、缺少对应完整履约权限，或账号与 RBAC 查询失败时返回错误。
+async fn ensure_initial_purchase_order_owner(
+    db: &mongodb::Database,
+    rbac: &SharedRbacService,
+    responsibility: FulfillmentResponsibility,
+    owner_user_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let Some(business_object_type) = responsibility.owner_fulfillment_object_type() else {
+        return Ok(());
+    };
+    crate::fulfillment::task::ensure_fulfillment_owner_eligible(
+        db,
+        rbac,
+        owner_user_id,
+        business_object_type,
+        executor,
+    )
+    .await
+    .map_err(|error| {
+        contextualize_fulfillment_owner_error(
+            error,
+            "当前采购责任人账号不可用或缺少后续履约权限，请先调整角色后再创建采购单",
+        )
+    })
+}
+
+/// 校验并解析采购单目标收货仓。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 与采购创建事务授权版本一致的 RBAC 服务
+/// * `responsibility` - 本单履约责任
+/// * `requested_id` - 客户端指定的目标仓库
+/// * `executor` - 当前事务执行器
+///
+/// # 返回
+/// 仓库履约返回存在且启用的目标仓库，其他履约返回空。
+///
+/// # 错误
+/// 仓库履约未指定目标仓、仓库不存在或停用、入库经办人不可用或权限不足，
+/// 或非仓库履约携带目标仓时返回错误。
+async fn resolve_target_warehouse(
+    db: &mongodb::Database,
+    rbac: &SharedRbacService,
+    responsibility: FulfillmentResponsibility,
+    requested_id: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<Option<WarehouseId>> {
+    let normalized = requested_id.map(str::trim).filter(|value| !value.is_empty());
+    match responsibility {
+        FulfillmentResponsibility::Warehouse => {
+            let id = normalized
+                .map(|value| WarehouseId::new(value.to_string()))
+                .ok_or_else(|| Error::ValidationError("仓库履约必须先选择目标收货仓".to_string()))?;
+            let warehouse = db
+                .warehouses()
+                .find_by_id(&id, executor)
+                .await?
+                .ok_or_else(|| Error::NotFound("目标仓库不存在，请重新选择".to_string()))?;
+            if !warehouse.is_active() {
+                return Err(Error::ValidationError(
+                    "目标仓库已停用，请重新选择后再创建采购单".to_string(),
+                ));
+            }
+            let handler_user_id = warehouse
+                .fulfillment_handler(WarehouseFulfillmentOperation::Receipt)
+                .map_err(|_| {
+                    Error::ValidationError("目标仓库未配置合格入库经办人，请先完成仓库责任配置".to_string())
+                })?;
+            crate::fulfillment::task::ensure_fulfillment_owner_eligible(
+                db,
+                rbac,
+                handler_user_id,
+                "purchase_receipt",
+                executor,
+            )
+            .await
+            .map_err(|error| {
+                contextualize_fulfillment_owner_error(
+                    error,
+                    "目标仓库入库经办人账号不可用或权限不足，请先更新仓库责任配置",
+                )
+            })?;
+            Ok(Some(id))
+        }
+        _ if normalized.is_some() => Err(Error::ValidationError("非仓库履约不能指定目标收货仓".to_string())),
+        _ => Ok(None),
+    }
+}
+
+/// 把责任资格失败转换为当前创建场景可执行的校验提示，同时保留基础设施错误。
+fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
+    match error {
+        Error::BusinessLogicError(_) => Error::ValidationError(message.to_string()),
+        other => other,
+    }
 }
 
 /// 规范化并校验逐行本次采购数量。
@@ -1593,6 +1730,7 @@ fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
 /// * `order` - 销售稳定单
 /// * `group` - 精确依据分组
 /// * `work_item_id` - 冻结本依据责任范围的开放任务
+/// * `target_warehouse_id` - 本张采购计划选择的目标仓库；可选择依据阶段为空
 ///
 /// # 返回
 /// 返回 `{sales_order_id}:{sha256}` 稳定依据 ID。
@@ -1601,8 +1739,13 @@ fn parse_basis_sales_order_id(basis_id: &str) -> Result<SalesOrderId> {
 /// 无。
 ///
 /// # 关键业务约束
-/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据。
-pub(super) fn basis_id_for(order: &SalesOrder, group: &BasisGroup, work_item_id: &str) -> String {
+/// guard 每次成功创建后推进，使作废释放的剩余量可形成新依据；同一范围拆向不同目标仓时身份不同。
+pub(super) fn basis_id_for(
+    order: &SalesOrder,
+    group: &BasisGroup,
+    work_item_id: &str,
+    target_warehouse_id: Option<&WarehouseId>,
+) -> String {
     let mut parts = vec![
         order.base.id.clone(),
         work_item_id.to_string(),
@@ -1611,7 +1754,21 @@ pub(super) fn basis_id_for(order: &SalesOrder, group: &BasisGroup, work_item_id:
         basis_scope_key(&group.scope),
     ];
     parts.extend(group.lines.iter().map(basis_line_fingerprint));
-    format!("{}:{}", order.base.id, digest_parts(&parts))
+    compose_basis_id(&order.base.id, parts, target_warehouse_id)
+}
+
+/// 以规范化依据片段和可选目标仓形成固定长度创建依据 ID。
+///
+/// 目标仓只在已经完成仓库选择的采购计划中加入；可选择依据保持原有无仓库身份。
+fn compose_basis_id(
+    sales_order_id: &str,
+    mut parts: Vec<String>,
+    target_warehouse_id: Option<&WarehouseId>,
+) -> String {
+    if let Some(target_warehouse_id) = target_warehouse_id {
+        parts.push(format!("target_warehouse:{target_warehouse_id}"));
+    }
+    format!("{sales_order_id}:{}", digest_parts(&parts))
 }
 
 /// 形成绑定销售 guard、库存余额版本与逐行剩余量的现有库存依据 ID。
@@ -1753,6 +1910,11 @@ fn create_request_fingerprint(req: &CreatePurchaseOrderFromBasisRequest, lines: 
         req.basis_id.trim().to_string(),
         req.purchase_type.as_str().to_string(),
         req.payment_term_code.trim().to_string(),
+        req.target_warehouse_id
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_string(),
     ];
     parts.extend(lines.iter().map(|line| {
         format!(
@@ -2145,12 +2307,14 @@ mod tests {
 
     use entities::catalog::ProductKind;
     use entities::common::time::Instant;
+    use entities::ids::WarehouseId;
     use entities::money::Quantity;
     use entities::purchase_order::{FulfillmentResponsibility, PurchaseType};
 
     use super::{
-        business_date_of, digest_parts, ensure_expected_delivery_within_sales_due, fulfillment_options,
-        maximum_create_quantity, parse_basis_sales_order_id, purchase_type_from_product_kind, BasisScope,
+        business_date_of, compose_basis_id, digest_parts, ensure_expected_delivery_within_sales_due,
+        fulfillment_options, maximum_create_quantity, parse_basis_sales_order_id,
+        purchase_type_from_product_kind, BasisScope,
     };
 
     /// 上海零点对应前一日 UTC 时仍还原业务自然日。
@@ -2189,6 +2353,27 @@ mod tests {
             "so-1"
         );
         assert!(parse_basis_sales_order_id("so-1:supplier-1").is_err());
+    }
+
+    /// 同一采购范围拆向不同目标仓时必须形成不同的数据库唯一身份。
+    #[test]
+    fn target_warehouse_scopes_creation_basis_identity() {
+        let common_parts = vec!["guard-1".to_string(), "scope-1".to_string()];
+        let first = compose_basis_id(
+            "so-1",
+            common_parts.clone(),
+            Some(&WarehouseId::new("warehouse-1")),
+        );
+        let second = compose_basis_id(
+            "so-1",
+            common_parts.clone(),
+            Some(&WarehouseId::new("warehouse-2")),
+        );
+        let selectable = compose_basis_id("so-1", common_parts, None);
+
+        assert_ne!(first, second);
+        assert_ne!(first, selectable);
+        assert_ne!(second, selectable);
     }
 
     /// 精确范围同时区分供应商、类型、付款条件和履约责任。
@@ -2268,6 +2453,8 @@ mod tests {
         assert!(production.contains("authorize_actor_permission(actor, CREATE_PERMISSION)"));
         assert!(production.contains("ensure_purchase_order_actor_account"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
+        assert!(production.contains("ensure_initial_purchase_order_owner"));
+        assert!(production.contains("ensure_fulfillment_owner_eligible"));
         assert!(production.contains("submit_created_draft_in_session"));
     }
 }

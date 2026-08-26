@@ -480,6 +480,37 @@ impl<'a> Repository<'a, WorkItem> {
         .await
     }
 
+    /// 查询同一责任键下全部开放采购履约任务。
+    ///
+    /// # 参数
+    /// * `responsibility_key` - 采购单责任键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按创建时间、任务 ID 稳定排序的开放履约任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 查询固定限制 `FULFILLMENT_OPERATION + OPEN`，供采购单责任转交原子级联。
+    pub async fn list_open_fulfillment_by_responsibility_key(
+        &self,
+        responsibility_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "work_item_type": WorkItemType::FulfillmentOperation.as_str(),
+                "responsibility_key": responsibility_key,
+                "status": WorkItemStatus::Open.as_str(),
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 查询具体账号拥有的开放供给分配任务。
     ///
     /// # 参数
@@ -666,6 +697,7 @@ fn literal_query_filter(query: &str) -> Document {
         "$or": [
             { "business_object_id": { "$regex": &literal, "$options": "i" } },
             { "business_object_type": { "$regex": &literal, "$options": "i" } },
+            { "responsibility_key": { "$regex": &literal, "$options": "i" } },
             { "reason_code": { "$regex": &literal, "$options": "i" } },
             { "impact_summary": { "$regex": &literal, "$options": "i" } },
         ]

@@ -5,6 +5,7 @@ import {
     isPendingReviewStage,
     stageOwnerDisplay,
 } from "@/features/sales-orders/lib/labels"
+import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 
 /** 详情页动作（作废/低毛利/发起改单等）的统一结果状态。 */
 export type SalesOrderDetailActionResult = {
@@ -61,7 +62,7 @@ const REVIEW_CODES = new Set([
     "in_approval",
 ])
 
-const FROM_FULFILLMENT = new Set(["W07", "W08", "W09"])
+const FROM_FULFILLMENT = new Set(["W01", "W07", "W08", "W09"])
 const FROM_RECEIVABLE = new Set(["W11", "W13"])
 
 const LIFECYCLE_ORDER: LifecycleStepId[] = [
@@ -326,10 +327,10 @@ export function customerAccountsForOrderHref(
 }
 
 export function fulfillmentWorkspaceHref(
-    order: SalesOrderListItem,
-    selfReturn: string,
+    _order: SalesOrderListItem,
+    _selfReturn: string,
 ) {
-    return `/fulfillment?scope=mine&salesOrderId=${encodeURIComponent(order.id)}&from=W05&returnTo=${encodeURIComponent(selfReturn)}`
+    return fulfillmentTasksHref()
 }
 
 export function canCreatePurchaseFromSalesOrder(

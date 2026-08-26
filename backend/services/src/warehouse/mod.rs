@@ -31,13 +31,17 @@ use validator::Validate;
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::iam::{self, SharedRbacService};
+use entities::work_item::{AvailableWorkItemAccount, WorkItemType};
+use entities::{AccountKind, Permission};
 
 mod dto;
 
 pub use self::dto::{
-    CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView, UpdateWarehouseRequest,
-    UpdateWarehouseSkuPolicyRequest, WarehouseListParams, WarehouseRevisionListParams, WarehouseRevisionView,
-    WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
+    CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
+    UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
+    WarehouseFulfillmentHandlerOptionView, WarehouseListParams, WarehouseRevisionListParams,
+    WarehouseRevisionView, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
 };
 
 /// 仓库列表筛选条件类型（经 `WarehouseExt` 关联类型跨 crate 可达）。
@@ -52,12 +56,12 @@ type WarehouseSkuPolicyFilter = <mongodb::Database as WarehouseExt>::WarehouseSk
 /// 地基修订候选：密钥应从 `config` 注入（services 层当前只持有 `Database`），
 /// 此处使用固定占位密钥；指纹算法与实体形态已固化（数据模型 §4.5.5）。
 const FINGERPRINT_KEY: &[u8] = b"erp-warehouse-sensitive-fingerprint-key-v1";
-
 /// 仓库域服务。
 ///
 /// 提供仓库稳定身份、仓库修订与仓库-SKU 预警策略的创建、查询、更新编排。
 pub struct WarehouseService {
     db: Database,
+    rbac: SharedRbacService,
 }
 
 impl WarehouseService {
@@ -69,7 +73,8 @@ impl WarehouseService {
     /// # 返回
     /// 返回服务实例。
     pub fn new(db: Database) -> Self {
-        Self { db }
+        let rbac = iam::shared_rbac_service(db.clone());
+        Self { db, rbac }
     }
 
     /// 分页查询仓库列表。
@@ -107,6 +112,8 @@ impl WarehouseService {
                 id: row.id,
                 warehouse_code: row.warehouse_code,
                 status: row.status,
+                inbound_handler_user_id: row.inbound_handler_user_id,
+                outbound_handler_user_id: row.outbound_handler_user_id,
                 created_at: row.created_at,
                 version: row.version,
             })
@@ -140,6 +147,18 @@ impl WarehouseService {
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
         req.validate()?;
+        self.ensure_handler_eligible(
+            &req.inbound_handler_user_id,
+            required_fulfillment_permissions("purchase_receipt"),
+            "入库",
+        )
+        .await?;
+        self.ensure_handler_eligible(
+            &req.outbound_handler_user_id,
+            required_fulfillment_permissions("delivery"),
+            "仓发",
+        )
+        .await?;
         let id = WarehouseId::new(next_id());
         let revision_id = WarehouseRevisionId::new(next_id());
         let mut warehouse = Warehouse::new(
@@ -147,6 +166,8 @@ impl WarehouseService {
             WarehouseData {
                 warehouse_code: req.warehouse_code,
                 status: req.status.unwrap_or(EnableStatus::Active),
+                inbound_handler_user_id: Some(req.inbound_handler_user_id),
+                outbound_handler_user_id: Some(req.outbound_handler_user_id),
             },
             actor.id(),
         )?;
@@ -205,6 +226,18 @@ impl WarehouseService {
         actor: &AuditActor,
     ) -> Result<WarehouseView> {
         req.validate()?;
+        self.ensure_handler_eligible(
+            &req.inbound_handler_user_id,
+            required_fulfillment_permissions("purchase_receipt"),
+            "入库",
+        )
+        .await?;
+        self.ensure_handler_eligible(
+            &req.outbound_handler_user_id,
+            required_fulfillment_permissions("delivery"),
+            "仓发",
+        )
+        .await?;
         let mut warehouse = self
             .db
             .warehouse()
@@ -237,6 +270,8 @@ impl WarehouseService {
         warehouse.update(
             WarehouseUpdate {
                 status: Some(req.status),
+                inbound_handler_user_id: Some(Some(req.inbound_handler_user_id)),
+                outbound_handler_user_id: Some(Some(req.outbound_handler_user_id)),
             },
             actor.id(),
         )?;
@@ -257,6 +292,139 @@ impl WarehouseService {
             })
             .await
             .map(Into::into)
+    }
+
+    /// 更新仓库入库与仓发经办人。
+    ///
+    /// # 参数
+    /// * `id` - 仓库稳定 ID
+    /// * `req` - 期望版本与两个具体经办人
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回更新后的仓库稳定视图。
+    ///
+    /// # 错误
+    /// 仓库不存在、版本冲突、账号不可用或缺少对应履约权限时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 配置变更只用于之后新建的履约任务，不改派已开放任务。
+    pub async fn warehouse_fulfillment_handlers_update(
+        &self,
+        id: &str,
+        req: UpdateWarehouseFulfillmentHandlersRequest,
+        actor: &AuditActor,
+    ) -> Result<WarehouseView> {
+        req.validate()?;
+        self.ensure_handler_eligible(
+            &req.inbound_handler_user_id,
+            required_fulfillment_permissions("purchase_receipt"),
+            "入库",
+        )
+        .await?;
+        self.ensure_handler_eligible(
+            &req.outbound_handler_user_id,
+            required_fulfillment_permissions("delivery"),
+            "仓发",
+        )
+        .await?;
+
+        let mut warehouse = self
+            .db
+            .warehouse()
+            .warehouse(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
+        if !warehouse.matches_version(req.version) {
+            return Err(Error::ConflictError(
+                "数据已被其他请求修改，请刷新后重试".to_string(),
+            ));
+        }
+        let audit_message = format!(
+            "inbound:{}->{};outbound:{}->{}",
+            warehouse.inbound_handler_user_id.as_deref().unwrap_or("未配置"),
+            req.inbound_handler_user_id,
+            warehouse.outbound_handler_user_id.as_deref().unwrap_or("未配置"),
+            req.outbound_handler_user_id,
+        );
+        warehouse.update(
+            WarehouseUpdate {
+                status: None,
+                inbound_handler_user_id: Some(Some(req.inbound_handler_user_id)),
+                outbound_handler_user_id: Some(Some(req.outbound_handler_user_id)),
+            },
+            actor.id(),
+        )?;
+        let audit = actor.clone().resource_log_with_message(
+            "warehouse.fulfillment_handlers.update",
+            "warehouse",
+            warehouse.base.id.clone(),
+            Some(audit_message),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.warehouses().update(&mut warehouse, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<Warehouse, crate::errors::Error>(warehouse)
+                })
+            })
+            .await
+            .map(Into::into)
+    }
+
+    /// 列出仓库收发责任配置可选的具体账号。
+    ///
+    /// # 返回
+    /// 返回可登录管理账号及其入库、仓发权限资格。
+    ///
+    /// # 错误
+    /// 账号或权限数据读取失败时返回错误。
+    pub async fn warehouse_fulfillment_handler_options(
+        &self,
+    ) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
+        let inbound = handler_permissions(required_fulfillment_permissions("purchase_receipt"));
+        let outbound = handler_permissions(required_fulfillment_permissions("delivery"));
+        let accounts = self
+            .db
+            .accounts()
+            .list_by_kind(AccountKind::Admin, &mut NoTransaction)
+            .await?;
+        let mut options = Vec::new();
+        for account in accounts {
+            if AvailableWorkItemAccount::from_account(&account).is_err() {
+                continue;
+            }
+            let permissions = self
+                .rbac
+                .permissions(account.kind, account.base.id.as_str())
+                .await?;
+            let inbound_eligible = inbound
+                .iter()
+                .all(|required| permissions.iter().any(|granted| granted.covers(required)));
+            let outbound_eligible = outbound
+                .iter()
+                .all(|required| permissions.iter().any(|granted| granted.covers(required)));
+            if !inbound_eligible && !outbound_eligible {
+                continue;
+            }
+            let login_account = account.secret.account().to_string();
+            options.push(WarehouseFulfillmentHandlerOptionView {
+                user_id: account.base.id,
+                display_name: account.name,
+                account: login_account,
+                inbound_eligible,
+                outbound_eligible,
+            });
+        }
+        options.sort_by(|left, right| {
+            left.display_name
+                .cmp(&right.display_name)
+                .then_with(|| left.user_id.cmp(&right.user_id))
+        });
+        Ok(options)
     }
 
     /// 分页查询仓库修订列表。
@@ -529,6 +697,53 @@ impl WarehouseService {
             })
             .await
     }
+
+    /// 校验仓储经办人是当前有效账号且具备对应正式操作权限。
+    async fn ensure_handler_eligible(
+        &self,
+        account_id: &str,
+        required_permissions: &[&str],
+        operation_label: &str,
+    ) -> Result<()> {
+        let account_id = account_id.trim();
+        let account = self
+            .db
+            .accounts()
+            .find_work_item_account(account_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| {
+                Error::BusinessLogicError(format!("{operation_label}经办人账号不存在或已停用，请重新选择"))
+            })?;
+        AvailableWorkItemAccount::from_account(&account).map_err(|_| {
+            Error::BusinessLogicError(format!("{operation_label}经办人账号不可用，请重新选择"))
+        })?;
+        let required = handler_permissions(required_permissions);
+        let permissions = self.rbac.permissions(account.kind, account_id).await?;
+        if required
+            .iter()
+            .all(|required| permissions.iter().any(|granted| granted.covers(required)))
+        {
+            return Ok(());
+        }
+        Err(Error::BusinessLogicError(format!(
+            "{operation_label}经办人缺少对应操作权限，请先调整角色或重新选择"
+        )))
+    }
+}
+
+/// 读取履约工作项登记的完整执行权限；未知对象属于程序配置错误。
+fn required_fulfillment_permissions(business_object_type: &str) -> &'static [&'static str] {
+    WorkItemType::FulfillmentOperation
+        .fulfillment_execution_permissions(business_object_type)
+        .expect("仓库责任对象必须登记履约完整执行权限")
+}
+
+/// 把固定收发操作权限代码解析为权限对象；非法代码属于程序错误。
+fn handler_permissions(codes: &[&str]) -> Vec<Permission> {
+    codes
+        .iter()
+        .map(|code| Permission::parse(code).expect("固定仓储操作权限必须合法"))
+        .collect()
 }
 
 /// 仓库修订构建输入（名称/地址/联系人/生效区间/变更原因）。

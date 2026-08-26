@@ -109,6 +109,14 @@ export function PurchaseOrderDetailOverviewSection({
                         {order.header.ownerName}
                     </DescriptionDetails>
                 </DescriptionItem>
+                {order.header.targetWarehouseId ? (
+                    <DescriptionItem>
+                        <DescriptionTerm>目标收货仓</DescriptionTerm>
+                        <DescriptionDetails className="num">
+                            {order.header.targetWarehouseId}
+                        </DescriptionDetails>
+                    </DescriptionItem>
+                ) : null}
             </DescriptionList>
             {gate.state !== "NOT_APPLICABLE" ? (
                 <div className="mt-4">

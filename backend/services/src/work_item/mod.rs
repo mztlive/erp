@@ -10,10 +10,10 @@ use std::{
 
 use chrono::{Datelike, FixedOffset, TimeZone, Utc};
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt, LegacyImportExt,
-    MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
-    SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, IntegrationOpsExt, InventoryExt,
+    LegacyImportExt, MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
+    SalesOrderExt, SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt,
+    Transactional, WorkItemExt,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::{
@@ -53,12 +53,15 @@ mod sales_order_brief;
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
     WorkItemAllowedAction, WorkItemConflict, WorkItemConflictKind, WorkItemDueFilter, WorkItemFamily,
-    WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView, WorkItemPartyView, WorkItemScope,
-    WorkItemSort, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+    WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView, WorkItemPartyView,
+    WorkItemReassignCandidateView, WorkItemScope, WorkItemSort, WorkItemStatsParams, WorkItemStatsView,
+    WorkItemView,
 };
 type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
 const MANAGE_PERMISSION: &str = "work_item:manage";
+const REASSIGN_PERMISSION: &str = "work_item:reassign";
+const CLOSE_PERMISSION: &str = "work_item:close";
 const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
 const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
@@ -85,6 +88,7 @@ struct AssignmentAuthorizationSnapshot {
     actor_read_role_ids: Vec<String>,
     actor_manage_role_ids: Vec<String>,
     assignee_read_role_ids: Vec<String>,
+    assignee_permissions: Vec<Permission>,
 }
 
 struct FocusedQueueContext<'a> {
@@ -454,6 +458,8 @@ impl WorkItemService {
         self.load_procurement_confirmation_facts(keys, &mut facts, executor)
             .await?;
         self.load_purchase_order_facts(keys, &mut facts, executor).await?;
+        self.load_fulfillment_operation_facts(keys, &mut facts, executor)
+            .await?;
         self.load_purchase_change_facts(keys, &mut facts, executor)
             .await?;
         self.load_sales_change_review_facts(keys, &mut facts, executor)
@@ -477,6 +483,107 @@ impl WorkItemService {
         self.load_master_mapping_task_facts(keys, &mut facts, executor)
             .await?;
         Ok(facts)
+    }
+
+    /// 装载入库、发货、电子交付与服务履约工作项的权威对象事实。
+    ///
+    /// # 参数
+    /// * `keys` - 本批任务引用的对象键
+    /// * `facts` - 输出对象事实表
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 成功时写入全部存在的履约对象事实。
+    ///
+    /// # 错误
+    /// 任一仓储查询失败时返回错误。
+    async fn load_fulfillment_operation_facts(
+        &self,
+        keys: &HashSet<(ObjectKind, String)>,
+        facts: &mut ObjectFactMap,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let receipt_ids = object_ids(keys, ObjectKind::PurchaseReceipt);
+        for receipt in self
+            .db
+            .purchase_receipts()
+            .list_work_item_brief_entities_by_ids(&receipt_ids, executor)
+            .await?
+        {
+            facts.insert(
+                (ObjectKind::PurchaseReceipt, receipt.base.id.clone()),
+                ObjectFact::new(
+                    receipt.purchase_order_id.to_string(),
+                    format!("采购入库单 {} · {}", receipt.receipt_no, receipt.status.label()),
+                    SYSTEM_OBJECT_OWNER,
+                ),
+            );
+        }
+
+        let delivery_ids = object_ids(keys, ObjectKind::Delivery);
+        for delivery in self
+            .db
+            .deliveries()
+            .list_work_item_brief_entities_by_ids(&delivery_ids, executor)
+            .await?
+        {
+            facts.insert(
+                (ObjectKind::Delivery, delivery.base.id.clone()),
+                ObjectFact::new(
+                    delivery.sales_order_id.to_string(),
+                    format!(
+                        "{} {} · {}",
+                        delivery.delivery_type.label(),
+                        delivery.delivery_no,
+                        delivery.status.label()
+                    ),
+                    SYSTEM_OBJECT_OWNER,
+                ),
+            );
+        }
+
+        let electronic_ids = object_ids(keys, ObjectKind::ElectronicDelivery);
+        for delivery in self
+            .db
+            .electronic_deliveries()
+            .list_work_item_brief_entities_by_ids(&electronic_ids, executor)
+            .await?
+        {
+            facts.insert(
+                (ObjectKind::ElectronicDelivery, delivery.base.id.clone()),
+                ObjectFact::new(
+                    delivery.purchase_order_id.to_string(),
+                    format!(
+                        "电子交付 {} · {}",
+                        delivery.fulfillment_no,
+                        delivery.status.label()
+                    ),
+                    SYSTEM_OBJECT_OWNER,
+                ),
+            );
+        }
+
+        let service_ids = object_ids(keys, ObjectKind::ServiceFulfillment);
+        for fulfillment in self
+            .db
+            .service_fulfillments()
+            .list_work_item_brief_entities_by_ids(&service_ids, executor)
+            .await?
+        {
+            facts.insert(
+                (ObjectKind::ServiceFulfillment, fulfillment.base.id.clone()),
+                ObjectFact::new(
+                    fulfillment.purchase_order_id.to_string(),
+                    format!(
+                        "服务履约 {} · {}",
+                        fulfillment.fulfillment_no,
+                        fulfillment.status.label()
+                    ),
+                    SYSTEM_OBJECT_OWNER,
+                ),
+            );
+        }
+        Ok(())
     }
 
     /// 装载库存、结算、导入、集成和供应侧对象事实。
@@ -768,6 +875,93 @@ impl WorkItemService {
         );
         self.apply_party_names(std::slice::from_mut(&mut view)).await?;
         Ok(view)
+    }
+
+    /// 查询当前开放非审批任务可转交的具体账号。
+    ///
+    /// # 参数
+    /// * `id` - 工作项稳定 ID
+    /// * `actor` - 已通过鉴权且具有责任管理范围的操作人
+    ///
+    /// # 返回
+    /// 返回当前仍有效、具备完整执行权限且满足任务责任约束的账号。
+    ///
+    /// # 错误
+    /// 任务不存在、不是开放非审批任务、操作人不在管理范围，或授权事实读取失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 采购单责任任务的候选人必须同时能够执行该采购单全部开放履约任务；列表只作交互提示，
+    /// 最终转交命令仍须在写事务内重验全部账号、授权与业务事实。
+    pub async fn reassign_candidates(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<Vec<WorkItemReassignCandidateView>> {
+        let managed_access = self.managed_access(actor).await?;
+        let item = self.load(id).await?;
+        item.ensure_generic_responsibility_mutation()
+            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        ensure_item_in_managed_scope(&item, &managed_access)?;
+
+        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
+        let cascade_tasks = if let Some(purchase_order_id) = purchase_order_id {
+            let (_, tasks) =
+                load_purchase_order_fulfillment_scope(&self.db, &item, purchase_order_id, &mut NoTransaction)
+                    .await?;
+            Some(tasks)
+        } else {
+            None
+        };
+
+        let accounts = self
+            .db
+            .accounts()
+            .list_by_kind(entities::AccountKind::Admin, &mut NoTransaction)
+            .await?;
+        let mut candidates = Vec::new();
+        for account in accounts {
+            if item.owner_user_id.as_deref() == Some(account.base.id.as_str())
+                || AvailableWorkItemAccount::from_account(&account).is_err()
+            {
+                continue;
+            }
+            let authorization = match self
+                .assignment_authorization_snapshot(actor, &account.base.id, &item, true)
+                .await
+            {
+                Ok(authorization) => authorization,
+                Err(Error::Forbidden(_)) => continue,
+                Err(error) => return Err(error),
+            };
+            if let Some(tasks) = cascade_tasks.as_deref() {
+                match ensure_fulfillment_tasks_candidate(
+                    self,
+                    tasks,
+                    &account.base.id,
+                    &authorization.assignee_permissions,
+                    &mut NoTransaction,
+                )
+                .await
+                {
+                    Ok(()) => {}
+                    Err(Error::Forbidden(_)) => continue,
+                    Err(error) => return Err(error),
+                }
+            }
+            let login_account = account.secret.account().to_string();
+            candidates.push(WorkItemReassignCandidateView {
+                user_id: account.base.id,
+                display_name: account.name,
+                account: login_account,
+            });
+        }
+        candidates.sort_by(|left, right| {
+            left.display_name
+                .cmp(&right.display_name)
+                .then_with(|| left.account.cmp(&right.account))
+                .then_with(|| left.user_id.cmp(&right.user_id))
+        });
+        Ok(candidates)
     }
 
     /// 受控转交开放任务。
@@ -1116,6 +1310,7 @@ impl WorkItemService {
                 .map_err(|_| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
             let assignee_role_ids =
                 active_role_ids(&self.db, assignee.kind(), assignee_id, &mut NoTransaction).await?;
+            let assignee_permissions = self.rbac.permissions(assignee.kind(), assignee_id).await?;
             let assignee_read_role_ids = self
                 .roles_granting_permission(&assignee_role_ids, &read_permission, true)
                 .await?;
@@ -1127,6 +1322,7 @@ impl WorkItemService {
                 actor_read_role_ids,
                 actor_manage_role_ids,
                 assignee_read_role_ids,
+                assignee_permissions,
             };
             self.ensure_assignment_actor_access(
                 actor.kind(),
@@ -1225,7 +1421,7 @@ impl WorkItemService {
             .ok_or_else(|| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
         AvailableWorkItemAccount::from_account_kind(&account, expected_kind)
             .map_err(|_| Error::Forbidden("目标账号不存在或已失效".to_string()))?;
-        let access = self
+        let mut access = self
             .assignment_access_for_executor(
                 expected_kind,
                 user_id,
@@ -1235,6 +1431,12 @@ impl WorkItemService {
                 executor,
             )
             .await?;
+        if item.work_item_type.is_fulfillment_operation() {
+            // 履约任务不仅要求注册表中的读取/确认权限，还要求 W01 内嵌作业面
+            // 使用的完整列表、详情、编辑与正式命令权限。该快照由同一 policy
+            // revision 形成，外层授权事务会以该 revision 做 CAS 后才允许提交。
+            access.permissions = authorization.assignee_permissions.clone();
+        }
         self.ensure_assignment_candidate_access_with_executor(item, &access, executor)
             .await
             .map_err(|_| Error::Forbidden("目标账号不具备该业务对象的参与权或读取权".to_string()))?;
@@ -1936,6 +2138,23 @@ impl WorkItemService {
         let replay_fingerprint = audit_command_fingerprint(&audit_message)
             .expect("服务端审计消息必须携带指纹")
             .to_string();
+        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?.map(str::to_string);
+        let source_user_id = item.owner_user_id.as_deref().unwrap_or("未指定").to_string();
+        let selected_work_item_id = item.base.id.clone();
+        let purchase_order_audit = purchase_order_id
+            .as_ref()
+            .map(|purchase_order_id| {
+                actor.clone().resource_log_with_id(
+                    format!("{audit_id}-purchase-order"),
+                    "purchase_order.owner_reassign",
+                    "purchase_order",
+                    purchase_order_id.clone(),
+                    Some(format!(
+                        "source_user_id={source_user_id};target_user_id={target_user_id};cascade=open_fulfillment_tasks;selected_work_item_id={selected_work_item_id}"
+                    )),
+                )
+            })
+            .transpose()?;
         let audit = actor.clone().resource_log_with_id(
             audit_id,
             action,
@@ -1978,16 +2197,31 @@ impl WorkItemService {
                         session,
                     )
                     .await?;
-                    current.reassign(target_user_id.clone(), Instant::now())?;
-                    db.work_items()
-                        .update(&mut current, session)
-                        .await
-                        .map_err(|error| match error {
-                            database::Error::OptimisticLockingError => {
-                                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
-                            }
-                            error => Error::from(error),
-                        })?;
+                    current = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
+                        reassign_purchase_order_fulfillment_responsibility(
+                            &db,
+                            &validation_rbac,
+                            current,
+                            purchase_order_id,
+                            &target_user_id,
+                            &actor_id,
+                            &authorization,
+                            session,
+                        )
+                        .await?
+                    } else {
+                        current.reassign(target_user_id.clone(), Instant::now())?;
+                        db.work_items()
+                            .update(&mut current, session)
+                            .await
+                            .map_err(|error| match error {
+                                database::Error::OptimisticLockingError => {
+                                    Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+                                }
+                                error => Error::from(error),
+                            })?;
+                        current
+                    };
                     ensure_assignment_policy_in_transaction(
                         &db,
                         &validation_rbac,
@@ -2003,6 +2237,9 @@ impl WorkItemService {
                         session,
                     )
                     .await?;
+                    if let Some(purchase_order_audit) = &purchase_order_audit {
+                        db.audit_logs().create(purchase_order_audit, session).await?;
+                    }
                     db.audit_logs().create(&audit, session).await?;
                     Ok(current)
                 })
@@ -2277,6 +2514,227 @@ async fn ensure_assignment_policy_in_transaction(
             executor,
         )
         .await
+}
+
+/// 解析采购单履约任务冻结的采购责任键。
+///
+/// # 参数
+/// * `item` - 待转交工作项
+///
+/// # 返回
+/// 非采购履约任务返回空；采购履约任务返回采购单 ID。
+///
+/// # 错误
+/// 对象类型、责任角色、原因码或责任键不符合固定履约合同时返回错误。
+fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> Result<Option<&str>> {
+    if !item.work_item_type.is_fulfillment_operation() {
+        return Ok(None);
+    }
+    let key = item
+        .responsibility_key()
+        .ok_or_else(|| Error::BusinessLogicError("履约任务缺少责任键，请联系管理员修复后重试".to_string()))?;
+    match (
+        item.business_object_type.as_str(),
+        item.owner_role.as_str(),
+        item.reason_code.as_deref(),
+    ) {
+        ("delivery", "purchase_order_owner", Some("SUPPLIER_DIRECT_DELIVERY_READY"))
+        | ("electronic_delivery", "purchase_order_owner", Some("ELECTRONIC_DELIVERY_READY"))
+        | ("service_fulfillment", "purchase_order_owner", Some("SERVICE_FULFILLMENT_READY")) => {
+            parse_purchase_order_responsibility_key(key).map(Some)
+        }
+        ("purchase_receipt", "warehouse_inbound_handler", Some("PURCHASE_RECEIPT_READY")) => {
+            ensure_warehouse_responsibility_key(key, ":receipt", "入库任务")?;
+            Ok(None)
+        }
+        ("delivery", "warehouse_outbound_handler", Some("WAREHOUSE_DELIVERY_READY")) => {
+            ensure_warehouse_responsibility_key(key, ":warehouse_ship", "仓发任务")?;
+            Ok(None)
+        }
+        _ => Err(Error::BusinessLogicError(
+            "履约任务的对象、责任角色或原因码不一致，请联系管理员修复后重试".to_string(),
+        )),
+    }
+}
+
+/// 解析采购履约任务的唯一采购单责任键。
+fn parse_purchase_order_responsibility_key(key: &str) -> Result<&str> {
+    key.strip_prefix("purchase_order:")
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.contains(':'))
+        .ok_or_else(|| {
+            Error::BusinessLogicError("采购履约任务的采购单责任键无效，请联系管理员修复后重试".to_string())
+        })
+}
+
+/// 校验仓库履约任务的固定操作责任键。
+fn ensure_warehouse_responsibility_key(key: &str, suffix: &str, operation_label: &str) -> Result<()> {
+    let warehouse_id = key
+        .strip_prefix("warehouse:")
+        .and_then(|value| value.strip_suffix(suffix))
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.contains(':'));
+    if warehouse_id.is_some() {
+        return Ok(());
+    }
+    Err(Error::BusinessLogicError(format!(
+        "{operation_label}的仓库责任键无效，请联系管理员修复后重试"
+    )))
+}
+
+/// 原子变更采购单当前责任人与其全部开放采购履约任务。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 授权服务
+/// * `selected` - 管理员本次选中的开放任务
+/// * `purchase_order_id` - 责任键解析出的采购单 ID
+/// * `target_user_id` - 新采购责任人
+/// * `actor_id` - 管理员账号 ID
+/// * `authorization` - 事务外冻结的授权快照
+/// * `executor` - 当前事务执行器
+///
+/// # 返回
+/// 返回已完成转交的选中任务。
+///
+/// # 错误
+/// 采购单、任务集合或原责任不一致，目标缺少任一履约权限，或 CAS 写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 完成和关闭的历史任务保持不变；只有同一 `purchase_order:{id}` 下的开放履约任务级联。
+#[allow(clippy::too_many_arguments)]
+async fn reassign_purchase_order_fulfillment_responsibility(
+    db: &Database,
+    rbac: &SharedRbacService,
+    selected: WorkItem,
+    purchase_order_id: &str,
+    target_user_id: &str,
+    actor_id: &str,
+    authorization: &AssignmentAuthorizationSnapshot,
+    executor: &mut dyn Executor,
+) -> Result<WorkItem> {
+    let (mut order, mut tasks) =
+        load_purchase_order_fulfillment_scope(db, &selected, purchase_order_id, executor).await?;
+    ensure_fulfillment_tasks_candidate(
+        &WorkItemService::new(db.clone(), rbac.clone()),
+        &tasks,
+        target_user_id,
+        &authorization.assignee_permissions,
+        executor,
+    )
+    .await
+    .map_err(|_| {
+        Error::Forbidden("目标账号缺少一个或多个开放履约任务所需权限，采购单责任未变更".to_string())
+    })?;
+
+    order.reassign_owner(target_user_id.to_string(), actor_id.to_string())?;
+    db.purchase_orders()
+        .update(&mut order, executor)
+        .await
+        .map_err(|error| match error {
+            database::Error::OptimisticLockingError => {
+                Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+            }
+            error => Error::from(error),
+        })?;
+
+    let reassigned_at = Instant::now();
+    let mut selected_after = None;
+    for task in &mut tasks {
+        task.reassign(target_user_id.to_string(), reassigned_at)?;
+        db.work_items()
+            .update(task, executor)
+            .await
+            .map_err(|error| match error {
+                database::Error::OptimisticLockingError => {
+                    Error::ConflictError(REASSIGN_VERSION_CONFLICT.to_string())
+                }
+                error => Error::from(error),
+            })?;
+        if task.base.id == selected.base.id {
+            selected_after = Some(task.clone());
+        }
+    }
+    selected_after.ok_or_else(|| Error::ConflictError("采购单开放履约任务已变化，请刷新后重试".to_string()))
+}
+
+/// 装载并校验采购单当前责任人与全部开放履约任务的一致范围。
+async fn load_purchase_order_fulfillment_scope(
+    db: &Database,
+    selected: &WorkItem,
+    purchase_order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<(entities::purchase_order::PurchaseOrder, Vec<WorkItem>)> {
+    let responsibility_key = format!("purchase_order:{purchase_order_id}");
+    let order = db
+        .purchase_orders()
+        .find_by_id(
+            &entities::ids::PurchaseOrderId::new(purchase_order_id.to_string()),
+            executor,
+        )
+        .await?
+        .ok_or_else(|| Error::BusinessLogicError("履约任务引用的采购单不存在".to_string()))?;
+    if matches!(
+        order.stable.status,
+        entities::purchase_order::PurchaseOrderStatus::Completed
+            | entities::purchase_order::PurchaseOrderStatus::Voided
+    ) {
+        return Err(Error::BusinessLogicError(
+            "已完成或已作废采购单不能变更责任人".to_string(),
+        ));
+    }
+    let original_owner = order.current_owner_user_id()?.to_string();
+    if selected.owner_user_id.as_deref() != Some(original_owner.as_str()) {
+        return Err(Error::ConflictError(
+            "采购单责任人与当前履约任务责任不一致，请刷新责任事实后重试".to_string(),
+        ));
+    }
+    let tasks = db
+        .work_items()
+        .list_open_fulfillment_by_responsibility_key(&responsibility_key, executor)
+        .await?;
+    if tasks.is_empty() || !tasks.iter().any(|task| task.base.id == selected.base.id) {
+        return Err(Error::ConflictError(
+            "采购单开放履约任务已变化，请刷新后重试".to_string(),
+        ));
+    }
+    if tasks.iter().any(|task| {
+        task.owner_user_id.as_deref() != Some(original_owner.as_str())
+            || task.responsibility_key() != Some(responsibility_key.as_str())
+            || !matches!(
+                purchase_order_fulfillment_responsibility_id(task),
+                Ok(Some(task_purchase_order_id)) if task_purchase_order_id == purchase_order_id
+            )
+    }) {
+        return Err(Error::ConflictError(
+            "采购单开放履约任务责任身份不一致，请联系管理员处理后重试".to_string(),
+        ));
+    }
+    Ok((order, tasks))
+}
+
+/// 校验目标账号可执行给定全部开放履约任务。
+async fn ensure_fulfillment_tasks_candidate(
+    service: &WorkItemService,
+    tasks: &[WorkItem],
+    target_user_id: &str,
+    permissions: &[Permission],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let target_access = ActorAccess {
+        actor_id: target_user_id.to_string(),
+        permissions: permissions.to_vec(),
+        participant_document_ids: HashSet::new(),
+        organization_ids: Vec::new(),
+        responsibility_scopes: Vec::new(),
+        can_manage: false,
+    };
+    for task in tasks {
+        service
+            .ensure_assignment_candidate_access_with_executor(task, &target_access, executor)
+            .await?;
+    }
+    Ok(())
 }
 
 /// 事务内校验 Casbin 持久化策略仍与事务外稳定授权快照一致。
@@ -2804,9 +3262,26 @@ fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts:
         return false;
     };
     has_permission(access, policy.read_permission)
-        && (item.work_item_type.is_procurement_order_creation()
+        && has_fulfillment_execution_permissions(item, access)
+        && (item.work_item_type.uses_explicit_owner_authorization()
             || has_object_participation(access, &item.owner_role, &item.owner_organization_id, fact))
         && fact.subject_versions.accepts(&item.subject_version)
+}
+
+/// 判断转交目标是否具备 W01 内嵌履约作业所需的完整权限集合。
+fn has_fulfillment_execution_permissions(item: &WorkItem, access: &ActorAccess) -> bool {
+    if !item.work_item_type.is_fulfillment_operation() {
+        return true;
+    }
+    let Some(required) = item
+        .work_item_type
+        .fulfillment_execution_permissions(&item.business_object_type)
+    else {
+        return false;
+    };
+    required
+        .iter()
+        .all(|permission| has_permission(access, permission))
 }
 
 /// 把对象事实中的标题、往来方和影响写回任务投影字段。
@@ -2847,7 +3322,7 @@ fn apply_subject_display(
     fields.counterparty_label = subject
         .and_then(|item| item.counterparty_label.clone())
         .or_else(|| fact.counterparty_label.clone());
-    let preserve_task_impact = fields.work_item_type.is_procurement_order_creation()
+    let preserve_task_impact = fields.work_item_type.uses_explicit_owner_authorization()
         && fields
             .impact_summary
             .as_deref()
@@ -2888,9 +3363,9 @@ fn has_item_participation(
     access: &ActorAccess,
     fact: &ObjectFact,
 ) -> bool {
-    let is_procurement_owner =
-        work_item_type.is_procurement_order_creation() && owner_user_id == Some(access.actor_id.as_str());
-    is_procurement_owner || has_object_participation(access, owner_role, owner_organization_id, fact)
+    let is_explicit_owner =
+        work_item_type.uses_explicit_owner_authorization() && owner_user_id == Some(access.actor_id.as_str());
+    is_explicit_owner || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
 fn has_object_participation(
@@ -2973,10 +3448,10 @@ fn allowed_actions(
     access: &ActorAccess,
 ) -> Vec<WorkItemAllowedAction> {
     let mut actions = vec![WorkItemAllowedAction::View];
-    let is_procurement_owner = item.work_item_type.is_procurement_order_creation()
+    let is_explicit_owner = item.work_item_type.uses_explicit_owner_authorization()
         && item.owner_user_id.as_deref() == Some(actor_id);
     if item.owner_user_id.as_deref() == Some(actor_id)
-        && (is_procurement_owner
+        && (is_explicit_owner
             || covers_responsibility(access, &item.owner_role, &item.owner_organization_id)
             || item.status != WorkItemStatus::Open)
     {
@@ -2995,8 +3470,10 @@ fn allowed_actions(
         actions.push(WorkItemAllowedAction::Reject);
     }
     if access.can_manage && scope == WorkItemScope::Managed {
-        actions.push(WorkItemAllowedAction::Reassign);
-        if is_w29_fields_closable(item) {
+        if has_permission(access, REASSIGN_PERMISSION) {
+            actions.push(WorkItemAllowedAction::Reassign);
+        }
+        if is_w29_fields_closable(item) && has_permission(access, CLOSE_PERMISSION) {
             actions.push(WorkItemAllowedAction::Close);
         }
     }
@@ -3414,9 +3891,10 @@ mod tests {
         audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
         command_audit_message, counts_as_processable_stat, detail_scope, expected_task_version,
         has_assignment_candidate_access, non_empty_assignment_actors, object_access_shapes, object_policy,
-        stable_digest, w29_close_reason, w29_domain_evidence_reference, ActorAccess,
-        AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
-        ObjectFactMap, ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
+        purchase_order_fulfillment_responsibility_id, stable_digest, w29_close_reason,
+        w29_domain_evidence_reference, ActorAccess, AssignmentSeparationPolicy, AuthorizedPage,
+        AuthorizedPageCollector, Error, ObjectFact, ObjectFactMap, ObjectKind, ViewAccess,
+        AUTHORIZED_SCAN_BATCH_SIZE,
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use entities::{
@@ -3576,6 +4054,33 @@ mod tests {
         .unwrap()
     }
 
+    fn fulfillment_item(
+        business_object_type: &str,
+        owner_role: &str,
+        responsibility_key: &str,
+        reason_code: &str,
+    ) -> WorkItem {
+        WorkItem::new_with_responsibility_key(
+            WorkItemId::new(format!("wi-{business_object_type}")),
+            WorkItemData {
+                work_item_type: WorkItemType::FulfillmentOperation,
+                business_object_type: business_object_type.to_string(),
+                business_object_id: format!("{business_object_type}-1"),
+                subject_version: "1".to_string(),
+                owner_role: owner_role.to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "owner-1".to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: Some(reason_code.to_string()),
+                impact_summary: None,
+            },
+            responsibility_key,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn idempotency_digest_never_contains_raw_key() {
         let digest = stable_digest("actor|action|item|secret-request-key");
@@ -3699,6 +4204,95 @@ mod tests {
             &access,
             &procurement_facts()
         ));
+    }
+
+    #[test]
+    fn fulfillment_candidate_requires_complete_execution_permissions() {
+        let item = fulfillment_item(
+            "purchase_receipt",
+            "warehouse_inbound_handler",
+            "warehouse:wh-1:receipt",
+            "PURCHASE_RECEIPT_READY",
+        );
+        let facts = HashMap::from([(
+            (ObjectKind::PurchaseReceipt, "purchase_receipt-1".to_string()),
+            ObjectFact::new("po-1", "采购入库单 GRN-1", "__system__"),
+        )]);
+        let access = |codes: &[&str]| ActorAccess {
+            actor_id: "candidate-1".to_string(),
+            permissions: codes
+                .iter()
+                .map(|code| Permission::parse(code).unwrap())
+                .collect(),
+            participant_document_ids: HashSet::new(),
+            organization_ids: Vec::new(),
+            responsibility_scopes: Vec::new(),
+            can_manage: false,
+        };
+        assert!(!has_assignment_candidate_access(
+            &item,
+            &access(&["purchase_receipt:post"]),
+            &facts,
+        ));
+        assert!(has_assignment_candidate_access(
+            &item,
+            &access(&[
+                "purchase_receipt:list",
+                "purchase_receipt:detail",
+                "purchase_receipt:update",
+                "purchase_receipt:post",
+            ]),
+            &facts,
+        ));
+    }
+
+    #[test]
+    fn fulfillment_reassign_parses_only_registered_responsibility_keys() {
+        let procurement = fulfillment_item(
+            "delivery",
+            "purchase_order_owner",
+            "purchase_order:po-1",
+            "SUPPLIER_DIRECT_DELIVERY_READY",
+        );
+        assert_eq!(
+            purchase_order_fulfillment_responsibility_id(&procurement).unwrap(),
+            Some("po-1")
+        );
+
+        let warehouse = fulfillment_item(
+            "delivery",
+            "warehouse_outbound_handler",
+            "warehouse:wh-1:warehouse_ship",
+            "WAREHOUSE_DELIVERY_READY",
+        );
+        assert_eq!(
+            purchase_order_fulfillment_responsibility_id(&warehouse).unwrap(),
+            None
+        );
+
+        let malformed = fulfillment_item(
+            "delivery",
+            "purchase_order_owner",
+            "warehouse:wh-1:warehouse_ship",
+            "SUPPLIER_DIRECT_DELIVERY_READY",
+        );
+        assert!(purchase_order_fulfillment_responsibility_id(&malformed).is_err());
+
+        let mismatched_reason = fulfillment_item(
+            "delivery",
+            "purchase_order_owner",
+            "purchase_order:po-1",
+            "WAREHOUSE_DELIVERY_READY",
+        );
+        assert!(purchase_order_fulfillment_responsibility_id(&mismatched_reason).is_err());
+
+        let mismatched_object = fulfillment_item(
+            "purchase_receipt",
+            "purchase_order_owner",
+            "purchase_order:po-1",
+            "SUPPLIER_DIRECT_DELIVERY_READY",
+        );
+        assert!(purchase_order_fulfillment_responsibility_id(&mismatched_object).is_err());
     }
 
     #[test]

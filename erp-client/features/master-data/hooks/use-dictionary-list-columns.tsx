@@ -7,13 +7,13 @@ import {
     blockerColumn,
     disableOnlyActionsColumn,
     effectivePeriodColumn,
-    fullActionsColumn,
     lifecycleColumn,
     nameColumn,
     revisionNoColumn,
     revisionTimingColumn,
     stableNoColumn,
     updateOnlyActionsColumn,
+    warehouseActionsColumn,
 } from "@/features/master-data/components/list/list-column-primitives"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
@@ -92,13 +92,13 @@ export function useWarehouseListColumns({
     rows,
     onPreview,
     onReviseTarget,
-    onDisableTarget,
+    canMaintainHandlers,
 }: {
     lastFocusedRowId: React.MutableRefObject<string | null>
     rows: readonly MasterDataListItem[]
     onPreview: (stableId: string) => void
     onReviseTarget: (item: MasterDataListItem) => void
-    onDisableTarget: (item: MasterDataListItem) => void
+    canMaintainHandlers: boolean
 }) {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
         () => [
@@ -109,13 +109,19 @@ export function useWarehouseListColumns({
             revisionTimingColumn(),
             effectivePeriodColumn(),
             ...blockerColumn(rows),
-            fullActionsColumn({
+            warehouseActionsColumn({
                 lastFocusedRowId,
                 onPreview,
                 onReviseTarget,
-                onDisableTarget,
+                canMaintainHandlers,
             }),
         ],
-        [lastFocusedRowId, onDisableTarget, onPreview, onReviseTarget, rows],
+        [
+            canMaintainHandlers,
+            lastFocusedRowId,
+            onPreview,
+            onReviseTarget,
+            rows,
+        ],
     )
 }

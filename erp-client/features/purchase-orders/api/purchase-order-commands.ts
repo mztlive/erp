@@ -309,6 +309,7 @@ export async function createPurchaseOrderFromBasis(
                 work_item_id: input.workItemId,
                 purchase_type: input.purchaseType,
                 payment_term_code: input.paymentTermCode,
+                target_warehouse_id: input.targetWarehouseId,
                 lines: input.lines.map((line) => ({
                     sales_order_line_id: line.salesOrderLineId,
                     quantity: line.quantity,
@@ -381,6 +382,7 @@ export async function createPurchaseOrdersFromSourcing(
                     sales_order_line_id: line.salesOrderLineId,
                     basis_id: line.basisId,
                     source_type: line.sourceType,
+                    target_warehouse_id: line.targetWarehouseId,
                     quantity: line.quantity,
                     expected_delivery_date: line.expectedDeliveryDate,
                 })),

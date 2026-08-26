@@ -12,9 +12,10 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 15] = [
+const WORK_ITEM_TYPES: [WorkItemType; 16] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
+    WorkItemType::FulfillmentOperation,
     WorkItemType::PurchaseOrderReview,
     WorkItemType::SalesChangeImpactReview,
     WorkItemType::SalesChangeFinanceReview,
@@ -308,6 +309,17 @@ pub struct WorkItemPartyView {
     pub id: String,
     /// 权限安全的展示名。
     pub display_name: String,
+}
+
+/// 非审批任务转交的合格具体账号。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemReassignCandidateView {
+    /// 账号稳定 ID。
+    pub user_id: String,
+    /// 账号显示名称。
+    pub display_name: String,
+    /// 用户可识别的登录账号。
+    pub account: String,
 }
 
 /// 事项简报中的只读键值。
@@ -781,6 +793,13 @@ fn handler_route(
         (WorkItemType::ProcurementOrderCreation, _) => {
             return Err(Error::ValidationError("供给分配任务业务对象未注册".to_string()));
         }
+        (
+            WorkItemType::FulfillmentOperation,
+            "purchase_receipt" | "delivery" | "electronic_delivery" | "service_fulfillment",
+        ) => ("fulfillment_operation", "W01"),
+        (WorkItemType::FulfillmentOperation, _) => {
+            return Err(Error::ValidationError("履约任务业务对象未注册".to_string()));
+        }
         (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
         (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
         (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
@@ -832,6 +851,7 @@ fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Opt
 fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => WorkItemFamily::Procurement,
+        WorkItemType::FulfillmentOperation => WorkItemFamily::Fulfillment,
         WorkItemType::DocumentApproval | WorkItemType::OwnershipMigrationSalesConfirmation => {
             WorkItemFamily::Approval
         }

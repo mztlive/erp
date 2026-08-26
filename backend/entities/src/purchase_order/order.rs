@@ -10,7 +10,7 @@ use crate::common::state::{ensure_transition, DocumentState};
 use crate::errors::{Error, Result};
 use crate::ids::{
     PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SalesOrderRevisionId,
-    SupplierAccountId,
+    SupplierAccountId, WarehouseId,
 };
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -21,6 +21,8 @@ const PURCHASE_NO_MAX_LEN: usize = 64;
 const PAYMENT_TERM_MAX_LEN: usize = 64;
 /// 精确采购创建依据最大长度。
 const CREATION_BASIS_ID_MAX_LEN: usize = 192;
+/// 采购单当前责任人账号 ID 最大长度。
+const OWNER_USER_ID_MAX_LEN: usize = 128;
 
 /// 采购单状态（数据模型 §6.6/§7.4，审批合同 §4.4.2 已收敛）。
 ///
@@ -200,6 +202,10 @@ pub struct PurchaseOrderData {
     pub payment_term_code: String,
     /// 履约责任。
     pub fulfillment_responsibility: FulfillmentResponsibility,
+    /// 采购单当前责任人；创建时通常继承供给分配任务责任人。
+    pub owner_user_id: String,
+    /// 入仓采购的目标仓库；其它履约责任必须为空。
+    pub target_warehouse_id: Option<WarehouseId>,
 }
 
 /// 采购单更新数据。
@@ -241,6 +247,12 @@ pub struct PurchaseOrder {
     pub payment_term_code: String,
     /// 履约责任。
     pub fulfillment_responsibility: FulfillmentResponsibility,
+    /// 采购单当前责任人；旧数据为空时执行失败关闭，不得回退创建人。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_user_id: Option<String>,
+    /// 入仓采购目标仓库；兼容旧数据缺少该字段。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_warehouse_id: Option<WarehouseId>,
     /// 财务审核状态。
     pub review_status: PurchaseReviewStatus,
     /// 付款进度。
@@ -272,6 +284,8 @@ impl PartialEq for PurchaseOrder {
             && self.purchase_type == other.purchase_type
             && self.payment_term_code == other.payment_term_code
             && self.fulfillment_responsibility == other.fulfillment_responsibility
+            && self.owner_user_id == other.owner_user_id
+            && self.target_warehouse_id == other.target_warehouse_id
             && self.review_status == other.review_status
             && self.payment_progress == other.payment_progress
             && self.invoice_progress == other.invoice_progress
@@ -314,6 +328,13 @@ impl PurchaseOrder {
             CREATION_BASIS_ID_MAX_LEN,
             "采购创建依据过长",
         )?;
+        let owner_user_id = normalize_required_text(
+            data.owner_user_id,
+            "采购单责任人不能为空",
+            OWNER_USER_ID_MAX_LEN,
+            "采购单责任人过长",
+        )?;
+        ensure_target_warehouse(data.fulfillment_responsibility, data.target_warehouse_id.as_ref())?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(PurchaseOrderStatus::Draft, created_by),
@@ -325,6 +346,8 @@ impl PurchaseOrder {
             purchase_type: data.purchase_type,
             payment_term_code,
             fulfillment_responsibility: data.fulfillment_responsibility,
+            owner_user_id: Some(owner_user_id),
+            target_warehouse_id: data.target_warehouse_id,
             review_status: PurchaseReviewStatus::Pending,
             payment_progress: ProgressStatus::None,
             invoice_progress: ProgressStatus::None,
@@ -669,6 +692,69 @@ impl PurchaseOrder {
         self.stable.touch(updated_by);
     }
 
+    /// 返回采购单当前责任人。
+    ///
+    /// # 返回
+    /// 显式责任人存在时返回账号 ID。
+    ///
+    /// # 错误
+    /// 存量数据缺少责任人时返回错误；调用方必须先补齐责任，不得回退创建人。
+    pub fn current_owner_user_id(&self) -> Result<&str> {
+        self.owner_user_id
+            .as_deref()
+            .filter(|owner| !owner.trim().is_empty())
+            .ok_or_else(|| Error::from("采购单未指定责任人，请先补齐后再继续履约"))
+    }
+
+    /// 取得入库任务必须使用的目标仓库。
+    ///
+    /// # 返回
+    /// 入仓采购且已指定目标仓库时返回仓库 ID。
+    ///
+    /// # 错误
+    /// 非入仓采购或旧数据缺少目标仓库时返回错误，调用方不得选择任意默认仓库。
+    pub fn target_warehouse_for_receipt(&self) -> Result<&WarehouseId> {
+        if self.fulfillment_responsibility != FulfillmentResponsibility::Warehouse {
+            return Err(Error::from("当前采购单不属于入仓履约"));
+        }
+        self.target_warehouse_id
+            .as_ref()
+            .ok_or_else(|| Error::from("采购单未指定目标仓库，请先补齐后再生效"))
+    }
+
+    /// 变更采购单当前责任人。
+    ///
+    /// # 参数
+    /// * `owner_user_id` - 已由应用层验证资格的具体账号
+    /// * `updated_by` - 本次责任变更操作人
+    ///
+    /// # 返回
+    /// 责任人更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 目标账号为空或过长时返回错误；已完成、已作废采购单禁止变更责任。
+    pub fn reassign_owner(
+        &mut self,
+        owner_user_id: impl Into<String>,
+        updated_by: impl Into<String>,
+    ) -> Result<()> {
+        if matches!(
+            self.stable.status,
+            PurchaseOrderStatus::Completed | PurchaseOrderStatus::Voided
+        ) {
+            return Err(Error::from("已完成或已作废采购单不能变更责任人"));
+        }
+        let owner_user_id = normalize_required_text(
+            owner_user_id.into(),
+            "采购单责任人不能为空",
+            OWNER_USER_ID_MAX_LEN,
+            "采购单责任人过长",
+        )?;
+        self.owner_user_id = Some(owner_user_id);
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 校验当前状态为草稿。
     ///
     /// # 返回
@@ -703,6 +789,19 @@ impl PurchaseOrder {
     }
 }
 
+/// 校验履约责任与目标仓库是一一对应的事实。
+fn ensure_target_warehouse(
+    responsibility: FulfillmentResponsibility,
+    target_warehouse_id: Option<&WarehouseId>,
+) -> Result<()> {
+    match (responsibility, target_warehouse_id) {
+        (FulfillmentResponsibility::Warehouse, Some(_)) => Ok(()),
+        (FulfillmentResponsibility::Warehouse, None) => Err(Error::from("入仓采购必须指定目标仓库")),
+        (_, None) => Ok(()),
+        (_, Some(_)) => Err(Error::from("非入仓采购不能指定目标仓库")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -726,6 +825,8 @@ mod tests {
             purchase_type: PurchaseType::Physical,
             payment_term_code: " NET-30 ".to_string(),
             fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+            owner_user_id: " buyer-1 ".to_string(),
+            target_warehouse_id: Some(crate::ids::WarehouseId::new("wh-1")),
         }
     }
 
@@ -743,6 +844,12 @@ mod tests {
         assert_eq!(order.payment_progress, ProgressStatus::None);
         assert_eq!(order.approval_subject_version, 0);
         assert!(order.current_submission_id.is_none());
+        assert_eq!(order.current_owner_user_id().unwrap(), "buyer-1");
+        assert_eq!(order.target_warehouse_for_receipt().unwrap().as_ref(), "wh-1");
+
+        let mut legacy = order.clone();
+        legacy.owner_user_id = None;
+        assert!(legacy.current_owner_user_id().is_err());
     }
 
     #[test]

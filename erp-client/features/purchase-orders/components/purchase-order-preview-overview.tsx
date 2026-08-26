@@ -16,6 +16,7 @@ import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
+import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 import { cn } from "@/lib/utils"
 
 export function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -199,6 +200,13 @@ export function PurchaseOrderPreviewOverview({
                         }
                     />
                     <CompactField label="负责人" value={header.ownerName} />
+                    {header.targetWarehouseId ? (
+                        <CompactField
+                            label="目标收货仓"
+                            value={header.targetWarehouseId}
+                            numeric
+                        />
+                    ) : null}
                     {header.expectedDate ? (
                         <CompactField
                             label="最近预计交期"
@@ -243,7 +251,7 @@ export function PurchaseOrderPreviewOverview({
                 <SectionTitle>关联对象</SectionTitle>
                 <div className="flex flex-wrap items-center gap-1.5">
                     <Link
-                        href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent("/procurement/orders")}`}
+                        href={fulfillmentTasksHref(identity.purchaseOrderId)}
                         className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2 text-xs font-medium text-primary hover:bg-accent"
                     >
                         去交付与代发

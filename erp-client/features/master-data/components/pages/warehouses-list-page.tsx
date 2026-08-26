@@ -1,10 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
-import { BusinessTableFrame, FormalActionResult } from "@/components/business"
-import { Button } from "@/components/ui/button"
+import { BusinessTableFrame } from "@/components/business"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { DictionaryListTable } from "@/features/master-data/components/list/dictionary-list-table"
 import { DictionaryListToolbar } from "@/features/master-data/components/list/dictionary-list-toolbar"
 import { LifecycleMetricStrip } from "@/features/master-data/components/list/lifecycle-metric-strip"
@@ -21,8 +20,14 @@ import {
     masterDataCopy,
     masterDataSearchPlaceholder,
 } from "@/features/master-data/lib/copy"
+import { hasPermission } from "@/lib/permissions"
 
 export function WarehousesListPage() {
+    const accountProfile = useAccountProfileQuery()
+    const canMaintainHandlers = hasPermission(
+        accountProfile.data?.permissions,
+        "warehouse:update",
+    )
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useDictionaryListState({
@@ -35,7 +40,7 @@ export function WarehousesListPage() {
         rows: state.rows,
         onPreview: state.setPreviewId,
         onReviseTarget: state.setReviseTarget,
-        onDisableTarget: state.setDisableTarget,
+        canMaintainHandlers,
     })
     const { filters } = state
     const hasActiveFilters =
@@ -47,35 +52,6 @@ export function WarehousesListPage() {
     return (
         <ListPageFrame
             title={masterDataCopy.pageTitle("仓库")}
-            banner={
-                <FormalActionResult
-                    status="blocked"
-                    title={masterDataCopy.warehouseWriteTitle}
-                    description={masterDataCopy.warehouseWriteBody}
-                    actions={
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                render={
-                                    <Link href="/master-data/sellable-items" />
-                                }
-                            >
-                                去公司商品池
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                render={<Link href="/inventory?view=balance" />}
-                            >
-                                打开库存台账
-                            </Button>
-                        </div>
-                    }
-                />
-            }
             exportMeta={state.exportMeta}
             actions={[
                 {
@@ -164,7 +140,7 @@ export function WarehousesListPage() {
                         hasActiveFilters={hasActiveFilters}
                         onClearFilters={filters.clearAllFilters}
                         emptyTitle="还没有仓库资料"
-                        emptyDescription="仓库资料暂不可新建，请从库存台账核对现有仓库。"
+                        emptyDescription="请先建立仓库资料；已有仓库可在列表中配置收发责任。"
                         onRowPreview={(row) => {
                             lastFocusedRowId.current = row.stableId
                             state.setPreviewId(row.stableId)
@@ -184,6 +160,7 @@ export function WarehousesListPage() {
                 onClose={() => state.setPreviewId(null)}
                 onRevise={state.setReviseTarget}
                 onDisable={state.setDisableTarget}
+                canMaintainHandlers={canMaintainHandlers}
             />
             <WarehouseReviseDialog
                 open={state.reviseTarget != null}

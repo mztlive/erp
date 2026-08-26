@@ -1,5 +1,5 @@
 /**
- * W09 先款条件徽章的文案口径。
+ * W01 履约作业面的先款条件徽章文案口径。
  * 仓发与其余作业共用判定，仅措辞不同；面向一线作业角色整体口语化。
  */
 
@@ -34,8 +34,7 @@ const RECEIVE_GATE_COPY: PrepaymentGateCopy = {
     allowedTitle: "货款已到，可以收货",
     blockedTitle: "先款未到，暂时不能收货",
     allowedBody: "货款已经够了，这一单可以继续。",
-    blockedBody:
-        "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
+    blockedBody: "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
 }
 
 export function prepaymentGateCopy(
@@ -48,7 +47,7 @@ export function paymentRegistrationHref(
     purchaseOrderId: string | undefined,
     currentUrl: string,
 ): string {
-    return `/finance/supplier-accounts?from=W09&purchaseOrderId=${purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(currentUrl)}`
+    return `/finance/supplier-accounts?from=W01&purchaseOrderId=${purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(currentUrl)}`
 }
 
 /**
@@ -63,12 +62,12 @@ export function acceptanceHref(
     salesOrderId: string,
     currentUrl: string,
 ): string {
-    return `/sales/orders/${salesOrderId}?section=acceptance&from=W09&returnTo=${encodeURIComponent(currentUrl)}`
+    return `/sales/orders/${salesOrderId}?section=acceptance&from=W01&returnTo=${encodeURIComponent(currentUrl)}`
 }
 
 export function salesOrderHref(
     salesOrderId: string,
     currentUrl: string,
 ): string {
-    return `/sales/orders/${salesOrderId}?from=W09&returnTo=${encodeURIComponent(currentUrl)}`
+    return `/sales/orders/${salesOrderId}?from=W01&returnTo=${encodeURIComponent(currentUrl)}`
 }

@@ -34,7 +34,7 @@ use super::{
 type PurchaseReceiptFilter = <mongodb::Database as FulfillmentExt>::PurchaseReceiptFilter;
 
 impl FulfillmentService {
-    /// 分页查询采购入库单列表（W09 入库视图）。
+    /// 分页查询采购入库单列表（W01 履约任务作业面）。
     ///
     /// # 参数
     /// * `params` - 查询参数（`purchase_order_id`/`status` 扁平筛选）
@@ -184,6 +184,15 @@ impl FulfillmentService {
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
+        if req
+            .warehouse_id
+            .as_ref()
+            .is_some_and(|warehouse_id| warehouse_id != &receipt.warehouse_id)
+        {
+            return Err(Error::ValidationError(
+                "采购入库单的目标仓库已冻结，不能在任务生成后变更".to_string(),
+            ));
+        }
         receipt.update(entities::fulfillment::PurchaseReceiptUpdate {
             warehouse_id: req.warehouse_id.or(Some(receipt.warehouse_id.clone())),
         })?;
@@ -192,11 +201,19 @@ impl FulfillmentService {
                 .clone()
                 .resource_log("purchase_receipt.update", "purchase_receipt", id.to_string())?;
         let db = self.db.clone();
+        let actor_id = actor.id().to_string();
         let client = db.client().clone();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.purchase_receipts().update(&mut receipt, session).await?;
+                    super::task::record_fulfillment_activity(
+                        &db,
+                        super::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
+                        &actor_id,
+                        session,
+                    )
+                    .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<PurchaseReceipt, crate::errors::Error>(receipt)
                 })
@@ -482,6 +499,12 @@ async fn persist_created_purchase_receipt(
                 db.fulfillment()
                     .create_purchase_receipt_with_lines(&receipt, &lines, session)
                     .await?;
+                super::task::ensure_fulfillment_task(
+                    &db,
+                    super::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
+                    session,
+                )
+                .await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })

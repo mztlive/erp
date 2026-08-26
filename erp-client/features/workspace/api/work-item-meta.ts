@@ -64,6 +64,12 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "lime",
         openActionLabel: "去分配供给",
     },
+    FULFILLMENT_OPERATION: {
+        label: "履约处理",
+        family: "fulfillment",
+        badgeLabel: "收发履约",
+        badgeVariant: "teal",
+    },
     LOW_MARGIN_MANAGER_CONFIRMATION: {
         label: "低毛利销售审批",
         family: "approval",

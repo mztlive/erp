@@ -50,7 +50,6 @@ export function PurchaseOrderDetailSections({
     fulfillBlocker,
     canChange,
     changeBlocker,
-    baseHref,
     w12PayHref,
     onRequestChange,
     changeWorkItemId,
@@ -69,7 +68,6 @@ export function PurchaseOrderDetailSections({
     fulfillBlocker: ActionBlocker
     canChange: boolean
     changeBlocker: ActionBlocker
-    baseHref: string
     w12PayHref: string
     onRequestChange: () => void
     changeWorkItemId?: string
@@ -146,7 +144,6 @@ export function PurchaseOrderDetailSections({
                         gate={gate}
                         canFulfill={canFulfill}
                         fulfillBlocker={fulfillBlocker}
-                        baseHref={baseHref}
                         w12PayHref={w12PayHref}
                     />
                 </ObjectSectionTabsPanel>

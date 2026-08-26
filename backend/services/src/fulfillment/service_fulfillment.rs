@@ -37,7 +37,7 @@ type ServiceFulfillmentFilter = <mongodb::Database as FulfillmentExt>::ServiceFu
 impl FulfillmentService {
     // ---------------------------------------------------------- service_fulfillment
 
-    /// 分页查询线下服务履约记录列表（W09 服务视图）。
+    /// 分页查询线下服务履约记录列表（W01 履约任务作业面）。
     ///
     /// # 参数
     /// * `params` - 查询参数（`sales_order_line_id`/`status` 扁平筛选）
@@ -96,6 +96,29 @@ impl FulfillmentService {
             page: filter.page,
             page_size: filter.page_size,
         })
+    }
+
+    /// 按主键查询线下服务履约记录。
+    ///
+    /// W01 履约任务以工作项冻结的业务对象主键精确读取，不经列表分页扫描。
+    ///
+    /// # 参数
+    /// * `id` - 服务履约记录主键
+    ///
+    /// # 返回
+    /// 返回服务履约记录视图。
+    ///
+    /// # 错误
+    /// * `NotFound` - 服务履约记录不存在
+    /// * `RepositoryError` - 数据库查询失败
+    pub async fn service_fulfillment_detail(&self, id: &str) -> Result<ServiceFulfillmentView> {
+        let record = self
+            .db
+            .service_fulfillments()
+            .find_by_id(id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("服务履约记录不存在".to_string()))?;
+        Ok(record.into())
     }
 
     /// 创建线下服务履约记录（草稿）。
@@ -180,6 +203,13 @@ impl FulfillmentService {
                     .await?;
                     record.confirm()?;
                     db.service_fulfillments().update(&mut record, session).await?;
+                    super::task::complete_fulfillment_task(
+                        &db,
+                        super::task::FulfillmentTaskObject::ServiceFulfillment(&record),
+                        actor.id(),
+                        session,
+                    )
+                    .await?;
                     let audit = actor.resource_log(
                         "service_fulfillment.confirm",
                         "service_fulfillment",
@@ -440,6 +470,12 @@ async fn persist_created_service_fulfillment(
             Box::pin(async move {
                 register_created_service_fulfillment_document(&db, &rbac, &record, &actor, session).await?;
                 db.service_fulfillments().create(&record, session).await?;
+                super::task::ensure_fulfillment_task(
+                    &db,
+                    super::task::FulfillmentTaskObject::ServiceFulfillment(&record),
+                    session,
+                )
+                .await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })

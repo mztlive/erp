@@ -162,9 +162,11 @@ export function WorkspaceHomePage() {
     const detail = selected ? (
         <WorkspaceTaskDetail
             item={selected}
+            grantedPermissions={accountProfileQuery.data?.permissions ?? []}
             onDecisionApplied={(_view, workItemId) => {
                 applyDecisionAfter(workItemId)
             }}
+            onTaskCompleted={applyDecisionAfter}
         />
     ) : (
         <div className="flex flex-1 items-center justify-center p-8">
@@ -295,7 +297,14 @@ export function WorkspaceHomePage() {
                     {selected ? (
                         <WorkspaceTaskDetail
                             item={selected}
+                            grantedPermissions={
+                                accountProfileQuery.data?.permissions ?? []
+                            }
                             onDecisionApplied={(_view, workItemId) => {
+                                applyDecisionAfter(workItemId)
+                                setNarrowDetailOpen(false)
+                            }}
+                            onTaskCompleted={(workItemId) => {
                                 applyDecisionAfter(workItemId)
                                 setNarrowDetailOpen(false)
                             }}

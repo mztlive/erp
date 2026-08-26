@@ -50,6 +50,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/warehouses/{id}/fulfillment-handlers",
+            with_permission(
+                put(warehouse::warehouse_fulfillment_handlers_update),
+                rbac,
+                warehouse::warehouse_fulfillment_handlers_update_permission_key(),
+            ),
+        )
+        .route(
+            "/warehouse-fulfillment-handler-options",
+            with_permission(
+                get(warehouse::warehouse_fulfillment_handler_options),
+                rbac,
+                warehouse::warehouse_fulfillment_handler_options_permission_key(),
+            ),
+        )
+        .route(
             "/warehouse-revisions",
             with_permission(
                 get(warehouse::warehouse_revision_list),

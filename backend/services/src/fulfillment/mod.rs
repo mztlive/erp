@@ -1,4 +1,4 @@
-//! 域 D16 `fulfillment` 服务编排（页面：W06 客户验收、W09 收货与发货/交付与代发）。
+//! 域 D16 `fulfillment` 服务编排（页面：W06 客户验收、W01 履约任务作业面）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
 //! - 采购收货、发货创建必须在同一事务注册 `BusinessDocument` 并调用统一绑定端口；
@@ -33,6 +33,7 @@ mod purchase_context;
 mod purchase_receipt;
 mod purchase_receipt_posting;
 mod service_fulfillment;
+pub(crate) mod task;
 
 pub use self::dto::{
     AcceptanceAllocationInput, AcceptanceAllocationView, AcceptanceEligibilityView, AcceptanceLineInput,

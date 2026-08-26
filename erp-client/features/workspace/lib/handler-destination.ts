@@ -1,6 +1,7 @@
 type HandlerFamily = "approval" | "finance" | "fulfillment" | "exception"
 
 type HandlerWorkspaceId =
+    | "W01"
     | "W03"
     | "W05"
     | "W07"
@@ -28,6 +29,12 @@ export type HandlerRegistration = Readonly<{
  * 不接受服务端下发的任意 URL。
  */
 export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
+    fulfillment_operation: {
+        workItemTypeLabel: "履约处理",
+        family: "fulfillment",
+        destinationWorkspaceId: "W01",
+        baseHref: "/workspace",
+    },
     procurement_confirmation: {
         workItemTypeLabel: "采购二次确认",
         family: "fulfillment",
@@ -271,9 +278,19 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
         return withParams(
             registration.baseHref,
             new URLSearchParams({
-                mode: "create",
+                action: "create",
                 salesOrderId: businessObjectId,
                 workItemId,
+            }),
+        )
+    }
+
+    if (item.handlerKey === "fulfillment_operation") {
+        return withParams(
+            registration.baseHref,
+            new URLSearchParams({
+                family: "fulfillment",
+                currentWorkItemId: workItemId,
             }),
         )
     }

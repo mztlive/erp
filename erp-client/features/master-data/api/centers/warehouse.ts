@@ -43,6 +43,7 @@ export async function centerWarehouse(
         lifecycleAtRevision: asLifecycle(wh.status),
     }))
     return baseCenter("warehouses", row, {
+        warehouseFulfillmentHandlers: row.warehouseFulfillmentHandlers,
         warehouseStockSummary: {
             onHandQty: "—",
             reservedQty: "—",

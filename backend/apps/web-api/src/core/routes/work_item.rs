@@ -52,6 +52,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/work-items/{id}/reassign-candidates",
+            with_permission(
+                get(work_item::work_item_reassign_candidates),
+                rbac,
+                work_item::work_item_reassign_candidates_permission_key(),
+            ),
+        )
+        .route(
             "/work-items/{id}/close",
             with_permission(
                 post(work_item::work_item_close),

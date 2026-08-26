@@ -133,7 +133,7 @@ export function PurchaseOrderCreatePreviewDialog({
                             items={previews.map((preview, index) => ({
                                 id: preview.key,
                                 title: `${index + 1}. ${preview.supplierName}`,
-                                description: `${PURCHASE_TYPE_LABEL[preview.purchaseType]} · ${preview.paymentTermLabel} · ${preview.lines.length} 行`,
+                                description: `${PURCHASE_TYPE_LABEL[preview.purchaseType]} · ${preview.paymentTermLabel}${preview.targetWarehouseName ? ` · ${preview.targetWarehouseName}` : ""} · ${preview.lines.length} 行`,
                             }))}
                             onSelect={setActiveKey}
                         />
@@ -253,6 +253,18 @@ function PurchaseOrderPreviewPaper({
                             preview.fulfillmentResponsibility
                         ],
                     },
+                    ...(preview.fulfillmentResponsibility === "WAREHOUSE"
+                        ? [
+                              {
+                                  id: "target-warehouse",
+                                  label: "采购入库目标仓",
+                                  value:
+                                      preview.targetWarehouseName ??
+                                      preview.targetWarehouseId ??
+                                      "—",
+                              },
+                          ]
+                        : []),
                     {
                         id: "lines",
                         label: "明细行数",

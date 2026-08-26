@@ -9,9 +9,11 @@ use axum::{
 };
 use services::audit::AuditActor;
 use services::warehouse::{
-    CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView, UpdateWarehouseRequest,
-    UpdateWarehouseSkuPolicyRequest, WarehouseListParams, WarehouseRevisionListParams, WarehouseRevisionView,
-    WarehouseService, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView, WarehouseView,
+    CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
+    UpdateWarehouseFulfillmentHandlersRequest, UpdateWarehouseRequest, UpdateWarehouseSkuPolicyRequest,
+    WarehouseFulfillmentHandlerOptionView, WarehouseListParams, WarehouseRevisionListParams,
+    WarehouseRevisionView, WarehouseService, WarehouseSkuPolicyListParams, WarehouseSkuPolicyView,
+    WarehouseView,
 };
 
 use crate::{
@@ -99,6 +101,58 @@ pub async fn warehouse_update(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "配置仓库收发经办人",
+    resource = "warehouse",
+    action = "update"
+)]
+/// 更新仓库入库与仓发经办人。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 仓库 ID
+/// * `req` - 期望版本与两个具体账号
+///
+/// # 返回
+/// 返回更新后的仓库视图。
+pub async fn warehouse_fulfillment_handlers_update(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateWarehouseFulfillmentHandlersRequest>,
+) -> Result<WarehouseView> {
+    let view = WarehouseService::new(state.db())
+        .warehouse_fulfillment_handlers_update(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询仓库收发经办人选项",
+    resource = "warehouse",
+    action = "update"
+)]
+/// 查询可用的仓库收发经办人选项。
+///
+/// # 参数
+/// * `state` - 应用状态
+///
+/// # 返回
+/// 返回可登录账号及其入库、仓发资格。
+pub async fn warehouse_fulfillment_handler_options(
+    State(state): State<AppState>,
+) -> Result<Vec<WarehouseFulfillmentHandlerOptionView>> {
+    let options = WarehouseService::new(state.db())
+        .warehouse_fulfillment_handler_options()
+        .await?;
+    Ok(ApiResponse::ok_with_data(options))
 }
 
 #[permission_macros::permission(

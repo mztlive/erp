@@ -68,7 +68,16 @@ impl PurchaseOrderService {
             .map(|row| row.sales_order_id.to_string())
             .collect();
         let sales_order_numbers = self.resolve_sales_order_numbers(&sales_order_ids).await?;
-        let owner_ids: Vec<String> = page.items.iter().map(|row| row.created_by.clone()).collect();
+        let owner_ids: Vec<String> = page
+            .items
+            .iter()
+            .filter_map(|row| {
+                row.owner_user_id
+                    .as_deref()
+                    .filter(|owner| !owner.trim().is_empty())
+                    .map(str::to_string)
+            })
+            .collect();
         let owner_names = self.resolve_account_names(&owner_ids).await?;
         let pointer_ids: Vec<String> = page
             .items
@@ -101,6 +110,11 @@ impl PurchaseOrderService {
                     .as_ref()
                     .and_then(|id| totals.get(id).cloned())
                     .unwrap_or_default();
+                let owner_user_id = row
+                    .owner_user_id
+                    .as_deref()
+                    .filter(|owner| !owner.trim().is_empty())
+                    .map(str::to_string);
                 Ok(PurchaseOrderListItemView {
                     id: row.id,
                     purchase_no: row.purchase_no,
@@ -110,7 +124,12 @@ impl PurchaseOrderService {
                     supplier_name,
                     purchase_type: row.purchase_type,
                     payment_term_code: row.payment_term_code,
-                    owner_name: owner_names.get(&row.created_by).cloned().unwrap_or_default(),
+                    owner_name: owner_names
+                        .get(owner_user_id.as_deref().unwrap_or_default())
+                        .cloned()
+                        .or_else(|| owner_user_id.as_ref().map(|_| "责任账号不可用".to_string()))
+                        .unwrap_or_else(|| "未指定".to_string()),
+                    owner_user_id,
                     status: row.status,
                     review_status: row.review_status,
                     gross_amount: totals.0,
@@ -164,6 +183,12 @@ impl PurchaseOrderService {
             .await?
             .remove(&sales_order_id)
             .ok_or_else(|| Error::Internal("采购单关联的销售单不存在".to_string()))?;
+        let owner_user_id = order.current_owner_user_id()?.to_string();
+        let owner_name = self
+            .resolve_account_names(std::slice::from_ref(&owner_user_id))
+            .await?
+            .remove(&owner_user_id)
+            .unwrap_or_else(|| "责任账号不可用".to_string());
 
         let (content_source, lines, totals) = self.resolve_current_content(&order).await?;
         let allocations = self.resolve_allocations(&order).await?;
@@ -224,6 +249,9 @@ impl PurchaseOrderService {
             purchase_type: order.purchase_type,
             payment_term_code: order.payment_term_code.clone(),
             fulfillment_responsibility: order.fulfillment_responsibility,
+            owner_user_id,
+            owner_name,
+            target_warehouse_id: order.target_warehouse_id.as_ref().map(ToString::to_string),
             payment_progress: order.payment_progress,
             invoice_progress: order.invoice_progress,
             fulfillment_progress: order.fulfillment_progress,

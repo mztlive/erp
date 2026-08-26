@@ -44,7 +44,10 @@ export type FulfillmentOperationsControllerContext = {
     stateMode?: "url" | "local"
     grantedPermissions?: readonly string[]
     permissionsReady?: boolean
+    /** W01 任务级 PROCESS 授权；权限资源授权不能替代当前任务责任。 */
+    executionAuthorized?: boolean
     onPosted?: (salesOrderId: string) => void
+    onOperationCompleted?: (operationId: string) => void
 }
 
 /**
@@ -58,7 +61,9 @@ export function useFulfillmentOperationsController({
     stateMode = "url",
     grantedPermissions,
     permissionsReady = true,
+    executionAuthorized = true,
     onPosted,
+    onOperationCompleted,
 }: FulfillmentOperationsControllerContext) {
     const router = useRouter()
     const pathname = usePathname()
@@ -119,6 +124,7 @@ export function useFulfillmentOperationsController({
         ) ??
         operations[0]
     const canExecute =
+        executionAuthorized &&
         Boolean(context?.canExecute ?? true) &&
         Boolean(operation) &&
         (!permissionChecksEnabled ||
@@ -127,12 +133,13 @@ export function useFulfillmentOperationsController({
                     grantedPermissions,
                     operation!.operationType,
                 )))
-    const executeBlockedReason =
-        permissionChecksEnabled && !permissionsReady
-            ? "正在核对履约操作权限，请稍候。"
-            : permissionChecksEnabled && operation && !canExecute
-              ? "当前账号可以查看这类单据，但没有保存或确认权限。"
-              : undefined
+    const executeBlockedReason = !executionAuthorized
+        ? "当前任务未授权给该账号处理。"
+        : permissionChecksEnabled && !permissionsReady
+          ? "正在核对履约操作权限，请稍候。"
+          : permissionChecksEnabled && operation && !canExecute
+            ? "当前账号可以查看这类单据，但没有保存或确认权限。"
+            : undefined
     const currentIndex = operation
         ? Math.max(
               0,
@@ -364,6 +371,7 @@ export function useFulfillmentOperationsController({
         setConfirmOpen,
         setLastResult,
         onPosted,
+        onOperationCompleted,
     })
 
     const validationIssues =

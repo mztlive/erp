@@ -34,13 +34,10 @@ import {
     type WorkspaceNavBadgeKey,
 } from "@/lib/workspace-registry"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useFulfillmentCountQuery } from "@/features/fulfillment-operations/queries"
 import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
 
 type NavBadgeCounts = {
     todo: number
-    delivery: number
-    warehouse: number
 }
 
 function badgeCountFor(
@@ -51,9 +48,8 @@ function badgeCountFor(
         case "todo-count":
             return counts.todo
         case "delivery-count":
-            return counts.delivery
         case "warehouse-count":
-            return counts.warehouse
+            return undefined
     }
 }
 
@@ -159,12 +155,8 @@ export function WorkspaceSidebarNav() {
     )
 
     const todoCountQuery = useWorkspaceInboxCountQuery()
-    const deliveryCountQuery = useFulfillmentCountQuery("procurement")
-    const warehouseCountQuery = useFulfillmentCountQuery("warehouse")
     const counts: NavBadgeCounts = {
         todo: todoCountQuery.data?.mine ?? 0,
-        delivery: deliveryCountQuery.data?.pending ?? 0,
-        warehouse: warehouseCountQuery.data?.pending ?? 0,
     }
 
     if (profileQuery.isPending) {

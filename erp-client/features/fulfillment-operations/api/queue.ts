@@ -1,6 +1,6 @@
 /**
- * W09 履约单据处理 · 队列查询：按角色拉取各类 DRAFT 单据，投影为工作单并
- * 在客户端完成筛选/排序/明细补全。权限不匹配时返回明确的无权限空态。
+ * W01 履约任务作业面 · 队列查询：普通聚合视图按角色拉取 DRAFT 单据；
+ * 工作项入口按冻结的业务对象类型和主键精确读取。权限不匹配时返回明确空态。
  */
 
 import { apiGet, type Page } from "@/lib/api"
@@ -24,12 +24,18 @@ import {
     receiptToOperation,
     serviceToOperation,
     type BackendDelivery,
+    type BackendDeliveryDetail,
     type BackendElectronicDelivery,
     type BackendPurchaseReceipt,
+    type BackendPurchaseReceiptDetail,
     type BackendServiceFulfillment,
     type BackendWarehouse,
 } from "./documents"
-import { hydrateOperationDetail } from "./hydrate"
+import {
+    deliveryDetailToOperation,
+    hydrateOperationDetail,
+    receiptDetailToOperation,
+} from "./hydrate"
 
 const QUEUE_PAGE_SIZE = 100
 const MAX_QUEUE_PAGES = 50
@@ -66,6 +72,8 @@ export type FulfillmentQueueFilters = {
     gate?: "blocked" | "satisfied"
     salesOrderId?: string
     purchaseOrderId?: string
+    /** W01 任务只允许加载该任务绑定的履约对象。 */
+    operationId?: string
     currentOperationId?: string
     /**
      * 按采购单筛选时，反查到的来源销售单。
@@ -108,6 +116,9 @@ function matchOperation(
     filters: FulfillmentQueueFilters,
     roleTypes: readonly FulfillmentOperationType[],
 ): boolean {
+    if (filters.operationId && operation.operationId !== filters.operationId) {
+        return false
+    }
     if (!roleTypes.includes(operation.operationType)) return false
     if (
         filters.operationTypes &&
@@ -211,6 +222,140 @@ async function resolveLinkedPurchaseOrderIds(
     }
 }
 
+type ResolvedFulfillmentRole = ReturnType<typeof resolveRole>
+
+async function loadExactOperation(
+    operationId: string,
+    operationType: FulfillmentOperationType,
+): Promise<FulfillmentOperation | undefined> {
+    const encodedId = encodeURIComponent(operationId)
+    switch (operationType) {
+        case "RECEIPT": {
+            const detail = await apiGet<BackendPurchaseReceiptDetail>(
+                `/admin/purchase-receipts/${encodedId}`,
+            )
+            return detail.receipt.status === "DRAFT"
+                ? receiptDetailToOperation(detail)
+                : undefined
+        }
+        case "WAREHOUSE_SHIP":
+        case "SUPPLIER_DIRECT": {
+            const detail = await apiGet<BackendDeliveryDetail>(
+                `/admin/deliveries/${encodedId}`,
+            )
+            return detail.delivery.status === "DRAFT"
+                ? deliveryDetailToOperation(detail)
+                : undefined
+        }
+        case "ELECTRONIC": {
+            const delivery = await apiGet<BackendElectronicDelivery>(
+                `/admin/electronic-deliveries/${encodedId}`,
+            )
+            return delivery.status === "DRAFT"
+                ? electronicToOperation(delivery)
+                : undefined
+        }
+        case "SERVICE": {
+            const fulfillment = await apiGet<BackendServiceFulfillment>(
+                `/admin/service-fulfillments/${encodedId}`,
+            )
+            return fulfillment.status === "DRAFT"
+                ? serviceToOperation(fulfillment)
+                : undefined
+        }
+    }
+}
+
+function exactOperationQueueView(
+    filters: FulfillmentQueueFilters,
+    role: ResolvedFulfillmentRole,
+    operationType: FulfillmentOperationType,
+    operation: FulfillmentOperation | undefined,
+    emptyReason: FulfillmentQueueView["emptyReason"],
+): FulfillmentQueueView {
+    const warehouseOptions =
+        operation?.source.warehouseId && operation.source.warehouseLabel
+            ? [
+                  {
+                      value: operation.source.warehouseId,
+                      label: operation.source.warehouseLabel,
+                  },
+              ]
+            : []
+    return {
+        preferences: { autoNextDefault: filters.role !== "warehouse" },
+        context: {
+            position: operation ? 1 : 0,
+            total: operation ? 1 : 0,
+            currentOperationId: operation?.operationId,
+            filterSummary: filterSummary(filters, warehouseOptions),
+            warehouseOptions,
+            visibleTypes: [operationType],
+            roleLabel: role.label,
+            viewerLabel: role.userLabel,
+            canExecute: role.canExecute,
+            snapshotUpdatedAt: nowIso(),
+        },
+        metrics: [
+            {
+                operationType,
+                label: `待${OPERATION_TYPE_SHORT[operationType]}`,
+                count: operation ? 1 : 0,
+                visible: true,
+            },
+        ],
+        operations: operation ? [operation] : [],
+        current: operation,
+        emptyReason: operation ? undefined : emptyReason,
+    }
+}
+
+async function fetchExactOperationQueue(
+    filters: FulfillmentQueueFilters,
+    role: ResolvedFulfillmentRole,
+    operationType: FulfillmentOperationType,
+): Promise<FulfillmentQueueView> {
+    try {
+        const operation = await loadExactOperation(
+            filters.operationId!,
+            operationType,
+        )
+        if (!operation) {
+            return exactOperationQueueView(
+                filters,
+                role,
+                operationType,
+                undefined,
+                "NO_OPERATIONS",
+            )
+        }
+        const hasFrozenIdentity =
+            operation.operationId === filters.operationId &&
+            operation.operationType === operationType
+        const matchesFilters =
+            hasFrozenIdentity &&
+            matchOperation(operation, filters, [operationType])
+        return exactOperationQueueView(
+            filters,
+            role,
+            operationType,
+            matchesFilters ? operation : undefined,
+            "FILTER_NO_RESULT",
+        )
+    } catch (error) {
+        if (isApiError(error) && error.status === 403) {
+            return exactOperationQueueView(
+                filters,
+                role,
+                operationType,
+                undefined,
+                "NO_PERMISSION",
+            )
+        }
+        throw error
+    }
+}
+
 export async function fetchFulfillmentQueue(
     filters: FulfillmentQueueFilters,
 ): Promise<FulfillmentQueueView> {
@@ -243,6 +388,24 @@ export async function fetchFulfillmentQueue(
             operations: [],
             emptyReason: "NO_PERMISSION",
         }
+    }
+
+    if (filters.operationId) {
+        if (!filters.operationTypes || filters.operationTypes.length !== 1) {
+            const operationType = role.types[0]
+            return exactOperationQueueView(
+                filters,
+                role,
+                operationType,
+                undefined,
+                "FILTER_NO_RESULT",
+            )
+        }
+        return fetchExactOperationQueue(
+            filters,
+            role,
+            filters.operationTypes[0],
+        )
     }
 
     // Load draft documents for types visible to role

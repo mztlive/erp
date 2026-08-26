@@ -185,6 +185,8 @@ export type WarehouseDto = {
     id: string
     warehouse_code: string
     status: EnableStatus
+    inbound_handler_user_id?: string | null
+    outbound_handler_user_id?: string | null
     created_at: number
     version: number
 }

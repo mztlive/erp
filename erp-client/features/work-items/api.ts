@@ -6,6 +6,7 @@ import type {
     WorkItemConflictCode,
     WorkItemConflictDataDto,
     WorkItemResponsibilityCommand,
+    WorkItemReassignCandidate,
     WorkItemScope,
 } from "./types"
 
@@ -155,6 +156,14 @@ export function getWorkItemStats(
 /** 查询单条权限安全的最新任务投影。 */
 export const getWorkItem = (workItemId: string): Promise<WorkItemDto> =>
     apiGet<WorkItemDto>(`/admin/work-items/${encodeURIComponent(workItemId)}`)
+
+/** 查询当前管理范围内、可接收该任务及其采购级联任务的具体账号。 */
+export const getWorkItemReassignCandidates = (
+    workItemId: string,
+): Promise<WorkItemReassignCandidate[]> =>
+    apiGet<WorkItemReassignCandidate[]>(
+        `/admin/work-items/${encodeURIComponent(workItemId)}/reassign-candidates`,
+    )
 
 /** 发送一条责任命令；任务版本只能来自最近一次服务端查询。 */
 export function submitWorkItemResponsibility(

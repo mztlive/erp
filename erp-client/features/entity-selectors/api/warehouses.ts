@@ -9,6 +9,8 @@ type WarehouseDto = Readonly<{
     id: string
     warehouse_code: string
     status: string
+    inbound_handler_user_id?: string | null
+    outbound_handler_user_id?: string | null
 }>
 
 type WarehouseRevisionDto = Readonly<{
@@ -56,11 +58,16 @@ export async function searchWarehouses(
         sort_by: "warehouse_code",
         sort_dir: "asc",
     })
-    return Promise.all(page.items.map(warehouseItem))
+    const selectable =
+        input.purpose === "purchase-receipt"
+            ? page.items.filter((row) => row.inbound_handler_user_id?.trim())
+            : page.items
+    return Promise.all(selectable.map(warehouseItem))
 }
 
 export async function fetchWarehouseOption(
     warehouseId: string,
+    purpose: EntitySearch["purpose"] = "filter",
 ): Promise<WarehouseComboboxItem | null> {
     if (!warehouseId) return null
     const page = await apiGet<Page<WarehouseDto>>("/admin/warehouses", {
@@ -69,5 +76,11 @@ export async function fetchWarehouseOption(
         page_size: 100,
     })
     const row = page.items.find((item) => item.id === warehouseId)
+    if (
+        purpose === "purchase-receipt" &&
+        !row?.inbound_handler_user_id?.trim()
+    ) {
+        return null
+    }
     return row ? warehouseItem(row) : null
 }

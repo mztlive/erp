@@ -203,7 +203,9 @@ pub struct PurchaseOrderListItemView {
     pub purchase_type: PurchaseType,
     /// 付款条件代码（实体 `payment_term_code`）。
     pub payment_term_code: String,
-    /// 采购单负责人展示名（创建人账号姓名；账号不存在时回落账号 ID）。
+    /// 当前采购单负责人账号 ID。
+    pub owner_user_id: Option<String>,
+    /// 当前采购单负责人展示名（账号不存在时回落账号 ID）。
     pub owner_name: String,
     /// 主状态。
     pub status: PurchaseOrderStatus,
@@ -385,6 +387,12 @@ pub struct PurchaseOrderCenterView {
     pub payment_term_code: String,
     /// 履约责任。
     pub fulfillment_responsibility: FulfillmentResponsibility,
+    /// 当前采购单责任人账号 ID。
+    pub owner_user_id: String,
+    /// 当前采购单责任人展示名。
+    pub owner_name: String,
+    /// 仓库履约冻结的目标收货仓。
+    pub target_warehouse_id: Option<String>,
     /// 付款进度。
     pub payment_progress: ProgressStatus,
     /// 收票进度。
@@ -703,6 +711,10 @@ pub struct CreatePurchaseOrderFromBasisRequest {
     /// 付款条件（受控码表代码）。
     #[validate(custom(function = "non_blank", message = "付款条件不能为空"))]
     pub payment_term_code: String,
+    /// 仓库履约的目标收货仓；非仓库履约必须为空。
+    #[serde(default)]
+    #[validate(length(min = 1, max = 128, message = "目标仓库长度必须在1-128个字符之间"))]
+    pub target_warehouse_id: Option<String>,
     /// 本次采购明细；允许只创建依据中的部分行或部分数量。
     #[validate(length(min = 1, max = 200, message = "本次采购明细必须在1-200行之间"), nested)]
     pub lines: Vec<CreatePurchaseOrderLineRequest>,
@@ -739,6 +751,10 @@ pub struct SourcingLineAssignment {
     /// 供给来源；旧客户端缺省为供应商采购。
     #[serde(default)]
     pub source_type: SupplySourceType,
+    /// 采购且由仓库履约时的目标收货仓；其他供给来源必须为空。
+    #[serde(default)]
+    #[validate(length(min = 1, max = 128, message = "目标仓库长度必须在1-128个字符之间"))]
+    pub target_warehouse_id: Option<String>,
     /// 本次分配数量；事务内必须大于零且不超过最新可分配数量。
     #[validate(custom(function = "non_blank", message = "本次分配数量不能为空"))]
     pub quantity: String,

@@ -46,6 +46,12 @@ pub struct WarehouseRow {
     pub warehouse_code: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 入库经办人。
+    #[serde(default)]
+    pub inbound_handler_user_id: Option<String>,
+    /// 仓发经办人。
+    #[serde(default)]
+    pub outbound_handler_user_id: Option<String>,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -629,6 +635,8 @@ fn warehouse_projection() -> Document {
         "id": 1,
         "warehouse_code": 1,
         "status": 1,
+        "inbound_handler_user_id": 1,
+        "outbound_handler_user_id": 1,
         "version": 1,
         "created_at": 1,
     }

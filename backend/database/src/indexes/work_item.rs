@@ -85,6 +85,7 @@ fn is_current_open_object_type_index(index: &IndexModel) -> bool {
 fn work_item_indexes() -> Vec<IndexModel> {
     vec![
         unique_open_object_type_index(),
+        unique_open_fulfillment_object_index(),
         unique_approval_execution_index(),
         named_index(
             "idx_work_items_mine",
@@ -149,6 +150,27 @@ fn unique_open_object_type_index() -> IndexModel {
         .build()
 }
 
+/// 履约对象不允许通过不同责任键并存多条开放任务。
+fn unique_open_fulfillment_object_index() -> IndexModel {
+    IndexModel::builder()
+        .keys(doc! {
+            "business_object_type": 1,
+            "business_object_id": 1,
+            "work_item_type": 1,
+        })
+        .options(
+            IndexOptions::builder()
+                .name("uk_work_items_open_fulfillment_object".to_string())
+                .unique(true)
+                .partial_filter_expression(doc! {
+                    "status": "OPEN",
+                    "work_item_type": "FULFILLMENT_OPERATION",
+                })
+                .build(),
+        )
+        .build()
+}
+
 fn unique_approval_execution_index() -> IndexModel {
     IndexModel::builder()
         .keys(doc! { "approval_node_execution_id": 1 })
@@ -188,6 +210,24 @@ mod tests {
             Some(doc! {
                 "status": "OPEN",
                 "owner_user_id": { "$type": "string" },
+            })
+        );
+
+        let fulfillment = index_named(&indexes, "uk_work_items_open_fulfillment_object");
+        assert_eq!(
+            fulfillment.keys,
+            doc! {
+                "business_object_type": 1,
+                "business_object_id": 1,
+                "work_item_type": 1,
+            }
+        );
+        assert_eq!(fulfillment.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            fulfillment.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! {
+                "status": "OPEN",
+                "work_item_type": "FULFILLMENT_OPERATION",
             })
         );
 

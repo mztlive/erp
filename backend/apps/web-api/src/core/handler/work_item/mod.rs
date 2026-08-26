@@ -14,8 +14,8 @@ use services::{
     audit::AuditActor,
     work_item::{
         CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflict, WorkItemListParams,
-        WorkItemMutationOutcome, WorkItemPageView, WorkItemService, WorkItemStatsParams, WorkItemStatsView,
-        WorkItemView,
+        WorkItemMutationOutcome, WorkItemPageView, WorkItemReassignCandidateView, WorkItemService,
+        WorkItemStatsParams, WorkItemStatsView, WorkItemView,
     },
 };
 
@@ -263,6 +263,28 @@ pub async fn work_item_detail(
         .work_item_detail(&id, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_view(view)))
+}
+
+#[permission_macros::permission(
+    group = "统一待办",
+    group_desc = "待办队列与责任处理",
+    desc = "查询非审批任务可转交人员",
+    resource = "work_item",
+    action = "reassign"
+)]
+/// 查询开放非审批任务当前合格的转交候选人。
+///
+/// # 返回
+/// 返回经账号状态、完整操作权限、管理范围和采购级联约束过滤后的具体账号。
+pub async fn work_item_reassign_candidates(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<Vec<WorkItemReassignCandidateView>> {
+    let candidates = WorkItemService::new(state.db(), state.rbac())
+        .reassign_candidates(&id, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(candidates))
 }
 
 #[permission_macros::permission(

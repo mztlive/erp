@@ -29,6 +29,7 @@ import {
     secsToIso,
     SEGREGATION_NOTE,
 } from "@/features/inventory/api/display"
+import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 import type {
     BackendStockAdjustment,
     BackendStockAdjustmentDetail,
@@ -129,7 +130,7 @@ export function mapMovement(
         sourceHref:
             sourceDocType === "PURCHASE_RECEIPT" ||
             sourceDocType === "WAREHOUSE_DISPATCH"
-                ? `/fulfillment?lane=warehouse&sourceDocId=${encodeURIComponent(m.source_document_id)}&warehouseId=${encodeURIComponent(m.warehouse_id)}&skuId=${encodeURIComponent(m.sku_id)}`
+                ? fulfillmentTasksHref(m.source_document_id)
                 : undefined,
     }
 }
@@ -161,7 +162,7 @@ export function mapReservation(
         statusLabel,
         statusTone,
         establishedAt: "", // backend_gap: no established_at
-        fulfillmentHref: `/fulfillment?lane=warehouse&type=warehouse_ship&scope=mine&warehouseId=${encodeURIComponent(r.warehouse_id)}&from=W10&returnTo=${encodeURIComponent(`/inventory?warehouseId=${r.warehouse_id}&skuId=${r.sku_id}`)}`,
+        fulfillmentHref: fulfillmentTasksHref(r.warehouse_id),
     }
 }
 

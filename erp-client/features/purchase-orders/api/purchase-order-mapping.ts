@@ -64,6 +64,7 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         fulfillmentResponsibility: "WAREHOUSE",
         paymentTermCode: row.payment_term_code ?? "",
         paymentTermLabel: paymentTermLabel(row.payment_term_code ?? ""),
+        ownerUserId: row.owner_user_id ?? undefined,
         ownerName: row.owner_name?.trim() || "—",
         grossAmount: row.gross_amount ?? "0",
         netAmount: row.net_amount ?? "0",
@@ -160,7 +161,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             ),
             paymentTermCode: center.payment_term_code,
             paymentTermLabel: paymentTermLabel(center.payment_term_code),
-            ownerName: "—",
+            ownerUserId: center.owner_user_id,
+            ownerName: center.owner_name.trim() || "责任账号不可用",
+            targetWarehouseId: center.target_warehouse_id ?? undefined,
             submittedBy: undefined,
             submittedAt: undefined,
             expectedDate: lines.find((l) => l.expectedDeliveryDate)

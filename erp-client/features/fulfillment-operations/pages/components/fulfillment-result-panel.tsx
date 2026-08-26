@@ -22,6 +22,7 @@ export type FulfillmentResultPanelProps = {
     onContinueWarehouseShip?: (salesOrderId: string) => void
     /** 嵌入销售单详情时原地展开客户验收。 */
     onOpenAcceptance?: () => void
+    showNext?: boolean
 }
 
 /**
@@ -39,6 +40,7 @@ export function FulfillmentResultPanel({
     onNext,
     onContinueWarehouseShip,
     onOpenAcceptance,
+    showNext = true,
 }: FulfillmentResultPanelProps) {
     if (!lastResult) return null
 
@@ -126,7 +128,8 @@ export function FulfillmentResultPanel({
                             </Button>
                         )
                     ) : null}
-                    {lastResult.stayOnItem === false ||
+                    {!showNext ||
+                    lastResult.stayOnItem === false ||
                     lastResult.status === "blocked" ? null : (
                         <Button type="button" size="sm" onClick={onNext}>
                             下一条

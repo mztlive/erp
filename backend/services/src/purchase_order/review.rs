@@ -325,13 +325,11 @@ async fn persist_formalized_order(
                         .create_cost_entry_with_allocations(entry, Vec::new(), session)
                         .await?;
                 }
-                // 入仓采购单生效后自动生成采购入库草稿：履约工作面（W09）按
-                // DRAFT 采购入库单投影「入库」待办，仓储确认后过账入库。
+                // 入仓采购单生效后自动生成采购入库草稿与 W01 指定到人的入库任务。
                 if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
                     create_receipt_draft_for_order(&db, &order_mut, &revision_lines, session).await?;
                 } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
-                    // 供应商直发同样需要履约待办：按 DRAFT 发货单（直发类型）
-                    // 投影「代发」待办，采购在履约工作面登记物流后过账发货。
+                    // 供应商直发草稿继续由采购单当前责任人处理。
                     create_delivery_draft_for_order(
                         &db,
                         &order_mut,
@@ -341,8 +339,7 @@ async fn persist_formalized_order(
                     )
                     .await?;
                 } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
-                    // 线下服务同样需要履约待办：按 DRAFT 服务履约记录投影
-                    // 「服务」待办，采购在履约工作面登记服务事实后确认完成。
+                    // 线下服务草稿继续由采购单当前责任人处理。
                     create_service_fulfillment_draft_for_order(
                         &db,
                         &order_mut,
@@ -360,25 +357,24 @@ async fn persist_formalized_order(
         .await
 }
 
-/// 为生效采购单创建采购入库草稿（默认取最早启用的仓库；行按版本行全额合格）。
+/// 为生效采购单按创建时冻结的目标仓库创建采购入库草稿。
 async fn create_receipt_draft_for_order(
     db: &mongodb::Database,
     order: &PurchaseOrder,
     revision_lines: &[entities::purchase_order::PurchaseOrderRevisionLine],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let warehouse = db
-        .purchase_order()
-        .find_first_active_warehouse(executor)
-        .await?
-        .ok_or_else(|| Error::BusinessLogicError("缺少启用仓库，无法生成采购入库草稿".to_string()))?;
+    let warehouse_id = order
+        .target_warehouse_for_receipt()
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))?
+        .clone();
     let receipt_id = PurchaseReceiptId::new(next_id());
     let receipt = PurchaseReceipt::new(
         receipt_id.clone(),
         PurchaseReceiptData {
             receipt_no: format!("GRN-{}", receipt_id.as_ref()),
             purchase_order_id: entities::ids::PurchaseOrderId::new(order.base.id.clone()),
-            warehouse_id: entities::ids::WarehouseId::new(warehouse.base.id.clone()),
+            warehouse_id,
         },
     )?;
     let zero = Quantity::from_str("0").map_err(|error| Error::Internal(error.to_string()))?;
@@ -409,13 +405,19 @@ async fn create_receipt_draft_for_order(
     db.fulfillment()
         .create_purchase_receipt_with_lines(&receipt, &lines, executor)
         .await?;
+    crate::fulfillment::task::ensure_fulfillment_task(
+        db,
+        crate::fulfillment::task::FulfillmentTaskObject::PurchaseReceipt(&receipt),
+        executor,
+    )
+    .await?;
     Ok(())
 }
 
 /// 为生效供应商直发采购单创建发货草稿（§6.7 直发）。
 ///
 /// 行按版本行全额生成，引用同一事务内已创建的「采购行→销售行」分配
-/// （`DeliveryLine` 行级校验要求直发必填分配）；草稿进入履约工作面（W09）
+/// （`DeliveryLine` 行级校验要求直发必填分配）；草稿进入 W01 履约任务作业面
 /// 「交付与代发」通道，采购登记物流后过账发货。
 async fn create_delivery_draft_for_order(
     db: &mongodb::Database,
@@ -477,6 +479,12 @@ async fn create_delivery_draft_for_order(
     db.fulfillment()
         .create_delivery_with_lines(&delivery, &lines, executor)
         .await?;
+    crate::fulfillment::task::ensure_fulfillment_task(
+        db,
+        crate::fulfillment::task::FulfillmentTaskObject::Delivery(&delivery),
+        executor,
+    )
+    .await?;
     Ok(())
 }
 
@@ -487,7 +495,7 @@ const SERVICE_FULFILLMENT_FINGERPRINT_KEY: &[u8] = b"erp-service-fulfillment-dra
 /// 为生效线下服务采购单创建服务履约草稿（§6.7 服务）。
 ///
 /// 服务履约记录按采购版本行逐行生成（单记录单明细），引用同一事务内已创建
-/// 的「采购行→销售行」分配；草稿进入履约工作面（W09）「交付与代发」通道的
+/// 的「采购行→销售行」分配；草稿进入 W01 履约任务作业面的
 /// 服务类型，采购登记服务地点/时间/结果后确认完成。交付对象与服务地点为
 /// 占位快照（UI 不采集交付对象；确认后仍以占位值落库）。
 async fn create_service_fulfillment_draft_for_order(
@@ -550,6 +558,12 @@ async fn create_service_fulfillment_draft_for_order(
         )
         .map_err(Error::Logic)?;
         db.service_fulfillments().create(&record, executor).await?;
+        crate::fulfillment::task::ensure_fulfillment_task(
+            db,
+            crate::fulfillment::task::FulfillmentTaskObject::ServiceFulfillment(&record),
+            executor,
+        )
+        .await?;
     }
     Ok(())
 }

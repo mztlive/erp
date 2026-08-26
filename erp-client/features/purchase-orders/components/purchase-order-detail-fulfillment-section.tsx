@@ -14,6 +14,7 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import { Button } from "@/components/ui/button"
+import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
@@ -25,7 +26,6 @@ export function PurchaseOrderDetailFulfillmentSection({
     gate,
     canFulfill,
     fulfillBlocker,
-    baseHref,
     w12PayHref,
 }: {
     order: PurchaseOrderCenterView
@@ -35,7 +35,6 @@ export function PurchaseOrderDetailFulfillmentSection({
     fulfillBlocker:
         | PurchaseOrderCenterView["actionBlockers"][number]
         | undefined
-    baseHref: string
     w12PayHref: string
 }) {
     return (
@@ -81,7 +80,9 @@ export function PurchaseOrderDetailFulfillmentSection({
                         type="button"
                         render={
                             <Link
-                                href={`/fulfillment?lane=procurement&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`}
+                                href={fulfillmentTasksHref(
+                                    order.identity.purchaseOrderId,
+                                )}
                             />
                         }
                     >

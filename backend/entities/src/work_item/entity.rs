@@ -31,6 +31,8 @@ const CLOSE_REASON_MAX_LEN: usize = 512;
 pub enum WorkItemType {
     /// 销售单生效后的供给分配（现有库存优先，缺口采购）。
     ProcurementOrderCreation,
+    /// 入库、仓发、供应商直发、电子交付或线下服务的具体履约操作。
+    FulfillmentOperation,
     /// 采购单财务审核。
     PurchaseOrderReview,
     /// 销售变更履约影响复核。
@@ -70,6 +72,14 @@ pub enum WorkItemBriefObjectKind {
     ProcurementConfirmation,
     /// 采购单。
     PurchaseOrder,
+    /// 采购入库单。
+    PurchaseReceipt,
+    /// 发货单。
+    Delivery,
+    /// 电子交付记录。
+    ElectronicDelivery,
+    /// 线下服务履约记录。
+    ServiceFulfillment,
     /// 采购变更单。
     PurchaseChangeOrder,
     /// 销售变更单。
@@ -269,6 +279,30 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         read_permission: "purchase_order:create",
     },
     WorkItemBriefRelation {
+        work_item_type: WorkItemType::FulfillmentOperation,
+        object_kind: WorkItemBriefObjectKind::PurchaseReceipt,
+        business_object_type: "purchase_receipt",
+        read_permission: "purchase_receipt:post",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::FulfillmentOperation,
+        object_kind: WorkItemBriefObjectKind::Delivery,
+        business_object_type: "delivery",
+        read_permission: "delivery:post",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::FulfillmentOperation,
+        object_kind: WorkItemBriefObjectKind::ElectronicDelivery,
+        business_object_type: "electronic_delivery",
+        read_permission: "electronic_delivery:confirm",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::FulfillmentOperation,
+        object_kind: WorkItemBriefObjectKind::ServiceFulfillment,
+        business_object_type: "service_fulfillment",
+        read_permission: "service_fulfillment:confirm",
+    },
+    WorkItemBriefRelation {
         work_item_type: WorkItemType::ImportBusinessConfirmation,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
@@ -458,6 +492,7 @@ impl WorkItemType {
     pub fn label(&self) -> &'static str {
         match self {
             Self::ProcurementOrderCreation => "供给分配",
+            Self::FulfillmentOperation => "履约处理",
             Self::PurchaseOrderReview => "采购单财务审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
             Self::SalesChangeFinanceReview => "销售变更财务影响复核",
@@ -482,6 +517,7 @@ impl WorkItemType {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
+            Self::FulfillmentOperation => "FULFILLMENT_OPERATION",
             Self::PurchaseOrderReview => "PURCHASE_ORDER_REVIEW",
             Self::SalesChangeImpactReview => "SALES_CHANGE_IMPACT_REVIEW",
             Self::SalesChangeFinanceReview => "SALES_CHANGE_FINANCE_REVIEW",
@@ -528,6 +564,7 @@ impl WorkItemType {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
             Self::ProcurementOrderCreation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
+            Self::FulfillmentOperation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
             Self::ImportBusinessConfirmation
             | Self::PurchaseOrderReview
             | Self::SalesChangeImpactReview
@@ -551,6 +588,58 @@ impl WorkItemType {
     /// 供给分配任务返回 `true`。
     pub fn is_procurement_order_creation(self) -> bool {
         self == Self::ProcurementOrderCreation
+    }
+
+    /// 判断任务是否为具体履约操作。
+    ///
+    /// # 返回
+    /// 入库、发货、电子交付或服务履约任务返回 `true`。
+    pub fn is_fulfillment_operation(self) -> bool {
+        self == Self::FulfillmentOperation
+    }
+
+    /// 返回具体履约对象在 W01 完整执行所需的权限集合。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 履约任务固定对象类型
+    ///
+    /// # 返回
+    /// 已注册履约对象返回完整权限；非履约任务或未知对象返回 `None`。
+    ///
+    /// # 错误
+    /// 无；调用方必须将 `None` 作为未注册合同并失败关闭。
+    pub fn fulfillment_execution_permissions(
+        self,
+        business_object_type: &str,
+    ) -> Option<&'static [&'static str]> {
+        if !self.is_fulfillment_operation() {
+            return None;
+        }
+        match business_object_type {
+            "purchase_receipt" => Some(&[
+                "purchase_receipt:list",
+                "purchase_receipt:detail",
+                "purchase_receipt:update",
+                "purchase_receipt:post",
+            ]),
+            "delivery" => Some(&[
+                "delivery:list",
+                "delivery:detail",
+                "delivery:update",
+                "delivery:post",
+            ]),
+            "electronic_delivery" => Some(&["electronic_delivery:list", "electronic_delivery:confirm"]),
+            "service_fulfillment" => Some(&["service_fulfillment:list", "service_fulfillment:confirm"]),
+            _ => None,
+        }
+    }
+
+    /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
+    ///
+    /// # 返回
+    /// 供给分配与履约操作返回 `true`；这些任务不依赖团队池或创建人回退。
+    pub fn uses_explicit_owner_authorization(self) -> bool {
+        matches!(self, Self::ProcurementOrderCreation | Self::FulfillmentOperation)
     }
 
     /// 判断任务是否为通用单据审批。
@@ -982,6 +1071,9 @@ impl WorkItem {
             && (responsibility_key.is_none() || responsibility_scope_ids.is_empty())
         {
             return Err(Error::from("供给分配任务必须冻结责任键和责任行范围"));
+        }
+        if normalized.work_item_type == WorkItemType::FulfillmentOperation && responsibility_key.is_none() {
+            return Err(Error::from("履约任务必须冻结责任键"));
         }
         if normalized.work_item_type != WorkItemType::ProcurementOrderCreation
             && !responsibility_scope_ids.is_empty()
@@ -1776,6 +1868,40 @@ mod tests {
             "sales-lines:key",
         )
         .is_err());
+    }
+
+    #[test]
+    fn fulfillment_task_cannot_bypass_frozen_responsibility_key() {
+        let data = WorkItemData {
+            work_item_type: WorkItemType::FulfillmentOperation,
+            business_object_type: "delivery".to_string(),
+            owner_role: "warehouse_outbound_handler".to_string(),
+            reason_code: Some("WAREHOUSE_DELIVERY_READY".to_string()),
+            ..direct_data()
+        };
+        assert!(WorkItem::new_at(
+            WorkItemId::new("wi-fulfillment-missing-key"),
+            data.clone(),
+            Instant::from_unix_secs(100),
+        )
+        .is_err());
+        let item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-fulfillment"),
+            data,
+            "warehouse:wh-1:warehouse_ship",
+        )
+        .unwrap();
+        assert_eq!(item.responsibility_key(), Some("warehouse:wh-1:warehouse_ship"));
+        assert_eq!(
+            WorkItemType::FulfillmentOperation.fulfillment_execution_permissions("electronic_delivery"),
+            Some(&["electronic_delivery:list", "electronic_delivery:confirm"] as &[&str])
+        );
+        assert!(WorkItemType::FulfillmentOperation
+            .fulfillment_execution_permissions("unknown")
+            .is_none());
+        assert!(WorkItemType::DocumentApproval
+            .fulfillment_execution_permissions("delivery")
+            .is_none());
     }
 
     #[test]

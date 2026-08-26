@@ -306,7 +306,7 @@ pub async fn delivery_post(
     resource = "electronic_delivery",
     action = "list"
 )]
-/// 查询电子交付记录列表（W09 电子交付视图）。
+/// 查询电子交付记录列表（W01 履约任务聚合视图）。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -321,6 +321,30 @@ pub async fn electronic_delivery_list(
     let page = service(&state).electronic_delivery_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "履约",
+    group_desc = "采购入库、发货、交付、服务与客户验收管理",
+    desc = "查询电子交付记录详情",
+    resource = "electronic_delivery",
+    action = "list"
+)]
+/// 按主键查询电子交付记录。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 电子交付记录主键
+///
+/// # 返回
+/// 返回电子交付记录视图。
+pub async fn electronic_delivery_detail(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<ElectronicDeliveryView> {
+    let view = service(&state).electronic_delivery_detail(&id).await?;
+
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
@@ -382,7 +406,7 @@ pub async fn electronic_delivery_confirm(
     resource = "service_fulfillment",
     action = "list"
 )]
-/// 查询线下服务履约记录列表（W09 服务视图）。
+/// 查询线下服务履约记录列表（W01 履约任务聚合视图）。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -397,6 +421,30 @@ pub async fn service_fulfillment_list(
     let page = service(&state).service_fulfillment_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "履约",
+    group_desc = "采购入库、发货、交付、服务与客户验收管理",
+    desc = "查询服务履约记录详情",
+    resource = "service_fulfillment",
+    action = "list"
+)]
+/// 按主键查询线下服务履约记录。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 服务履约记录主键
+///
+/// # 返回
+/// 返回服务履约记录视图。
+pub async fn service_fulfillment_detail(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<ServiceFulfillmentView> {
+    let view = service(&state).service_fulfillment_detail(&id).await?;
+
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(

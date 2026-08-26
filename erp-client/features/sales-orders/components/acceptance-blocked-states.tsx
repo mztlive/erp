@@ -4,6 +4,7 @@ import Link from "next/link"
 
 import { BusinessEmptyState } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 
 export function AcceptanceBlockedState({
     isCard,
@@ -39,8 +40,7 @@ export function AcceptanceNoFactsState() {
             description="请先完成收货/发货或服务交付登记；也可以查看历史验收。"
             action={
                 <Button
-                    /* 销售只读，没有归属岗位：不带 lane，走中性页头 */
-                    render={<Link href="/fulfillment" />}
+                    render={<Link href={fulfillmentTasksHref()} />}
                     variant="outline"
                 >
                     去发货/交付

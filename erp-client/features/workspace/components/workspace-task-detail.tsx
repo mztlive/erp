@@ -43,6 +43,7 @@ import {
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
 import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
@@ -56,9 +57,44 @@ export function WorkspaceTaskDetail({
     item,
     canReadSensitive = true,
     onDecisionApplied,
+    grantedPermissions = [],
+    onTaskCompleted,
 }: {
     item: WorkspaceWorkItem
     canReadSensitive?: boolean
+    onDecisionApplied?: (
+        view: ApprovalCommandView,
+        completedWorkItemId: string,
+    ) => void
+    grantedPermissions?: readonly string[]
+    onTaskCompleted?: (workItemId: string) => void
+}) {
+    if (item.workItemType === "FULFILLMENT_OPERATION") {
+        return (
+            <WorkspaceFulfillmentTask
+                item={item}
+                grantedPermissions={grantedPermissions}
+                onTaskCompleted={(workItemId) => onTaskCompleted?.(workItemId)}
+            />
+        )
+    }
+
+    return (
+        <WorkspaceDocumentTaskDetail
+            item={item}
+            canReadSensitive={canReadSensitive}
+            onDecisionApplied={onDecisionApplied}
+        />
+    )
+}
+
+function WorkspaceDocumentTaskDetail({
+    item,
+    canReadSensitive,
+    onDecisionApplied,
+}: {
+    item: WorkspaceWorkItem
+    canReadSensitive: boolean
     onDecisionApplied?: (
         view: ApprovalCommandView,
         completedWorkItemId: string,

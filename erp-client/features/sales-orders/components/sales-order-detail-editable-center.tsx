@@ -45,7 +45,8 @@ export function SalesOrderEditableCenter({
                         </span>
                         {fromQueue ? (
                             <span>
-                                {fromWorkspace === "W09"
+                                {fromWorkspace === "W01" ||
+                                fromWorkspace === "W09"
                                     ? "从履约处理打开 · 处理完可点返回，回到列表原位"
                                     : fromWorkspace === "W08"
                                       ? "从采购单打开 · 处理完可点返回，回到列表原位"

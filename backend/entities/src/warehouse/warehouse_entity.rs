@@ -11,12 +11,24 @@ use crate::common::stable::StableBase;
 use crate::common::state::ensure_transition;
 use crate::errors::{Error, Result};
 use crate::ids::WarehouseId;
-use crate::validation::normalize_required_text;
+use crate::validation::{normalize_optional_text, normalize_required_text};
 use crate::warehouse::status::EnableStatus;
 use crate::warehouse::warehouse_revision::WarehouseRevision;
 
 /// 仓库代码最大长度。
 const WAREHOUSE_CODE_MAX_LEN: usize = 64;
+/// 仓储经办人账号 ID 最大长度。
+const HANDLER_USER_ID_MAX_LEN: usize = 128;
+
+/// 仓库履约责任类型。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum WarehouseFulfillmentOperation {
+    /// 采购到货入库。
+    Receipt,
+    /// 公司仓发货。
+    WarehouseShip,
+}
 
 /// 仓库创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -25,6 +37,10 @@ pub struct WarehouseData {
     pub warehouse_code: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 入库经办人；旧数据允许为空，生成任务时失败关闭。
+    pub inbound_handler_user_id: Option<String>,
+    /// 仓发经办人；旧数据允许为空，生成任务时失败关闭。
+    pub outbound_handler_user_id: Option<String>,
 }
 
 /// 仓库更新数据。
@@ -32,6 +48,10 @@ pub struct WarehouseData {
 pub struct WarehouseUpdate {
     /// 启停状态；`None` 表示不修改。
     pub status: Option<EnableStatus>,
+    /// 入库经办人；外层 `None` 表示不修改。
+    pub inbound_handler_user_id: Option<Option<String>>,
+    /// 仓发经办人；外层 `None` 表示不修改。
+    pub outbound_handler_user_id: Option<Option<String>>,
 }
 
 /// 仓库实体（稳定基础资料，数据模型 §6.3）。
@@ -46,6 +66,12 @@ pub struct Warehouse {
     pub stable: StableBase<EnableStatus>,
     /// ERP 仓库稳定代码（创建后不可修改）。
     pub warehouse_code: String,
+    /// 入库经办人；兼容存量仓库缺少该字段。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbound_handler_user_id: Option<String>,
+    /// 仓发经办人；兼容存量仓库缺少该字段。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outbound_handler_user_id: Option<String>,
 }
 
 impl PartialEq for Warehouse {
@@ -57,6 +83,8 @@ impl PartialEq for Warehouse {
             && self.stable.created_by == other.stable.created_by
             && self.stable.updated_by == other.stable.updated_by
             && self.warehouse_code == other.warehouse_code
+            && self.inbound_handler_user_id == other.inbound_handler_user_id
+            && self.outbound_handler_user_id == other.outbound_handler_user_id
     }
 }
 
@@ -84,11 +112,15 @@ impl Warehouse {
             WAREHOUSE_CODE_MAX_LEN,
             "仓库代码过长",
         )?;
+        let inbound_handler_user_id = normalize_handler_user_id(data.inbound_handler_user_id)?;
+        let outbound_handler_user_id = normalize_handler_user_id(data.outbound_handler_user_id)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(data.status, created_by),
             warehouse_code,
+            inbound_handler_user_id,
+            outbound_handler_user_id,
         })
     }
 
@@ -107,6 +139,12 @@ impl Warehouse {
         if let Some(status) = update.status {
             ensure_transition(self.stable.status, status)?;
             self.stable.status = status;
+        }
+        if let Some(handler) = update.inbound_handler_user_id {
+            self.inbound_handler_user_id = normalize_handler_user_id(handler)?;
+        }
+        if let Some(handler) = update.outbound_handler_user_id {
+            self.outbound_handler_user_id = normalize_handler_user_id(handler)?;
         }
         self.stable.touch(updated_by);
         Ok(())
@@ -148,6 +186,39 @@ impl Warehouse {
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
+
+    /// 解析指定仓储操作的唯一经办人。
+    ///
+    /// # 参数
+    /// * `operation` - 入库或仓发责任类型
+    ///
+    /// # 返回
+    /// 仓库启用且已配置对应经办人时返回账号 ID。
+    ///
+    /// # 错误
+    /// 仓库停用或对应经办人缺失时返回错误；调用方必须失败关闭，禁止回退创建人或责任池。
+    pub fn fulfillment_handler(&self, operation: WarehouseFulfillmentOperation) -> Result<&str> {
+        if !self.is_active() {
+            return Err(Error::from("目标仓库已停用，请先更换仓库"));
+        }
+        let handler = match operation {
+            WarehouseFulfillmentOperation::Receipt => self.inbound_handler_user_id.as_deref(),
+            WarehouseFulfillmentOperation::WarehouseShip => self.outbound_handler_user_id.as_deref(),
+        };
+        handler.ok_or_else(|| {
+            Error::from(match operation {
+                WarehouseFulfillmentOperation::Receipt => "目标仓库未配置入库经办人，请先完成仓库责任配置",
+                WarehouseFulfillmentOperation::WarehouseShip => {
+                    "目标仓库未配置仓发经办人，请先完成仓库责任配置"
+                }
+            })
+        })
+    }
+}
+
+/// 规范化可选仓储经办人账号 ID。
+fn normalize_handler_user_id(value: Option<String>) -> Result<Option<String>> {
+    normalize_optional_text(value, "仓储经办人", HANDLER_USER_ID_MAX_LEN)
 }
 
 #[cfg(test)]
@@ -162,6 +233,8 @@ mod tests {
         WarehouseData {
             warehouse_code: " WH-BJ-001 ".to_string(),
             status: EnableStatus::Active,
+            inbound_handler_user_id: Some(" inbound-1 ".to_string()),
+            outbound_handler_user_id: Some(" outbound-1 ".to_string()),
         }
     }
 
@@ -190,6 +263,8 @@ mod tests {
         assert_eq!(warehouse.warehouse_code, "WH-BJ-001");
         assert!(warehouse.is_active());
         assert_eq!(warehouse.stable.created_by, "admin-1");
+        assert_eq!(warehouse.inbound_handler_user_id.as_deref(), Some("inbound-1"));
+        assert_eq!(warehouse.outbound_handler_user_id.as_deref(), Some("outbound-1"));
     }
 
     /// 失败路径：必填空与超长各一条。
@@ -217,6 +292,8 @@ mod tests {
             .update(
                 WarehouseUpdate {
                     status: Some(EnableStatus::Disabled),
+                    inbound_handler_user_id: None,
+                    outbound_handler_user_id: None,
                 },
                 "admin-2",
             )
@@ -225,6 +302,38 @@ mod tests {
         assert!(!warehouse.is_active());
         assert_eq!(warehouse.warehouse_code, "WH-BJ-001");
         assert_eq!(warehouse.stable.updated_by, "admin-2");
+    }
+
+    /// 履约责任必须解析到对应具体人员，且入库与仓发允许同人。
+    #[test]
+    fn fulfillment_handlers_are_operation_specific_and_fail_closed() {
+        let warehouse = Warehouse::new(WarehouseId::new("wh-1"), data(), "admin-1").unwrap();
+        assert_eq!(
+            warehouse
+                .fulfillment_handler(WarehouseFulfillmentOperation::Receipt)
+                .unwrap(),
+            "inbound-1"
+        );
+        assert_eq!(
+            warehouse
+                .fulfillment_handler(WarehouseFulfillmentOperation::WarehouseShip)
+                .unwrap(),
+            "outbound-1"
+        );
+
+        let missing = Warehouse::new(
+            WarehouseId::new("wh-2"),
+            WarehouseData {
+                inbound_handler_user_id: None,
+                outbound_handler_user_id: Some("same-user".to_string()),
+                ..data()
+            },
+            "admin-1",
+        )
+        .unwrap();
+        assert!(missing
+            .fulfillment_handler(WarehouseFulfillmentOperation::Receipt)
+            .is_err());
     }
 
     /// 修订归属与乐观锁版本由仓库实体统一匹配。

@@ -15,12 +15,15 @@
 # 用法：
 #   E2E_RESET=1 [E2E_ALLOW_REMOTE_RESET=1] bash scripts/reset-db.sh
 #
-# 前置条件（由 run-flow.sh 保证）：执行前已停止 web-api 等写入方；执行后需重启应用。
+# 本脚本只清库、不填种子。开发开单准备请用：
+#   E2E_RESET=1 [E2E_ALLOW_REMOTE_RESET=1] bash scripts/prepare-dev.sh
+#
+# 前置条件（由 run-flow.sh / prepare-dev.sh 保证）：执行前已停止 web-api 等写入方；执行后需重启应用。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-BACKEND_DIR="$(cd "${E2E_DIR}/../backend" && pwd)"
+BACKEND_DIR="$(cd "${E2E_DIR}/backend" && pwd)"
 RESET_SCRIPT="${BACKEND_DIR}/scripts/reset-dev-business-data.sh"
 CONFIG_FILE="${BACKEND_DIR}/config.toml"
 

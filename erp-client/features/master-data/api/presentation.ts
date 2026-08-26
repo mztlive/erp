@@ -260,7 +260,11 @@ export const commonActions = (
     }
     if (resource === "warehouses") {
         return {
-            allowedActions: ["VIEW", "EXPORT_ROW"],
+            allowedActions: [
+                "VIEW",
+                "EXPORT_ROW",
+                "MAINTAIN_FULFILLMENT_HANDLERS",
+            ],
             actionBlockers: [
                 {
                     action: "CREATE",

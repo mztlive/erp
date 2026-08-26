@@ -68,6 +68,8 @@ export type SourcingLineInput = {
     selected: boolean
     quantity: string
     basisId: string
+    targetWarehouseId?: string
+    targetWarehouseName?: string
     expectedDeliveryDate: string
 }
 
@@ -82,6 +84,8 @@ export type PurchaseOrderPreview = Readonly<{
     paymentTermLabel: string
     workItemId: string
     basisId: string
+    targetWarehouseId?: string
+    targetWarehouseName?: string
     lines: readonly PurchaseOrderPreviewLine[]
     totals: Readonly<{ gross: string; net: string; tax: string }>
 }>
@@ -295,6 +299,8 @@ export function buildDefaultSourcingLines(
                 selected: true,
                 quantity: line.remainingQuantity,
                 basisId: "",
+                targetWarehouseId: "",
+                targetWarehouseName: "",
                 expectedDeliveryDate: line.deliveryDeadline,
             })
         }
@@ -314,6 +320,8 @@ const sourcingInput = (
     selected: true,
     quantity: formatQuantityUnits(quantity),
     basisId: option.basisId,
+    targetWarehouseId: "",
+    targetWarehouseName: "",
     expectedDeliveryDate: option.expectedDeliveryDate,
 })
 
@@ -668,6 +676,7 @@ export function buildPurchaseOrderPreviews(
             option.purchaseType,
             option.paymentTermCode,
             option.fulfillmentResponsibility,
+            input.targetWarehouseId,
         ].join("|")
         const previewLine: PurchaseOrderPreviewLine = {
             salesOrderLineId: product.salesOrderLineId,
@@ -698,6 +707,14 @@ export function buildPurchaseOrderPreviews(
                 paymentTermLabel: option.paymentTermLabel,
                 workItemId: option.workItemId,
                 basisId: option.basisId,
+                targetWarehouseId:
+                    option.fulfillmentResponsibility === "WAREHOUSE"
+                        ? input.targetWarehouseId || undefined
+                        : undefined,
+                targetWarehouseName:
+                    option.fulfillmentResponsibility === "WAREHOUSE"
+                        ? input.targetWarehouseName || undefined
+                        : undefined,
             },
             lines: [previewLine],
         })

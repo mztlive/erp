@@ -39,8 +39,11 @@ pub struct PurchaseOrderRow {
     pub purchase_type: PurchaseType,
     /// 付款条件代码。
     pub payment_term_code: String,
-    /// 创建人账号 ID（列表「负责人」解析来源）。
+    /// 创建人账号 ID（只读审计事实，不得作为责任回退来源）。
     pub created_by: String,
+    /// 当前采购单责任人；存量数据允许为空，但执行必须失败关闭。
+    #[serde(default)]
+    pub owner_user_id: Option<String>,
     /// 主状态。
     pub status: PurchaseOrderStatus,
     /// 财务审核状态。
@@ -419,6 +422,7 @@ fn purchase_order_projection() -> Document {
         "purchase_type": 1,
         "payment_term_code": 1,
         "created_by": 1,
+        "owner_user_id": 1,
         "status": 1,
         "review_status": 1,
         "payment_progress": 1,
@@ -469,10 +473,11 @@ mod tests {
     }
 
     #[test]
-    fn projection_includes_payment_term_and_owner_source() {
+    fn projection_includes_payment_term_and_current_owner() {
         let document = super::purchase_order_projection();
         assert_eq!(document.get_i32("payment_term_code").unwrap(), 1);
         assert_eq!(document.get_i32("created_by").unwrap(), 1);
+        assert_eq!(document.get_i32("owner_user_id").unwrap(), 1);
     }
 
     #[test]
