@@ -49,6 +49,14 @@ export type WorkItemStats = Readonly<{
     blocked?: number
     started?: number
     inbox?: number
+    /** 新旧服务滚动发布期间允许缺省；缺省时前端不得用当前页条目推算。 */
+    family_counts?: Readonly<{
+        approval: number
+        procurement: number
+        fulfillment: number
+        finance: number
+        exception: number
+    }>
     as_of: number
 }>
 

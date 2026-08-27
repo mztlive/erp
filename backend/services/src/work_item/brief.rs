@@ -3,7 +3,7 @@
 //! 队列只展示只读业务内容，不承载确认/审批表单。采购二次确认提供客户、金额
 //! 与前几行明细；采购财务审核通过 `extra_sections` 补充供应商、税额和付款条件。
 
-use chrono::{Datelike, FixedOffset};
+use chrono::{Datelike, FixedOffset, Timelike};
 use entities::common::time::{BusinessDate, Instant};
 use entities::money::Quantity;
 
@@ -327,6 +327,28 @@ pub(crate) fn format_instant_date(at: Instant) -> String {
     format!("{}-{:02}-{:02}", local.year(), local.month(), local.day())
 }
 
+/// 把时刻格式化为业务时区的分钟级时间。
+///
+/// # 参数
+/// * `at` - UTC 时刻
+///
+/// # 返回
+/// 返回东八区 `YYYY-MM-DD HH:mm`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn format_instant_datetime(at: Instant) -> String {
+    let local = at.as_utc().with_timezone(&shanghai_offset());
+    format!(
+        "{}-{:02}-{:02} {:02}:{:02}",
+        local.year(),
+        local.month(),
+        local.day(),
+        local.hour(),
+        local.minute()
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,6 +375,7 @@ mod tests {
         let noon_utc = Instant::from_unix_secs(1_787_457_600);
         assert_eq!(format_instant_date(noon_utc), "2026-08-23");
         assert_eq!(format_instant_due_label(noon_utc), "8/23 交");
+        assert_eq!(format_instant_datetime(noon_utc), "2026-08-23 12:00");
         assert_eq!(
             join_list_summary([Some("甲".into()), None, Some("¥1".into())]),
             "甲 · ¥1"

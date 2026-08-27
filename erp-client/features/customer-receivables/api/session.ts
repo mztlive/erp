@@ -19,6 +19,12 @@ import { instantToIso } from "./mappers"
 import { loadAllPages } from "./loaders"
 import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_COUNTERPARTY_NAME,
+    MISSING_CUSTOMER_NAME,
+    MISSING_SALES_ORDER_NO,
+} from "@/features/customer-receivables/lib/display-labels"
 
 export const sessions = new Map<string, AllocationSessionView>()
 let sessionSeq = 100
@@ -53,18 +59,25 @@ async function buildPool(
         return rows.flatMap((r) =>
             (r.entries ?? [])
                 .filter((e) => e.direction === "increase")
-                .map((e) => ({
-                    targetId: e.id,
-                    targetKind: "receivable_entry" as const,
-                    label: `${r.sales_order_no || r.sales_order_id} · ${e.entry_type}`,
-                    salesOrderId: r.sales_order_id,
-                    salesOrderNo: r.sales_order_no || r.sales_order_id,
-                    // open amount is server field on account; entry-level open is not exposed — use amount as display open
-                    openAmount: e.amount,
-                    dueDate: e.due_date,
-                    counterpartyPartyId: r.counterparty_party_id,
-                    baselineVersion: r.version,
-                })),
+                .map((e) => {
+                    const salesOrderNo = businessLabelOrPlaceholder(
+                        r.sales_order_no,
+                        r.sales_order_id,
+                        MISSING_SALES_ORDER_NO,
+                    )
+                    return {
+                        targetId: e.id,
+                        targetKind: "receivable_entry" as const,
+                        label: `${salesOrderNo} · ${e.entry_type}`,
+                        salesOrderId: r.sales_order_id,
+                        salesOrderNo,
+                        // open amount is server field on account; entry-level open is not exposed — use amount as display open
+                        openAmount: e.amount,
+                        dueDate: e.due_date,
+                        counterpartyPartyId: r.counterparty_party_id,
+                        baselineVersion: r.version,
+                    }
+                }),
         )
     }
     return rows
@@ -74,17 +87,24 @@ async function buildPool(
                 r.open_invoiceable_total !== "0" &&
                 r.open_invoiceable_total !== "0.00",
         )
-        .map((r) => ({
-            targetId: r.id,
-            targetKind: "receivable_account" as const,
-            label: `应收子账 #${r.account_seq} · ${r.sales_order_no || r.sales_order_id}`,
-            salesOrderId: r.sales_order_id,
-            salesOrderNo: r.sales_order_no || r.sales_order_id,
-            openAmount: r.open_invoiceable_total,
-            dueDate: r.entries?.[0]?.due_date,
-            counterpartyPartyId: r.counterparty_party_id,
-            baselineVersion: r.version,
-        }))
+        .map((r) => {
+            const salesOrderNo = businessLabelOrPlaceholder(
+                r.sales_order_no,
+                r.sales_order_id,
+                MISSING_SALES_ORDER_NO,
+            )
+            return {
+                targetId: r.id,
+                targetKind: "receivable_account" as const,
+                label: `应收子账 #${r.account_seq} · ${salesOrderNo}`,
+                salesOrderId: r.sales_order_id,
+                salesOrderNo,
+                openAmount: r.open_invoiceable_total,
+                dueDate: r.entries?.[0]?.due_date,
+                counterpartyPartyId: r.counterparty_party_id,
+                baselineVersion: r.version,
+            }
+        })
 }
 
 function recomputeProposed(
@@ -128,7 +148,7 @@ export async function createAllocationSession(
         existingFactVersion = r.version
         approval = mapCustomerReceiptApproval(r.approval)
         customerId = r.customer_id ?? ""
-        customerName = r.customer_id ?? ""
+        customerName = input.customerName ?? ""
         fact = {
             receivedAt: instantToIso(r.received_at).slice(0, 16),
             amount: r.unallocated_amount,
@@ -215,7 +235,11 @@ export async function createAllocationSession(
                         row.id === input.receivableAccountId),
             )
             customerId = account?.customer_id ?? ""
-            customerName = account?.customer_name || customerId
+            customerName = businessLabelOrPlaceholder(
+                account?.customer_name,
+                customerId,
+                MISSING_CUSTOMER_NAME,
+            )
         } catch {
             // leave empty — display gap
         }
@@ -232,10 +256,17 @@ export async function createAllocationSession(
         draftSessionId,
         mode: input.mode,
         counterpartyPartyId: input.counterpartyPartyId,
-        counterpartyPartyName:
-            input.counterpartyPartyName ?? input.counterpartyPartyId,
+        counterpartyPartyName: businessLabelOrPlaceholder(
+            input.counterpartyPartyName,
+            input.counterpartyPartyId,
+            MISSING_COUNTERPARTY_NAME,
+        ),
         customerId,
-        customerName: customerName || customerId,
+        customerName: businessLabelOrPlaceholder(
+            customerName,
+            customerId,
+            MISSING_CUSTOMER_NAME,
+        ),
         status: "draft",
         existingFactId: input.existingFactId,
         existingFactNo,

@@ -18,6 +18,7 @@ use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
     ObjectBriefSource,
 };
+use super::change_order_brief::{change_diff_lines, purchase_order_submission_line_states, LineStateMap};
 use super::presentation::{format_yuan, purchase_review_impact_summary};
 use super::{object_ids, ObjectFact, ObjectFactMap, ObjectKind, SubjectBrief, WorkItemService};
 use crate::errors::Result;
@@ -29,6 +30,19 @@ struct PurchaseReviewDisplay {
     counterparty: Option<String>,
     impact: String,
     brief: ObjectBriefSource,
+}
+
+#[derive(Default)]
+struct PurchaseSubmissionLineContext {
+    brief_lines: HashMap<String, Vec<BriefLine>>,
+    line_states: HashMap<String, LineStateMap>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct PurchaseSubmissionComparison<'a> {
+    origin: Option<&'a str>,
+    previous: Option<&'a PurchaseOrderSubmission>,
+    changed_line_count: Option<usize>,
 }
 
 impl WorkItemService {
@@ -104,7 +118,7 @@ impl WorkItemService {
     ) -> Result<HashMap<String, PurchaseReviewDisplay>> {
         let submissions = self.purchase_submissions_for_orders(orders, executor).await?;
         let sales_order_nos = self.sales_order_numbers_for_orders(orders, executor).await?;
-        let lines_by_submission = self
+        let line_context = self
             .purchase_submission_brief_lines(&submissions, executor)
             .await?;
         let submitter_names = HashMap::<String, String>::new();
@@ -112,7 +126,8 @@ impl WorkItemService {
         Ok(assemble_purchase_review_displays(
             &submissions,
             &source_sales_orders_by_purchase_order(orders, &sales_order_nos),
-            &lines_by_submission,
+            &line_context.brief_lines,
+            &line_context.line_states,
             &submitter_names,
         ))
     }
@@ -187,7 +202,7 @@ impl WorkItemService {
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 返回提交 ID 到已按行号排序的简报行。
+    /// 返回提交 ID 到已按行号排序的简报行和稳定比较状态。
     ///
     /// # 错误
     /// 仓储查询失败时返回错误。
@@ -195,27 +210,28 @@ impl WorkItemService {
         &self,
         submissions: &[PurchaseOrderSubmission],
         executor: &mut dyn Executor,
-    ) -> Result<HashMap<String, Vec<BriefLine>>> {
+    ) -> Result<PurchaseSubmissionLineContext> {
         let submission_ids = submissions
             .iter()
             .map(|item| PurchaseOrderSubmissionId::new(item.base.id.clone()))
             .collect::<Vec<_>>();
         if submission_ids.is_empty() {
-            return Ok(HashMap::new());
+            return Ok(PurchaseSubmissionLineContext::default());
         }
-        let mut grouped: HashMap<String, Vec<(u32, PurchaseOrderSubmissionLine)>> = HashMap::new();
-        for line in self
+        let lines = self
             .db
             .purchase_order_submission_lines()
             .find_lines_by_submission_ids(&submission_ids, executor)
-            .await?
-        {
+            .await?;
+        let line_states = purchase_order_submission_line_states(&lines);
+        let mut grouped: HashMap<String, Vec<(u32, PurchaseOrderSubmissionLine)>> = HashMap::new();
+        for line in lines {
             grouped
                 .entry(line.purchase_order_submission_id.to_string())
                 .or_default()
                 .push((line.line_no, line));
         }
-        Ok(grouped
+        let brief_lines = grouped
             .into_iter()
             .map(|(submission_id, mut rows)| {
                 rows.sort_by_key(|(line_no, _)| *line_no);
@@ -224,7 +240,11 @@ impl WorkItemService {
                     purchase_brief_lines(rows.into_iter().map(|(_, line)| line)),
                 )
             })
-            .collect())
+            .collect();
+        Ok(PurchaseSubmissionLineContext {
+            brief_lines,
+            line_states,
+        })
     }
 }
 
@@ -261,6 +281,7 @@ fn source_sales_orders_by_purchase_order(
 /// * `submissions` - 本批采购提交
 /// * `source_sales_orders` - 采购单 ID 到来源销售单 ID 与单号
 /// * `lines_by_submission` - 提交 ID 到简报行
+/// * `line_states` - 提交 ID 到按稳定来源行分组的比较状态
 /// * `submitter_names` - 账号 ID 到姓名
 ///
 /// # 返回
@@ -272,31 +293,79 @@ fn assemble_purchase_review_displays(
     submissions: &[PurchaseOrderSubmission],
     source_sales_orders: &HashMap<String, (String, String)>,
     lines_by_submission: &HashMap<String, Vec<BriefLine>>,
+    line_states: &HashMap<String, LineStateMap>,
     submitter_names: &HashMap<String, String>,
 ) -> HashMap<String, PurchaseReviewDisplay> {
     let origins = submission_origins(submissions);
+    let previous_ids = previous_formal_submission_ids(submissions);
+    let submissions_by_id = submissions
+        .iter()
+        .map(|submission| (submission.base.id.as_str(), submission))
+        .collect::<HashMap<_, _>>();
     submissions
         .iter()
         .map(|submission| {
             let source_sales_order = source_sales_orders
                 .get(submission.purchase_order_id.as_ref())
                 .map(|(id, order_no)| (id.as_str(), order_no.as_str()));
+            let previous = previous_ids
+                .get(&submission.base.id)
+                .and_then(|id| submissions_by_id.get(id.as_str()).copied());
+            let changed_lines = previous.map(|previous| {
+                change_diff_lines(
+                    line_states.get(&previous.base.id),
+                    line_states.get(&submission.base.id),
+                )
+            });
+            let current_lines = lines_by_submission
+                .get(&submission.base.id)
+                .cloned()
+                .unwrap_or_default();
+            let display_lines = changed_lines
+                .as_ref()
+                .filter(|lines| !lines.is_empty())
+                .cloned()
+                .unwrap_or(current_lines);
             let display = purchase_review_display(
                 submission,
                 source_sales_order,
-                lines_by_submission
-                    .get(&submission.base.id)
-                    .cloned()
-                    .unwrap_or_default(),
+                display_lines,
                 submission
                     .submitted_by
                     .as_ref()
                     .and_then(|actor| submitter_names.get(actor).cloned()),
                 origins.get(&submission.base.id).copied(),
+                previous,
+                changed_lines.as_ref().map(Vec::len),
             );
             (submission.base.id.clone(), display)
         })
         .collect()
+}
+
+/// 为每次正式重提定位同一采购单的上一次正式提交。
+fn previous_formal_submission_ids(submissions: &[PurchaseOrderSubmission]) -> HashMap<String, String> {
+    let mut grouped: HashMap<String, Vec<(u32, String)>> = HashMap::new();
+    for submission in submissions {
+        let Some(sequence) = submission.formal_sequence() else {
+            continue;
+        };
+        grouped
+            .entry(submission.purchase_order_id.to_string())
+            .or_default()
+            .push((sequence, submission.base.id.clone()));
+    }
+    let mut previous = HashMap::new();
+    for mut values in grouped.into_values() {
+        values.sort_by_key(|(sequence, _)| *sequence);
+        for pair in values.windows(2) {
+            let [(_, before), (_, after)] = pair else {
+                continue;
+            };
+            previous.insert(after.clone(), before.clone());
+        }
+    }
+    previous
 }
 
 /// 把采购单事实和按提交准备好的简报写入对象事实表。
@@ -396,6 +465,8 @@ fn submission_origins(submissions: &[PurchaseOrderSubmission]) -> HashMap<String
 /// * `lines` - 已按行号排好的简报行
 /// * `submitter_name` - 已解析的提交人姓名
 /// * `origin` - 初次提交或再次提交
+/// * `previous` - 同一采购单的上一次正式提交
+/// * `changed_line_count` - 与上次提交相比发生变化的明细行数
 ///
 /// # 返回
 /// 返回供应商、影响和事项简报。
@@ -408,6 +479,8 @@ fn purchase_review_display(
     lines: Vec<BriefLine>,
     submitter_name: Option<String>,
     origin: Option<&str>,
+    previous: Option<&PurchaseOrderSubmission>,
+    changed_line_count: Option<usize>,
 ) -> PurchaseReviewDisplay {
     let supplier = non_empty(&submission.supplier_snapshot.supplier_name);
     let (visible_lines, more_count) = split_purchase_brief_lines(lines);
@@ -418,17 +491,25 @@ fn purchase_review_display(
         visible_lines,
         more_count,
         submitter_name,
-        origin,
+        PurchaseSubmissionComparison {
+            origin,
+            previous,
+            changed_line_count,
+        },
     );
     let line_count = Some(brief.lines.len() + brief.more_count as usize).filter(|count| *count > 0);
+    let mut impact = purchase_review_impact_summary(
+        line_count,
+        Some(&submission.gross_amount),
+        submission.payment_term_snapshot.prepay_gate,
+    );
+    if previous.is_some() {
+        impact.push_str("；本次为再次提交，必须先核对前后差异");
+    }
     PurchaseReviewDisplay {
         purchase_order_id: submission.purchase_order_id.to_string(),
         counterparty: supplier,
-        impact: purchase_review_impact_summary(
-            line_count,
-            Some(&submission.gross_amount),
-            submission.payment_term_snapshot.prepay_gate,
-        ),
+        impact,
         brief,
     }
 }
@@ -442,7 +523,7 @@ fn purchase_review_display(
 /// * `lines` - 截断后的简报行
 /// * `more_count` - 未展开的商品行数
 /// * `submitter_name` - 提交人姓名
-/// * `origin` - 提交来源
+/// * `comparison` - 提交来源、上次正式提交与行级差异数量
 ///
 /// # 返回
 /// 返回可上屏的对象简报源。
@@ -456,7 +537,7 @@ fn purchase_review_brief_source(
     lines: Vec<BriefLine>,
     more_count: u32,
     submitter_name: Option<String>,
-    origin: Option<&str>,
+    comparison: PurchaseSubmissionComparison<'_>,
 ) -> ObjectBriefSource {
     let payment = payment_term_label(&submission.payment_term_snapshot);
     ObjectBriefSource {
@@ -467,7 +548,9 @@ fn purchase_review_brief_source(
             source_sales_order,
             submission,
             payment.as_deref(),
-            origin,
+            comparison.origin,
+            comparison.previous,
+            comparison.changed_line_count,
         ),
         list_summary: purchase_review_list_summary(
             supplier.as_deref(),
@@ -491,6 +574,8 @@ fn purchase_review_brief_source(
 /// * `submission` - 不可变采购提交
 /// * `payment` - 已翻译的付款条件
 /// * `origin` - 提交来源
+/// * `previous` - 上一次正式提交
+/// * `changed_line_count` - 行级差异数量
 ///
 /// # 返回
 /// 返回供应商、销售单、金额三元组、付款条件、经营类目和提交号等段。销售单段携带可跳转身份。
@@ -503,6 +588,8 @@ fn purchase_review_sections(
     submission: &PurchaseOrderSubmission,
     payment: Option<&str>,
     origin: Option<&str>,
+    previous: Option<&PurchaseOrderSubmission>,
+    changed_line_count: Option<usize>,
 ) -> Vec<BriefSection> {
     let mut sections = Vec::new();
     push_section(&mut sections, "供应商", supplier, false);
@@ -556,7 +643,108 @@ fn purchase_review_sections(
         non_empty(&submission.submission_no).as_deref(),
         false,
     );
+    if let Some(previous) = previous {
+        push_resubmission_comparisons(
+            &mut sections,
+            previous,
+            submission,
+            changed_line_count.unwrap_or_default(),
+        );
+    }
     sections
+}
+
+/// 追加采购再次提交相对上一正式提交的表头与行级差异结论。
+fn push_resubmission_comparisons(
+    sections: &mut Vec<BriefSection>,
+    previous: &PurchaseOrderSubmission,
+    current: &PurchaseOrderSubmission,
+    changed_line_count: usize,
+) {
+    push_section(
+        sections,
+        "对比基准",
+        non_empty(&previous.submission_no).as_deref(),
+        false,
+    );
+    let mut header_change_count = 0usize;
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "含税金额（前→后）",
+        format_yuan(&previous.gross_amount),
+        format_yuan(&current.gross_amount),
+        true,
+    ));
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "不含税金额（前→后）",
+        format_yuan(&previous.net_amount),
+        format_yuan(&current.net_amount),
+        true,
+    ));
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "税额（前→后）",
+        format_yuan(&previous.tax_amount),
+        format_yuan(&current.tax_amount),
+        true,
+    ));
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "供应商（前→后）",
+        previous.supplier_snapshot.supplier_name.clone(),
+        current.supplier_snapshot.supplier_name.clone(),
+        false,
+    ));
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "付款条件（前→后）",
+        payment_term_label(&previous.payment_term_snapshot).unwrap_or_else(|| "未记录".to_string()),
+        payment_term_label(&current.payment_term_snapshot).unwrap_or_else(|| "未记录".to_string()),
+        false,
+    ));
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "采购类型（前→后）",
+        previous.purchase_type.label().to_string(),
+        current.purchase_type.label().to_string(),
+        false,
+    ));
+    header_change_count += usize::from(push_changed_section(
+        sections,
+        "履约责任（前→后）",
+        previous.fulfillment_responsibility.label().to_string(),
+        current.fulfillment_responsibility.label().to_string(),
+        false,
+    ));
+    let summary = if header_change_count == 0 && changed_line_count == 0 {
+        "与上一次正式提交一致".to_string()
+    } else {
+        format!("{header_change_count} 项表头变化 · {changed_line_count} 行明细变化")
+    };
+    push_section(sections, "重提差异", Some(&summary), false);
+}
+
+/// 值发生变化时追加“前→后”段并返回 `true`。
+fn push_changed_section(
+    sections: &mut Vec<BriefSection>,
+    label: &str,
+    before: String,
+    after: String,
+    numeric: bool,
+) -> bool {
+    let before = before.trim();
+    let after = after.trim();
+    if before == after {
+        return false;
+    }
+    let comparison = format!(
+        "{} → {}",
+        if before.is_empty() { "未记录" } else { before },
+        if after.is_empty() { "未记录" } else { after }
+    );
+    push_section(sections, label, Some(&comparison), numeric);
+    true
 }
 
 /// 生成采购审核队列一行摘要。
@@ -904,6 +1092,57 @@ mod tests {
 
         assert_eq!(origins.get("submission-1"), Some(&"初次提交"));
         assert_eq!(origins.get("submission-2"), Some(&"再次提交"));
+    }
+
+    #[test]
+    fn later_formal_submission_uses_the_previous_formal_submission_as_baseline() {
+        let draft = purchase_submission("draft-1", "purchase-order-1", "DRAFT-12345678");
+        let first = PurchaseOrderSubmission::freeze_from_draft(
+            PurchaseOrderSubmissionId::new("submission-1"),
+            "SUB-000001".to_string(),
+            &draft,
+            Instant::from_unix_secs(1_700_000_000),
+            "buyer-1",
+        )
+        .expect("首次正式提交必须可冻结");
+        let second = PurchaseOrderSubmission::freeze_from_draft(
+            PurchaseOrderSubmissionId::new("submission-2"),
+            "SUB-000002".to_string(),
+            &draft,
+            Instant::from_unix_secs(1_700_000_100),
+            "buyer-1",
+        )
+        .expect("再次正式提交必须可冻结");
+
+        let previous = previous_formal_submission_ids(&[draft, first, second]);
+
+        assert_eq!(
+            previous.get("submission-2").map(String::as_str),
+            Some("submission-1")
+        );
+        assert!(!previous.contains_key("submission-1"));
+    }
+
+    #[test]
+    fn changed_header_section_exposes_before_and_after() {
+        let mut sections = Vec::new();
+
+        assert!(push_changed_section(
+            &mut sections,
+            "含税金额（前→后）",
+            "¥100".to_string(),
+            "¥120".to_string(),
+            true,
+        ));
+        assert_eq!(sections[0].value, "¥100 → ¥120");
+        assert!(sections[0].numeric);
+        assert!(!push_changed_section(
+            &mut sections,
+            "供应商（前→后）",
+            "云桦有礼".to_string(),
+            "云桦有礼".to_string(),
+            false,
+        ));
     }
 
     #[test]

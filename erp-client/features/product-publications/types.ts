@@ -1,6 +1,5 @@
 /**
  * W22 商品发布 · 客户端契约
- * 对齐 docs/ui-workspaces/w22-product-publication.md §5 / §8
  *
  * 安全暂停契约类型见 lib/safety-pause-types.ts；枚举中文映射见
  * lib/status-labels.ts。两者均在此原样再导出，保持既有导入路径稳定。

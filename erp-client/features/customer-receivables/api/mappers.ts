@@ -26,6 +26,12 @@ import {
 } from "@/features/customer-receivables/lib/customer-refund-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 import {
+    businessLabelOrPlaceholder,
+    MISSING_COUNTERPARTY_NAME,
+    MISSING_CUSTOMER_NAME,
+    MISSING_SALES_ORDER_NO,
+} from "@/features/customer-receivables/lib/display-labels"
+import {
     mapReceiptReversalApproval,
     receiptReversalStatusLabel,
     receiptReversalStatusTone,
@@ -159,7 +165,7 @@ export function filterSummary(query: CustomerAccountsQuery): string {
                 ? "销项发票"
                 : "待核销",
     ]
-    if (query.counterpartyPartyId) parts.push(query.counterpartyPartyId)
+    if (query.counterpartyPartyId) parts.push("已按往来主体过滤")
     if (query.customerId) parts.push("已按经营客户过滤")
     if (query.q?.trim()) parts.push(`「${query.q.trim()}」`)
     if (query.due && query.due !== "all") parts.push(DUE_LABEL[query.due])
@@ -173,7 +179,7 @@ function projectEntry(e: BackendReceivableEntry): ReceivableEntry {
         direction: e.direction,
         amountGross: e.amount,
         dueDate: e.due_date,
-        sourceLabel: e.source_document_id,
+        sourceLabel: "来源业务单据",
         postedAt: instantToIso(e.posted_at),
     }
 }
@@ -194,11 +200,23 @@ export function projectReceivable(
         accountId: a.id,
         accountSeq: a.account_seq,
         counterpartyPartyId: a.counterparty_party_id,
-        counterpartyPartyName: a.counterparty_party_name || a.counterparty_party_id,
+        counterpartyPartyName: businessLabelOrPlaceholder(
+            a.counterparty_party_name,
+            a.counterparty_party_id,
+            MISSING_COUNTERPARTY_NAME,
+        ),
         customerId: a.customer_id,
-        customerName: a.customer_name || a.customer_id,
+        customerName: businessLabelOrPlaceholder(
+            a.customer_name,
+            a.customer_id,
+            MISSING_CUSTOMER_NAME,
+        ),
         salesOrderId: a.sales_order_id,
-        salesOrderNo: a.sales_order_no || a.sales_order_id,
+        salesOrderNo: businessLabelOrPlaceholder(
+            a.sales_order_no,
+            a.sales_order_id,
+            MISSING_SALES_ORDER_NO,
+        ),
         businessType: "physical_service",
         businessTypeLabel: "实物服务",
         grossTotal: a.gross_total,
@@ -220,14 +238,12 @@ export function projectReceivable(
     }
 }
 
-function projectReceiptAllocation(
-    a: BackendReceiptAllocation,
-): AllocationLine {
+function projectReceiptAllocation(a: BackendReceiptAllocation): AllocationLine {
     return {
         allocationId: a.id,
         action: mapAllocationAction(a.allocation_action),
         amountGross: a.allocated_amount,
-        targetLabel: a.receivable_entry_id,
+        targetLabel: "应收明细",
         targetId: a.receivable_entry_id,
         occurredAt: instantToIso(a.allocated_at),
         reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
@@ -235,7 +251,13 @@ function projectReceiptAllocation(
     }
 }
 
-export function projectReceipt(r: BackendCustomerReceipt): ReceiptRow {
+export function projectReceipt(
+    r: BackendCustomerReceipt,
+    display?: {
+        counterpartyPartyName?: string
+        customerName?: string
+    },
+): ReceiptRow {
     const status = mapReceiptStatus(r.status)
     const isPosted = status === "posted" || status === "reversed"
     const allowed: AllowedAction[] = ["VIEW_DETAIL"]
@@ -249,9 +271,17 @@ export function projectReceipt(r: BackendCustomerReceipt): ReceiptRow {
         receiptId: r.id,
         receiptNo: r.receipt_no,
         counterpartyPartyId: r.counterparty_party_id,
-        counterpartyPartyName: r.counterparty_party_id,
+        counterpartyPartyName: businessLabelOrPlaceholder(
+            display?.counterpartyPartyName,
+            r.counterparty_party_id,
+            MISSING_COUNTERPARTY_NAME,
+        ),
         customerId: r.customer_id ?? "",
-        customerName: r.customer_id ?? "",
+        customerName: businessLabelOrPlaceholder(
+            display?.customerName,
+            r.customer_id,
+            MISSING_CUSTOMER_NAME,
+        ),
         receivedAt: instantToIso(r.received_at),
         amount: r.amount,
         bankReferenceMasked: maskBank(r.bank_reference),
@@ -340,14 +370,12 @@ export function projectReceiptReversal(
     }
 }
 
-function projectInvoiceAllocation(
-    a: BackendInvoiceAllocation,
-): AllocationLine {
+function projectInvoiceAllocation(a: BackendInvoiceAllocation): AllocationLine {
     return {
         allocationId: a.id,
         action: mapAllocationAction(a.allocation_action),
         amountGross: a.allocated_gross_amount,
-        targetLabel: a.receivable_account_id,
+        targetLabel: "应收子账",
         targetId: a.receivable_account_id,
         occurredAt: "",
         reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
@@ -360,7 +388,13 @@ function projectInvoiceAllocation(
  *
  * @param inv 发票 HTTP 载荷。
  */
-export function projectInvoice(inv: BackendInvoice): SalesInvoiceRow {
+export function projectInvoice(
+    inv: BackendInvoice,
+    display?: {
+        counterpartyPartyName?: string
+        customerName?: string
+    },
+): SalesInvoiceRow {
     const invoice = stripInvoiceApprovalField(inv)
     const status = mapInvoiceStatus(invoice.status)
     const isPosted = status === "registered" || status === "reversed"
@@ -375,9 +409,17 @@ export function projectInvoice(inv: BackendInvoice): SalesInvoiceRow {
         invoiceKind: invoice.invoice_kind,
         invoiceKindLabel: invoice.invoice_kind === "red" ? "红票" : "蓝票",
         counterpartyPartyId: invoice.party_id,
-        counterpartyPartyName: invoice.party_id,
+        counterpartyPartyName: businessLabelOrPlaceholder(
+            display?.counterpartyPartyName,
+            invoice.party_id,
+            MISSING_COUNTERPARTY_NAME,
+        ),
         customerId: "",
-        customerName: "",
+        customerName: businessLabelOrPlaceholder(
+            display?.customerName,
+            undefined,
+            MISSING_CUSTOMER_NAME,
+        ),
         invoiceDate: invoice.invoice_date,
         grossAmount: invoice.gross_amount,
         netAmount: invoice.net_amount,

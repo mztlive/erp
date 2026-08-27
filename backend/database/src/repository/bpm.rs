@@ -250,6 +250,34 @@ impl<'a> BpmWorkflowRepository<'a> {
             .await
     }
 
+    /// 按主键批量读取审批节点执行。
+    ///
+    /// # 参数
+    /// * `execution_ids` - 已授权工作项引用的审批节点执行 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的节点执行；不存在的 ID 不产生占位记录。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法只批量解析工作项已经持有的运行身份，不按审批人扩大查询范围。
+    pub async fn list_executions_by_ids(
+        &self,
+        execution_ids: &[ApprovalNodeExecutionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalNodeExecution>> {
+        if execution_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = execution_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.executions()
+            .find_many(doc! { "id": { "$in": ids } }, executor)
+            .await
+    }
+
     /// 查询实例指定节点的当前审批人绑定。
     ///
     /// # 参数
@@ -648,6 +676,44 @@ impl<'a> BpmWorkflowRepository<'a> {
         mongo_ops::find_many(
             &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
             instance_list_filter_doc(filter),
+            options,
+            executor,
+        )
+        .await
+    }
+
+    /// 按实例主键批量读取审批运行的有界列表投影。
+    ///
+    /// # 参数
+    /// * `instance_ids` - 已由工作项节点执行解析出的审批实例 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前节点、当前审批人、最近驳回摘要和实例状态；不扫描执行历史。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 只允许使用有界实例投影补充工作台判断事实，不得为列表逐实例查询历史。
+    pub async fn list_instance_summaries_by_ids(
+        &self,
+        instance_ids: &[ApprovalProcessInstanceId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalInstanceSummary>> {
+        if instance_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = instance_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let options = FindOptions::builder()
+            .projection(instance_summary_projection())
+            .build();
+        mongo_ops::find_many(
+            &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
+            doc! {
+                "id": { "$in": ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
             options,
             executor,
         )

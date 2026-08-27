@@ -1,6 +1,5 @@
 /**
  * W30 历史消费回填 · 客户端契约类型
- * 对齐 docs/ui-workspaces/w30-historical-consumption-backfill.md §5/§8。
  *
  * 枚举中文映射与阶段常量已拆到 lib/labels.ts，此处按原名重新导出，
  * 既有 import "@/features/history-backfill/types" 不受影响。

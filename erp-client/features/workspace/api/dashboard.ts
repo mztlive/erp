@@ -18,6 +18,7 @@ import type {
     TodayWorkspaceQuery,
     TodayWorkspaceView,
     WorkspaceActionCode,
+    WorkspaceFamilyCounts,
     WorkspaceFamilyFilter,
     WorkspaceMetric,
     WorkspaceWorkItem,
@@ -101,24 +102,22 @@ function fulfillmentStableNumber(
     workItemType: string,
     label: string | null | undefined,
     typeLabel: string,
-    businessObjectId: string,
 ): string {
     if (workItemType === "FULFILLMENT_OPERATION") {
         return fulfillmentListNumber(label ?? undefined, typeLabel)
     }
-    return label?.trim() || typeLabel || businessObjectId
+    return label?.trim() || typeLabel || "业务单号待补全"
 }
 
 function fulfillmentTitle(
     workItemType: string,
     label: string | null | undefined,
     typeLabel: string,
-    businessObjectId: string,
 ): string {
     if (workItemType === "FULFILLMENT_OPERATION") {
         return fulfillmentObjectTitle(label ?? undefined, typeLabel)
     }
-    return label?.trim() || `${typeLabel} · ${businessObjectId}`
+    return label?.trim() || typeLabel || "业务对象名称待补全"
 }
 
 function dueBucket(
@@ -180,13 +179,11 @@ export function mapWorkspaceWorkItem(
             dto.work_item_type,
             dto.business_object_label,
             workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
-            task.businessObjectId,
         ),
         objectTitle: fulfillmentTitle(
             dto.work_item_type,
             dto.business_object_label,
             workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
-            task.businessObjectId,
         ),
         counterpartyName: task.counterpartyLabel,
         listSummary: task.listSummary,
@@ -223,6 +220,19 @@ export function mapWorkspaceWorkItem(
         family: meta.family,
         approvalProcessInstanceId: task.approvalProcessInstanceId,
         approvalNodeExecutionId: task.approvalNodeExecutionId,
+        approval: task.approvalContext
+            ? {
+                  instanceId: task.approvalContext.instanceId,
+                  currentRoundNo: task.approvalContext.currentRoundNo,
+                  currentNodeLabel: task.approvalContext.currentNodeLabel,
+                  currentAssigneeLabel:
+                      task.approvalContext.currentAssigneeLabel ??
+                      "审批人待补全",
+                  lastRejectReason: task.approvalContext.latestRejectionReason,
+                  processVersion: task.approvalContext.processVersion,
+                  status: task.approvalContext.status,
+              }
+            : undefined,
         rootBusinessObjectId: task.rootBusinessObjectId,
         summarySections: task.summarySections,
         briefLines: task.briefLines,
@@ -261,6 +271,21 @@ function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
             tone: "info",
         },
     ]
+}
+
+/** 映射服务端任务族统计；旧服务缺少字段时保持不可见，不能回退当前页求和。 */
+function buildFamilyCounts(
+    stats: WorkItemStats,
+): WorkspaceFamilyCounts | undefined {
+    const counts = stats.family_counts
+    if (!counts) return undefined
+    return {
+        approval: counts.approval,
+        procurement: counts.procurement,
+        fulfillment: counts.fulfillment,
+        finance: counts.finance,
+        exception: counts.exception,
+    }
 }
 
 /**
@@ -353,6 +378,7 @@ export async function fetchWorkspaceDashboard(
             projectionState: updatedAt ? "fresh" : "stale",
         },
         metrics,
+        familyCounts: buildFamilyCounts(stats),
         items,
         nextCursor: page.nextCursor,
         total: page.total,
@@ -386,7 +412,8 @@ function startedInstanceToWorkItem(
         businessObjectType: item.documentType ?? "",
         businessObjectId: item.documentId ?? item.instanceId,
         subjectVersion: "",
-        stableNumber: item.documentId ?? item.instanceId,
+        stableNumber:
+            item.documentLabel ?? item.processName ?? "审批单号待补全",
         objectTitle: item.documentLabel ?? item.processName ?? "审批",
         status: "OPEN",
         statusLabel: item.status === "BLOCKED" ? "受阻" : "审批中",

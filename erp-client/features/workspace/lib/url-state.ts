@@ -11,6 +11,7 @@ import { createUrlStateCodec } from "@/lib/url-state"
 const DUE_VALUES = ["today", "overdue"] as const
 const FAMILY_VALUES = [
     "approval",
+    "procurement",
     "finance",
     "fulfillment",
     "exception",

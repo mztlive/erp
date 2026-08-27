@@ -16,6 +16,7 @@ export type DetailSection = Readonly<{
 
 /** 抽到金额条的段，并按此顺序上屏；第一项作为主金额放大。 */
 const AMOUNT_ORDER: readonly string[] = [
+    "待开票金额",
     "含税金额",
     "不含税金额",
     "税额",
@@ -108,5 +109,24 @@ export function splitDetailSections(
     amounts.sort(
         (a, b) => AMOUNT_ORDER.indexOf(a.label) - AMOUNT_ORDER.indexOf(b.label),
     )
-    return { amounts, keyFields, moreFields, submitter }
+    const invoiceAmount = amounts.find(
+        (section) => section.label === "待开票金额",
+    )
+    if (!invoiceAmount) {
+        return { amounts, keyFields, moreFields, submitter }
+    }
+    return {
+        amounts: amounts.filter(
+            (section) =>
+                section.label === "待开票金额" ||
+                section.value !== invoiceAmount.value,
+        ),
+        keyFields,
+        moreFields: moreFields.filter(
+            (section) =>
+                section.value !== invoiceAmount.value ||
+                !["开放余额", "含税总额"].includes(section.label),
+        ),
+        submitter,
+    }
 }

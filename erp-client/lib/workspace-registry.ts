@@ -292,7 +292,7 @@ export function filterNavGroupsByPermissions(
         .filter((group) => group.items.length > 0)
 }
 
-/** Full W01–W30 index aligned with docs/ui-workspaces/README.md. */
+/** Full W01–W30 index. */
 export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     {
         id: "W01",

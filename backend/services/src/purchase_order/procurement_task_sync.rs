@@ -101,7 +101,7 @@ fn validate_procurement_task_access(
 ///
 /// # 关键业务约束
 /// 开放任务归零后进入不可逆终态；历史终态范围重新出现剩余量时创建新任务，不重开旧任务。
-pub(super) async fn sync_procurement_tasks_for_sales_order(
+pub(crate) async fn sync_procurement_tasks_for_sales_order(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
     executor: &mut dyn Executor,

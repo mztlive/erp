@@ -36,6 +36,11 @@ import {
     downloadCsv,
 } from "@/features/customer-receivables/lib/export-csv"
 import {
+    businessLabelOrPlaceholder,
+    MISSING_COUNTERPARTY_NAME,
+    MISSING_CUSTOMER_NAME,
+} from "@/features/customer-receivables/lib/display-labels"
+import {
     DUE_LABEL,
     RECEIVABLE_STATUS_LABEL,
     REVIEW_STATUS_LABEL,
@@ -218,13 +223,21 @@ export function CustomerReceivablesWorkspace({
                     : undefined
             chips.push({
                 key: "counterpartyId",
-                label: `往来主体：${party?.counterpartyPartyName ?? embeddedPartyName ?? urlState.counterpartyPartyId}`,
+                label: `往来主体：${businessLabelOrPlaceholder(
+                    party?.counterpartyPartyName ?? embeddedPartyName,
+                    urlState.counterpartyPartyId,
+                    MISSING_COUNTERPARTY_NAME,
+                )}`,
             })
         }
         if (urlState.customerId) {
             chips.push({
                 key: "customerId",
-                label: `经营客户 ${lockedCustomerName ?? urlState.customerId}`,
+                label: `经营客户：${businessLabelOrPlaceholder(
+                    lockedCustomerName,
+                    urlState.customerId,
+                    MISSING_CUSTOMER_NAME,
+                )}`,
             })
         }
         if (urlState.due && urlState.due !== "all") {
@@ -251,7 +264,9 @@ export function CustomerReceivablesWorkspace({
             )
             chips.push({
                 key: "salesOrderId",
-                label: `销售单：${row?.salesOrderNo ?? urlState.salesOrderId}`,
+                label: row?.salesOrderNo
+                    ? `销售单：${row.salesOrderNo}`
+                    : "已限定销售单",
             })
         }
         if (urlState.receivableAccountId) {
@@ -263,7 +278,7 @@ export function CustomerReceivablesWorkspace({
                 label:
                     row?.accountSeq != null
                         ? `往来子账：${row.accountSeq}`
-                        : `往来子账：${urlState.receivableAccountId}`,
+                        : "已限定往来子账",
             })
         }
         return chips
@@ -330,12 +345,33 @@ export function CustomerReceivablesWorkspace({
         setActionError(null)
         setLastResult(null)
         try {
+            const party = data?.counterparties.find(
+                (item) => item.counterpartyPartyId === partyId,
+            )
+            const receivable = data?.receivables.find(
+                (row) =>
+                    row.counterpartyPartyId === partyId &&
+                    (!target?.receivableAccountId ||
+                        row.accountId === target.receivableAccountId) &&
+                    (!(target?.salesOrderId ?? urlState.salesOrderId) ||
+                        row.salesOrderId ===
+                            (target?.salesOrderId ?? urlState.salesOrderId)),
+            )
             const session = await createSession.mutateAsync({
                 mode,
                 counterpartyPartyId: partyId,
-                counterpartyPartyName,
-                customerId,
-                customerName,
+                counterpartyPartyName:
+                    party?.counterpartyPartyName ??
+                    receivable?.counterpartyPartyName ??
+                    (partyId === counterpartyPartyId
+                        ? counterpartyPartyName
+                        : undefined),
+                customerId:
+                    party?.customerId ?? receivable?.customerId ?? customerId,
+                customerName:
+                    party?.customerName ??
+                    receivable?.customerName ??
+                    customerName,
                 existingFactId,
                 salesOrderId: target?.salesOrderId ?? urlState.salesOrderId,
                 receivableAccountId:

@@ -40,6 +40,7 @@ export function DecisionDialog({
     expectedTaskVersion,
     defaultDecision,
     allowedActions,
+    context,
     onApplied,
 }: {
     open: boolean
@@ -48,6 +49,12 @@ export function DecisionDialog({
     expectedTaskVersion: string
     defaultDecision: ApprovalDecision
     allowedActions: readonly string[]
+    context?: Readonly<{
+        documentLabel?: string
+        amountLabel?: string
+        currentNodeLabel?: string
+        impactSummary?: string
+    }>
     onApplied?: (view: ApprovalCommandView) => void
 }) {
     const submitDecision = useSubmitDecisionMutation()
@@ -55,6 +62,7 @@ export function DecisionDialog({
     const [conflictMessage, setConflictMessage] = React.useState<string | null>(
         null,
     )
+    const appliedViewRef = React.useRef<ApprovalCommandView | null>(null)
     const canApprove = allowedActions.includes("APPROVE")
     const canReject = allowedActions.includes("REJECT")
 
@@ -89,8 +97,8 @@ export function DecisionDialog({
                     }),
                 )
                 setConflictMessage(null)
+                appliedViewRef.current = view
                 onOpenChange(false)
-                onApplied?.(view)
             } catch (error) {
                 if (isApprovalConflict(error)) {
                     setConflictMessage(approvalConflictMessage(error))
@@ -106,17 +114,29 @@ export function DecisionDialog({
         form.reset({ decision: defaultDecision, reason: "" })
         setSlot(null)
         setConflictMessage(null)
+        appliedViewRef.current = null
     }, [defaultDecision, form, open])
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={onOpenChange}
+            onOpenChangeComplete={(nextOpen) => {
+                if (nextOpen || !appliedViewRef.current) return
+                const view = appliedViewRef.current
+                appliedViewRef.current = null
+                onApplied?.(view)
+            }}
+        >
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>
-                        {defaultDecision === "REJECT" ? "驳回" : "通过"}
+                        {defaultDecision === "REJECT" ? "确认驳回" : "确认通过"}
                     </DialogTitle>
                     <DialogDescription>
-                        将按当前任务提交决定。驳回后将从第一节点开始下一轮审批。
+                        {defaultDecision === "REJECT"
+                            ? "请核对当前任务。确认后将驳回，并从第一节点开始下一轮审批。"
+                            : "请核对单据、金额、当前节点和结果影响。只有确认后才会提交审批决定。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -126,6 +146,30 @@ export function DecisionDialog({
                         void form.handleSubmit()
                     }}
                 >
+                    {context ? (
+                        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-md border border-border/60 bg-muted/30 p-3 text-sm">
+                            <dt className="text-muted-foreground">单据</dt>
+                            <dd className="min-w-0 break-words font-medium">
+                                {context.documentLabel?.trim() || "当前任务"}
+                            </dd>
+                            <dt className="text-muted-foreground">金额</dt>
+                            <dd className="num font-medium">
+                                {context.amountLabel?.trim() || "未提供金额"}
+                            </dd>
+                            <dt className="text-muted-foreground">当前节点</dt>
+                            <dd className="min-w-0 break-words">
+                                {context.currentNodeLabel?.trim() ||
+                                    "当前节点待加载"}
+                            </dd>
+                            <dt className="text-muted-foreground">结果影响</dt>
+                            <dd className="min-w-0 break-words">
+                                {context.impactSummary?.trim() ||
+                                    (defaultDecision === "REJECT"
+                                        ? "驳回后从首节点进入下一轮审批。"
+                                        : "通过后进入下一审批节点；如无后续节点，则完成本轮审批。")}
+                            </dd>
+                        </dl>
+                    ) : null}
                     {defaultDecision === "REJECT" ? (
                         <form.AppField
                             name="decision"
@@ -163,7 +207,11 @@ export function DecisionDialog({
                         )}
                     />
                     {conflictMessage ? (
-                        <p className="text-sm text-destructive">
+                        <p
+                            className="text-sm text-destructive"
+                            role="alert"
+                            aria-live="assertive"
+                        >
                             {conflictMessage}
                         </p>
                     ) : null}
@@ -186,8 +234,7 @@ export function DecisionDialog({
                                     submitDecision.isPending ||
                                     (defaultDecision === "APPROVE" &&
                                         !canApprove) ||
-                                    (defaultDecision === "REJECT" &&
-                                        !canReject)
+                                    (defaultDecision === "REJECT" && !canReject)
                                 }
                             />
                         </form.AppForm>

@@ -264,6 +264,36 @@ impl<'a> Repository<'a, SalesChangeSubmission> {
 }
 
 impl<'a> Repository<'a, SalesChangeSubmissionLine> {
+    /// 批量列出多个变更提交的全部明细。
+    ///
+    /// # 参数
+    /// * `submission_ids` - 所属变更提交集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配明细；调用方按提交和行号分组排序。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_lines_by_submissions(
+        &self,
+        submission_ids: &[SalesChangeSubmissionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesChangeSubmissionLine>> {
+        if submission_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            doc! {
+                "sales_change_submission_id": {
+                    "$in": submission_ids.iter().map(ToString::to_string).collect::<Vec<_>>()
+                }
+            },
+            executor,
+        )
+        .await
+    }
+
     /// 列出变更提交的全部明细（按行号升序）。
     ///
     /// # 参数

@@ -1,10 +1,13 @@
-type HandlerFamily = "approval" | "finance" | "fulfillment" | "exception"
+type HandlerFamily =
+    | "approval"
+    | "procurement"
+    | "finance"
+    | "fulfillment"
+    | "exception"
 
 type HandlerWorkspaceId =
     | "W01"
-    | "W03"
     | "W05"
-    | "W07"
     | "W08"
     | "W10"
     | "W11"
@@ -37,15 +40,9 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W01",
         baseHref: "/workspace",
     },
-    procurement_confirmation: {
-        workItemTypeLabel: "采购二次确认",
-        family: "fulfillment",
-        destinationWorkspaceId: "W07",
-        baseHref: "/procurement/confirm",
-    },
     procurement_order_creation: {
         workItemTypeLabel: "待供给分配",
-        family: "fulfillment",
+        family: "procurement",
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",
     },
@@ -60,12 +57,6 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         family: "finance",
         destinationWorkspaceId: "W11",
         baseHref: "/finance/customer-accounts",
-    },
-    low_margin_manager: {
-        workItemTypeLabel: "低毛利销售审批",
-        family: "approval",
-        destinationWorkspaceId: "W05",
-        baseHref: "/sales/orders",
     },
     sales_change_impact_review: {
         workItemTypeLabel: "销售变更履约影响复核",
@@ -97,41 +88,11 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W13",
         baseHref: "/finance/card-funds-review",
     },
-    card_sales_manager_approval: {
-        workItemTypeLabel: "卡券销售领导审批",
-        family: "approval",
-        destinationWorkspaceId: "W05",
-        baseHref: "/sales/orders",
-    },
-    card_sales_operations_approval: {
-        workItemTypeLabel: "卡券运营审批",
-        family: "approval",
-        destinationWorkspaceId: "W05",
-        baseHref: "/sales/orders",
-    },
-    ownership_sales: {
-        workItemTypeLabel: "归属迁移销售确认",
-        family: "approval",
-        destinationWorkspaceId: "W03",
-        baseHref: "/sales/customers",
-    },
-    ownership_finance: {
-        workItemTypeLabel: "归属迁移财务确认",
-        family: "finance",
-        destinationWorkspaceId: "W17",
-        baseHref: "/governance/mall-sync",
-    },
     inventory_adj: {
         workItemTypeLabel: "库存调整复核",
         family: "fulfillment",
         destinationWorkspaceId: "W10",
         baseHref: "/inventory",
-    },
-    finance_correction: {
-        workItemTypeLabel: "财务纠错复核",
-        family: "finance",
-        destinationWorkspaceId: "W17",
-        baseHref: "/governance/mall-sync",
     },
     supplier_settlement: {
         workItemTypeLabel: "供应商结算复核",
@@ -319,19 +280,6 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
     })
 
     switch (item.handlerKey) {
-        case "card_sales_manager_approval":
-        case "card_sales_operations_approval":
-            params.set("section", "approval")
-            return withParams(
-                `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
-                params,
-            )
-        case "low_margin_manager":
-            params.set("section", "procurement-rejection")
-            return withParams(
-                `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
-                params,
-            )
         case "sales_change_impact_review":
         case "sales_change_finance_review": {
             const salesOrderId = requiredValue(item.rootBusinessObjectId)

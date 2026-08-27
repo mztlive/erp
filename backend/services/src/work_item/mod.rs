@@ -10,18 +10,19 @@ use std::{
 
 use chrono::{Datelike, FixedOffset, TimeZone, Utc};
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt, LegacyImportExt,
-    MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt,
-    SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, BpmExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt,
+    LegacyImportExt, MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
+    SalesOrderExt, SalesReviewExt, SupplierFulfillmentExt, SupplierOfferingExt, SupplierSettlementExt,
+    Transactional, WorkItemExt,
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
     common::time::Instant,
     integration_ops::{
-        ErrorClass, ErrorTaskStatus, ReconciliationDifferenceId, ReconciliationDifferenceResolution,
-        ReconciliationDifferenceResolutionId, ResolutionAction, ResolutionType,
+        ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ReconciliationDifference,
+        ReconciliationDifferenceId, ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionId,
+        ResolutionAction, ResolutionType,
     },
     work_item::{
         AvailableWorkItemAccount, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind,
@@ -54,10 +55,10 @@ mod sales_order_brief;
 
 pub use dto::{
     CloseWorkItemRequest, ProcessingBlockerView, ProcessingState, ReassignWorkItemRequest,
-    WorkItemAllowedAction, WorkItemConflict, WorkItemConflictKind, WorkItemDueFilter, WorkItemFamily,
-    WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView, WorkItemPartyView,
-    WorkItemReassignCandidateView, WorkItemScope, WorkItemSort, WorkItemStatsParams, WorkItemStatsView,
-    WorkItemView,
+    WorkItemAllowedAction, WorkItemApprovalContextView, WorkItemConflict, WorkItemConflictKind,
+    WorkItemDueFilter, WorkItemFamily, WorkItemFamilyCountsView, WorkItemListParams, WorkItemMutationOutcome,
+    WorkItemPageView, WorkItemPartyView, WorkItemReassignCandidateView, WorkItemScope, WorkItemSort,
+    WorkItemStatsParams, WorkItemStatsView, WorkItemView,
 };
 pub(crate) use finance_responsibility::ResolvedFinanceResponsibility;
 pub use finance_responsibility::{
@@ -204,7 +205,7 @@ impl WorkItemService {
     /// * `actor` - 已认证操作人
     ///
     /// # 返回
-    /// 返回个人、今日到期、超期和异常计数及服务端统计时点。
+    /// 返回个人、今日到期、超期、异常、任务族计数及服务端统计时点。
     ///
     /// # 错误
     /// 查询参数、权限范围或对象事实读取失败时返回错误。
@@ -226,6 +227,17 @@ impl WorkItemService {
         let assigned = self
             .processable_stats_fields(assigned, WorkItemScope::Mine, actor, &access)
             .await?;
+        let family_items = if params.family.is_none() && params.work_item_type.is_none() {
+            assigned.clone()
+        } else {
+            let mut family_query = query.clone();
+            family_query.work_item_types = registered_work_item_types();
+            let family_items = self
+                .stats_fields_for_open_scope(&family_query, WorkItemScope::Mine, actor, &access)
+                .await?;
+            self.processable_stats_fields(family_items, WorkItemScope::Mine, actor, &access)
+                .await?
+        };
         let as_of = Instant::now();
         let (today_start, tomorrow_start) = business_day_bounds()?;
         Ok(WorkItemStatsView {
@@ -256,6 +268,7 @@ impl WorkItemService {
                     })
                     .count(),
             ),
+            family_counts: family_counts_for_types(family_items.iter().map(|item| item.work_item_type)),
             as_of,
         })
     }
@@ -568,15 +581,18 @@ impl WorkItemService {
             .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
-            facts.insert(
-                (ObjectKind::IntegrationErrorTask, task.base.id.clone()),
-                ObjectFact::new(
-                    task.base.id.clone(),
-                    "集成异常处理",
-                    task.owner_user_id
-                        .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string()),
-                ),
+            let owner = task
+                .owner_user_id
+                .clone()
+                .unwrap_or_else(|| SYSTEM_OBJECT_OWNER.to_string());
+            let mut fact = ObjectFact::new(
+                task.base.id.clone(),
+                format!("集成异常 · {}", task.error_class.label()),
+                owner,
             );
+            fact.impact_summary = Some(integration_error_impact(&task).to_string());
+            fact.brief_source = Some(integration_error_brief_source(&task));
+            facts.insert((ObjectKind::IntegrationErrorTask, task.base.id.clone()), fact);
         }
         Ok(())
     }
@@ -597,13 +613,17 @@ impl WorkItemService {
             .list_work_item_brief_entities_by_ids(&ids, executor)
             .await?
         {
+            let mut fact = ObjectFact::new(
+                difference.base.id.clone(),
+                format!("业务异常 · {}", difference.difference_type),
+                SYSTEM_OBJECT_OWNER,
+            );
+            fact.impact_summary =
+                Some("需核对两侧不可变证据后处理差异，不得直接改写正式业务事实".to_string());
+            fact.brief_source = Some(reconciliation_difference_brief_source(&difference));
             facts.insert(
                 (ObjectKind::ReconciliationDifference, difference.base.id.clone()),
-                ObjectFact::new(
-                    difference.base.id.clone(),
-                    format!("对账差异：{}", difference.difference_type),
-                    SYSTEM_OBJECT_OWNER,
-                ),
+                fact,
             );
         }
         Ok(())
@@ -756,7 +776,69 @@ impl WorkItemService {
             );
         }
         self.apply_party_names(&mut items).await?;
+        self.apply_approval_contexts(&mut items).await?;
         Ok(items)
+    }
+
+    /// 批量补齐审批任务的当前节点和最近驳回事实。
+    ///
+    /// # 参数
+    /// * `items` - 已通过工作项和业务对象授权的安全投影
+    ///
+    /// # 返回
+    /// 无审批节点的任务保持不变；审批任务获得与节点执行严格绑定的运行上下文。
+    ///
+    /// # 错误
+    /// BPM 节点执行或实例有界投影查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 列表固定执行两次批量查询，不得逐任务读取审批历史；最近驳回只取实例有界投影。
+    async fn apply_approval_contexts(&self, items: &mut [WorkItemView]) -> Result<()> {
+        let execution_ids = items
+            .iter()
+            .filter_map(|item| item.approval_node_execution_id.as_deref())
+            .map(bpm::ids::ApprovalNodeExecutionId::new)
+            .collect::<Vec<_>>();
+        if execution_ids.is_empty() {
+            return Ok(());
+        }
+        let executions = self
+            .db
+            .bpm_workflow()
+            .list_executions_by_ids(&execution_ids, &mut NoTransaction)
+            .await?;
+        let instance_ids = executions
+            .iter()
+            .map(|execution| execution.process_instance_id.clone())
+            .collect::<Vec<_>>();
+        let summaries = self
+            .db
+            .bpm_workflow()
+            .list_instance_summaries_by_ids(&instance_ids, &mut NoTransaction)
+            .await?;
+        let executions = executions
+            .into_iter()
+            .map(|execution| (execution.base.id.clone(), execution))
+            .collect::<HashMap<_, _>>();
+        let summaries = summaries
+            .into_iter()
+            .map(|summary| (summary.id.clone(), summary))
+            .collect::<HashMap<_, _>>();
+        for item in items {
+            let Some(execution_id) = item.approval_node_execution_id.as_deref() else {
+                continue;
+            };
+            let Some(execution) = executions.get(execution_id) else {
+                fail_closed_missing_approval_context(item);
+                continue;
+            };
+            let Some(summary) = summaries.get(execution.process_instance_id.as_ref()) else {
+                fail_closed_missing_approval_context(item);
+                continue;
+            };
+            item.set_approval_context(approval_context_view(execution, summary));
+        }
+        Ok(())
     }
 
     /// 查询当前用户有权查看的单条任务。
@@ -782,6 +864,8 @@ impl WorkItemService {
             view_access.action_blockers,
         );
         self.apply_party_names(std::slice::from_mut(&mut view)).await?;
+        self.apply_approval_contexts(std::slice::from_mut(&mut view))
+            .await?;
         Ok(view)
     }
 
@@ -2353,6 +2437,8 @@ impl WorkItemService {
                 view_access.action_blockers,
             );
         self.apply_party_names(std::slice::from_mut(&mut view)).await?;
+        self.apply_approval_contexts(std::slice::from_mut(&mut view))
+            .await?;
         Ok(view)
     }
 }
@@ -2956,6 +3042,271 @@ impl ObjectFact {
     }
 }
 
+/// 组装集成错误任务的结构化简报。
+///
+/// # 参数
+/// * `task` - 集成错误任务正式事实
+///
+/// # 返回
+/// 返回错误分类、关联参考号、发生时间、重试证据、脱敏摘要和处理结果。
+///
+/// # 错误
+/// 无。
+fn integration_error_brief_source(task: &IntegrationErrorTask) -> brief::ObjectBriefSource {
+    let occurred_at = base_created_at_datetime(task.base.created_at);
+    let last_attempt_at = task.last_attempt_at.map(brief::format_instant_datetime);
+    let attempt_count = format!("{} 次", task.attempt_count);
+    let resolved_at = task.resolved_at.map(brief::format_instant_datetime);
+    let resolution_type = task.resolution_type.map(|value| value.label().to_string());
+    let reference = task
+        .business_object_id
+        .clone()
+        .or_else(|| task.message_id.as_ref().map(ToString::to_string));
+    let mut sections = Vec::new();
+    brief::push_section(&mut sections, "错误分类", Some(task.error_class.label()), false);
+    brief::push_section(&mut sections, "状态", Some(task.status.label()), false);
+    brief::push_section(
+        &mut sections,
+        "业务对象参考号",
+        task.business_object_id.as_deref(),
+        false,
+    );
+    let message_id = task.message_id.as_ref().map(ToString::to_string);
+    brief::push_section(&mut sections, "关联消息", message_id.as_deref(), false);
+    brief::push_section(&mut sections, "发生时间", occurred_at.as_deref(), false);
+    brief::push_section(&mut sections, "重试记录", Some(attempt_count.as_str()), false);
+    brief::push_section(&mut sections, "最近尝试", last_attempt_at.as_deref(), false);
+    brief::push_section(
+        &mut sections,
+        "错误摘要",
+        task.last_attempt_summary.as_deref(),
+        false,
+    );
+    brief::push_section(&mut sections, "责任角色", task.owner_role.as_deref(), false);
+    brief::push_section(&mut sections, "责任人", task.owner_user_id.as_deref(), false);
+    brief::push_section(
+        &mut sections,
+        "安全下一步",
+        Some(integration_error_next_step(task.error_class)),
+        false,
+    );
+    brief::push_section(&mut sections, "解决方式", resolution_type.as_deref(), false);
+    brief::push_section(&mut sections, "处理证据", task.resolution.as_deref(), false);
+    brief::push_section(&mut sections, "完成时间", resolved_at.as_deref(), false);
+    brief::ObjectBriefSource {
+        customer: None,
+        amount_label: None,
+        lines: Vec::new(),
+        more_count: 0,
+        submitter_name: None,
+        list_summary: brief::join_list_summary([
+            Some(task.error_class.label().to_string()),
+            reference,
+            Some(format!("重试 {attempt_count}")),
+            task.last_attempt_summary.as_deref().and_then(brief::non_empty),
+        ]),
+        extra_sections: sections,
+    }
+}
+
+/// 返回集成错误对业务处理的安全影响说明。
+///
+/// # 参数
+/// * `task` - 集成错误任务正式事实
+///
+/// # 返回
+/// 结果未知返回防重复写入说明，其余分类返回通用缺失或重复风险说明。
+///
+/// # 错误
+/// 无。
+fn integration_error_impact(task: &IntegrationErrorTask) -> &'static str {
+    if task.error_class == ErrorClass::ResultUnknown {
+        "外部结果尚未确认，盲目重试可能造成重复写入或重复履约"
+    } else {
+        "集成异常未处理可能造成业务事实缺失、延迟或上下游不一致"
+    }
+}
+
+/// 按固定错误分类返回可执行且安全的下一步。
+///
+/// # 参数
+/// * `error_class` - 错误分类
+///
+/// # 返回
+/// 返回不泄露内部实现的处理指引。
+///
+/// # 错误
+/// 无。
+fn integration_error_next_step(error_class: ErrorClass) -> &'static str {
+    match error_class {
+        ErrorClass::CapabilityGap => "确认目标系统能力后转人工补偿或补齐能力",
+        ErrorClass::MappingError => "修复映射并验证业务键后再重放",
+        ErrorClass::BusinessRejected => "核对拒绝原因并修正业务输入后重新提交",
+        ErrorClass::TransientFailure | ErrorClass::RateLimited => "核对最近尝试摘要，按原幂等业务键重试",
+        ErrorClass::ResultUnknown => "先查询原请求结果，确认无结果后才允许重放",
+        ErrorClass::AuthSignature => "修复鉴权或签名配置，验证通过后再重试",
+        ErrorClass::OutOfOrder => "补齐前置事实并确认顺序后再重放",
+    }
+}
+
+/// 组装对账差异的结构化业务异常简报。
+///
+/// # 参数
+/// * `difference` - 不可变对账差异事实
+///
+/// # 返回
+/// 返回异常对象、差异类型、发现时间与两侧证据引用。
+///
+/// # 错误
+/// 无。
+fn reconciliation_difference_brief_source(difference: &ReconciliationDifference) -> brief::ObjectBriefSource {
+    let occurred_at = base_created_at_datetime(difference.base.created_at);
+    let evidence_count = usize::from(difference.left_fact_reference.is_some())
+        + usize::from(difference.right_fact_reference.is_some());
+    let evidence_summary = format!("{evidence_count} 侧证据");
+    let mut sections = Vec::new();
+    brief::push_section(
+        &mut sections,
+        "异常对象",
+        Some(difference.business_object_type.as_str()),
+        false,
+    );
+    brief::push_section(
+        &mut sections,
+        "外部/业务参考号",
+        Some(difference.business_object_id.as_str()),
+        false,
+    );
+    brief::push_section(
+        &mut sections,
+        "差异类型",
+        Some(difference.difference_type.as_str()),
+        false,
+    );
+    brief::push_section(&mut sections, "发现时间", occurred_at.as_deref(), false);
+    brief::push_section(
+        &mut sections,
+        "左侧证据",
+        difference.left_fact_reference.as_deref(),
+        false,
+    );
+    brief::push_section(
+        &mut sections,
+        "右侧证据",
+        difference.right_fact_reference.as_deref(),
+        false,
+    );
+    brief::push_section(
+        &mut sections,
+        "关闭条件",
+        Some("两侧事实已核对，并引用正式处理结果或无需处理的证据"),
+        false,
+    );
+    brief::ObjectBriefSource {
+        customer: None,
+        amount_label: None,
+        lines: Vec::new(),
+        more_count: 0,
+        submitter_name: None,
+        list_summary: brief::join_list_summary([
+            Some(difference.business_object_type.clone()),
+            Some(difference.business_object_id.clone()),
+            Some(difference.difference_type.clone()),
+            Some(evidence_summary),
+        ]),
+        extra_sections: sections,
+    }
+}
+
+/// 把实体基础时间转换为业务时区展示；非法或测试零值不上屏。
+///
+/// # 参数
+/// * `created_at` - 实体 Unix 秒级创建时间
+///
+/// # 返回
+/// 返回分钟级时间；零值或超出 `i64` 时返回 `None`。
+///
+/// # 错误
+/// 无。
+fn base_created_at_datetime(created_at: u64) -> Option<String> {
+    (created_at > 0)
+        .then(|| i64::try_from(created_at).ok())
+        .flatten()
+        .map(Instant::from_unix_secs)
+        .map(brief::format_instant_datetime)
+}
+
+#[cfg(test)]
+mod integration_brief_tests {
+    use entities::{
+        common::time::Instant,
+        ids::{IntegrationErrorTaskId, ReconciliationDifferenceId},
+        integration_ops::{
+            ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData, ReconciliationDifference,
+            ReconciliationDifferenceData,
+        },
+    };
+
+    use super::{integration_error_brief_source, reconciliation_difference_brief_source};
+
+    #[test]
+    fn integration_brief_exposes_retry_and_redacted_error_evidence() {
+        let mut task = IntegrationErrorTask::new(
+            IntegrationErrorTaskId::new("integration-1"),
+            IntegrationErrorTaskData {
+                message_id: None,
+                business_object_id: Some("EXT-2026-001".to_string()),
+                error_class: ErrorClass::ResultUnknown,
+                owner_role: Some("integration-operator".to_string()),
+                owner_user_id: Some("operator-1".to_string()),
+            },
+        )
+        .unwrap();
+        task.attempt_count = 2;
+        task.last_attempt_at = Some(Instant::from_unix_secs(1_787_457_600));
+        task.last_attempt_summary = Some("目标系统超时，未取得业务结果".to_string());
+
+        let brief = integration_error_brief_source(&task);
+
+        assert!(brief
+            .extra_sections
+            .iter()
+            .any(|section| { section.label == "业务对象参考号" && section.value == "EXT-2026-001" }));
+        assert!(brief
+            .extra_sections
+            .iter()
+            .any(|section| section.label == "重试记录" && section.value == "2 次"));
+        assert!(brief.list_summary.contains("目标系统超时"));
+    }
+
+    #[test]
+    fn reconciliation_brief_exposes_both_immutable_evidence_references() {
+        let difference = ReconciliationDifference::new(
+            ReconciliationDifferenceId::new("difference-1"),
+            ReconciliationDifferenceData {
+                business_object_type: "商城订单".to_string(),
+                business_object_id: "MALL-1001".to_string(),
+                difference_type: "金额不一致".to_string(),
+                left_fact_reference: Some("mall-snapshot:7".to_string()),
+                right_fact_reference: Some("erp-revision:9".to_string()),
+            },
+        )
+        .unwrap();
+
+        let brief = reconciliation_difference_brief_source(&difference);
+
+        assert!(brief
+            .extra_sections
+            .iter()
+            .any(|section| section.label == "左侧证据"));
+        assert!(brief
+            .extra_sections
+            .iter()
+            .any(|section| section.label == "右侧证据"));
+        assert!(brief.list_summary.contains("2 侧证据"));
+    }
+}
+
 type ObjectFactMap = HashMap<(ObjectKind, String), ObjectFact>;
 
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
@@ -3032,6 +3383,64 @@ fn non_empty_assignment_actors(actors: Vec<String>) -> Result<HashSet<String>> {
         ));
     }
     Ok(actors)
+}
+
+/// 把审批节点执行与实例有界投影合并为工作台判断上下文。
+///
+/// # 参数
+/// * `execution` - 工作项直接引用的审批节点执行
+/// * `summary` - 同一审批实例的有界列表投影
+///
+/// # 返回
+/// 返回当前任务节点、审批人、轮次、实例状态和最近驳回摘要。
+///
+/// # 错误
+/// 无；两者属于同一实例的约束由调用方按实例 ID 建立。
+fn approval_context_view(
+    execution: &bpm::model::ApprovalNodeExecution,
+    summary: &database::repository::bpm::ApprovalInstanceSummary,
+) -> dto::WorkItemApprovalContextView {
+    dto::WorkItemApprovalContextView {
+        instance_id: summary.id.clone(),
+        status: summary.status.as_str().to_string(),
+        current_round_no: execution.round_no,
+        current_node_label: execution.node_name.clone(),
+        current_assignee_label: non_empty_text(&execution.assignee_name_snapshot),
+        latest_rejection_reason: summary
+            .latest_rejection_summary
+            .as_deref()
+            .and_then(non_empty_text),
+        process_version: Some(summary.definition_version),
+    }
+}
+
+/// 审批运行上下文缺失时移除决定动作并追加稳定阻断信息。
+fn fail_closed_missing_approval_context(item: &mut WorkItemView) {
+    if !remove_approval_decision_actions(&mut item.allowed_actions) {
+        return;
+    }
+    item.action_blockers.push(ProcessingBlockerView {
+        code: "APPROVAL_CONTEXT_MISSING".to_string(),
+        message: "审批运行信息暂不可用，请刷新；仍未恢复时联系管理员修复审批数据".to_string(),
+    });
+}
+
+/// 从动作集合中移除审批决定并返回是否发生移除。
+fn remove_approval_decision_actions(actions: &mut Vec<WorkItemAllowedAction>) -> bool {
+    let before = actions.len();
+    actions.retain(|action| {
+        !matches!(
+            action,
+            WorkItemAllowedAction::Approve | WorkItemAllowedAction::Reject
+        )
+    });
+    actions.len() != before
+}
+
+/// 返回去除首尾空白后的非空展示文本。
+fn non_empty_text(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 /// 从批量对象键中提取指定实体种类的稳定 ID。
@@ -3618,6 +4027,41 @@ fn count_u64(value: usize) -> u64 {
     u64::try_from(value).unwrap_or(u64::MAX)
 }
 
+/// 返回服务端正式注册的全部任务类型，用于形成不受当前分组限制的统计口径。
+fn registered_work_item_types() -> Vec<WorkItemType> {
+    [
+        WorkItemFamily::Approval,
+        WorkItemFamily::Procurement,
+        WorkItemFamily::Fulfillment,
+        WorkItemFamily::Finance,
+        WorkItemFamily::Exception,
+    ]
+    .into_iter()
+    .flat_map(WorkItemFamily::work_item_types)
+    .collect()
+}
+
+/// 按服务端固定任务族映射汇总可处理任务数量。
+fn family_counts_for_types(
+    work_item_types: impl IntoIterator<Item = WorkItemType>,
+) -> WorkItemFamilyCountsView {
+    let mut counts = WorkItemFamilyCountsView::default();
+    for work_item_type in work_item_types {
+        match dto::family_of(work_item_type) {
+            WorkItemFamily::Approval => counts.approval = counts.approval.saturating_add(1),
+            WorkItemFamily::Procurement => {
+                counts.procurement = counts.procurement.saturating_add(1);
+            }
+            WorkItemFamily::Fulfillment => {
+                counts.fulfillment = counts.fulfillment.saturating_add(1);
+            }
+            WorkItemFamily::Finance => counts.finance = counts.finance.saturating_add(1),
+            WorkItemFamily::Exception => counts.exception = counts.exception.saturating_add(1),
+        }
+    }
+    counts
+}
+
 fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &ActorAccess) -> String {
     stable_digest(&format!(
         "queue|{actor_id}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{}",
@@ -3831,11 +4275,11 @@ mod tests {
         allowed_actions, approval_assignment_separated, audit_command_fingerprint,
         audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
         command_audit_message, counts_as_processable_stat, detail_scope, expected_task_version,
-        has_assignment_candidate_access, non_empty_assignment_actors, object_access_shapes, object_policy,
-        purchase_order_fulfillment_responsibility_id, stable_digest, w29_close_reason,
-        w29_domain_evidence_reference, ActorAccess, AssignmentSeparationPolicy, AuthorizedPage,
-        AuthorizedPageCollector, Error, ObjectFact, ObjectFactMap, ObjectKind, ViewAccess,
-        AUTHORIZED_SCAN_BATCH_SIZE,
+        family_counts_for_types, has_assignment_candidate_access, non_empty_assignment_actors,
+        object_access_shapes, object_policy, purchase_order_fulfillment_responsibility_id,
+        remove_approval_decision_actions, stable_digest, w29_close_reason, w29_domain_evidence_reference,
+        ActorAccess, AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
+        ObjectFactMap, ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
     use entities::{
@@ -4372,6 +4816,37 @@ mod tests {
 
         let view_only = ViewAccess::ready(vec![WorkItemAllowedAction::View]);
         assert!(!counts_as_processable_stat(WorkItemScope::Mine, &view_only));
+    }
+
+    #[test]
+    fn missing_approval_context_removes_decisions_but_keeps_view() {
+        let mut actions = vec![
+            WorkItemAllowedAction::View,
+            WorkItemAllowedAction::Approve,
+            WorkItemAllowedAction::Reject,
+        ];
+
+        assert!(remove_approval_decision_actions(&mut actions));
+        assert_eq!(actions, vec![WorkItemAllowedAction::View]);
+        assert!(!remove_approval_decision_actions(&mut actions));
+    }
+
+    #[test]
+    fn family_counts_use_the_registered_server_mapping() {
+        let counts = family_counts_for_types([
+            WorkItemType::DocumentApproval,
+            WorkItemType::ProcurementOrderCreation,
+            WorkItemType::SalesInvoiceExecution,
+            WorkItemType::InventoryAdjustmentReview,
+            WorkItemType::BusinessException,
+            WorkItemType::SupplierPaymentExecution,
+        ]);
+
+        assert_eq!(counts.approval, 1);
+        assert_eq!(counts.procurement, 1);
+        assert_eq!(counts.fulfillment, 1);
+        assert_eq!(counts.finance, 2);
+        assert_eq!(counts.exception, 1);
     }
 
     #[test]

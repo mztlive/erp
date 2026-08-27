@@ -7,7 +7,7 @@
 //!   也不覆盖名称、启停状态与 system 标记。
 //!
 //! 角色集合与默认权限对齐第一期部门职责（`docs/erp-phase-1.md` §11）、
-//! 工作台角色入口（`docs/ui-workspaces/w01-today-workspace.md` §2.1）以及二期销售领导审批轨。
+//! 工作台角色入口（W01 今日工作台）以及二期销售领导审批轨。
 //! `role-root` 由 [`super::ensure_root_role`] 单独维护，不在本清单中。
 
 use entities::{Permission, RoleData};

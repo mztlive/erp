@@ -1,6 +1,5 @@
 /**
  * W20 · API 供应商连接 · 客户端契约
- * 对齐 docs/ui-workspaces/w20-supplier-api-connections.md §5/§7/§8
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"

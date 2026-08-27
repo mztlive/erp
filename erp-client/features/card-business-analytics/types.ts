@@ -1,4 +1,4 @@
-/** W28 卡券消费台账与经营分析 · 客户端契约（对齐 docs/ui-workspaces/w28 §8） */
+/** W28 卡券消费台账与经营分析 · 客户端契约 */
 
 import type { StatusTone } from "@/components/ui/status-badge"
 

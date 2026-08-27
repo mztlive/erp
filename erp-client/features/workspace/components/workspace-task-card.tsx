@@ -1,5 +1,7 @@
 "use client"
 
+import { ChevronRightIcon } from "lucide-react"
+
 import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 
@@ -30,7 +32,6 @@ export function WorkspaceTaskCard({
     ).amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
     const sourceSales = findSourceSalesOrder(item.summarySections)
-    const dueOrStatus = blocked || overdue || Boolean(item.dueAt)
     const counterpartyLine = [
         item.counterpartyName,
         sourceSales ? `来源 ${sourceSales.orderNo}` : undefined,
@@ -41,7 +42,7 @@ export function WorkspaceTaskCard({
     return (
         <button
             type="button"
-            id={`work-item-${item.stableNumber}`}
+            id={`workspace-task-${item.workItemId}`}
             data-testid={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION"
                     ? `work-item-procurement-order-creation-${item.workItemId}`
@@ -55,7 +56,7 @@ export function WorkspaceTaskCard({
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
-                "relative flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors",
+                "relative flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 selected
                     ? "bg-muted/50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
                     : "hover:bg-muted/40",
@@ -78,8 +79,8 @@ export function WorkspaceTaskCard({
                         </span>
                     ) : null}
                 </span>
-                {dueOrStatus ? (
-                    blocked ? (
+                <span className="flex shrink-0 items-center gap-1">
+                    {blocked ? (
                         <StatusBadge label="受阻" tone="warning" />
                     ) : overdue ? (
                         <StatusBadge label="已超期" tone="destructive" />
@@ -90,8 +91,16 @@ export function WorkspaceTaskCard({
                         >
                             {item.dueAtLabel}
                         </time>
-                    ) : null
-                ) : null}
+                    ) : (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                            未设截止
+                        </span>
+                    )}
+                    <ChevronRightIcon
+                        aria-hidden="true"
+                        className="size-3.5 text-muted-foreground"
+                    />
+                </span>
             </span>
         </button>
     )

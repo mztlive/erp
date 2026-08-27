@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+    TYPE_META,
     workspaceDocumentBadge,
     workspaceOpenActionLabel,
     workspaceReadActionLabel,
@@ -34,10 +35,30 @@ test("common inbox badges use distinct colors", () => {
         workspaceDocumentBadge("DOCUMENT_APPROVAL", "supplier_payment"),
         workspaceDocumentBadge("DOCUMENT_APPROVAL", "customer_refund"),
         workspaceDocumentBadge("PROCUREMENT_ORDER_CREATION", "sales_order"),
-        workspaceDocumentBadge("PROCUREMENT_CONFIRMATION", "sales_order"),
     ]
     const variants = badges.map((badge) => badge.variant)
     assert.equal(new Set(variants).size, variants.length)
+})
+
+test("workbench metadata contains only active and projectable work item types", () => {
+    assert.deepEqual(Object.keys(TYPE_META).sort(), [
+        "BUSINESS_EXCEPTION",
+        "CARD_FUNDS_DELTA_REVIEW",
+        "CARD_FUNDS_REVIEW",
+        "DOCUMENT_APPROVAL",
+        "FULFILLMENT_OPERATION",
+        "IMPORT_BUSINESS_CONFIRMATION",
+        "INTEGRATION_RESULT_UNKNOWN",
+        "INVENTORY_ADJUSTMENT_REVIEW",
+        "PROCUREMENT_ORDER_CREATION",
+        "PURCHASE_ORDER_REVIEW",
+        "SALES_CHANGE_FINANCE_REVIEW",
+        "SALES_CHANGE_IMPACT_REVIEW",
+        "SALES_INVOICE_EXECUTION",
+        "SUPPLIER_PAYMENT_EXECUTION",
+        "SUPPLIER_SETTLEMENT_REVIEW",
+    ])
+    assert.equal(TYPE_META.PROCUREMENT_ORDER_CREATION?.family, "procurement")
 })
 
 test("document approval accepts PascalCase object types", () => {

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import type { WorkspaceUrlState } from "../lib/url-state"
 import type {
     WorkspaceFamilyFilter,
+    WorkspaceFamilyCounts,
     WorkspaceMetric,
     WorkspaceMetricKey,
     WorkspaceSort,
@@ -30,6 +31,7 @@ import type {
 const FAMILIES: readonly (WorkspaceFamilyFilter | undefined)[] = [
     undefined,
     "approval",
+    "procurement",
     "fulfillment",
     "finance",
     "exception",
@@ -37,9 +39,10 @@ const FAMILIES: readonly (WorkspaceFamilyFilter | undefined)[] = [
 
 const FAMILY_LABEL: Record<string, string> = {
     approval: "审批",
+    procurement: "采购",
     fulfillment: "履约",
     finance: "财务",
-    exception: "集成",
+    exception: "异常",
 }
 
 const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
@@ -48,7 +51,7 @@ const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
     { value: "created_desc", label: "进入时间" },
 ]
 
-/** 文字导航项。选中靠字重，不用胶囊底。 */
+/** 文字导航项。选中态同时使用字重与下划线，不能只依赖颜色。 */
 function WorkspaceTextNavButton({
     active,
     children,
@@ -60,9 +63,9 @@ function WorkspaceTextNavButton({
             type="button"
             aria-pressed={active}
             className={cn(
-                "h-8 px-1.5 text-sm",
+                "relative h-8 rounded-sm px-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 active
-                    ? "font-medium text-foreground"
+                    ? "font-medium text-foreground after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground"
                     : "text-muted-foreground hover:text-foreground",
             )}
         >
@@ -72,7 +75,7 @@ function WorkspaceTextNavButton({
 }
 
 /**
- * 队列口径切换。只切换待办范围，不展示统计数字。
+ * 队列口径切换。数量直接使用服务端指标，禁止对已加载条目求和。
  */
 export function WorkspaceQueueScopeNav({
     metrics,
@@ -95,9 +98,13 @@ export function WorkspaceQueueScopeNav({
                 <WorkspaceTextNavButton
                     key={metric.key}
                     active={metric.key === activeMetric}
+                    aria-label={`${metric.label} ${metric.count} 项`}
                     onClick={() => onMetricClick(metric.key)}
                 >
-                    {metric.label}
+                    <span>{metric.label}</span>
+                    <span className="num ml-1 text-xs text-muted-foreground">
+                        {metric.count}
+                    </span>
                 </WorkspaceTextNavButton>
             ))}
         </div>
@@ -109,12 +116,17 @@ export function WorkspaceQueueScopeNav({
  */
 export function WorkspaceFamilyNav({
     urlState,
+    counts,
     onFamilyChange,
 }: {
     urlState: WorkspaceUrlState
+    counts?: WorkspaceFamilyCounts
     onFamilyChange: (family?: WorkspaceFamilyFilter) => void
 }) {
     const familyValue = urlState.family ?? "all"
+    const allCount = counts
+        ? Object.values(counts).reduce((total, count) => total + count, 0)
+        : undefined
 
     return (
         <div
@@ -124,17 +136,28 @@ export function WorkspaceFamilyNav({
         >
             {FAMILIES.map((family) => {
                 const value = family ?? "all"
+                const count = family ? counts?.[family] : allCount
                 return (
                     <WorkspaceTextNavButton
                         key={value}
                         active={familyValue === value}
+                        aria-label={
+                            count == null
+                                ? undefined
+                                : `${family ? FAMILY_LABEL[family] : "全部"} ${count} 项`
+                        }
                         onClick={() =>
                             onFamilyChange(
                                 family === undefined ? undefined : family,
                             )
                         }
                     >
-                        {family ? FAMILY_LABEL[family] : "全部"}
+                        <span>{family ? FAMILY_LABEL[family] : "全部"}</span>
+                        {count == null ? null : (
+                            <span className="num ml-1 text-xs text-muted-foreground">
+                                {count}
+                            </span>
+                        )}
                     </WorkspaceTextNavButton>
                 )
             })}

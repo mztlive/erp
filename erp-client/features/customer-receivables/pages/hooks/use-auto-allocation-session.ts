@@ -22,6 +22,9 @@ export function useAutoAllocationSession(args: {
         mutateAsync: (input: {
             mode: "receipt" | "invoice"
             counterpartyPartyId: string
+            counterpartyPartyName?: string
+            customerId?: string
+            customerName?: string
             salesOrderId?: string
             receivableAccountId?: string
             returnTo?: string
@@ -63,12 +66,33 @@ export function useAutoAllocationSession(args: {
             data.counterparties.find((c) => c.customerId === customerId)
                 ?.counterpartyPartyId
         if (!party) return
+        const receivable =
+            data.receivables.find(
+                (row) =>
+                    row.counterpartyPartyId === party &&
+                    (!receivableAccountId ||
+                        row.accountId === receivableAccountId) &&
+                    (!salesOrderId || row.salesOrderId === salesOrderId),
+            ) ??
+            data.receivables.find((row) => row.counterpartyPartyId === party)
+        const counterparty = data.counterparties.find(
+            (item) => item.counterpartyPartyId === party,
+        )
         autoSessionRef.current = true
         void (async () => {
             try {
                 const session = await createSession.mutateAsync({
                     mode: registerMode === "invoice" ? "invoice" : "receipt",
                     counterpartyPartyId: party,
+                    counterpartyPartyName:
+                        receivable?.counterpartyPartyName ??
+                        counterparty?.counterpartyPartyName,
+                    customerId:
+                        customerId ??
+                        receivable?.customerId ??
+                        counterparty?.customerId,
+                    customerName:
+                        receivable?.customerName ?? counterparty?.customerName,
                     salesOrderId,
                     receivableAccountId,
                     returnTo,
@@ -85,11 +109,14 @@ export function useAutoAllocationSession(args: {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         canRegister,
+        counterpartyPartyId,
+        customerId,
         data,
         from,
         receivableAccountId,
         registerMode,
         returnTo,
+        salesOrderId,
         sessionId,
     ])
 }

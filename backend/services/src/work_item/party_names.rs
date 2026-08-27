@@ -260,6 +260,7 @@ mod tests {
             destination_workspace_id: "W01".to_string(),
             route_context: None,
             approval_node_execution_id: None,
+            approval_context: None,
             status: WorkItemStatus::Open,
             assignment_source: AssignmentSource::SystemRule,
             owner_role: "role-procurement".to_string(),

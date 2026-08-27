@@ -1,4 +1,4 @@
-/** W06 客户验收 — 类型对齐 docs/ui-workspaces/w06-customer-acceptance.md §8 */
+/** W06 客户验收 — client contract types */
 
 export type FulfillmentFactType =
     | "WAREHOUSE_SHIP"

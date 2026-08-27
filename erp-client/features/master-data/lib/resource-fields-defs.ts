@@ -1,5 +1,5 @@
 /**
- * W14 资源专属字段声明表 — 按资源强类型化（对齐 docs/ui-workspaces/w14-basic-data.md §4.3/§5.2/§8.2）。
+ * W14 资源专属字段声明表 — 按资源强类型化。
  * 本文件为纯声明式配置表（资源 → 字段定义与选项常量），故允许保持较长；
  * 表单/回填逻辑见 resource-fields.ts，均经 `@/features/master-data/lib/resource-fields` 统一出口。
  */

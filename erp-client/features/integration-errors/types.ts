@@ -1,6 +1,5 @@
 /**
  * W29 接口错误与对账中心 · 客户端契约类型
- * 对齐 docs/ui-workspaces/w29-integration-error-reconciliation.md §5/§7/§8
  */
 
 import type { InterfaceErrorClass } from "@/components/business"

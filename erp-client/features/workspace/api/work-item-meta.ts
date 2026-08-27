@@ -29,6 +29,7 @@ export const FAMILY_META: Record<
     { label: string; defaultExpanded: boolean }
 > = {
     approval: { label: "审批与确认", defaultExpanded: true },
+    procurement: { label: "供给与采购", defaultExpanded: true },
     finance: { label: "票款与结算", defaultExpanded: true },
     fulfillment: { label: "履约与库存", defaultExpanded: false },
     exception: { label: "数据治理与异常", defaultExpanded: false },
@@ -50,16 +51,9 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeLabel: "单据",
         badgeVariant: "info",
     },
-    PROCUREMENT_CONFIRMATION: {
-        label: "采购二次确认",
-        family: "fulfillment",
-        badgeLabel: "采购确认",
-        badgeVariant: "indigo",
-        openActionLabel: "去确认采购计划",
-    },
     PROCUREMENT_ORDER_CREATION: {
         label: "待供给分配",
-        family: "fulfillment",
+        family: "procurement",
         badgeLabel: "供给分配",
         badgeVariant: "lime",
         openActionLabel: "去分配供给",
@@ -83,13 +77,6 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeLabel: "待开票",
         badgeVariant: "violet",
         openActionLabel: "去登记销项发票",
-    },
-    LOW_MARGIN_MANAGER_CONFIRMATION: {
-        label: "低毛利销售审批",
-        family: "approval",
-        badgeLabel: "低毛利",
-        badgeVariant: "rose",
-        openActionLabel: "去审批低毛利订单",
     },
     PURCHASE_ORDER_REVIEW: {
         label: "采购单财务审核",
@@ -126,47 +113,12 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "lime",
         openActionLabel: "去复核票款差额",
     },
-    CARD_SALES_MANAGER_APPROVAL: {
-        label: "卡券销售领导审批",
-        family: "approval",
-        badgeLabel: "卡券领导",
-        badgeVariant: "indigo",
-        openActionLabel: "去审批卡券销售",
-    },
-    CARD_SALES_OPERATION_APPROVAL: {
-        label: "卡券运营审批",
-        family: "approval",
-        badgeLabel: "卡券运营",
-        badgeVariant: "cyan",
-        openActionLabel: "去审批卡券运营",
-    },
-    OWNERSHIP_MIGRATION_SALES_CONFIRMATION: {
-        label: "归属迁移销售确认",
-        family: "approval",
-        badgeLabel: "归属销售",
-        badgeVariant: "orange",
-        openActionLabel: "去确认归属迁移",
-    },
-    OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION: {
-        label: "归属迁移财务确认",
-        family: "finance",
-        badgeLabel: "归属财务",
-        badgeVariant: "teal",
-        openActionLabel: "去确认财务归属",
-    },
     INVENTORY_ADJUSTMENT_REVIEW: {
         label: "库存调整复核",
         family: "fulfillment",
         badgeLabel: "库存调整",
         badgeVariant: "teal",
         openActionLabel: "去复核库存调整",
-    },
-    FINANCE_CORRECTION_REVIEW: {
-        label: "财务纠错复核",
-        family: "finance",
-        badgeLabel: "财务纠错",
-        badgeVariant: "rose",
-        openActionLabel: "去复核财务纠错",
     },
     SUPPLIER_SETTLEMENT_REVIEW: {
         label: "供应商结算复核",

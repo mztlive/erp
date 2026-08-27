@@ -1115,6 +1115,40 @@ impl<'a> Repository<'a, PartyTaxProfile> {
         .await
     }
 
+    /// 批量读取多个主体在指定日期生效的税务资料。
+    ///
+    /// # 参数
+    /// * `party_ids` - 往来主体 ID 集合
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按主体、默认标记和创建时间稳定排序的启用税务资料。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_current_for_parties_on(
+        &self,
+        party_ids: &[PartyId],
+        as_of: entities::common::time::BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyTaxProfile>> {
+        if party_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut filter = active_fact_window_filter(as_of);
+        filter.insert(
+            "party_id",
+            doc! { "$in": party_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+        );
+        self.find_many_sorted(
+            filter,
+            doc! { "party_id": 1, "is_default": -1, "created_at": -1, "id": -1 },
+            executor,
+        )
+        .await
+    }
+
     /// 清除同一 Party 其他税务资料的默认标记。
     ///
     /// 必须与主写入位于同一事务执行器中，避免并发或中途失败留下多个默认行。
@@ -1738,9 +1772,21 @@ impl<'a> PartyRepository<'a> {
 /// # 返回
 /// 返回启用状态且日期落在左闭右开有效期内的查询文档。
 fn active_fact_filter(party_id: &PartyId, as_of: entities::common::time::BusinessDate) -> Document {
+    let mut filter = active_fact_window_filter(as_of);
+    filter.insert("party_id", party_id.to_string());
+    filter
+}
+
+/// 构造指定日期生效的 Party 从属事实公共时间窗过滤条件。
+///
+/// # 参数
+/// * `as_of` - 业务日期
+///
+/// # 返回
+/// 返回启用状态且日期落在左闭右开有效期内的公共查询文档。
+fn active_fact_window_filter(as_of: entities::common::time::BusinessDate) -> Document {
     let as_of = as_of.to_string();
     doc! {
-        "party_id": party_id.to_string(),
         "status": EffectiveRecordStatus::Active.as_str(),
         "valid_from": { "$lte": &as_of },
         "$or": [
@@ -1887,7 +1933,8 @@ fn party_bank_account_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, PartyFilter, QueryFilter};
+    use super::{active_fact_window_filter, sort_doc, PartyFilter, QueryFilter};
+    use entities::common::time::BusinessDate;
     use entities::party::{PartyKind, PartyStatus};
     use mongodb::bson::doc;
 
@@ -1910,6 +1957,31 @@ mod tests {
         let keyword = document.get_document("party_no").unwrap();
         assert_eq!(keyword.get_str("$regex").unwrap(), r"P\-20");
         assert_eq!(keyword.get_str("$options").unwrap(), "i");
+    }
+
+    #[test]
+    fn active_fact_window_is_left_closed_and_right_open() {
+        let as_of = BusinessDate::from_ymd(2026, 8, 27).expect("测试日期必须合法");
+
+        let filter = active_fact_window_filter(as_of);
+
+        assert_eq!(
+            filter
+                .get_document("valid_from")
+                .expect("必须包含开始日期")
+                .get_str("$lte")
+                .expect("开始日期必须包含当天"),
+            "2026-08-27"
+        );
+        let valid_to = filter.get_array("$or").expect("必须包含结束日期分支")[1]
+            .as_document()
+            .expect("结束日期分支必须是文档")
+            .get_document("valid_to")
+            .expect("必须包含结束日期");
+        assert_eq!(
+            valid_to.get_str("$gt").expect("结束日期必须排除当天"),
+            "2026-08-27"
+        );
     }
 
     #[test]

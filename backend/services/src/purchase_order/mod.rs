@@ -65,6 +65,7 @@ pub use self::dto::{
     SubmitPurchaseOrderResult, SupplySourceType, TotalsView, VoidPurchaseOrderRequest,
     VoidPurchaseOrderResult,
 };
+pub(crate) use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;

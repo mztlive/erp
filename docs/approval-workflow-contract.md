@@ -1012,7 +1012,7 @@ approval_instance:upgrade_binding
 | 页面 | W01 · 我的工作台 |
 | 路由 | `/workspace` |
 | 布局 | 列表 + 详情主从，页内连续处理 |
-| 废止页面 | W02；`docs/ui-workspaces/w02-unified-task-queue.md` 标记为已废止并注明能力并入 W01 |
+| 废止页面 | W02；已废止并注明能力并入 W01 |
 | 旧路由 | `/workspace/tasks` 永久重定向到 `/workspace`，不保留第二个待办入口 |
 
 TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍为 `/workspace`。顶栏待办角标只指向本页面。

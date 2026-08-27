@@ -11,6 +11,7 @@ import type { WorkspaceId } from "@/lib/workspace-registry"
 export type WorkspaceDueFilter = "today" | "overdue"
 export type WorkspaceFamilyFilter =
     | "approval"
+    | "procurement"
     | "finance"
     | "fulfillment"
     | "exception"
@@ -94,8 +95,8 @@ export type WorkspaceWorkItem = Readonly<{
         currentAssigneeLabel: string
         lastRejectorLabel?: string
         lastRejectReason?: string
-        processName: string
-        processVersion: string
+        processName?: string
+        processVersion?: string
         status: string
     }
 }>
@@ -108,6 +109,10 @@ export type WorkspaceMetric = Readonly<{
     tone: StatusTone
     detail?: string
 }>
+
+export type WorkspaceFamilyCounts = Readonly<
+    Record<WorkspaceFamilyFilter, number>
+>
 
 export type WorkspaceWarning = Readonly<{
     warningId: string
@@ -156,6 +161,8 @@ export type TodayWorkspaceView = Readonly<{
         projectionState: "fresh" | "stale" | "failed" | "rebuilding"
     }
     metrics: readonly WorkspaceMetric[]
+    /** 服务端授权统计快照；旧服务缺省时不展示，禁止从当前页推算。 */
+    familyCounts?: WorkspaceFamilyCounts
     items: readonly WorkspaceWorkItem[]
     nextCursor?: string
     total: number

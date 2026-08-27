@@ -208,13 +208,18 @@ function WorkspaceDocumentTaskDetail({
             expectedTaskVersion={item.taskVersion}
             instance={instance}
             canReadSensitive={canReadSensitive}
-            approveWithoutDialog
             hiddenActions={["OPEN_DOCUMENT", "VIEW"]}
+            decisionContext={{
+                documentLabel: item.objectTitle,
+                amountLabel: primaryAmount?.value,
+                currentNodeLabel: instance?.currentNodeName,
+                impactSummary,
+            }}
             onDecisionApplied={(view) =>
                 onDecisionApplied?.(view, item.workItemId)
             }
         />
-    ) : documentHref ? (
+    ) : documentHref && item.allowedActions.includes("PROCESS") ? (
         <Button
             type="button"
             data-testid={`work-item-open-document-${item.workItemId}`}
@@ -325,14 +330,23 @@ function WorkspaceDocumentTaskDetail({
                                 {briefLines.map((line, lineIndex) => (
                                     <li
                                         key={`${lineIndex}:${line.title}`}
-                                        className="flex justify-between gap-4 border-b border-border/40 py-2.5 last:border-b-0"
+                                        className="grid gap-1 border-b border-border/40 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4"
                                     >
                                         <span className="min-w-0">
                                             {line.title}
                                         </span>
-                                        {line.quantity ? (
-                                            <span className="num shrink-0 text-muted-foreground">
-                                                {line.quantity}
+                                        {line.quantity || line.dueLabel ? (
+                                            <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground sm:max-w-md sm:justify-end sm:text-right">
+                                                {line.quantity ? (
+                                                    <span className="num">
+                                                        {line.quantity}
+                                                    </span>
+                                                ) : null}
+                                                {line.dueLabel ? (
+                                                    <span className="text-xs">
+                                                        {line.dueLabel}
+                                                    </span>
+                                                ) : null}
                                             </span>
                                         ) : null}
                                     </li>
@@ -375,15 +389,19 @@ function WorkspaceDocumentTaskDetail({
             {actions || item.nextActionHint ? (
                 <div
                     className={cn(
-                        "flex shrink-0 items-center gap-4 border-t border-border/40 py-3",
-                        actions ? "justify-between" : "justify-end",
+                        "flex shrink-0 flex-col items-stretch gap-2 border-t border-border/40 py-3 sm:flex-row sm:items-center sm:gap-4",
+                        actions ? "sm:justify-between" : "sm:justify-end",
                     )}
                 >
-                    {actions}
                     {item.nextActionHint ? (
-                        <p className="max-w-sm text-right text-xs text-muted-foreground">
+                        <p className="order-1 max-w-sm text-left text-xs text-muted-foreground sm:order-2 sm:text-right">
                             {item.nextActionHint}
                         </p>
+                    ) : null}
+                    {actions ? (
+                        <div className="order-2 shrink-0 sm:order-1">
+                            {actions}
+                        </div>
                     ) : null}
                 </div>
             ) : null}

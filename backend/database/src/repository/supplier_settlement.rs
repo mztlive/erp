@@ -519,6 +519,33 @@ impl<'a> Repository<'a, SupplierSettlementSourceEvidence> {
         .await?;
         Ok(values.pop())
     }
+
+    /// 按冻结来源摘要批量读取不可变来源证据。
+    ///
+    /// # 参数
+    /// * `source_hashes` - 结算单持有的来源快照摘要
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配且未软删除的来源证据批次。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_source_hashes(
+        &self,
+        source_hashes: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementSourceEvidence>> {
+        if source_hashes.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! { "source_hash": { "$in": source_hashes } },
+            doc! { "source_version": -1, "id": 1 },
+            executor,
+        )
+        .await
+    }
 }
 
 impl<'a> Repository<'a, SupplierSettlementDifferenceEvidence> {
@@ -569,6 +596,33 @@ impl<'a> Repository<'a, SupplierSettlementItem> {
         self.find_many_sorted(
             doc! { "statement_id": statement_id },
             doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 按结算单主键批量读取全部冻结明细。
+    ///
+    /// # 参数
+    /// * `statement_ids` - 已授权结算单主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按结算单、创建时间和主键稳定排序的冻结明细。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_statement_ids(
+        &self,
+        statement_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementItem>> {
+        if statement_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many_sorted(
+            doc! { "statement_id": { "$in": statement_ids } },
+            doc! { "statement_id": 1, "created_at": 1, "id": 1 },
             executor,
         )
         .await

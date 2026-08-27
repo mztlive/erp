@@ -252,6 +252,21 @@ impl WorkItemStatsParams {
     }
 }
 
+/// 服务端权限过滤后的任务族数量。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
+pub struct WorkItemFamilyCountsView {
+    /// 审批与确认任务数。
+    pub approval: u64,
+    /// 供给与采购任务数。
+    pub procurement: u64,
+    /// 履约与库存任务数。
+    pub fulfillment: u64,
+    /// 票款与结算任务数。
+    pub finance: u64,
+    /// 数据治理与异常任务数。
+    pub exception: u64,
+}
+
 /// 服务端权限过滤后的待办统计。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemStatsView {
@@ -263,6 +278,8 @@ pub struct WorkItemStatsView {
     pub overdue: u64,
     /// 当前选中责任范围内的结果未知与业务异常任务数。
     pub exception: u64,
+    /// 当前责任范围内按任务族划分的可处理任务数。
+    pub family_counts: WorkItemFamilyCountsView,
     /// 服务端统计时点。
     pub as_of: entities::common::time::Instant,
 }
@@ -357,6 +374,28 @@ pub struct WorkItemRouteContext {
     pub document_type: Option<String>,
 }
 
+/// 工作台审批任务的有界运行上下文。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorkItemApprovalContextView {
+    /// 审批运行实例主键；只作运行查询键，不承担单据识别。
+    pub instance_id: String,
+    /// 审批运行状态。
+    pub status: String,
+    /// 当前审批轮次。
+    pub current_round_no: u32,
+    /// 当前节点冻结名称。
+    pub current_node_label: String,
+    /// 当前审批人冻结名称。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_assignee_label: Option<String>,
+    /// 最近一次驳回原因摘要。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_rejection_reason: Option<String>,
+    /// 当前实例绑定的流程定义业务版本。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_version: Option<u32>,
+}
+
 /// 人工任务队列安全投影。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct WorkItemView {
@@ -368,6 +407,9 @@ pub struct WorkItemView {
     pub route_context: Option<WorkItemRouteContext>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_node_execution_id: Option<String>,
+    /// 由审批节点执行和有界实例投影补齐的判断上下文。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_context: Option<WorkItemApprovalContextView>,
     pub status: WorkItemStatus,
     pub assignment_source: AssignmentSource,
     pub owner_role: String,
@@ -512,6 +554,17 @@ impl WorkItemView {
         self
     }
 
+    /// 设置与本任务审批节点严格绑定的运行上下文。
+    ///
+    /// # 参数
+    /// * `approval_context` - 服务层按节点执行批量解析的有界运行事实
+    ///
+    /// # 返回
+    /// 无。
+    pub(crate) fn set_approval_context(&mut self, approval_context: WorkItemApprovalContextView) {
+        self.approval_context = Some(approval_context);
+    }
+
     /// 由已授权字段生成队列安全投影。
     ///
     /// # 参数
@@ -544,6 +597,7 @@ impl WorkItemView {
             destination_workspace_id: route.destination_workspace_id.to_string(),
             route_context: route.route_context,
             approval_node_execution_id: fields.approval_node_execution_id,
+            approval_context: None,
             status: fields.status,
             assignment_source: fields.assignment_source,
             owner_role_label: role_label(&fields.owner_role),
@@ -860,7 +914,7 @@ fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Opt
     }
 }
 
-fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
+pub(crate) fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => WorkItemFamily::Procurement,
         WorkItemType::FulfillmentOperation => WorkItemFamily::Fulfillment,

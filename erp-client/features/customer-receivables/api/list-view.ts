@@ -84,10 +84,26 @@ export async function fetchCustomerAccountsList(
     ])
 
     let receivables = (recvPage.items ?? []).map(projectReceivable)
-    let receipts = (rcptPage.items ?? []).map(projectReceipt)
+    const partyDisplay = new Map(
+        receivables.map((row) => [
+            row.counterpartyPartyId,
+            {
+                counterpartyPartyName: row.counterpartyPartyName,
+                customerName: row.customerName,
+            },
+        ]),
+    )
+    let receipts = (rcptPage.items ?? []).map((receipt) =>
+        projectReceipt(
+            receipt,
+            partyDisplay.get(receipt.counterparty_party_id),
+        ),
+    )
     let invoices = (invPage.items ?? [])
         .filter((i) => i.invoice_direction === "sales" || !i.invoice_direction)
-        .map(projectInvoice)
+        .map((invoice) =>
+            projectInvoice(invoice, partyDisplay.get(invoice.party_id)),
+        )
 
     if (query.receivableAccountId) {
         receivables = receivables.filter(

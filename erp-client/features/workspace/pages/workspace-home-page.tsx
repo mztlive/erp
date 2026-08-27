@@ -48,6 +48,8 @@ export function WorkspaceHomePage() {
         setSearchDraft,
         narrowDetailOpen,
         setNarrowDetailOpen,
+        setNarrowDetailSettledOpen,
+        completionAnnouncement,
         selected,
         onMetricClick,
         clearFilters,
@@ -181,6 +183,15 @@ export function WorkspaceHomePage() {
 
     return (
         <PageScaffold className="min-h-0" density="compact">
+            <p
+                key={completionAnnouncement.sequence}
+                className="sr-only"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+            >
+                {completionAnnouncement.text}
+            </p>
             <PageHeader
                 title="我的工作台"
                 metadata={
@@ -244,6 +255,7 @@ export function WorkspaceHomePage() {
                         </p>
                         <WorkspaceFamilyNav
                             urlState={urlState}
+                            counts={view.familyCounts}
                             onFamilyChange={onFamilyChange}
                         />
                         {queueToolbar}
@@ -282,6 +294,7 @@ export function WorkspaceHomePage() {
             <Sheet
                 open={narrowDetailOpen && Boolean(selected)}
                 onOpenChange={setNarrowDetailOpen}
+                onOpenChangeComplete={setNarrowDetailSettledOpen}
             >
                 <SheetContent
                     side="right"

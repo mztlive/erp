@@ -1,4 +1,4 @@
-/** W16 实际经营盈亏 · 客户端契约类型（与 docs/ui-workspaces/w16 §8 对齐） */
+/** W16 实际经营盈亏 · 客户端契约类型 */
 
 import type { StatusTone } from "@/components/ui/status-badge"
 

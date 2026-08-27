@@ -42,6 +42,16 @@ export type WorkItemPartyDto = Readonly<{
     display_name: string
 }>
 
+export type WorkItemApprovalContextDto = Readonly<{
+    instance_id: string
+    status: string
+    current_round_no: number
+    current_node_label: string
+    current_assignee_label?: string | null
+    latest_rejection_reason?: string | null
+    process_version?: number | null
+}>
+
 /** `/admin/work-items` 返回的单条任务。 */
 export type WorkItemDto = Readonly<{
     id: string
@@ -54,6 +64,7 @@ export type WorkItemDto = Readonly<{
     approval_step_instance_id: string | null
     approval_process_instance_id?: string | null
     approval_node_execution_id?: string | null
+    approval_context?: WorkItemApprovalContextDto | null
     status: WorkItemStatus
     assignment_source: string
     owner_role: string
@@ -132,6 +143,15 @@ export type WorkItemProjection = Readonly<{
     approvalStepInstanceId?: string
     approvalProcessInstanceId?: string
     approvalNodeExecutionId?: string
+    approvalContext?: Readonly<{
+        instanceId: string
+        status: string
+        currentRoundNo: number
+        currentNodeLabel: string
+        currentAssigneeLabel?: string
+        latestRejectionReason?: string
+        processVersion?: string
+    }>
     status: WorkItemStatus
     assignmentSource: string
     ownerRole: string
@@ -196,8 +216,29 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
             : undefined,
         approvalStepInstanceId: dto.approval_step_instance_id ?? undefined,
         approvalProcessInstanceId:
-            dto.approval_process_instance_id ?? undefined,
+            dto.approval_process_instance_id ??
+            dto.approval_context?.instance_id ??
+            undefined,
         approvalNodeExecutionId: dto.approval_node_execution_id ?? undefined,
+        approvalContext: dto.approval_context
+            ? {
+                  instanceId: dto.approval_context.instance_id,
+                  status: dto.approval_context.status,
+                  currentRoundNo: dto.approval_context.current_round_no,
+                  currentNodeLabel:
+                      dto.approval_context.current_node_label.trim(),
+                  currentAssigneeLabel:
+                      dto.approval_context.current_assignee_label?.trim() ||
+                      undefined,
+                  latestRejectionReason:
+                      dto.approval_context.latest_rejection_reason?.trim() ||
+                      undefined,
+                  processVersion:
+                      dto.approval_context.process_version == null
+                          ? undefined
+                          : String(dto.approval_context.process_version),
+              }
+            : undefined,
         status: dto.status,
         assignmentSource: dto.assignment_source,
         ownerRole: dto.owner_role,

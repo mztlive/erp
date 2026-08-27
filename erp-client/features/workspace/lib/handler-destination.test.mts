@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+    HANDLER_REGISTRY,
     buildHandlerHref,
     // @ts-expect-error TS5097 -- runtime TypeScript module under node:test
 } from "./handler-destination.ts"
@@ -27,37 +28,30 @@ function assertStableContext(url: URL): void {
     assert.equal(url.searchParams.has("allowedActions"), false)
 }
 
-for (const handlerKey of [
-    "card_sales_manager_approval",
-    "card_sales_operations_approval",
-] as const) {
-    test(`${handlerKey} opens the exact W05 sales order approval section`, () => {
-        const url = parsedHref(
+test("inactive handlers are absent and fail closed", () => {
+    for (const handlerKey of [
+        "procurement_confirmation",
+        "low_margin_manager",
+        "card_sales_manager_approval",
+        "card_sales_operations_approval",
+        "ownership_sales",
+        "ownership_finance",
+        "finance_correction",
+    ]) {
+        assert.equal(HANDLER_REGISTRY[handlerKey], undefined)
+        assert.equal(
             buildHandlerHref({
                 ...REQUIRED_CONTEXT,
                 handlerKey,
                 destinationWorkspaceId: "W05",
             }),
+            null,
         )
-
-        assert.equal(url.pathname, "/sales/orders/object%20%2F%2042")
-        assert.equal(url.searchParams.get("section"), "approval")
-        assertStableContext(url)
-    })
-}
-
-test("low margin handler opens the exact W05 rejection section", () => {
-    const url = parsedHref(
-        buildHandlerHref({
-            ...REQUIRED_CONTEXT,
-            handlerKey: "low_margin_manager",
-            destinationWorkspaceId: "W05",
-        }),
+    }
+    assert.equal(
+        HANDLER_REGISTRY.procurement_order_creation?.family,
+        "procurement",
     )
-
-    assert.equal(url.pathname, "/sales/orders/object%20%2F%2042")
-    assert.equal(url.searchParams.get("section"), "procurement-rejection")
-    assertStableContext(url)
 })
 
 test("sales change review opens its root sales order instead of the review id", () => {

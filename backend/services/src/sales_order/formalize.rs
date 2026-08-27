@@ -46,6 +46,7 @@ use crate::procurement_responsibility::{
     AuthorizedResolutionPlan, ProcurementResponsibilityService, ResolutionInput,
 };
 use crate::projection::projection_content_hash;
+use crate::purchase_order::sync_procurement_tasks_for_sales_order;
 
 /// 销售版本聚合载体（版本头 + 公共行 + 子类型行）。
 struct RevisionAggregate {
@@ -307,6 +308,14 @@ async fn persist_formalized_submission_write(
             session,
         )
         .await?;
+    if write.procurement.is_some() {
+        sync_procurement_tasks_for_sales_order(
+            &write.db,
+            &SalesOrderId::new(write.order_id.clone()),
+            session,
+        )
+        .await?;
+    }
     write
         .db
         .sales_order_submissions()
@@ -822,7 +831,7 @@ async fn persist_voucher_projection(
     Ok(())
 }
 
-/// 证明本模块只包装仓储 `formalize_submission`。
+/// 验证销售形式化事务的状态、仓储与供给任务合同。
 #[cfg(test)]
 mod tests {
     use super::{ensure_final_approve_formalize, procurement_responsibility_key};
@@ -853,11 +862,21 @@ mod tests {
     #[test]
     fn formalize_wraps_repository_and_only_accepts_in_approval() {
         let source = include_str!("formalize.rs");
-        assert!(source.contains("formalize_submission("));
-        assert!(source.contains("ensure_final_approve_formalize"));
-        assert!(source.contains("build_voucher_execution_projection"));
-        assert!(source.contains("create_projection_revision"));
-        let production = source.split("/// 证明本模块只包装仓储").next().expect("生产代码");
+        let production = source.split("/// 验证销售形式化事务").next().expect("生产代码");
+        let formalize_at = production
+            .find(".formalize_submission(")
+            .expect("写入销售当前版本");
+        let synchronize_at = production[formalize_at..]
+            .find("sync_procurement_tasks_for_sales_order(")
+            .map(|offset| formalize_at + offset)
+            .expect("校准供给分配任务");
+        assert!(
+            synchronize_at > formalize_at,
+            "供给任务必须在销售当前版本落库后按权威覆盖量校准"
+        );
+        assert!(production.contains("ensure_final_approve_formalize"));
+        assert!(production.contains("build_voucher_execution_projection"));
+        assert!(production.contains("create_projection_revision"));
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
         assert!(!production.contains("CARD_SALES_APPROVAL"));
         let mut order = draft_order();

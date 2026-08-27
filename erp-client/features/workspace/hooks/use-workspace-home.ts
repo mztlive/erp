@@ -25,6 +25,7 @@ import type {
 } from "@/features/workspace/types"
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
+const taskButtonId = (workItemId: string) => `workspace-task-${workItemId}`
 
 /**
  * W01 页面状态：URL 筛选、指标切换、当前项与连续处理后选中下一条。
@@ -58,6 +59,14 @@ export function useWorkspaceHome() {
 
     const [searchDraft, setSearchDraft] = React.useState(urlState.query ?? "")
     const [narrowDetailOpen, setNarrowDetailOpen] = React.useState(false)
+    const [narrowDetailSettledOpen, setNarrowDetailSettledOpen] =
+        React.useState(false)
+    const [pendingFocusWorkItemId, setPendingFocusWorkItemId] =
+        React.useState<string>()
+    const [completionAnnouncement, setCompletionAnnouncement] = React.useState({
+        sequence: 0,
+        text: "",
+    })
 
     const activeMetric = metricKeyFromUrlState(urlState)
     const hasActiveFilter = Boolean(
@@ -123,6 +132,7 @@ export function useWorkspaceHome() {
                 currentWorkItemId: next?.workItemId,
             })
             if (!next) setNarrowDetailOpen(false)
+            return next
         },
         [replaceUrl, urlState, view?.items],
     )
@@ -133,13 +143,43 @@ export function useWorkspaceHome() {
      */
     const applyDecisionAfter = React.useCallback(
         (completedWorkItemId: string) => {
-            selectNextAfter(completedWorkItemId)
+            const next = selectNextAfter(completedWorkItemId)
+            setCompletionAnnouncement((current) => ({
+                sequence: current.sequence + 1,
+                text: next
+                    ? `任务已完成，已切换到${next.objectTitle}`
+                    : "任务已完成，当前队列没有其他待办",
+            }))
+            setPendingFocusWorkItemId(next?.workItemId)
             void queryClient.invalidateQueries({
                 queryKey: workspaceHomeKeys.all,
             })
         },
         [queryClient, selectNextAfter],
     )
+
+    React.useEffect(() => {
+        if (
+            !pendingFocusWorkItemId ||
+            narrowDetailOpen ||
+            narrowDetailSettledOpen
+        )
+            return
+        const frame = window.requestAnimationFrame(() => {
+            const target = document.getElementById(
+                taskButtonId(pendingFocusWorkItemId),
+            )
+            if (!(target instanceof HTMLButtonElement)) return
+            target.focus()
+            setPendingFocusWorkItemId(undefined)
+        })
+        return () => window.cancelAnimationFrame(frame)
+    }, [
+        narrowDetailOpen,
+        narrowDetailSettledOpen,
+        pendingFocusWorkItemId,
+        view?.items,
+    ])
 
     const onFamilyChange = React.useCallback(
         (family?: WorkspaceFamilyFilter) => {
@@ -190,6 +230,8 @@ export function useWorkspaceHome() {
         setSearchDraft,
         narrowDetailOpen,
         setNarrowDetailOpen,
+        setNarrowDetailSettledOpen,
+        completionAnnouncement,
         selected,
         onMetricClick,
         clearFilters,
