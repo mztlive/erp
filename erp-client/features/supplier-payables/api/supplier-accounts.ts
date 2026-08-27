@@ -40,6 +40,7 @@ import {
     PAYABLE_STATUS_LABEL,
     SOURCE_TYPE_LABEL,
 } from "@/features/supplier-payables/types"
+import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { fetchSupplierOption } from "@/features/entity-selectors/api/suppliers"
 
 export async function fetchSupplierAccounts(
@@ -298,8 +299,16 @@ export async function fetchAllocationSession(input: {
     existingInvoiceId?: string
     preselectPayableAccountId?: string
 }): Promise<AllocationSessionView> {
-    if (input.draftSessionId && sessions.has(input.draftSessionId)) {
-        return sessions.get(input.draftSessionId)!
+    if (input.draftSessionId) {
+        const existingSession = sessions.get(input.draftSessionId)
+        if (existingSession) {
+            if (!allocationSessionMatchesIdentity(existingSession, input)) {
+                throw new Error(
+                    "核销草稿会话与当前业务对象不一致，请重新打开任务",
+                )
+            }
+            return existingSession
+        }
     }
 
     const payPage = await apiGet<Page<BackendPayableAccount>>(

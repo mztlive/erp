@@ -50,6 +50,11 @@ export type AllocationSessionOptions = {
     onDraftSessionIdChange?: (draftSessionId: string) => void
 }
 
+const HYDRATE_FIELD_OPTIONS = {
+    dontUpdateMeta: true,
+    dontValidate: true,
+} as const
+
 /** 核销工作区全部状态与派生数据：会话查询、两张记录表单、勾选/金额状态、校验问题与提交。 */
 export function useAllocationSession(
     {
@@ -181,9 +186,17 @@ export function useAllocationSession(
         if (!session.existingPaymentId && !session.existingInvoiceId) {
             const prefill = fromCents(prefillSum)
             if (track === "payment") {
-                paymentForm.setFieldValue("amount", prefill)
+                paymentForm.setFieldValue(
+                    "amount",
+                    prefill,
+                    HYDRATE_FIELD_OPTIONS,
+                )
             } else {
-                invoiceForm.setFieldValue("grossAmount", prefill)
+                invoiceForm.setFieldValue(
+                    "grossAmount",
+                    prefill,
+                    HYDRATE_FIELD_OPTIONS,
+                )
             }
         }
         setPaymentApproval(
@@ -193,8 +206,13 @@ export function useAllocationSession(
             paymentForm.setFieldValue(
                 "bankReceiptAssetId",
                 session.existingBankReceipt?.assetId ?? "",
+                HYDRATE_FIELD_OPTIONS,
             )
-            paymentForm.setFieldValue("bankReceipt", null)
+            paymentForm.setFieldValue(
+                "bankReceipt",
+                null,
+                HYDRATE_FIELD_OPTIONS,
+            )
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 会话与预选变化时同步
     }, [session?.draftSessionId, preselectKey])
@@ -202,11 +220,16 @@ export function useAllocationSession(
     React.useEffect(() => {
         if (!session?.existingUnallocated) return
         if (track === "payment") {
-            paymentForm.setFieldValue("amount", session.existingUnallocated)
+            paymentForm.setFieldValue(
+                "amount",
+                session.existingUnallocated,
+                HYDRATE_FIELD_OPTIONS,
+            )
         } else {
             invoiceForm.setFieldValue(
                 "grossAmount",
                 session.existingUnallocated,
+                HYDRATE_FIELD_OPTIONS,
             )
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps

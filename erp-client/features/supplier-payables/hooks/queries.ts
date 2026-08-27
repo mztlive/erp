@@ -53,8 +53,11 @@ const supplierPayablesKeys = {
         supplierId: string
         draftSessionId?: string
         purchaseOrderId?: string
+        returnTo?: string
+        fromWorkspace?: string
         existingPaymentId?: string
         existingInvoiceId?: string
+        preselectPayableAccountId?: string
     }) => [...supplierPayablesKeys.all, "session", params] as const,
 }
 
@@ -146,8 +149,12 @@ export function useAllocationSessionQuery(
                       supplierId: params.supplierId,
                       draftSessionId: params.draftSessionId,
                       purchaseOrderId: params.purchaseOrderId,
+                      returnTo: params.returnTo,
+                      fromWorkspace: params.fromWorkspace,
                       existingPaymentId: params.existingPaymentId,
                       existingInvoiceId: params.existingInvoiceId,
+                      preselectPayableAccountId:
+                          params.preselectPayableAccountId,
                   }
                 : { track: "payment", supplierId: "" },
         ),

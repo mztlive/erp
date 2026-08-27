@@ -5,6 +5,7 @@ import * as React from "react"
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
 import { usePayableDetailQuery } from "@/features/supplier-payables/hooks/queries"
 import { useAllocationSession } from "@/features/supplier-payables/hooks/use-allocation-session"
@@ -121,6 +122,7 @@ export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
                     </Alert>
                 ) : (
                     <WorkspacePaymentSession
+                        key={item.workItemId}
                         item={item}
                         supplierId={payable.supplierId}
                         purchaseOrderId={descriptor.purchaseOrderId}
@@ -191,12 +193,47 @@ function WorkspacePaymentSession({
         )
     }
 
-    if (!sessionState.session) {
+    const session = sessionState.session
+
+    if (!session) {
         return (
             <Alert>
                 <AlertTitle>没有可核销内容</AlertTitle>
                 <AlertDescription>
                     当前应付没有开放余额，或核销池未能加载。请刷新后重试。
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    if (
+        !allocationSessionMatchesIdentity(session, {
+            track: "payment",
+            supplierId,
+            purchaseOrderId,
+            preselectPayableAccountId: item.businessObjectId,
+        })
+    ) {
+        return (
+            <Alert variant="destructive">
+                <AlertTitle>付款会话与当前任务不一致</AlertTitle>
+                <AlertDescription>
+                    已停止载入上一条任务的付款草稿，请重新打开当前任务后重试。
+                </AlertDescription>
+            </Alert>
+        )
+    }
+
+    if (
+        !session.pool.some(
+            (poolItem) => poolItem.payableAccountId === item.businessObjectId,
+        )
+    ) {
+        return (
+            <Alert variant="warning">
+                <AlertTitle>当前应付已不可付款</AlertTitle>
+                <AlertDescription>
+                    当前任务绑定的应付没有开放余额，或已不在可付款范围内。请刷新任务列表后重试。
                 </AlertDescription>
             </Alert>
         )
