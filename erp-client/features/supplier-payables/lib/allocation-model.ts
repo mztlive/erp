@@ -2,16 +2,65 @@
 
 import { z } from "zod"
 
-export const paymentSchema = z.object({
-    paidAt: z.string().min(1, "请填写实际付款时间"),
-    amount: z
-        .string()
-        .trim()
-        .min(1, "请填写付款金额")
-        .refine((v) => Number(v) > 0, "付款金额必须为正数"),
-    bankReference: z.string().trim().min(1, "请填写银行流水引用"),
-    note: z.string(),
-})
+export const BANK_RECEIPT_PENDING_REFERENCE = "pending-file:bank-receipt"
+
+const BANK_RECEIPT_MAX_BYTES = 5 * 1024 * 1024
+const BANK_RECEIPT_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
+
+/** 锁定单一应付目标时，以付款金额覆盖该目标核销金额，确保界面与提交只有一个金额真源。 */
+export function withLockedPaymentAmount(
+    amounts: Readonly<Record<string, string>>,
+    payableAccountId: string | undefined,
+    paymentAmount: string,
+): Readonly<Record<string, string>> {
+    if (!payableAccountId || amounts[payableAccountId] === paymentAmount) {
+        return amounts
+    }
+    return {
+        ...amounts,
+        [payableAccountId]: paymentAmount,
+    }
+}
+
+export const paymentSchema = z
+    .object({
+        paidAt: z.string().min(1, "请填写实际付款时间"),
+        amount: z
+            .string()
+            .trim()
+            .min(1, "请填写付款金额")
+            .refine((v) => Number(v) > 0, "付款金额必须为正数"),
+        bankReference: z
+            .string()
+            .trim()
+            .max(256, "银行流水号不能超过 256 个字符"),
+        bankReceiptAssetId: z.string(),
+        bankReceipt: z
+            .custom<File | null>(
+                (value) =>
+                    value === null ||
+                    (typeof File !== "undefined" && value instanceof File),
+                "银行回单文件无效",
+            )
+            .refine(
+                (file) => !file || BANK_RECEIPT_TYPES.has(file.type),
+                "银行回单仅支持 JPG、PNG 或 WebP 图片",
+            )
+            .refine(
+                (file) => !file || file.size <= BANK_RECEIPT_MAX_BYTES,
+                "银行回单图片不能超过 5 MB",
+            ),
+        note: z.string(),
+    })
+    .superRefine((value, context) => {
+        if (!value.bankReceiptAssetId.trim()) {
+            context.addIssue({
+                code: "custom",
+                path: ["bankReceipt"],
+                message: "请上传银行回单图片",
+            })
+        }
+    })
 
 export const invoiceSchema = z
     .object({

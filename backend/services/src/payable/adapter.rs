@@ -403,7 +403,7 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::ids::{PayableEntryId, SupplierPaymentId};
+    use entities::ids::{FileAssetId, PayableEntryId, SupplierPaymentId};
     use entities::payable::SupplierPaymentData;
     use std::str::FromStr;
 
@@ -416,6 +416,7 @@ mod tests {
                 paid_at: Instant::from_unix_secs(10),
                 amount: entities::money::Amount::from_str("100").expect("金额合法"),
                 bank_reference: None,
+                bank_receipt_asset_id: FileAssetId::new("asset-receipt-1"),
             },
         )
         .expect("草稿必须可构造")

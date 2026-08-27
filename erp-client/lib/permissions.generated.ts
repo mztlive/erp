@@ -2847,6 +2847,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/supplier-payments/{id}/bank-receipt",
+                description: "预览供应商付款银行回单",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/supplier-payments/commit",
                 description: "原子创建或提交供应商付款审批",

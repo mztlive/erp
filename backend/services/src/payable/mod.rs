@@ -20,14 +20,15 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, PartyExt, PayableExt, PurchaseOrderExt,
-    ReceivableExt, SupplierExt, Transactional,
+    AccessControlExt, DocumentRegistryExt, FileAssetExt, NoTransaction, PartyExt, PayableExt,
+    PurchaseOrderExt, ReceivableExt, SupplierExt, Transactional,
 };
 use entities::common::time::Instant;
 use entities::document_registry::{BusinessDocument, DocumentType};
+use entities::file_asset::{RetentionClass, SensitivityClass};
 use entities::ids::{
-    InvoiceId, PayableAccountId, PayableEntryId, PaymentAllocationId, PurchaseInvoiceAllocationId,
-    SupplierAccountId, SupplierPaymentId,
+    FileAssetId, InvoiceId, PayableAccountId, PayableEntryId, PaymentAllocationId,
+    PurchaseInvoiceAllocationId, SupplierAccountId, SupplierPaymentId,
 };
 use entities::money::Amount;
 use entities::payable::{
@@ -38,7 +39,7 @@ use entities::payable::{
 };
 use entities::receivable::{Invoice, InvoiceData, InvoiceDirection, InvoiceKind};
 use id_generator::next_id;
-use mongodb::Database;
+use mongodb::{ClientSession, Database};
 use validator::Validate;
 
 use crate::approval::binding::{
@@ -49,7 +50,9 @@ use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::audit::{AuditActor, CommandReceipt};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
+use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
 use crate::iam::{self, SharedRbacService};
+use crate::pending_file_assets::PendingFileAssets;
 
 mod adapter;
 mod cancel_approval;
@@ -74,8 +77,8 @@ pub use self::dto::{
     CreateSupplierPaymentRequest, DocumentApprovalView, PageView, PayableAccountListParams,
     PayableAccountView, PaymentAllocationLineRequest, PaymentAllocationView, PostSupplierPaymentRequest,
     PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
-    RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest, SupplierPaymentListParams,
-    SupplierPaymentView,
+    RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest, SupplierPaymentBankReceiptView,
+    SupplierPaymentListParams, SupplierPaymentView,
 };
 use self::start_approval::{
     build_supplier_payment_start_input, load_bound_definition_graph_with_executor,
@@ -94,6 +97,14 @@ type SupplierPaymentFilter = <mongodb::Database as PayableExt>::SupplierPaymentF
 pub struct PayableService {
     db: Database,
     rbac: SharedRbacService,
+}
+
+/// 携带银行回单文件资产的付款提交结果。
+pub struct SupplierPaymentWithAssetsResult {
+    /// 稳定付款单结果。
+    pub view: SupplierPaymentView,
+    /// 本次上传对象是否已随业务事务登记；幂等重放时为 `false`。
+    pub assets_committed: bool,
 }
 
 impl PayableService {
@@ -308,6 +319,31 @@ impl PayableService {
         self.supplier_payment_view(id.to_string()).await
     }
 
+    /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
+    ///
+    /// 实际对象字节由 HTTP 层在事务外读取；本方法只允许读取付款实体直接引用的
+    /// 回单资产，禁止用付款详情权限预览任意文件资产。
+    ///
+    /// # 错误
+    /// 付款单、回单引用或文件资产不存在，以及审计写入失败时返回错误。
+    pub async fn supplier_payment_bank_receipt(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
+        let payment = self.load_supplier_payment(id).await?;
+        let asset_id = payment.require_bank_receipt()?;
+        let asset = self
+            .db
+            .file_assets()
+            .find_by_id(asset_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
+        let audit = actor.clone().resource_log(
+            "supplier_payment.bank_receipt.preview",
+            "supplier_payment",
+            id.to_string(),
+        )?;
+        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        Ok(asset.into())
+    }
+
     /// 登记供应商付款草稿，并在同一事务绑定已发布审批定义。
     ///
     /// 付款单号全局唯一（唯一索引）构成幂等去重。绑定失败必须回滚业务实体，
@@ -329,6 +365,8 @@ impl PayableService {
         actor: &AuditActor,
     ) -> Result<SupplierPaymentView> {
         req.validate()?;
+        self.ensure_existing_bank_receipt(&req.bank_receipt_asset_id)
+            .await?;
         let payment = SupplierPayment::new(
             SupplierPaymentId::new(next_id()),
             SupplierPaymentData {
@@ -337,6 +375,7 @@ impl PayableService {
                 paid_at: req.paid_at,
                 amount: req.amount,
                 bank_reference: req.bank_reference,
+                bank_receipt_asset_id: req.bank_receipt_asset_id,
             },
         )?;
         persist_created_supplier_payment(&self.db, &self.rbac, payment.clone(), actor.clone()).await?;
@@ -344,6 +383,24 @@ impl PayableService {
     }
 
     /// 原子创建或提交供应商付款并启动审批。
+    ///
+    /// 不携带新上传对象的内部兼容入口；HTTP 付款工作台使用
+    /// [`Self::commit_supplier_payment_with_assets`]。
+    ///
+    /// # 错误
+    /// 参数组合、银行回单、任务责任、审批绑定或事务提交不合法时返回错误。
+    pub async fn commit_supplier_payment(
+        &self,
+        req: CommitSupplierPaymentRequest,
+        actor: &AuditActor,
+    ) -> Result<SupplierPaymentView> {
+        Ok(self
+            .commit_supplier_payment_with_assets(req, Vec::new(), actor)
+            .await?
+            .view)
+    }
+
+    /// 原子创建或提交供应商付款、登记银行回单并启动审批。
     ///
     /// 新付款的单据注册与定义绑定、付款实体、冻结核销分配、审批运行事实、
     /// 不可变快照、入口任务和审计全部位于同一事务。已有草稿用乐观锁校验后
@@ -360,11 +417,12 @@ impl PayableService {
     /// * `ValidationError` - 参数组合或分配不合法
     /// * `ConflictError` - 草稿版本、状态、绑定或审批定义冲突
     /// * `NotFound` - 已有草稿或供应商不存在
-    pub async fn commit_supplier_payment(
+    pub async fn commit_supplier_payment_with_assets(
         &self,
-        req: CommitSupplierPaymentRequest,
+        mut req: CommitSupplierPaymentRequest,
+        asset_requests: Vec<PendingFileAssetRequest>,
         actor: &AuditActor,
-    ) -> Result<SupplierPaymentView> {
+    ) -> Result<SupplierPaymentWithAssetsResult> {
         req.validate()?;
         let command_receipt = CommandReceipt::new(
             "supplier-payment-commit-",
@@ -375,12 +433,21 @@ impl PayableService {
             &req,
         )?;
         if let Some(payment_id) = command_receipt.committed_resource_id(&self.db).await? {
-            return self.supplier_payment_detail(&payment_id).await;
+            return Ok(SupplierPaymentWithAssetsResult {
+                view: self.supplier_payment_detail(&payment_id).await?,
+                assets_committed: false,
+            });
         }
+        validate_bank_receipt_pending_requests(&asset_requests)?;
+        let has_pending_assets = !asset_requests.is_empty();
+        let pending_assets = PendingFileAssets::prepare(asset_requests, actor)?;
+        let used_assets = resolve_payment_receipt_references(&mut req, &pending_assets)?;
+        pending_assets.ensure_all_used(&used_assets)?;
         let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
         let work_item_id = req.work_item_id.clone();
+        let receipt_override = req.bank_receipt_asset_id;
         let new_payment = match (&req.payment_id, req.expected_version, req.payment) {
-            (None, None, Some(create)) => {
+            (None, None, Some(create)) if receipt_override.is_none() => {
                 create.validate()?;
                 Some(SupplierPayment::new(
                     SupplierPaymentId::new(next_id()),
@@ -390,6 +457,7 @@ impl PayableService {
                         paid_at: create.paid_at,
                         amount: create.amount,
                         bank_reference: create.bank_reference,
+                        bank_receipt_asset_id: create.bank_receipt_asset_id,
                     },
                 )?)
             }
@@ -454,6 +522,14 @@ impl PayableService {
                                 session,
                             )
                             .await?;
+                            ensure_bank_receipt_asset_in_transaction(
+                                &db,
+                                candidate.require_bank_receipt()?,
+                                &pending_assets,
+                                session,
+                            )
+                            .await?;
+                            pending_assets.persist(&db, session).await?;
                             db.supplier_payments().create(&candidate, session).await?;
                             let audit = actor_owned.clone().resource_log(
                                 "supplier_payment.create",
@@ -467,17 +543,28 @@ impl PayableService {
                             let payment_id = requested_id
                                 .as_deref()
                                 .ok_or_else(|| Error::ValidationError("已有付款缺少主键".to_string()))?;
-                            let payment = db
-                                .supplier_payments()
-                                .find_by_id(payment_id, session)
-                                .await?
-                                .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
+                            let mut payment =
+                                db.supplier_payments()
+                                    .find_by_id(payment_id, session)
+                                    .await?
+                                    .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
                             ensure_expected_version(
                                 payment.base.version,
                                 expected_version.ok_or_else(|| {
                                     Error::ValidationError("已有付款缺少期望版本".to_string())
                                 })?,
                             )?;
+                            if let Some(asset_id) = receipt_override {
+                                payment.replace_bank_receipt(asset_id)?;
+                            }
+                            ensure_bank_receipt_asset_in_transaction(
+                                &db,
+                                payment.require_bank_receipt()?,
+                                &pending_assets,
+                                session,
+                            )
+                            .await?;
+                            pending_assets.persist(&db, session).await?;
                             let binding = find_approval_binding(&db, payment_id, session)
                                 .await?
                                 .ok_or_else(|| {
@@ -557,13 +644,24 @@ impl PayableService {
 
         let committed = match transaction_result {
             Ok(committed) => committed,
-            Err(error) => match command_receipt.committed_resource_id(&self.db).await? {
-                Some(payment_id) => return self.supplier_payment_detail(&payment_id).await,
-                None => return Err(error),
-            },
+            Err(error) => {
+                let assets_may_be_committed = matches!(&error, Error::OutcomeUnknown(_));
+                match command_receipt.committed_resource_id(&self.db).await? {
+                    Some(payment_id) => {
+                        return Ok(SupplierPaymentWithAssetsResult {
+                            view: self.supplier_payment_detail(&payment_id).await?,
+                            assets_committed: has_pending_assets && assets_may_be_committed,
+                        });
+                    }
+                    None => return Err(error),
+                }
+            }
         };
 
-        self.supplier_payment_detail(&committed.base.id).await
+        Ok(SupplierPaymentWithAssetsResult {
+            view: self.supplier_payment_detail(&committed.base.id).await?,
+            assets_committed: has_pending_assets,
+        })
     }
 
     /// 提交供应商付款并调用统一 `start_approval`。
@@ -595,6 +693,7 @@ impl PayableService {
                 payment_id: Some(id.to_string()),
                 expected_version: Some(req.expected_version),
                 payment: None,
+                bank_receipt_asset_id: None,
                 allocations: req.allocations,
                 idempotency_key: req.idempotency_key,
             },
@@ -703,6 +802,22 @@ impl PayableService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
+    }
+
+    /// 校验 JSON 创建入口引用的既有银行回单资产。
+    async fn ensure_existing_bank_receipt(&self, asset_id: &FileAssetId) -> Result<()> {
+        let asset = self
+            .db
+            .file_assets()
+            .find_by_id(asset_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
+        validate_bank_receipt_metadata(
+            &asset.content_type,
+            asset.sensitivity_class,
+            asset.retention_class,
+            asset.destroyed_at.is_some(),
+        )
     }
 
     /// 最终通过过账并核销（§8.3-1 事务不变量）。
@@ -1163,6 +1278,8 @@ impl PayableService {
             Err(Error::NotFound(_)) => None,
             Err(error) => return Err(error),
         };
+        let bank_receipt =
+            payment_bank_receipt_view(&self.db, payment.bank_receipt_asset_id.as_ref()).await?;
         Ok(SupplierPaymentView {
             id: payment.base.id.clone(),
             payment_no: payment.payment_no,
@@ -1171,6 +1288,7 @@ impl PayableService {
             paid_at: payment.paid_at,
             amount: payment.amount,
             bank_reference: payment.bank_reference,
+            bank_receipt,
             version: payment.base.version,
             created_at: payment.base.created_at,
             unallocated_amount: payment.amount.checked_sub(allocated_total),
@@ -1179,6 +1297,108 @@ impl PayableService {
             approval: document_approval_view(binding.as_ref(), None, payment.status),
         })
     }
+}
+
+/// 校验付款命令携带的待登记银行回单元数据。
+fn validate_bank_receipt_pending_requests(requests: &[PendingFileAssetRequest]) -> Result<()> {
+    for request in requests {
+        validate_bank_receipt_metadata(
+            &request.registration.content_type,
+            request.registration.sensitivity_class,
+            request.registration.retention_class,
+            false,
+        )?;
+    }
+    Ok(())
+}
+
+/// 解析新付款或既有草稿覆盖字段中的临时回单引用。
+fn resolve_payment_receipt_references(
+    req: &mut CommitSupplierPaymentRequest,
+    pending_assets: &PendingFileAssets,
+) -> Result<HashSet<String>> {
+    let mut used = HashSet::new();
+    if let Some(payment) = req.payment.as_mut() {
+        pending_assets.resolve_id(&mut payment.bank_receipt_asset_id, &mut used)?;
+    }
+    if let Some(asset_id) = req.bank_receipt_asset_id.as_mut() {
+        pending_assets.resolve_id(asset_id, &mut used)?;
+    }
+    Ok(used)
+}
+
+/// 在付款事务内校验正式或本批次待登记的银行回单资产。
+async fn ensure_bank_receipt_asset_in_transaction(
+    db: &Database,
+    asset_id: &FileAssetId,
+    pending_assets: &PendingFileAssets,
+    session: &mut ClientSession,
+) -> Result<()> {
+    if pending_assets.contains_id(asset_id) {
+        let sensitivity = pending_assets
+            .sensitivity(asset_id)
+            .ok_or_else(|| Error::ValidationError("银行回单临时引用无效".to_string()))?;
+        if sensitivity == SensitivityClass::General {
+            return Err(Error::ValidationError("银行回单必须按敏感文件保存".to_string()));
+        }
+        return Ok(());
+    }
+    let asset = db
+        .file_assets()
+        .find_by_id(asset_id.as_ref(), session)
+        .await?
+        .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
+    validate_bank_receipt_metadata(
+        &asset.content_type,
+        asset.sensitivity_class,
+        asset.retention_class,
+        asset.destroyed_at.is_some(),
+    )
+}
+
+/// 校验银行回单的图片类型、敏感级别、保留策略与销毁状态。
+fn validate_bank_receipt_metadata(
+    content_type: &str,
+    sensitivity: SensitivityClass,
+    retention: RetentionClass,
+    destroyed: bool,
+) -> Result<()> {
+    if !matches!(content_type, "image/jpeg" | "image/png" | "image/webp") {
+        return Err(Error::ValidationError(
+            "银行回单仅支持 JPG、PNG 或 WebP 图片".to_string(),
+        ));
+    }
+    if sensitivity == SensitivityClass::General {
+        return Err(Error::ValidationError("银行回单必须按敏感文件保存".to_string()));
+    }
+    if retention != RetentionClass::LongTerm {
+        return Err(Error::ValidationError("银行回单必须长期保留".to_string()));
+    }
+    if destroyed {
+        return Err(Error::ValidationError("银行回单已销毁".to_string()));
+    }
+    Ok(())
+}
+
+/// 装配付款详情中的银行回单安全元数据。
+async fn payment_bank_receipt_view(
+    db: &Database,
+    asset_id: Option<&FileAssetId>,
+) -> Result<Option<SupplierPaymentBankReceiptView>> {
+    let Some(asset_id) = asset_id else {
+        return Ok(None);
+    };
+    let asset = db
+        .file_assets()
+        .find_by_id(asset_id.as_ref(), &mut NoTransaction)
+        .await?
+        .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
+    Ok(Some(SupplierPaymentBankReceiptView {
+        asset_id: asset.base.id,
+        file_name: asset.file_name,
+        content_type: asset.content_type,
+        byte_size: asset.byte_size,
+    }))
 }
 
 /// 解析供应商展示信息（编号 + 名称）。
@@ -1430,10 +1650,14 @@ fn purchase_invoice_allocation_view(
 
 #[cfg(test)]
 mod supplier_payment_approval_tests {
-    use super::{execute_supplier_payment_domain_action, start_supplier_payment_approval, PayableService};
+    use super::{
+        execute_supplier_payment_domain_action, start_supplier_payment_approval,
+        validate_bank_receipt_metadata, PayableService,
+    };
     use crate::approval::policy::ApprovalDomainAction;
     use entities::common::time::Instant;
-    use entities::ids::{PayableEntryId, SupplierAccountId, SupplierPaymentId};
+    use entities::file_asset::{RetentionClass, SensitivityClass};
+    use entities::ids::{FileAssetId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
     use entities::money::Amount;
     use entities::payable::{
         PendingPaymentAllocation, SupplierPayment, SupplierPaymentData, SupplierPaymentStatus,
@@ -1449,9 +1673,42 @@ mod supplier_payment_approval_tests {
                 paid_at: Instant::from_unix_secs(1),
                 amount: Amount::from_str("100").expect("金额合法"),
                 bank_reference: None,
+                bank_receipt_asset_id: FileAssetId::new("asset-receipt-1"),
             },
         )
         .expect("草稿必须可构造")
+    }
+
+    #[test]
+    fn bank_receipt_requires_sensitive_long_term_image() {
+        assert!(validate_bank_receipt_metadata(
+            "image/png",
+            SensitivityClass::Sensitive,
+            RetentionClass::LongTerm,
+            false,
+        )
+        .is_ok());
+        assert!(validate_bank_receipt_metadata(
+            "application/pdf",
+            SensitivityClass::Sensitive,
+            RetentionClass::LongTerm,
+            false,
+        )
+        .is_err());
+        assert!(validate_bank_receipt_metadata(
+            "image/png",
+            SensitivityClass::General,
+            RetentionClass::LongTerm,
+            false,
+        )
+        .is_err());
+        assert!(validate_bank_receipt_metadata(
+            "image/png",
+            SensitivityClass::Sensitive,
+            RetentionClass::SevenDays,
+            false,
+        )
+        .is_err());
     }
 
     /// 创建必须注册 BusinessDocument 并绑定发布定义。

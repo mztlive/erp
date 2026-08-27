@@ -26,7 +26,7 @@ export function SupplierPaymentSubmitConfirmDialog({
         <FormalActionConfirmDialog
             open={open}
             onOpenChange={onOpenChange}
-            actionLabel="提交付款"
+            actionLabel="提交付款审批"
             confirmLabel="确认提交"
             fromStatus={{ label: "草稿", tone: "neutral" }}
             toStatus={{ label: "审批中", tone: "warning" }}
@@ -39,7 +39,12 @@ export function SupplierPaymentSubmitConfirmDialog({
                     />
                 </div>
             }
-            lockedFields={["供应商", "付款金额", "已绑定的审批流程"]}
+            lockedFields={[
+                "供应商",
+                "付款金额",
+                "银行回单",
+                "已绑定的审批流程",
+            ]}
             effects={[
                 "内容锁定并进入审批",
                 "按已绑定的审批流程办理",

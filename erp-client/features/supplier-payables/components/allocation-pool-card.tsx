@@ -23,6 +23,7 @@ export type AllocationPoolCardProps = {
     selected: ReadonlySet<string>
     amounts: Readonly<Record<string, string>>
     disabled: boolean
+    lockedTarget?: boolean
     onToggleItem: (
         payableAccountId: string,
         checked: boolean | "indeterminate",
@@ -41,6 +42,7 @@ export function AllocationPoolCard({
     selected,
     amounts,
     disabled,
+    lockedTarget = false,
     onToggleItem,
     onAmountChange,
     onToggleSelectAll,
@@ -50,42 +52,49 @@ export function AllocationPoolCard({
         <section
             id="alloc-pool"
             className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            aria-label="同供应商待核销池"
+            aria-label={lockedTarget ? "本次付款对应单据" : "同供应商待核销池"}
         >
             <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">同供应商待核销池</h2>
+                <h2 className="text-sm font-semibold">
+                    {lockedTarget ? "本次付款对应单据" : "同供应商待核销池"}
+                </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                    仅 {supplierName} ·{" "}
-                    {track === "payment" ? "开放应付" : "可收票余额"}
+                    {lockedTarget
+                        ? `${supplierName} · 任务已锁定付款来源`
+                        : `仅 ${supplierName} · ${
+                              track === "payment" ? "开放应付" : "可收票余额"
+                          }`}
                 </p>
             </div>
-            <div className="space-y-2 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>共 {pool.length} 个开放目标</span>
-                    <div className="flex gap-1">
-                        <Button
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={pool.length === 0 || disabled}
-                            onClick={onToggleSelectAll}
-                        >
-                            全选
-                        </Button>
-                        <Button
-                            type="button"
-                            size="xs"
-                            variant="ghost"
-                            disabled={selected.size === 0 || disabled}
-                            onClick={onFillAllSelected}
-                        >
-                            按开放余额填满
-                        </Button>
+            <div className={cn("p-4", !lockedTarget && "space-y-2")}>
+                {!lockedTarget ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>{`共 ${pool.length} 个开放目标`}</span>
+                        <div className="flex gap-1">
+                            <Button
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                disabled={pool.length === 0 || disabled}
+                                onClick={onToggleSelectAll}
+                            >
+                                全选
+                            </Button>
+                            <Button
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                disabled={selected.size === 0 || disabled}
+                                onClick={onFillAllSelected}
+                            >
+                                按开放余额填满
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                ) : null}
                 {pool.length === 0 ? (
                     <p className="py-6 text-sm text-muted-foreground">
-                        当前无开放目标
+                        {lockedTarget ? "未匹配到待付款单据" : "当前无开放目标"}
                     </p>
                 ) : (
                     pool.map((item) => {
@@ -94,6 +103,55 @@ export function AllocationPoolCard({
                             track === "payment"
                                 ? item.openTotal
                                 : item.openInvoiceableTotal
+                        if (lockedTarget) {
+                            return (
+                                <div
+                                    key={item.payableAccountId}
+                                    className="grid gap-4 py-1 md:grid-cols-[minmax(0,1.4fr)_minmax(150px,0.45fr)_minmax(150px,0.45fr)] md:items-center"
+                                >
+                                    <div className="min-w-0 md:pr-5">
+                                        <div className="text-xs font-medium text-muted-foreground">
+                                            采购单
+                                        </div>
+                                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                            <span className="num truncate text-sm font-medium">
+                                                {item.sourceDocumentNo}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {item.dueStateLabel} ·{" "}
+                                                {item.dueDate}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="border-t border-border pt-3 md:border-l md:border-t-0 md:py-1 md:pl-5">
+                                        <div className="text-xs font-medium text-muted-foreground">
+                                            剩余应付
+                                        </div>
+                                        <div className="mt-1 text-base font-semibold">
+                                            <MoneyValue
+                                                value={open}
+                                                taxBasis="gross"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="border-t border-border pt-3 md:border-l md:border-t-0 md:py-1 md:pl-5">
+                                        <div className="text-xs font-medium text-muted-foreground">
+                                            本次核销
+                                        </div>
+                                        <div className="mt-1 text-base font-semibold">
+                                            <MoneyValue
+                                                value={
+                                                    amounts[
+                                                        item.payableAccountId
+                                                    ] ?? "0"
+                                                }
+                                                taxBasis="gross"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        }
                         return (
                             <div
                                 key={item.payableAccountId}
@@ -104,7 +162,7 @@ export function AllocationPoolCard({
                                         : "border-border bg-card",
                                 )}
                             >
-                                <div className="flex items-start gap-2">
+                                <div className="flex min-w-0 items-start gap-2">
                                     <Checkbox
                                         checked={checked}
                                         onCheckedChange={(v) =>
@@ -155,7 +213,9 @@ export function AllocationPoolCard({
                                             htmlFor={`amt-${item.payableAccountId}`}
                                             className="text-xs whitespace-nowrap"
                                         >
-                                            本次分配
+                                            <span className="text-muted-foreground">
+                                                本次分配
+                                            </span>
                                         </Label>
                                         <Input
                                             id={`amt-${item.payableAccountId}`}

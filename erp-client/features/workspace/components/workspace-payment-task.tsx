@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
@@ -43,17 +44,29 @@ export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
                 <div className="flex min-w-0 flex-col gap-2">
                     <WorkspaceDocumentBadge item={item} />
                     <h2 className="text-xl font-semibold tracking-tight">
-                        {item.objectTitle}
+                        向
+                        {payable?.supplierName ??
+                            item.counterpartyName ??
+                            "供应商"}
+                        付款
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                        {[
-                            `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                            payable?.supplierName,
-                            payable?.sourceDocumentNo,
-                        ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                    </p>
+                    {payable ? (
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span>
+                                待付{" "}
+                                <MoneyValue
+                                    value={payable.openTotal}
+                                    taxBasis="gross"
+                                />
+                            </span>
+                            <span>采购单 {payable.sourceDocumentNo}</span>
+                            {payable.dueDate ? (
+                                <span>
+                                    {payable.dueStateLabel} · {payable.dueDate}
+                                </span>
+                            ) : null}
+                        </div>
+                    ) : null}
                 </div>
             </header>
 

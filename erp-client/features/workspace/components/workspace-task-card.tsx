@@ -12,6 +12,13 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 
+/** 队列只保留长单号的可辨识首尾，完整单号仍在右侧任务详情展示。 */
+function compactDocumentNumber(number: string): string {
+    return number.length > 22
+        ? `${number.slice(0, 10)}…${number.slice(-6)}`
+        : number
+}
+
 /**
  * 工作台队列行。首行单号与金额对齐扫读，次行放类型徽章与往来方。
  */
@@ -31,6 +38,7 @@ export function WorkspaceTaskCard({
         item.counterpartyName,
     ).amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
+    const paymentTask = item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
     const sourceSales = findSourceSalesOrder(item.summarySections)
     const counterpartyLine = [
         item.counterpartyName,
@@ -38,6 +46,12 @@ export function WorkspaceTaskCard({
     ]
         .filter(Boolean)
         .join(" · ")
+    const primaryLabel = paymentTask
+        ? item.counterpartyName || "供应商付款"
+        : number
+    const secondaryLine = paymentTask
+        ? `采购单 ${compactDocumentNumber(number)}`
+        : counterpartyLine
 
     return (
         <button
@@ -49,9 +63,11 @@ export function WorkspaceTaskCard({
                     : undefined
             }
             aria-label={
-                sourceSales
-                    ? `${item.workItemTypeLabel} ${number} 来源 ${sourceSales.orderNo}`
-                    : `${item.workItemTypeLabel} ${number}`
+                paymentTask
+                    ? `${item.workItemTypeLabel} ${primaryLabel} ${secondaryLine}`
+                    : sourceSales
+                      ? `${item.workItemTypeLabel} ${number} 来源 ${sourceSales.orderNo}`
+                      : `${item.workItemTypeLabel} ${number}`
             }
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
@@ -63,8 +79,13 @@ export function WorkspaceTaskCard({
             )}
         >
             <span className="flex items-baseline justify-between gap-3">
-                <span className="num min-w-0 truncate text-sm font-medium">
-                    {number}
+                <span
+                    className={cn(
+                        "min-w-0 truncate text-sm font-medium",
+                        !paymentTask && "num",
+                    )}
+                >
+                    {primaryLabel}
                 </span>
                 {amount ? (
                     <span className="num shrink-0 text-sm">{amount.value}</span>
@@ -73,9 +94,9 @@ export function WorkspaceTaskCard({
             <span className="flex min-w-0 items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
                     <WorkspaceDocumentBadge item={item} decorative />
-                    {counterpartyLine ? (
+                    {secondaryLine ? (
                         <span className="min-w-0 truncate text-xs text-muted-foreground">
-                            {counterpartyLine}
+                            {secondaryLine}
                         </span>
                     ) : null}
                 </span>

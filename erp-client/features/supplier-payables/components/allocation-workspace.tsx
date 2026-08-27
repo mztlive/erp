@@ -2,9 +2,14 @@
 
 import { ShieldAlertIcon } from "lucide-react"
 
-import { FormalActionConfirmDialog } from "@/components/business"
+import { FormalActionConfirmDialog, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import {
+    DescriptionDetails,
+    DescriptionItem,
+    DescriptionList,
+    DescriptionTerm,
+} from "@/components/ui/description-list"
 import { AllocationFactFormCard } from "@/features/supplier-payables/components/allocation-fact-form-card"
 import { AllocationPoolCard } from "@/features/supplier-payables/components/allocation-pool-card"
 import { AllocationResultView } from "@/features/supplier-payables/components/allocation-result-view"
@@ -26,6 +31,56 @@ export type SupplierAllocationWorkspaceProps = {
     embedded?: boolean
     onClose: () => void
     onGoToInvoiceView?: () => void
+}
+
+function AllocationAmountSummary({
+    track,
+    factAmount,
+    allocatedAmount,
+    unallocatedAmount,
+}: {
+    track: AllocationTrack
+    factAmount: string
+    allocatedAmount: string
+    unallocatedAmount: string
+}) {
+    const items =
+        track === "payment"
+            ? [
+                  ["付款总额", factAmount || "0"],
+                  ["核销金额", allocatedAmount],
+                  ["未核销金额", unallocatedAmount],
+              ]
+            : [
+                  ["记录金额", factAmount || "0"],
+                  ["拟分配", allocatedAmount],
+                  ["拟未分配", unallocatedAmount],
+              ]
+
+    return (
+        <DescriptionList
+            columns="three"
+            aria-label={track === "payment" ? "付款金额摘要" : "分配金额摘要"}
+            className="gap-0 border-y border-border sm:grid-cols-3 xl:grid-cols-3"
+        >
+            {items.map(([label, value], index) => (
+                <DescriptionItem
+                    key={label}
+                    className={cn(
+                        "px-1 py-3 sm:px-5",
+                        index > 0 &&
+                            "border-t border-border sm:border-l sm:border-t-0",
+                        index === 0 && "sm:pl-1",
+                    )}
+                >
+                    <DescriptionTerm>{label}</DescriptionTerm>
+                    <DescriptionDetails className="num text-lg font-semibold">
+                        <MoneyValue value={value} taxBasis="gross" />
+                    </DescriptionDetails>
+                </DescriptionItem>
+            ))}
+        </DescriptionList>
+    )
 }
 
 /**
@@ -78,7 +133,9 @@ export function SupplierAllocationWorkspace({
 
     return (
         <div className={cn("flex min-w-0 flex-col gap-4", embedded && "pb-4")}>
-            {policy && policy.state !== "AVAILABLE" ? (
+            {policy &&
+            policy.state !== "AVAILABLE" &&
+            !(embedded && track === "payment" && pool.length <= 1) ? (
                 <Alert>
                     <ShieldAlertIcon />
                     <AlertTitle>应付优先级策略不可用</AlertTitle>
@@ -117,25 +174,6 @@ export function SupplierAllocationWorkspace({
                 />
             ) : null}
 
-            {embedded && !result ? (
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                    {draftHint ? (
-                        <p className="text-xs text-muted-foreground">
-                            {draftHint}（不形成业务记录）
-                        </p>
-                    ) : null}
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={isSavingDraft}
-                        onClick={() => void handleSaveDraft()}
-                    >
-                        {isSavingDraft ? "保存中…" : "保存草稿"}
-                    </Button>
-                </div>
-            ) : null}
-
             {result ? (
                 <AllocationResultView
                     result={result}
@@ -147,43 +185,57 @@ export function SupplierAllocationWorkspace({
                     onResolveUnknown={handleResolveUnknown}
                 />
             ) : (
-                <div
-                    className={cn(
-                        "grid items-start gap-4",
-                        embedded ? "grid-cols-1" : "lg:grid-cols-2",
-                    )}
-                >
-                    <AllocationPoolCard
-                        supplierName={session.supplierName}
-                        pool={pool}
+                <>
+                    <AllocationAmountSummary
                         track={track}
-                        selected={selected}
-                        amounts={amounts}
-                        disabled={Boolean(result)}
-                        onToggleItem={toggleItem}
-                        onAmountChange={setAmountFor}
-                        onToggleSelectAll={toggleSelectAll}
-                        onFillAllSelected={fillAllSelected}
-                    />
-                    <AllocationFactFormCard
-                        track={track}
-                        existingPaymentId={session.existingPaymentId}
-                        existingInvoiceId={session.existingInvoiceId}
-                        existingDocumentNo={session.existingDocumentNo}
-                        existingUnallocated={session.existingUnallocated}
-                        paymentForm={paymentForm}
-                        invoiceForm={invoiceForm}
                         factAmount={factAmount}
-                        allocatedHint={allocatedHint}
-                        unallocatedHint={unallocatedHint}
-                        mixedSources={mixedSources}
-                        policyBlocksAuto={policyBlocksAuto}
-                        issues={issues}
-                        canSubmit={canSubmit}
-                        isSubmitting={isSubmitting}
-                        onSubmitClick={requestSubmit}
+                        allocatedAmount={allocatedHint}
+                        unallocatedAmount={unallocatedHint}
                     />
-                </div>
+                    <div
+                        className={cn(
+                            "grid items-start gap-4",
+                            embedded ? "grid-cols-1" : "lg:grid-cols-2",
+                        )}
+                    >
+                        <AllocationPoolCard
+                            supplierName={session.supplierName}
+                            pool={pool}
+                            track={track}
+                            selected={selected}
+                            amounts={amounts}
+                            disabled={Boolean(result)}
+                            onToggleItem={toggleItem}
+                            onAmountChange={setAmountFor}
+                            onToggleSelectAll={toggleSelectAll}
+                            onFillAllSelected={fillAllSelected}
+                            lockedTarget={embedded && track === "payment"}
+                        />
+                        <AllocationFactFormCard
+                            track={track}
+                            existingPaymentId={session.existingPaymentId}
+                            existingInvoiceId={session.existingInvoiceId}
+                            existingDocumentNo={session.existingDocumentNo}
+                            existingUnallocated={session.existingUnallocated}
+                            existingBankReceipt={session.existingBankReceipt}
+                            paymentForm={paymentForm}
+                            invoiceForm={invoiceForm}
+                            mixedSources={mixedSources}
+                            policyBlocksAuto={policyBlocksAuto}
+                            issues={issues}
+                            canSubmit={canSubmit}
+                            isSubmitting={isSubmitting}
+                            draftHint={embedded ? draftHint : undefined}
+                            isSavingDraft={isSavingDraft}
+                            onSaveDraft={
+                                embedded
+                                    ? () => void handleSaveDraft()
+                                    : undefined
+                            }
+                            onSubmitClick={requestSubmit}
+                        />
+                    </div>
+                </>
             )}
 
             {track === "payment" ? (

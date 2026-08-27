@@ -1,14 +1,13 @@
 /** W12 供应商往来 · 核销记录表单值类型与表单实例类型（供拆分子表单组件使用）。 */
 
-import type {
-    FieldComponent,
-    ReactFormExtendedApi,
-} from "@tanstack/react-form"
+import type { FieldComponent, ReactFormExtendedApi } from "@tanstack/react-form"
 
 export type PaymentFormValues = {
     paidAt: string
     amount: string
     bankReference: string
+    bankReceiptAssetId: string
+    bankReceipt: File | null
     note: string
 }
 

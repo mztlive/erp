@@ -338,6 +338,7 @@ export async function fetchAllocationSession(input: {
     let existingUnallocated: string | undefined
     let existingDocumentNo: string | undefined
     let existingPaymentVersion: number | undefined
+    let existingBankReceipt: AllocationSessionView["existingBankReceipt"]
     let approval: AllocationSessionView["approval"]
 
     if (input.existingPaymentId) {
@@ -348,6 +349,14 @@ export async function fetchAllocationSession(input: {
         existingUnallocated = p.unallocated_amount
         existingDocumentNo = p.payment_no
         existingPaymentVersion = p.version
+        existingBankReceipt = p.bank_receipt
+            ? {
+                  assetId: p.bank_receipt.asset_id,
+                  fileName: p.bank_receipt.file_name,
+                  contentType: p.bank_receipt.content_type,
+                  byteSize: p.bank_receipt.byte_size,
+              }
+            : undefined
         approval = projectPayment(p).approval
     } else if (input.existingInvoiceId) {
         const inv = await apiGet<BackendInvoice>(
@@ -389,6 +398,7 @@ export async function fetchAllocationSession(input: {
         existingUnallocated,
         existingDocumentNo,
         existingPaymentVersion,
+        existingBankReceipt,
         approval,
     }
     sessions.set(draftSessionId, view)

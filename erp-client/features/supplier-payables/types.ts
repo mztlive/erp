@@ -104,6 +104,12 @@ export type PaymentRow = Readonly<{
     paidAt: string
     amount: string
     bankReferenceMasked: string
+    bankReceipt?: Readonly<{
+        assetId: string
+        fileName: string
+        contentType: string
+        byteSize: number
+    }>
     allocatedTotal: string
     unallocatedAmount: string
     status: PaymentStatus
@@ -314,6 +320,7 @@ export type AllocationSessionView = Readonly<{
     existingUnallocated?: string
     existingDocumentNo?: string
     existingPaymentVersion?: number
+    existingBankReceipt?: PaymentRow["bankReceipt"]
     approval?: DocumentApprovalView
 }>
 
@@ -333,6 +340,8 @@ export type PostPaymentInput = {
     paidAt: string
     amount: string
     bankReference: string
+    bankReceiptAssetId: string
+    bankReceiptFile: File | null
     note?: string
     targets: readonly AllocationTargetInput[]
     payablePriorityPolicyId?: string

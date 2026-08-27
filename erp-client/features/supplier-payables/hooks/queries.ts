@@ -11,6 +11,7 @@ import {
     fetchPaymentReversal,
     fetchSupplierAccounts,
     fetchSupplierPayment,
+    fetchSupplierPaymentBankReceiptBlob,
     fetchSupplierRefund,
     resolveUnknownResult,
     reverseInvoice,
@@ -41,6 +42,8 @@ const supplierPayablesKeys = {
         [...supplierPayablesKeys.all, "detail", payableAccountId] as const,
     payment: (paymentId: string) =>
         [...supplierPayablesKeys.all, "payment", paymentId] as const,
+    paymentReceipt: (paymentId: string) =>
+        [...supplierPayablesKeys.payment(paymentId), "bank-receipt"] as const,
     refund: (refundId: string) =>
         [...supplierPayablesKeys.all, "refund", refundId] as const,
     reversal: (reversalId: string) =>
@@ -80,6 +83,19 @@ export function useSupplierPaymentQuery(paymentId: string | null) {
         queryKey: supplierPayablesKeys.payment(paymentId ?? ""),
         queryFn: () => fetchSupplierPayment(paymentId!),
         enabled: Boolean(paymentId),
+    })
+}
+
+/** 读取付款单归属的银行回单图片；空付款 ID 或无回单时不发请求。 */
+export function useSupplierPaymentBankReceiptQuery(
+    paymentId: string | null,
+    enabled = true,
+) {
+    return useQuery({
+        queryKey: supplierPayablesKeys.paymentReceipt(paymentId ?? ""),
+        queryFn: () => fetchSupplierPaymentBankReceiptBlob(paymentId!),
+        enabled: Boolean(paymentId) && enabled,
+        staleTime: 5 * 60 * 1000,
     })
 }
 

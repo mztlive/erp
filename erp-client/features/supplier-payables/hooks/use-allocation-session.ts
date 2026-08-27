@@ -16,11 +16,13 @@ import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { readSupplierPaymentApprovalResponsibility } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { buildAllocationIssues } from "@/features/supplier-payables/lib/allocation-validation"
 import {
+    BANK_RECEIPT_PENDING_REFERENCE,
     cents,
     fromCents,
     invoiceSchema,
     paymentSchema,
     todayInput,
+    withLockedPaymentAmount,
 } from "@/features/supplier-payables/lib/allocation-model"
 import type {
     AllocationTrack,
@@ -111,6 +113,8 @@ export function useAllocationSession(
             amount:
                 session?.existingUnallocated ?? session?.existingAmount ?? "",
             bankReference: "",
+            bankReceiptAssetId: "",
+            bankReceipt: null as File | null,
             note: "",
         },
         validators: { onChange: paymentSchema },
@@ -185,6 +189,13 @@ export function useAllocationSession(
         setPaymentApproval(
             session.track === "payment" ? session.approval : undefined,
         )
+        if (track === "payment") {
+            paymentForm.setFieldValue(
+                "bankReceiptAssetId",
+                session.existingBankReceipt?.assetId ?? "",
+            )
+            paymentForm.setFieldValue("bankReceipt", null)
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- 会话与预选变化时同步
     }, [session?.draftSessionId, preselectKey])
 
@@ -208,13 +219,34 @@ export function useAllocationSession(
     const factAmount =
         track === "payment" ? paymentValues.amount : invoiceValues.grossAmount
 
+    const effectiveAmounts = React.useMemo(() => {
+        if (
+            track !== "payment" ||
+            !paymentPayableAccountId ||
+            session?.existingPaymentId
+        ) {
+            return amounts
+        }
+        return withLockedPaymentAmount(
+            amounts,
+            paymentPayableAccountId,
+            paymentValues.amount,
+        )
+    }, [
+        amounts,
+        paymentPayableAccountId,
+        paymentValues.amount,
+        session?.existingPaymentId,
+        track,
+    ])
+
     const allocatedHint = React.useMemo(() => {
         let c = 0
         for (const id of selected) {
-            c += cents(amounts[id] ?? "0")
+            c += cents(effectiveAmounts[id] ?? "0")
         }
         return fromCents(c)
-    }, [selected, amounts])
+    }, [effectiveAmounts, selected])
 
     const unallocatedHint = React.useMemo(() => {
         return fromCents(
@@ -240,7 +272,7 @@ export function useAllocationSession(
     const issues = buildAllocationIssues({
         track,
         selected,
-        amounts,
+        amounts: effectiveAmounts,
         pool,
         allocatedHint,
         factAmount,
@@ -257,7 +289,14 @@ export function useAllocationSession(
             expectedPaymentTaskVersion &&
             paymentPayableAccountId,
         )
-    const canSubmit = issues.length === 0 && !result && hasPaymentTask
+    const hasPaymentReceipt =
+        track !== "payment" ||
+        Boolean(
+            paymentValues.bankReceipt ||
+            paymentValues.bankReceiptAssetId.trim(),
+        )
+    const canSubmit =
+        issues.length === 0 && !result && hasPaymentTask && hasPaymentReceipt
 
     function toggleItem(
         payableAccountId: string,
@@ -327,7 +366,7 @@ export function useAllocationSession(
             track,
             supplierId,
             formSnapshot: {
-                amounts,
+                amounts: effectiveAmounts,
                 selected: [...selected],
                 payment: paymentForm.state.values,
                 invoice: invoiceForm.state.values,
@@ -370,7 +409,7 @@ export function useAllocationSession(
             return {
                 payableAccountId,
                 payableEntryId: item.primaryEntryId,
-                amount: amounts[payableAccountId] || "0",
+                amount: effectiveAmounts[payableAccountId] || "0",
                 entryLockVersion: item.entryLockVersion,
                 accountLockVersion: item.accountLockVersion,
             }
@@ -391,6 +430,10 @@ export function useAllocationSession(
                     ? (session.existingAmount ?? v.amount)
                     : v.amount,
                 bankReference: v.bankReference,
+                bankReceiptAssetId: v.bankReceipt
+                    ? BANK_RECEIPT_PENDING_REFERENCE
+                    : v.bankReceiptAssetId,
+                bankReceiptFile: v.bankReceipt,
                 note: v.note,
                 targets,
                 payablePriorityPolicyId: policy?.payablePriorityPolicyId,
@@ -489,7 +532,7 @@ export function useAllocationSession(
         session,
         policy,
         pool,
-        amounts,
+        amounts: effectiveAmounts,
         selected,
         confirmOpen,
         setConfirmOpen,

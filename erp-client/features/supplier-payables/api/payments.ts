@@ -3,7 +3,7 @@
  * 幂等结果缓存见 api/shared。过账只由最终通过动作内部消费。
  */
 
-import { apiPost } from "@/lib/api"
+import { apiGetBlob, apiPostForm } from "@/lib/api"
 import type { BackendSupplierPayment } from "@/features/supplier-payables/api/mappers"
 import {
     errorMessage,
@@ -14,6 +14,7 @@ import {
 } from "@/features/supplier-payables/api/shared"
 import { commitPaymentReversal } from "@/features/supplier-payables/api/reversals"
 import { mapSupplierPaymentApproval } from "@/features/supplier-payables/lib/supplier-payment-approval"
+import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
 import type {
     FormalSubmitResult,
     PostPaymentInput,
@@ -30,7 +31,7 @@ function failedPayment(code: string, message: string): FormalSubmitResult {
 }
 
 /**
- * 提交供应商付款审批。只走 `/submit`，不得调用已关闭的过账旁路。
+ * 提交供应商付款审批。命令与银行回单在一次 multipart 请求中提交。
  *
  * @param input 提交所需字段。
  */
@@ -56,37 +57,56 @@ export async function submitPayment(
             "提交审批至少需要一条核销分配。",
         )
     }
+    const bankReceiptAssetId = commandInput.bankReceiptFile
+        ? BANK_RECEIPT_PENDING_REFERENCE
+        : commandInput.bankReceiptAssetId.trim()
+    if (!bankReceiptAssetId) {
+        return failedPayment("BANK_RECEIPT_REQUIRED", "请上传银行回单图片。")
+    }
 
     try {
         const paidAtSecs = Math.floor(
             new Date(commandInput.paidAt).getTime() / 1000,
         )
-        const submitted = await apiPost<BackendSupplierPayment>(
+        const command = {
+            work_item_id: commandInput.workItemId,
+            expected_task_version: commandInput.expectedTaskVersion,
+            payment_id: commandInput.existingPaymentId ?? null,
+            expected_version: commandInput.existingPaymentId
+                ? (commandInput.expectedVersion ?? null)
+                : null,
+            payment: commandInput.existingPaymentId
+                ? null
+                : {
+                      payment_no: `FK-${commandInput.idempotencyKey.slice(-8)}`,
+                      supplier_id: commandInput.supplierId,
+                      paid_at: paidAtSecs,
+                      amount: commandInput.amount,
+                      bank_reference: commandInput.bankReference || undefined,
+                      bank_receipt_asset_id: bankReceiptAssetId,
+                  },
+            bank_receipt_asset_id: commandInput.existingPaymentId
+                ? bankReceiptAssetId
+                : null,
+            allocations: targets.map((target) => ({
+                payable_entry_id:
+                    target.payableEntryId ?? target.payableAccountId,
+                allocated_amount: target.amount,
+            })),
+            idempotency_key: commandInput.idempotencyKey,
+        }
+        const form = new FormData()
+        form.append("command", JSON.stringify(command))
+        if (commandInput.bankReceiptFile) {
+            form.append(
+                BANK_RECEIPT_PENDING_REFERENCE,
+                commandInput.bankReceiptFile,
+                commandInput.bankReceiptFile.name,
+            )
+        }
+        const submitted = await apiPostForm<BackendSupplierPayment>(
             "/admin/supplier-payments/commit",
-            {
-                work_item_id: commandInput.workItemId,
-                expected_task_version: commandInput.expectedTaskVersion,
-                payment_id: commandInput.existingPaymentId ?? null,
-                expected_version: commandInput.existingPaymentId
-                    ? (commandInput.expectedVersion ?? null)
-                    : null,
-                payment: commandInput.existingPaymentId
-                    ? null
-                    : {
-                          payment_no: `FK-${commandInput.idempotencyKey.slice(-8)}`,
-                          supplier_id: commandInput.supplierId,
-                          paid_at: paidAtSecs,
-                          amount: commandInput.amount,
-                          bank_reference:
-                              commandInput.bankReference || undefined,
-                      },
-                allocations: targets.map((target) => ({
-                    payable_entry_id:
-                        target.payableEntryId ?? target.payableAccountId,
-                    allocated_amount: target.amount,
-                })),
-                idempotency_key: commandInput.idempotencyKey,
-            },
+            form,
         )
         const approval = mapSupplierPaymentApproval(submitted.approval)
         const draft = sessions.get(commandInput.draftSessionId)
@@ -97,6 +117,14 @@ export async function submitPayment(
                 existingDocumentNo: submitted.payment_no,
                 existingPaymentVersion: submitted.version,
                 existingUnallocated: submitted.unallocated_amount,
+                existingBankReceipt: submitted.bank_receipt
+                    ? {
+                          assetId: submitted.bank_receipt.asset_id,
+                          fileName: submitted.bank_receipt.file_name,
+                          contentType: submitted.bank_receipt.content_type,
+                          byteSize: submitted.bank_receipt.byte_size,
+                      }
+                    : undefined,
                 approval,
             })
         }
@@ -145,6 +173,16 @@ export async function submitPayment(
             errorCode: "HTTP_ERROR",
         }
     }
+}
+
+/** 读取付款单归属的银行回单图片；后端按付款关系校验并记录审计。 */
+export function fetchSupplierPaymentBankReceiptBlob(
+    paymentId: string,
+): Promise<Blob> {
+    return apiGetBlob(
+        `/admin/supplier-payments/${encodeURIComponent(paymentId)}/bank-receipt`,
+        { timeoutMs: 30_000, cache: "no-store" },
+    )
 }
 
 /**

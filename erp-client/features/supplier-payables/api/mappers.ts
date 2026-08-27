@@ -82,6 +82,12 @@ export type BackendSupplierPayment = {
     paid_at: number
     amount: string
     bank_reference?: string | null
+    bank_receipt?: {
+        asset_id: string
+        file_name: string
+        content_type: string
+        byte_size: number
+    } | null
     version: number
     created_at: number
     allocated_total: string
@@ -175,7 +181,7 @@ export function instantToIso(secs: number | undefined | null): string {
 
 function maskBank(raw?: string | null): string {
     const v = (raw ?? "").trim()
-    if (!v) return "****"
+    if (!v) return "未填写"
     if (v.includes("*")) return v
     if (v.length <= 4) return `****${v}`
     return `****${v.slice(-4)}`
@@ -290,6 +296,14 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         paidAt: instantToIso(p.paid_at),
         amount: p.amount,
         bankReferenceMasked: maskBank(p.bank_reference),
+        bankReceipt: p.bank_receipt
+            ? {
+                  assetId: p.bank_receipt.asset_id,
+                  fileName: p.bank_receipt.file_name,
+                  contentType: p.bank_receipt.content_type,
+                  byteSize: p.bank_receipt.byte_size,
+              }
+            : undefined,
         allocatedTotal: p.allocated_total,
         unallocatedAmount: p.unallocated_amount,
         status,

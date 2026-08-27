@@ -12,7 +12,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::payable, middleware::with_permission},
+    core::{handler::payable, middleware::with_permission, upload},
 };
 
 /// 返回本域管理端路由集合。
@@ -73,9 +73,20 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-payments/{id}/bank-receipt",
+            with_permission(
+                get(payable::supplier_payment_bank_receipt),
+                rbac,
+                payable::supplier_payment_bank_receipt_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-payments/commit",
             with_permission(
-                post(payable::supplier_payment_commit),
+                upload::multipart_route(
+                    post(payable::supplier_payment_commit),
+                    upload::MAX_MULTIPART_REQUEST_BYTES,
+                ),
                 rbac,
                 payable::supplier_payment_commit_permission_key(),
             ),
@@ -133,8 +144,10 @@ mod tests {
             .expect("生产路由必须存在");
         assert!(production.contains("/supplier-payments/{id}/submit"));
         assert!(production.contains("/supplier-payments/{id}/cancel-approval"));
+        assert!(production.contains("/supplier-payments/{id}/bank-receipt"));
         assert!(production.contains("supplier_payment_submit"));
         assert!(production.contains("supplier_payment_cancel_approval"));
+        assert!(production.contains("multipart_route"));
         assert!(!production.contains("PENDING_REVIEW"));
     }
 }

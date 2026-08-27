@@ -4,9 +4,16 @@
 //! 直接复用 `services::payable` 的 DTO。
 
 use axum::{
-    extract::{Path, Query, State},
+    body::Body,
+    extract::{Multipart, Path, Query, State},
+    http::{
+        header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS},
+        HeaderValue, StatusCode,
+    },
+    response::Response,
     Extension, Json,
 };
+use entities::file_asset::{SecurityScanStatus, SensitivityClass};
 use services::{
     audit::AuditActor,
     payable::{
@@ -17,10 +24,18 @@ use services::{
         SupplierPaymentListParams, SupplierPaymentView,
     },
 };
+use tracing::error;
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::{Error, Result},
+        handler::file_asset::{
+            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+            store_pending_asset_files, PendingAssetFile,
+        },
+        response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -202,13 +217,131 @@ pub async fn supplier_payment_create(
 pub async fn supplier_payment_commit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CommitSupplierPaymentRequest>,
+    mut multipart: Multipart,
 ) -> Result<SupplierPaymentView> {
-    let view = PayableService::new(state.db())
-        .commit_supplier_payment(req, &actor)
-        .await?;
+    let (req, files) =
+        extract_command_with_asset_files::<CommitSupplierPaymentRequest>(&mut multipart).await?;
+    validate_bank_receipt_upload(&req, &files)?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
+    let result = PayableService::new(state.db())
+        .commit_supplier_payment_with_assets(req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(result) => {
+            if !result.assets_committed {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Ok(ApiResponse::ok_with_data(result.view))
+        }
+        Err(service_error) => {
+            if should_compensate_pending_assets(&service_error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(service_error.into())
+        }
+    }
+}
 
-    Ok(ApiResponse::ok_with_data(view))
+#[permission_macros::permission(
+    group = "供应商往来",
+    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
+    desc = "预览供应商付款银行回单",
+    resource = "supplier_payment",
+    action = "detail"
+)]
+/// 在校验付款归属并记录审计后，返回银行回单图片内容。
+///
+/// # 错误
+/// 付款、回单或对象不存在，文件不可预览，审计或对象存储读取失败时返回错误。
+pub async fn supplier_payment_bank_receipt(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> std::result::Result<Response, Error> {
+    let view = PayableService::new(state.db())
+        .supplier_payment_bank_receipt(&id, &actor)
+        .await?;
+    if !matches!(
+        view.content_type.as_str(),
+        "image/jpeg" | "image/png" | "image/webp"
+    ) {
+        return Err(Error::Unprocessable("当前银行回单类型不支持在线预览".to_string()));
+    }
+    if view.destroyed_at.is_some()
+        || matches!(
+            view.security_scan_status,
+            SecurityScanStatus::Rejected | SecurityScanStatus::Quarantined
+        )
+    {
+        return Err(Error::Unprocessable("银行回单不可预览，请联系管理员".to_string()));
+    }
+    let content = state
+        .storage()
+        .read(&view.storage_object_key)
+        .await
+        .map_err(|storage_error| {
+            error!(
+                error = %storage_error,
+                supplier_payment_id = %id,
+                "Failed to read supplier payment bank receipt"
+            );
+            Error::Internal("Object storage operation failed".to_string())
+        })?;
+    let content_type = HeaderValue::from_str(&view.content_type)
+        .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
+    let mut response = Response::new(Body::from(content));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(CONTENT_TYPE, content_type);
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response
+        .headers_mut()
+        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    Ok(response)
+}
+
+/// 校验 multipart 中的银行回单字段与命令临时引用一一对应。
+fn validate_bank_receipt_upload(
+    req: &CommitSupplierPaymentRequest,
+    files: &[PendingAssetFile],
+) -> std::result::Result<(), Error> {
+    let mut expected = Vec::new();
+    if let Some(payment) = &req.payment {
+        let reference = payment.bank_receipt_asset_id.to_string();
+        if reference.starts_with("pending-file:") {
+            expected.push(reference);
+        }
+    }
+    if let Some(asset_id) = &req.bank_receipt_asset_id {
+        let reference = asset_id.to_string();
+        if reference.starts_with("pending-file:") {
+            expected.push(reference);
+        }
+    }
+    if expected.len() != files.len() {
+        return Err(Error::BadRequest("银行回单图片与付款命令不匹配".to_string()));
+    }
+    expected.sort();
+    let mut actual = files
+        .iter()
+        .map(|pending| pending.reference.clone())
+        .collect::<Vec<_>>();
+    actual.sort();
+    if actual != expected {
+        return Err(Error::BadRequest("银行回单图片临时引用无效".to_string()));
+    }
+    if files.iter().any(|pending| {
+        !matches!(
+            pending.file.content_type.as_str(),
+            "image/jpeg" | "image/png" | "image/webp"
+        )
+    }) {
+        return Err(Error::BadRequest(
+            "银行回单仅支持 JPG、PNG 或 WebP 图片".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[permission_macros::permission(
@@ -358,7 +491,10 @@ pub async fn purchase_invoice_allocation_list(
 
 #[cfg(test)]
 mod tests {
-    use services::payable::SubmitSupplierPaymentRequest;
+    use services::payable::{CommitSupplierPaymentRequest, SubmitSupplierPaymentRequest};
+
+    use super::validate_bank_receipt_upload;
+    use crate::core::handler::file_asset::{AssetFile, PendingAssetFile};
 
     /// 供应商付款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
     #[test]
@@ -385,5 +521,47 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    #[test]
+    fn bank_receipt_file_must_match_pending_image_reference() {
+        let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "1",
+            "payment_id": null,
+            "expected_version": null,
+            "payment": {
+                "payment_no": "FK-1",
+                "supplier_id": "supplier-1",
+                "paid_at": 1,
+                "amount": "10.00",
+                "bank_reference": null,
+                "bank_receipt_asset_id": "pending-file:bank-receipt"
+            },
+            "bank_receipt_asset_id": null,
+            "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10.00"}],
+            "idempotency_key": "commit-1"
+        }))
+        .expect("付款命令必须可反序列化");
+        let image = PendingAssetFile {
+            reference: "pending-file:bank-receipt".to_string(),
+            file: AssetFile {
+                file_name: "receipt.png".to_string(),
+                content_type: "image/png".to_string(),
+                content: vec![1],
+            },
+        };
+        assert!(validate_bank_receipt_upload(&request, &[image]).is_ok());
+
+        let pdf = PendingAssetFile {
+            reference: "pending-file:bank-receipt".to_string(),
+            file: AssetFile {
+                file_name: "receipt.pdf".to_string(),
+                content_type: "application/pdf".to_string(),
+                content: vec![1],
+            },
+        };
+        assert!(validate_bank_receipt_upload(&request, &[pdf]).is_err());
+        assert!(validate_bank_receipt_upload(&request, &[]).is_err());
     }
 }

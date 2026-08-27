@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{PayableEntryId, SupplierAccountId, SupplierPaymentId};
+use crate::ids::{FileAssetId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
 use crate::money::Amount;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
 /// 付款单号最大长度。
 const PAYMENT_NO_MAX_LEN: usize = 64;
-/// 银行凭证引用最大长度。
+/// 银行流水号最大长度。
 const BANK_REFERENCE_MAX_LEN: usize = 256;
 
 /// 付款单状态（合同 §4.4.2：`PENDING_REVIEW` 收敛为 `IN_APPROVAL`，删除审批 `REJECTED`）。
@@ -111,8 +111,10 @@ pub struct SupplierPaymentData {
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
-    /// 付款凭证引用。
+    /// 银行流水号。
     pub bank_reference: Option<String>,
+    /// 银行回单图片资产。
+    pub bank_receipt_asset_id: FileAssetId,
 }
 
 /// 供应商付款单更新数据（仅草稿可编辑）。
@@ -122,7 +124,7 @@ pub struct SupplierPaymentUpdate {
     pub paid_at: Option<Instant>,
     /// 付款金额；`None` 表示不修改。
     pub amount: Option<Amount>,
-    /// 付款凭证引用；`None` 表示不修改，`Some("")` 清除。
+    /// 银行流水号；`None` 表示不修改，`Some("")` 清除。
     pub bank_reference: Option<String>,
 }
 
@@ -146,8 +148,11 @@ pub struct SupplierPayment {
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
-    /// 付款凭证引用。
+    /// 银行流水号。
     pub bank_reference: Option<String>,
+    /// 银行回单图片资产；历史付款缺少该字段时兼容为空，新付款必须提供。
+    #[serde(default)]
+    pub bank_receipt_asset_id: Option<FileAssetId>,
     /// 审批提交版本，初值 0。不得复用 `BaseModel.version`。
     #[serde(default)]
     pub approval_subject_version: u32,
@@ -159,7 +164,7 @@ pub struct SupplierPayment {
 impl SupplierPayment {
     /// 创建供应商付款单（初始状态为草稿）。
     ///
-    /// 完成付款单号与凭证引用的 trim/非空/长度校验和金额正数校验。
+    /// 完成付款单号与银行流水号的 trim/非空/长度校验和金额正数校验。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::SupplierPaymentId`）
@@ -169,7 +174,7 @@ impl SupplierPayment {
     /// 返回新建的付款单实体。
     ///
     /// # 错误
-    /// 当付款单号为空/超长、凭证引用超长或金额非正时返回错误。
+    /// 当付款单号为空/超长、银行流水号超长或金额非正时返回错误。
     pub fn new(id: SupplierPaymentId, data: SupplierPaymentData) -> Result<Self> {
         let payment_no = normalize_required_text(
             data.payment_no,
@@ -178,7 +183,7 @@ impl SupplierPayment {
             "付款单号过长",
         )?;
         let bank_reference =
-            normalize_optional_text(data.bank_reference, "付款凭证引用", BANK_REFERENCE_MAX_LEN)?;
+            normalize_optional_text(data.bank_reference, "银行流水号", BANK_REFERENCE_MAX_LEN)?;
         ensure_positive_amount(&data.amount)?;
 
         Ok(Self {
@@ -189,6 +194,7 @@ impl SupplierPayment {
             paid_at: data.paid_at,
             amount: data.amount,
             bank_reference,
+            bank_receipt_asset_id: Some(data.bank_receipt_asset_id),
             approval_subject_version: 0,
             pending_allocations: Vec::new(),
         })
@@ -218,9 +224,32 @@ impl SupplierPayment {
         }
         if let Some(bank_reference) = update.bank_reference {
             self.bank_reference =
-                normalize_optional_text(Some(bank_reference), "付款凭证引用", BANK_REFERENCE_MAX_LEN)?;
+                normalize_optional_text(Some(bank_reference), "银行流水号", BANK_REFERENCE_MAX_LEN)?;
         }
         Ok(())
+    }
+
+    /// 替换草稿付款的银行回单图片。
+    ///
+    /// # 参数
+    /// * `asset_id` - 已登记或随当前命令登记的文件资产 ID
+    ///
+    /// # 错误
+    /// 付款不再处于草稿状态时返回错误。
+    pub fn replace_bank_receipt(&mut self, asset_id: FileAssetId) -> Result<()> {
+        self.ensure_editable()?;
+        self.bank_receipt_asset_id = Some(asset_id);
+        Ok(())
+    }
+
+    /// 返回提交审批所需的银行回单图片资产。
+    ///
+    /// # 错误
+    /// 历史草稿尚未补充银行回单时返回错误。
+    pub fn require_bank_receipt(&self) -> Result<&FileAssetId> {
+        self.bank_receipt_asset_id
+            .as_ref()
+            .ok_or_else(|| Error::from("请先上传银行回单图片"))
     }
 
     /// 迁移付款单状态。
@@ -354,6 +383,7 @@ mod tests {
             paid_at: Instant::from_unix_secs(1_700_000_000),
             amount: Amount::from_str("1000.00").unwrap(),
             bank_reference: Some(" BANK-1 ".to_string()),
+            bank_receipt_asset_id: FileAssetId::new("asset-receipt-1"),
         }
     }
 
@@ -363,10 +393,25 @@ mod tests {
 
         assert_eq!(payment.payment_no, "SP-2026-001");
         assert_eq!(payment.bank_reference.as_deref(), Some("BANK-1"));
+        assert_eq!(
+            payment.bank_receipt_asset_id.as_ref().map(AsRef::as_ref),
+            Some("asset-receipt-1")
+        );
         assert_eq!(payment.status, SupplierPaymentStatus::Draft);
         assert_eq!(payment.approval_subject_version, 0);
         assert!(payment.pending_allocations.is_empty());
         assert!(!payment.is_posted());
+    }
+
+    #[test]
+    fn legacy_payment_without_bank_receipt_stays_readable_but_cannot_submit() {
+        let payment = SupplierPayment::new(SupplierPaymentId::new("sp-legacy"), data()).unwrap();
+        let mut value = serde_json::to_value(payment).unwrap();
+        value.as_object_mut().unwrap().remove("bank_receipt_asset_id");
+
+        let legacy: SupplierPayment = serde_json::from_value(value).unwrap();
+        assert!(legacy.bank_receipt_asset_id.is_none());
+        assert!(legacy.require_bank_receipt().is_err());
     }
 
     #[test]
@@ -403,6 +448,14 @@ mod tests {
             .unwrap();
         assert_eq!(payment.payment_no, "SP-2026-001", "关键字段不改");
         assert_eq!(payment.bank_reference.as_deref(), Some("BANK-2"));
+
+        payment
+            .replace_bank_receipt(FileAssetId::new("asset-receipt-2"))
+            .unwrap();
+        assert_eq!(
+            payment.require_bank_receipt().unwrap().as_ref(),
+            "asset-receipt-2"
+        );
 
         payment
             .start_approval(vec![PendingPaymentAllocation::new(

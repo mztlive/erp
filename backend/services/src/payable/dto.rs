@@ -5,7 +5,7 @@
 //! 契约来源：`erp-client/features/supplier-payables/types.ts`（W12）。
 
 use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
+use entities::ids::{FileAssetId, PayableAccountId, PayableEntryId, SupplierAccountId, WorkItemId};
 use entities::money::Amount;
 use entities::payable::{
     AllocationAction, EntryDirection, PayableAccountStatus, PayableEntryType, PayableSourceType,
@@ -277,8 +277,10 @@ pub struct CreateSupplierPaymentRequest {
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
-    /// 付款凭证引用。
+    /// 银行流水号（辅助检索，可空）。
     pub bank_reference: Option<String>,
+    /// 银行回单图片资产。
+    pub bank_receipt_asset_id: FileAssetId,
 }
 
 /// 付款核销分配请求行（§8.3-1：同一供应商、净分配不超过付款金额）。
@@ -338,6 +340,8 @@ pub struct CommitSupplierPaymentRequest {
     pub expected_version: Option<u64>,
     /// 新付款完整字段；提交已有草稿时为空。
     pub payment: Option<CreateSupplierPaymentRequest>,
+    /// 已有草稿补充或替换的银行回单；新付款使用 `payment.bank_receipt_asset_id`。
+    pub bank_receipt_asset_id: Option<FileAssetId>,
     /// 提交时冻结的待过账核销分配。
     #[validate(length(min = 1, message = "至少提供一条核销分配"))]
     pub allocations: Vec<PaymentAllocationLineRequest>,
@@ -395,8 +399,10 @@ pub struct SupplierPaymentView {
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
-    /// 付款凭证引用。
+    /// 银行流水号。
     pub bank_reference: Option<String>,
+    /// 银行回单图片元数据；历史付款可能为空。
+    pub bank_receipt: Option<SupplierPaymentBankReceiptView>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -409,6 +415,19 @@ pub struct SupplierPaymentView {
     pub allocations: Vec<PaymentAllocationView>,
     /// 统一只读审批结构。客户端不得据此选择定义或审批人。
     pub approval: DocumentApprovalView,
+}
+
+/// 供应商付款银行回单的安全展示元数据。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierPaymentBankReceiptView {
+    /// 文件资产主键；仅供付款提交续办与受控预览使用。
+    pub asset_id: String,
+    /// 原始展示文件名。
+    pub file_name: String,
+    /// 图片内容类型。
+    pub content_type: String,
+    /// 文件字节大小。
+    pub byte_size: u64,
 }
 
 /// 单据详情返回的统一只读审批结构。

@@ -5,8 +5,10 @@ import * as React from "react"
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { FileUpload } from "@/components/ui/file-upload"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { SupplierPaymentApprovalArea } from "@/features/supplier-payables/components/supplier-payment-approval-area"
+import { useSupplierPaymentBankReceiptQuery } from "@/features/supplier-payables/hooks/queries"
 import { supplierPaymentApprovalPhase } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import type { PaymentRow } from "@/features/supplier-payables/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -62,7 +64,7 @@ export function SupplierPaymentDetailBody({
                     label="付款金额"
                     value={<MoneyValue value={row.amount} taxBasis="gross" />}
                 />
-                <Fact label="银行引用" value={row.bankReferenceMasked} mono />
+                <Fact label="银行流水号" value={row.bankReferenceMasked} mono />
                 <Fact
                     label="净已分配"
                     value={
@@ -82,6 +84,7 @@ export function SupplierPaymentDetailBody({
                     }
                 />
             </div>
+            <BankReceiptPreview row={row} />
             <section>
                 <h4 className="mb-2 text-sm font-semibold">
                     分配明细（新增不覆盖原金额）
@@ -128,6 +131,53 @@ export function SupplierPaymentDetailBody({
                 )}
             </section>
         </div>
+    )
+}
+
+/** 通过付款归属接口受控读取银行回单，不暴露底层对象地址。 */
+function BankReceiptPreview({ row }: { row: PaymentRow }) {
+    const query = useSupplierPaymentBankReceiptQuery(
+        row.paymentId,
+        Boolean(row.bankReceipt),
+    )
+    const [previewUrl, setPreviewUrl] = React.useState<string>()
+    React.useEffect(() => {
+        if (!query.data) {
+            setPreviewUrl(undefined)
+            return
+        }
+        const url = URL.createObjectURL(query.data)
+        setPreviewUrl(url)
+        return () => URL.revokeObjectURL(url)
+    }, [query.data])
+
+    return (
+        <section>
+            <h4 className="mb-2 text-sm font-semibold">银行回单</h4>
+            {row.bankReceipt ? (
+                <div className="max-w-md space-y-2">
+                    <FileUpload
+                        onFilesSelected={() => undefined}
+                        multiple={false}
+                        density="compact"
+                        preview={{
+                            src: previewUrl,
+                            name: row.bankReceipt.fileName,
+                            status: "uploaded",
+                        }}
+                    />
+                    {query.isError ? (
+                        <p className="text-xs text-destructive">
+                            回单预览加载失败，请稍后重试。
+                        </p>
+                    ) : null}
+                </div>
+            ) : (
+                <p className="text-sm text-muted-foreground">
+                    历史付款未留存银行回单图片
+                </p>
+            )}
+        </section>
     )
 }
 
