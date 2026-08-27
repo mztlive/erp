@@ -7,7 +7,6 @@ export type AllocationSessionIdentity = Readonly<{
     track: AllocationTrack
     supplierId: string
     purchaseOrderId?: string
-    existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
 }>
@@ -25,8 +24,6 @@ export function allocationSessionMatchesIdentity(
         session.track === identity.track &&
         session.supplierId === identity.supplierId &&
         session.purchaseOrderId === identity.purchaseOrderId &&
-        (!identity.existingPaymentId ||
-            session.existingPaymentId === identity.existingPaymentId) &&
         (!identity.existingInvoiceId ||
             session.existingInvoiceId === identity.existingInvoiceId) &&
         session.preselectedPayableAccountIds.length ===

@@ -1,4 +1,4 @@
-//! `supplier_payment` 供应商付款单（数据模型 §6.9、合同 §4.4 资金单据状态机）。
+//! `supplier_payment` 供应商付款事实（数据模型 §6.9、无独立审批的付款执行合同）。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{FileAssetId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
+use crate::ids::{FileAssetId, PartyBankAccountId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
 use crate::money::Amount;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
@@ -16,15 +16,14 @@ const PAYMENT_NO_MAX_LEN: usize = 64;
 /// 银行流水号最大长度。
 const BANK_REFERENCE_MAX_LEN: usize = 256;
 
-/// 付款单状态（合同 §4.4.2：`PENDING_REVIEW` 收敛为 `IN_APPROVAL`，删除审批 `REJECTED`）。
+/// 付款单状态。
+///
+/// 付款由开放付款执行任务直接形成 `POSTED`，不得进入审批状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SupplierPaymentStatus {
     /// 草稿。
     Draft,
-    /// 审批中。
-    #[serde(rename = "IN_APPROVAL")]
-    InApproval,
     /// 已过账。
     Posted,
     /// 已冲正（存在正式反向事实，原事实不删除）。
@@ -39,7 +38,6 @@ impl SupplierPaymentStatus {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
-            Self::InApproval => "审批中",
             Self::Posted => "已过账",
             Self::Reversed => "已冲正",
         }
@@ -52,7 +50,6 @@ impl SupplierPaymentStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
-            Self::InApproval => "IN_APPROVAL",
             Self::Posted => "posted",
             Self::Reversed => "reversed",
         }
@@ -62,18 +59,17 @@ impl SupplierPaymentStatus {
 impl DocumentState for SupplierPaymentStatus {
     /// 返回全部合法后继状态。
     ///
-    /// 提交进入 `IN_APPROVAL`，最终通过过账，撤回回到草稿；`REVERSED` 是终态。
+    /// 正常付款从草稿直接过账；`REVERSED` 是终态。
     fn allowed_next(self) -> &'static [Self] {
         match self {
-            Self::Draft => &[Self::InApproval],
-            Self::InApproval => &[Self::Posted, Self::Draft],
+            Self::Draft => &[Self::Posted],
             Self::Posted => &[Self::Reversed],
             Self::Reversed => &[],
         }
     }
 }
 
-/// 提交时冻结、待最终通过才落成正式核销的分配行。
+/// 付款原子过账前的强类型核销分配行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PendingPaymentAllocation {
     /// 被核销应付分录。
@@ -107,6 +103,8 @@ pub struct SupplierPaymentData {
     pub payment_no: String,
     /// 收款供应商。
     pub supplier_id: SupplierAccountId,
+    /// 本次付款冻结的供应商收款银行账户。
+    pub payee_bank_account_id: PartyBankAccountId,
     /// 实际付款时间。
     pub paid_at: Instant,
     /// 含税付款金额。
@@ -115,17 +113,6 @@ pub struct SupplierPaymentData {
     pub bank_reference: Option<String>,
     /// 银行回单图片资产。
     pub bank_receipt_asset_id: FileAssetId,
-}
-
-/// 供应商付款单更新数据（仅草稿可编辑）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct SupplierPaymentUpdate {
-    /// 付款时间；`None` 表示不修改。
-    pub paid_at: Option<Instant>,
-    /// 付款金额；`None` 表示不修改。
-    pub amount: Option<Amount>,
-    /// 银行流水号；`None` 表示不修改，`Some("")` 清除。
-    pub bank_reference: Option<String>,
 }
 
 /// 供应商付款单实体（正式事实，数据模型 §6.9）。
@@ -144,21 +131,18 @@ pub struct SupplierPayment {
     pub payment_no: String,
     /// 收款供应商。
     pub supplier_id: SupplierAccountId,
+    /// 本次付款冻结的供应商收款银行账户；异常旧数据可能为空。
+    #[serde(default)]
+    pub payee_bank_account_id: Option<PartyBankAccountId>,
     /// 实际付款时间。
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
     /// 银行流水号。
     pub bank_reference: Option<String>,
-    /// 银行回单图片资产；历史付款缺少该字段时兼容为空，新付款必须提供。
+    /// 银行回单图片资产；异常旧数据可能为空，新付款必须提供。
     #[serde(default)]
     pub bank_receipt_asset_id: Option<FileAssetId>,
-    /// 审批提交版本，初值 0。不得复用 `BaseModel.version`。
-    #[serde(default)]
-    pub approval_subject_version: u32,
-    /// 提交时冻结的待过账核销分配。
-    #[serde(default)]
-    pub pending_allocations: Vec<PendingPaymentAllocation>,
 }
 
 impl SupplierPayment {
@@ -191,61 +175,18 @@ impl SupplierPayment {
             status: SupplierPaymentStatus::Draft,
             payment_no,
             supplier_id: data.supplier_id,
+            payee_bank_account_id: Some(data.payee_bank_account_id),
             paid_at: data.paid_at,
             amount: data.amount,
             bank_reference,
             bank_receipt_asset_id: Some(data.bank_receipt_asset_id),
-            approval_subject_version: 0,
-            pending_allocations: Vec::new(),
         })
     }
 
-    /// 更新付款单草稿。
-    ///
-    /// 复用 `new` 的校验规则；`POSTED` 后内容不可编辑（§7.5），草稿修改不改变
-    /// 付款单号与收款供应商等关键字段。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
+    /// 返回付款执行所需的银行回单图片资产。
     ///
     /// # 错误
-    /// 当状态非草稿或更新字段校验失败时返回错误。
-    pub fn update(&mut self, update: SupplierPaymentUpdate) -> Result<()> {
-        self.ensure_editable()?;
-        if let Some(amount) = update.amount {
-            ensure_positive_amount(&amount)?;
-            self.amount = amount;
-        }
-        if let Some(paid_at) = update.paid_at {
-            self.paid_at = paid_at;
-        }
-        if let Some(bank_reference) = update.bank_reference {
-            self.bank_reference =
-                normalize_optional_text(Some(bank_reference), "银行流水号", BANK_REFERENCE_MAX_LEN)?;
-        }
-        Ok(())
-    }
-
-    /// 替换草稿付款的银行回单图片。
-    ///
-    /// # 参数
-    /// * `asset_id` - 已登记或随当前命令登记的文件资产 ID
-    ///
-    /// # 错误
-    /// 付款不再处于草稿状态时返回错误。
-    pub fn replace_bank_receipt(&mut self, asset_id: FileAssetId) -> Result<()> {
-        self.ensure_editable()?;
-        self.bank_receipt_asset_id = Some(asset_id);
-        Ok(())
-    }
-
-    /// 返回提交审批所需的银行回单图片资产。
-    ///
-    /// # 错误
-    /// 历史草稿尚未补充银行回单时返回错误。
+    /// 数据缺少银行回单时返回错误。
     pub fn require_bank_receipt(&self) -> Result<&FileAssetId> {
         self.bank_receipt_asset_id
             .as_ref()
@@ -270,52 +211,18 @@ impl SupplierPayment {
         Ok(())
     }
 
-    /// 提交并启动审批：递增 `approval_subject_version` 并进入 `IN_APPROVAL`。
-    ///
-    /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
+    /// 由付款执行任务直接过账。
     ///
     /// # 参数
-    /// * `allocations` - 提交时冻结的待过账核销分配
-    ///
-    /// # 返回
-    /// 返回冻结后的提交版本。
+    /// * `allocations` - 本次原子写入的付款核销分配
     ///
     /// # 错误
-    /// 非草稿、分配非法或版本溢出时返回冲突。
-    pub fn start_approval(&mut self, allocations: Vec<PendingPaymentAllocation>) -> Result<u32> {
+    /// 非草稿或分配非法时返回冲突。
+    pub fn post_from_execution(&mut self, allocations: &[PendingPaymentAllocation]) -> Result<()> {
         if self.status != SupplierPaymentStatus::Draft {
-            return Err(Error::from("只有草稿状态的供应商付款单可以提交审批"));
+            return Err(Error::from("只有草稿状态的供应商付款单可以由付款任务过账"));
         }
-        ensure_pending_allocations(&self.amount, &allocations)?;
-        let next = self
-            .approval_subject_version
-            .checked_add(1)
-            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
-        self.approval_subject_version = next;
-        self.pending_allocations = allocations;
-        self.transition(SupplierPaymentStatus::InApproval)?;
-        Ok(next)
-    }
-
-    /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
-    ///
-    /// # 错误
-    /// 非审批中时返回冲突。
-    pub fn cancel_approval(&mut self) -> Result<()> {
-        if self.status != SupplierPaymentStatus::InApproval {
-            return Err(Error::from("只有审批中的供应商付款单可以撤回审批"));
-        }
-        self.transition(SupplierPaymentStatus::Draft)
-    }
-
-    /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
-    ///
-    /// # 错误
-    /// 状态不是审批中时返回冲突。
-    pub fn mark_posted(&mut self) -> Result<()> {
-        if self.status != SupplierPaymentStatus::InApproval {
-            return Err(Error::from("只有审批中的供应商付款单可以由最终通过动作过账"));
-        }
+        ensure_execution_allocations(&self.amount, allocations)?;
         self.transition(SupplierPaymentStatus::Posted)
     }
 
@@ -325,20 +232,6 @@ impl SupplierPayment {
     /// 状态为 `Posted` 时返回 `true`。
     pub fn is_posted(&self) -> bool {
         self.status == SupplierPaymentStatus::Posted
-    }
-
-    /// 校验付款单仍可编辑。
-    ///
-    /// # 返回
-    /// 草稿状态返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 状态非草稿时返回错误。
-    fn ensure_editable(&self) -> Result<()> {
-        if self.status != SupplierPaymentStatus::Draft {
-            return Err(Error::from("已过账或已冲正的付款单不可编辑"));
-        }
-        Ok(())
     }
 }
 
@@ -353,20 +246,20 @@ fn ensure_positive_amount(amount: &Amount) -> Result<()> {
     Ok(())
 }
 
-/// 校验待过账分配合计不超过付款金额。
+/// 校验付款任务核销分配合计等于实际付款金额。
 ///
 /// # 错误
-/// 无分配行或合计超额时返回错误。
-fn ensure_pending_allocations(amount: &Amount, allocations: &[PendingPaymentAllocation]) -> Result<()> {
+/// 无分配行或分配合计不等于付款金额时返回错误。
+fn ensure_execution_allocations(amount: &Amount, allocations: &[PendingPaymentAllocation]) -> Result<()> {
     if allocations.is_empty() {
-        return Err(Error::from("提交审批至少提供一条核销分配"));
+        return Err(Error::from("登记付款至少提供一条核销分配"));
     }
     let mut total = allocations[0].allocated_amount.to_decimal();
     for line in &allocations[1..] {
         total += line.allocated_amount.to_decimal();
     }
-    if total > amount.to_decimal() {
-        return Err(Error::from("核销合计超过付款金额"));
+    if total != amount.to_decimal() {
+        return Err(Error::from("核销分配合计必须等于付款金额"));
     }
     Ok(())
 }
@@ -380,6 +273,7 @@ mod tests {
         SupplierPaymentData {
             payment_no: " SP-2026-001 ".to_string(),
             supplier_id: SupplierAccountId::new("sup-1"),
+            payee_bank_account_id: PartyBankAccountId::new("bank-1"),
             paid_at: Instant::from_unix_secs(1_700_000_000),
             amount: Amount::from_str("1000.00").unwrap(),
             bank_reference: Some(" BANK-1 ".to_string()),
@@ -398,8 +292,10 @@ mod tests {
             Some("asset-receipt-1")
         );
         assert_eq!(payment.status, SupplierPaymentStatus::Draft);
-        assert_eq!(payment.approval_subject_version, 0);
-        assert!(payment.pending_allocations.is_empty());
+        assert_eq!(
+            payment.payee_bank_account_id.as_ref().map(AsRef::as_ref),
+            Some("bank-1")
+        );
         assert!(!payment.is_posted());
     }
 
@@ -436,41 +332,22 @@ mod tests {
     }
 
     #[test]
-    fn update_applies_draft_changes_and_rejects_posted() {
+    fn payment_is_posted_once_from_execution() {
         let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
-
         payment
-            .update(SupplierPaymentUpdate {
-                paid_at: Some(Instant::from_unix_secs(1_700_000_100)),
-                amount: Some(Amount::from_str("1200.00").unwrap()),
-                bank_reference: Some(" BANK-2 ".to_string()),
-            })
-            .unwrap();
-        assert_eq!(payment.payment_no, "SP-2026-001", "关键字段不改");
-        assert_eq!(payment.bank_reference.as_deref(), Some("BANK-2"));
-
-        payment
-            .replace_bank_receipt(FileAssetId::new("asset-receipt-2"))
-            .unwrap();
-        assert_eq!(
-            payment.require_bank_receipt().unwrap().as_ref(),
-            "asset-receipt-2"
-        );
-
-        payment
-            .start_approval(vec![PendingPaymentAllocation::new(
+            .post_from_execution(&[PendingPaymentAllocation::new(
                 PayableEntryId::new("pe-1"),
-                Amount::from_str("100.00").unwrap(),
+                Amount::from_str("1000.00").unwrap(),
             )
             .unwrap()])
             .unwrap();
-        payment.mark_posted().unwrap();
         assert!(payment.is_posted());
         assert!(payment
-            .update(SupplierPaymentUpdate {
-                amount: Some(Amount::from_str("1.00").unwrap()),
-                ..Default::default()
-            })
+            .post_from_execution(&[PendingPaymentAllocation::new(
+                PayableEntryId::new("pe-1"),
+                Amount::from_str("1000.00").unwrap(),
+            )
+            .unwrap()])
             .is_err());
     }
 
@@ -479,16 +356,12 @@ mod tests {
         use crate::common::state::ensure_transition as tr;
         use SupplierPaymentStatus as S;
 
-        assert!(tr(S::Draft, S::InApproval).is_ok());
-        assert!(tr(S::InApproval, S::Posted).is_ok());
-        assert!(tr(S::InApproval, S::Draft).is_ok());
+        assert!(tr(S::Draft, S::Posted).is_ok());
         assert!(tr(S::Posted, S::Reversed).is_ok());
         assert!(tr(S::Reversed, S::Reversed).is_ok(), "幂等迁移恒合法");
 
-        assert!(tr(S::Draft, S::Posted).is_err(), "草稿不得绕过审批直接过账");
         assert!(tr(S::Draft, S::Reversed).is_err());
         assert!(tr(S::Posted, S::Draft).is_err());
-        assert!(tr(S::Posted, S::InApproval).is_err());
         assert!(tr(S::Reversed, S::Posted).is_err());
         assert!(tr(S::Reversed, S::Draft).is_err());
 
@@ -497,30 +370,31 @@ mod tests {
     }
 
     #[test]
-    fn start_approval_increments_version_and_cancel_does_not_rollback() {
+    fn direct_post_requires_allocations_and_cannot_repeat() {
         let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
-        assert_eq!(payment.approval_subject_version, 0);
-        let version = payment
-            .start_approval(vec![PendingPaymentAllocation::new(
-                PayableEntryId::new("pe-1"),
-                Amount::from_str("100.00").unwrap(),
-            )
-            .unwrap()])
-            .unwrap();
-        assert_eq!(version, 1);
-        assert_eq!(payment.status, SupplierPaymentStatus::InApproval);
-        payment.cancel_approval().unwrap();
-        assert_eq!(payment.status, SupplierPaymentStatus::Draft);
-        assert_eq!(payment.approval_subject_version, 1);
-        assert!(payment.mark_posted().is_err());
+        let allocations = [PendingPaymentAllocation::new(
+            PayableEntryId::new("pe-1"),
+            Amount::from_str("1000.00").unwrap(),
+        )
+        .unwrap()];
+        payment.post_from_execution(&allocations).unwrap();
+        assert_eq!(payment.status, SupplierPaymentStatus::Posted);
+        assert!(payment.post_from_execution(&allocations).is_err());
     }
 
     #[test]
-    fn start_approval_rejects_empty_or_over_allocated_lines() {
+    fn direct_post_rejects_empty_under_or_over_allocated_lines() {
         let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data()).unwrap();
-        assert!(payment.start_approval(Vec::new()).is_err());
+        assert!(payment.post_from_execution(&[]).is_err());
         assert!(payment
-            .start_approval(vec![PendingPaymentAllocation::new(
+            .post_from_execution(&[PendingPaymentAllocation::new(
+                PayableEntryId::new("pe-1"),
+                Amount::from_str("999.99").unwrap(),
+            )
+            .unwrap()])
+            .is_err());
+        assert!(payment
+            .post_from_execution(&[PendingPaymentAllocation::new(
                 PayableEntryId::new("pe-1"),
                 Amount::from_str("1000.01").unwrap(),
             )
@@ -541,10 +415,6 @@ mod tests {
 
     #[test]
     fn status_serializes_with_stable_codes_and_labels() {
-        assert_eq!(
-            serde_json::to_string(&SupplierPaymentStatus::InApproval).unwrap(),
-            "\"IN_APPROVAL\""
-        );
         assert_eq!(SupplierPaymentStatus::Posted.label(), "已过账");
         assert_eq!(SupplierPaymentStatus::Reversed.as_str(), "reversed");
         assert_eq!(SupplierPaymentStatus::Draft.as_str(), "draft");

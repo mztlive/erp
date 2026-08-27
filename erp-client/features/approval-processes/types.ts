@@ -31,8 +31,9 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number]
 
-/** 合同签署为无需审批的 8 个类型。 */
+/** 合同签署为无需审批的 9 个类型。 */
 export const NO_APPROVAL_DOCUMENT_TYPES = [
+    "supplier_payment",
     "purchase_receipt",
     "delivery",
     "electronic_delivery",
@@ -43,7 +44,7 @@ export const NO_APPROVAL_DOCUMENT_TYPES = [
     "purchase_return_order",
 ] as const satisfies readonly DocumentType[]
 
-/** 合同签署为必须审批的 12 个类型。 */
+/** 合同签署为必须审批的 11 个类型。 */
 export const PROCESS_REQUIRED_DOCUMENT_TYPES = [
     "sales_order",
     "voucher_sales_order",
@@ -52,7 +53,6 @@ export const PROCESS_REQUIRED_DOCUMENT_TYPES = [
     "purchase_change_order",
     "stock_adjustment",
     "customer_receipt",
-    "supplier_payment",
     "customer_refund",
     "supplier_refund",
     "receipt_reversal",

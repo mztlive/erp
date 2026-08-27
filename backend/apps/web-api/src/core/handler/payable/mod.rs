@@ -17,11 +17,10 @@ use entities::file_asset::{SecurityScanStatus, SensitivityClass};
 use services::{
     audit::AuditActor,
     payable::{
-        CancelSupplierPaymentApprovalRequest, CommitSupplierPaymentRequest, CreatePayableAccountRequest,
-        CreateSupplierPaymentRequest, PageView, PayableAccountListParams, PayableAccountView, PayableService,
-        PostSupplierPaymentRequest, PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView,
-        PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest,
-        SupplierPaymentListParams, SupplierPaymentView,
+        CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
+        PayableAccountView, PayableService, PaymentRecipientRevealView, PurchaseInvoiceAllocationListParams,
+        PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest,
+        RevealPaymentRecipientRequest, SupplierPaymentListParams, SupplierPaymentView,
     },
 };
 use tracing::error;
@@ -85,6 +84,37 @@ pub async fn payable_account_detail(
 ) -> Result<PayableAccountView> {
     let view = PayableService::new(state.db())
         .payable_account_detail(&id)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商往来",
+    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
+    desc = "揭示付款任务收款账号",
+    resource = "party_bank_account",
+    action = "reveal"
+)]
+/// 在付款任务责任、版本和收款账户身份校验后揭示完整收款账号。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 当前付款任务绑定的应付往来子账 ID
+/// * `req` - 任务版本与页面所见收款账户身份
+///
+/// # 返回
+/// 返回完整收款账号；成功揭示同时记录敏感数据审计。
+pub async fn payment_recipient_reveal(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<RevealPaymentRecipientRequest>,
+) -> Result<PaymentRecipientRevealView> {
+    let sensitive_data = state.sensitive_data();
+    let view = PayableService::new(state.db())
+        .reveal_payment_recipient(&id, req, &actor, sensitive_data.as_ref())
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -173,47 +203,19 @@ pub async fn supplier_payment_detail(
 #[permission_macros::permission(
     group = "供应商往来",
     group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "登记供应商付款草稿",
+    desc = "登记供应商付款并过账核销",
     resource = "supplier_payment",
-    action = "create"
+    action = "commit"
 )]
-/// 登记供应商付款草稿（付款单号唯一构成幂等去重）。
+/// 在付款执行任务内原子登记付款、过账并核销。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
+/// * `req` - 本次付款事实、冻结分配与幂等键
 ///
 /// # 返回
-/// 返回新建付款单视图。
-pub async fn supplier_payment_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CreateSupplierPaymentRequest>,
-) -> Result<SupplierPaymentView> {
-    let view = PayableService::new(state.db())
-        .create_supplier_payment(req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "原子创建或提交供应商付款审批",
-    resource = "supplier_payment",
-    action = "submit"
-)]
-/// 原子创建或提交供应商付款并启动统一审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 新付款或已有草稿、冻结分配与幂等键
-///
-/// # 返回
-/// 返回进入审批后的付款单视图。
+/// 返回已过账的付款单视图。
 pub async fn supplier_payment_commit(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -307,17 +309,9 @@ fn validate_bank_receipt_upload(
     files: &[PendingAssetFile],
 ) -> std::result::Result<(), Error> {
     let mut expected = Vec::new();
-    if let Some(payment) = &req.payment {
-        let reference = payment.bank_receipt_asset_id.to_string();
-        if reference.starts_with("pending-file:") {
-            expected.push(reference);
-        }
-    }
-    if let Some(asset_id) = &req.bank_receipt_asset_id {
-        let reference = asset_id.to_string();
-        if reference.starts_with("pending-file:") {
-            expected.push(reference);
-        }
+    let reference = req.payment.bank_receipt_asset_id.to_string();
+    if reference.starts_with("pending-file:") {
+        expected.push(reference);
     }
     if expected.len() != files.len() {
         return Err(Error::BadRequest("银行回单图片与付款命令不匹配".to_string()));
@@ -342,95 +336,6 @@ fn validate_bank_receipt_upload(
         ));
     }
     Ok(())
-}
-
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "提交供应商付款审批",
-    resource = "supplier_payment",
-    action = "submit"
-)]
-/// 提交供应商付款并启动统一审批。客户端不得选择定义或审批人。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 付款单 ID
-/// * `req` - 提交请求（版本、幂等键与冻结分配）
-///
-/// # 返回
-/// 返回提交后的付款单视图。
-pub async fn supplier_payment_submit(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<SubmitSupplierPaymentRequest>,
-) -> Result<SupplierPaymentView> {
-    let view = PayableService::new(state.db())
-        .submit_supplier_payment(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "撤回供应商付款审批",
-    resource = "supplier_payment",
-    action = "cancel_approval"
-)]
-/// 撤回尚未最终通过的供应商付款审批。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 付款单 ID
-/// * `req` - 撤回请求（原因必填）
-///
-/// # 返回
-/// 返回撤回后的付款单视图。
-pub async fn supplier_payment_cancel_approval(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<CancelSupplierPaymentApprovalRequest>,
-) -> Result<SupplierPaymentView> {
-    let view = PayableService::new(state.db())
-        .cancel_supplier_payment_approval(&id, req, &actor)
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商往来",
-    group_desc = "应付台账、付款单与进项发票登记管理（W12）",
-    desc = "供应商付款过账并核销",
-    resource = "supplier_payment",
-    action = "post"
-)]
-/// 客户端直接过账失败关闭。过账只允许作为审批最终通过动作。
-///
-/// # 参数
-/// * `_state` - 应用状态
-/// * `_actor` - 已通过鉴权的审计操作人
-/// * `_id` - 付款单 ID
-/// * `_req` - 过账请求（客户端不得据此形成资金事实）
-///
-/// # 错误
-/// 始终返回冲突，防止 HTTP 旁路过账。
-pub async fn supplier_payment_post(
-    State(_state): State<AppState>,
-    Extension(_actor): Extension<AuditActor>,
-    Path(_id): Path<String>,
-    Json(_req): Json<PostSupplierPaymentRequest>,
-) -> Result<SupplierPaymentView> {
-    match PayableService::reject_client_post() {
-        Err(error) => Err(error.into()),
-        Ok(result) => Ok(ApiResponse::ok_with_data(result)),
-    }
 }
 
 #[permission_macros::permission(
@@ -491,36 +396,27 @@ pub async fn purchase_invoice_allocation_list(
 
 #[cfg(test)]
 mod tests {
-    use services::payable::{CommitSupplierPaymentRequest, SubmitSupplierPaymentRequest};
+    use services::payable::CommitSupplierPaymentRequest;
 
     use super::validate_bank_receipt_upload;
     use crate::core::handler::file_asset::{AssetFile, PendingAssetFile};
 
-    /// 供应商付款 HTTP 只走统一提交、撤回与详情，客户端不得选定义或直接过账。
+    /// 供应商付款 HTTP 只保留任务内原子登记与详情，不暴露付款审批端口。
     #[test]
-    fn supplier_payment_http_uses_unified_ports() {
+    fn supplier_payment_http_uses_execution_task_port() {
         let production = include_str!("mod.rs")
             .split("#[cfg(test)]")
             .next()
             .expect("生产代码");
-        assert!(production.contains("submit_supplier_payment"));
-        assert!(production.contains("cancel_supplier_payment_approval"));
-        assert!(production.contains("reject_client_post"));
+        assert!(production.contains("commit_supplier_payment_with_assets"));
+        assert!(production.contains("reveal_payment_recipient"));
         assert!(production.contains("supplier_payment_detail"));
+        assert!(!production.contains("submit_supplier_payment"));
+        assert!(!production.contains("cancel_supplier_payment_approval"));
+        assert!(!production.contains("reject_client_post"));
         assert!(!production.contains(".post_supplier_payment("));
         assert!(!production.contains("definition_id"));
         assert!(!production.contains("PENDING_REVIEW"));
-        assert!(
-            serde_json::from_value::<SubmitSupplierPaymentRequest>(serde_json::json!({
-                "work_item_id": "wi-1",
-                "expected_task_version": "1",
-                "expected_version": 1,
-                "idempotency_key": "k1",
-                "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
-                "assignee": "forged"
-            }))
-            .is_err()
-        );
     }
 
     #[test]
@@ -528,8 +424,8 @@ mod tests {
         let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
             "work_item_id": "wi-1",
             "expected_task_version": "1",
-            "payment_id": null,
-            "expected_version": null,
+            "expected_payee_bank_account_id": "bank-1",
+            "expected_payee_bank_account_version": 1,
             "payment": {
                 "payment_no": "FK-1",
                 "supplier_id": "supplier-1",
@@ -538,7 +434,6 @@ mod tests {
                 "bank_reference": null,
                 "bank_receipt_asset_id": "pending-file:bank-receipt"
             },
-            "bank_receipt_asset_id": null,
             "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10.00"}],
             "idempotency_key": "commit-1"
         }))

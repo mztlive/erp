@@ -54,22 +54,4 @@ describe("allocationSessionMatchesIdentity", () => {
             }),
         ).toBe(false)
     })
-
-    it("keeps the originating task identity after the session creates a payment", () => {
-        expect(
-            allocationSessionMatchesIdentity(
-                { ...session, existingPaymentId: "payment-a" },
-                identity,
-            ),
-        ).toBe(true)
-    })
-
-    it("rejects a draft opened for another existing payment", () => {
-        expect(
-            allocationSessionMatchesIdentity(
-                { ...session, existingPaymentId: "payment-a" },
-                { ...identity, existingPaymentId: "payment-b" },
-            ),
-        ).toBe(false)
-    })
 })

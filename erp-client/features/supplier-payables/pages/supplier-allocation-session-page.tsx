@@ -12,10 +12,12 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
+import { PaymentRecipientCard } from "@/features/supplier-payables/components/payment-recipient-card"
 import { useAllocationSession } from "@/features/supplier-payables/hooks/use-allocation-session"
 import type {
     AllocationTrack,
     FormalSubmitResult,
+    PaymentRecipient,
 } from "@/features/supplier-payables/types"
 
 export type SupplierAllocationSessionPageProps = {
@@ -25,12 +27,12 @@ export type SupplierAllocationSessionPageProps = {
     purchaseOrderId?: string
     returnTo?: string
     fromWorkspace?: string
-    existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
     paymentWorkItemId?: string
     expectedPaymentTaskVersion?: string
     paymentPayableAccountId?: string
+    paymentRecipient?: PaymentRecipient
     paymentTaskPending?: boolean
     onClose: () => void
     onCompleted?: (result: FormalSubmitResult) => void
@@ -49,12 +51,12 @@ export function SupplierAllocationSessionPage({
     purchaseOrderId,
     returnTo,
     fromWorkspace,
-    existingPaymentId,
     existingInvoiceId,
     preselectPayableAccountId,
     paymentWorkItemId,
     expectedPaymentTaskVersion,
     paymentPayableAccountId,
+    paymentRecipient,
     paymentTaskPending = false,
     onClose,
     onCompleted,
@@ -69,12 +71,13 @@ export function SupplierAllocationSessionPage({
             purchaseOrderId,
             returnTo,
             fromWorkspace,
-            existingPaymentId,
             existingInvoiceId,
             preselectPayableAccountId,
             paymentWorkItemId,
             expectedPaymentTaskVersion,
             paymentPayableAccountId,
+            paymentRecipientBankAccountId: paymentRecipient?.bankAccountId,
+            paymentRecipientBankAccountVersion: paymentRecipient?.version,
         },
         { onCompleted, onDraftSessionIdChange },
     )
@@ -222,15 +225,24 @@ export function SupplierAllocationSessionPage({
         track === "payment" &&
         (!paymentWorkItemId ||
             !expectedPaymentTaskVersion ||
-            !paymentPayableAccountId)
+            !paymentPayableAccountId ||
+            !paymentRecipient)
     ) {
         return (
             <PageScaffold density="compact">
                 {header}
                 <BusinessEmptyState
                     kind="no-scope"
-                    title="请从付款任务进入"
-                    description="付款执行已按负责人分派。请回到工作台打开分配给你的供应商付款任务；普通列表入口只能查看，不能提交付款。"
+                    title={
+                        paymentWorkItemId && !paymentRecipient
+                            ? "供应商未配置可用收款账户"
+                            : "请从付款任务进入"
+                    }
+                    description={
+                        paymentWorkItemId && !paymentRecipient
+                            ? "当前付款任务不能执行。请先在供应商主数据中维护唯一的当前默认收款账户，再刷新任务。"
+                            : "付款执行已按负责人分派。请回到工作台打开分配给你的供应商付款任务；普通列表入口只能查看，不能提交付款。"
+                    }
                     action={
                         <Button
                             type="button"
@@ -248,12 +260,26 @@ export function SupplierAllocationSessionPage({
     return (
         <PageScaffold density="compact">
             {header}
+            {track === "payment" &&
+            paymentRecipient &&
+            paymentWorkItemId &&
+            expectedPaymentTaskVersion &&
+            paymentPayableAccountId ? (
+                <PaymentRecipientCard
+                    key={`${paymentWorkItemId}:${paymentRecipient.bankAccountId}:${paymentRecipient.version}`}
+                    payableAccountId={paymentPayableAccountId}
+                    workItemId={paymentWorkItemId}
+                    expectedTaskVersion={expectedPaymentTaskVersion}
+                    recipient={paymentRecipient}
+                />
+            ) : null}
             <SupplierAllocationWorkspace
                 state={sessionState}
                 track={track}
                 fromWorkspace={fromWorkspace}
                 purchaseOrderId={purchaseOrderId}
                 returnTo={returnTo}
+                paymentRecipient={paymentRecipient}
                 onClose={onClose}
                 onGoToInvoiceView={onGoToInvoiceView}
             />

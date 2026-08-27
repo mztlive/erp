@@ -46,6 +46,7 @@ export interface SupplierAccountsPreviewProps {
     onRequestReversalSubmit?: () => void
     returnTo: string | undefined
     fromWorkspace: string | undefined
+    paymentTaskPayableAccountId?: string
     onClose: () => void
     onOpenSession: (next: SessionState) => void
     workItemId?: string
@@ -55,7 +56,8 @@ export interface SupplierAccountsPreviewProps {
 }
 
 /**
- * 供应商往来详情抽屉。付款、退款与付款冲正嵌入通用审批区；应付预览不展示审批。
+ * 供应商往来详情抽屉。付款展示正式事实；退款与付款冲正嵌入通用审批区。
+ * 应付预览只能为当前付款任务打开付款作业。
  */
 export function SupplierAccountsPreview({
     previewPayableId,
@@ -70,6 +72,7 @@ export function SupplierAccountsPreview({
     onRequestReversalSubmit,
     returnTo,
     fromWorkspace,
+    paymentTaskPayableAccountId,
     onClose,
     onOpenSession,
     workItemId,
@@ -82,9 +85,7 @@ export function SupplierAccountsPreview({
             Boolean(reversalQuery.data) &&
             isUnsubmittedPaymentReversalStatus(reversalQuery.data?.status) &&
             Boolean(
-                reversalQuery.data?.approval?.allowedActions.includes(
-                    "SUBMIT",
-                ),
+                reversalQuery.data?.approval?.allowedActions.includes("SUBMIT"),
             ) &&
             Boolean(onRequestReversalSubmit)
         return (
@@ -95,13 +96,10 @@ export function SupplierAccountsPreview({
                 }}
                 size="detail"
                 title={reversalQuery.data?.reversalNo ?? "冲正详情"}
-                description="冲正事实与审批区只读服务端投影"
+                description="付款冲正记录与审批信息"
                 footer={
                     canSubmitDraft ? (
-                        <Button
-                            type="button"
-                            onClick={onRequestReversalSubmit}
-                        >
+                        <Button type="button" onClick={onRequestReversalSubmit}>
                             提交审批
                         </Button>
                     ) : null
@@ -159,13 +157,10 @@ export function SupplierAccountsPreview({
                 }}
                 size="detail"
                 title={refundQuery.data?.refundNo ?? "退款详情"}
-                description="退款事实与审批区只读服务端投影"
+                description="供应商退款记录与审批信息"
                 footer={
                     canSubmitDraft ? (
-                        <Button
-                            type="button"
-                            onClick={onRequestRefundSubmit}
-                        >
+                        <Button type="button" onClick={onRequestRefundSubmit}>
                             提交审批
                         </Button>
                     ) : null
@@ -216,18 +211,12 @@ export function SupplierAccountsPreview({
                 }}
                 size="detail"
                 title={paymentQuery.data?.paymentNo ?? "付款详情"}
-                description="付款事实与审批区只读服务端投影"
+                description="已过账付款记录与核销明细"
             >
                 {paymentQuery.isPending ? (
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 ) : paymentQuery.data ? (
-                    <SupplierPaymentDetailBody
-                        row={paymentQuery.data}
-                        workItemId={workItemId}
-                        expectedTaskVersion={expectedTaskVersion}
-                        workItemAllowedActions={workItemAllowedActions}
-                        onDecisionApplied={onDecisionApplied}
-                    />
+                    <SupplierPaymentDetailBody row={paymentQuery.data} />
                 ) : paymentQuery.isError ? (
                     <div className="space-y-3 p-6">
                         <p className="text-sm text-muted-foreground">
@@ -368,9 +357,7 @@ export function SupplierAccountsPreview({
 
                     <Separator />
                     <div>
-                        <h4 className="mb-2 text-sm font-medium">
-                            应付分录
-                        </h4>
+                        <h4 className="mb-2 text-sm font-medium">应付分录</h4>
                         <ul className="space-y-2 text-sm">
                             {detailQuery.data.entries.map((e) => (
                                 <li
@@ -389,9 +376,7 @@ export function SupplierAccountsPreview({
                         </ul>
                     </div>
                     <div>
-                        <h4 className="mb-2 text-sm font-medium">
-                            付款分配
-                        </h4>
+                        <h4 className="mb-2 text-sm font-medium">付款分配</h4>
                         {detailQuery.data.paymentAllocations.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 暂无
@@ -416,9 +401,7 @@ export function SupplierAccountsPreview({
                         )}
                     </div>
                     <div>
-                        <h4 className="mb-2 text-sm font-medium">
-                            进项票分配
-                        </h4>
+                        <h4 className="mb-2 text-sm font-medium">进项票分配</h4>
                         {detailQuery.data.invoiceAllocations.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                                 暂无
@@ -463,8 +446,24 @@ export function SupplierAccountsPreview({
                         <Button
                             type="button"
                             size="sm"
+                            disabled={
+                                detailQuery.data.payable.payableAccountId !==
+                                paymentTaskPayableAccountId
+                            }
+                            title={
+                                detailQuery.data.payable.payableAccountId ===
+                                paymentTaskPayableAccountId
+                                    ? undefined
+                                    : "付款必须由当前负责人从对应付款任务进入"
+                            }
                             onClick={() => {
                                 const p = detailQuery.data!.payable
+                                if (
+                                    p.payableAccountId !==
+                                    paymentTaskPayableAccountId
+                                ) {
+                                    return
+                                }
                                 onClose()
                                 onOpenSession({
                                     track: "payment",
@@ -519,9 +518,7 @@ export function SupplierAccountsPreview({
                     </Button>
                 </div>
             ) : (
-                <p className="text-sm text-muted-foreground">
-                    未找到应付详情
-                </p>
+                <p className="text-sm text-muted-foreground">未找到应付详情</p>
             )}
         </QuickPreviewSheet>
     )

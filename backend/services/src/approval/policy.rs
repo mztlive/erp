@@ -213,12 +213,6 @@ pub enum ApprovalDomainAction {
     CustomerReceiptPost,
     /// 客户回款单撤回审批。
     CustomerReceiptCancelApproval,
-    /// 供应商付款单提交。
-    SupplierPaymentSubmit,
-    /// 供应商付款单过账。
-    SupplierPaymentPost,
-    /// 供应商付款单撤回审批。
-    SupplierPaymentCancelApproval,
     /// 客户退款单提交。
     CustomerRefundSubmit,
     /// 客户退款单过账。
@@ -277,9 +271,6 @@ impl ApprovalDomainAction {
             Self::CustomerReceiptSubmit => "ReceivableService::submit_customer_receipt",
             Self::CustomerReceiptPost => "ReceivableService::post_customer_receipt",
             Self::CustomerReceiptCancelApproval => "ReceivableService::cancel_customer_receipt_approval",
-            Self::SupplierPaymentSubmit => "PayableService::submit_supplier_payment",
-            Self::SupplierPaymentPost => "PayableService::post_supplier_payment",
-            Self::SupplierPaymentCancelApproval => "PayableService::cancel_supplier_payment_approval",
             Self::CustomerRefundSubmit => "ReturnsService::submit_customer_refund",
             Self::CustomerRefundPost => "ReturnsService::post_customer_refund",
             Self::CustomerRefundCancelApproval => "ReturnsService::cancel_customer_refund_approval",
@@ -454,12 +445,7 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
             ApprovalDomainAction::CustomerReceiptPost,
             ApprovalDomainAction::CustomerReceiptCancelApproval,
         ),
-        DocumentType::SupplierPayment => finance_required(
-            document_type,
-            ApprovalDomainAction::SupplierPaymentSubmit,
-            ApprovalDomainAction::SupplierPaymentPost,
-            ApprovalDomainAction::SupplierPaymentCancelApproval,
-        ),
+        DocumentType::SupplierPayment => Ok(no_approval(document_type)),
         DocumentType::CustomerRefund => finance_required(
             document_type,
             ApprovalDomainAction::CustomerRefundSubmit,
@@ -646,7 +632,6 @@ fn owner_role(document_type: DocumentType) -> Result<WorkItemOwnerRole> {
         DocumentType::PurchaseChangeOrder => "purchase_change_order_approver",
         DocumentType::StockAdjustment => "stock_adjustment_approver",
         DocumentType::CustomerReceipt => "customer_receipt_approver",
-        DocumentType::SupplierPayment => "supplier_payment_approver",
         DocumentType::CustomerRefund => "customer_refund_approver",
         DocumentType::SupplierRefund => "supplier_refund_approver",
         DocumentType::ReceiptReversal => "receipt_reversal_approver",
@@ -683,9 +668,6 @@ fn ensure_real_action(action: ApprovalDomainAction) -> Result<()> {
         | ApprovalDomainAction::CustomerReceiptSubmit
         | ApprovalDomainAction::CustomerReceiptPost
         | ApprovalDomainAction::CustomerReceiptCancelApproval
-        | ApprovalDomainAction::SupplierPaymentSubmit
-        | ApprovalDomainAction::SupplierPaymentPost
-        | ApprovalDomainAction::SupplierPaymentCancelApproval
         | ApprovalDomainAction::CustomerRefundSubmit
         | ApprovalDomainAction::CustomerRefundPost
         | ApprovalDomainAction::CustomerRefundCancelApproval
@@ -726,7 +708,7 @@ mod tests {
     use super::*;
     use crate::approval::process_kind::{document_type_of, process_kind_of};
 
-    /// 20 行政策穷尽：12 个 PROCESS_REQUIRED 逐行断言矩阵，8 个 NO_APPROVAL 仅身份字段。
+    /// 20 行政策穷尽：11 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
     #[test]
     fn policies_are_exhaustive_and_match_process_kind() {
         assert_eq!(ALL_DOCUMENT_TYPES.len(), 20);
@@ -748,8 +730,8 @@ mod tests {
                 }
             }
         }
-        assert_eq!(required, 12);
-        assert_eq!(no_approval, 8);
+        assert_eq!(required, 11);
+        assert_eq!(no_approval, 9);
     }
 
     /// 无审批政策不得进入定义管理。
@@ -810,7 +792,6 @@ mod tests {
     fn finance_policies_require_amount_not_quantity() {
         for document_type in [
             DocumentType::CustomerReceipt,
-            DocumentType::SupplierPayment,
             DocumentType::CustomerRefund,
             DocumentType::SupplierRefund,
             DocumentType::ReceiptReversal,
@@ -897,15 +878,6 @@ mod tests {
                 approve: ApprovalDomainAction::CustomerReceiptPost,
                 cancel: ApprovalDomainAction::CustomerReceiptCancelApproval,
             }),
-            DocumentType::SupplierPayment => Some(ExpectedRequiredPolicy {
-                purposes: NO_PURPOSES,
-                version: ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
-                snapshot: FINANCE_SNAPSHOT,
-                owner_role: "supplier_payment_approver",
-                start: ApprovalDomainAction::SupplierPaymentSubmit,
-                approve: ApprovalDomainAction::SupplierPaymentPost,
-                cancel: ApprovalDomainAction::SupplierPaymentCancelApproval,
-            }),
             DocumentType::CustomerRefund => Some(ExpectedRequiredPolicy {
                 purposes: NO_PURPOSES,
                 version: ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
@@ -942,7 +914,8 @@ mod tests {
                 approve: ApprovalDomainAction::PaymentReversalPost,
                 cancel: ApprovalDomainAction::PaymentReversalCancelApproval,
             }),
-            DocumentType::PurchaseReceipt
+            DocumentType::SupplierPayment
+            | DocumentType::PurchaseReceipt
             | DocumentType::Delivery
             | DocumentType::ElectronicDelivery
             | DocumentType::ServiceFulfillment

@@ -49,19 +49,19 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/supplier-payments",
+            "/payable-accounts/{id}/payment-recipient/reveal",
             with_permission(
-                get(payable::supplier_payment_list),
+                post(payable::payment_recipient_reveal),
                 rbac,
-                payable::supplier_payment_list_permission_key(),
+                payable::payment_recipient_reveal_permission_key(),
             ),
         )
         .route(
             "/supplier-payments",
             with_permission(
-                post(payable::supplier_payment_create),
+                get(payable::supplier_payment_list),
                 rbac,
-                payable::supplier_payment_create_permission_key(),
+                payable::supplier_payment_list_permission_key(),
             ),
         )
         .route(
@@ -92,30 +92,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/supplier-payments/{id}/submit",
-            with_permission(
-                post(payable::supplier_payment_submit),
-                rbac,
-                payable::supplier_payment_submit_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-payments/{id}/cancel-approval",
-            with_permission(
-                post(payable::supplier_payment_cancel_approval),
-                rbac,
-                payable::supplier_payment_cancel_approval_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-payments/{id}/post",
-            with_permission(
-                post(payable::supplier_payment_post),
-                rbac,
-                payable::supplier_payment_post_permission_key(),
-            ),
-        )
-        .route(
             "/purchase-invoice-allocations",
             with_permission(
                 get(payable::purchase_invoice_allocation_list),
@@ -135,19 +111,20 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    /// 供应商付款路由暴露提交与撤回，不再把过账当客户端旁路入口。
+    /// 供应商付款只暴露任务内原子登记，不暴露付款审批或独立过账入口。
     #[test]
-    fn supplier_payment_routes_expose_submit_and_cancel() {
+    fn supplier_payment_routes_expose_direct_commit_and_recipient_reveal() {
         let production = include_str!("payable.rs")
             .split("#[cfg(test)]")
             .next()
             .expect("生产路由必须存在");
-        assert!(production.contains("/supplier-payments/{id}/submit"));
-        assert!(production.contains("/supplier-payments/{id}/cancel-approval"));
+        assert!(production.contains("/supplier-payments/commit"));
+        assert!(production.contains("/payment-recipient/reveal"));
         assert!(production.contains("/supplier-payments/{id}/bank-receipt"));
-        assert!(production.contains("supplier_payment_submit"));
-        assert!(production.contains("supplier_payment_cancel_approval"));
         assert!(production.contains("multipart_route"));
+        assert!(!production.contains("/supplier-payments/{id}/submit"));
+        assert!(!production.contains("/supplier-payments/{id}/cancel-approval"));
+        assert!(!production.contains("/supplier-payments/{id}/post"));
         assert!(!production.contains("PENDING_REVIEW"));
     }
 }

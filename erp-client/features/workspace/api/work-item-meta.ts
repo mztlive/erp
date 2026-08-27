@@ -198,7 +198,7 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         badgeVariant: "success",
     },
     supplier_payment: {
-        approvalLabel: "付款审批",
+        approvalLabel: "付款记录",
         badgeLabel: "付款",
         badgeVariant: "cyan",
     },

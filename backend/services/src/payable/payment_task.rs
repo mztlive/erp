@@ -1,9 +1,9 @@
 //! 已确认采购应付与 W01 付款执行任务的原子生命周期编排。
 //!
 //! 任务对象固定为 `payable_account`，负责人由供应商精确责任规则或付款默认规则
-//! 解析并冻结；付款单自身的审批任务仍由统一审批运行时维护，不与本任务合并。
-//! 付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按当前
-//! 责任规则创建新任务身份。
+//! 解析并冻结。采购审批最终通过已经提供付款授权；付款单不再创建第二套审批
+//! 任务。付款部分核销只更新摘要，开放余额归零自动完成；冲正重新产生余额时按
+//! 当前责任规则创建新任务身份。
 
 use chrono::{FixedOffset, TimeZone};
 use database::{Executor, PayableExt, SupplierExt, WorkItemExt};
@@ -135,30 +135,8 @@ pub(crate) async fn record_payment_execution(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let mut task = db
-        .work_items()
-        .find_by_id(work_item_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
-    if task.base.version != expected_task_version {
-        return Err(Error::ConflictError(
-            "付款任务版本已变化，请刷新工作台任务后重试".to_string(),
-        ));
-    }
-    let account = db
-        .payable_accounts()
-        .find_by_id(&task.business_object_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("付款任务关联的应付往来子账不存在".to_string()))?;
-    ensure_task_identity(&task, &account)?;
-    if !task.is_owned_by(actor.id()) {
-        return Err(Error::Forbidden(
-            "当前账号不是开放付款任务的当前责任人".to_string(),
-        ));
-    }
-    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
-        .ensure_domain_decision_access(actor, &task, executor)
-        .await?;
+    let (mut task, account) =
+        authorize_payment_execution(db, work_item_id, expected_task_version, None, actor, executor).await?;
     if &account.supplier_id != supplier_id {
         return Err(Error::BusinessLogicError(
             "付款供应商与当前任务的应付子账不一致".to_string(),
@@ -184,6 +162,63 @@ pub(crate) async fn record_payment_execution(
         .map_err(Error::Logic)?;
     db.work_items().update(&mut task, executor).await?;
     Ok(())
+}
+
+/// 校验付款执行任务的冻结身份、版本、当前责任人和领域权限。
+///
+/// 本方法不记录任务活动、不修改任务版本，可用于付款前查看敏感收款账号。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `work_item_id` - 当前付款执行任务
+/// * `expected_task_version` - 页面读取的任务版本
+/// * `expected_account_id` - 可选的页面应付子账身份
+/// * `actor` - 当前操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已校验的任务与应付子账。
+///
+/// # 错误
+/// 任务不存在、身份或版本漂移、非当前责任人或无处理权限时失败关闭。
+pub(crate) async fn authorize_payment_execution(
+    db: &mongodb::Database,
+    work_item_id: &WorkItemId,
+    expected_task_version: u64,
+    expected_account_id: Option<&PayableAccountId>,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<(WorkItem, PayableAccount)> {
+    let task = db
+        .work_items()
+        .find_by_id(work_item_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商付款执行任务不存在".to_string()))?;
+    if task.base.version != expected_task_version {
+        return Err(Error::ConflictError(
+            "付款任务版本已变化，请刷新工作台任务后重试".to_string(),
+        ));
+    }
+    if expected_account_id.is_some_and(|id| task.business_object_id != id.as_ref()) {
+        return Err(Error::BusinessLogicError(
+            "付款任务与当前应付子账不一致，请刷新工作台任务后重试".to_string(),
+        ));
+    }
+    let account = db
+        .payable_accounts()
+        .find_by_id(&task.business_object_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("付款任务关联的应付往来子账不存在".to_string()))?;
+    ensure_task_identity(&task, &account)?;
+    if !task.is_owned_by(actor.id()) {
+        return Err(Error::Forbidden(
+            "当前账号不是开放付款任务的当前责任人".to_string(),
+        ));
+    }
+    WorkItemService::new(db.clone(), crate::iam::shared_rbac_service(db.clone()))
+        .ensure_domain_decision_access(actor, &task, executor)
+        .await?;
+    Ok((task, account))
 }
 
 /// 校验采购应付与原始分录属于同一正式事实。

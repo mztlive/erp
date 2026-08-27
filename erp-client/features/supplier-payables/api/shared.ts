@@ -29,6 +29,27 @@ export function nextSessionId(): string {
     return `alloc_sup_${++sessionSeq}`
 }
 
+/**
+ * 结束上一笔核销尝试并生成全新的会话身份。
+ *
+ * 成功的分次付款不得复用上一笔会话或幂等结果，否则下一笔会被客户端缓存
+ * 误判为上一笔的重复提交。
+ */
+export function beginFreshAllocationAttempt(
+    previousDraftSessionId: string | undefined,
+    previousIdempotencyKey: string | null,
+): string {
+    if (previousDraftSessionId) {
+        sessions.delete(previousDraftSessionId)
+        draftSnapshots.delete(previousDraftSessionId)
+    }
+    if (previousIdempotencyKey) {
+        submitIdempotency.delete(previousIdempotencyKey)
+        submitUnknownResolvers.delete(previousIdempotencyKey)
+    }
+    return nextSessionId()
+}
+
 export function errorMessage(err: unknown, fallback: string): string {
     return err && typeof err === "object" && "message" in err
         ? String((err as { message: unknown }).message)

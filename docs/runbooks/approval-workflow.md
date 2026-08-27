@@ -177,10 +177,11 @@ backend/scripts/reset-dev-business-data.sh \
 3. 创建并验证全部新索引；任一索引失败不得继续发布定义。
 4. 运行 readiness、权限种子、边界扫描和旧符号清零。`APPROVAL_POLICY_NOT_REGISTERED` 必须使 readiness 失败。
 5. 仅先为唯一试点 `StockAdjustment` 创建并发布定义，完成创建、绑定、提交、决定、恢复、取消和通知冒烟。
-6. 试点通过后，按 [approval-workflow.md](../dev-plan/approval-workflow.md) §3 对其余 11 个 `PROCESS_REQUIRED` 类型逐个发布定义并完成同一组冒烟：
-   `SalesOrder` → `VoucherSalesOrder` → `SalesChangeOrder` → `PurchaseOrder` → `PurchaseChangeOrder` → `CustomerReceipt` → `SupplierPayment` → `CustomerRefund` → `SupplierRefund` → `ReceiptReversal` → `PaymentReversal`。
-7. `NO_APPROVAL` 类型不得发布定义、不得创建审批实例。
-8. P6-PILOT 只允许在专用空数据库演练试点，不得触碰共享开发环境。共享开发环境只在 P6-FINAL 启用前门禁通过后执行第 1—6 步。
+6. 试点通过后，按 [approval-workflow.md](../dev-plan/approval-workflow.md) §3 对其余 10 个 `PROCESS_REQUIRED` 类型逐个发布定义并完成同一组冒烟：
+   `SalesOrder` → `VoucherSalesOrder` → `SalesChangeOrder` → `PurchaseOrder` → `PurchaseChangeOrder` → `CustomerReceipt` → `CustomerRefund` → `SupplierRefund` → `ReceiptReversal` → `PaymentReversal`。
+7. `SupplierPayment` 必须按 `NO_APPROVAL` 冒烟：采购单最终通过形成应付和指定出纳付款任务；工作台展示收款账户摘要；当前责任人可审计揭示完整账号；提交携带页面所见账户 ID 与版本并在付款事务内完成 CAS 写锁；连续两次部分付款必须使用不同会话与幂等键并各自产生一条过账付款记录；全部付款均在同一事务登记、过账、核销并更新任务，且审批绑定、实例和审批任务均为 0。
+8. 其余 `NO_APPROVAL` 类型不得发布定义、不得创建审批实例。
+9. P6-PILOT 只允许在专用空数据库演练试点，不得触碰共享开发环境。共享开发环境只在 P6-FINAL 启用前门禁通过后执行第 1—7 步。
 
 ## 9. 启用失败
 

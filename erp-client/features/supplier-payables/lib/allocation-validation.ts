@@ -15,7 +15,6 @@ export type AllocationIssueInput = {
     /** 拟分配合计（已按元格式化） */
     allocatedHint: string
     factAmount: string
-    existingPaymentId?: string
     existingInvoiceId?: string
     existingUnallocated?: string
     existingAmount?: string
@@ -31,7 +30,6 @@ export function buildAllocationIssues(
         pool,
         allocatedHint,
         factAmount,
-        existingPaymentId,
         existingInvoiceId,
         existingUnallocated,
         existingAmount,
@@ -46,13 +44,8 @@ export function buildAllocationIssues(
             targetId: "alloc-pool",
         })
     }
-    const capAmount =
-        existingUnallocated || existingAmount || factAmount || "0"
-    if (
-        cents(factAmount || "0") <= 0 &&
-        !existingPaymentId &&
-        !existingInvoiceId
-    ) {
+    const capAmount = existingUnallocated || existingAmount || factAmount || "0"
+    if (cents(factAmount || "0") <= 0 && !existingInvoiceId) {
         issues.push({
             id: "amount",
             label: track === "payment" ? "付款金额" : "发票金额",

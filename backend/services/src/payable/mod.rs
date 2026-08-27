@@ -1,13 +1,12 @@
 //! 域 D19 `payable` 服务编排（页面：W12 供应商往来）。
 //!
 //! 事务边界只在 Service（conventions §6.1）：
-//! - 供应商付款创建必须在同一事务注册 `BusinessDocument` 并绑定发布定义；
-//! - 单集合草稿写入（付款单草稿）→ `&mut NoTransaction`；
+//! - 供应商付款必须在付款执行事务注册无审批 `BusinessDocument`；
 //! - 跨集合资金/票款过账（§8.3 不变量）→
 //!   `database::Transactional::with_transaction`。
 //! - 资金类入口（付款过账、进项发票登记）以业务唯一键
 //!   （付款单号/规范化发票号码）与状态迁移构成去重机制。
-//!   付款过账只能作为审批最终通过动作。
+//!   采购审批形成付款授权，付款任务由当前责任出纳直接登记并过账。
 //!
 //! 跨域只经 `DatabaseExt` 调对方域 Repository：
 //! - D15 `purchase_orders()` 校验来源采购单存在；
@@ -20,17 +19,18 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, FileAssetExt, NoTransaction, PartyExt, PayableExt,
-    PurchaseOrderExt, ReceivableExt, SupplierExt, Transactional,
+    AccessControlExt, Executor, FileAssetExt, NoTransaction, PartyExt, PayableExt, PurchaseOrderExt,
+    ReceivableExt, SupplierExt, Transactional,
 };
-use entities::common::time::Instant;
+use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::file_asset::{RetentionClass, SensitivityClass};
 use entities::ids::{
-    FileAssetId, InvoiceId, PayableAccountId, PayableEntryId, PaymentAllocationId,
-    PurchaseInvoiceAllocationId, SupplierAccountId, SupplierPaymentId,
+    FileAssetId, InvoiceId, PartyBankAccountId, PartyId, PayableAccountId, PayableEntryId,
+    PaymentAllocationId, PurchaseInvoiceAllocationId, SupplierAccountId, SupplierPaymentId,
 };
 use entities::money::Amount;
+use entities::party::PartyBankAccount;
 use entities::payable::{
     AllocationAction, EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData,
     PayableEntryType, PaymentAllocation, PaymentAllocationData, PendingPaymentAllocation,
@@ -43,48 +43,28 @@ use mongodb::{ClientSession, Database};
 use validator::Validate;
 
 use crate::approval::binding::{
-    attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
+    bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::audit::{AuditActor, CommandReceipt};
-use crate::document_registry::{find_approval_binding, new_registered_document};
+use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
 use crate::iam::{self, SharedRbacService};
 use crate::pending_file_assets::PendingFileAssets;
 
-mod adapter;
-mod cancel_approval;
 mod dto;
 pub(crate) mod payment_task;
-mod start_approval;
-
-pub use self::adapter::supplier_payment_object_readable;
-use self::adapter::{
-    build_supplier_payment_snapshot, document_approval_view, ensure_final_approve_posting,
-    execute_supplier_payment_domain_action, pending_allocations_from_request, require_frozen_binding,
-    start_supplier_payment_approval, supplier_payment_adapter, supplier_payment_responsible_org_id,
-    supplier_payment_subject_ref,
-};
-use self::cancel_approval::{
-    build_supplier_payment_cancel_input, load_cancel_runtime, persist_supplier_payment_cancel,
-    SupplierPaymentCancelPersistInput,
-};
 use self::dto::SortDir;
 pub use self::dto::{
-    CancelSupplierPaymentApprovalRequest, CommitSupplierPaymentRequest, CreatePayableAccountRequest,
-    CreateSupplierPaymentRequest, DocumentApprovalView, PageView, PayableAccountListParams,
-    PayableAccountView, PaymentAllocationLineRequest, PaymentAllocationView, PostSupplierPaymentRequest,
-    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
-    RegisterPurchaseInvoiceRequest, SubmitSupplierPaymentRequest, SupplierPaymentBankReceiptView,
-    SupplierPaymentListParams, SupplierPaymentView,
+    CommitSupplierPaymentRequest, CreatePayableAccountRequest, CreateSupplierPaymentRequest, PageView,
+    PayableAccountListParams, PayableAccountView, PaymentAllocationLineRequest, PaymentAllocationView,
+    PaymentRecipientRevealView, PaymentRecipientView, PurchaseInvoiceAllocationListParams,
+    PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest,
+    RevealPaymentRecipientRequest, SupplierPaymentBankReceiptView, SupplierPaymentListParams,
+    SupplierPaymentView,
 };
-use self::start_approval::{
-    build_supplier_payment_start_input, load_bound_definition_graph_with_executor,
-    load_start_receipt_with_executor, persist_supplier_payment_start_in_transaction,
-    SupplierPaymentStartInput, SupplierPaymentStartPersistInput,
-};
+use crate::party::SensitiveDataCodec;
 
 /// 应付往来子账列表筛选条件类型（经 `PayableExt` 关联类型跨 crate 可达）。
 type PayableAccountFilter = <mongodb::Database as PayableExt>::PayableAccountFilter;
@@ -156,7 +136,7 @@ impl PayableService {
             .await?;
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
-            views.push(self.payable_account_view(row.id).await?);
+            views.push(self.payable_account_view(row.id, false).await?);
         }
         Ok(PageView {
             items: views,
@@ -177,7 +157,63 @@ impl PayableService {
     /// # 错误
     /// * `NotFound` - 子账不存在
     pub async fn payable_account_detail(&self, id: &str) -> Result<PayableAccountView> {
-        self.payable_account_view(id.to_string()).await
+        self.payable_account_view(id.to_string(), true).await
+    }
+
+    /// 在付款任务责任校验后揭示当前默认收款账号。
+    ///
+    /// 查看不修改任务版本；页面可在核对账号后继续使用同一任务版本提交付款。
+    /// 每次成功揭示均写入敏感信息审计。
+    ///
+    /// # 参数
+    /// * `id` - 当前付款任务绑定的应付往来子账 ID
+    /// * `req` - 任务身份、任务版本与页面所见收款账户
+    /// * `actor` - 当前操作人
+    /// * `sensitive_data` - 应用启动期共享的敏感数据编解码器
+    ///
+    /// # 返回
+    /// 返回完整收款账号和对应账户事实行主键。
+    ///
+    /// # 错误
+    /// 任务责任、版本、账户身份或敏感密文不合法时失败关闭。
+    pub async fn reveal_payment_recipient(
+        &self,
+        id: &str,
+        req: RevealPaymentRecipientRequest,
+        actor: &AuditActor,
+        sensitive_data: &SensitiveDataCodec,
+    ) -> Result<PaymentRecipientRevealView> {
+        req.validate()?;
+        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let account_id = PayableAccountId::new(id);
+        let (_, account) = payment_task::authorize_payment_execution(
+            &self.db,
+            &req.work_item_id,
+            expected_task_version,
+            Some(&account_id),
+            actor,
+            &mut NoTransaction,
+        )
+        .await?;
+        let recipient =
+            resolve_current_payment_recipient(&self.db, &account.supplier_id, &mut NoTransaction).await?;
+        ensure_expected_payment_recipient(
+            &recipient.base.id,
+            recipient.base.version,
+            &PartyBankAccountId::new(req.expected_bank_account_id.trim()),
+            req.expected_bank_account_version,
+        )?;
+        let account_number = sensitive_data.decrypt(&recipient.account_number_ciphertext)?;
+        let audit = actor.clone().resource_log(
+            "party_bank_account.reveal_for_payment",
+            "party_bank_account",
+            recipient.base.id.clone(),
+        )?;
+        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        Ok(PaymentRecipientRevealView {
+            bank_account_id: recipient.base.id,
+            account_number,
+        })
     }
 
     /// 建立应付往来子账与原始应付分录（跨集合事务写入）。
@@ -295,7 +331,7 @@ impl PayableService {
             .await?;
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
-            views.push(self.supplier_payment_view(row.id).await?);
+            views.push(self.supplier_payment_view(row.id, false).await?);
         }
         Ok(PageView {
             items: views,
@@ -316,7 +352,7 @@ impl PayableService {
     /// # 错误
     /// * `NotFound` - 付款单不存在
     pub async fn supplier_payment_detail(&self, id: &str) -> Result<SupplierPaymentView> {
-        self.supplier_payment_view(id.to_string()).await
+        self.supplier_payment_view(id.to_string(), true).await
     }
 
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
@@ -344,51 +380,13 @@ impl PayableService {
         Ok(asset.into())
     }
 
-    /// 登记供应商付款草稿，并在同一事务绑定已发布审批定义。
-    ///
-    /// 付款单号全局唯一（唯一索引）构成幂等去重。绑定失败必须回滚业务实体，
-    /// 不得把绑定推迟到提交。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回新建付款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 供应商不存在
-    /// * `ConflictError` - 付款单号重复或流程未配置
-    pub async fn create_supplier_payment(
-        &self,
-        req: CreateSupplierPaymentRequest,
-        actor: &AuditActor,
-    ) -> Result<SupplierPaymentView> {
-        req.validate()?;
-        self.ensure_existing_bank_receipt(&req.bank_receipt_asset_id)
-            .await?;
-        let payment = SupplierPayment::new(
-            SupplierPaymentId::new(next_id()),
-            SupplierPaymentData {
-                payment_no: req.payment_no,
-                supplier_id: req.supplier_id,
-                paid_at: req.paid_at,
-                amount: req.amount,
-                bank_reference: req.bank_reference,
-                bank_receipt_asset_id: req.bank_receipt_asset_id,
-            },
-        )?;
-        persist_created_supplier_payment(&self.db, &self.rbac, payment.clone(), actor.clone()).await?;
-        self.supplier_payment_detail(&payment.base.id).await
-    }
-
-    /// 原子创建或提交供应商付款并启动审批。
+    /// 原子登记并过账供应商付款。
     ///
     /// 不携带新上传对象的内部兼容入口；HTTP 付款工作台使用
     /// [`Self::commit_supplier_payment_with_assets`]。
     ///
     /// # 错误
-    /// 参数组合、银行回单、任务责任、审批绑定或事务提交不合法时返回错误。
+    /// 参数组合、银行回单、任务责任、收款账户或事务提交不合法时返回错误。
     pub async fn commit_supplier_payment(
         &self,
         req: CommitSupplierPaymentRequest,
@@ -400,23 +398,23 @@ impl PayableService {
             .view)
     }
 
-    /// 原子创建或提交供应商付款、登记银行回单并启动审批。
+    /// 原子登记并过账供应商付款，同时登记银行回单。
     ///
-    /// 新付款的单据注册与定义绑定、付款实体、冻结核销分配、审批运行事实、
-    /// 不可变快照、入口任务和审计全部位于同一事务。已有草稿用乐观锁校验后
-    /// 走同一启动事务，前端不得再执行“先创建草稿、再提交”。
+    /// 任务责任、当前默认收款账户、付款实体、核销分配、应付余额、回单资产、
+    /// 付款任务和审计全部位于同一事务。采购单审批是付款授权来源，本命令不得
+    /// 创建付款审批实例或审批任务。
     ///
     /// # 参数
-    /// * `req` - 新付款或已有草稿身份、冻结分配与幂等键
+    /// * `req` - 本次付款事实、冻结分配与幂等键
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回进入审批后的付款单视图。
+    /// 返回已过账付款单视图。
     ///
     /// # 错误
     /// * `ValidationError` - 参数组合或分配不合法
-    /// * `ConflictError` - 草稿版本、状态、绑定或审批定义冲突
-    /// * `NotFound` - 已有草稿或供应商不存在
+    /// * `ConflictError` - 任务版本、付款单号或收款账户漂移
+    /// * `NotFound` - 任务、应付、供应商或银行回单不存在
     pub async fn commit_supplier_payment_with_assets(
         &self,
         mut req: CommitSupplierPaymentRequest,
@@ -445,34 +443,23 @@ impl PayableService {
         pending_assets.ensure_all_used(&used_assets)?;
         let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
         let work_item_id = req.work_item_id.clone();
-        let receipt_override = req.bank_receipt_asset_id;
-        let new_payment = match (&req.payment_id, req.expected_version, req.payment) {
-            (None, None, Some(create)) if receipt_override.is_none() => {
-                create.validate()?;
-                Some(SupplierPayment::new(
-                    SupplierPaymentId::new(next_id()),
-                    SupplierPaymentData {
-                        payment_no: create.payment_no,
-                        supplier_id: create.supplier_id,
-                        paid_at: create.paid_at,
-                        amount: create.amount,
-                        bank_reference: create.bank_reference,
-                        bank_receipt_asset_id: create.bank_receipt_asset_id,
-                    },
-                )?)
-            }
-            (Some(_), Some(version), None) if version > 0 => None,
-            _ => {
-                return Err(Error::ValidationError(
-                    "新付款必须提交 payment；已有草稿必须提交 payment_id 与 expected_version".to_string(),
-                ));
-            }
-        };
-        let requested_id = req.payment_id.clone();
-        let expected_version = req.expected_version;
+        let expected_payee_bank_account_id =
+            PartyBankAccountId::new(req.expected_payee_bank_account_id.trim());
+        let expected_payee_bank_account_version = req.expected_payee_bank_account_version;
+        req.payment.validate()?;
+        let payment = SupplierPayment::new(
+            SupplierPaymentId::new(next_id()),
+            SupplierPaymentData {
+                payment_no: req.payment.payment_no,
+                supplier_id: req.payment.supplier_id,
+                payee_bank_account_id: expected_payee_bank_account_id.clone(),
+                paid_at: req.payment.paid_at,
+                amount: req.payment.amount,
+                bank_reference: req.payment.bank_reference,
+                bank_receipt_asset_id: req.payment.bank_receipt_asset_id,
+            },
+        )?;
         let allocations = pending_allocations_from_request(&req.allocations)?;
-        let idempotency_key = req.idempotency_key;
-        let adapter = supplier_payment_adapter()?;
         let policy_revision = self.rbac.current_policy_revision().await?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -482,105 +469,66 @@ impl PayableService {
             .clone()
             .run_authorized_policy_transaction(policy_revision, move |session| {
                 Box::pin(async move {
-                    let (mut payment, binding, organization_id) = match new_payment {
-                        Some(candidate) => {
-                            if db
-                                .supplier_payments()
-                                .find_by_payment_no(&candidate.payment_no, session)
-                                .await?
-                                .is_some()
-                            {
-                                return Err(Error::ConflictError("付款单号已存在，请刷新后重试".to_string()));
-                            }
-                            let supplier = db
-                                .supplier_accounts()
-                                .find_by_id(candidate.supplier_id.as_ref(), session)
-                                .await?
-                                .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-                            let organization_id =
-                                supplier_payment_responsible_org_id(supplier.party_id.as_ref())?;
-                            let bind_command = BindPublishedDefinitionCommand {
-                                document_type: DocumentType::SupplierPayment,
-                                business_object_id: candidate.base.id.clone(),
-                                business_object_version: candidate.base.version,
-                                context: BindingRevalidationContext {
-                                    organization_id: organization_id.clone(),
-                                    creator_id: actor_owned.id().to_string(),
-                                },
-                            };
-                            let document = new_registered_document(
-                                &candidate.base.id,
-                                DocumentType::SupplierPayment,
-                                candidate.payment_no.clone(),
-                            )?;
-                            let binding = persist_bound_supplier_payment_document(
-                                &db,
-                                &rbac,
-                                document,
-                                &bind_command,
-                                &actor_owned,
-                                session,
-                            )
-                            .await?;
-                            ensure_bank_receipt_asset_in_transaction(
-                                &db,
-                                candidate.require_bank_receipt()?,
-                                &pending_assets,
-                                session,
-                            )
-                            .await?;
-                            pending_assets.persist(&db, session).await?;
-                            db.supplier_payments().create(&candidate, session).await?;
-                            let audit = actor_owned.clone().resource_log(
-                                "supplier_payment.create",
-                                "supplier_payment",
-                                candidate.base.id.clone(),
-                            )?;
-                            db.audit_logs().create(&audit, session).await?;
-                            (candidate, binding, organization_id)
-                        }
-                        None => {
-                            let payment_id = requested_id
-                                .as_deref()
-                                .ok_or_else(|| Error::ValidationError("已有付款缺少主键".to_string()))?;
-                            let mut payment =
-                                db.supplier_payments()
-                                    .find_by_id(payment_id, session)
-                                    .await?
-                                    .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
-                            ensure_expected_version(
-                                payment.base.version,
-                                expected_version.ok_or_else(|| {
-                                    Error::ValidationError("已有付款缺少期望版本".to_string())
-                                })?,
-                            )?;
-                            if let Some(asset_id) = receipt_override {
-                                payment.replace_bank_receipt(asset_id)?;
-                            }
-                            ensure_bank_receipt_asset_in_transaction(
-                                &db,
-                                payment.require_bank_receipt()?,
-                                &pending_assets,
-                                session,
-                            )
-                            .await?;
-                            pending_assets.persist(&db, session).await?;
-                            let binding = find_approval_binding(&db, payment_id, session)
-                                .await?
-                                .ok_or_else(|| {
-                                    Error::ConflictError("供应商付款单缺少审批绑定".to_string())
-                                })?;
-                            let supplier = db
-                                .supplier_accounts()
-                                .find_by_id(payment.supplier_id.as_ref(), session)
-                                .await?
-                                .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-                            let organization_id =
-                                supplier_payment_responsible_org_id(supplier.party_id.as_ref())?;
-                            (payment, binding, organization_id)
-                        }
+                    let mut payment = payment;
+                    if db
+                        .supplier_payments()
+                        .find_by_payment_no(&payment.payment_no, session)
+                        .await?
+                        .is_some()
+                    {
+                        return Err(Error::ConflictError("付款单号已存在，请刷新后重试".to_string()));
+                    }
+                    let supplier = db
+                        .supplier_accounts()
+                        .find_by_id(payment.supplier_id.as_ref(), session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+                    let bind_command = BindPublishedDefinitionCommand {
+                        document_type: DocumentType::SupplierPayment,
+                        business_object_id: payment.base.id.clone(),
+                        business_object_version: payment.base.version,
+                        context: BindingRevalidationContext {
+                            organization_id: supplier.party_id.to_string(),
+                            creator_id: actor_owned.id().to_string(),
+                        },
                     };
-                    let binding = require_frozen_binding(Some(&binding))?.clone();
+                    let document = new_registered_document(
+                        &payment.base.id,
+                        DocumentType::SupplierPayment,
+                        payment.payment_no.clone(),
+                    )?;
+                    persist_unbound_supplier_payment_document(
+                        &db,
+                        &rbac,
+                        document,
+                        &bind_command,
+                        &actor_owned,
+                        session,
+                    )
+                    .await?;
+                    ensure_bank_receipt_asset_in_transaction(
+                        &db,
+                        payment.require_bank_receipt()?,
+                        &pending_assets,
+                        session,
+                    )
+                    .await?;
+                    pending_assets.persist(&db, session).await?;
+                    db.supplier_payments().create(&payment, session).await?;
+                    let audit = actor_owned.clone().resource_log(
+                        "supplier_payment.create",
+                        "supplier_payment",
+                        payment.base.id.clone(),
+                    )?;
+                    db.audit_logs().create(&audit, session).await?;
+                    lock_expected_payment_recipient(
+                        &db,
+                        &payment.supplier_id,
+                        &expected_payee_bank_account_id,
+                        expected_payee_bank_account_version,
+                        session,
+                    )
+                    .await?;
                     payment_task::record_payment_execution(
                         &db,
                         &work_item_id,
@@ -591,53 +539,19 @@ impl PayableService {
                         session,
                     )
                     .await?;
-                    start_supplier_payment_approval(&mut payment, allocations)?;
                     let id = payment.base.id.clone();
-                    let subject = supplier_payment_subject_ref(&id)?;
-                    let now = Instant::now();
-                    let snapshot =
-                        build_supplier_payment_snapshot(&payment, &organization_id, actor_owned.id(), now)?;
-                    let _ = supplier_payment_object_readable(&organization_id, actor_owned.id())?;
-                    let graph = load_bound_definition_graph_with_executor(&db, &binding, session).await?;
-                    let existing_start_receipt = load_start_receipt_with_executor(
+                    post_supplier_payment_in_transaction(
                         &db,
-                        &subject,
-                        payment.approval_subject_version,
-                        &idempotency_key,
+                        &mut payment,
+                        &allocations,
+                        PaymentPostSource::ExecutionTask,
+                        &actor_owned,
                         session,
                     )
                     .await?;
-                    let start_input = build_supplier_payment_start_input(SupplierPaymentStartInput {
-                        graph,
-                        binding: &binding,
-                        subject,
-                        subject_version: payment.approval_subject_version,
-                        actor_id: actor_owned.id(),
-                        organization_id: &organization_id,
-                        idempotency_key: &idempotency_key,
-                        receipt: existing_start_receipt,
-                        now,
-                    })?;
-                    let prepared = prepare_start(start_input)?;
-                    let committed = persist_supplier_payment_start_in_transaction(
-                        &db,
-                        SupplierPaymentStartPersistInput {
-                            payment,
-                            actor: actor_owned.clone(),
-                            id,
-                            snapshot_payload: snapshot,
-                            prepared,
-                            owner_role: adapter.owner_role,
-                            organization_id,
-                            now,
-                        },
-                        session,
-                    )
-                    .await?;
-                    let command_audit =
-                        command_receipt_for_tx.audit(actor_owned.clone(), committed.base.id.clone())?;
+                    let command_audit = command_receipt_for_tx.audit(actor_owned.clone(), id)?;
                     db.audit_logs().create(&command_audit, session).await?;
-                    Ok::<SupplierPayment, crate::errors::Error>(committed)
+                    Ok::<SupplierPayment, crate::errors::Error>(payment)
                 })
             })
             .await;
@@ -664,134 +578,6 @@ impl PayableService {
         })
     }
 
-    /// 提交供应商付款并调用统一 `start_approval`。
-    ///
-    /// 按合同 §4.4.1 冻结 `approval_subject_version` 与 `subject_snapshot`，
-    /// 单据进入 `IN_APPROVAL`。定义与审批人取自已绑定事实，不接受客户端选择。
-    ///
-    /// # 参数
-    /// * `id` - 付款单主键
-    /// * `req` - 提交请求（版本、幂等键与冻结分配）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回提交后的付款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 付款单或供应商不存在
-    /// * `ConflictError` - 非草稿、无绑定或并发冲突
-    pub async fn submit_supplier_payment(
-        &self,
-        id: &str,
-        req: SubmitSupplierPaymentRequest,
-        actor: &AuditActor,
-    ) -> Result<SupplierPaymentView> {
-        self.commit_supplier_payment(
-            CommitSupplierPaymentRequest {
-                work_item_id: req.work_item_id,
-                expected_task_version: req.expected_task_version,
-                payment_id: Some(id.to_string()),
-                expected_version: Some(req.expected_version),
-                payment: None,
-                bank_receipt_asset_id: None,
-                allocations: req.allocations,
-                idempotency_key: req.idempotency_key,
-            },
-            actor,
-        )
-        .await
-    }
-
-    /// 撤回供应商付款审批，成功后回到草稿且 `subject_version` 不回退。
-    ///
-    /// 作为合同 `cancel_action`，供业务撤回与管理员受阻取消共用。
-    ///
-    /// # 参数
-    /// * `id` - 付款单主键
-    /// * `req` - 撤回请求（原因必填）
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回撤回后的付款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 付款单不存在
-    /// * `ConflictError` - 非审批中、已最终通过或并发冲突
-    pub async fn cancel_supplier_payment_approval(
-        &self,
-        id: &str,
-        req: CancelSupplierPaymentApprovalRequest,
-        actor: &AuditActor,
-    ) -> Result<SupplierPaymentView> {
-        req.validate()?;
-        let mut payment = self.load_supplier_payment(id).await?;
-        ensure_expected_version(payment.base.version, req.expected_version)?;
-        self.persist_cancelled_supplier_payment(id, &mut payment, &req, actor)
-            .await?;
-        self.supplier_payment_detail(id).await
-    }
-
-    /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
-    ///
-    /// # 返回
-    /// 恒返回冲突。
-    ///
-    /// # 错误
-    /// 恒返回 `ConflictError`。
-    pub fn reject_client_post() -> Result<SupplierPaymentView> {
-        Err(Error::ConflictError(
-            "供应商付款过账只能由审批最终通过动作执行，客户端不得直接过账".to_string(),
-        ))
-    }
-
-    /// 加载撤回运行事实并写回草稿。
-    ///
-    /// # 错误
-    /// 无绑定、实例终态或写入失败时返回错误。
-    async fn persist_cancelled_supplier_payment(
-        &self,
-        id: &str,
-        payment: &mut SupplierPayment,
-        req: &CancelSupplierPaymentApprovalRequest,
-        actor: &AuditActor,
-    ) -> Result<()> {
-        let adapter = supplier_payment_adapter()?;
-        let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
-        let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let subject = supplier_payment_subject_ref(id)?;
-        let runtime =
-            load_cancel_runtime(&self.db, &binding, &subject, payment.approval_subject_version).await?;
-        let now = Instant::now();
-        let input = build_supplier_payment_cancel_input(
-            &runtime,
-            &req.reason,
-            actor.id(),
-            &req.idempotency_key,
-            None,
-            now,
-        )?;
-        let prepared = prepare_cancel(input)?;
-        execute_supplier_payment_domain_action(payment, adapter.cancel_action)?;
-        let audit = actor.clone().resource_log(
-            "supplier_payment.cancel_approval",
-            "supplier_payment",
-            id.to_string(),
-        )?;
-        persist_supplier_payment_cancel(
-            &self.db,
-            SupplierPaymentCancelPersistInput {
-                payment: payment.clone(),
-                prepared,
-                open_tasks: runtime.open_tasks,
-                actor_id: actor.id().to_string(),
-                reason: req.reason.clone(),
-                now,
-                audit,
-            },
-        )
-        .await
-    }
-
     /// 按主键读取供应商付款单。
     ///
     /// # 错误
@@ -802,180 +588,6 @@ impl PayableService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))
-    }
-
-    /// 校验 JSON 创建入口引用的既有银行回单资产。
-    async fn ensure_existing_bank_receipt(&self, asset_id: &FileAssetId) -> Result<()> {
-        let asset = self
-            .db
-            .file_assets()
-            .find_by_id(asset_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
-        validate_bank_receipt_metadata(
-            &asset.content_type,
-            asset.sensitivity_class,
-            asset.retention_class,
-            asset.destroyed_at.is_some(),
-        )
-    }
-
-    /// 最终通过过账并核销（§8.3-1 事务不变量）。
-    ///
-    /// 作为合同 `on_final_approve`，仅 `IN_APPROVAL` 可进入过账。同一事务内：
-    /// 校验付款与应付分录同一供应商、分录开放余额与付款剩余余额；写提交时
-    /// 冻结的核销分配（`APPLY`）；按条件原子更新子账已核销进度。
-    ///
-    /// # 参数
-    /// * `id` - 付款单 ID
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回过账后付款单视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 付款单或应付分录不存在
-    /// * `ConflictError` - 非审批中
-    /// * `BusinessLogicError` - 跨供应商核销、超额核销或重复过账
-    pub async fn post_supplier_payment(&self, id: &str, actor: &AuditActor) -> Result<SupplierPaymentView> {
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let actor_owned = actor.clone();
-        let actor_id = actor.id().to_string();
-        let payment_id = id.to_string();
-        let detail_id = payment_id.clone();
-        let audit_action = format!("supplier_payment.post:{id}");
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let mut payment = db
-                        .supplier_payments()
-                        .find_by_id(&payment_id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("供应商付款单不存在".to_string()))?;
-                    if payment.status == SupplierPaymentStatus::Reversed {
-                        return Err(Error::BusinessLogicError("已冲正付款不能再核销".to_string()));
-                    }
-                    ensure_final_approve_posting(&payment)?;
-                    execute_supplier_payment_domain_action(
-                        &mut payment,
-                        crate::approval::policy::ApprovalDomainAction::SupplierPaymentPost,
-                    )?;
-
-                    let existing = db
-                        .payment_allocations()
-                        .find_allocations_by_payments(&[payment.base.id.clone().into()], session)
-                        .await?;
-                    let net_allocated = net_payment_allocated(&existing);
-                    if net_allocated.checked_add(pending_allocated_total(&payment.pending_allocations))
-                        > payment.amount
-                    {
-                        return Err(Error::BusinessLogicError("核销合计超过付款金额".to_string()));
-                    }
-
-                    let mut entry_balances: HashMap<String, Amount> = HashMap::new();
-                    for allocation in &existing {
-                        let entry_key = allocation.payable_entry_id.to_string();
-                        let balance = entry_balances.entry(entry_key).or_insert_with(zero_amount);
-                        match allocation.allocation_action {
-                            AllocationAction::Apply => {
-                                *balance = balance.checked_add(allocation.allocated_amount);
-                            }
-                            AllocationAction::Reverse => {
-                                *balance = balance.checked_sub(allocation.allocated_amount);
-                            }
-                        }
-                    }
-
-                    let next_seq = existing
-                        .iter()
-                        .map(|allocation| allocation.allocation_seq)
-                        .max()
-                        .unwrap_or(0)
-                        + 1;
-                    let pending = payment.pending_allocations.clone();
-                    let mut new_allocations = Vec::with_capacity(pending.len());
-                    for (index, line) in pending.iter().enumerate() {
-                        let entry = db
-                            .payable_entries()
-                            .find_by_id(&line.payable_entry_id, session)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
-                        let account = db
-                            .payable_accounts()
-                            .find_by_id(&entry.payable_account_id, session)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
-                        if account.supplier_id != payment.supplier_id {
-                            return Err(Error::BusinessLogicError("禁止跨供应商核销".to_string()));
-                        }
-                        let allocated = entry_balances
-                            .entry(entry.base.id.clone())
-                            .or_insert_with(zero_amount);
-                        if allocated.checked_add(line.allocated_amount) > entry.amount {
-                            return Err(Error::BusinessLogicError(
-                                "核销金额超过应付分录开放余额".to_string(),
-                            ));
-                        }
-                        *allocated = allocated.checked_add(line.allocated_amount);
-
-                        new_allocations.push(PaymentAllocation::new(
-                            PaymentAllocationId::new(next_id()),
-                            PaymentAllocationData {
-                                supplier_payment_id: payment.base.id.clone().into(),
-                                payable_entry_id: line.payable_entry_id.clone(),
-                                allocation_seq: next_seq + index as u32,
-                                allocation_action: AllocationAction::Apply,
-                                allocated_amount: line.allocated_amount,
-                                allocated_at: Instant::now(),
-                                reverses_allocation_id: None,
-                            },
-                        )?);
-                    }
-
-                    let mut affected_accounts = HashSet::new();
-                    for (line_index, line) in new_allocations.iter().enumerate() {
-                        let entry = db
-                            .payable_entries()
-                            .find_by_id(&line.payable_entry_id, session)
-                            .await?
-                            .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
-                        let applied = db
-                            .payable_accounts()
-                            .apply_settlement(
-                                &entry.payable_account_id,
-                                &new_allocations[line_index].allocated_amount,
-                                &actor_id,
-                                session,
-                            )
-                            .await?;
-                        if !applied {
-                            return Err(Error::BusinessLogicError(
-                                "子账剩余开放余额不足，核销被拒绝".to_string(),
-                            ));
-                        }
-                        affected_accounts.insert(entry.payable_account_id);
-                    }
-                    for account_id in affected_accounts {
-                        payment_task::sync_purchase_payment_task(&db, &account_id, session).await?;
-                    }
-                    payment.mark_posted()?;
-                    db.supplier_payments().update(&mut payment, session).await?;
-                    for allocation in &new_allocations {
-                        db.payment_allocations().create(allocation, session).await?;
-                    }
-                    let audit = actor_owned.clone().resource_log(
-                        &audit_action,
-                        "supplier_payment",
-                        payment.base.id.clone(),
-                    )?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
-
-        self.supplier_payment_detail(&detail_id).await
     }
 
     // -----------------------------------------------------------------------
@@ -1192,17 +804,22 @@ impl PayableService {
     // 私有视图装配
     // -----------------------------------------------------------------------
 
-    /// 装配应付往来子账详情视图。
+    /// 装配应付往来子账视图。
     ///
     /// # 参数
     /// * `id` - 子账 ID
+    /// * `include_payment_recipient` - 是否加载任务/详情所需的当前收款账户
     ///
     /// # 返回
     /// 返回完整应付台账视图。
     ///
     /// # 错误
     /// * `NotFound` - 子账不存在
-    async fn payable_account_view(&self, id: String) -> Result<PayableAccountView> {
+    async fn payable_account_view(
+        &self,
+        id: String,
+        include_payment_recipient: bool,
+    ) -> Result<PayableAccountView> {
         let account = self
             .db
             .payable_accounts()
@@ -1228,6 +845,14 @@ impl PayableService {
             .collect();
         let (supplier_no, supplier_name) =
             resolve_supplier_display(&self.db, account.supplier_id.as_ref()).await?;
+        let payment_recipient = if include_payment_recipient {
+            resolve_optional_payment_recipient_for_read(&self.db, &account.supplier_id, &mut NoTransaction)
+                .await?
+                .as_ref()
+                .map(payment_recipient_view)
+        } else {
+            None
+        };
         let source_document_no = resolve_source_document_no(&self.db, &account).await?;
         Ok(PayableAccountView {
             id: account.base.id.clone(),
@@ -1236,6 +861,7 @@ impl PayableService {
             supplier_id: account.supplier_id.to_string(),
             supplier_no,
             supplier_name,
+            payment_recipient,
             source_type: account.source_type,
             gross_total: account.gross_total,
             settled_total: account.settled_total,
@@ -1254,13 +880,18 @@ impl PayableService {
     ///
     /// # 参数
     /// * `id` - 付款单 ID
+    /// * `include_payment_recipient` - 是否加载付款详情所需的冻结收款账户
     ///
     /// # 返回
     /// 返回付款单视图（含分配行与未分配余额）。
     ///
     /// # 错误
     /// * `NotFound` - 付款单不存在
-    async fn supplier_payment_view(&self, id: String) -> Result<SupplierPaymentView> {
+    async fn supplier_payment_view(
+        &self,
+        id: String,
+        include_payment_recipient: bool,
+    ) -> Result<SupplierPaymentView> {
         let payment = self
             .db
             .supplier_payments()
@@ -1273,10 +904,15 @@ impl PayableService {
             .find_allocations_by_payments(&[payment.base.id.clone().into()], &mut NoTransaction)
             .await?;
         let (allocated_total, views) = payment_allocation_view(&allocations);
-        let binding = match find_approval_binding(&self.db, &id, &mut NoTransaction).await {
-            Ok(binding) => binding,
-            Err(Error::NotFound(_)) => None,
-            Err(error) => return Err(error),
+        let payment_recipient = match (include_payment_recipient, payment.payee_bank_account_id.as_ref()) {
+            (true, Some(account_id)) => self
+                .db
+                .party_bank_accounts()
+                .find_by_id(account_id.as_ref(), &mut NoTransaction)
+                .await?
+                .as_ref()
+                .map(payment_recipient_view),
+            _ => None,
         };
         let bank_receipt =
             payment_bank_receipt_view(&self.db, payment.bank_receipt_asset_id.as_ref()).await?;
@@ -1285,6 +921,7 @@ impl PayableService {
             payment_no: payment.payment_no,
             status: payment.status,
             supplier_id: payment.supplier_id.to_string(),
+            payment_recipient,
             paid_at: payment.paid_at,
             amount: payment.amount,
             bank_reference: payment.bank_reference,
@@ -1294,8 +931,292 @@ impl PayableService {
             unallocated_amount: payment.amount.checked_sub(allocated_total),
             allocated_total,
             allocations: views,
-            approval: document_approval_view(binding.as_ref(), None, payment.status),
         })
+    }
+}
+
+/// 付款过账授权来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaymentPostSource {
+    /// 当前开放付款执行任务。
+    ExecutionTask,
+}
+
+/// 在调用方事务内写入付款核销、应付余额、任务进度与审计。
+///
+/// # 错误
+/// 付款状态、供应商、应付开放余额、分配金额或仓储写入不合法时返回错误。
+async fn post_supplier_payment_in_transaction(
+    db: &Database,
+    payment: &mut SupplierPayment,
+    pending: &[PendingPaymentAllocation],
+    source: PaymentPostSource,
+    actor: &AuditActor,
+    session: &mut ClientSession,
+) -> Result<()> {
+    if payment.status == SupplierPaymentStatus::Reversed {
+        return Err(Error::BusinessLogicError("已冲正付款不能再核销".to_string()));
+    }
+    let existing = db
+        .payment_allocations()
+        .find_allocations_by_payments(&[payment.base.id.clone().into()], session)
+        .await?;
+    let net_allocated = net_payment_allocated(&existing);
+    if net_allocated.checked_add(pending_allocated_total(pending)) > payment.amount {
+        return Err(Error::BusinessLogicError("核销合计超过付款金额".to_string()));
+    }
+
+    let mut entry_balances: HashMap<String, Amount> = HashMap::new();
+    for allocation in &existing {
+        let balance = entry_balances
+            .entry(allocation.payable_entry_id.to_string())
+            .or_insert_with(zero_amount);
+        match allocation.allocation_action {
+            AllocationAction::Apply => *balance = balance.checked_add(allocation.allocated_amount),
+            AllocationAction::Reverse => *balance = balance.checked_sub(allocation.allocated_amount),
+        }
+    }
+
+    let next_seq = existing
+        .iter()
+        .map(|allocation| allocation.allocation_seq)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let mut new_allocations = Vec::with_capacity(pending.len());
+    for (index, line) in pending.iter().enumerate() {
+        let entry = db
+            .payable_entries()
+            .find_by_id(&line.payable_entry_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
+        let account = db
+            .payable_accounts()
+            .find_by_id(&entry.payable_account_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
+        if account.supplier_id != payment.supplier_id {
+            return Err(Error::BusinessLogicError("禁止跨供应商核销".to_string()));
+        }
+        let allocated = entry_balances
+            .entry(entry.base.id.clone())
+            .or_insert_with(zero_amount);
+        if allocated.checked_add(line.allocated_amount) > entry.amount {
+            return Err(Error::BusinessLogicError(
+                "核销金额超过应付分录开放余额".to_string(),
+            ));
+        }
+        *allocated = allocated.checked_add(line.allocated_amount);
+        new_allocations.push(PaymentAllocation::new(
+            PaymentAllocationId::new(next_id()),
+            PaymentAllocationData {
+                supplier_payment_id: payment.base.id.clone().into(),
+                payable_entry_id: line.payable_entry_id.clone(),
+                allocation_seq: next_seq + index as u32,
+                allocation_action: AllocationAction::Apply,
+                allocated_amount: line.allocated_amount,
+                allocated_at: Instant::now(),
+                reverses_allocation_id: None,
+            },
+        )?);
+    }
+
+    let mut affected_accounts = HashSet::new();
+    for allocation in &new_allocations {
+        let entry = db
+            .payable_entries()
+            .find_by_id(&allocation.payable_entry_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("应付分录不存在".to_string()))?;
+        let applied = db
+            .payable_accounts()
+            .apply_settlement(
+                &entry.payable_account_id,
+                &allocation.allocated_amount,
+                actor.id(),
+                session,
+            )
+            .await?;
+        if !applied {
+            return Err(Error::BusinessLogicError(
+                "子账剩余开放余额不足，核销被拒绝".to_string(),
+            ));
+        }
+        affected_accounts.insert(entry.payable_account_id);
+    }
+    for account_id in affected_accounts {
+        payment_task::sync_purchase_payment_task(db, &account_id, session).await?;
+    }
+    match source {
+        PaymentPostSource::ExecutionTask => payment.post_from_execution(pending)?,
+    }
+    db.supplier_payments().update(payment, session).await?;
+    for allocation in &new_allocations {
+        db.payment_allocations().create(allocation, session).await?;
+    }
+    let audit = actor.clone().resource_log(
+        "supplier_payment.post",
+        "supplier_payment",
+        payment.base.id.clone(),
+    )?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(())
+}
+
+/// 把付款核销请求行转换为强类型分配行。
+///
+/// # 错误
+/// 任一金额非正时返回校验错误。
+fn pending_allocations_from_request(
+    lines: &[PaymentAllocationLineRequest],
+) -> Result<Vec<PendingPaymentAllocation>> {
+    lines
+        .iter()
+        .map(|line| {
+            PendingPaymentAllocation::new(line.payable_entry_id.clone(), line.allocated_amount)
+                .map_err(Into::into)
+        })
+        .collect()
+}
+
+/// 解析供应商在当前业务日唯一生效的默认收款账户。
+///
+/// # 错误
+/// 供应商不存在、未配置默认账户或出现多个默认账户时失败关闭。
+async fn resolve_current_payment_recipient(
+    db: &Database,
+    supplier_id: &SupplierAccountId,
+    executor: &mut dyn Executor,
+) -> Result<PartyBankAccount> {
+    let supplier = db
+        .supplier_accounts()
+        .find_by_id(supplier_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+    resolve_optional_party_payment_recipient(db, &supplier.party_id, executor)
+        .await?
+        .ok_or_else(|| Error::BusinessLogicError("供应商未配置当前默认收款账户，无法付款".to_string()))
+}
+
+/// 为只读任务/详情投影解析供应商当前默认收款账户。
+///
+/// 供应商已软删除或缺失时返回空，保证历史应付仍可读取；付款执行必须调用
+/// [`resolve_current_payment_recipient`] 并严格校验活跃供应商。
+///
+/// # 错误
+/// 出现多个默认账户或仓储读取失败时返回错误。
+async fn resolve_optional_payment_recipient_for_read(
+    db: &Database,
+    supplier_id: &SupplierAccountId,
+    executor: &mut dyn Executor,
+) -> Result<Option<PartyBankAccount>> {
+    let Some(supplier) = db
+        .supplier_accounts()
+        .find_by_id(supplier_id.as_ref(), executor)
+        .await?
+    else {
+        return Ok(None);
+    };
+    resolve_optional_party_payment_recipient(db, &supplier.party_id, executor).await
+}
+
+/// 解析主体当前唯一默认收款账户；未配置时返回空。
+///
+/// # 错误
+/// 出现多个默认账户或仓储读取失败时返回错误。
+async fn resolve_optional_party_payment_recipient(
+    db: &Database,
+    party_id: &PartyId,
+    executor: &mut dyn Executor,
+) -> Result<Option<PartyBankAccount>> {
+    let accounts = db
+        .party_bank_accounts()
+        .list_current_on(party_id, BusinessDate::today(), executor)
+        .await?;
+    let mut defaults = accounts.into_iter().filter(|account| account.is_default);
+    let account = defaults.next();
+    if defaults.next().is_some() {
+        return Err(Error::BusinessLogicError(
+            "供应商存在多个当前默认收款账户，请先修复主数据".to_string(),
+        ));
+    }
+    Ok(account)
+}
+
+/// 在付款事务内校验并占用页面所见收款账户版本。
+///
+/// 该 CAS 写入递增账户版本，使付款事务与默认账户切换、停用、删除或内容修改
+/// 在同一事实行上串行化；任一并发写入成功后，另一方必须刷新重试。
+///
+/// # 错误
+/// 账户身份/版本漂移或 CAS 写入冲突时返回业务冲突。
+async fn lock_expected_payment_recipient(
+    db: &Database,
+    supplier_id: &SupplierAccountId,
+    expected_id: &PartyBankAccountId,
+    expected_version: u64,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut recipient = resolve_current_payment_recipient(db, supplier_id, executor).await?;
+    ensure_expected_payment_recipient(
+        &recipient.base.id,
+        recipient.base.version,
+        expected_id,
+        expected_version,
+    )?;
+    db.party_bank_accounts()
+        .update(&mut recipient, executor)
+        .await
+        .map_err(payment_recipient_lock_error)
+}
+
+/// 把收款账户占用冲突映射为可操作的刷新提示。
+fn payment_recipient_lock_error(error: database::Error) -> Error {
+    match error {
+        database::Error::OptimisticLockingError | database::Error::TransientTransactionConflict(_) => {
+            Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string())
+        }
+        other => other.into(),
+    }
+}
+
+/// 校验页面所见收款账户身份与版本均未变化。
+///
+/// # 错误
+/// 账户事实行发生变化时返回冲突，要求用户重新核对。
+fn ensure_expected_payment_recipient(
+    actual_id: &str,
+    actual_version: u64,
+    expected_id: &PartyBankAccountId,
+    expected_version: u64,
+) -> Result<()> {
+    if actual_id == expected_id.as_ref() && actual_version == expected_version {
+        return Ok(());
+    }
+    Err(Error::ConflictError(
+        "供应商收款账户已变化，请刷新付款任务并重新核对".to_string(),
+    ))
+}
+
+/// 构造不含敏感明文的收款账户摘要。
+fn payment_recipient_view(account: &PartyBankAccount) -> PaymentRecipientView {
+    PaymentRecipientView {
+        bank_account_id: account.base.id.clone(),
+        version: account.base.version,
+        account_name: account.account_name.clone(),
+        bank_name: account.bank_name.clone(),
+        bank_branch_name: account.bank_branch_name.clone(),
+        account_number_masked: masked_bank_account_number(&account.account_number_last4),
+    }
+}
+
+/// 使用账号末四位构造不可恢复的工作台掩码。
+fn masked_bank_account_number(last4: &str) -> String {
+    let last4 = last4.trim();
+    if last4.is_empty() {
+        "********".to_string()
+    } else {
+        format!("********{last4}")
     }
 }
 
@@ -1312,18 +1233,13 @@ fn validate_bank_receipt_pending_requests(requests: &[PendingFileAssetRequest]) 
     Ok(())
 }
 
-/// 解析新付款或既有草稿覆盖字段中的临时回单引用。
+/// 解析本次付款字段中的临时回单引用。
 fn resolve_payment_receipt_references(
     req: &mut CommitSupplierPaymentRequest,
     pending_assets: &PendingFileAssets,
 ) -> Result<HashSet<String>> {
     let mut used = HashSet::new();
-    if let Some(payment) = req.payment.as_mut() {
-        pending_assets.resolve_id(&mut payment.bank_receipt_asset_id, &mut used)?;
-    }
-    if let Some(asset_id) = req.bank_receipt_asset_id.as_mut() {
-        pending_assets.resolve_id(asset_id, &mut used)?;
-    }
+    pending_assets.resolve_id(&mut req.payment.bank_receipt_asset_id, &mut used)?;
     Ok(used)
 }
 
@@ -1484,102 +1400,26 @@ fn pending_allocated_total(allocations: &[PendingPaymentAllocation]) -> Amount {
         .fold(zero_amount(), |sum, line| sum.checked_add(line.allocated_amount))
 }
 
-/// 校验乐观锁版本。
+/// 证明供应商付款为无审批单据并持久化未绑定注册行。
 ///
 /// # 错误
-/// 不一致时返回冲突。
-fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
-    if actual == expected {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "数据已被其他请求修改，请刷新后重试".to_string(),
-    ))
-}
-
-/// 在创建事务内写入付款单、绑定发布定义并登记单据。
-///
-/// 绑定失败必须回滚业务实体，不得留下以后补流程的单据。
-///
-/// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误。
-async fn persist_created_supplier_payment(
+/// 政策不是 `NO_APPROVAL`、绑定端口意外返回定义或注册写入失败时返回错误。
+async fn persist_unbound_supplier_payment_document(
     db: &Database,
     rbac: &SharedRbacService,
-    payment: SupplierPayment,
-    actor: AuditActor,
-) -> Result<()> {
-    let organization_id = load_supplier_responsible_org_id(db, &payment.supplier_id).await?;
-    let bind_command = BindPublishedDefinitionCommand {
-        document_type: DocumentType::SupplierPayment,
-        business_object_id: payment.base.id.clone(),
-        business_object_version: payment.base.version,
-        context: BindingRevalidationContext {
-            organization_id,
-            creator_id: actor.id().to_string(),
-        },
-    };
-    let document = new_registered_document(
-        &payment.base.id,
-        DocumentType::SupplierPayment,
-        payment.payment_no.clone(),
-    )?;
-    let audit = actor.clone().resource_log(
-        "supplier_payment.create",
-        "supplier_payment",
-        payment.base.id.clone(),
-    )?;
-    let db = db.clone();
-    let rbac = rbac.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move {
-                persist_bound_supplier_payment_document(&db, &rbac, document, &bind_command, &actor, session)
-                    .await?;
-                db.supplier_payments().create(&payment, session).await?;
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<(), crate::errors::Error>(())
-            })
-        })
-        .await
-}
-
-/// 查询供应商往来主体作为责任组织。
-///
-/// # 错误
-/// 供应商不存在或往来主体为空时返回错误。
-async fn load_supplier_responsible_org_id(db: &Database, supplier_id: &SupplierAccountId) -> Result<String> {
-    let supplier = db
-        .supplier_accounts()
-        .find_by_id(supplier_id, &mut NoTransaction)
-        .await?
-        .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
-    supplier_payment_responsible_org_id(supplier.party_id.as_ref())
-}
-
-/// 查询发布定义、写入绑定并持久化注册行。
-///
-/// # 错误
-/// 无发布定义或绑定失败时返回错误。
-async fn persist_bound_supplier_payment_document(
-    db: &Database,
-    rbac: &SharedRbacService,
-    mut document: BusinessDocument,
+    document: BusinessDocument,
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<entities::document_registry::business_document::ApprovalDefinitionBinding> {
-    let _ = supplier_payment_object_readable(
-        &bind_command.context.organization_id,
-        &bind_command.context.creator_id,
-    )?;
+) -> Result<()> {
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
-    let binding = binding.ok_or_else(|| Error::Internal("供应商付款单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(&mut document, binding.clone())?;
-    db.business_documents().create(&document, session).await?;
-    Ok(binding)
+    if binding.is_some() || document.approval_binding.is_some() {
+        return Err(Error::Internal(
+            "供应商付款为 NO_APPROVAL，不得写入审批绑定".to_string(),
+        ));
+    }
+    persist_registered_document(db, &document, session).await
 }
 
 /// 计算付款单净已核销合计（`APPLY` 加、`REVERSE` 减）。
@@ -1649,35 +1489,12 @@ fn purchase_invoice_allocation_view(
 }
 
 #[cfg(test)]
-mod supplier_payment_approval_tests {
+mod supplier_payment_execution_tests {
     use super::{
-        execute_supplier_payment_domain_action, start_supplier_payment_approval,
-        validate_bank_receipt_metadata, PayableService,
+        ensure_expected_payment_recipient, masked_bank_account_number, validate_bank_receipt_metadata,
     };
-    use crate::approval::policy::ApprovalDomainAction;
-    use entities::common::time::Instant;
     use entities::file_asset::{RetentionClass, SensitivityClass};
-    use entities::ids::{FileAssetId, PayableEntryId, SupplierAccountId, SupplierPaymentId};
-    use entities::money::Amount;
-    use entities::payable::{
-        PendingPaymentAllocation, SupplierPayment, SupplierPaymentData, SupplierPaymentStatus,
-    };
-    use std::str::FromStr;
-
-    fn draft_payment() -> SupplierPayment {
-        SupplierPayment::new(
-            SupplierPaymentId::new("sp-1"),
-            SupplierPaymentData {
-                payment_no: "SP-1".into(),
-                supplier_id: SupplierAccountId::new("sup-1"),
-                paid_at: Instant::from_unix_secs(1),
-                amount: Amount::from_str("100").expect("金额合法"),
-                bank_reference: None,
-                bank_receipt_asset_id: FileAssetId::new("asset-receipt-1"),
-            },
-        )
-        .expect("草稿必须可构造")
-    }
+    use entities::ids::PartyBankAccountId;
 
     #[test]
     fn bank_receipt_requires_sensitive_long_term_image() {
@@ -1711,124 +1528,125 @@ mod supplier_payment_approval_tests {
         .is_err());
     }
 
-    /// 创建必须注册 BusinessDocument 并绑定发布定义。
+    /// 付款登记必须注册无审批 BusinessDocument。
     #[test]
-    fn create_registers_document_and_binds_published_definition() {
+    fn commit_registers_unbound_document() {
         let source = include_str!("mod.rs");
         assert!(source.contains("bind_published_definition_on_document_create"));
         assert!(source.contains("new_registered_document"));
         assert!(source.contains("DocumentType::SupplierPayment"));
-        assert!(source.contains("persist_created_supplier_payment"));
+        assert!(source.contains("persist_unbound_supplier_payment_document"));
+        assert!(source.contains("供应商付款为 NO_APPROVAL"));
     }
 
-    /// 对象读取权必须已接线；组织覆盖时绑定闸门不得报未接线。
+    /// 付款必须绑定执行任务并在同一事务直接过账。
     #[test]
-    fn object_read_is_wired_for_binding() {
-        use crate::approval::business_adapter::{
-            adapter_object_read_decision, adapter_spec_of, revalidate_assignee_binding_access,
-            BindingRevalidationContext,
-        };
-        use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
-        use entities::document_registry::DocumentType;
-        use entities::ids::DataScopeId;
-
-        let spec = adapter_spec_of(DocumentType::SupplierPayment).expect("供应商付款必须有适配器");
-        let context = BindingRevalidationContext {
-            organization_id: "org-1".to_string(),
-            creator_id: "creator-1".to_string(),
-        };
-        assert_eq!(
-            adapter_object_read_decision(&spec, &context, "u1").expect("读取权必须已接线"),
-            Some(true)
-        );
-
-        let role_company = DataScope::new(
-            DataScopeId::new("ds-role"),
-            DataScopeData {
-                subject_type: DataScopeSubjectType::Role,
-                subject_id: "role-1".to_string(),
-                scope_type: DataScopeType::Company,
-                scope_targets: Vec::new(),
-            },
-        )
-        .expect("角色范围夹具");
-        let user_org = DataScope::new(
-            DataScopeId::new("ds-user"),
-            DataScopeData {
-                subject_type: DataScopeSubjectType::User,
-                subject_id: "u1".to_string(),
-                scope_type: DataScopeType::Organization,
-                scope_targets: vec!["org-1".to_string()],
-            },
-        )
-        .expect("用户范围夹具");
-        revalidate_assignee_binding_access(
-            &spec,
-            std::slice::from_ref(&user_org),
-            std::slice::from_ref(&role_company),
-            &context,
-            "u1",
-        )
-        .expect("组织覆盖时不得报对象读取权未接线");
+    fn commit_records_task_and_posts_without_approval() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("record_payment_execution"));
+        assert!(production.contains("post_supplier_payment_in_transaction"));
+        assert!(production.contains("PaymentPostSource::ExecutionTask"));
+        assert!(!production.contains("pub async fn submit_supplier_payment"));
+        assert!(!production.contains("prepare_start"));
     }
 
-    /// 提交必须绑定付款执行任务并在同一事务启动审批。
+    /// 收款账号掩码不得泄露除末四位外的内容。
     #[test]
-    fn submit_calls_start_approval_with_subject_version() {
-        let source = include_str!("mod.rs");
-        assert!(source.contains("pub async fn submit_supplier_payment"));
-        assert!(source.contains("record_payment_execution"));
-        assert!(source.contains("payment.approval_subject_version"));
-        assert!(source.contains("prepare_start"));
+    fn recipient_mask_only_contains_last_four() {
+        assert_eq!(masked_bank_account_number("1234"), "********1234");
+        assert_eq!(masked_bank_account_number(""), "********");
     }
 
-    /// 最终动作唯一为 post_supplier_payment，且客户端过账旁路关闭。
+    /// 提交时默认收款账户身份或版本发生漂移必须失败关闭。
     #[test]
-    fn final_action_is_post_supplier_payment() {
-        let source = include_str!("mod.rs");
-        assert!(source.contains("pub async fn post_supplier_payment"));
-        assert!(source.contains("payment.mark_posted"));
-        assert!(source.contains("SupplierPaymentPost"));
-        assert!(source.contains("pending_allocations"));
-        assert!(PayableService::reject_client_post().is_err());
-    }
-
-    /// 撤回必须调用统一 cancel 并回到草稿。
-    #[test]
-    fn cancel_uses_unified_port() {
-        let source = include_str!("mod.rs");
-        assert!(source.contains("pub async fn cancel_supplier_payment_approval"));
-        assert!(source.contains("prepare_cancel"));
-        assert!(source.contains("persist_supplier_payment_cancel"));
-        let _ = PayableService::reject_client_post();
-        let mut payment = draft_payment();
-        start_supplier_payment_approval(
-            &mut payment,
-            vec![PendingPaymentAllocation::new(
-                PayableEntryId::new("pe-1"),
-                Amount::from_str("10").expect("金额合法"),
-            )
-            .expect("分配合法")],
+    fn recipient_identity_or_version_drift_is_rejected() {
+        assert!(ensure_expected_payment_recipient(
+            "bank-account-1",
+            7,
+            &PartyBankAccountId::new("bank-account-1"),
+            7,
         )
-        .unwrap();
-        execute_supplier_payment_domain_action(
-            &mut payment,
-            ApprovalDomainAction::SupplierPaymentCancelApproval,
+        .is_ok());
+        assert!(ensure_expected_payment_recipient(
+            "bank-account-2",
+            7,
+            &PartyBankAccountId::new("bank-account-1"),
+            7,
         )
-        .unwrap();
-        assert_eq!(payment.status, SupplierPaymentStatus::Draft);
-        assert_eq!(payment.approval_subject_version, 1);
+        .is_err());
+        assert!(ensure_expected_payment_recipient(
+            "bank-account-1",
+            8,
+            &PartyBankAccountId::new("bank-account-1"),
+            7,
+        )
+        .is_err());
     }
 
-    /// 生产代码不得保留草稿直接过账或待复核旁路。
+    /// 列表投影不得逐行解析收款账户；收款账户只允许详情/任务路径加载。
     #[test]
-    fn production_closes_draft_post_and_pending_review() {
+    fn list_views_omit_payment_recipient_lookups() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("payable_account_view(row.id, false)"));
+        assert!(production.contains("supplier_payment_view(row.id, false)"));
+        assert!(production.contains("payable_account_view(id.to_string(), true)"));
+        assert!(production.contains("supplier_payment_view(id.to_string(), true)"));
+    }
+
+    /// 历史应付读取不得因供应商已软删除而返回 NotFound。
+    #[test]
+    fn historical_payable_recipient_projection_is_nonblocking() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let read_projection = production
+            .split("async fn resolve_optional_payment_recipient_for_read")
+            .nth(1)
+            .expect("只读收款账户解析")
+            .split("async fn resolve_optional_party_payment_recipient")
+            .next()
+            .expect("只读解析函数体");
+        assert!(read_projection.contains("return Ok(None)"));
+        assert!(!read_projection.contains("Error::NotFound"));
+    }
+
+    /// 事务内收款账户校验必须以页面版本执行真实 CAS 写入。
+    #[test]
+    fn payment_recipient_lock_performs_cas_write() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        let lock = production
+            .split("async fn lock_expected_payment_recipient")
+            .nth(1)
+            .expect("收款账户事务锁")
+            .split("fn payment_recipient_lock_error")
+            .next()
+            .expect("收款账户事务锁函数体");
+        assert!(lock.contains("expected_version"));
+        assert!(lock.contains(".update(&mut recipient, executor)"));
+    }
+
+    /// 正常付款生产代码不得创建付款审批实例或暴露审批命令。
+    #[test]
+    fn production_has_no_supplier_payment_approval_commands() {
         let production = include_str!("mod.rs")
             .split("#[cfg(test)]")
             .next()
             .expect("生产代码");
         assert!(!production.contains("SupplierPaymentStatus::PendingReview"));
-        assert!(!production.contains("Draft =>"));
-        assert!(!production.contains("pending_review"));
+        assert!(!production.contains("submit_supplier_payment"));
+        assert!(!production.contains("cancel_supplier_payment_approval"));
+        assert!(!production.contains("start_supplier_payment_approval"));
+        assert!(!production.contains("pub async fn post_supplier_payment"));
+        assert!(!production.contains("SupplierPaymentStatus::InApproval"));
     }
 }

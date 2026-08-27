@@ -3,7 +3,7 @@
  * 会话共享状态见 api/shared；DTO 映射见 api/mappers。
  */
 
-import { apiGet } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
 import type { Page } from "@/lib/api"
 import {
     filterSummary,
@@ -270,8 +270,44 @@ export async function fetchPayableDetail(
     }
 }
 
+/** 付款任务内揭示收款账号所需的冻结身份。 */
+export type RevealPaymentRecipientInput = Readonly<{
+    payableAccountId: string
+    workItemId: string
+    expectedTaskVersion: string
+    expectedBankAccountId: string
+    expectedBankAccountVersion: number
+}>
+
 /**
- * 读取供应商付款详情，含只读审批投影。缺失时返回 null。
+ * 在当前付款任务责任校验后读取完整收款账号。
+ *
+ * 后端同时校验任务版本、当前负责人和页面所见账户身份，并记录敏感数据审计。
+ */
+export async function revealPaymentRecipient(
+    input: RevealPaymentRecipientInput,
+): Promise<string> {
+    const result = await apiPost<{
+        bank_account_id: string
+        account_number: string
+    }>(
+        `/admin/payable-accounts/${encodeURIComponent(input.payableAccountId)}/payment-recipient/reveal`,
+        {
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_bank_account_id: input.expectedBankAccountId,
+            expected_bank_account_version: input.expectedBankAccountVersion,
+        },
+        { cache: "no-store" },
+    )
+    if (result.bank_account_id !== input.expectedBankAccountId) {
+        throw new Error("收款账户已变化，请刷新付款任务后重新核对")
+    }
+    return result.account_number
+}
+
+/**
+ * 读取供应商付款详情。缺失时返回 null。
  *
  * @param paymentId 付款主键。
  */
@@ -295,7 +331,6 @@ export async function fetchAllocationSession(input: {
     purchaseOrderId?: string
     returnTo?: string
     fromWorkspace?: string
-    existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
 }): Promise<AllocationSessionView> {
@@ -346,28 +381,7 @@ export async function fetchAllocationSession(input: {
     let existingAmount: string | undefined
     let existingUnallocated: string | undefined
     let existingDocumentNo: string | undefined
-    let existingPaymentVersion: number | undefined
-    let existingBankReceipt: AllocationSessionView["existingBankReceipt"]
-    let approval: AllocationSessionView["approval"]
-
-    if (input.existingPaymentId) {
-        const p = await apiGet<BackendSupplierPayment>(
-            `/admin/supplier-payments/${encodeURIComponent(input.existingPaymentId)}`,
-        )
-        existingAmount = p.amount
-        existingUnallocated = p.unallocated_amount
-        existingDocumentNo = p.payment_no
-        existingPaymentVersion = p.version
-        existingBankReceipt = p.bank_receipt
-            ? {
-                  assetId: p.bank_receipt.asset_id,
-                  fileName: p.bank_receipt.file_name,
-                  contentType: p.bank_receipt.content_type,
-                  byteSize: p.bank_receipt.byte_size,
-              }
-            : undefined
-        approval = projectPayment(p).approval
-    } else if (input.existingInvoiceId) {
+    if (input.existingInvoiceId) {
         const inv = await apiGet<BackendInvoice>(
             `/admin/invoices/${encodeURIComponent(input.existingInvoiceId)}`,
         )
@@ -401,14 +415,10 @@ export async function fetchAllocationSession(input: {
         fromWorkspace: input.fromWorkspace,
         dataWatermark: `wm-sess-${pool.length}`,
         queriedAt: new Date().toISOString(),
-        existingPaymentId: input.existingPaymentId,
         existingInvoiceId: input.existingInvoiceId,
         existingAmount,
         existingUnallocated,
         existingDocumentNo,
-        existingPaymentVersion,
-        existingBankReceipt,
-        approval,
     }
     sessions.set(draftSessionId, view)
     return view

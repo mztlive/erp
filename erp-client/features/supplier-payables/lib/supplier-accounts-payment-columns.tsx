@@ -9,26 +9,15 @@ import { formatDateTime } from "@/lib/datetime"
 import type {
     PaymentRow,
     ReverseTarget,
-    SessionState,
     SupplierRefundRequest,
 } from "@/features/supplier-payables/types"
 
 export function buildPaymentColumns(input: {
-    returnTo?: string
-    fromWorkspace?: string
-    openSession: (next: SessionState) => void
     openPaymentPreview: (paymentId: string) => void
     setReverseTarget: Dispatch<SetStateAction<ReverseTarget | null>>
     setRefundRequest?: Dispatch<SetStateAction<SupplierRefundRequest | null>>
 }): ColumnDef<PaymentRow>[] {
-    const {
-        returnTo,
-        fromWorkspace,
-        openSession,
-        openPaymentPreview,
-        setReverseTarget,
-        setRefundRequest,
-    } = input
+    const { openPaymentPreview, setReverseTarget, setRefundRequest } = input
     return [
         {
             id: "doc",
@@ -56,10 +45,7 @@ export function buildPaymentColumns(input: {
             },
             cell: ({ row }) => (
                 <div className="text-end text-sm">
-                    <MoneyValue
-                        value={row.original.amount}
-                        taxBasis="gross"
-                    />
+                    <MoneyValue value={row.original.amount} taxBasis="gross" />
                     <div className="text-xs text-muted-foreground">
                         未分配{" "}
                         <MoneyValue value={row.original.unallocatedAmount} />
@@ -89,9 +75,7 @@ export function buildPaymentColumns(input: {
                     description={
                         row.original.status === "POSTED"
                             ? "已过账不可编辑；纠错请冲正"
-                            : row.original.status === "IN_APPROVAL"
-                              ? "审批中，只读服务端当前审批人"
-                              : undefined
+                            : undefined
                     }
                 />
             ),
@@ -102,11 +86,7 @@ export function buildPaymentColumns(input: {
             meta: { label: "时间", width: "default", numeric: true },
             cell: ({ row }) => (
                 <span className="num text-xs text-muted-foreground">
-                    {formatDateTime(
-                        row.original.paidAt,
-                        "full",
-                        "passthrough",
-                    )}
+                    {formatDateTime(row.original.paidAt, "full", "passthrough")}
                 </span>
             ),
         },
@@ -126,26 +106,6 @@ export function buildPaymentColumns(input: {
                             }
                         >
                             查看
-                        </Button>
-                    ) : null}
-                    {row.original.allowedActions.includes(
-                        "CONTINUE_ALLOCATE",
-                    ) ? (
-                        <Button
-                            type="button"
-                            size="xs"
-                            onClick={() =>
-                                openSession({
-                                    track: "payment",
-                                    supplierId: row.original.supplierId,
-                                    existingPaymentId:
-                                        row.original.paymentId,
-                                    returnTo,
-                                    fromWorkspace,
-                                })
-                            }
-                        >
-                            继续核销
                         </Button>
                     ) : null}
                     {row.original.allowedActions.includes("REVERSE") ? (

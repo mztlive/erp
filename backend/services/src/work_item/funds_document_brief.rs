@@ -12,7 +12,7 @@ use database::{
 use entities::common::time::BusinessDate;
 use entities::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
 use entities::party::Party;
-use entities::payable::{PayableAccount, PayableEntry, PendingPaymentAllocation, SupplierPayment};
+use entities::payable::{PayableAccount, PayableEntry, PaymentAllocation, SupplierPayment};
 use entities::receivable::{
     CustomerReceipt, EntryDirection as ReceivableEntryDirection, PendingReceiptAllocation, ReceivableAccount,
     ReceivableEntry,
@@ -337,7 +337,7 @@ impl WorkItemService {
         Ok(())
     }
 
-    /// 供应商付款审批任务的对象事实。
+    /// 供应商付款事实简报。
     ///
     /// # 参数
     /// * `keys` - 本批任务引用的对象键
@@ -376,15 +376,20 @@ impl WorkItemService {
             .map(|item| item.supplier_id.to_string())
             .collect::<Vec<_>>();
         let supplier_names = self.supplier_display_names(&supplier_ids, executor).await?;
+        let allocation_lines = self.payment_allocation_lines(&payments, executor).await?;
         for payment in payments {
             let supplier = supplier_names.get(&payment.supplier_id.to_string()).cloned();
+            let lines = allocation_lines
+                .get(&payment.base.id)
+                .cloned()
+                .unwrap_or_default();
             let mut fact = ObjectFact::new(
                 payment.base.id.clone(),
                 format!("供应商付款 {}", payment.payment_no),
                 created_by.get(&payment.base.id).cloned().unwrap_or_default(),
             );
             fact.counterparty_label = supplier.clone();
-            fact.impact_summary = Some("不审批则付款不能过账、不能核销应付".to_string());
+            fact.impact_summary = Some("付款已登记并过账；纠错须走付款冲正或供应商退款".to_string());
             let mut sections = Vec::new();
             push_section(&mut sections, "供应商", supplier.as_deref(), false);
             push_section(
@@ -400,14 +405,16 @@ impl WorkItemService {
                 false,
             );
             push_section(&mut sections, "凭证", payment.bank_reference.as_deref(), false);
-            if !payment.pending_allocations.is_empty() {
+            if !lines.is_empty() {
                 push_section(
                     &mut sections,
-                    "待核销",
-                    Some(format!("{} 笔", payment.pending_allocations.len())).as_deref(),
+                    "核销事实",
+                    Some(format!("{} 笔", lines.len())).as_deref(),
                     false,
                 );
             }
+            let more_count = lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
+            let lines = lines.into_iter().take(BRIEF_LINE_LIMIT).collect();
             fact.brief_source = Some(ObjectBriefSource {
                 customer: None,
                 amount_label: Some(format_yuan(&payment.amount)),
@@ -417,8 +424,8 @@ impl WorkItemService {
                     Some(format_yuan(&payment.amount)),
                     payment.bank_reference.clone().and_then(|text| non_empty(&text)),
                 ]),
-                lines: Vec::new(),
-                more_count: 0,
+                lines,
+                more_count,
                 submitter_name: None,
             });
             facts.insert((ObjectKind::SupplierPayment, payment.base.id.clone()), fact);
@@ -1482,10 +1489,11 @@ impl WorkItemService {
             .into_iter()
             .map(|payment| {
                 let id = payment.base.id.clone();
-                let allocation_summary = if payment.pending_allocations.is_empty() {
+                let allocation_count = lines.get(&id).map_or(0, Vec::len);
+                let allocation_summary = if allocation_count == 0 {
                     "未记录核销分配".to_string()
                 } else {
-                    format!("已关联 {} 笔核销", payment.pending_allocations.len())
+                    format!("已关联 {allocation_count} 笔核销事实")
                 };
                 (
                     id.clone(),
@@ -1568,7 +1576,7 @@ impl WorkItemService {
             .collect())
     }
 
-    /// 把付款待过账核销转成按付款单分组的采购单简报行。
+    /// 把已过账付款核销事实转成按付款单分组的采购单简报行。
     ///
     /// # 参数
     /// * `payments` - 本批付款单
@@ -1584,14 +1592,21 @@ impl WorkItemService {
         payments: &[SupplierPayment],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, Vec<BriefLine>>> {
-        let entry_ids = payments
+        if payments.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let payment_ids = payments
             .iter()
-            .flat_map(|payment| {
-                payment
-                    .pending_allocations
-                    .iter()
-                    .map(|item| item.payable_entry_id.to_string())
-            })
+            .map(|payment| payment.base.id.clone().into())
+            .collect::<Vec<_>>();
+        let allocations = self
+            .db
+            .payment_allocations()
+            .find_allocations_by_payments(&payment_ids, executor)
+            .await?;
+        let entry_ids = allocations
+            .iter()
+            .map(|allocation| allocation.payable_entry_id.to_string())
             .collect::<Vec<_>>();
         let entries = self
             .db
@@ -1621,14 +1636,14 @@ impl WorkItemService {
         Ok(payments
             .iter()
             .map(|payment| {
+                let payment_allocations = allocations
+                    .iter()
+                    .filter(|allocation| allocation.supplier_payment_id.as_ref() == payment.base.id)
+                    .cloned()
+                    .collect::<Vec<_>>();
                 (
                     payment.base.id.clone(),
-                    payment_brief_lines(
-                        &payment.pending_allocations,
-                        &entry_by_id,
-                        &account_by_id,
-                        &purchase_nos,
-                    ),
+                    payment_brief_lines(&payment_allocations, &entry_by_id, &account_by_id, &purchase_nos),
                 )
             })
             .collect())
@@ -1864,10 +1879,10 @@ fn receipt_brief_lines(
         .collect()
 }
 
-/// 把待过账付款核销转成采购单号与核销金额。
+/// 把已过账付款核销事实转成采购单号、动作与金额。
 ///
 /// # 参数
-/// * `allocations` - 待过账付款核销
+/// * `allocations` - 已过账付款核销事实
 /// * `entries` - 应付分录 ID 到分录
 /// * `accounts` - 应付子账 ID 到子账
 /// * `purchase_nos` - 采购单 ID 到单号
@@ -1878,7 +1893,7 @@ fn receipt_brief_lines(
 /// # 错误
 /// 无。
 fn payment_brief_lines(
-    allocations: &[PendingPaymentAllocation],
+    allocations: &[PaymentAllocation],
     entries: &HashMap<String, PayableEntry>,
     accounts: &HashMap<String, PayableAccount>,
     purchase_nos: &HashMap<String, String>,
@@ -1893,8 +1908,8 @@ fn payment_brief_lines(
                 .cloned();
             BriefLine {
                 title: purchase_no
-                    .map(|no| format!("采购单 {no}"))
-                    .unwrap_or_else(|| "采购单号待补全".to_string()),
+                    .map(|no| format!("{}采购单 {no}", allocation.allocation_action.label()))
+                    .unwrap_or_else(|| format!("{}采购单号待补全", allocation.allocation_action.label())),
                 quantity: Some(format_yuan(&allocation.allocated_amount)),
                 due_label: None,
             }

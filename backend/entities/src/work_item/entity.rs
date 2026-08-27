@@ -692,10 +692,10 @@ impl WorkItemType {
         Some(&[
             "payable_account:list",
             "payable_account:detail",
+            "party_bank_account:reveal",
             "supplier_payment:list",
             "supplier_payment:detail",
-            "supplier_payment:create",
-            "supplier_payment:submit",
+            "supplier_payment:commit",
         ])
     }
 
@@ -2088,7 +2088,7 @@ mod tests {
                 .unwrap()
                 .last()
                 .copied(),
-            Some("supplier_payment:submit")
+            Some("supplier_payment:commit")
         );
         assert!(WorkItemType::SupplierPaymentExecution.uses_explicit_owner_authorization());
     }

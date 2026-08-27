@@ -179,6 +179,8 @@ pub struct PayableAccountView {
     pub supplier_no: Option<String>,
     /// 供应商名称（主数据缺失时为空）。
     pub supplier_name: Option<String>,
+    /// 当前默认收款账户；未配置时为空并禁止付款。
+    pub payment_recipient: Option<PaymentRecipientView>,
     /// 来源类型。
     pub source_type: PayableSourceType,
     /// 含税应付总额。
@@ -201,6 +203,51 @@ pub struct PayableAccountView {
     pub created_at: u64,
     /// 应付分录。
     pub entries: Vec<PayableEntryView>,
+}
+
+/// 付款工作台使用的收款账户安全摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PaymentRecipientView {
+    /// 收款银行账户事实行主键，用于提交时检测主数据漂移。
+    pub bank_account_id: String,
+    /// 收款账户乐观锁版本，用于提交时阻止并发主数据变更。
+    pub version: u64,
+    /// 收款户名。
+    pub account_name: String,
+    /// 开户银行。
+    pub bank_name: String,
+    /// 开户支行。
+    pub bank_branch_name: Option<String>,
+    /// 收款账号掩码。
+    pub account_number_masked: String,
+}
+
+/// 付款工作台揭示完整收款账号请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct RevealPaymentRecipientRequest {
+    /// 当前开放付款执行任务。
+    pub work_item_id: WorkItemId,
+    /// 查询所得任务乐观锁版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
+    pub expected_task_version: String,
+    /// 页面展示的收款账户事实行主键。
+    #[validate(custom(function = "non_blank", message = "收款账户不能为空"))]
+    #[validate(length(max = 64, message = "收款账户标识不能超过 64 个字符"))]
+    pub expected_bank_account_id: String,
+    /// 页面展示的收款账户乐观锁版本。
+    #[validate(range(min = 1, message = "收款账户版本必须大于0"))]
+    pub expected_bank_account_version: u64,
+}
+
+/// 付款工作台短时揭示的完整收款账号。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PaymentRecipientRevealView {
+    /// 收款银行账户事实行主键。
+    pub bank_account_id: String,
+    /// 完整收款账号。只允许响应当前任务责任人，不得写入日志或持久化副本。
+    pub account_number: String,
 }
 
 /// 应付往来子账列表查询参数。
@@ -265,7 +312,7 @@ impl PayableAccountListParams {
 // 供应商付款单（supplier_payment）
 // ---------------------------------------------------------------------------
 
-/// 供应商付款单创建请求（W12 登记草稿付款；过账与分配走 `post`）。
+/// 供应商付款登记字段（仅作为付款任务原子提交的一部分使用）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSupplierPaymentRequest {
     /// 付款单号（唯一，幂等键）。
@@ -283,7 +330,7 @@ pub struct CreateSupplierPaymentRequest {
     pub bank_receipt_asset_id: FileAssetId,
 }
 
-/// 付款核销分配请求行（§8.3-1：同一供应商、净分配不超过付款金额）。
+/// 付款核销分配请求行（§8.3-1：同一供应商、分配合计等于付款金额）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PaymentAllocationLineRequest {
     /// 被核销应付分录。
@@ -292,39 +339,9 @@ pub struct PaymentAllocationLineRequest {
     pub allocated_amount: Amount,
 }
 
-/// 供应商付款过账请求（仅由最终通过动作内部消费冻结分配；HTTP 旁路已关闭）。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct PostSupplierPaymentRequest {
-    /// 核销分配行（允许保留未分配余额）。
-    #[validate(length(min = 1, message = "至少提供一条核销分配"))]
-    pub allocations: Vec<PaymentAllocationLineRequest>,
-}
-
-/// 供应商付款提交审批请求。客户端不得选择定义或审批人。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[serde(deny_unknown_fields)]
-pub struct SubmitSupplierPaymentRequest {
-    /// 当前开放付款执行任务。
-    pub work_item_id: WorkItemId,
-    /// 查询所得任务乐观锁版本。
-    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
-    #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
-    pub expected_task_version: String,
-    /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub expected_version: u64,
-    /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
-    pub idempotency_key: String,
-    /// 提交时冻结的待过账核销分配。
-    #[validate(length(min = 1, message = "至少提供一条核销分配"))]
-    pub allocations: Vec<PaymentAllocationLineRequest>,
-}
-
-/// 供应商付款原子创建并提交审批请求。
+/// 供应商付款原子登记并过账请求。
 ///
-/// 已有草稿提交 `payment_id + expected_version`；新登记提交完整 `payment`。
-/// 服务端在一个事务内完成绑定、创建、冻结分配、审批启动与审计。
+/// 服务端在一个事务内完成任务责任校验、收款账户冻结、付款、核销与审计。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CommitSupplierPaymentRequest {
@@ -334,32 +351,18 @@ pub struct CommitSupplierPaymentRequest {
     #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
     #[validate(length(max = 20, message = "任务版本不能超过 20 个字符"))]
     pub expected_task_version: String,
-    /// 已有付款草稿主键。
-    pub payment_id: Option<String>,
-    /// 已有草稿期望乐观锁版本。
-    pub expected_version: Option<u64>,
-    /// 新付款完整字段；提交已有草稿时为空。
-    pub payment: Option<CreateSupplierPaymentRequest>,
-    /// 已有草稿补充或替换的银行回单；新付款使用 `payment.bank_receipt_asset_id`。
-    pub bank_receipt_asset_id: Option<FileAssetId>,
+    /// 页面展示的当前默认收款账户；提交时不一致必须刷新重试。
+    #[validate(custom(function = "non_blank", message = "收款账户不能为空"))]
+    #[validate(length(max = 64, message = "收款账户标识不能超过 64 个字符"))]
+    pub expected_payee_bank_account_id: String,
+    /// 页面展示的当前默认收款账户乐观锁版本。
+    #[validate(range(min = 1, message = "收款账户版本必须大于0"))]
+    pub expected_payee_bank_account_version: u64,
+    /// 本次付款完整字段。
+    pub payment: CreateSupplierPaymentRequest,
     /// 提交时冻结的待过账核销分配。
     #[validate(length(min = 1, message = "至少提供一条核销分配"))]
     pub allocations: Vec<PaymentAllocationLineRequest>,
-    /// 业务请求幂等键。
-    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
-    pub idempotency_key: String,
-}
-
-/// 撤回供应商付款审批请求。原因必填。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[serde(deny_unknown_fields)]
-pub struct CancelSupplierPaymentApprovalRequest {
-    /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub expected_version: u64,
-    /// 非空撤回原因。
-    #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
-    pub reason: String,
     /// 业务请求幂等键。
     #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
     pub idempotency_key: String,
@@ -395,6 +398,8 @@ pub struct SupplierPaymentView {
     pub status: SupplierPaymentStatus,
     /// 收款供应商。
     pub supplier_id: String,
+    /// 付款时冻结的收款账户摘要；历史付款可能为空。
+    pub payment_recipient: Option<PaymentRecipientView>,
     /// 实际付款时间（秒级时间戳）。
     pub paid_at: Instant,
     /// 含税付款金额。
@@ -413,8 +418,6 @@ pub struct SupplierPaymentView {
     pub unallocated_amount: Amount,
     /// 付款核销分配行。
     pub allocations: Vec<PaymentAllocationView>,
-    /// 统一只读审批结构。客户端不得据此选择定义或审批人。
-    pub approval: DocumentApprovalView,
 }
 
 /// 供应商付款银行回单的安全展示元数据。
@@ -428,84 +431,6 @@ pub struct SupplierPaymentBankReceiptView {
     pub content_type: String,
     /// 文件字节大小。
     pub byte_size: u64,
-}
-
-/// 单据详情返回的统一只读审批结构。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalView {
-    /// `PROCESS_REQUIRED` 或 `NO_APPROVAL`。
-    pub requirement: String,
-    /// 创建时冻结的定义摘要；未绑定为空。
-    pub definition: Option<DocumentApprovalDefinitionView>,
-    /// 已启动后的实例摘要；未提交为空。
-    pub instance: Option<DocumentApprovalInstanceView>,
-    /// 有界最近历史。
-    pub recent_history: Vec<DocumentApprovalHistoryItemView>,
-    /// 完整历史分页游标。
-    pub history_page: DocumentApprovalHistoryPageView,
-    /// 服务端允许的动作；不含选择定义或审批人。
-    pub allowed_actions: Vec<String>,
-}
-
-/// 绑定定义只读摘要。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalDefinitionView {
-    /// 定义主键。
-    pub id: String,
-    /// 定义名称。
-    pub name: String,
-    /// 定义业务版本。
-    pub version: u32,
-    /// 节点摘要。单据详情不展开审批人。
-    pub nodes: Vec<DocumentApprovalNodeView>,
-}
-
-/// 定义节点只读摘要。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalNodeView {
-    /// 节点键。
-    pub key: String,
-    /// 节点名称。
-    pub name: String,
-}
-
-/// 运行实例只读摘要。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalInstanceView {
-    /// 实例主键。
-    pub id: String,
-    /// 实例状态。
-    pub status: String,
-    /// 当前轮次。
-    pub current_round_no: u32,
-    /// 当前节点键。
-    pub current_node: Option<String>,
-    /// 当前审批人。
-    pub current_assignee: Option<String>,
-    /// 最近驳回原因。
-    pub latest_rejection: Option<String>,
-}
-
-/// 有界历史项。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalHistoryItemView {
-    /// 执行主键。
-    pub execution_id: String,
-    /// 轮次。
-    pub round_no: u32,
-    /// 节点键。
-    pub node_key: String,
-    /// 结束结果。
-    pub result: String,
-}
-
-/// 完整历史分页。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct DocumentApprovalHistoryPageView {
-    /// 下一页游标。
-    pub next_cursor: Option<String>,
-    /// 是否还有更多。
-    pub has_more: bool,
 }
 
 /// 供应商付款单列表查询参数。
@@ -785,41 +710,62 @@ mod tests {
         assert_eq!(query.paging.page_size, 25);
     }
 
+    /// 付款提交必须携带页面已核对的收款账户身份与版本。
     #[test]
-    fn submit_and_cancel_requests_reject_client_assignee_choice() {
-        use super::{CancelSupplierPaymentApprovalRequest, SubmitSupplierPaymentRequest};
+    fn payment_commit_requires_expected_recipient_account() {
+        use super::CommitSupplierPaymentRequest;
 
-        assert!(
-            serde_json::from_value::<SubmitSupplierPaymentRequest>(serde_json::json!({
-                "work_item_id": "wi-1",
-                "expected_task_version": "3",
-                "expected_version": 1,
-                "idempotency_key": "k1",
-                "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
-                "definition_id": "forged"
-            }))
-            .is_err()
-        );
-        let submit: SubmitSupplierPaymentRequest = serde_json::from_value(serde_json::json!({
+        let without_recipient = serde_json::json!({
             "work_item_id": "wi-1",
             "expected_task_version": "3",
-            "expected_version": 1,
-            "idempotency_key": "k1",
-            "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}]
+            "payment": {
+                "payment_no": "FK-1",
+                "supplier_id": "supplier-1",
+                "paid_at": 1,
+                "amount": "10.00",
+                "bank_reference": null,
+                "bank_receipt_asset_id": "asset-1"
+            },
+            "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
+            "idempotency_key": "k1"
+        });
+        assert!(serde_json::from_value::<CommitSupplierPaymentRequest>(without_recipient).is_err());
+
+        let blank_recipient = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "3",
+            "expected_payee_bank_account_id": " ",
+            "expected_payee_bank_account_version": 1,
+            "payment": {
+                "payment_no": "FK-1",
+                "supplier_id": "supplier-1",
+                "paid_at": 1,
+                "amount": "10.00",
+                "bank_reference": null,
+                "bank_receipt_asset_id": "asset-1"
+            },
+            "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
+            "idempotency_key": "k1"
         }))
-        .unwrap();
-        assert_eq!(submit.work_item_id.to_string(), "wi-1");
-        assert_eq!(submit.expected_task_version, "3");
-        assert_eq!(submit.expected_version, 1);
-        assert!(
-            serde_json::from_value::<CancelSupplierPaymentApprovalRequest>(serde_json::json!({
-                "expected_version": 1,
-                "reason": "改金额",
-                "idempotency_key": "k2",
-                "assignee": "forged"
-            }))
-            .is_err()
-        );
+        .expect("空白收款账户可完成协议反序列化");
+        assert!(blank_recipient.validate().is_err());
+
+        let missing_version = serde_json::json!({
+            "work_item_id": "wi-1",
+            "expected_task_version": "3",
+            "expected_payee_bank_account_id": "bank-1",
+            "payment": {
+                "payment_no": "FK-1",
+                "supplier_id": "supplier-1",
+                "paid_at": 1,
+                "amount": "10.00",
+                "bank_reference": null,
+                "bank_receipt_asset_id": "asset-1"
+            },
+            "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10"}],
+            "idempotency_key": "k1"
+        });
+        assert!(serde_json::from_value::<CommitSupplierPaymentRequest>(missing_version).is_err());
     }
 
     #[test]

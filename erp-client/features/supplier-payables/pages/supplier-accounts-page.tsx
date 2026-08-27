@@ -14,7 +14,6 @@ import {
     useSupplierRefundQuery,
 } from "@/features/supplier-payables/hooks/queries"
 import { isPaymentReversalWorkItem } from "@/features/supplier-payables/lib/payment-reversal-approval"
-import { isSupplierPaymentWorkItem } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { isSupplierRefundWorkItem } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
@@ -145,20 +144,17 @@ export function SupplierAccountsPage() {
         focusedWorkItem.allowedActions.includes("PROCESS")
             ? focusedWorkItem
             : undefined
-    const paymentTaskPayable = data?.payables.find(
-        (item) =>
-            item.payableAccountId === paymentExecutionTask?.businessObjectId,
+    const paymentTaskPayableQuery = usePayableDetailQuery(
+        paymentExecutionTask?.businessObjectId ?? null,
     )
-    const workItemPaymentId = isSupplierPaymentWorkItem(focusedWorkItem)
-        ? focusedWorkItem?.businessObjectId
-        : undefined
+    const paymentTaskPayable = paymentTaskPayableQuery.data?.payable
     const workItemRefundId = isSupplierRefundWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
     const workItemReversalId = isPaymentReversalWorkItem(focusedWorkItem)
         ? focusedWorkItem?.businessObjectId
         : undefined
-    const focusedPaymentId = previewPaymentId ?? workItemPaymentId ?? null
+    const focusedPaymentId = previewPaymentId ?? null
     const focusedRefundId = previewRefundId ?? workItemRefundId ?? null
     const focusedReversalId = previewReversalId ?? workItemReversalId ?? null
     const detailQuery = usePayableDetailQuery(previewPayableId)
@@ -193,6 +189,15 @@ export function SupplierAccountsPage() {
         },
     })
 
+    function closeAllocationSession() {
+        const refreshPaymentContext =
+            session?.track === "payment" && lastResult?.status === "succeeded"
+        closeSession()
+        if (refreshPaymentContext) {
+            void Promise.all([listQuery.refetch(), workItemQuery.refetch()])
+        }
+    }
+
     if (session) {
         return (
             <SupplierAllocationSessionPage
@@ -200,13 +205,16 @@ export function SupplierAccountsPage() {
                 paymentWorkItemId={paymentExecutionTask?.workItemId}
                 expectedPaymentTaskVersion={paymentExecutionTask?.taskVersion}
                 paymentPayableAccountId={paymentExecutionTask?.businessObjectId}
+                paymentRecipient={paymentTaskPayable?.paymentRecipient}
                 paymentTaskPending={
-                    Boolean(workItemId) && workItemQuery.isPending
+                    Boolean(workItemId) &&
+                    (workItemQuery.isPending ||
+                        paymentTaskPayableQuery.isPending)
                 }
-                onClose={closeSession}
+                onClose={closeAllocationSession}
                 onDraftSessionIdChange={syncSessionId}
                 onGoToInvoiceView={() => {
-                    closeSession()
+                    closeAllocationSession()
                     patchUrl({ view: "purchase_invoice" })
                 }}
                 onCompleted={(result) => {
@@ -311,6 +319,9 @@ export function SupplierAccountsPage() {
                         onClearFilters={clearFilters}
                         returnTo={returnTo}
                         fromWorkspace={fromWorkspace}
+                        paymentTaskPayableAccountId={
+                            paymentExecutionTask?.businessObjectId
+                        }
                         openPreview={openPreview}
                         openPaymentPreview={openPaymentPreview}
                         openSession={openSession}
@@ -341,6 +352,9 @@ export function SupplierAccountsPage() {
                 }}
                 returnTo={returnTo}
                 fromWorkspace={fromWorkspace}
+                paymentTaskPayableAccountId={
+                    paymentExecutionTask?.businessObjectId
+                }
                 onClose={closePreview}
                 onOpenSession={openSession}
                 workItemId={focusedWorkItem?.workItemId}
@@ -358,10 +372,7 @@ export function SupplierAccountsPage() {
                             ? `已按当前任务提交决定。${view.latestRejectionReason}`
                             : "已按当前任务提交决定。",
                         reference:
-                            focusedReversalId ??
-                            focusedRefundId ??
-                            focusedPaymentId ??
-                            undefined,
+                            focusedReversalId ?? focusedRefundId ?? undefined,
                         facts: view.currentAssigneeName
                             ? [
                                   {

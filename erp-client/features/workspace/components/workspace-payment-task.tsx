@@ -1,14 +1,24 @@
 "use client"
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
-import { usePayableDetailQuery } from "@/features/supplier-payables/hooks/queries"
+import { PaymentRecipientCard } from "@/features/supplier-payables/components/payment-recipient-card"
+import {
+    supplierPayablesKeys,
+    usePayableDetailQuery,
+} from "@/features/supplier-payables/hooks/queries"
 import { useAllocationSession } from "@/features/supplier-payables/hooks/use-allocation-session"
+import type { PaymentRecipient } from "@/features/supplier-payables/types"
+import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
+import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
+import { workItemKeys } from "@/features/work-items/queries"
+import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 
 import type { WorkspaceWorkItem } from "../types"
@@ -120,13 +130,30 @@ export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
                                 "当前账号没有处理此付款任务的资格。"}
                         </AlertDescription>
                     </Alert>
+                ) : !payable.paymentRecipient ? (
+                    <Alert variant="warning">
+                        <AlertTitle>供应商未配置可用收款账户</AlertTitle>
+                        <AlertDescription>
+                            当前付款任务不能执行。请先在供应商主数据中维护唯一的当前默认收款账户，再刷新任务。
+                        </AlertDescription>
+                    </Alert>
                 ) : (
-                    <WorkspacePaymentSession
-                        key={item.workItemId}
-                        item={item}
-                        supplierId={payable.supplierId}
-                        purchaseOrderId={descriptor.purchaseOrderId}
-                    />
+                    <div className="space-y-4">
+                        <PaymentRecipientCard
+                            key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}`}
+                            payableAccountId={payable.payableAccountId}
+                            workItemId={item.workItemId}
+                            expectedTaskVersion={item.taskVersion}
+                            recipient={payable.paymentRecipient}
+                        />
+                        <WorkspacePaymentSession
+                            key={item.workItemId}
+                            item={item}
+                            supplierId={payable.supplierId}
+                            purchaseOrderId={descriptor.purchaseOrderId}
+                            paymentRecipient={payable.paymentRecipient}
+                        />
+                    </div>
                 )}
             </div>
         </section>
@@ -138,11 +165,14 @@ function WorkspacePaymentSession({
     item,
     supplierId,
     purchaseOrderId,
+    paymentRecipient,
 }: {
     item: WorkspaceWorkItem
     supplierId: string
     purchaseOrderId: string
+    paymentRecipient: PaymentRecipient
 }) {
+    const queryClient = useQueryClient()
     const [draftSessionId, setDraftSessionId] = React.useState<string>()
     const sessionState = useAllocationSession(
         {
@@ -155,9 +185,32 @@ function WorkspacePaymentSession({
             paymentWorkItemId: item.workItemId,
             expectedPaymentTaskVersion: item.taskVersion,
             paymentPayableAccountId: item.businessObjectId,
+            paymentRecipientBankAccountId: paymentRecipient.bankAccountId,
+            paymentRecipientBankAccountVersion: paymentRecipient.version,
         },
         { onDraftSessionIdChange: setDraftSessionId },
     )
+
+    async function startNextPaymentAttempt() {
+        await Promise.all([
+            queryClient.invalidateQueries({
+                queryKey: supplierPayablesKeys.all,
+            }),
+            queryClient.invalidateQueries({
+                queryKey: purchaseOrderKeys.all,
+            }),
+            queryClient.invalidateQueries({
+                queryKey: fulfillmentKeys.all,
+            }),
+            queryClient.invalidateQueries({
+                queryKey: workItemKeys.all,
+            }),
+            queryClient.invalidateQueries({
+                queryKey: workspaceHomeKeys.all,
+            }),
+        ])
+        setDraftSessionId(sessionState.startFreshAttempt())
+    }
 
     if (sessionState.sessionQuery.isPending) {
         return (
@@ -244,10 +297,10 @@ function WorkspacePaymentSession({
             state={sessionState}
             track="payment"
             purchaseOrderId={purchaseOrderId}
+            paymentRecipient={paymentRecipient}
             embedded
             onClose={() => {
-                sessionState.clearResult()
-                void sessionState.sessionQuery.refetch()
+                void startNextPaymentAttempt()
             }}
         />
     )

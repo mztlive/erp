@@ -2817,22 +2817,22 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/payable-accounts/{id}/payment-recipient/reveal",
+                description: "揭示付款任务收款账号",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "reveal",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-payments",
                 description: "查询供应商付款单列表",
                 permission: {
                     resource: "supplier_payment",
                     action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-payments",
-                description: "登记供应商付款草稿",
-                permission: {
-                    resource: "supplier_payment",
-                    action: "create",
                 },
             },
             {
@@ -2859,40 +2859,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 module: "admin",
                 method: "POST",
                 path: "/admin/supplier-payments/commit",
-                description: "原子创建或提交供应商付款审批",
+                description: "登记供应商付款并过账核销",
                 permission: {
                     resource: "supplier_payment",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-payments/{id}/submit",
-                description: "提交供应商付款审批",
-                permission: {
-                    resource: "supplier_payment",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-payments/{id}/cancel-approval",
-                description: "撤回供应商付款审批",
-                permission: {
-                    resource: "supplier_payment",
-                    action: "cancel_approval",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-payments/{id}/post",
-                description: "供应商付款过账并核销",
-                permission: {
-                    resource: "supplier_payment",
-                    action: "post",
+                    action: "commit",
                 },
             },
             {

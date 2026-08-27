@@ -12,9 +12,8 @@ import {
     useSubmitInvoiceMutation,
     useSubmitPaymentMutation,
 } from "@/features/supplier-payables/hooks/queries"
-import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import { readSupplierPaymentApprovalResponsibility } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { buildAllocationIssues } from "@/features/supplier-payables/lib/allocation-validation"
+import { beginFreshAllocationAttempt } from "@/features/supplier-payables/api/shared"
 import {
     BANK_RECEIPT_PENDING_REFERENCE,
     cents,
@@ -36,12 +35,13 @@ export type AllocationSessionParams = {
     purchaseOrderId?: string
     returnTo?: string
     fromWorkspace?: string
-    existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
     paymentWorkItemId?: string
     expectedPaymentTaskVersion?: string
     paymentPayableAccountId?: string
+    paymentRecipientBankAccountId?: string
+    paymentRecipientBankAccountVersion?: number
 }
 
 export type AllocationSessionOptions = {
@@ -64,12 +64,13 @@ export function useAllocationSession(
         purchaseOrderId,
         returnTo,
         fromWorkspace,
-        existingPaymentId,
         existingInvoiceId,
         preselectPayableAccountId,
         paymentWorkItemId,
         expectedPaymentTaskVersion,
         paymentPayableAccountId,
+        paymentRecipientBankAccountId,
+        paymentRecipientBankAccountVersion,
     }: AllocationSessionParams,
     { onCompleted, onDraftSessionIdChange }: AllocationSessionOptions = {},
 ) {
@@ -80,7 +81,6 @@ export function useAllocationSession(
         purchaseOrderId,
         returnTo,
         fromWorkspace,
-        existingPaymentId,
         existingInvoiceId,
         preselectPayableAccountId,
     })
@@ -107,9 +107,6 @@ export function useAllocationSession(
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [result, setResult] = React.useState<FormalSubmitResult | null>(null)
     const [draftHint, setDraftHint] = React.useState<string | null>(null)
-    const [paymentApproval, setPaymentApproval] = React.useState<
-        DocumentApprovalView | undefined
-    >(undefined)
     const idempotencyRef = React.useRef<string | null>(null)
 
     const paymentForm = useAppForm({
@@ -183,7 +180,7 @@ export function useAllocationSession(
         }
         setAmounts((prev) => ({ ...am, ...prev }))
         // 预选目标时同步预填记录金额，避免重复输入（继续核销场景除外）
-        if (!session.existingPaymentId && !session.existingInvoiceId) {
+        if (!session.existingInvoiceId) {
             const prefill = fromCents(prefillSum)
             if (track === "payment") {
                 paymentForm.setFieldValue(
@@ -199,13 +196,10 @@ export function useAllocationSession(
                 )
             }
         }
-        setPaymentApproval(
-            session.track === "payment" ? session.approval : undefined,
-        )
         if (track === "payment") {
             paymentForm.setFieldValue(
                 "bankReceiptAssetId",
-                session.existingBankReceipt?.assetId ?? "",
+                "",
                 HYDRATE_FIELD_OPTIONS,
             )
             paymentForm.setFieldValue(
@@ -233,21 +227,13 @@ export function useAllocationSession(
             )
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        session?.existingUnallocated,
-        session?.existingPaymentId,
-        session?.existingInvoiceId,
-    ])
+    }, [session?.existingUnallocated, session?.existingInvoiceId])
 
     const factAmount =
         track === "payment" ? paymentValues.amount : invoiceValues.grossAmount
 
     const effectiveAmounts = React.useMemo(() => {
-        if (
-            track !== "payment" ||
-            !paymentPayableAccountId ||
-            session?.existingPaymentId
-        ) {
+        if (track !== "payment" || !paymentPayableAccountId) {
             return amounts
         }
         return withLockedPaymentAmount(
@@ -255,13 +241,7 @@ export function useAllocationSession(
             paymentPayableAccountId,
             paymentValues.amount,
         )
-    }, [
-        amounts,
-        paymentPayableAccountId,
-        paymentValues.amount,
-        session?.existingPaymentId,
-        track,
-    ])
+    }, [amounts, paymentPayableAccountId, paymentValues.amount, track])
 
     const allocatedHint = React.useMemo(() => {
         let c = 0
@@ -299,7 +279,6 @@ export function useAllocationSession(
         pool,
         allocatedHint,
         factAmount,
-        existingPaymentId: session?.existingPaymentId,
         existingInvoiceId: session?.existingInvoiceId,
         existingUnallocated: session?.existingUnallocated,
         existingAmount: session?.existingAmount,
@@ -310,7 +289,9 @@ export function useAllocationSession(
         Boolean(
             paymentWorkItemId &&
             expectedPaymentTaskVersion &&
-            paymentPayableAccountId,
+            paymentPayableAccountId &&
+            paymentRecipientBankAccountId &&
+            paymentRecipientBankAccountVersion,
         )
     const hasPaymentReceipt =
         track !== "payment" ||
@@ -418,7 +399,9 @@ export function useAllocationSession(
             track === "payment" &&
             (!paymentWorkItemId ||
                 !expectedPaymentTaskVersion ||
-                !paymentPayableAccountId)
+                !paymentPayableAccountId ||
+                !paymentRecipientBankAccountId ||
+                !paymentRecipientBankAccountVersion)
         ) {
             return
         }
@@ -446,12 +429,13 @@ export function useAllocationSession(
             res = await submitPayment.mutateAsync({
                 workItemId: paymentWorkItemId!,
                 expectedTaskVersion: expectedPaymentTaskVersion!,
+                expectedPayeeBankAccountId: paymentRecipientBankAccountId!,
+                expectedPayeeBankAccountVersion:
+                    paymentRecipientBankAccountVersion!,
                 draftSessionId: session.draftSessionId,
                 supplierId,
                 paidAt: v.paidAt,
-                amount: session.existingPaymentId
-                    ? (session.existingAmount ?? v.amount)
-                    : v.amount,
+                amount: v.amount,
                 bankReference: v.bankReference,
                 bankReceiptAssetId: v.bankReceipt
                     ? BANK_RECEIPT_PENDING_REFERENCE
@@ -463,18 +447,13 @@ export function useAllocationSession(
                 payablePriorityPolicyVersion:
                     policy?.payablePriorityPolicyVersion,
                 explicitSelection,
-                existingPaymentId: session.existingPaymentId,
-                expectedVersion: session.existingPaymentVersion,
                 idempotencyKey: idempotencyRef.current,
             })
-            if (res.approval) setPaymentApproval(res.approval)
             if (res.status === "succeeded") {
-                const responsibility =
-                    readSupplierPaymentApprovalResponsibility(res.approval)
                 res = {
                     ...res,
-                    title: "付款已提交审批",
-                    description: `已进入审批。单号 ${res.documentNo ?? res.reference ?? ""}。全部节点通过后过账核销。`,
+                    title: "付款已登记",
+                    description: `付款单号 ${res.documentNo ?? res.reference ?? ""} 已过账并核销。`,
                     facts: [
                         {
                             label: "付款单号",
@@ -489,14 +468,6 @@ export function useAllocationSession(
                             value: res.unallocatedAmount ?? "0.00",
                         },
                         { label: "供应商", value: session.supplierName },
-                        ...(responsibility.nextResponsible
-                            ? [
-                                  {
-                                      label: "当前审批人",
-                                      value: responsibility.nextResponsible,
-                                  },
-                              ]
-                            : []),
                     ],
                 }
             }
@@ -542,12 +513,25 @@ export function useAllocationSession(
         return false
     }
 
-    /**
-     * 清提交结果，回到当前核销工作面。
-     * 工作台页内付款在提交后仍可能继续处理同一应付，不能离开当前任务。
-     */
-    function clearResult() {
+    /** 结束上一笔提交并为分次付款建立新的会话与幂等身份。 */
+    function startFreshAttempt(): string {
+        const nextDraftSessionId = beginFreshAllocationAttempt(
+            session?.draftSessionId,
+            idempotencyRef.current,
+        )
+        idempotencyRef.current = null
+        paymentForm.reset()
+        invoiceForm.reset()
+        submitPayment.reset()
+        submitInvoice.reset()
+        saveDraft.reset()
+        resolveUnknown.reset()
+        setAmounts({})
+        setSelected(new Set())
+        setConfirmOpen(false)
         setResult(null)
+        setDraftHint(null)
+        return nextDraftSessionId
     }
 
     return {
@@ -561,7 +545,6 @@ export function useAllocationSession(
         setConfirmOpen,
         result,
         draftHint,
-        paymentApproval,
         paymentForm,
         invoiceForm,
         factAmount,
@@ -582,7 +565,7 @@ export function useAllocationSession(
         requestSubmit,
         doSubmit,
         handleResolveUnknown,
-        clearResult,
+        startFreshAttempt,
     }
 }
 

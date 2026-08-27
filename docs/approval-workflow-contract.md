@@ -2,7 +2,7 @@
 
 > 状态：执行合同，待实施
 >
-> 签署日期：2026-08-17
+> 签署日期：2026-08-27
 >
 > 生效输入：第 4.3 节政策矩阵、第 4.4 节生命周期矩阵、第 4.5 节唯一试点、第 4.6 节权限双门禁、第 13.3 节 WorkItem 映射、第 16.5 节通知合同
 >
@@ -152,7 +152,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 | `final_approve_action` | 最终通过时执行的唯一强类型领域动作 |
 | `cancel_action` | 审批最终通过前撤回到可修正草稿的强类型领域动作 |
 
-12 个 `PROCESS_REQUIRED` 类型都必须注册实际 `cancel_action`，不支持禁止撤回或另设受阻取消动作。业务撤回与管理员受阻取消共用同一个强类型动作；两者只允许取消 `RUNNING` / `BLOCKED` 实例，已经最终通过并形成业务事实的实例不可取消，原事实只能按对应冲正或变更合同处理。`NO_APPROVAL` 政策只包含 `document_type`、`approval_requirement` 和 `process_kind`，不得包含动作、资格、岗位分离、WorkItem 或取消配置，也不得注册空 Adapter。
+11 个 `PROCESS_REQUIRED` 类型都必须注册实际 `cancel_action`，不支持禁止撤回或另设受阻取消动作。业务撤回与管理员受阻取消共用同一个强类型动作；两者只允许取消 `RUNNING` / `BLOCKED` 实例，已经最终通过并形成业务事实的实例不可取消，原事实只能按对应冲正或变更合同处理。`NO_APPROVAL` 政策只包含 `document_type`、`approval_requirement` 和 `process_kind`，不得包含动作、资格、岗位分离、WorkItem 或取消配置，也不得注册空 Adapter。
 
 1. 审批政策由代码注册，用户不能配置任意业务动作。
 2. 流程结构和审批人由管理端配置，不能继续由代码注册固定步骤。
@@ -180,7 +180,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 | `PurchaseChangeOrder` | 采购变更单 | `PROCESS_REQUIRED` | `purchase_change_order` |
 | `StockAdjustment` | 库存调整单 | `PROCESS_REQUIRED` | `stock_adjustment` |
 | `CustomerReceipt` | 客户回款单 | `PROCESS_REQUIRED` | `customer_receipt` |
-| `SupplierPayment` | 供应商付款单 | `PROCESS_REQUIRED` | `supplier_payment` |
+| `SupplierPayment` | 供应商付款单 | `NO_APPROVAL` | 不适用 |
 | `CustomerRefund` | 客户退款单 | `PROCESS_REQUIRED` | `customer_refund` |
 | `SupplierRefund` | 供应商退款单 | `PROCESS_REQUIRED` | `supplier_refund` |
 | `ReceiptReversal` | 回款冲正单 | `PROCESS_REQUIRED` | `receipt_reversal` |
@@ -194,13 +194,24 @@ bpm          -> entity-core + entity-macros + 外部基础库
 | `SalesReturnCase` | 销售退货单 | `NO_APPROVAL` | 不适用 |
 | `PurchaseReturnOrder` | 采购退货单 | `NO_APPROVAL` | 不适用 |
 
-签署依据：`PROCESS_REQUIRED` 的 12 个类型是当前业务状态机中已存在人工复核态（`Pending*Review` 及等价值）的全部类型。8 个 `NO_APPROVAL` 类型本期不新增审批环节：其中 6 个当前从草稿直接过账或确认；`SalesReturnCase`（`PENDING_WAREHOUSE_ACCEPTANCE`、`PENDING_PROCUREMENT`、`PENDING_FINANCE`）与 `PurchaseReturnOrder`（`PENDING_EXECUTION`）虽有人工处理态，但它们是履约与执行分工态、不是审批复核态，因此同样签署为 `NO_APPROVAL`，其状态机不受第 4.4.2 节收敛约束。
+签署规则：`PROCESS_REQUIRED` 固定为 11 个类型。`NO_APPROVAL` 固定为 9 个类型，其中 `SupplierPayment` 的付款授权来源是已经最终通过的 `PurchaseOrder`；付款执行由指定到人的 `SupplierPaymentExecution` 工作项承担，不得重复启动付款审批。其余 8 个 `NO_APPROVAL` 类型维持既有无审批合同；`SalesReturnCase`（`PENDING_WAREHOUSE_ACCEPTANCE`、`PENDING_PROCUREMENT`、`PENDING_FINANCE`）与 `PurchaseReturnOrder`（`PENDING_EXECUTION`）的人工状态属于履约与执行分工态，不属于审批复核态。
 
 `NO_APPROVAL` 类型不得注册审批适配器、不得绑定定义、不得创建审批实例或审批任务。将上表任一 `NO_APPROVAL` 行改为必须审批，必须先修订本合同并新增该类型的第 4.4 节生命周期行。
 
+`SupplierPayment` 还必须满足下列执行合同：
+
+1. `PurchaseOrder` 最终审批通过必须形成应付事实，并按财务责任规则创建唯一开放的 `SupplierPaymentExecution` 工作项；
+2. 当前工作项责任人提交付款时，Service 必须在一个事务内校验任务身份、任务版本、应付对象、供应商、收款账户版本和核销分配，随后登记并过账付款、更新应付余额、同步任务进度并写审计；
+3. 付款页面不得提供审批流程、审批人、提交审批、撤回审批或独立过账入口；
+4. 工作台必须展示当前默认收款账户的户名、开户行和脱敏账号。完整账号只能由当前任务责任人在 `party_bank_account:reveal` 权限下主动揭示，成功揭示必须审计；
+5. 提交命令必须携带页面已核对的收款账户事实行 ID 与乐观锁版本。Service 必须在付款事务内以该版本执行 CAS 写锁；当前默认账户的身份、版本或有效状态发生变化时必须返回冲突并要求刷新，不得静默改用新账户；
+6. 已过账付款的纠错必须走付款冲正或供应商退款；付款冲正和供应商退款继续执行各自的 `PROCESS_REQUIRED` 合同。
+7. `SupplierPayment` 状态机固定为 `DRAFT → POSTED → REVERSED`；`DRAFT` 仅存在于付款任务提交事务内，不得形成可见草稿，且不得定义 `IN_APPROVAL`、`REJECTED` 或任何付款审批兼容状态。
+8. 每次付款允许小于应付开放余额，以支持分次付款；但本次核销分配合计必须等于本次实际付款金额，不得形成无法由付款任务继续处理的未分配付款余额。
+
 ### 4.4 生命周期矩阵（已签署）
 
-下表是 12 个 `PROCESS_REQUIRED` 类型的唯一确定生命周期。每行取值均为唯一确定值，实施人员不得代为选择。
+下表是 11 个 `PROCESS_REQUIRED` 类型的唯一确定生命周期。每行取值均为唯一确定值，实施人员不得代为选择。
 
 #### 4.4.1 状态与版本
 
@@ -213,7 +224,6 @@ bpm          -> entity-core + entity-macros + 外部基础库
 | `PurchaseChangeOrder` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `EFFECTIVE` | 新增 `approval_subject_version` |
 | `StockAdjustment` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
 | `CustomerReceipt` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
-| `SupplierPayment` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
 | `CustomerRefund` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
 | `SupplierRefund` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
 | `ReceiptReversal` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
@@ -222,7 +232,7 @@ bpm          -> entity-core + entity-macros + 外部基础库
 关于 `subject_version` 的固定规则：
 
 1. `SalesOrder`、`VoucherSalesOrder`、`SalesChangeOrder` 使用提交时形成的不可变提交记录 `submission_no`；
-2. 其余 9 个类型必须在业务实体上新增 `approval_subject_version: u32`，初值 0，每次提交在同一事务内 checked add 1。`PurchaseOrder` 的生效 `purchase_revision.revision_no` 只在最终通过时生成，`purchase_order_submission.submission_no` 与 `purchase_change_submission.submission_no` 又是字符串业务编号，两者均不得充当审批版本；
+2. 其余 8 个类型必须在业务实体上新增 `approval_subject_version: u32`，初值 0，每次提交在同一事务内 checked add 1。`PurchaseOrder` 的生效 `purchase_revision.revision_no` 只在最终通过时生成，`purchase_order_submission.submission_no` 与 `purchase_change_submission.submission_no` 又是字符串业务编号，两者均不得充当审批版本；
 3. 任何类型都不得使用 `BaseModel.version` 作为 `subject_version`；
 4. `subject_version` 在实例启动后永久不可变，驳回和轮次递增都不改变它。
 
@@ -232,17 +242,17 @@ bpm          -> entity-core + entity-macros + 外部基础库
 2. 不得设置提交准入阶段。`ReviewStatus` 的提交后继只能是 `IN_APPROVAL`；不得新增「准入已通过」字段、准入状态或第二条启动路径；
 3. `SalesOrder` 已发布定义不再要求 `node_purpose=SALES_ORDER_PROCUREMENT_CONFIRMATION`。流程管理员按普通节点配置销售单审批链；空白草稿可预置一个名为「采购确认」的普通节点，允许删除。BPM 推进、决定 DTO 和业务副作用不得按用途分支；
 4. `subject_snapshot.submitted_by` 固定记该销售单的提交销售；
-5. 12 个 `PROCESS_REQUIRED` 类型的 `on_approval_start` 一律由该类型自身的提交命令调用，不存在由其它环节代为启动的类型。
+5. 11 个 `PROCESS_REQUIRED` 类型的 `on_approval_start` 一律由该类型自身的提交命令调用，不存在由其它环节代为启动的类型。
 
 #### 4.4.2 状态机收敛
 
 本次改造必须删除业务状态机中的逐节点审批态，节点粒度事实唯一存在于 `approval_node_execution`：
 
 1. `ReviewStatus` 固定为 `NOT_SUBMITTED`、`IN_APPROVAL`、`APPROVED` 三值。必须删除 `PENDING_SALES_LEADER`、`PENDING_OPERATIONS`、`REJECTED`、`PENDING_PROCUREMENT_CONFIRMATION` 和 `PENDING_LOW_MARGIN_SUPERIOR`。销售单当前节点只存在于 `approval_node_execution`；
-2. `StockAdjustmentState` 的 `PENDING_WAREHOUSE_REVIEW` 与 `PENDING_FINANCE_REVIEW` 合并为唯一 `IN_APPROVAL`；`PurchaseChangeOrderStatus` 的 `PENDING_WAREHOUSE_IMPACT` 与 `PENDING_FINANCE_REVIEW`、`SalesChangeOrderStatus` 的 `PENDING_IMPACT_CONFIRMATION` 与 `PENDING_FINANCE_REVIEW`、`PurchaseOrderStatus` 的 `PENDING_FINANCE_REVIEW`、资金类 6 个类型的 `PENDING_REVIEW` 同样收敛为唯一 `IN_APPROVAL`；
+2. `StockAdjustmentState` 的 `PENDING_WAREHOUSE_REVIEW` 与 `PENDING_FINANCE_REVIEW` 合并为唯一 `IN_APPROVAL`；`PurchaseChangeOrderStatus` 的 `PENDING_WAREHOUSE_IMPACT` 与 `PENDING_FINANCE_REVIEW`、`SalesChangeOrderStatus` 的 `PENDING_IMPACT_CONFIRMATION` 与 `PENDING_FINANCE_REVIEW`、`PurchaseOrderStatus` 的 `PENDING_FINANCE_REVIEW`、资金类 5 个 `PROCESS_REQUIRED` 类型的 `PENDING_REVIEW` 同样收敛为唯一 `IN_APPROVAL`；
 3. 业务状态机不得再出现「第几级审批」语义。页面展示的当前节点、当前审批人和轮次一律取审批实例投影；
 4. 驳回不改变业务状态：单据保持 `IN_APPROVAL`，实例进入下一轮。必须删除 `ReviewStatus::REJECTED → NOT_SUBMITTED` 的旧「驳回回到草稿再改单」路径，并禁止驳回触发 `CommercialStatus::PENDING_REVIEW → DRAFT`；该邻接只允许由第 4.4.4 节签署的 `cancel_action` 触发；
-5. 12 个类型的撤回和受阻取消一律回到该类型的 `DRAFT` / `NOT_SUBMITTED`，审批驳回又不改变业务状态，因此审批导致的业务 `REJECTED` 已无可达路径，必须删除：资金类 6 个类型的 `REJECTED`、`ReviewStatus::REJECTED`、`SalesChangeOrderStatus::Rejected`、`PurchaseChangeOrderStatus::Rejected`、`StockAdjustmentState::Rejected`，以及采购单上与审批实例事实重复的整个 `PurchaseReviewStatus`（`Pending` / `Approved` / `Rejected`）字段。作废仍由各类型现有 `VOIDED` 表达，审批结果一律取审批实例投影。
+5. 11 个类型的撤回和受阻取消一律回到该类型的 `DRAFT` / `NOT_SUBMITTED`，审批驳回又不改变业务状态，因此审批导致的业务 `REJECTED` 已无可达路径，必须删除：资金类 5 个 `PROCESS_REQUIRED` 类型的 `REJECTED`、`ReviewStatus::REJECTED`、`SalesChangeOrderStatus::Rejected`、`PurchaseChangeOrderStatus::Rejected`、`StockAdjustmentState::Rejected`，以及采购单上与审批实例事实重复的整个 `PurchaseReviewStatus`（`Pending` / `Approved` / `Rejected`）字段。作废仍由各类型现有 `VOIDED` 表达，审批结果一律取审批实例投影。
 
 #### 4.4.3 采购确认节点与禁用业务环节
 
@@ -284,22 +294,21 @@ bpm          -> entity-core + entity-macros + 外部基础库
 | `PurchaseChangeOrder` | `PurchaseChangeService::submit_change` | `PurchaseChangeService::apply_effective_change` | `PurchaseChangeService::cancel_approval` | 改写采购单并同步履约影响 |
 | `StockAdjustment` | `InventoryService::submit_stock_adjustment` | `InventoryService::post_stock_adjustment` | `InventoryService::cancel_stock_adjustment_approval` | 库存移动过账 |
 | `CustomerReceipt` | `ReceivableService::submit_customer_receipt` | `ReceivableService::post_customer_receipt` | `ReceivableService::cancel_customer_receipt_approval` | 应收核销与资金入账 |
-| `SupplierPayment` | `PayableService::submit_supplier_payment` | `PayableService::post_supplier_payment` | `PayableService::cancel_supplier_payment_approval` | 应付核销与资金出账 |
 | `CustomerRefund` | `ReturnsService::submit_customer_refund` | `ReturnsService::post_customer_refund` | `ReturnsService::cancel_customer_refund_approval` | 客户退款出账 |
 | `SupplierRefund` | `ReturnsService::submit_supplier_refund` | `ReturnsService::post_supplier_refund` | `ReturnsService::cancel_supplier_refund_approval` | 供应商退款入账 |
 | `ReceiptReversal` | `ReturnsService::submit_receipt_reversal` | `ReturnsService::post_receipt_reversal` | `ReturnsService::cancel_receipt_reversal_approval` | 回款冲正 |
 | `PaymentReversal` | `ReturnsService::submit_payment_reversal` | `ReturnsService::post_payment_reversal` | `ReturnsService::cancel_payment_reversal_approval` | 付款冲正 |
 
-1. 12 个类型的 `cancel_action` 成功后，单据一律回到该类型的 `DRAFT` / `NOT_SUBMITTED`，`subject_version` 不回退；修改后重新提交必须递增 `subject_version` 并创建新实例；
+1. 11 个类型的 `cancel_action` 成功后，单据一律回到该类型的 `DRAFT` / `NOT_SUBMITTED`，`subject_version` 不回退；修改后重新提交必须递增 `subject_version` 并创建新实例；
 2. 原提交人只能在业务撤回规则和服务端 `allowed_actions` 同时允许时撤回；撤回原因一律必填。具备该类型 `approval_runtime_admin` 权限和实例 DataScope 的运行管理员可在原提交人无法处理时应急撤回，但必须走同一业务撤回端口并记录应急代办身份。管理员受阻取消只处理第 12.5 节的非人员一致性 blocker，仍执行同一 `cancel_action`，不得另设终态或动作；
 3. 最终通过后实例已是 `APPROVED`，不得调用 `cancel_action`。资金过账、库存移动、正式修订等最终事实只能通过业务变更或冲正单处理；
 4. 上表方法名是本合同签署的强类型端口名。现有 `post_*` 领域方法必须被对应 Service 端口包装调用，不得由审批运行时直接调用 Repository 或用 `$set` 绕过领域不变式；
-5. 12 个类型的 `on_approval_start` 一律由该类型自身的提交命令在同一事务内调用（第 4.4.1 节提交规则第 5 条）。`SalesOrder` 不再存在由准入环节代为启动的特例，全系统只有一条启动路径；
+5. 11 个类型的 `on_approval_start` 一律由该类型自身的提交命令在同一事务内调用（第 4.4.1 节提交规则第 5 条）。`SalesOrder` 不再存在由准入环节代为启动的特例，全系统只有一条启动路径；
 6. 表中 `SalesChangeOrderService`、`PurchaseChangeService` 是本合同签署的**目标端口名**。当前基线没有这两个结构：`submit_sales_change` 在 `services/src/sales_review/sales_change_order.rs`，`submit_change` 在 `services/src/purchase_order/change.rs` 的 `PurchaseOrderService` 上。实施时按 `docs/dev-plan/domains.md` 的域归属落地端口，结构命名不构成合同偏离。
 
 #### 4.4.5 业务对象快照
 
-`subject_snapshot` 对全部 12 个类型固定为下列有界强类型结构，不得使用任意 Map、未约束 JSON 或 BSON `Document`：
+`subject_snapshot` 对全部 11 个类型固定为下列有界强类型结构，不得使用任意 Map、未约束 JSON 或 BSON `Document`：
 
 ```text
 document_no            单据业务编号
@@ -312,7 +321,7 @@ total_quantity         数量合计（库存调整、销售、采购类必填）
 line_count             行数
 ```
 
-`work_item_owner_role` 与 `owner_organization_source` 对全部 12 个类型固定为：`owner_role` 取该类型第 4.3 节权限前缀对应的稳定角色语义值 `<prefix>_approver`；`owner_organization_id` 取 `subject_snapshot.responsible_org_id`。不得取当前登录人组织或空字符串补位。`owner_role` 只是审计与展示用的稳定语义标签，不是分派依据：责任始终由 `owner_user_id` 唯一表达，不得据 `owner_role` 反推可处理人集合。
+`work_item_owner_role` 与 `owner_organization_source` 对全部 11 个类型固定为：`owner_role` 取该类型第 4.3 节权限前缀对应的稳定角色语义值 `<prefix>_approver`；`owner_organization_id` 取 `subject_snapshot.responsible_org_id`。不得取当前登录人组织或空字符串补位。`owner_role` 只是审计与展示用的稳定语义标签，不是分派依据：责任始终由 `owner_user_id` 唯一表达，不得据 `owner_role` 反推可处理人集合。
 
 #### 4.4.6 毛利风险提示
 
@@ -330,7 +339,7 @@ line_count             行数
 
 签署依据：单一创建入口（`inventory/mod.rs::create_stock_adjustment`）；已存在 create / submit / post 三段命令；两个复核节点足以验证多节点推进、驳回与轮次递增；域内隔离，无 `BusinessType` 分流、无商城同步、无资金外部事实；其现有人工 approve 中间旁路正好是本次必须清除的目标。
 
-`StockAdjustment` 未通过 `P6-PILOT` 前，其余 11 个 `PROCESS_REQUIRED` 类型不得开始接入，也不得启用共享开发环境。
+`StockAdjustment` 未通过 `P6-PILOT` 前，其余 10 个 `PROCESS_REQUIRED` 类型不得开始接入，也不得启用共享开发环境。
 
 ### 4.6 权限双门禁（已签署）
 
@@ -714,7 +723,7 @@ N3 --REJECT--> N1
 ### 12.1 取消
 
 1. 取消不是审批决定，只能由业务单据的受控撤回用例调用。
-2. 12 个 `PROCESS_REQUIRED` 类型均允许在最终通过前调用。撤回原因必填；调用人必须等于 `subject_snapshot.submitted_by`，或具备该类型 `approval_runtime_admin` 权限。两者都必须通过 `approval_instance:cancel`、对象读取权、DataScope、业务允许撤回、单据版本、实例版本和当前执行版本的事务内重验，任一不满足即失败关闭；运行管理员路径必须另记应急代办身份。
+2. 11 个 `PROCESS_REQUIRED` 类型均允许在最终通过前调用。撤回原因必填；调用人必须等于 `subject_snapshot.submitted_by`，或具备该类型 `approval_runtime_admin` 权限。两者都必须通过 `approval_instance:cancel`、对象读取权、DataScope、业务允许撤回、单据版本、实例版本和当前执行版本的事务内重验，任一不满足即失败关闭；运行管理员路径必须另记应急代办身份。
 3. 实例为 `RUNNING` 时必须锁定并校验当前唯一 `OPEN` 任务及其版本，成功后关闭该任务；实例为 `BLOCKED` 时只接受人员失效类别，必须证明当前执行没有 `OPEN` 任务、任务版本为空，不得虚构或重开任务。非人员一致性 blocker 只能调用第 12.5 节受阻取消。
 4. 成功后将当前执行置为 `CANCELLED`、将实例置为 `CANCELLED`、清空实例当前执行引用，并执行强类型撤回动作。
 5. 已经最终通过、已取消或不存在当前执行的实例不得取消。
@@ -1150,7 +1159,7 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 9. 实现通过和驳回重启事务。
 10. 将全部工作项（审批与非审批）改为创建即指定到人，删除责任池、领取、开始处理和退回团队。
 11. 对第 4.5 节签署的唯一试点 `StockAdjustment` 完成端到端试点和专用空数据库硬重置演练。
-12. 试点通过后，按第 4.3 节矩阵对其余 11 个 `PROCESS_REQUIRED` 类型逐项独立接入新运行时，一个类型一个批次。`SalesOrder` 批次必须停止采购二次确认与低毛利旧路径的新写入并移除其 HTTP 可达性，选源后移到采购单。
+12. 试点通过后，按第 4.3 节矩阵对其余 10 个 `PROCESS_REQUIRED` 类型逐项独立接入新运行时，一个类型一个批次。`SalesOrder` 批次必须停止采购二次确认与低毛利旧路径的新写入并移除其 HTTP 可达性，选源后移到采购单。
 13. 全部 20 个类型的 P3/P4 批次完成后执行 P0-D，删除旧注册表、bootstrap、角色解析、审批责任池、团队任务、旧销售确认实现和驳回终态路径。
 14. 按第 16.4 节把 W01 与 W02 合并为唯一工作台，基于稳定的流程和责任事实重做信息架构。
 15. 完成全量合同、数据、权限、并发和双用户验收后切换。
@@ -1185,14 +1194,14 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 - [ ] 旧代码注册流程、审批责任池、团队任务、预建 `WAITING` 步骤和驳回终态路径已从生产实现中清零；`claim`、`start_processing`、`release_to_team` 在 `backend` 与 `erp-client` 中命中为 0（开发重置脚本的固定删除条件除外）。合同、实施计划和 P0-D `deletes` 清单允许以删除或禁止条款引用旧名称，不纳入生产实现零命中。
 - [ ] 第 4.3 节 20 行政策矩阵在代码中由对 `DocumentType` 的穷尽 `match` 实现，新增类型必触发编译失败或完整性测试失败。
 - [ ] `VoucherSalesOrder` 与 `SalesOrder` 各自拥有独立定义、审批链、权限和验收记录；创建时按 `BusinessType` 穷尽分派。
-- [ ] 8 个 `NO_APPROVAL` 类型创建成功且无绑定、无实例、无审批任务，且未注册空适配器。
-- [ ] 第 4.4.1 节 12 行 `subject_version` 权威来源全部生效；新增 `approval_subject_version` 的 9 个类型均不复用 `BaseModel.version`，`PurchaseOrder` 不使用最终通过后才生成的 `purchase_revision.revision_no`。
+- [ ] 9 个 `NO_APPROVAL` 类型创建成功且无绑定、无实例、无审批任务，且未注册空适配器；`SupplierPayment` 只能由当前付款执行任务原子登记并过账。
+- [ ] 第 4.4.1 节 11 行 `subject_version` 权威来源全部生效；新增 `approval_subject_version` 的 8 个类型均不复用 `BaseModel.version`，`PurchaseOrder` 不使用最终通过后才生成的 `purchase_revision.revision_no`。
 - [ ] 第 4.4.2 节状态机收敛完成：业务状态机中不存在逐节点审批态，驳回不改变业务状态。
 - [ ] 采购二次确认已收敛为 `SalesOrder` 定义中的普通审批节点：`ProcurementConfirmation` 实体、集合、状态机、驳回原因代码枚举、`WorkItemType` 和路由已删除，选源已后移到采购单。
 - [ ] 低毛利上级确认已整体删除：实体、集合、状态、`WorkItemType`、Service、端点和权限项全仓命中为 0；毛利风险只以只读提示存在，不阻断任何流程。
 - [ ] `ReviewStatus` 正好三值（`NOT_SUBMITTED`、`IN_APPROVAL`、`APPROVED`），`SalesOrder` 与 `VoucherSalesOrder` 的提交路径完全一致。
 - [ ] W01 与 W02 已合并为唯一工作台：`/workspace/tasks` 重定向到 `/workspace`，页面无「团队待处理」分区，口径胶囊筛选不跳页，详情区可连续提交审批决定；无独立统计卡，待办列表只渲染一份。
-- [ ] 第 4.4.4 节 12 行强类型动作全部实现；所有类型均可在最终通过前由原提交人受控撤回，运行管理员可填写原因应急撤回，受阻取消复用同一 `cancel_action`，最终通过后不得取消。
+- [ ] 第 4.4.4 节 11 行强类型动作全部实现；所有类型均可在最终通过前由原提交人受控撤回，运行管理员可填写原因应急撤回，受阻取消复用同一 `cancel_action`，最终通过后不得取消。
 - [ ] 恢复原审批人与受阻取消两条路径互斥且按 blocker 类别失败关闭。
 - [ ] 同一 `approval_node_execution_id` 在全部任务状态合计最多一条 WorkItem。
 - [ ] 第 16.5 节全部 9 类通知事件具备去重键、重试上限和死信处置，事务内只写 outbox。

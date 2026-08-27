@@ -6,29 +6,12 @@ import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { FileUpload } from "@/components/ui/file-upload"
-import type { ApprovalCommandView } from "@/features/approval-workflow/types"
-import { SupplierPaymentApprovalArea } from "@/features/supplier-payables/components/supplier-payment-approval-area"
 import { useSupplierPaymentBankReceiptQuery } from "@/features/supplier-payables/hooks/queries"
-import { supplierPaymentApprovalPhase } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import type { PaymentRow } from "@/features/supplier-payables/types"
 import { formatDateTime } from "@/lib/datetime"
 
-/**
- * 供应商付款详情。草稿展示绑定卡，运行中/终态嵌入通用审批区。
- */
-export function SupplierPaymentDetailBody({
-    row,
-    workItemId,
-    expectedTaskVersion,
-    workItemAllowedActions,
-    onDecisionApplied,
-}: {
-    row: PaymentRow
-    workItemId?: string
-    expectedTaskVersion?: string
-    workItemAllowedActions?: readonly string[]
-    onDecisionApplied?: (view: ApprovalCommandView) => void
-}) {
+/** 供应商付款事实详情；普通付款登记即过账，不包含独立审批区。 */
+export function SupplierPaymentDetailBody({ row }: { row: PaymentRow }) {
     const posted = row.status === "POSTED" || row.status === "REVERSED"
     return (
         <div className="space-y-5 overflow-auto p-6">
@@ -40,18 +23,6 @@ export function SupplierPaymentDetailBody({
                     </AlertDescription>
                 </Alert>
             ) : null}
-            <SupplierPaymentApprovalArea
-                phase={supplierPaymentApprovalPhase(
-                    row.approval,
-                    row.status === "IN_APPROVAL" ? "IN_APPROVAL" : row.status,
-                )}
-                approval={row.approval}
-                documentId={row.paymentId}
-                workItemId={workItemId}
-                expectedTaskVersion={expectedTaskVersion}
-                workItemAllowedActions={workItemAllowedActions}
-                onDecisionApplied={onDecisionApplied}
-            />
             <div className="grid grid-cols-2 gap-3">
                 <Fact label="付款单号" value={row.paymentNo} mono />
                 <Fact label="供应商" value={row.supplierName} />
@@ -65,6 +36,28 @@ export function SupplierPaymentDetailBody({
                     value={<MoneyValue value={row.amount} taxBasis="gross" />}
                 />
                 <Fact label="银行流水号" value={row.bankReferenceMasked} mono />
+                {row.paymentRecipient ? (
+                    <>
+                        <Fact
+                            label="收款户名"
+                            value={row.paymentRecipient.accountName}
+                        />
+                        <Fact
+                            label="收款银行"
+                            value={[
+                                row.paymentRecipient.bankName,
+                                row.paymentRecipient.bankBranchName,
+                            ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                        />
+                        <Fact
+                            label="收款账号"
+                            value={row.paymentRecipient.accountNumberMasked}
+                            mono
+                        />
+                    </>
+                ) : null}
                 <Fact
                     label="净已分配"
                     value={

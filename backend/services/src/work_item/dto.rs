@@ -1050,7 +1050,6 @@ fn role_label(role: &str) -> String {
         "purchase_change_order_approver" => "采购变更单审批人",
         "stock_adjustment_approver" => "库存调整单审批人",
         "customer_receipt_approver" => "回款复核人",
-        "supplier_payment_approver" => "供应商付款审批人",
         "customer_refund_approver" => "客户退款审批人",
         "supplier_refund_approver" => "供应商退款审批人",
         "receipt_reversal_approver" => "回款冲正审批人",

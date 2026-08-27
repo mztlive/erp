@@ -1272,11 +1272,6 @@ async fn finalize_approved_document(
                 .post_customer_receipt(business_object_id, actor)
                 .await?;
         }
-        DocumentType::SupplierPayment => {
-            crate::payable::PayableService::new(db.clone())
-                .post_supplier_payment(business_object_id, actor)
-                .await?;
-        }
         DocumentType::CustomerRefund => {
             crate::returns::ReturnsService::new(db.clone())
                 .post_customer_refund(business_object_id, actor)

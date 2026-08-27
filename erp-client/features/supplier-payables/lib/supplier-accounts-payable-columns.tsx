@@ -14,10 +14,18 @@ export function buildPayableColumns(input: {
     data: SupplierAccountsListView | undefined
     returnTo?: string
     fromWorkspace?: string
+    paymentTaskPayableAccountId?: string
     openPreview: (payableAccountId: string) => void
     openSession: (next: SessionState) => void
 }): ColumnDef<PayableRow>[] {
-    const { data, returnTo, fromWorkspace, openPreview, openSession } = input
+    const {
+        data,
+        returnTo,
+        fromWorkspace,
+        paymentTaskPayableAccountId,
+        openPreview,
+        openSession,
+    } = input
     return [
         {
             id: "supplier",
@@ -120,47 +128,53 @@ export function buildPayableColumns(input: {
             id: "actions",
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
-            cell: ({ row }) => (
-                <div className="flex flex-nowrap justify-end gap-1">
-                    <Button
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        onClick={() =>
-                            openPreview(row.original.payableAccountId)
-                        }
-                    >
-                        预览
-                    </Button>
-                    <Button
-                        type="button"
-                        size="xs"
-                        onClick={() =>
-                            openSession({
-                                track: "payment",
-                                supplierId: row.original.supplierId,
-                                preselectPayableAccountId:
-                                    row.original.payableAccountId,
-                                purchaseOrderId:
-                                    row.original.sourceType ===
-                                    "PURCHASE_ORDER"
-                                        ? row.original.sourceDocumentId
-                                        : undefined,
-                                returnTo,
-                                fromWorkspace,
-                            })
-                        }
-                        disabled={!data?.canRegisterPayment}
-                        title={
-                            data?.canRegisterPayment
-                                ? undefined
-                                : "当前无付款登记/核销权限"
-                        }
-                    >
-                        核销付款
-                    </Button>
-                </div>
-            ),
+            cell: ({ row }) => {
+                const canExecutePayment =
+                    Boolean(data?.canRegisterPayment) &&
+                    row.original.payableAccountId ===
+                        paymentTaskPayableAccountId
+                return (
+                    <div className="flex flex-nowrap justify-end gap-1">
+                        <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() =>
+                                openPreview(row.original.payableAccountId)
+                            }
+                        >
+                            预览
+                        </Button>
+                        <Button
+                            type="button"
+                            size="xs"
+                            onClick={() =>
+                                openSession({
+                                    track: "payment",
+                                    supplierId: row.original.supplierId,
+                                    preselectPayableAccountId:
+                                        row.original.payableAccountId,
+                                    purchaseOrderId:
+                                        row.original.sourceType ===
+                                        "PURCHASE_ORDER"
+                                            ? row.original.sourceDocumentId
+                                            : undefined,
+                                    returnTo,
+                                    fromWorkspace,
+                                })
+                            }
+                            disabled={!canExecutePayment}
+                            title={
+                                canExecutePayment
+                                    ? undefined
+                                    : "付款必须由当前负责人从对应付款任务进入"
+                            }
+                        >
+                            核销付款
+                        </Button>
+                    </div>
+                )
+            },
         },
     ]
 }

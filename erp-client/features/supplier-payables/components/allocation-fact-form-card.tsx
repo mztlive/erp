@@ -1,7 +1,5 @@
 "use client"
 
-import * as React from "react"
-
 import {
     MoneyValue,
     ValidationSummary,
@@ -19,24 +17,18 @@ import {
 import { FileUpload } from "@/components/ui/file-upload"
 import { toFieldErrors } from "@/components/form"
 import { cn } from "@/lib/utils"
-import { useSupplierPaymentBankReceiptQuery } from "@/features/supplier-payables/hooks/queries"
 import type {
     InvoiceFormApi,
     PaymentFormApi,
 } from "@/features/supplier-payables/lib/allocation-form-types"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
-import type {
-    AllocationSessionView,
-    AllocationTrack,
-} from "@/features/supplier-payables/types"
+import type { AllocationTrack } from "@/features/supplier-payables/types"
 
 export type AllocationFactFormCardProps = {
     track: AllocationTrack
-    existingPaymentId?: string
     existingInvoiceId?: string
     existingDocumentNo?: string
     existingUnallocated?: string
-    existingBankReceipt?: AllocationSessionView["existingBankReceipt"]
     paymentForm: Pick<
         PaymentFormApi,
         "AppField" | "handleSubmit" | "setFieldValue"
@@ -53,29 +45,12 @@ export type AllocationFactFormCardProps = {
     onSubmitClick: () => void
 }
 
-/** 把受控预览 Blob 转成短生命周期 URL，并在更新或卸载时释放。 */
-function useBlobUrl(blob?: Blob): string | undefined {
-    const [url, setUrl] = React.useState<string>()
-    React.useEffect(() => {
-        if (!blob) {
-            setUrl(undefined)
-            return
-        }
-        const next = URL.createObjectURL(blob)
-        setUrl(next)
-        return () => URL.revokeObjectURL(next)
-    }, [blob])
-    return url
-}
-
 /** 本次付款/进项发票记录卡：记录表单、分配汇总与提交校验。 */
 export function AllocationFactFormCard({
     track,
-    existingPaymentId,
     existingInvoiceId,
     existingDocumentNo,
     existingUnallocated,
-    existingBankReceipt,
     paymentForm,
     invoiceForm,
     mixedSources,
@@ -88,12 +63,6 @@ export function AllocationFactFormCard({
     onSaveDraft,
     onSubmitClick,
 }: AllocationFactFormCardProps) {
-    const receiptQuery = useSupplierPaymentBankReceiptQuery(
-        existingPaymentId ?? null,
-        Boolean(existingBankReceipt),
-    )
-    const existingReceiptUrl = useBlobUrl(receiptQuery.data)
-
     return (
         <section
             className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
@@ -118,62 +87,40 @@ export function AllocationFactFormCard({
                             void paymentForm.handleSubmit()
                         }}
                     >
-                        {!existingPaymentId ? (
-                            <>
-                                <paymentForm.AppField
-                                    name="amount"
-                                    children={(field) => (
-                                        <field.TextField
-                                            label="付款金额"
-                                            inputMode="decimal"
-                                        />
-                                    )}
+                        <paymentForm.AppField
+                            name="amount"
+                            children={(field) => (
+                                <field.TextField
+                                    label="付款金额"
+                                    inputMode="decimal"
                                 />
-                                <paymentForm.AppField
-                                    name="paidAt"
-                                    children={(field) => (
-                                        <field.DateTimeField
-                                            label="实际付款时间"
-                                            clearable={false}
-                                        />
-                                    )}
+                            )}
+                        />
+                        <paymentForm.AppField
+                            name="paidAt"
+                            children={(field) => (
+                                <field.DateTimeField
+                                    label="实际付款时间"
+                                    clearable={false}
                                 />
-                                <paymentForm.AppField
-                                    name="bankReference"
-                                    children={(field) => (
-                                        <field.TextField label="银行流水号（可选）" />
-                                    )}
+                            )}
+                        />
+                        <paymentForm.AppField
+                            name="bankReference"
+                            children={(field) => (
+                                <field.TextField label="银行流水号（可选）" />
+                            )}
+                        />
+                        <paymentForm.AppField
+                            name="note"
+                            children={(field) => (
+                                <field.TextareaField
+                                    label="备注（可选）"
+                                    rows={1}
+                                    textareaClassName="min-h-control"
                                 />
-                                <paymentForm.AppField
-                                    name="note"
-                                    children={(field) => (
-                                        <field.TextareaField
-                                            label="备注（可选）"
-                                            rows={1}
-                                            textareaClassName="min-h-control"
-                                        />
-                                    )}
-                                />
-                            </>
-                        ) : (
-                            <div
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "space-y-1 px-3 py-3 text-sm md:col-span-2",
-                                )}
-                            >
-                                <div>原付款 {existingDocumentNo}</div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">
-                                        未分配余额
-                                    </span>
-                                    <MoneyValue
-                                        value={existingUnallocated}
-                                        taxBasis="gross"
-                                    />
-                                </div>
-                            </div>
-                        )}
+                            )}
+                        />
                         <div className="md:col-span-2">
                             <paymentForm.AppField
                                 name="bankReceipt"
@@ -184,13 +131,6 @@ export function AllocationFactFormCard({
                                     const errors = toFieldErrors(
                                         field.state.meta.errors,
                                     )
-                                    const preview = existingBankReceipt
-                                        ? {
-                                              src: existingReceiptUrl,
-                                              name: existingBankReceipt.fileName,
-                                              status: "uploaded" as const,
-                                          }
-                                        : null
                                     return (
                                         <Field
                                             data-invalid={invalid || undefined}
@@ -208,7 +148,6 @@ export function AllocationFactFormCard({
                                                 density="compact"
                                                 label="上传银行回单"
                                                 description="支持 JPG、PNG、WebP，单张不超过 5 MB"
-                                                preview={preview}
                                                 previewSelectedImage
                                                 onFilesSelected={(files) => {
                                                     field.handleChange(
@@ -347,7 +286,7 @@ export function AllocationFactFormCard({
                         onClick={onSubmitClick}
                     >
                         {track === "payment"
-                            ? "提交付款审批"
+                            ? "登记付款并核销"
                             : "确认登记并核销"}
                     </Button>
                 </div>

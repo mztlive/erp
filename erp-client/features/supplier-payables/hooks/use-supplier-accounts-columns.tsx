@@ -22,6 +22,7 @@ export function useSupplierAccountsColumns(input: {
     data: SupplierAccountsListView | undefined
     returnTo?: string
     fromWorkspace?: string
+    paymentTaskPayableAccountId?: string
     openPreview: (payableAccountId: string) => void
     openPaymentPreview: (paymentId: string) => void
     openSession: (next: SessionState) => void
@@ -35,6 +36,7 @@ export function useSupplierAccountsColumns(input: {
         data,
         returnTo,
         fromWorkspace,
+        paymentTaskPayableAccountId,
         openPreview,
         openPaymentPreview,
         openSession,
@@ -49,29 +51,37 @@ export function useSupplierAccountsColumns(input: {
                 data,
                 returnTo,
                 fromWorkspace,
+                paymentTaskPayableAccountId,
                 openPreview,
                 openSession,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [data?.canRegisterPayment, returnTo, fromWorkspace],
+        [
+            data?.canRegisterPayment,
+            returnTo,
+            fromWorkspace,
+            paymentTaskPayableAccountId,
+        ],
     )
 
     const paymentColumns = React.useMemo<ColumnDef<PaymentRow>[]>(
         () =>
             buildPaymentColumns({
-                returnTo,
-                fromWorkspace,
-                openSession,
                 openPaymentPreview,
                 setReverseTarget,
                 setRefundRequest,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [returnTo, fromWorkspace, setRefundRequest],
+        [setRefundRequest],
     )
 
     const invoiceColumns = React.useMemo<ColumnDef<PurchaseInvoiceRow>[]>(
-        () => buildInvoiceColumns({ openSession, setReverseTarget, setRedInvoiceNo }),
+        () =>
+            buildInvoiceColumns({
+                openSession,
+                setReverseTarget,
+                setRedInvoiceNo,
+            }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [],
     )

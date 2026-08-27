@@ -13,7 +13,7 @@ export type PayableSourceType = "PURCHASE_ORDER" | "SUPPLIER_SETTLEMENT"
 
 export type PayableStatus = "OPEN" | "PARTIAL" | "SETTLED"
 
-export type PaymentStatus = "DRAFT" | "IN_APPROVAL" | "POSTED" | "REVERSED"
+export type PaymentStatus = "DRAFT" | "POSTED" | "REVERSED"
 
 type InvoiceKind = "BLUE" | "RED"
 
@@ -49,6 +49,16 @@ type ActionBlocker = {
     message: string
 }
 
+/** 付款任务与付款事实使用的收款账户摘要；账号明文须另行受控揭示。 */
+export type PaymentRecipient = Readonly<{
+    bankAccountId: string
+    version: number
+    accountName: string
+    bankName: string
+    bankBranchName?: string
+    accountNumberMasked: string
+}>
+
 export type PayableRow = Readonly<{
     payableAccountId: string
     supplierId: string
@@ -73,6 +83,7 @@ export type PayableRow = Readonly<{
     status: PayableStatus
     statusLabel: string
     statusTone: StatusTone
+    paymentRecipient?: PaymentRecipient
     paymentGateSummary?: {
         state: "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
         message: string
@@ -121,7 +132,7 @@ export type PaymentRow = Readonly<{
     actionBlockers: readonly ActionBlocker[]
     reversedByPaymentId?: string
     reverseOfPaymentId?: string
-    approval?: DocumentApprovalView
+    paymentRecipient?: PaymentRecipient
 }>
 
 /** SupplierRefund 为 PROCESS_REQUIRED：行投影携带只读审批区。 */
@@ -313,15 +324,11 @@ export type AllocationSessionView = Readonly<{
     dataWatermark: string
     queriedAt: string
     draftSavedAt?: string
-    /** 继续核销已有付款/发票时带入 */
-    existingPaymentId?: string
+    /** 继续核销已有发票时带入 */
     existingInvoiceId?: string
     existingAmount?: string
     existingUnallocated?: string
     existingDocumentNo?: string
-    existingPaymentVersion?: number
-    existingBankReceipt?: PaymentRow["bankReceipt"]
-    approval?: DocumentApprovalView
 }>
 
 type AllocationTargetInput = {
@@ -335,6 +342,8 @@ type AllocationTargetInput = {
 export type PostPaymentInput = {
     workItemId: string
     expectedTaskVersion: string
+    expectedPayeeBankAccountId: string
+    expectedPayeeBankAccountVersion: number
     draftSessionId: string
     supplierId: string
     paidAt: string
@@ -348,8 +357,6 @@ export type PostPaymentInput = {
     payablePriorityPolicyVersion?: number
     /** 用户显式逐项选择（策略缺失时必须） */
     explicitSelection: boolean
-    existingPaymentId?: string
-    expectedVersion?: number
     idempotencyKey: string
 }
 
@@ -460,7 +467,6 @@ export type SessionState = {
     purchaseOrderId?: string
     returnTo?: string
     fromWorkspace?: string
-    existingPaymentId?: string
     existingInvoiceId?: string
     preselectPayableAccountId?: string
 }

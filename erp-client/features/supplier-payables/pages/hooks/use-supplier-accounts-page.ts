@@ -70,7 +70,6 @@ export function useSupplierAccountsPage() {
     const detailId = searchParams.get("detailId") ?? undefined
     const previewKind = parsePreviewKind(searchParams.get("previewKind"))
     const workItemId = parseWorkItemId(searchParams)
-    const existingPaymentId = searchParams.get("paymentId") ?? undefined
     const existingInvoiceId = searchParams.get("invoiceId") ?? undefined
 
     const [searchInput, setSearchInput] = React.useState(qParam)
@@ -475,7 +474,6 @@ export function useSupplierAccountsPage() {
                     purchaseOrderId,
                     returnTo,
                     fromWorkspace,
-                    existingPaymentId,
                     existingInvoiceId,
                     preselectPayableAccountId:
                         previewKind === "payable" ? detailId : undefined,
@@ -532,7 +530,6 @@ export function useSupplierAccountsPage() {
                 session: next.track,
                 supplierId: next.supplierId,
                 draftSessionId: next.draftSessionId ?? null,
-                paymentId: next.existingPaymentId ?? null,
                 invoiceId: next.existingInvoiceId ?? null,
                 detailId: null,
             },
@@ -546,7 +543,6 @@ export function useSupplierAccountsPage() {
             {
                 session: null,
                 draftSessionId: null,
-                paymentId: null,
                 invoiceId: null,
             },
             { replace: true },
@@ -577,7 +573,7 @@ export function useSupplierAccountsPage() {
     }
 
     /**
-     * 打开供应商付款详情，嵌入通用审批区。
+     * 打开已登记供应商付款事实详情。
      *
      * @param paymentId 付款主键。
      */

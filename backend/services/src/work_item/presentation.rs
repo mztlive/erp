@@ -72,7 +72,7 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
         WorkItemType::FulfillmentOperation => "核对来源、数量和履约信息后，提交本次确认。",
-        WorkItemType::SupplierPaymentExecution => "核对本页应付金额后，登记付款并提交审批。",
+        WorkItemType::SupplierPaymentExecution => "核对收款账户、应付金额和银行回单后，登记付款并完成核销。",
         WorkItemType::SalesInvoiceExecution => "核对本页待开金额后，登记销项发票并完成分配。",
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
@@ -209,7 +209,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
         WorkItemType::FulfillmentOperation => "不确认则本次收货、发货或交付不能形成正式事实",
-        WorkItemType::SupplierPaymentExecution => "不登记则应付无法进入付款审批与核销",
+        WorkItemType::SupplierPaymentExecution => "不登记则应付无法完成付款核销",
         WorkItemType::SalesInvoiceExecution => "不登记则销售应收无法完成销项开票",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
         WorkItemType::SalesChangeImpactReview => "不复核则销售变更不能继续履约",
@@ -385,7 +385,7 @@ mod tests {
         );
         assert_eq!(
             next_action_hint(WorkItemType::SupplierPaymentExecution),
-            "核对本页应付金额后，登记付款并提交审批。"
+            "核对收款账户、应付金额和银行回单后，登记付款并完成核销。"
         );
         assert_eq!(
             next_action_hint(WorkItemType::FulfillmentOperation),

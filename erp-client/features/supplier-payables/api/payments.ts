@@ -1,6 +1,6 @@
 /**
- * W12 供应商往来 · 付款相关请求（登记草稿、提交审批、冲正）。
- * 幂等结果缓存见 api/shared。过账只由最终通过动作内部消费。
+ * W12 供应商往来 · 付款相关请求（任务内登记并过账、冲正）。
+ * 幂等结果缓存见 api/shared；普通付款不启动独立审批。
  */
 
 import { apiGetBlob, apiPostForm } from "@/lib/api"
@@ -13,7 +13,6 @@ import {
     submitUnknownResolvers,
 } from "@/features/supplier-payables/api/shared"
 import { commitPaymentReversal } from "@/features/supplier-payables/api/reversals"
-import { mapSupplierPaymentApproval } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
 import type {
     FormalSubmitResult,
@@ -31,7 +30,7 @@ function failedPayment(code: string, message: string): FormalSubmitResult {
 }
 
 /**
- * 提交供应商付款审批。命令与银行回单在一次 multipart 请求中提交。
+ * 在当前付款任务内登记付款并过账核销。命令与银行回单一次提交。
  *
  * @param input 提交所需字段。
  */
@@ -54,7 +53,7 @@ export async function submitPayment(
     if (targets.length === 0) {
         return failedPayment(
             "NEED_ALLOCATION",
-            "提交审批至少需要一条核销分配。",
+            "登记付款至少需要一条核销分配。",
         )
     }
     const bankReceiptAssetId = commandInput.bankReceiptFile
@@ -71,23 +70,18 @@ export async function submitPayment(
         const command = {
             work_item_id: commandInput.workItemId,
             expected_task_version: commandInput.expectedTaskVersion,
-            payment_id: commandInput.existingPaymentId ?? null,
-            expected_version: commandInput.existingPaymentId
-                ? (commandInput.expectedVersion ?? null)
-                : null,
-            payment: commandInput.existingPaymentId
-                ? null
-                : {
-                      payment_no: `FK-${commandInput.idempotencyKey.slice(-8)}`,
-                      supplier_id: commandInput.supplierId,
-                      paid_at: paidAtSecs,
-                      amount: commandInput.amount,
-                      bank_reference: commandInput.bankReference || undefined,
-                      bank_receipt_asset_id: bankReceiptAssetId,
-                  },
-            bank_receipt_asset_id: commandInput.existingPaymentId
-                ? bankReceiptAssetId
-                : null,
+            expected_payee_bank_account_id:
+                commandInput.expectedPayeeBankAccountId,
+            expected_payee_bank_account_version:
+                commandInput.expectedPayeeBankAccountVersion,
+            payment: {
+                payment_no: `FK-${commandInput.idempotencyKey.slice(-8)}`,
+                supplier_id: commandInput.supplierId,
+                paid_at: paidAtSecs,
+                amount: commandInput.amount,
+                bank_reference: commandInput.bankReference || undefined,
+                bank_receipt_asset_id: bankReceiptAssetId,
+            },
             allocations: targets.map((target) => ({
                 payable_entry_id:
                     target.payableEntryId ?? target.payableAccountId,
@@ -108,37 +102,18 @@ export async function submitPayment(
             "/admin/supplier-payments/commit",
             form,
         )
-        const approval = mapSupplierPaymentApproval(submitted.approval)
         const draft = sessions.get(commandInput.draftSessionId)
-        if (draft) {
-            sessions.set(commandInput.draftSessionId, {
-                ...draft,
-                existingPaymentId: submitted.id,
-                existingDocumentNo: submitted.payment_no,
-                existingPaymentVersion: submitted.version,
-                existingUnallocated: submitted.unallocated_amount,
-                existingBankReceipt: submitted.bank_receipt
-                    ? {
-                          assetId: submitted.bank_receipt.asset_id,
-                          fileName: submitted.bank_receipt.file_name,
-                          contentType: submitted.bank_receipt.content_type,
-                          byteSize: submitted.bank_receipt.byte_size,
-                      }
-                    : undefined,
-                approval,
-            })
-        }
         const result: FormalSubmitResult = {
             status: "succeeded",
-            title: "付款已提交审批",
-            description: "已进入审批。全部节点通过后过账并核销。",
+            title: "付款已登记并过账",
+            description: "已形成过账付款记录，并按本次分配核销应付。",
             reference: submitted.payment_no,
             operationId: commandInput.idempotencyKey,
             documentNo: submitted.payment_no,
+            existingDocumentId: submitted.id,
             unallocatedAmount: submitted.unallocated_amount,
             allocatedTotal: submitted.allocated_total,
             returnTo: draft?.returnTo,
-            approval,
             subjectStatus: submitted.status,
         }
         submitIdempotency.set(commandInput.idempotencyKey, result)

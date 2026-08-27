@@ -9,7 +9,7 @@ describe("FormalActionConfirmDialog", () => {
             <FormalActionConfirmDialog
                 open
                 onOpenChange={() => undefined}
-                actionLabel="提交付款审批"
+                actionLabel="提交采购审批"
                 fromStatus={{ label: "草稿", tone: "neutral" }}
                 toStatus={{ label: "审批中", tone: "warning" }}
                 description={

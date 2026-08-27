@@ -13,6 +13,7 @@ import {
     fetchSupplierPayment,
     fetchSupplierPaymentBankReceiptBlob,
     fetchSupplierRefund,
+    revealPaymentRecipient,
     resolveUnknownResult,
     reverseInvoice,
     reversePayment,
@@ -23,7 +24,6 @@ import {
     submitSupplierRefund,
 } from "@/features/supplier-payables/api/requests"
 import { PAYMENT_REVERSAL_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/payment-reversal-approval"
-import { SUPPLIER_PAYMENT_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-payment-approval"
 import { SUPPLIER_REFUND_DOCUMENT_TYPE } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type {
     AllocationTrack,
@@ -34,7 +34,7 @@ import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
 
-const supplierPayablesKeys = {
+export const supplierPayablesKeys = {
     all: ["supplier-payables"] as const,
     list: (query: SupplierAccountsQuery) =>
         [...supplierPayablesKeys.all, "list", query] as const,
@@ -55,7 +55,6 @@ const supplierPayablesKeys = {
         purchaseOrderId?: string
         returnTo?: string
         fromWorkspace?: string
-        existingPaymentId?: string
         existingInvoiceId?: string
         preselectPayableAccountId?: string
     }) => [...supplierPayablesKeys.all, "session", params] as const,
@@ -77,7 +76,7 @@ export function usePayableDetailQuery(payableAccountId: string | null) {
 }
 
 /**
- * 读取供应商付款详情，含只读审批绑定。
+ * 读取供应商付款详情。
  *
  * @param paymentId 付款主键；空值不发请求。
  */
@@ -136,7 +135,6 @@ export function useAllocationSessionQuery(
         purchaseOrderId?: string
         returnTo?: string
         fromWorkspace?: string
-        existingPaymentId?: string
         existingInvoiceId?: string
         preselectPayableAccountId?: string
     } | null,
@@ -151,7 +149,6 @@ export function useAllocationSessionQuery(
                       purchaseOrderId: params.purchaseOrderId,
                       returnTo: params.returnTo,
                       fromWorkspace: params.fromWorkspace,
-                      existingPaymentId: params.existingPaymentId,
                       existingInvoiceId: params.existingInvoiceId,
                       preselectPayableAccountId:
                           params.preselectPayableAccountId,
@@ -165,7 +162,6 @@ export function useAllocationSessionQuery(
 
 async function invalidateFinanceAndSources(
     queryClient: ReturnType<typeof useQueryClient>,
-    paymentId?: string,
 ) {
     await queryClient.invalidateQueries({ queryKey: supplierPayablesKeys.all })
     await queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all })
@@ -173,14 +169,14 @@ async function invalidateFinanceAndSources(
     await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
     await queryClient.invalidateQueries({ queryKey: workspaceHomeKeys.all })
     await queryClient.invalidateQueries({ queryKey: approvalKeys.all })
-    if (paymentId) {
-        await queryClient.invalidateQueries({
-            queryKey: approvalKeys.document(
-                SUPPLIER_PAYMENT_DOCUMENT_TYPE,
-                paymentId,
-            ),
-        })
-    }
+}
+
+/** 受控揭示付款任务收款账号；结果只留在组件短时内存，不进入 Query 缓存。 */
+export function useRevealPaymentRecipientMutation() {
+    return useMutation({
+        mutationFn: revealPaymentRecipient,
+        gcTime: 0,
+    })
 }
 
 export function useSubmitPaymentMutation() {
@@ -188,12 +184,29 @@ export function useSubmitPaymentMutation() {
     return useMutation({
         mutationFn: submitPayment,
         onSuccess: async (result) => {
-            if (result.status === "succeeded") {
-                await invalidateFinanceAndSources(
-                    queryClient,
-                    result.existingDocumentId ?? result.documentNo,
-                )
-            }
+            if (result.status !== "succeeded") return
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: supplierPayablesKeys.all,
+                    refetchType: "none",
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.all,
+                    refetchType: "none",
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: fulfillmentKeys.all,
+                    refetchType: "none",
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                    refetchType: "none",
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workspaceHomeKeys.all,
+                    refetchType: "none",
+                }),
+            ])
         },
     })
 }

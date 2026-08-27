@@ -13,11 +13,12 @@ import {
 import { AllocationFactFormCard } from "@/features/supplier-payables/components/allocation-fact-form-card"
 import { AllocationPoolCard } from "@/features/supplier-payables/components/allocation-pool-card"
 import { AllocationResultView } from "@/features/supplier-payables/components/allocation-result-view"
-import { SupplierPaymentApprovalArea } from "@/features/supplier-payables/components/supplier-payment-approval-area"
 import { SupplierPaymentSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-payment-submit-confirm-dialog"
 import type { AllocationSessionState } from "@/features/supplier-payables/hooks/use-allocation-session"
-import { supplierPaymentApprovalPhase } from "@/features/supplier-payables/lib/supplier-payment-approval"
-import type { AllocationTrack } from "@/features/supplier-payables/types"
+import type {
+    AllocationTrack,
+    PaymentRecipient,
+} from "@/features/supplier-payables/types"
 import { workspaceLabel } from "@/lib/ui-text"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 import { cn } from "@/lib/utils"
@@ -28,6 +29,7 @@ export type SupplierAllocationWorkspaceProps = {
     fromWorkspace?: string
     purchaseOrderId?: string
     returnTo?: string
+    paymentRecipient?: PaymentRecipient
     embedded?: boolean
     onClose: () => void
     onGoToInvoiceView?: () => void
@@ -92,6 +94,7 @@ export function SupplierAllocationWorkspace({
     fromWorkspace,
     purchaseOrderId,
     returnTo,
+    paymentRecipient,
     embedded = false,
     onClose,
     onGoToInvoiceView,
@@ -106,7 +109,6 @@ export function SupplierAllocationWorkspace({
         setConfirmOpen,
         result,
         draftHint,
-        paymentApproval,
         paymentForm,
         invoiceForm,
         factAmount,
@@ -161,19 +163,6 @@ export function SupplierAllocationWorkspace({
                 </Alert>
             ) : null}
 
-            {track === "payment" && paymentApproval ? (
-                <SupplierPaymentApprovalArea
-                    phase={supplierPaymentApprovalPhase(
-                        paymentApproval,
-                        result?.status === "succeeded"
-                            ? "IN_APPROVAL"
-                            : "DRAFT",
-                    )}
-                    approval={paymentApproval}
-                    documentId={session.existingPaymentId}
-                />
-            ) : null}
-
             {result ? (
                 <AllocationResultView
                     result={result}
@@ -213,11 +202,9 @@ export function SupplierAllocationWorkspace({
                         />
                         <AllocationFactFormCard
                             track={track}
-                            existingPaymentId={session.existingPaymentId}
                             existingInvoiceId={session.existingInvoiceId}
                             existingDocumentNo={session.existingDocumentNo}
                             existingUnallocated={session.existingUnallocated}
-                            existingBankReceipt={session.existingBankReceipt}
                             paymentForm={paymentForm}
                             invoiceForm={invoiceForm}
                             mixedSources={mixedSources}
@@ -242,7 +229,10 @@ export function SupplierAllocationWorkspace({
                 <SupplierPaymentSubmitConfirmDialog
                     open={confirmOpen}
                     pending={isSubmitting}
-                    approval={paymentApproval}
+                    supplierName={session.supplierName}
+                    paymentAmount={factAmount}
+                    allocatedAmount={allocatedHint}
+                    recipient={paymentRecipient}
                     onOpenChange={setConfirmOpen}
                     onConfirm={() => void doSubmit()}
                 />

@@ -1,6 +1,6 @@
 //! 审批业务适配器注册与资格重验。
 //!
-//! 12 个 `PROCESS_REQUIRED` 类型必须登记完整规格；8 个 `NO_APPROVAL` 类型
+//! 11 个 `PROCESS_REQUIRED` 类型必须登记完整规格；9 个 `NO_APPROVAL` 类型
 //! 不得注册空适配器。领域动作由各 DocumentType 子阶段接线。
 
 use bpm::model::types::ApprovalDefinitionStatus;
@@ -336,12 +336,6 @@ pub fn adapter_object_read_decision(
             assignee_user_id,
         )?));
     }
-    if spec.document_type == DocumentType::SupplierPayment {
-        return Ok(Some(crate::payable::supplier_payment_object_readable(
-            &context.organization_id,
-            assignee_user_id,
-        )?));
-    }
     if spec.document_type == DocumentType::CustomerRefund {
         return Ok(Some(crate::returns::customer_refund_object_readable(
             &context.organization_id,
@@ -466,7 +460,7 @@ mod tests {
     use crate::approval::policy::policy_of;
     use entities::access_control::DataScopeSubjectType;
 
-    /// 12 个必须审批类型的适配器规格完整，8 个无审批类型不得注册空适配器。
+    /// 11 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
     #[test]
     fn adapter_registry_is_complete_and_no_approval_has_no_adapter() {
         let mut required = 0;
@@ -486,8 +480,8 @@ mod tests {
                 }
             }
         }
-        assert_eq!(required, 12);
-        assert_eq!(no_approval, 8);
+        assert_eq!(required, 11);
+        assert_eq!(no_approval, 9);
     }
 
     /// 每个 DocumentType 都能构造唯一 SubjectRef。
@@ -654,11 +648,7 @@ mod tests {
             adapter_object_read_decision(&receipt_reversal, &context, "u1").expect("回款冲正读取权已接线"),
             Some(true)
         );
-        let payment = adapter_spec_of(DocumentType::SupplierPayment).expect("供应商付款必须有适配器");
-        assert_eq!(
-            adapter_object_read_decision(&payment, &context, "u1").expect("供应商付款读取权已接线"),
-            Some(true)
-        );
+        assert!(adapter_spec_of(DocumentType::SupplierPayment).is_err());
         let payment_reversal = adapter_spec_of(DocumentType::PaymentReversal).expect("付款冲正必须有适配器");
         assert_eq!(
             adapter_object_read_decision(&payment_reversal, &context, "u1").expect("付款冲正读取权已接线"),

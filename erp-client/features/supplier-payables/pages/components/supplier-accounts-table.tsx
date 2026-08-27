@@ -46,6 +46,7 @@ export interface SupplierAccountsTableProps {
     onClearFilters: () => void
     returnTo: string | undefined
     fromWorkspace: string | undefined
+    paymentTaskPayableAccountId?: string
     openPreview: (payableAccountId: string) => void
     openPaymentPreview: (paymentId: string) => void
     openSession: (next: SessionState) => void
@@ -74,6 +75,7 @@ export function SupplierAccountsTable({
     onClearFilters,
     returnTo,
     fromWorkspace,
+    paymentTaskPayableAccountId,
     openPreview,
     openPaymentPreview,
     openSession,
@@ -91,6 +93,7 @@ export function SupplierAccountsTable({
         data,
         returnTo,
         fromWorkspace,
+        paymentTaskPayableAccountId,
         openPreview,
         openPaymentPreview,
         openSession,

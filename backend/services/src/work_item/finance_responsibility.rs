@@ -572,7 +572,7 @@ mod tests {
             required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)
                 .unwrap()
                 .covers(&entities::PermissionSet::new(vec![Permission::parse(
-                    "supplier_payment:submit"
+                    "supplier_payment:commit"
                 )
                 .unwrap(),]))
         );

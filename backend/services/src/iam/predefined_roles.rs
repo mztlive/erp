@@ -1415,7 +1415,7 @@ mod tests {
             assert!(permissions.covers(&required), "采购缺少 {required:?}");
         }
         for forbidden in [
-            "supplier_payment:create",
+            "supplier_payment:commit",
             "supplier_settlement_statement:confirm",
             "supplier_settlement_statement:create",
             "integration_error_task:list",

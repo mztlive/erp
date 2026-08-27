@@ -72,41 +72,32 @@ export function buildUnallocatedColumns(input: {
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => {
-                const payment = data?.payments.find(
-                    (p) => p.paymentNo === row.original.documentNo,
-                )
                 const invoice = data?.invoices.find(
                     (p) =>
                         `${p.invoiceCode}-${p.invoiceNo}` ===
                         row.original.documentNo,
                 )
-                const resolved =
-                    row.original.track === "payment" ? payment : invoice
+                const isPayment = row.original.track === "payment"
                 return (
                     <Button
                         type="button"
                         size="xs"
-                        disabled={!resolved}
+                        disabled={isPayment || !invoice}
                         title={
-                            resolved
-                                ? undefined
-                                : "未找到原付款/发票，请回到对应视图操作"
+                            isPayment
+                                ? "付款必须在付款任务登记时完成核销"
+                                : invoice
+                                  ? undefined
+                                  : "未找到原发票，请回到进项发票视图操作"
                         }
-                        onClick={() =>
+                        onClick={() => {
+                            if (!invoice || isPayment) return
                             openSession({
-                                track: row.original.track,
+                                track: "purchase_invoice",
                                 supplierId: row.original.supplierId,
-                                existingPaymentId:
-                                    row.original.track === "payment"
-                                        ? payment?.paymentId
-                                        : undefined,
-                                existingInvoiceId:
-                                    row.original.track ===
-                                    "purchase_invoice"
-                                        ? invoice?.invoiceId
-                                        : undefined,
+                                existingInvoiceId: invoice.invoiceId,
                             })
-                        }
+                        }}
                     >
                         继续核销
                     </Button>

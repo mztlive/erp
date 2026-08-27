@@ -16,10 +16,9 @@ import {
     VIEW_LABEL,
 } from "@/features/supplier-payables/types"
 import {
-    mapSupplierPaymentApproval,
     supplierPaymentStatusLabel,
     supplierPaymentStatusTone,
-} from "@/features/supplier-payables/lib/supplier-payment-approval"
+} from "@/features/supplier-payables/lib/supplier-payment"
 import {
     mapPaymentReversalApproval,
     paymentReversalStatusLabel,
@@ -44,6 +43,15 @@ type BackendPayableEntry = {
     posted_at: number
 }
 
+type BackendPaymentRecipient = {
+    bank_account_id: string
+    version: number
+    account_name: string
+    bank_name: string
+    bank_branch_name?: string | null
+    account_number_masked: string
+}
+
 export type BackendPayableAccount = {
     id: string
     source_document_id: string
@@ -62,6 +70,7 @@ export type BackendPayableAccount = {
     version: number
     created_at: number
     entries: BackendPayableEntry[]
+    payment_recipient?: BackendPaymentRecipient | null
 }
 
 type BackendPaymentAllocation = {
@@ -79,6 +88,7 @@ export type BackendSupplierPayment = {
     payment_no: string
     status: string
     supplier_id: string
+    payment_recipient?: BackendPaymentRecipient | null
     paid_at: number
     amount: string
     bank_reference?: string | null
@@ -93,7 +103,6 @@ export type BackendSupplierPayment = {
     allocated_total: string
     unallocated_amount: string
     allocations: BackendPaymentAllocation[]
-    approval?: DocumentApprovalViewDto | null
 }
 
 /** SupplierRefund 为 PROCESS_REQUIRED：创建/详情 DTO 必须携带只读审批绑定。 */
@@ -187,6 +196,20 @@ function maskBank(raw?: string | null): string {
     return `****${v.slice(-4)}`
 }
 
+function mapPaymentRecipient(
+    recipient?: BackendPaymentRecipient | null,
+): PayableRow["paymentRecipient"] {
+    if (!recipient) return undefined
+    return {
+        bankAccountId: recipient.bank_account_id,
+        version: recipient.version,
+        accountName: recipient.account_name,
+        bankName: recipient.bank_name,
+        bankBranchName: recipient.bank_branch_name ?? undefined,
+        accountNumberMasked: recipient.account_number_masked,
+    }
+}
+
 export function mapPayableStatus(s: string): PayableRow["status"] {
     if (s === "settled") return "SETTLED"
     if (s === "partially_settled" || s === "partial") return "PARTIAL"
@@ -201,21 +224,13 @@ export function mapSourceType(s: string): PayableRow["sourceType"] {
 }
 
 /**
- * 把后端付款状态映射为页面稳定码。审批中不得伪装成草稿或已过账。
+ * 把后端付款状态映射为页面稳定码。
  *
  * @param s 服务端状态字面量。
  */
 export function mapPaymentStatus(s: string): PaymentRow["status"] {
     if (s === "reversed" || s === "REVERSED") return "REVERSED"
     if (s === "posted" || s === "POSTED") return "POSTED"
-    if (
-        s === "IN_APPROVAL" ||
-        s === "in_approval" ||
-        s === "pending_review" ||
-        s === "PENDING_REVIEW"
-    ) {
-        return "IN_APPROVAL"
-    }
     return "DRAFT"
 }
 
@@ -269,22 +284,20 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
         status,
         statusLabel: PAYABLE_STATUS_LABEL[status],
         statusTone: PAYABLE_STATUS_TONE[status],
+        paymentRecipient: mapPaymentRecipient(a.payment_recipient),
         allowedActions: ["VIEW_DETAIL", "REGISTER_PAYMENT", "REGISTER_INVOICE"],
         actionBlockers: [],
     }
 }
 
 /**
- * 把付款 HTTP 视图投影为列表/详情行。审批绑定只透传，不推导责任。
+ * 把付款 HTTP 视图投影为列表/详情行。
  *
  * @param p 付款 HTTP 载荷。
  */
 export function projectPayment(p: BackendSupplierPayment): PaymentRow {
     const status = mapPaymentStatus(p.status)
     const allowed: string[] = ["VIEW_DETAIL"]
-    if (status === "DRAFT") {
-        allowed.push("CONTINUE_ALLOCATE")
-    }
     if (status === "POSTED") {
         allowed.push("REVERSE_PAYMENT", "REVERSE", "REFUND")
     }
@@ -323,7 +336,7 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         })),
         allowedActions: allowed,
         actionBlockers: [],
-        approval: mapSupplierPaymentApproval(p.approval),
+        paymentRecipient: mapPaymentRecipient(p.payment_recipient),
     }
 }
 
