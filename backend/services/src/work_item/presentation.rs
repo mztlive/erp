@@ -72,12 +72,8 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
         WorkItemType::FulfillmentOperation => "核对来源、数量和履约信息后，提交本次确认。",
-        WorkItemType::SupplierPaymentExecution => {
-            "进入供应商往来，核对计划付款日和未付金额，登记付款并提交审批。"
-        }
-        WorkItemType::SalesInvoiceExecution => {
-            "进入客户往来，核对客户、销售单和待开金额，登记销项发票并完成分配。"
-        }
+        WorkItemType::SupplierPaymentExecution => "核对本页应付金额后，登记付款并提交审批。",
+        WorkItemType::SalesInvoiceExecution => "核对本页待开金额后，登记销项发票并完成分配。",
         WorkItemType::ImportBusinessConfirmation => {
             "进入采购确认页后，逐行确认可供数量；确认通过后销售单才会生效。"
         }
@@ -386,6 +382,18 @@ mod tests {
         assert_eq!(
             next_action_hint(WorkItemType::DocumentApproval),
             "核对本页事实后，确认通过或驳回。"
+        );
+        assert_eq!(
+            next_action_hint(WorkItemType::SupplierPaymentExecution),
+            "核对本页应付金额后，登记付款并提交审批。"
+        );
+        assert_eq!(
+            next_action_hint(WorkItemType::FulfillmentOperation),
+            "核对来源、数量和履约信息后，提交本次确认。"
+        );
+        assert_eq!(
+            next_action_hint(WorkItemType::SalesInvoiceExecution),
+            "核对本页待开金额后，登记销项发票并完成分配。"
         );
         assert_eq!(
             default_impact_summary(WorkItemType::DocumentApproval),

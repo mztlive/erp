@@ -151,18 +151,20 @@ customer_assignments customer_profile_commands customer_accounts
 
 ### 3.3 必须按条件删除的共享数据
 
-`external_identity_targets` 必须删除内部对象类型为 `customer`、`contract` 或 `sales_order` 的记录，以及指向待删映射的记录。`external_identity_maps` 必须删除 `object_type` 为 `customer`、`contract` 或 `sales_order` 的记录。`source_systems` 必须保留。
+`external_identity_targets` 必须删除内部对象类型为 `customer`、`contract` 或 `sales_order` 的记录，以及指向待删映射的记录。`external_identity_maps` 必须删除 `object_type` 为 `customer`、`contract` 或 `sales_order` 的记录。`ERP_RESET_INCLUDE_CATALOG=1` 时对象类型还包含 `supplier`、`product`、`sku`、`voucher_category`。`source_systems` 必须保留。
 
-`supplier_api_connections` 必须保留；但其健康检查运行事实和命令回执被重置后，工具必须把仍带健康缓存的连接置为 `disabled`，并清空 `last_health_at`、`last_health_result`、`last_healthy_technical_config_version`。不得保留无法追溯来源的“最近健康”或继续启用状态。
+默认必须保留 `supplier_api_connections`；但其健康检查运行事实和命令回执被重置后，工具必须把仍带健康缓存的连接置为 `disabled`，并清空 `last_health_at`、`last_health_result`、`last_healthy_technical_config_version`。不得保留无法追溯来源的“最近健康”或继续启用状态。`ERP_RESET_INCLUDE_CATALOG=1` 时连接集合按 §3.4 整体 drop。
 
-删除交易链前必须固化全部待删 Party 候选：`customer_accounts.party_id`，合同、合同版本、销售单、销售草稿、销售提交、销售变更提交的 `settlement_party_id`，以及应收账户、收款和发票的往来主体 ID。满足下列任一条件的 Party 必须保留：
+删除交易链前必须固化全部待删 Party 候选：`customer_accounts.party_id`，合同、合同版本、销售单、销售草稿、销售提交、销售变更提交的 `settlement_party_id`，以及应收账户、收款和发票的往来主体 ID。默认满足下列任一条件的 Party 必须保留：
 
 - 被 `supplier_accounts.party_id` 引用；
 - 被 `supplier_commercial_profile_revisions.signing_entity_party_id` 引用；
 - 被 `supplier_commercial_profile_revisions.payment_entity_party_id` 引用。
 
+`ERP_RESET_INCLUDE_CATALOG=1` 时清空全部 Party，由后续种子重新写入公司主体、供应商主体和客户主体。
+
 其余客户及结算链专属 Party 必须按 `party_bank_accounts`、`party_tax_profiles`、`party_addresses`、`party_contacts`、`party_revisions`、`parties` 的顺序删除。
-删除这些 Party 前，工具必须删除指向它们的 `external_identity_targets`；只有在候选映射已无任何其他目标时，才可删除对应 `external_identity_maps`。指向供应商共享 Party 的目标和映射必须保留。
+删除这些 Party 前，工具必须删除指向它们的 `external_identity_targets`；只有在候选映射已无任何其他目标时，才可删除对应 `external_identity_maps`。默认指向供应商共享 Party 的目标和映射必须保留；`ERP_RESET_INCLUDE_CATALOG=1` 时按 §3.4 清空全部 Party。
 
 Party 专属链必须在 drop 客户、合同、销售和应收来源集合前删除。
 该顺序用于保证中断后幂等重跑：若程序在 Party 删除后、来源集合 drop 前中断，
@@ -170,13 +172,29 @@ Party 专属链必须在 drop 客户、合同、销售和应收来源集合前�
 此中断窗口内可暂时存在指向已删 Party 的待重置引用，因此整个重置期间必须持续停止应用写入，
 并在全部 drop 和后置校验完成前禁止重启应用。
 
+### 3.4 可选的供应商/商品主数据重置
+
+默认保留供应商、商品、SKU 与供给主数据，供 E2E 跨流程复用。
+
+`ERP_RESET_INCLUDE_CATALOG=1` 时（`scripts/prepare-dev.sh` 使用），工具额外整体 drop：
+
+- 供应商供给与公司商品池资格：`supplier_offerings`、`supplier_offering_revisions`、`supplier_offering_availabilities`、`supplier_offering_commands`
+- 商品与 SKU：`products`、`product_revisions`、`product_revision_medias`、`skus`、`sku_revisions`、`sku_revision_attribute_values`、`voucher_category_profile_revisions`
+- 供应商主数据与接口配置：`supplier_accounts` 及其资料/能力/资质/评级/命令集合，以及 `supplier_api_connections`、`supplier_api_capabilities`、`supplier_api_business_capability_confirmations`
+- 仓库：`warehouses`、`warehouse_revisions`、`warehouse_sku_policies`
+- 商品字典：`product_categories`、`product_brands`、`unit_of_measures`、`sku_attributes`、`sku_attribute_values`、`product_category_attributes`
+
+此时全部 Party 一并删除（含原公司签约/付款主体），由后续种子重新写入。账号/RBAC 仍保留。
+
+集合摘要计入该开关；preview / execute / verify 必须使用同一 `ERP_RESET_INCLUDE_CATALOG` 值。
+
 ## 4. 明确保留项
 
 工具必须保留：
 
 - 账号、角色、权限、数据范围和审计记录；
-- `supplier_accounts` 及供应商资料、能力、资质、目录和接口配置；
-- 商品、SKU、仓库、供应商供给和其他基础资料；商品发布运行链按 §3.2 重建；
+- 默认保留 `supplier_accounts` 及供应商资料、能力、资质、目录和接口配置；`ERP_RESET_INCLUDE_CATALOG=1` 时按 §3.4 重置；
+- 默认保留商品、SKU、仓库、供应商供给和其他基础资料；商品发布运行链按 §3.2 重建；`ERP_RESET_INCLUDE_CATALOG=1` 时按 §3.4 重置商品/SKU/供给/仓库/字典；
 - `source_systems`；
 - `file_assets` 和对象存储对象；
 - `document_number_counters`。

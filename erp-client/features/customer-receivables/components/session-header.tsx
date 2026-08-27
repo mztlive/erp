@@ -8,18 +8,21 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { formatDateTime } from "@/lib/datetime"
 import type { AllocationSessionView } from "@/features/customer-receivables/types"
 
+/** 核销会话页头。工作台页内作业可隐藏返回按钮。 */
 export function SessionHeader({
     session,
     isReceipt,
     existing,
     draftSavedAt,
     onRequestClose,
+    showClose = true,
 }: {
     session: AllocationSessionView
     isReceipt: boolean
     existing: boolean
     draftSavedAt: string | undefined
     onRequestClose: () => void
+    showClose?: boolean
 }) {
     return (
         <>
@@ -41,17 +44,19 @@ export function SessionHeader({
                         {session.note}
                     </p>
                 </div>
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={onRequestClose}
-                >
-                    <XIcon data-icon="inline-start" aria-hidden="true" />
-                    {session.returnContext?.returnTo
-                        ? "取消并返回"
-                        : "返回列表"}
-                </Button>
+                {showClose ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onRequestClose}
+                    >
+                        <XIcon data-icon="inline-start" aria-hidden="true" />
+                        {session.returnContext?.returnTo
+                            ? "取消并返回"
+                            : "返回列表"}
+                    </Button>
+                ) : null}
             </div>
 
             {session.returnContext?.from === "W05" &&

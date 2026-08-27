@@ -44,6 +44,8 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
+import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
+import { WorkspacePaymentTask } from "./workspace-payment-task"
 import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
@@ -51,7 +53,7 @@ import {
 
 /**
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
- * 查看/打开在页头图标；通过、驳回留在底栏。
+ * 履约、付款与开票在本页提交正式命令；审批通过、驳回留在底栏。
  */
 export function WorkspaceTaskDetail({
     item,
@@ -77,6 +79,14 @@ export function WorkspaceTaskDetail({
                 onTaskCompleted={(workItemId) => onTaskCompleted?.(workItemId)}
             />
         )
+    }
+
+    if (item.workItemType === "SUPPLIER_PAYMENT_EXECUTION") {
+        return <WorkspacePaymentTask item={item} />
+    }
+
+    if (item.workItemType === "SALES_INVOICE_EXECUTION") {
+        return <WorkspaceInvoiceTask item={item} />
     }
 
     return (

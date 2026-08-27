@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# 开发开单准备：清业务数据后补齐开单底座（审批定义 + 财务责任 + 客户 + 合同）。
+# 开发开单准备：清空业务数据与主数据后，写入可开单的真实风格底座。
 #
 # 编排：
 #   1. 停止 web-api（停写）
-#   2. 调用 reset-db.sh（清业务数据，保留账号/主数据，不填种子）
+#   2. 调用 reset-db.sh（清业务单据，并清供应商/商品/仓库/字典；保留账号）
 #   3. 临时拉起 web-api（只为发布审批定义和写种子）
 #   4. 发布审批定义
-#   5. 创建仓储账号、开发仓（绑定收发经办人）、财务三人（审批 caiwu / 付款 fukuan / 开票 kaipiao）、客户与合同（幂等）
-#   6. 再次停止 web-api，交给用户自行启动
+#   5. 创建仓储账号、仓库、财务三人、客户与合同
+#   6. 创建供应商、分类/品牌/单位、商品与供给，使公司商品池可开单
+#   7. 再次停止 web-api，交给用户自行启动
 #
 # 不创建销售单、采购单、库存或票款。E2E（run-flow.sh）不得调用本脚本。
 #
@@ -30,8 +31,8 @@ echo "== 开发开单准备 =="
 echo "-- 停止 web-api（停写） --"
 bash "${SCRIPT_DIR}/stop-backend.sh"
 
-echo "-- 数据库 reset --"
-E2E_RESET=1 bash "${SCRIPT_DIR}/reset-db.sh"
+echo "-- 数据库 reset（含全部主数据） --"
+E2E_RESET=1 ERP_RESET_INCLUDE_CATALOG=1 bash "${SCRIPT_DIR}/reset-db.sh"
 
 echo "-- 临时启动 web-api（写种子） --"
 bash "${SCRIPT_DIR}/restart-backend.sh"
@@ -41,6 +42,9 @@ node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
 
 echo "-- 种子：仓储账号 + 仓库 + 财务责任 + 客户 + 合同 --"
 node "${SCRIPT_DIR}/seed-dev-foundation.mjs"
+
+echo "-- 种子：供应商 + 商品 + 公司商品池 --"
+node "${SCRIPT_DIR}/seed-dev-catalog.mjs"
 
 echo "-- 停止 web-api --"
 bash "${SCRIPT_DIR}/stop-backend.sh"

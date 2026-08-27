@@ -4,6 +4,7 @@
 // 由 reset-dev-business-data.sh 调用。连接串只从进程环境读取，禁止输出。
 // 本文件默认只执行 count/distinct/aggregate；ERP_RESET_EXECUTE=1 才进入写分支。
 // ERP_RESET_VERIFY=1 只跑后置校验。禁止 dropDatabase()，只 drop 固定集合或按固定过滤删除。
+// ERP_RESET_INCLUDE_CATALOG=1 时额外 drop 供应商/商品/SKU/供给主数据。
 
 const OLD_APPROVAL_COLLECTIONS = [
     "approval_step_instances",
@@ -258,6 +259,66 @@ const DROP_GROUPS = [
     },
 ];
 
+// 仅 ERP_RESET_INCLUDE_CATALOG=1 时并入 DROP_GROUPS。开发开单准备会清主数据
+// 后再走 API 种子；E2E reset-db.sh 不设此开关，继续保留主数据。
+const CATALOG_DROP_GROUPS = [
+    {
+        name: "供应商供给与公司商品池资格",
+        collections: [
+            "supplier_offering_availabilities",
+            "supplier_offering_revisions",
+            "supplier_offerings",
+            "supplier_offering_commands",
+        ],
+    },
+    {
+        name: "商品与 SKU 主数据",
+        collections: [
+            "sku_revision_attribute_values",
+            "sku_revisions",
+            "skus",
+            "product_revision_medias",
+            "product_revisions",
+            "products",
+            "voucher_category_profile_revisions",
+        ],
+    },
+    {
+        name: "供应商主数据与接口配置",
+        collections: [
+            "supplier_api_business_capability_confirmations",
+            "supplier_api_capabilities",
+            "supplier_api_connections",
+            "supplier_profile_commands",
+            "supplier_rating_revisions",
+            "supplier_qualification_capabilities",
+            "supplier_qualification_revisions",
+            "supplier_qualifications",
+            "supplier_capability_revisions",
+            "supplier_capabilities",
+            "supplier_commercial_profile_revisions",
+            "supplier_accounts",
+        ],
+    },
+    {
+        name: "仓库主数据",
+        collections: ["warehouse_sku_policies", "warehouse_revisions", "warehouses"],
+    },
+    {
+        name: "商品字典",
+        collections: [
+            "product_category_attributes",
+            "sku_attribute_values",
+            "sku_attributes",
+            "product_categories",
+            "product_brands",
+            "unit_of_measures",
+        ],
+    },
+];
+
+const CATALOG_OBJECT_TYPES = ["supplier", "product", "sku", "voucher_category"];
+
 const PARTY_CHILD_COLLECTIONS = [
     "party_bank_accounts",
     "party_tax_profiles",
@@ -266,7 +327,7 @@ const PARTY_CHILD_COLLECTIONS = [
     "party_revisions",
 ];
 
-const RESET_OBJECT_TYPES = ["customer", "contract", "sales_order"];
+const BUSINESS_OBJECT_TYPES = ["customer", "contract", "sales_order"];
 const BATCH_SIZE = 500;
 
 const BEFORE_RELATIONS = [
@@ -416,19 +477,30 @@ function chunks(values) {
     return result;
 }
 
-function dropCollectionNames() {
+function activeDropGroups(includeCatalog) {
+    return includeCatalog ? [...DROP_GROUPS, ...CATALOG_DROP_GROUPS] : DROP_GROUPS;
+}
+
+function dropCollectionNames(includeCatalog) {
     const names = [];
-    for (const group of DROP_GROUPS) {
+    for (const group of activeDropGroups(includeCatalog)) {
         names.push(...group.collections);
     }
     return names;
 }
 
-function printAllowlist() {
+function resetObjectTypes(includeCatalog) {
+    return includeCatalog ? [...BUSINESS_OBJECT_TYPES, ...CATALOG_OBJECT_TYPES] : BUSINESS_OBJECT_TYPES;
+}
+
+function printAllowlist(includeCatalog) {
     line("== 集合 allowlist ==");
     line(`- 旧审批集合: ${OLD_APPROVAL_COLLECTIONS.join(", ")}`);
     line(`- 新 BPM/集成集合: ${NEW_APPROVAL_COLLECTIONS.join(", ")}`);
-    line(`- drop 集合: ${dropCollectionNames().join(", ")}`);
+    line(
+        `- 主数据范围: ${includeCatalog ? "重置供应商/商品/SKU/供给/仓库/分类/品牌/单位（保留账号）" : "保留供应商/商品/仓库主数据"}`,
+    );
+    line(`- drop 集合: ${dropCollectionNames(includeCatalog).join(", ")}`);
     line(`- 审批 WorkItem 类型: ${APPROVAL_WORK_ITEM_TYPES.join(", ")}`);
     line("- 审批 WorkItem 字段: approval_step_instance_id, approval_node_execution_id");
     line(
@@ -442,6 +514,9 @@ async function run() {
     const execute = process.env.ERP_RESET_EXECUTE === "1";
     const verifyOnly = process.env.ERP_RESET_VERIFY === "1";
     const confirmedDb = process.env.ERP_RESET_CONFIRMED_DB || "";
+    const includeCatalog = process.env.ERP_RESET_INCLUDE_CATALOG === "1";
+    const dropGroups = activeDropGroups(includeCatalog);
+    const objectTypes = resetObjectTypes(includeCatalog);
 
     if (!uri || !dbName) {
         throw new Error("missing_configuration");
@@ -605,19 +680,26 @@ async function run() {
         ...(await distinct("customer_receipts", "counterparty_party_id")),
         ...(await distinct("invoices", "party_id")),
     ]);
-    const protectedPartyIds = uniqueValues([
-        ...(await distinctReferenced("supplier_accounts", ["party_id"], resetPartyIds)),
-        ...(await distinctReferenced(
-            "supplier_commercial_profile_revisions",
-            ["signing_entity_party_id", "payment_entity_party_id"],
-            resetPartyIds,
-        )),
-    ]);
+    const supplierPartyIds = await distinct("supplier_accounts", "party_id");
+    const allPartyIds = includeCatalog ? await distinct("parties", "id") : [];
+    const protectedPartyIds = includeCatalog
+        ? []
+        : uniqueValues([
+              ...(await distinctReferenced("supplier_accounts", ["party_id"], resetPartyIds)),
+              ...(await distinctReferenced(
+                  "supplier_commercial_profile_revisions",
+                  ["signing_entity_party_id", "payment_entity_party_id"],
+                  resetPartyIds,
+              )),
+          ]);
     const protectedKeys = new Set(protectedPartyIds.map(bsonKey));
-    const deletablePartyIds = resetPartyIds.filter((value) => !protectedKeys.has(bsonKey(value)));
+    const deletablePartyIds = uniqueValues([
+        ...resetPartyIds,
+        ...(includeCatalog ? [...supplierPartyIds, ...allPartyIds] : []),
+    ]).filter((value) => !protectedKeys.has(bsonKey(value)));
 
     const resetMapIds = await distinct("external_identity_maps", "id", {
-        object_type: { $in: RESET_OBJECT_TYPES },
+        object_type: { $in: objectTypes },
     });
     const partyTargetMapIds = [];
     for (const batch of chunks(deletablePartyIds)) {
@@ -635,12 +717,12 @@ async function run() {
     ]);
 
     line();
-    printAllowlist();
+    printAllowlist(includeCatalog);
 
     line();
     line("== 执行前范围 ==");
     let plannedDocuments = 0;
-    for (const group of DROP_GROUPS) {
+    for (const group of dropGroups) {
         let groupDocuments = 0;
         const nonEmpty = [];
         for (const collectionName of group.collections) {
@@ -658,10 +740,10 @@ async function run() {
     }
 
     const sourceTargetsByType = await countDocuments("external_identity_targets", {
-        internal_object_type: { $in: RESET_OBJECT_TYPES },
+        internal_object_type: { $in: objectTypes },
     });
     const sourceMaps = await countDocuments("external_identity_maps", {
-        object_type: { $in: RESET_OBJECT_TYPES },
+        object_type: { $in: objectTypes },
     });
     let sourceTargetsByMap = 0;
     for (const batch of chunks(resetMapIds)) {
@@ -683,15 +765,20 @@ async function run() {
         ],
     });
 
-    line(`- customer/contract/sales external_identity_maps: ${sourceMaps}`);
-    line(`- customer/contract/sales external_identity_targets（按类型）: ${sourceTargetsByType}`);
-    line(`- customer/contract/sales external_identity_targets（按映射）: ${sourceTargetsByMap}`);
-    line(`- 将删除的客户及结算链专属 Party external_identity_targets: ${deletablePartyTargets}`);
+    line(`- 待删对象类型 external_identity_maps: ${sourceMaps}`);
+    line(`- 待删对象类型 external_identity_targets（按类型）: ${sourceTargetsByType}`);
+    line(`- 待删对象类型 external_identity_targets（按映射）: ${sourceTargetsByMap}`);
+    line(`- 将删除的专属 Party external_identity_targets: ${deletablePartyTargets}`);
     line(`- 将失效的供应商 API 连接技术健康缓存: ${connectionHealthCaches}`);
     line(`- 客户账户 Party: ${customerPartyIds.length}`);
     line(`- 客户/合同/销售结算链 Party: ${resetPartyIds.length}`);
-    line(`- 将保留的供应商共享 Party: ${protectedPartyIds.length}`);
-    line(`- 将删除的客户及结算链专属 Party: ${deletablePartyIds.length}`);
+    line(`- 供应商 Party: ${supplierPartyIds.length}`);
+    line(
+        includeCatalog
+            ? `- 将保留的 Party: 0（主数据重置清空全部主体，种子再写入）`
+            : `- 将保留的供应商共享 Party: ${protectedPartyIds.length}`,
+    );
+    line(`- 将删除的专属 Party: ${deletablePartyIds.length}`);
     for (const collectionName of PARTY_CHILD_COLLECTIONS) {
         line(`    ${collectionName}: ${await countByValues(collectionName, "party_id", deletablePartyIds)}`);
     }
@@ -816,13 +903,17 @@ async function run() {
         deletedPartyChildren += await deleteByValues(collectionName, "party_id", deletablePartyIds);
     }
     deletedParties = await deleteByValues("parties", "id", deletablePartyIds);
-    line(`- 客户及结算链专属 Party targets 已删除: ${deletedPartyTargets}`);
-    line(`- 客户及结算链专属 Party 孤立 maps 已删除: ${deletedPartyMaps}`);
-    line(`- 客户及结算链专属 Party 子记录已删除: ${deletedPartyChildren}`);
-    line(`- 客户及结算链专属 Party 根记录已删除: ${deletedParties}`);
-    line(`- 供应商共享 Party 已保护: ${protectedPartyIds.length}`);
+    line(`- 专属 Party targets 已删除: ${deletedPartyTargets}`);
+    line(`- 专属 Party 孤立 maps 已删除: ${deletedPartyMaps}`);
+    line(`- 专属 Party 子记录已删除: ${deletedPartyChildren}`);
+    line(`- 专属 Party 根记录已删除: ${deletedParties}`);
+    line(
+        includeCatalog
+            ? `- 主数据重置已清空全部 Party: ${deletedParties}`
+            : `- 供应商共享 Party 已保护: ${protectedPartyIds.length}`,
+    );
 
-    for (const group of DROP_GROUPS) {
+    for (const group of dropGroups) {
         let dropped = 0;
         for (const collectionName of group.collections) {
             if (!existing.has(collectionName)) {
@@ -838,7 +929,7 @@ async function run() {
     deletedTargets = deletedPartyTargets;
     if (existing.has("external_identity_targets")) {
         const byType = await targetDb.getCollection("external_identity_targets").deleteMany({
-            internal_object_type: { $in: RESET_OBJECT_TYPES },
+            internal_object_type: { $in: objectTypes },
         });
         deletedTargets += byType.deletedCount;
         deletedTargets += await deleteByValues(
@@ -850,7 +941,7 @@ async function run() {
     deletedMaps = deletedPartyMaps + (existing.has("external_identity_maps")
         ? (
               await targetDb.getCollection("external_identity_maps").deleteMany({
-                  object_type: { $in: RESET_OBJECT_TYPES },
+                  object_type: { $in: objectTypes },
               })
           ).deletedCount
         : 0);
@@ -863,7 +954,7 @@ async function run() {
     let remainingResetDocuments = 0;
     let remainingResetCollections = 0;
     const currentCollections = new Set(await targetDb.getCollectionNames());
-    for (const group of DROP_GROUPS) {
+    for (const group of dropGroups) {
         for (const collectionName of group.collections) {
             if (currentCollections.has(collectionName)) {
                 remainingResetCollections += 1;
@@ -872,10 +963,10 @@ async function run() {
         }
     }
     const remainingSourceMaps = await countDocuments("external_identity_maps", {
-        object_type: { $in: RESET_OBJECT_TYPES },
+        object_type: { $in: objectTypes },
     });
     const remainingSourceTargets = await countDocuments("external_identity_targets", {
-        internal_object_type: { $in: RESET_OBJECT_TYPES },
+        internal_object_type: { $in: objectTypes },
     });
     let remainingTargetsByDeletedMap = 0;
     for (const batch of chunks(resetMapIds)) {
@@ -906,11 +997,11 @@ async function run() {
 
     line(`- 残留 reset 集合: ${remainingResetCollections}`);
     line(`- 残留 reset 文档: ${remainingResetDocuments}`);
-    line(`- 残留 customer/contract/sales external maps: ${remainingSourceMaps}`);
-    line(`- 残留 customer/contract/sales external targets: ${remainingSourceTargets}`);
-    line(`- 残留指向已删 customer/contract/sales map 的 targets: ${remainingTargetsByDeletedMap}`);
-    line(`- 残留指向已删客户及结算链专属 Party 的 targets: ${remainingDeletablePartyTargets}`);
-    line(`- 残留客户及结算链专属 Party/子记录: ${remainingPartyRows}`);
+    line(`- 残留待删对象类型 external maps: ${remainingSourceMaps}`);
+    line(`- 残留待删对象类型 external targets: ${remainingSourceTargets}`);
+    line(`- 残留指向已删 map 的 targets: ${remainingTargetsByDeletedMap}`);
+    line(`- 残留指向已删专属 Party 的 targets: ${remainingDeletablePartyTargets}`);
+    line(`- 残留专属 Party/子记录: ${remainingPartyRows}`);
     line(`- 残留供应商 API 连接技术健康缓存: ${remainingConnectionHealthCaches}`);
     line(`- 残留审批 WorkItem: ${remainingApprovalWorkItems.matching}`);
     line(`    approval_step_instance_id=${remainingApprovalWorkItems.byStepId}`);
@@ -957,7 +1048,11 @@ async function run() {
     } else {
         line("清理完成：重置后置条件通过。必须重启应用以重建索引和审批定义，再执行应用级验收。");
     }
-    line("保留项：账号/RBAC、供应商主数据、商品/仓库主数据、source_systems、file_assets、对象存储、审计记录、编号计数器。");
+    line(
+        includeCatalog
+            ? "保留项：账号/RBAC、source_systems、file_assets、对象存储、审计记录、编号计数器。"
+            : "保留项：账号/RBAC、供应商主数据、商品/仓库主数据、source_systems、file_assets、对象存储、审计记录、编号计数器。",
+    );
 }
 
 run()

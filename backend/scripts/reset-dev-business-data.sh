@@ -51,8 +51,11 @@ usage() {
      ERP_RESET_ALLOWED_REMOTE_HOSTS 精确列出 URI 中全部主机
      （逗号分隔，禁止通配符）。
   6. preview / execute / verify 必须使用同一目标与同一集合摘要；
-     摘要由 database.db_name 与 mongosh 脚本内容计算，不一致则失败关闭。
+     摘要由 database.db_name、ERP_RESET_INCLUDE_CATALOG 与 mongosh 脚本内容计算，
+     不一致则失败关闭。
   7. 本工具不得调用 dropDatabase()，只 drop 固定集合或按固定过滤删除。
+  8. ERP_RESET_INCLUDE_CATALOG=1 时额外 drop 供应商/商品/SKU/供给、
+     仓库、分类/品牌/单位字典及全部 Party。默认 0，E2E 继续保留主数据。
 
 本工具不会输出 MongoDB URI、用户名、密码、证书或 config.toml 中的其他密钥。
 EOF
@@ -158,14 +161,18 @@ case "${DB_NAME}" in
 esac
 
 SCOPE_DIGEST="$(
-    python3 - "${DB_NAME}" "${MONGOSH_SCRIPT}" <<'PY'
+    ERP_RESET_INCLUDE_CATALOG="${ERP_RESET_INCLUDE_CATALOG:-0}" python3 - "${DB_NAME}" "${MONGOSH_SCRIPT}" <<'PY'
 import hashlib
+import os
 import pathlib
 import sys
 
 db_name = sys.argv[1]
 script = pathlib.Path(sys.argv[2]).read_bytes()
-sys.stdout.write(hashlib.sha256(db_name.encode("utf-8") + b"\n" + script).hexdigest())
+flag = b"1" if os.environ.get("ERP_RESET_INCLUDE_CATALOG", "0") == "1" else b"0"
+sys.stdout.write(
+    hashlib.sha256(db_name.encode("utf-8") + b"\n" + script + b"\ninclude-catalog=" + flag).hexdigest()
+)
 PY
 )"
 
@@ -295,6 +302,11 @@ fi
 echo "目标数据库: ${DB_NAME}"
 echo "目标主机: ${TARGET_HOSTS}"
 echo "集合摘要: ${SCOPE_DIGEST}"
+if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
+    echo "主数据范围: 重置供应商/商品/SKU/供给/仓库/分类/品牌/单位（保留账号）"
+else
+    echo "主数据范围: 保留供应商/商品/仓库主数据"
+fi
 if [[ "${EXECUTE}" -eq 1 ]]; then
     echo "运行模式: EXECUTE（清理已授权）"
 elif [[ "${VERIFY}" -eq 1 ]]; then
@@ -313,4 +325,5 @@ ERP_RESET_DB_NAME="${DB_NAME}" \
 ERP_RESET_EXECUTE="${EXECUTE}" \
 ERP_RESET_VERIFY="${VERIFY}" \
 ERP_RESET_CONFIRMED_DB="${CONFIRM_DB}" \
+ERP_RESET_INCLUDE_CATALOG="${ERP_RESET_INCLUDE_CATALOG:-0}" \
     mongosh --nodb --norc --quiet --file "${MONGOSH_SCRIPT}"

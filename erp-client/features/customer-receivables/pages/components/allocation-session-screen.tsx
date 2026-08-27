@@ -20,6 +20,10 @@ type AllocationSessionScreenProps = {
     taskReceivableAccountId?: string
     /** 已由对象详情承载页面框架时，只渲染会话内容。 */
     embedded?: boolean
+    /** 工作台页内作业不展示会话自己的返回入口。 */
+    hideSessionClose?: boolean
+    /** 提交结果区关闭按钮文案；缺省为「返回列表」。 */
+    closeLabel?: string
 }
 
 /** 核销会话全屏态：加载骨架 / 失效提示 / 会话面板。 */
@@ -35,6 +39,8 @@ export function AllocationSessionScreen({
     expectedTaskVersion,
     taskReceivableAccountId,
     embedded = false,
+    hideSessionClose = false,
+    closeLabel,
 }: AllocationSessionScreenProps) {
     const wrap = (content: React.ReactNode) =>
         embedded ? content : <PageScaffold>{content}</PageScaffold>
@@ -55,7 +61,7 @@ export function AllocationSessionScreen({
                 description="本次核销已失效，请重新开始。"
                 action={
                     <Button type="button" onClick={onBackToList}>
-                        返回列表
+                        {hideSessionClose ? "重试" : "返回列表"}
                     </Button>
                 }
             />,
@@ -71,6 +77,8 @@ export function AllocationSessionScreen({
             workItemId={workItemId}
             expectedTaskVersion={expectedTaskVersion}
             taskReceivableAccountId={taskReceivableAccountId}
+            hideSessionClose={hideSessionClose}
+            closeLabel={closeLabel}
         />,
     )
 }

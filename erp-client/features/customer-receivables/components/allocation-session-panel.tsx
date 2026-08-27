@@ -38,6 +38,8 @@ export function AllocationSessionPanel({
     workItemId,
     expectedTaskVersion,
     taskReceivableAccountId,
+    hideSessionClose = false,
+    closeLabel = "返回列表",
 }: {
     session: AllocationSessionView
     onClose: () => void
@@ -47,6 +49,8 @@ export function AllocationSessionPanel({
     workItemId?: string
     expectedTaskVersion?: string
     taskReceivableAccountId?: string
+    hideSessionClose?: boolean
+    closeLabel?: string
 }) {
     const {
         form,
@@ -104,6 +108,7 @@ export function AllocationSessionPanel({
                 existing={existing}
                 draftSavedAt={draftSavedAt}
                 onRequestClose={requestClose}
+                showClose={!hideSessionClose}
             />
 
             {result ? (
@@ -142,7 +147,7 @@ export function AllocationSessionPanel({
                                 variant="outline"
                                 onClick={onClose}
                             >
-                                返回列表
+                                {closeLabel}
                             </Button>
                         </>
                     }

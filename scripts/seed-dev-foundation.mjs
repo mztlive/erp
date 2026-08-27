@@ -2,13 +2,13 @@
 /**
  * 开发开单底座：在业务数据已清空、web-api 已就绪后，补齐开单所需底座。
  *
- * 不写入销售单/采购单/库存/票款。账号、供应商、商品/SKU 由 reset 保留。
- * 仓库主数据也会保留，但空库或未绑定收发经办人时本脚本会补齐。
+ * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
+ * 仓库在主数据重置后由本脚本重建。
  * 付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
  * 财务三人分责：caiwu 仍只做审批；fukuan 为默认付款负责人；kaipiao 为默认开票负责人。
  * 审批定义由 publish-approval-definitions.mjs 单独发布，审批人仍是 caiwu。
  *
- * 幂等：客户、合同、仓储账号、开发仓、财务三人、默认财务责任规则均按固定标识查找；
+ * 幂等：客户、合同、仓储账号、仓库、财务三人、默认财务责任规则均按固定标识查找；
  * 已存在则跳过或只补绑定/校正。
  * 客户用 xiaoshou 创建（不含银行账户：销售无权维护该字段），负责销售一开始就是开单账号。
  * 银行账户由 admin 后补（财务有该字段权限，但客户资料修订还要 customer:update）。
@@ -33,25 +33,33 @@ const DEFAULT_FINANCE_RULES = [
     { operation: "SUPPLIER_PAYMENT", label: "默认付款负责人", accountKey: "payment" },
     { operation: "SALES_INVOICE", label: "默认开票负责人", accountKey: "invoice" },
 ]
-const WAREHOUSE = {
-    code: "DEV-WH-01",
-    name: "开发开单仓",
-    address: "北京市朝阳区开发路 1 号仓库",
-    contact: "仓储",
-}
+const WAREHOUSES = [
+    {
+        code: "BJ-TZ-01",
+        name: "北京通州仓",
+        address: "北京市通州区马驹桥物流基地兴贸一街 6 号",
+        contact: "周强",
+    },
+    {
+        code: "SH-JD-01",
+        name: "上海嘉定仓",
+        address: "上海市嘉定区江桥镇金沙江南路 1358 号",
+        contact: "吴婷",
+    },
+]
 
 const CUSTOMER = {
-    legalName: "开发开单客户",
-    shortName: "开发客户",
-    unifiedCreditCode: "91110000DEVSEED001",
-    contactName: "开发联系人",
-    mobile: "13800000001",
-    address: "北京市朝阳区开发路 1 号",
-    bankName: "招商银行",
-    accountNumber: "1101010000000000001",
+    legalName: "华润置地（北京）有限公司",
+    shortName: "华润置地北京",
+    unifiedCreditCode: "91110105MA00CRBJ0X",
+    contactName: "赵敏",
+    mobile: "13811062817",
+    address: "北京市朝阳区建国路 91 号金地中心 A 座",
+    bankName: "中国建设银行北京建国路支行",
+    accountNumber: "1105012349000000128",
 }
 
-const CONTRACT_NO = "DEV-SO-BASE-001"
+const CONTRACT_NO = "HT-2026-HRYD-WF-001"
 
 function todayBusinessDate() {
     const date = new Date()
@@ -145,7 +153,7 @@ async function createCustomer(token, actor) {
             contacts: [
                 {
                     contact_name: CUSTOMER.contactName,
-                    title: "对接人",
+                    title: "福利采购经理",
                     mobile: CUSTOMER.mobile,
                     is_default: true,
                 },
@@ -165,7 +173,7 @@ async function createCustomer(token, actor) {
                 },
             ],
             effective_from: today,
-            change_reason: "开发开单底座首版建档",
+            change_reason: "主数据初始化：客户建档",
         },
     })
 }
@@ -187,7 +195,7 @@ async function ensureCustomerBankAccount(adminToken, customerId) {
             legal_name: detail.legal_name || CUSTOMER.legalName,
             bank_accounts: customerBankAccounts(),
             effective_from: todayBusinessDate(),
-            change_reason: "开发开单底座：补录银行账户",
+            change_reason: "主数据初始化：补录银行账户",
         },
     })
     console.log("已补录客户银行账户")
@@ -221,7 +229,7 @@ async function ensureSalesOwner(adminToken, customerId, salesUserId) {
                     user_id: salesUserId,
                     assignment_role: "COLLABORATOR",
                     valid_from: today,
-                    change_reason: "开发开单底座：同一天不能换 OWNER，改为协作销售",
+                    change_reason: "主数据初始化：同一天不能换 OWNER，改为协作销售",
                 },
             })
             console.warn(
@@ -243,7 +251,7 @@ async function ensureSalesOwner(adminToken, customerId, salesUserId) {
             user_id: salesUserId,
             assignment_role: "OWNER",
             valid_from: today,
-            change_reason: "开发开单底座：销售负责",
+            change_reason: "主数据初始化：指定负责销售",
         },
     })
     console.log("已将负责销售换为 xiaoshou")
@@ -283,7 +291,7 @@ async function uploadContract(token, customer) {
         signed_at: today,
     }
     const form = new FormData()
-    form.append("file", foundationPdf(), "dev-foundation-contract.pdf")
+    form.append("file", foundationPdf(), "HT-2026-HRYD-WF-001.pdf")
     form.append("command", JSON.stringify(command))
     return call("POST", "/admin/contracts/upload", { token, form })
 }
@@ -443,59 +451,37 @@ async function bindWarehouseHandlers(adminToken, warehouse, handlerUserId) {
     })
 }
 
-async function ensureWarehouse(adminToken, handlerUserId) {
-    let warehouses = await listWarehouses(adminToken)
-    let warehouse = warehouses.find((row) => row.warehouse_code === WAREHOUSE.code)
+async function ensureWarehouse(adminToken, handlerUserId, spec) {
+    const warehouses = await listWarehouses(adminToken)
+    let warehouse = warehouses.find((row) => row.warehouse_code === spec.code)
     if (!warehouse) {
         warehouse = await call("POST", "/admin/warehouses", {
             token: adminToken,
             body: {
-                warehouse_code: WAREHOUSE.code,
-                name: WAREHOUSE.name,
-                address: WAREHOUSE.address,
-                contact: WAREHOUSE.contact,
+                warehouse_code: spec.code,
+                name: spec.name,
+                address: spec.address,
+                contact: spec.contact,
                 effective_from: todayBusinessDate(),
-                change_reason: "开发开单底座",
+                change_reason: "主数据初始化：仓库",
                 status: "active",
                 inbound_handler_user_id: handlerUserId,
                 outbound_handler_user_id: handlerUserId,
             },
         })
-        console.log("仓库已创建:", warehouse.warehouse_code, WAREHOUSE.name)
-        warehouses = await listWarehouses(adminToken)
-        warehouse = warehouses.find((row) => row.id === warehouse.id) ?? warehouse
-    } else {
-        console.log("仓库已存在:", warehouse.warehouse_code)
-        const bound = await bindWarehouseHandlers(adminToken, warehouse, handlerUserId)
-        if (bound.inbound_handler_user_id !== warehouse.inbound_handler_user_id) {
-            console.log("已将", warehouse.warehouse_code, "收发经办人绑定为 cangchu")
-        }
-        warehouse = bound
+        console.log("仓库已创建:", warehouse.warehouse_code, spec.name)
+        return warehouse
     }
-
-    warehouses = await listWarehouses(adminToken)
-    for (const row of warehouses) {
-        if (row.id === warehouse.id) continue
-        if (row.status && row.status !== "active") continue
-        if (row.inbound_handler_user_id?.trim() && row.outbound_handler_user_id?.trim()) continue
-        const bound = await bindWarehouseHandlers(adminToken, row, handlerUserId)
-        console.log("已为已有仓库补绑定收发经办人:", bound.warehouse_code)
-    }
-    return warehouse
+    console.log("仓库已存在:", warehouse.warehouse_code)
+    return bindWarehouseHandlers(adminToken, warehouse, handlerUserId)
 }
 
-async function skuCount(adminToken, productKind) {
-    try {
-        const page = await call(
-            "GET",
-            `/admin/sellable-skus?product_kind=${encodeURIComponent(productKind)}&page=1&page_size=1`,
-            { token: adminToken },
-        )
-        return page?.total ?? (page?.items ?? []).length
-    } catch (error) {
-        console.warn(`可售 SKU（${productKind}）查询失败: ${error.message}`)
-        return null
+async function ensureWarehouses(adminToken, handlerUserId) {
+    const created = []
+    for (const spec of WAREHOUSES) {
+        created.push(await ensureWarehouse(adminToken, handlerUserId, spec))
     }
+    return created
 }
 
 async function main() {
@@ -506,7 +492,7 @@ async function main() {
     console.log("登录成功；销售账号 id:", salesUserId)
 
     const warehouseAccount = await ensureWarehouseAccount(adminToken)
-    const warehouse = await ensureWarehouse(adminToken, warehouseAccount.id)
+    const warehouses = await ensureWarehouses(adminToken, warehouseAccount.id)
     const financePeople = await ensureFinancePeople(adminToken)
     await ensureDefaultFinanceRules(adminToken, financePeople)
 
@@ -549,29 +535,19 @@ async function main() {
         console.log("合同已归档:", contract.contract_no)
     }
 
-    const [physical, voucher, service] = await Promise.all([
-        skuCount(adminToken, "PHYSICAL"),
-        skuCount(adminToken, "VOUCHER"),
-        skuCount(adminToken, "OFFLINE_SERVICE"),
-    ])
-
     console.log("")
     console.log("== 开发开单底座已就绪 ==")
     console.log(`客户: ${customer.legal_name}（${customer.customer_no}）`)
     console.log(`合同: ${contract.contract_no}`)
-    console.log(`仓库: ${warehouse.warehouse_code}（收发经办人 cangchu）`)
+    console.log(
+        `仓库: ${warehouses.map((row) => `${row.warehouse_code} ${row.name ?? ""}`.trim()).join("、")}（收发经办人 cangchu）`,
+    )
     console.log("销售负责人: xiaoshou")
     console.log("财务审批人: caiwu")
     console.log("默认付款负责人: fukuan")
     console.log("默认开票负责人: kaipiao")
-    console.log(
-        `可售 SKU: PHYSICAL ${physical ?? "?"} / VOUCHER ${voucher ?? "?"} / OFFLINE_SERVICE ${service ?? "?"}`,
-    )
     console.log("登录账号: admin / xiaoshou / caigou / caiwu / fukuan / kaipiao / cangchu    密码: 123456")
     console.log("下一步: 用 xiaoshou 打开销售开单页，选择该合同")
-    if (service === 0) {
-        console.log("线下服务开单另需: node scripts/seed-service-sku.mjs")
-    }
 }
 
 main().catch((error) => {

@@ -31,6 +31,7 @@ import type {
 import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 import { workItemKeys } from "@/features/work-items/queries"
+import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
 
 const supplierPayablesKeys = {
     all: ["supplier-payables"] as const,
@@ -147,6 +148,7 @@ async function invalidateFinanceAndSources(
     await queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all })
     await queryClient.invalidateQueries({ queryKey: fulfillmentKeys.all })
     await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
+    await queryClient.invalidateQueries({ queryKey: workspaceHomeKeys.all })
     await queryClient.invalidateQueries({ queryKey: approvalKeys.all })
     if (paymentId) {
         await queryClient.invalidateQueries({

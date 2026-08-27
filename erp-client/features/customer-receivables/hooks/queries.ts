@@ -16,6 +16,8 @@ import {
     submitReceiptReversal,
 } from "@/features/customer-receivables/api"
 import { CUSTOMER_RECEIPT_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { workItemKeys } from "@/features/work-items/queries"
+import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
 import { CUSTOMER_REFUND_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-refund-approval"
 import { RECEIPT_REVERSAL_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
@@ -98,6 +100,12 @@ export function usePostAllocationMutation() {
             if (result.status === "succeeded") {
                 await queryClient.invalidateQueries({
                     queryKey: customerReceivableKeys.all,
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: workspaceHomeKeys.all,
                 })
                 if (result.mode === "receipt") {
                     await queryClient.invalidateQueries({

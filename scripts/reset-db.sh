@@ -3,8 +3,9 @@
 #
 # 复用 backend/scripts/reset-dev-business-data.sh 的 preview/execute/verify 合同：
 #   - 只清理业务数据集合（客户/合同/销售单/采购单/票款/库存/审批实例等）；
-#   - 保留：账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、
+#   - 默认保留：账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、
 #           对象存储、审计记录、编号计数器（即"不 reset 账号数据"）；
+#   - ERP_RESET_INCLUDE_CATALOG=1 时额外清供应商/商品/SKU/供给、仓库、分类/品牌/单位及全部 Party；
 #   - 不填充任何种子数据，流程从 0 开始跑。
 #
 # 安全门禁：
@@ -116,13 +117,18 @@ fi
 echo "== E2E 数据库重置 =="
 echo "目标数据库: ${DB_NAME}"
 echo "目标主机: ${TARGET_HOSTS}"
-echo "保留项: 账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、审计、计数器"
-echo "清理项: 客户/合同/销售单/采购单/票款/库存/审批实例/待办等业务数据（不填充种子）"
+if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
+    echo "保留项: 账号/RBAC、source_systems、file_assets、审计、计数器"
+    echo "清理项: 业务单据及供应商/商品/SKU/供给/仓库/分类/品牌/单位（不填充种子）"
+else
+    echo "保留项: 账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、审计、计数器"
+    echo "清理项: 客户/合同/销售单/采购单/票款/库存/审批实例/待办等业务数据（不填充种子）"
+fi
 
 # 1) preview：只读核对并输出集合摘要（同一目标与摘要贯穿 execute/verify）
 echo "-- [1/3] preview --"
 PREVIEW_OUTPUT="$("${RESET_SCRIPT}")"
-echo "${PREVIEW_OUTPUT}" | grep -E "^(目标|集合摘要|运行模式)" || true
+echo "${PREVIEW_OUTPUT}" | grep -E "^(目标|集合摘要|运行模式|主数据范围)" || true
 SCOPE_DIGEST="$(echo "${PREVIEW_OUTPUT}" | sed -n 's/^集合摘要: //p')"
 [[ -n "${SCOPE_DIGEST}" ]] || { echo "错误: preview 未输出集合摘要" >&2; exit 2; }
 
@@ -140,4 +146,8 @@ fi
 echo "-- [3/3] verify --"
 "${RESET_SCRIPT}" --verify --expect-summary "${SCOPE_DIGEST}"
 
-echo "== 重置完成：业务数据已清空，账号与主数据保留 =="
+if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
+    echo "== 重置完成：业务数据与主数据已清空，账号保留 =="
+else
+    echo "== 重置完成：业务数据已清空，账号与主数据保留 =="
+fi

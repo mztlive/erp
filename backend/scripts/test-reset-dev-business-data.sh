@@ -30,6 +30,27 @@ for collection in \
     product_publication_revision_media \
     product_publication_revisions \
     product_publications \
+    supplier_offerings \
+    supplier_offering_revisions \
+    supplier_offering_availabilities \
+    supplier_offering_commands \
+    products \
+    product_revisions \
+    skus \
+    sku_revisions \
+    voucher_category_profile_revisions \
+    warehouse_sku_policies \
+    warehouses \
+    warehouse_revisions \
+    product_categories \
+    product_brands \
+    unit_of_measures \
+    sku_attributes \
+    sku_attribute_values \
+    product_category_attributes \
+    supplier_accounts \
+    supplier_commercial_profile_revisions \
+    supplier_profile_commands \
     approval_definitions \
     approval_step_definitions \
     approval_instances \
@@ -61,7 +82,7 @@ done
 
 party_delete_line="$(grep -n 'let deletedPartyTargets' "${MONGOSH_SCRIPT}" | cut -d: -f1)"
 business_drop_line="$(
-    grep -n 'for (const group of DROP_GROUPS)' "${MONGOSH_SCRIPT}" |
+    grep -n 'for (const group of dropGroups)' "${MONGOSH_SCRIPT}" |
         cut -d: -f1 |
         awk -v party_line="${party_delete_line}" '$1 > party_line { print; exit }'
 )"
@@ -76,6 +97,8 @@ grep -q "默认行为" "${help_output}" || fail "--help 未输出合同"
 grep -q -- "--verify" "${help_output}" || fail "--help 未声明 --verify"
 grep -q -- "--expect-summary" "${help_output}" || fail "--help 未声明 --expect-summary"
 grep -q "dropDatabase" "${help_output}" || fail "--help 未声明禁止 dropDatabase()"
+grep -q "ERP_RESET_INCLUDE_CATALOG" "${help_output}" || fail "--help 未声明 ERP_RESET_INCLUDE_CATALOG"
+grep -q "CATALOG_DROP_GROUPS" "${MONGOSH_SCRIPT}" || fail "供应商/商品主数据重置分组未纳入合同"
 
 mkdir -p "${TEST_DIR}/bin"
 fixture_config="${TEST_DIR}/config.toml"
@@ -104,16 +127,20 @@ scope_digest() {
     local db_name="$1"
     python3 - "${db_name}" "${MONGOSH_SCRIPT}" <<'PY'
 import hashlib
+import os
 import pathlib
 import sys
 
 db_name = sys.argv[1]
 script = pathlib.Path(sys.argv[2]).read_bytes()
-print(hashlib.sha256(db_name.encode("utf-8") + b"\n" + script).hexdigest())
+flag = b"1" if os.environ.get("ERP_RESET_INCLUDE_CATALOG", "0") == "1" else b"0"
+print(hashlib.sha256(db_name.encode("utf-8") + b"\n" + script + b"\ninclude-catalog=" + flag).hexdigest())
 PY
 }
 
 PREVIEW_DIGEST="$(scope_digest reset_contract_test)"
+CATALOG_DIGEST="$(ERP_RESET_INCLUDE_CATALOG=1 scope_digest reset_contract_test)"
+[[ "${PREVIEW_DIGEST}" != "${CATALOG_DIGEST}" ]] || fail "主数据重置开关未计入集合摘要"
 
 preview_output="${TEST_DIR}/preview.txt"
 PATH="${TEST_DIR}/bin:${PATH}" EXPECTED_EXECUTE=0 EXPECTED_VERIFY=0 \

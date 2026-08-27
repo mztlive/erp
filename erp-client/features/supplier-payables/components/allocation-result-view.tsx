@@ -10,6 +10,7 @@ export type AllocationResultViewProps = {
     result: FormalSubmitResult
     returnTo?: string
     hasSubmitKey: boolean
+    closeLabel?: string
     onGoToInvoiceView?: () => void
     onClose: () => void
     onResolveUnknown: () => Promise<boolean>
@@ -20,6 +21,7 @@ export function AllocationResultView({
     result,
     returnTo,
     hasSubmitKey,
+    closeLabel = "回到列表",
     onGoToInvoiceView,
     onClose,
     onResolveUnknown,
@@ -81,7 +83,7 @@ export function AllocationResultView({
                         size="sm"
                         onClick={onClose}
                     >
-                        回到列表
+                        {closeLabel}
                     </Button>
                     {showReturnToSource ? (
                         <Button

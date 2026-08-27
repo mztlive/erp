@@ -476,6 +476,14 @@ export function useAllocationSession(
         return false
     }
 
+    /**
+     * 清提交结果，回到当前核销工作面。
+     * 工作台页内付款在提交后仍可能继续处理同一应付，不能离开当前任务。
+     */
+    function clearResult() {
+        setResult(null)
+    }
+
     return {
         sessionQuery,
         session,
@@ -508,5 +516,9 @@ export function useAllocationSession(
         requestSubmit,
         doSubmit,
         handleResolveUnknown,
+        clearResult,
     }
 }
+
+/** 核销工作区状态：会话查询、表单、勾选金额、校验问题与提交动作。 */
+export type AllocationSessionState = ReturnType<typeof useAllocationSession>
