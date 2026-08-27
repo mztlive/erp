@@ -9,6 +9,7 @@ use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseChangeOrder, PurchaseChangeSubmissionLine, PurchaseChangeSubmissionLineData,
     PurchaseLineType, PurchaseOrder, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
 };
+use entities::supplier::SupplierPaymentTerm;
 use id_generator::next_id;
 
 use super::dto::SavePurchaseOrderLine;
@@ -54,10 +55,16 @@ impl PurchaseOrderService {
         Ok(revision.map(|revision| revision.legal_name))
     }
 
-    /// 解析付款条件门禁快照（PREPAY 前缀判定先款后货，金额/比例门槛暂空）。
+    /// 解析付款条件并生成门禁快照（金额/比例门槛暂空）。
     pub(super) async fn payment_term_snapshot(&self, payment_term_code: &str) -> Result<PaymentTermSnapshot> {
-        let prepay_gate = payment_term_code.trim().to_uppercase().starts_with("PREPAY");
-        PaymentTermSnapshot::new(payment_term_code.to_string(), prepay_gate, None, None).map_err(Into::into)
+        let payment_term = SupplierPaymentTerm::parse(payment_term_code)?;
+        PaymentTermSnapshot::new(
+            payment_term.code().to_string(),
+            payment_term.prepay_gate(),
+            None,
+            None,
+        )
+        .map_err(Into::into)
     }
 
     /// 构建变更提交行。

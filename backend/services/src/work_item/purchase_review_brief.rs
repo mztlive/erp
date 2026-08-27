@@ -12,7 +12,7 @@ use entities::purchase_order::{
     PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
     PurchaseOrderSubmissionLine,
 };
-use entities::supplier::split_encoded_payment_term_snapshot;
+use entities::supplier::{split_encoded_payment_term_snapshot, SupplierPaymentTerm};
 
 use super::brief::{
     format_business_due_label, format_quantity, line_title, push_document_section, BriefLine, BriefSection,
@@ -923,16 +923,12 @@ fn purchase_item_quantity(quantity: Option<&Quantity>, unit: Option<&str>, gross
 /// 无。
 fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
     let code = split_encoded_payment_term_snapshot(&snapshot.payment_term_code).payment_term_code;
-    let named = match code.as_str() {
-        "PREPAY_100" => "先款 100%",
-        "PREPAY_50" => "先款 50%",
-        "PREPAY_30" => "先款 30%",
-        "POSTPAY_NET15" => "货到 15 天",
-        "POSTPAY_NET30" => "货到 30 天",
-        "CONTRACT" => "按合同约定",
-        other if !other.is_empty() => other,
-        _ => return snapshot.prepay_gate.then(|| "先款后货".to_string()),
-    };
+    if code.is_empty() {
+        return snapshot.prepay_gate.then(|| "先款后货".to_string());
+    }
+    let named = SupplierPaymentTerm::parse(&code)
+        .map(SupplierPaymentTerm::label)
+        .unwrap_or(code.as_str());
     if snapshot.prepay_gate && !named.contains("先款") {
         Some(format!("{named} · 先款后货"))
     } else {
@@ -1035,16 +1031,12 @@ mod tests {
             Some("先款 30%")
         );
         assert_eq!(
-            payment_term_label(&payment("POSTPAY_NET30", true)).as_deref(),
-            Some("货到 30 天 · 先款后货")
-        );
-        assert_eq!(
-            payment_term_label(&payment("CUSTOM", false)).as_deref(),
-            Some("CUSTOM")
+            payment_term_label(&payment("POSTPAY_NET30", false)).as_deref(),
+            Some("货到 30 天")
         );
         assert_eq!(
             payment_term_label(&payment("现结｜经营类目：礼盒", false)).as_deref(),
-            Some("现结")
+            Some("现结（审批通过日）")
         );
     }
 

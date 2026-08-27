@@ -1,5 +1,11 @@
 import { currentResourceFieldValues } from "@/features/master-data/lib/resource-fields"
+import { settlementCode } from "@/features/master-data/api/presentation"
 import type { MasterDataCenterView } from "@/features/master-data/types"
+import {
+    isSupplierPaymentTermCode,
+    paymentTermCode,
+    paymentTermMatchesSettlement,
+} from "@/lib/business-options"
 
 export type SupplierEditorFormValues = Readonly<{
     name: string
@@ -10,6 +16,7 @@ export type SupplierEditorFormValues = Readonly<{
     address: string
     capability: string
     settlement: string
+    paymentTerm: string
     businessCategory: string
     signingEntity: string
     paymentEntity: string
@@ -78,6 +85,13 @@ export function validateSupplierEditorFields(
     }
     if (!values.signingEntity.trim()) return "请选择公司签约主体"
     if (!values.paymentEntity.trim()) return "请选择公司付款主体"
+    if (!settlementCode(values.settlement)) return "请选择结算方式"
+    if (!isSupplierPaymentTermCode(values.paymentTerm)) {
+        return "请选择具体付款条件"
+    }
+    if (!paymentTermMatchesSettlement(values.paymentTerm, values.settlement)) {
+        return "结算方式与付款条件不一致，请重新选择"
+    }
     for (const [label, score] of [
         ["合作期初评分", values.initialScore],
         ["合作中评分", values.currentScore],
@@ -111,6 +125,7 @@ export function hydrateSupplierEditor(
     data: MasterDataCenterView,
 ): SupplierEditorFormValues {
     const fields = currentResourceFieldValues(data)
+    const resolvedPaymentTerm = paymentTermCode(fields.paymentTerm ?? "")
     return {
         name: data.name,
         company: fields.company ?? "",
@@ -119,7 +134,12 @@ export function hydrateSupplierEditor(
         contactPhone: fields.contactPhone ?? "",
         address: fields.address ?? "",
         capability: fields.capability ?? "",
-        settlement: fields.settlement ?? "",
+        settlement: settlementCode(fields.settlement) ?? "",
+        paymentTerm:
+            resolvedPaymentTerm &&
+            isSupplierPaymentTermCode(resolvedPaymentTerm)
+                ? resolvedPaymentTerm
+                : "",
         businessCategory: fields.businessCategory ?? "",
         signingEntity: fields.signingEntity ?? "",
         paymentEntity: fields.paymentEntity ?? "",
@@ -157,6 +177,7 @@ export function createSupplierEditorDefaults(
         address: "",
         capability: "",
         settlement: "",
+        paymentTerm: "",
         businessCategory: "",
         signingEntity: "",
         paymentEntity: "",

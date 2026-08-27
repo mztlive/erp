@@ -13,6 +13,7 @@ use crate::ids::{
     SupplierAccountId, WarehouseId,
 };
 use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
+use crate::supplier::SupplierPaymentTerm;
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
 /// 采购单号最大长度。
@@ -322,6 +323,7 @@ impl PurchaseOrder {
             PAYMENT_TERM_MAX_LEN,
             "付款条件过长",
         )?;
+        let payment_term_code = SupplierPaymentTerm::parse(&payment_term_code)?.code().to_string();
         let creation_basis_id = normalize_required_text(
             data.creation_basis_id,
             "采购创建依据不能为空",
@@ -775,15 +777,16 @@ impl PurchaseOrder {
     /// * `payment_term_code` - 可选付款条件
     ///
     /// # 错误
-    /// 付款条件为空或超长时返回错误。
+    /// 付款条件为空、超长或不具备计划付款日规则时返回错误。
     fn apply_payment_term(&mut self, payment_term_code: Option<String>) -> Result<()> {
         if let Some(payment_term_code) = payment_term_code {
-            self.payment_term_code = normalize_required_text(
+            let payment_term_code = normalize_required_text(
                 payment_term_code,
                 "付款条件不能为空",
                 PAYMENT_TERM_MAX_LEN,
                 "付款条件过长",
             )?;
+            self.payment_term_code = SupplierPaymentTerm::parse(&payment_term_code)?.code().to_string();
         }
         Ok(())
     }
@@ -838,7 +841,7 @@ mod tests {
     fn new_trims_and_initializes_defaults() {
         let order = new_order();
         assert_eq!(order.purchase_no, "PO-2026-0001");
-        assert_eq!(order.payment_term_code, "NET-30");
+        assert_eq!(order.payment_term_code, "POSTPAY_NET30");
         assert_eq!(order.stable.status(), PurchaseOrderStatus::Draft);
         assert_eq!(order.review_status, PurchaseReviewStatus::Pending);
         assert_eq!(order.payment_progress, ProgressStatus::None);
@@ -866,6 +869,12 @@ mod tests {
             ..order_data()
         };
         assert!(PurchaseOrder::new(PurchaseOrderId::new("po-3"), overlong, "admin-1").is_err());
+
+        let ambiguous_payment_term = PurchaseOrderData {
+            payment_term_code: "先用后付".to_string(),
+            ..order_data()
+        };
+        assert!(PurchaseOrder::new(PurchaseOrderId::new("po-4"), ambiguous_payment_term, "admin-1").is_err());
     }
 
     #[test]
@@ -932,7 +941,7 @@ mod tests {
                 "admin-2",
             )
             .unwrap();
-        assert_eq!(order.payment_term_code, "PREPAY-30");
+        assert_eq!(order.payment_term_code, "PREPAY_30");
         assert_eq!(order.purchase_type, PurchaseType::Service);
         assert_eq!(order.stable.updated_by, "admin-2");
 

@@ -11,6 +11,7 @@ import type {
 } from "@/features/master-data/types"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import type { ApiError } from "@/lib/api/errors"
+import { paymentTermCode } from "@/lib/business-options"
 
 export const LIST_PAGE_SIZE = 100
 
@@ -83,6 +84,25 @@ export const settlementLabel = (mode: string | undefined): string => {
     }
 }
 
+/** 结算方式稳定代码、中文名称转后端受控代码。 */
+export const settlementCode = (
+    value: string | undefined,
+): string | undefined => {
+    switch (value?.trim()) {
+        case "prepayment":
+        case "预付款":
+            return "prepayment"
+        case "pay_after_use":
+        case "先用后付":
+            return "pay_after_use"
+        case "cash_settlement":
+        case "现结":
+            return "cash_settlement"
+        default:
+            return undefined
+    }
+}
+
 export const invoiceLabel = (type: string | undefined): string => {
     switch (type) {
         case "vat_special":
@@ -97,16 +117,9 @@ export const invoiceLabel = (type: string | undefined): string => {
 }
 
 export const settlementToBackend = (label: string | undefined): string => {
-    switch (label) {
-        case "预付款":
-            return "prepayment"
-        case "先用后付":
-            return "pay_after_use"
-        case "现结":
-            return "cash_settlement"
-        default:
-            return "prepayment"
-    }
+    const code = settlementCode(label)
+    if (!code) throw new Error("请选择结算方式")
+    return code
 }
 
 export const invoiceToBackend = (label: string | undefined): string => {
@@ -174,9 +187,14 @@ export const ratingToBackend = (label: string | undefined): string => {
     return m ? m[1].toUpperCase() : "C"
 }
 
-/** 付款条件快照只保存结算文案，经营类目走独立字段。 */
-export const paymentTermSnapshotOf = (settlement: string | undefined): string =>
-    (settlement?.trim() || "默认付款条件").slice(0, 64)
+/** 付款条件快照只保存可计算计划付款日的稳定代码。 */
+export const paymentTermSnapshotOf = (
+    paymentTerm: string | undefined,
+): string => {
+    const code = paymentTermCode(paymentTerm ?? "")
+    if (!code || code === "CONTRACT") throw new Error("请选择具体付款条件")
+    return code
+}
 
 /** 从历史付款条件快照解析经营类目（无标记则空）。 */
 export const parseBusinessCategoryFromSnapshot = (

@@ -24,6 +24,7 @@ export {
     RESOURCE_FIELDS,
     SETTLEMENT_MODE_OPTIONS,
     SUPPLIER_CAPABILITY_OPTIONS,
+    SUPPLIER_PAYMENT_TERM_OPTIONS,
     SUPPLIER_RATING_OPTIONS,
 } from "@/features/master-data/lib/resource-fields-defs"
 export type { ResourceFieldDef } from "@/features/master-data/lib/resource-fields-defs"
@@ -295,6 +296,7 @@ export function buildResourceFields(
                 contactPhone: pickField(values, "contactPhone"),
                 address: pickField(values, "address"),
                 settlement: pickField(values, "settlement"),
+                paymentTerm: pickField(values, "paymentTerm"),
                 capability: pickField(values, "capability"),
                 businessCategory: pickField(values, "businessCategory"),
                 signingEntity: pickField(values, "signingEntity"),

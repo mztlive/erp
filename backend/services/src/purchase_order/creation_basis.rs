@@ -27,6 +27,7 @@ use entities::purchase_order::{
     SupplierSnapshot,
 };
 use entities::sales_order::{CommercialStatus, SalesOrder, SalesOrderRevision};
+use entities::supplier::SupplierPaymentTerm;
 use entities::supplier_offering::{
     AvailabilityStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
@@ -1257,11 +1258,7 @@ async fn build_draft_submission(
         .current_commercial_profile_revision_id
         .clone()
         .ok_or_else(|| Error::BusinessLogicError("供应商缺少商务结算版本".to_string()))?;
-    let prepay_gate = scope
-        .payment_term_code
-        .trim()
-        .to_uppercase()
-        .starts_with("PREPAY");
+    let payment_term = SupplierPaymentTerm::parse(&scope.payment_term_code)?;
     PurchaseOrderSubmission::new(
         PurchaseOrderSubmissionId::new(next_id()),
         PurchaseOrderSubmissionData {
@@ -1273,8 +1270,8 @@ async fn build_draft_submission(
             supplier_revision_id: revision_id,
             supplier_snapshot: SupplierSnapshot::new(supplier_name.to_string())?,
             payment_term_snapshot: entities::purchase_order::PaymentTermSnapshot::new(
-                scope.payment_term_code.clone(),
-                prepay_gate,
+                payment_term.code().to_string(),
+                payment_term.prepay_gate(),
                 None,
                 None,
             )?,

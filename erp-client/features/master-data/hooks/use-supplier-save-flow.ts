@@ -4,11 +4,13 @@ import * as React from "react"
 import { useSelector } from "@tanstack/react-form"
 
 import type { SupplierEditor } from "@/features/master-data/hooks/use-supplier-editor"
+import { settlementLabel } from "@/features/master-data/api/presentation"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     validateSupplierEditorFields,
     type SupplierFieldKey,
 } from "@/features/master-data/lib/supplier-editor-model"
+import { paymentTermLabel } from "@/lib/business-options"
 
 /**
  * 供应商编辑器右上角保存流程：字段校验 → 变更原因弹窗 → 提交。
@@ -114,33 +116,39 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         [detailQuery],
     )
 
-    const summaryRows: Array<{ label: string; value: string }> =
-        React.useMemo(
-            () => [
-                {
-                    label: masterDataCopy.fContactName,
-                    value: values.contactName.trim() || "—",
-                },
-                {
-                    label: masterDataCopy.fSettlement,
-                    value: values.settlement || "—",
-                },
-                {
-                    label: masterDataCopy.fSupplierRating,
-                    value: values.supplierRating || "—",
-                },
-                {
-                    label: masterDataCopy.fCapability,
-                    value: values.capability || "—",
-                },
-            ],
-            [
-                values.capability,
-                values.contactName,
-                values.settlement,
-                values.supplierRating,
-            ],
-        )
+    const summaryRows: Array<{ label: string; value: string }> = React.useMemo(
+        () => [
+            {
+                label: masterDataCopy.fContactName,
+                value: values.contactName.trim() || "—",
+            },
+            {
+                label: masterDataCopy.fSettlement,
+                value: settlementLabel(values.settlement) || "—",
+            },
+            {
+                label: masterDataCopy.fPaymentTerm,
+                value: values.paymentTerm
+                    ? paymentTermLabel(values.paymentTerm)
+                    : "—",
+            },
+            {
+                label: masterDataCopy.fSupplierRating,
+                value: values.supplierRating || "—",
+            },
+            {
+                label: masterDataCopy.fCapability,
+                value: values.capability || "—",
+            },
+        ],
+        [
+            values.capability,
+            values.contactName,
+            values.paymentTerm,
+            values.settlement,
+            values.supplierRating,
+        ],
+    )
 
     return {
         values,

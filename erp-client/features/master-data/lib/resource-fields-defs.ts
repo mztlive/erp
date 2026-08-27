@@ -6,6 +6,7 @@
 
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataResource } from "@/features/master-data/types"
+import { SUPPLIER_PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 
 const REGION_OPTIONS = [
     "华东",
@@ -17,8 +18,14 @@ const REGION_OPTIONS = [
     "全国",
 ] as const
 
-/** 供应商结算方式（对齐 supplier_commercial_profile_revision.settlement_mode）。 */
-export const SETTLEMENT_MODE_OPTIONS = ["预付款", "先用后付", "现结"] as const
+/** 供应商结算方式（稳定值对齐 supplier_commercial_profile_revision.settlement_mode）。 */
+export const SETTLEMENT_MODE_OPTIONS = [
+    { value: "prepayment", label: "预付款" },
+    { value: "pay_after_use", label: "先用后付" },
+    { value: "cash_settlement", label: "现结" },
+] as const
+
+export { SUPPLIER_PAYMENT_TERM_OPTIONS }
 
 /** 供应商发票类型。 */
 export const INVOICE_TYPE_OPTIONS = [
@@ -257,9 +264,20 @@ export const RESOURCE_FIELDS: Readonly<
             key: "settlement",
             label: masterDataCopy.fSettlement,
             kind: "select",
-            options: SETTLEMENT_MODE_OPTIONS,
+            options: SETTLEMENT_MODE_OPTIONS.map((option) => option.value),
+            required: true,
             listFact: true,
             aliases: ["商务结算", "商务结算版本"],
+        },
+        {
+            key: "paymentTerm",
+            label: masterDataCopy.fPaymentTerm,
+            kind: "select",
+            options: SUPPLIER_PAYMENT_TERM_OPTIONS.map(
+                (option) => option.value,
+            ),
+            required: true,
+            listFact: true,
         },
         {
             key: "capability",

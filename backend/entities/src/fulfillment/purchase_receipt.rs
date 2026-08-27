@@ -895,7 +895,7 @@ mod tests {
         );
 
         let snapshot = PaymentTermSnapshot::new(
-            "PREPAY".to_string(),
+            "PREPAY_50".to_string(),
             true,
             Some(Amount::from_str("50.00").unwrap()),
             Some(crate::money::Rate::from_str("0.500000").unwrap()),
@@ -914,7 +914,7 @@ mod tests {
         )
         .is_err());
         let ratio_only = PaymentTermSnapshot::new(
-            "PREPAY-RATIO".to_string(),
+            "PREPAY_100".to_string(),
             true,
             None,
             Some(crate::money::Rate::from_str("0.750000").unwrap()),

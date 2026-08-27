@@ -25,6 +25,7 @@ import type {
     MasterDataCenterView,
     RevisionTimelineEntry,
 } from "@/features/master-data/types"
+import { paymentTermLabel } from "@/lib/business-options"
 import { baseCenter } from "./base"
 
 export async function centerSupplier(
@@ -140,6 +141,12 @@ export async function centerSupplier(
         // mobile 不在列表契约中；telephone 若创建时同步写入可回显
         fact("联系电话", contact?.telephone),
         fact("结算方式", settlementLabel(profile?.settlement_mode)),
+        fact(
+            "付款条件",
+            profile?.payment_term_snapshot
+                ? paymentTermLabel(profile.payment_term_snapshot)
+                : null,
+        ),
         fact("发票类型", invoiceLabel(profile?.invoice_type)),
         fact("发票税点", invoiceTaxRatePercent),
         fact("能力", capabilityLabels),
@@ -182,6 +189,12 @@ export async function centerSupplier(
         {
             label: "结算方式",
             value: settlementLabel(profile?.settlement_mode) || "—",
+        },
+        {
+            label: "付款条件",
+            value: profile?.payment_term_snapshot
+                ? paymentTermLabel(profile.payment_term_snapshot)
+                : "—",
         },
         {
             label: "发票类型",

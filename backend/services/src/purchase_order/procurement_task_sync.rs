@@ -186,7 +186,7 @@ async fn synchronize_tasks(
                     db.work_items().update(&mut task, executor).await?;
                 }
             }
-        } else if remaining.to_decimal().is_sign_positive() {
+        } else if !remaining.to_decimal().is_zero() && remaining.to_decimal().is_sign_positive() {
             terminal_candidates.push((key, task, remaining));
         }
     }

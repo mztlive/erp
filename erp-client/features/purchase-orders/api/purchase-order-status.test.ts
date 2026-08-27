@@ -12,7 +12,7 @@ describe("parsePaymentTermSnapshot", () => {
             businessCategory: "礼盒",
         })
         expect(parsePaymentTermSnapshot("现结｜经营类目：礼盒")).toEqual({
-            paymentTerm: "现结",
+            paymentTerm: "现结（审批通过日）",
             businessCategory: "礼盒",
         })
     })
@@ -27,7 +27,9 @@ describe("parsePaymentTermSnapshot", () => {
 
 describe("paymentTermLabel", () => {
     it("strips historical business category encoding from stored codes", () => {
-        expect(paymentTermLabel("现结｜经营类目：礼盒")).toBe("现结")
+        expect(paymentTermLabel("现结｜经营类目：礼盒")).toBe(
+            "现结（审批通过日）",
+        )
         expect(paymentTermLabel("POSTPAY_NET30")).toBe("货到 30 天")
     })
 })

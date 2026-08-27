@@ -27,6 +27,7 @@ import type {
     MasterDataListItem,
     ProductListingStatus,
 } from "@/features/master-data/types"
+import { paymentTermLabel } from "@/lib/business-options"
 
 export function isFutureDate(date: string | undefined): boolean {
     if (!date) return false
@@ -371,6 +372,12 @@ export function mapSupplierRow(
             {
                 label: "结算方式",
                 value: settlementLabel(profile?.settlement_mode) || "—",
+            },
+            {
+                label: "付款条件",
+                value: profile?.payment_term_snapshot
+                    ? paymentTermLabel(profile.payment_term_snapshot)
+                    : "—",
             },
             {
                 label: "发票类型",

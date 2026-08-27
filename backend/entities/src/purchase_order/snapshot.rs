@@ -9,6 +9,7 @@ use crate::common::time::BusinessDate;
 use crate::errors::{Error, Result};
 use crate::money::{Amount, Rate};
 use crate::supplier::business_category::split_encoded_payment_term_snapshot;
+use crate::supplier::SupplierPaymentTerm;
 use crate::validation::normalize_required_text;
 
 /// 供应商名称最大长度。
@@ -80,7 +81,7 @@ impl PaymentTermSnapshot {
     /// 返回快照实例。
     ///
     /// # 错误
-    /// 代码为空/超长，或金额/比例门槛为负时返回错误。
+    /// 代码为空、不是可计算的受控付款条件、门禁与条件不一致，或金额/比例门槛为负时返回错误。
     pub fn new(
         payment_term_code: String,
         prepay_gate: bool,
@@ -93,6 +94,11 @@ impl PaymentTermSnapshot {
             PAYMENT_TERM_MAX_LEN,
             "付款条件过长",
         )?;
+        let payment_term_code = split_encoded_payment_term_snapshot(&payment_term_code).payment_term_code;
+        let payment_term = SupplierPaymentTerm::parse(&payment_term_code)?;
+        if payment_term.prepay_gate() != prepay_gate {
+            return Err(Error::from("付款条件与先款门禁不一致，请重新选择"));
+        }
         if let Some(amount) = prepay_minimum_amount {
             if amount.to_decimal() < rust_decimal::Decimal::ZERO {
                 return Err(Error::from("先款门槛金额不能为负"));
@@ -104,7 +110,7 @@ impl PaymentTermSnapshot {
             }
         }
         Ok(Self {
-            payment_term_code,
+            payment_term_code: payment_term.code().to_string(),
             prepay_gate,
             prepay_minimum_amount,
             prepay_minimum_ratio,
@@ -130,20 +136,10 @@ impl PaymentTermSnapshot {
         approved_on: BusinessDate,
         expected_delivery_on: Option<BusinessDate>,
     ) -> Result<BusinessDate> {
-        let code = split_encoded_payment_term_snapshot(&self.payment_term_code)
-            .payment_term_code
-            .trim()
-            .to_uppercase();
-        if self.prepay_gate
-            || code.starts_with("PREPAY")
-            || matches!(code.as_str(), "现结" | "预付款" | "先款")
-        {
+        let code = split_encoded_payment_term_snapshot(&self.payment_term_code).payment_term_code;
+        let payment_term = SupplierPaymentTerm::parse(&code)?;
+        let Some(days) = payment_term.days_after_delivery() else {
             return Ok(approved_on);
-        }
-        let days = match code.as_str() {
-            "POSTPAY_NET15" | "POSTPAY-NET15" | "NET15" | "NET-15" => 15,
-            "POSTPAY_NET30" | "POSTPAY-NET30" | "NET30" | "NET-30" => 30,
-            _ => return Err(Error::from("付款条件未登记计划付款日规则")),
         };
         let delivery_on = expected_delivery_on.ok_or("后付条件缺少预计交付日")?;
         let due = delivery_on
@@ -179,7 +175,7 @@ mod tests {
             None,
         );
         assert!(snapshot.is_ok());
-        assert_eq!(snapshot.unwrap().payment_term_code, "PREPAY-30");
+        assert_eq!(snapshot.unwrap().payment_term_code, "PREPAY_30");
 
         let negative = PaymentTermSnapshot::new(
             "P30".to_string(),
@@ -195,9 +191,11 @@ mod tests {
         let approved = BusinessDate::from_ymd(2026, 8, 26).unwrap();
         let delivery = BusinessDate::from_ymd(2026, 9, 1).unwrap();
         let prepay = PaymentTermSnapshot::new("PREPAY_30".to_string(), true, None, None).unwrap();
+        let cash = PaymentTermSnapshot::new("CASH_ON_APPROVAL".to_string(), false, None, None).unwrap();
         let postpay = PaymentTermSnapshot::new("POSTPAY_NET15".to_string(), false, None, None).unwrap();
 
         assert_eq!(prepay.payable_due_date(approved, None).unwrap(), approved);
+        assert_eq!(cash.payable_due_date(approved, None).unwrap(), approved);
         assert_eq!(
             postpay.payable_due_date(approved, Some(delivery)).unwrap(),
             BusinessDate::from_ymd(2026, 9, 16).unwrap()
@@ -205,12 +203,18 @@ mod tests {
     }
 
     #[test]
-    fn payment_term_fails_closed_without_a_registered_due_rule() {
+    fn payment_term_rejects_ambiguous_terms_before_approval() {
         let approved = BusinessDate::from_ymd(2026, 8, 26).unwrap();
         let postpay = PaymentTermSnapshot::new("NET-30".to_string(), false, None, None).unwrap();
-        let unknown = PaymentTermSnapshot::new("先用后付".to_string(), false, None, None).unwrap();
 
         assert!(postpay.payable_due_date(approved, None).is_err());
-        assert!(unknown.payable_due_date(approved, Some(approved)).is_err());
+        assert!(PaymentTermSnapshot::new("先用后付".to_string(), false, None, None).is_err());
+        assert!(PaymentTermSnapshot::new("CONTRACT".to_string(), false, None, None).is_err());
+    }
+
+    #[test]
+    fn payment_term_requires_matching_prepay_gate() {
+        assert!(PaymentTermSnapshot::new("PREPAY_30".to_string(), false, None, None).is_err());
+        assert!(PaymentTermSnapshot::new("POSTPAY_NET30".to_string(), true, None, None).is_err());
     }
 }

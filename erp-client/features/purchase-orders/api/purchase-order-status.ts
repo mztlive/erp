@@ -10,7 +10,7 @@ import type {
     PurchaseReviewStatus,
     PurchaseType,
 } from "@/features/purchase-orders/types"
-import { PAYMENT_TERM_OPTIONS } from "@/features/purchase-orders/types"
+import { paymentTermLabel as sharedPaymentTermLabel } from "@/lib/business-options"
 
 export function secsToIso(secs?: number | null): string {
     if (secs == null || secs <= 0) return new Date(0).toISOString()
@@ -104,10 +104,7 @@ export function paymentTermLabel(code: string): string {
             .trim()
             .split(/\s*[|｜]\s*经营类目：/)[0]
             ?.trim() ?? ""
-    return (
-        PAYMENT_TERM_OPTIONS.find((o) => o.value === term)?.label ??
-        (term === "NET-30" ? "货到 30 天" : term || "—")
-    )
+    return term ? sharedPaymentTermLabel(term) : "—"
 }
 
 /**

@@ -474,12 +474,5 @@ export const REJECT_REASON_LABEL: Record<string, string> = {
     OTHER: "其它",
 }
 
-/** 付款条件可选全集（含履约语义后缀）；保存时直接使用所选 label，不做二次映射 */
-export const PAYMENT_TERM_OPTIONS: readonly { value: string; label: string }[] =
-    [
-        { value: "PREPAY_100", label: "先款 100% 后履约" },
-        { value: "PREPAY_50", label: "先款 50% 后直发" },
-        { value: "PREPAY_30", label: "先款 30%" },
-        { value: "POSTPAY_NET15", label: "货到 15 天" },
-        { value: "POSTPAY_NET30", label: "货到 30 天" },
-    ]
+/** 采购付款条件只暴露可形成计划付款日的受控代码。 */
+export { SUPPLIER_PAYMENT_TERM_OPTIONS as PAYMENT_TERM_OPTIONS } from "@/lib/business-options"

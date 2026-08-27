@@ -13,8 +13,10 @@ import type { SupplierEditorSectionProps } from "@/features/master-data/componen
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     SETTLEMENT_MODE_OPTIONS,
+    SUPPLIER_PAYMENT_TERM_OPTIONS,
     SUPPLIER_RATING_OPTIONS,
 } from "@/features/master-data/lib/resource-fields"
+import { supplierPaymentTermOptionsFor } from "@/lib/business-options"
 import { cn } from "@/lib/utils"
 
 export function SupplierEditorCommercialSection({
@@ -22,6 +24,7 @@ export function SupplierEditorCommercialSection({
     setFieldValue,
     canEdit,
 }: SupplierEditorSectionProps) {
+    const paymentTermOptions = supplierPaymentTermOptionsFor(values.settlement)
     return (
         <SectionPanel
             title="商务合作"
@@ -42,18 +45,56 @@ export function SupplierEditorCommercialSection({
                         <Label>{masterDataCopy.fSettlement}</Label>
                         <OptionCombobox
                             value={values.settlement || null}
-                            onValueChange={(v) =>
-                                setFieldValue("settlement", v ?? "")
-                            }
-                            options={SETTLEMENT_MODE_OPTIONS.map((o) => ({
-                                value: o,
-                                label: o,
-                            }))}
+                            onValueChange={(value) => {
+                                const settlement = value ?? ""
+                                setFieldValue("settlement", settlement)
+                                const allowed =
+                                    supplierPaymentTermOptionsFor(settlement)
+                                if (
+                                    !allowed.some(
+                                        (option) =>
+                                            option.value === values.paymentTerm,
+                                    )
+                                ) {
+                                    setFieldValue(
+                                        "paymentTerm",
+                                        allowed.length === 1
+                                            ? allowed[0].value
+                                            : "",
+                                    )
+                                }
+                            }}
+                            options={SETTLEMENT_MODE_OPTIONS}
                             allowClear
                             placeholder="请选择结算方式"
                             className="w-full"
                             disabled={!canEdit}
                         />
+                    </FieldShell>
+                    <FieldShell>
+                        <Label>{masterDataCopy.fPaymentTerm}</Label>
+                        <OptionCombobox
+                            value={values.paymentTerm || null}
+                            onValueChange={(value) =>
+                                setFieldValue("paymentTerm", value ?? "")
+                            }
+                            options={
+                                values.settlement
+                                    ? paymentTermOptions
+                                    : SUPPLIER_PAYMENT_TERM_OPTIONS
+                            }
+                            allowClear
+                            placeholder={
+                                values.settlement
+                                    ? "请选择具体付款条件"
+                                    : "请先选择结算方式"
+                            }
+                            className="w-full"
+                            disabled={!canEdit || !values.settlement}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            先款与现结按采购最终审批日；货到账期按采购明细最晚预计交付日计算。
+                        </p>
                     </FieldShell>
                     <FieldShell>
                         <Label htmlFor="supplier-business-category">

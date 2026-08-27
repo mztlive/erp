@@ -8,6 +8,8 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use super::business_category::{normalize_business_category, split_encoded_payment_term_snapshot};
+pub use super::payment_term::SettlementMode;
+use super::payment_term::SupplierPaymentTerm;
 use crate::common::revision::RevisionBase;
 use crate::errors::{Error, Result};
 use crate::money::Rate;
@@ -19,44 +21,6 @@ pub use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisi
 const PAYMENT_TERM_SNAPSHOT_MAX_LEN: usize = 64;
 /// 变更原因最大长度。
 const CHANGE_REASON_MAX_LEN: usize = 500;
-
-/// 结算方式（§6.2：预付款、先用后付、现结等受控代码；固定枚举）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SettlementMode {
-    /// 预付款。
-    Prepayment,
-    /// 先用后付。
-    PayAfterUse,
-    /// 现结。
-    CashSettlement,
-}
-
-impl SettlementMode {
-    /// 返回方式的中文展示名。
-    ///
-    /// # 返回
-    /// 返回面向用户的中文标签。
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Prepayment => "预付款",
-            Self::PayAfterUse => "先用后付",
-            Self::CashSettlement => "现结",
-        }
-    }
-
-    /// 返回方式的稳定代码。
-    ///
-    /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Prepayment => "prepayment",
-            Self::PayAfterUse => "pay_after_use",
-            Self::CashSettlement => "cash_settlement",
-        }
-    }
-}
 
 /// 对账周期（§6.2：日、周、月、季、年或无需周期对账；固定枚举）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,13 +182,17 @@ impl SupplierCommercialProfileRevision {
     /// 返回新建的版本实体。
     ///
     /// # 错误
-    /// 当快照/原因为空或超长、经营类目超长、税点越界时返回错误。
+    /// 当付款条件缺少可计算规则、与结算方式不一致，或其他版本字段非法时返回错误。
     pub fn new(
         id: SupplierCommercialProfileRevisionId,
         data: SupplierCommercialProfileRevisionData,
     ) -> Result<Self> {
         let (payment_term_snapshot, business_category) =
             split_payment_term_fields(data.payment_term_snapshot, data.business_category)?;
+        let payment_term = SupplierPaymentTerm::parse(&payment_term_snapshot)?;
+        if payment_term.settlement_mode() != data.settlement_mode {
+            return Err(Error::from("结算方式与付款条件不一致，请重新选择"));
+        }
         let change_reason = normalize_required_text(
             data.change_reason,
             "变更原因不能为空",
@@ -239,7 +207,7 @@ impl SupplierCommercialProfileRevision {
             supplier_id: data.supplier_id,
             settlement_mode: data.settlement_mode,
             reconciliation_cycle: data.reconciliation_cycle,
-            payment_term_snapshot,
+            payment_term_snapshot: payment_term.code().to_string(),
             business_category,
             invoice_type: data.invoice_type,
             invoice_tax_rate: data.invoice_tax_rate,
@@ -263,7 +231,10 @@ impl SupplierCommercialProfileRevision {
     /// # 错误
     /// 无。
     pub fn effective_payment_term_code(&self) -> String {
-        split_encoded_payment_term_snapshot(&self.payment_term_snapshot).payment_term_code
+        let code = split_encoded_payment_term_snapshot(&self.payment_term_snapshot).payment_term_code;
+        SupplierPaymentTerm::parse(&code)
+            .map(|term| term.code().to_string())
+            .unwrap_or(code)
     }
 
     /// 返回经营类目：独立字段优先，否则从历史付款条件快照拆出。
@@ -377,7 +348,7 @@ mod tests {
         assert_eq!(profile.revision.revision_no, 1);
     }
 
-    /// 失败路径：快照/原因为空或超长、税点越界。
+    /// 失败路径：快照/原因为空或超长、付款条件不受控、结算方式不匹配或税点越界。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_snapshot = SupplierCommercialProfileRevisionData {
@@ -409,6 +380,28 @@ mod tests {
             bad_rate,
         )
         .is_err());
+
+        let ambiguous_payment_term = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::PayAfterUse,
+            payment_term_snapshot: "先用后付".to_string(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            ambiguous_payment_term,
+        )
+        .is_err());
+
+        let mismatched_settlement = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::PayAfterUse,
+            payment_term_snapshot: "PREPAY_30".to_string(),
+            ..profile_data()
+        };
+        assert!(SupplierCommercialProfileRevision::new(
+            SupplierCommercialProfileRevisionId::new("p"),
+            mismatched_settlement,
+        )
+        .is_err());
     }
 
     /// 金额三元组：发票税点参与行金额计算时保持 gross = net + tax。
@@ -438,6 +431,7 @@ mod tests {
     #[test]
     fn new_splits_encoded_snapshot_and_prefers_explicit_category() {
         let encoded = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::CashSettlement,
             payment_term_snapshot: "现结｜经营类目：礼盒".to_string(),
             business_category: None,
             ..profile_data()
@@ -447,12 +441,13 @@ mod tests {
             encoded,
         )
         .unwrap();
-        assert_eq!(profile.payment_term_snapshot, "现结");
+        assert_eq!(profile.payment_term_snapshot, "CASH_ON_APPROVAL");
         assert_eq!(profile.business_category.as_deref(), Some("礼盒"));
-        assert_eq!(profile.effective_payment_term_code(), "现结");
+        assert_eq!(profile.effective_payment_term_code(), "CASH_ON_APPROVAL");
         assert_eq!(profile.effective_business_category().as_deref(), Some("礼盒"));
 
         let explicit = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::CashSettlement,
             payment_term_snapshot: "现结｜经营类目：礼盒".to_string(),
             business_category: Some(" 鲜花 ".to_string()),
             ..profile_data()
@@ -462,7 +457,7 @@ mod tests {
             explicit,
         )
         .unwrap();
-        assert_eq!(profile.payment_term_snapshot, "现结");
+        assert_eq!(profile.payment_term_snapshot, "CASH_ON_APPROVAL");
         assert_eq!(profile.business_category.as_deref(), Some("鲜花"));
     }
 
@@ -479,7 +474,7 @@ mod tests {
         doc.insert("payment_term_snapshot", "现结｜经营类目：礼盒".to_string());
         let loaded: SupplierCommercialProfileRevision = bson::deserialize_from_document(doc).unwrap();
         assert_eq!(loaded.business_category, None);
-        assert_eq!(loaded.effective_payment_term_code(), "现结");
+        assert_eq!(loaded.effective_payment_term_code(), "CASH_ON_APPROVAL");
         assert_eq!(loaded.effective_business_category().as_deref(), Some("礼盒"));
     }
 
