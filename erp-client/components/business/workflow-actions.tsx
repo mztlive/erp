@@ -285,6 +285,7 @@ function FormalActionConfirmDialog({
             </AlertDialogMedia>
             <AlertDialogTitle>{title ?? `确认${actionLabel}`}</AlertDialogTitle>
             <AlertDialogDescription
+                render={<div />}
                 className={layout === "landscape" ? "text-left" : undefined}
             >
                 {description ?? "请核对状态变化和业务影响后再继续。"}
