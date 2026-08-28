@@ -1,5 +1,7 @@
 "use client"
 
+import { LoaderCircleIcon } from "lucide-react"
+
 import { FormalActionResult } from "@/components/business"
 import type { ResultState } from "@/components/business/feedback"
 import { Button } from "@/components/ui/button"
@@ -42,7 +44,14 @@ export function AdjustmentResultBanner({
                                 void onResolve()
                             }}
                         >
-                            查询最终结果
+                            {isResolving ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {isResolving ? "查询中…" : "查询最终结果"}
                         </Button>
                     </div>
                 ) : undefined

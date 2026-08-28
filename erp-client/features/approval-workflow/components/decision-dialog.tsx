@@ -219,6 +219,7 @@ export function DecisionDialog({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={submitDecision.isPending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消

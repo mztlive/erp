@@ -4,6 +4,7 @@ import Link from "next/link"
 
 import { BatchImpactPreview } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
     Dialog,
     DialogContent,
@@ -114,6 +115,7 @@ export function DisableConnectionDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -124,7 +126,10 @@ export function DisableConnectionDialog({
                         disabled={!canDisable || pending}
                         onClick={() => void onSubmit()}
                     >
-                        确认停用
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {pending ? "停用中…" : "确认停用"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

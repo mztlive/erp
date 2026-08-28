@@ -140,6 +140,7 @@ export function UpgradeBindingDialog({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={upgrade.isPending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消

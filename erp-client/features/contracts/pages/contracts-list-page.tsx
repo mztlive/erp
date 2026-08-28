@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon, FileUpIcon } from "lucide-react"
+import { DownloadIcon, FileUpIcon, LoaderCircleIcon } from "lucide-react"
 
 import {
     DataFreshness,
@@ -88,8 +88,12 @@ export function ContractsListPage() {
                         actions={[
                             {
                                 actionKey: "export",
-                                label: "导出",
-                                icon: DownloadIcon,
+                                label: actions.exportPending
+                                    ? "导出中…"
+                                    : "导出",
+                                icon: actions.exportPending
+                                    ? LoaderCircleIcon
+                                    : DownloadIcon,
                                 variant: "outline",
                                 disabled:
                                     list.filtered.length === 0 ||

@@ -44,6 +44,32 @@ impl<'a> Repository<'a, ApprovalSubjectSnapshot> {
         )
         .await
     }
+
+    /// 按审批实例批量读取不可变业务对象快照。
+    ///
+    /// # 参数
+    /// * `approval_process_instance_ids` - 当前列表页内的审批实例 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的快照；调用方按实例 ID 关联。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_process_instance_ids(
+        &self,
+        approval_process_instance_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ApprovalSubjectSnapshot>> {
+        if approval_process_instance_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            snapshot_by_process_instances_filter(approval_process_instance_ids),
+            executor,
+        )
+        .await
+    }
 }
 
 impl<'a> Repository<'a, ApprovalNotificationOutbox> {
@@ -205,6 +231,14 @@ fn snapshot_by_process_instance_filter(approval_process_instance_id: &str) -> Do
     doc! { "approval_process_instance_id": approval_process_instance_id }
 }
 
+fn snapshot_by_process_instances_filter(approval_process_instance_ids: &[String]) -> Document {
+    doc! {
+        "approval_process_instance_id": {
+            "$in": approval_process_instance_ids.to_vec(),
+        }
+    }
+}
+
 fn outbox_lease_filter(now: Instant) -> Document {
     let now = now.unix_secs();
     doc! {
@@ -340,12 +374,25 @@ mod tests {
     use super::{
         clamp_outbox_limit, dead_letter_outbox_pipeline, lease_owner_filter, lease_take_pipeline,
         lease_take_sort, mark_outbox_delivered_pipeline, outbox_lease_filter, reschedule_outbox_pipeline,
-        MAX_OUTBOX_BATCH,
+        snapshot_by_process_instances_filter, MAX_OUTBOX_BATCH,
     };
     use entities::approval_integration::ApprovalNotificationDeliveryStatus;
     use entities::common::time::Instant;
 
     use mongodb::bson::{doc, Bson};
+
+    #[test]
+    fn snapshot_batch_filter_uses_only_requested_instances() {
+        let filter = snapshot_by_process_instances_filter(&["inst-1".to_string(), "inst-2".to_string()]);
+        assert_eq!(
+            filter,
+            doc! {
+                "approval_process_instance_id": {
+                    "$in": ["inst-1", "inst-2"],
+                }
+            }
+        );
+    }
 
     #[test]
     fn lease_filter_allows_pending_due_and_expired_inflight() {

@@ -15,8 +15,8 @@ use axum::{
 };
 use entities::document_registry::DocumentType;
 use services::approval::execution::{
-    ApprovalRuntimeService, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
-    UpgradeBindingCommand,
+    ApprovalRuntimeService, RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView,
+    RuntimeInstanceStatusFilter, UpgradeBindingCommand,
 };
 use services::audit::AuditActor;
 
@@ -29,7 +29,7 @@ use crate::{
 };
 
 use self::http::{
-    CancelBlockedHttpRequest, DecisionValue, InstanceHistoryQuery, InstanceListQuery,
+    CancelBlockedHttpRequest, DecisionValue, InstanceHistoryQuery, InstanceListCursor, InstanceListQuery,
     ResumeApproverHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
 };
 
@@ -90,19 +90,47 @@ pub async fn instance_list(
     let normalized = query
         .normalize()
         .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
+    let view = normalized.view;
+    let cursor = normalized
+        .cursor
+        .map(|cursor| {
+            cursor
+                .sort_primary
+                .parse::<i64>()
+                .map(|sort_time| RuntimeInstanceListCursor {
+                    sort_time,
+                    id: cursor.sort_id,
+                })
+                .map_err(|_| "cursor 的排序时间必须是整数".to_string())
+        })
+        .transpose()
+        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
     let page = runtime_service(&state)
         .instance_list(
             &actor,
             RuntimeInstanceListQuery {
-                view: map_list_view(normalized.view),
+                view: map_list_view(view),
                 document_type: normalized.document_type,
                 status: normalized.status.map(map_status_filter),
+                cursor,
                 limit: normalized.limit,
             },
         )
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
-    ok_json(page)
+    let next_cursor = page.next_cursor.map(|cursor| {
+        InstanceListCursor {
+            view,
+            sort_primary: cursor.sort_time.to_string(),
+            sort_id: cursor.id,
+        }
+        .encode()
+    });
+    ok_json(serde_json::json!({
+        "items": page.items,
+        "total": page.total,
+        "next_cursor": next_cursor,
+    }))
 }
 
 #[permission_macros::permission(

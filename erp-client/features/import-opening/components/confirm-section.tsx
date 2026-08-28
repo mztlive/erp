@@ -109,7 +109,13 @@ function ReturnForFixDialog({
                     />
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={pending}
+                                />
+                            }
                         >
                             返回核对
                         </DialogClose>

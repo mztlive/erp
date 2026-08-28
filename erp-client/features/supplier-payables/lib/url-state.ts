@@ -16,7 +16,14 @@ export type SupplierAccountsPreviewKind =
 export function parsePreviewKind(
     raw: string | null,
 ): SupplierAccountsPreviewKind {
-    if (raw === "payment" || raw === "refund" || raw === "reversal") return raw
+    if (
+        raw === "payment" ||
+        raw === "refund" ||
+        raw === "reversal" ||
+        raw === "payable"
+    ) {
+        return raw
+    }
     return "payable"
 }
 

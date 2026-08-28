@@ -158,6 +158,8 @@ pub struct PayableEntryView {
     pub due_date: BusinessDate,
     /// 来源单据 ID。
     pub source_document_id: String,
+    /// 来源业务单号（采购单号或结算单号；缺失时为空，不得回退内部 ID）。
+    pub source_document_no: Option<String>,
     /// 来源内序号。
     pub source_sequence: u32,
     /// 入账时间（秒级时间戳）。
@@ -379,6 +381,14 @@ pub struct PaymentAllocationView {
     pub allocation_action: AllocationAction,
     /// 被核销应付分录。
     pub payable_entry_id: String,
+    /// 被核销应付子账；分录缺失时为空。
+    pub payable_account_id: Option<String>,
+    /// 应付来源类型；分录或子账缺失时为空。
+    pub source_type: Option<PayableSourceType>,
+    /// 来源单据内部身份；缺失时为空，界面不得当单号展示。
+    pub source_document_id: Option<String>,
+    /// 来源业务单号（采购单号或结算单号；缺失时为空）。
+    pub source_document_no: Option<String>,
     /// 核销金额。
     pub allocated_amount: Amount,
     /// 核销发生时间（秒级时间戳）。
@@ -398,6 +408,10 @@ pub struct SupplierPaymentView {
     pub status: SupplierPaymentStatus,
     /// 收款供应商。
     pub supplier_id: String,
+    /// 供应商编号（主数据缺失时为空）。
+    pub supplier_no: Option<String>,
+    /// 供应商名称（主数据缺失时为空，不得回退供应商 ID）。
+    pub supplier_name: Option<String>,
     /// 付款时冻结的收款账户摘要；历史付款可能为空。
     pub payment_recipient: Option<PaymentRecipientView>,
     /// 实际付款时间（秒级时间戳）。
@@ -635,6 +649,10 @@ impl From<&PaymentAllocation> for PaymentAllocationView {
             allocation_seq: allocation.allocation_seq,
             allocation_action: allocation.allocation_action,
             payable_entry_id: allocation.payable_entry_id.to_string(),
+            payable_account_id: None,
+            source_type: None,
+            source_document_id: None,
+            source_document_no: None,
             allocated_amount: allocation.allocated_amount,
             allocated_at: allocation.allocated_at,
             reverses_allocation_id: allocation
@@ -708,6 +726,38 @@ mod tests {
         };
         let query = allocations.normalized().unwrap();
         assert_eq!(query.paging.page_size, 25);
+    }
+
+    /// 分配实体转视图时来源展示字段为空，由展示装配补全，避免把分录 ID 当单号。
+    #[test]
+    fn payment_allocation_view_leaves_source_blank_before_enrichment() {
+        use std::str::FromStr;
+
+        use entities::common::time::Instant;
+        use entities::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
+        use entities::money::Amount;
+        use entities::payable::{AllocationAction, PaymentAllocation, PaymentAllocationData};
+
+        use super::PaymentAllocationView;
+
+        let allocation = PaymentAllocation::new(
+            PaymentAllocationId::new("alloc-1"),
+            PaymentAllocationData {
+                supplier_payment_id: SupplierPaymentId::new("pay-1"),
+                payable_entry_id: PayableEntryId::new("pe-1"),
+                allocation_seq: 1,
+                allocation_action: AllocationAction::Apply,
+                allocated_amount: Amount::from_str("10.00").unwrap(),
+                allocated_at: Instant::from_unix_secs(1_700_000_000),
+                reverses_allocation_id: None,
+            },
+        )
+        .unwrap();
+        let view = PaymentAllocationView::from(&allocation);
+        assert_eq!(view.payable_entry_id, "pe-1");
+        assert!(view.payable_account_id.is_none());
+        assert!(view.source_document_no.is_none());
+        assert!(view.source_document_id.is_none());
     }
 
     /// 付款提交必须携带页面已核对的收款账户身份与版本。

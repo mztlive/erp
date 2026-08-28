@@ -124,12 +124,16 @@ export function CreateDraftDialog({
                         <Button
                             type="button"
                             variant="ghost"
+                            disabled={createMutation.isPending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消
                         </Button>
                         <form.AppForm>
-                            <form.SubmitButton label="确认创建草稿" />
+                            <form.SubmitButton
+                                label="确认创建草稿"
+                                disabled={createMutation.isPending}
+                            />
                         </form.AppForm>
                     </DialogFooter>
                 </form>

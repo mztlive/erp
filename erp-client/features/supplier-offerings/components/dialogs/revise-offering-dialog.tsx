@@ -227,7 +227,13 @@ export function ReviseOfferingDialog({
                     </FieldGroup>
                     <DialogFooter className="border-t pt-4">
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={mutation.isPending}
+                                />
+                            }
                         >
                             取消
                         </DialogClose>

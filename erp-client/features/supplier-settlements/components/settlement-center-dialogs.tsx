@@ -5,6 +5,7 @@ import {
     OptionCombobox,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
     Dialog,
     DialogContent,
@@ -105,6 +106,7 @@ function SettlementResolveDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -114,7 +116,10 @@ function SettlementResolveDialog({
                         disabled={pending}
                         onClick={() => void onSubmit()}
                     >
-                        提交结论
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {pending ? "提交中…" : "提交结论"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -172,6 +177,7 @@ function SettlementEvidenceDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -181,7 +187,10 @@ function SettlementEvidenceDialog({
                         disabled={pending || !referenceId.trim()}
                         onClick={() => void onSubmit()}
                     >
-                        保存证据
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {pending ? "保存中…" : "保存证据"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -238,6 +247,7 @@ function SettlementRejectDialog({
                     <Button
                         type="button"
                         variant="ghost"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -247,7 +257,10 @@ function SettlementRejectDialog({
                         disabled={!reasonCode || pending}
                         onClick={() => void onSubmit()}
                     >
-                        确认驳回
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {pending ? "提交中…" : "确认驳回"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

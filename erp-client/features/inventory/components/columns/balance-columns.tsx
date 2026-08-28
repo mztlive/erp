@@ -2,6 +2,8 @@
 
 import type { ColumnDef } from "@tanstack/react-table"
 
+import { LoaderCircleIcon } from "lucide-react"
+
 import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,6 +16,7 @@ export type BalanceColumnsInput = {
     rowFocusRef: { current: Map<string, HTMLButtonElement | null> }
     openDetail: (balanceId: string) => void
     startAdjustment: (row: StockBalanceRow) => Promise<void>
+    isCreating?: boolean
 }
 
 export function buildBalanceColumns({
@@ -21,6 +24,7 @@ export function buildBalanceColumns({
     rowFocusRef,
     openDetail,
     startAdjustment,
+    isCreating = false,
 }: BalanceColumnsInput): ColumnDef<StockBalanceRow>[] {
     return [
         {
@@ -164,13 +168,20 @@ export function buildBalanceColumns({
                             type="button"
                             variant="outline"
                             size="xs"
-                            disabled={!canAdjust}
+                            disabled={!canAdjust || isCreating}
                             title={blocker?.message}
                             onClick={() =>
                                 void startAdjustment(row.original)
                             }
                         >
-                            库存调整
+                            {isCreating ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {isCreating ? "创建中…" : "库存调整"}
                         </Button>
                     </div>
                 )

@@ -6,6 +6,7 @@ import {
     ArrowRightIcon,
     CircleCheckIcon,
     EyeIcon,
+    LoaderCircleIcon,
     SaveIcon,
     SkipForwardIcon,
     Undo2Icon,
@@ -258,8 +259,16 @@ export function FulfillmentWorkSurface({
                                     disabled={formalPending || !dirty}
                                     onClick={() => void onSave()}
                                 >
-                                    <SaveIcon data-icon="inline-start" />
-                                    保存
+                                    {formalPending ? (
+                                        <LoaderCircleIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                            className="animate-spin"
+                                        />
+                                    ) : (
+                                        <SaveIcon data-icon="inline-start" />
+                                    )}
+                                    {formalPending ? "保存中…" : "保存"}
                                 </Button>
                             ) : null}
                             <Button
@@ -267,12 +276,22 @@ export function FulfillmentWorkSurface({
                                 disabled={formalPending || !canPost}
                                 onClick={onConfirm}
                             >
-                                <CircleCheckIcon data-icon="inline-start" />
-                                {autoNext
-                                    ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
-                                    : OPERATION_ACTION_LABEL[
-                                          operation.operationType
-                                      ]}
+                                {formalPending ? (
+                                    <LoaderCircleIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                        className="animate-spin"
+                                    />
+                                ) : (
+                                    <CircleCheckIcon data-icon="inline-start" />
+                                )}
+                                {formalPending
+                                    ? "处理中…"
+                                    : autoNext
+                                      ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
+                                      : OPERATION_ACTION_LABEL[
+                                            operation.operationType
+                                        ]}
                             </Button>
                         </div>
                     ) : (

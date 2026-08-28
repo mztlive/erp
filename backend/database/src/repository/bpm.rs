@@ -34,7 +34,7 @@ const RECEIPTS: &str = <mongodb::Database as BpmExt>::APPROVAL_COMMAND_RECEIPTS;
 const MAX_DEFINITION_GRAPH_DOCS: i64 = 20;
 const MAX_DEFINITION_VERSIONS: i64 = 100;
 const MAX_EXECUTION_HISTORY: i64 = 50;
-const MAX_INSTANCE_PAGE: i64 = 50;
+const MAX_INSTANCE_PAGE: i64 = 101;
 
 /// CAS 写入结果。未命中必须区分为不存在、版本冲突或状态变化。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -677,6 +677,37 @@ impl<'a> BpmWorkflowRepository<'a> {
             &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
             instance_list_filter_doc(filter),
             options,
+            executor,
+        )
+        .await
+    }
+
+    /// 统计当前授权过滤条件下的审批实例总数。
+    ///
+    /// 游标只限定当前页起点，不得缩小总数口径，因此统计时固定移除游标。
+    ///
+    /// # 参数
+    /// * `filter` - 与列表相同的视图、状态、启动人和对象范围
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回当前过滤条件下的完整实例数量。
+    ///
+    /// # 错误
+    /// MongoDB 统计失败时返回错误。
+    pub async fn count_instance_summaries(
+        &self,
+        filter: &ApprovalInstanceListFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<u64> {
+        if instance_list_scope_empty(filter) {
+            return Ok(0);
+        }
+        let mut total_filter = filter.clone();
+        total_filter.cursor = None;
+        mongo_ops::count_documents(
+            &self.db.collection::<ApprovalInstanceSummary>(INSTANCES),
+            instance_list_filter_doc(&total_filter),
             executor,
         )
         .await
@@ -2003,8 +2034,9 @@ mod tests {
         );
         assert_eq!(clamp_limit(0, MAX_INSTANCE_PAGE), 1);
         assert_eq!(clamp_limit(50, MAX_INSTANCE_PAGE), 50);
-        assert_eq!(clamp_limit(51, MAX_INSTANCE_PAGE), 50);
-        assert_eq!(clamp_limit(u32::MAX, MAX_INSTANCE_PAGE), 50);
+        assert_eq!(clamp_limit(101, MAX_INSTANCE_PAGE), 101);
+        assert_eq!(clamp_limit(102, MAX_INSTANCE_PAGE), 101);
+        assert_eq!(clamp_limit(u32::MAX, MAX_INSTANCE_PAGE), 101);
     }
 
     #[test]

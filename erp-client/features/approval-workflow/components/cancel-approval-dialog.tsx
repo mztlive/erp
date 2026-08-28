@@ -166,6 +166,7 @@ export function CancelApprovalDialog({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={pending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消

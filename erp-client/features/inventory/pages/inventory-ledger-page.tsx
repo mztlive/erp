@@ -162,7 +162,8 @@ export function InventoryLedgerPage() {
     const detailQuery = useBalanceDetailQuery(previewBalanceId)
     const adjustmentDetailQuery = useAdjustmentDetailQuery(previewAdjustmentId)
 
-    const { exportJob, startExport, closeExport } = useInventoryExportJob()
+    const { exportJob, startExport, closeExport, isExporting } =
+        useInventoryExportJob()
 
     const handleFocusRestore = React.useCallback((balanceId: string) => {
         restoreFocusIdRef.current = balanceId
@@ -231,6 +232,7 @@ export function InventoryLedgerPage() {
         rowFocusRef,
         openDetail,
         startAdjustment: adjustment.startAdjustment,
+        isCreating: adjustment.isCreating,
     })
 
     const data = listQuery.data
@@ -356,6 +358,7 @@ export function InventoryLedgerPage() {
                 queriedAt={data?.queriedAt ?? ""}
                 canExport={data?.canExport ?? false}
                 total={data?.total ?? 0}
+                isExporting={isExporting}
                 onRefresh={() => {
                     void listQuery.refetch()
                     if (previewBalanceId) void detailQuery.refetch()
@@ -446,6 +449,7 @@ export function InventoryLedgerPage() {
                 open={previewBalanceId != null}
                 detail={detail}
                 isPending={detailQuery.isPending}
+                isCreating={adjustment.isCreating}
                 onClose={closeDetail}
                 onViewMovements={(currentDetail) => {
                     setPreviewBalanceId(null)

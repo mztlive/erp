@@ -5,13 +5,17 @@
 
 import type { AccountProfile } from "@/features/auth/api"
 import { listApprovalInstances } from "@/features/approval-workflow/api"
-import type { ApprovalInstanceListItem } from "@/features/approval-workflow/types"
+import type {
+    ApprovalInstanceListItem,
+    ApprovalInstanceListPage,
+} from "@/features/approval-workflow/types"
 import {
     getWorkItemStats,
     listWorkItems,
     type WorkItemStats,
 } from "@/features/work-items/api"
 import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
+import { hasPermission } from "@/lib/permissions"
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
 import type {
@@ -240,7 +244,11 @@ export function mapWorkspaceWorkItem(
     }
 }
 
-function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
+function buildMetrics(
+    stats: WorkItemStats,
+    startedCount: number,
+    canReadStarted: boolean,
+): WorkspaceMetric[] {
     return [
         {
             key: "inbox",
@@ -266,8 +274,8 @@ function buildMetrics(stats: WorkItemStats): WorkspaceMetric[] {
         {
             key: "started",
             label: "我发起的",
-            count: stats.started ?? 0,
-            visible: stats.started != null,
+            count: startedCount,
+            visible: canReadStarted,
             tone: "info",
         },
     ]
@@ -295,23 +303,31 @@ export async function fetchWorkspaceDashboard(
     query: TodayWorkspaceQuery,
     profile: AccountProfile,
 ): Promise<TodayWorkspaceView> {
-    const canManage = profile.permissions.some((permission) =>
-        [
-            "approval_instance:resume",
-            "approval_instance:cancel_blocked",
-            "approval_instance:*",
-            "*:*",
-        ].includes(permission),
+    const canManage = [
+        "approval_instance:resume",
+        "approval_instance:cancel_blocked",
+    ].some((permission) => hasPermission(profile.permissions, permission))
+    const canReadStarted = hasPermission(
+        profile.permissions,
+        "approval_instance:read",
     )
-    const view = query.view === "managed" && !canManage ? "inbox" : query.view
+    const view =
+        (query.view === "managed" && !canManage) ||
+        (query.view === "started" && !canReadStarted)
+            ? "inbox"
+            : query.view
 
-    const [page, stats] = await Promise.all([
+    const startedPagePromise: Promise<ApprovalInstanceListPage> = canReadStarted
+        ? listApprovalInstances({
+              view: "started",
+              cursor: view === "started" ? query.cursor : undefined,
+              limit: view === "started" ? 20 : 1,
+          })
+        : Promise.resolve({ items: [], total: 0 })
+
+    const [page, stats, startedPage] = await Promise.all([
         view === "started"
-            ? listApprovalInstances({
-                  view: "started",
-                  documentType: query.workItemType,
-                  limit: 20,
-              }).then((result) => ({
+            ? startedPagePromise.then((result) => ({
                   items: [] as WorkItemDto[],
                   startedItems: result.items,
                   total: result.total ?? result.items.length,
@@ -343,6 +359,7 @@ export async function fetchWorkspaceDashboard(
             blocked: query.blocked,
             timezone: query.timezone,
         }),
+        startedPagePromise,
     ])
 
     const items =
@@ -353,10 +370,10 @@ export async function fetchWorkspaceDashboard(
             : page.items.map((dto) => mapWorkspaceWorkItem(dto, query.timezone))
 
     const updatedAt = unixToIso(stats.as_of)
-    const metrics = buildMetrics(stats).map((metric) =>
-        metric.key === "started" && !canManage
-            ? { ...metric, visible: metric.visible && canManage }
-            : metric,
+    const metrics = buildMetrics(
+        stats,
+        startedPage.total ?? startedPage.items.length,
+        canReadStarted,
     )
 
     return {
@@ -403,21 +420,29 @@ function startedInstanceToWorkItem(
     item: ApprovalInstanceListItem,
     timezone: string,
 ): WorkspaceWorkItem {
-    const createdAt = ""
+    const businessObjectType = item.documentType ?? ""
+    const typeLabel = workspaceTypeLabel(
+        "APPROVAL_INSTANCE",
+        businessObjectType,
+    )
+    const destinationWorkspaceId = approvalDestination(businessObjectType)
+    const status = startedStatus(item.status)
+    const createdAt = unixToIso(item.startedAt)
     return {
         workItemId: item.instanceId,
         taskVersion: "",
         workItemType: "APPROVAL_INSTANCE",
-        workItemTypeLabel: item.processName ?? "我发起的审批",
-        businessObjectType: item.documentType ?? "",
+        workItemTypeLabel: item.processName ?? typeLabel,
+        businessObjectType,
         businessObjectId: item.documentId ?? item.instanceId,
         subjectVersion: "",
-        stableNumber:
-            item.documentLabel ?? item.processName ?? "审批单号待补全",
-        objectTitle: item.documentLabel ?? item.processName ?? "审批",
-        status: "OPEN",
-        statusLabel: item.status === "BLOCKED" ? "受阻" : "审批中",
-        statusTone: item.status === "BLOCKED" ? "destructive" : "info",
+        stableNumber: item.documentLabel ?? "单号待补全",
+        objectTitle: item.documentLabel
+            ? `${typeLabel} ${item.documentLabel}`
+            : typeLabel,
+        status: status.workItemStatus,
+        statusLabel: status.statusLabel,
+        statusTone: status.statusTone,
         processingState:
             item.status === "BLOCKED" ? "APPROVAL_BLOCKED" : "READY",
         priority: 3,
@@ -431,8 +456,8 @@ function startedInstanceToWorkItem(
         nextActionHint: "打开单据查看审批进度。",
         allowedActions: ["VIEW"],
         actionBlockers: [],
-        destinationWorkspaceId: "W01",
-        handlerKey: "",
+        destinationWorkspaceId,
+        handlerKey: destinationWorkspaceId === "W01" ? "" : "document_approval",
         enteredAtLabel: formatRelativeLabel(createdAt, timezone),
         dueAtLabel: "—",
         dueBucket: "later",
@@ -446,8 +471,74 @@ function startedInstanceToWorkItem(
             currentAssigneeLabel: item.currentAssigneeName ?? "—",
             processName: item.processName ?? "审批流程",
             processVersion: item.processVersion ?? "",
+            lastRejectReason: item.latestRejectionSummary,
             status: item.status,
         },
+    }
+}
+
+/** 按单据类型解析“我发起的”记录应回到的正式工作面。 */
+function approvalDestination(documentType: string): WorkspaceId {
+    if (
+        ["sales_order", "voucher_sales_order", "sales_change_order"].includes(
+            documentType,
+        )
+    ) {
+        return "W05"
+    }
+    if (["purchase_order", "purchase_change_order"].includes(documentType)) {
+        return "W08"
+    }
+    if (documentType === "stock_adjustment") return "W10"
+    if (
+        ["customer_receipt", "customer_refund", "receipt_reversal"].includes(
+            documentType,
+        )
+    ) {
+        return "W11"
+    }
+    if (
+        ["supplier_payment", "supplier_refund", "payment_reversal"].includes(
+            documentType,
+        )
+    ) {
+        return "W12"
+    }
+    return "W01"
+}
+
+/** 把审批实例状态映射为只读跟踪行的展示状态。 */
+function startedStatus(status: string): Pick<
+    WorkspaceWorkItem,
+    "statusLabel" | "statusTone"
+> & {
+    workItemStatus: WorkspaceWorkItem["status"]
+} {
+    switch (status) {
+        case "APPROVED":
+            return {
+                workItemStatus: "COMPLETED",
+                statusLabel: "已通过",
+                statusTone: "success",
+            }
+        case "CANCELLED":
+            return {
+                workItemStatus: "CLOSED",
+                statusLabel: "已取消",
+                statusTone: "neutral",
+            }
+        case "BLOCKED":
+            return {
+                workItemStatus: "OPEN",
+                statusLabel: "受阻",
+                statusTone: "destructive",
+            }
+        default:
+            return {
+                workItemStatus: "OPEN",
+                statusLabel: "审批中",
+                statusTone: "info",
+            }
     }
 }
 

@@ -82,7 +82,12 @@ export function WorkspaceTaskDetail({
     }
 
     if (item.workItemType === "SUPPLIER_PAYMENT_EXECUTION") {
-        return <WorkspacePaymentTask item={item} />
+        return (
+            <WorkspacePaymentTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
     }
 
     if (item.workItemType === "SALES_INVOICE_EXECUTION") {
@@ -115,6 +120,7 @@ function WorkspaceDocumentTaskDetail({
         item.approvalProcessInstanceId,
         item.approvalNodeExecutionId,
     )
+    const trackingTask = item.workItemType === "APPROVAL_INSTANCE"
     const instanceId =
         item.approvalProcessInstanceId ?? item.approval?.instanceId
     const recoveryQuery = useRecoveryOptionsQuery(
@@ -229,7 +235,8 @@ function WorkspaceDocumentTaskDetail({
                 onDecisionApplied?.(view, item.workItemId)
             }
         />
-    ) : documentHref && item.allowedActions.includes("PROCESS") ? (
+    ) : documentHref &&
+      (trackingTask || item.allowedActions.includes("PROCESS")) ? (
         <Button
             type="button"
             data-testid={`work-item-open-document-${item.workItemId}`}

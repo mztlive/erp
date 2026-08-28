@@ -137,6 +137,8 @@ export function SupplierAccountsTable({
                     paymentColumns={paymentColumns}
                     invoiceColumns={invoiceColumns}
                     unallocatedColumns={unallocatedColumns}
+                    openPreview={openPreview}
+                    openPaymentPreview={openPaymentPreview}
                 />
             }
         />
@@ -161,6 +163,8 @@ function SupplierAccountsTableBody({
     paymentColumns,
     invoiceColumns,
     unallocatedColumns,
+    openPreview,
+    openPaymentPreview,
 }: Pick<
     SupplierAccountsTableProps,
     | "view"
@@ -176,6 +180,8 @@ function SupplierAccountsTableBody({
     | "sorting"
     | "onSortingChange"
     | "onClearFilters"
+    | "openPreview"
+    | "openPaymentPreview"
 > & {
     payableColumns: ReturnType<
         typeof useSupplierAccountsColumns
@@ -250,6 +256,10 @@ function SupplierAccountsTableBody({
                 rowCount={rowCount}
                 layout="flush"
                 loading={loading}
+                onRowPreview={(row) => openPreview(row.payableAccountId)}
+                rowLabel={(row) =>
+                    `${row.supplierName} ${row.sourceDocumentNo}`
+                }
             />
         )
     }
@@ -265,6 +275,8 @@ function SupplierAccountsTableBody({
                 rowCount={rowCount}
                 layout="flush"
                 loading={loading}
+                onRowPreview={(row) => openPaymentPreview(row.paymentId)}
+                rowLabel={(row) => `${row.paymentNo} ${row.supplierName}`}
             />
         )
     }

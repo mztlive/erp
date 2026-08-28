@@ -26,6 +26,11 @@ import {
     SOURCE_TYPE_LABEL,
     TRACK_LABEL,
 } from "@/features/supplier-payables/types"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SUPPLIER_NAME,
+} from "@/features/supplier-payables/lib/display-labels"
+import { missingSourceDocumentNo } from "@/features/supplier-payables/lib/related-documents"
 import type {
     SupplierAppliedChip,
     SupplierFilterKey,
@@ -145,18 +150,14 @@ export function useSupplierAccountsPage() {
         () => ({ pageIndex, pageSize: 20 }),
         [pageIndex],
     )
-    const [previewPayableId, setPreviewPayableId] = React.useState<
-        string | null
-    >(previewKind === "payable" ? (detailId ?? null) : null)
-    const [previewPaymentId, setPreviewPaymentId] = React.useState<
-        string | null
-    >(previewKind === "payment" ? (detailId ?? null) : null)
-    const [previewRefundId, setPreviewRefundId] = React.useState<string | null>(
-        previewKind === "refund" ? (detailId ?? null) : null,
-    )
-    const [previewReversalId, setPreviewReversalId] = React.useState<
-        string | null
-    >(previewKind === "reversal" ? (detailId ?? null) : null)
+    const previewPayableId =
+        previewKind === "payable" && detailId ? detailId : null
+    const previewPaymentId =
+        previewKind === "payment" && detailId ? detailId : null
+    const previewRefundId =
+        previewKind === "refund" && detailId ? detailId : null
+    const previewReversalId =
+        previewKind === "reversal" && detailId ? detailId : null
     const [session, setSession] = React.useState<SessionState | null>(null)
     const [pickSupplierOpen, setPickSupplierOpen] =
         React.useState<null | AllocationTrack>(null)
@@ -218,16 +219,19 @@ export function useSupplierAccountsPage() {
         })
     }, [data?.payables, sorting])
 
-    function patchUrl(
-        patch: Record<string, string | null | undefined>,
-        options?: { replace?: boolean; scroll?: boolean },
-    ) {
-        patchSearchParams(
-            { router, pathname, searchParams, view },
-            patch,
-            options,
-        )
-    }
+    const patchUrl = React.useCallback(
+        (
+            patch: Record<string, string | null | undefined>,
+            options?: { replace?: boolean; scroll?: boolean },
+        ) => {
+            patchSearchParams(
+                { router, pathname, searchParams, view },
+                patch,
+                options,
+            )
+        },
+        [pathname, router, searchParams, view],
+    )
 
     // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类参数）/排序/导航上下文
     // （session/detailId/returnTo/from 等）。
@@ -351,7 +355,11 @@ export function useSupplierAccountsPage() {
             )?.supplierName
             chips.push({
                 key: "supplierId",
-                label: `供应商：${supplierName ?? supplierId}`,
+                label: `供应商：${businessLabelOrPlaceholder(
+                    supplierName,
+                    supplierId,
+                    MISSING_SUPPLIER_NAME,
+                )}`,
             })
         }
         if (validSourceType) {
@@ -382,13 +390,21 @@ export function useSupplierAccountsPage() {
             })
         }
         if (purchaseOrderId) {
+            const purchaseOrderNo = (data?.payables ?? []).find(
+                (item) => item.sourceDocumentId === purchaseOrderId,
+            )?.sourceDocumentNo
             chips.push({
                 key: "purchaseOrderId",
-                label: `采购单：${purchaseOrderId}`,
+                label: `采购单：${businessLabelOrPlaceholder(
+                    purchaseOrderNo,
+                    purchaseOrderId,
+                    missingSourceDocumentNo("PURCHASE_ORDER"),
+                )}`,
             })
         }
         return chips
     }, [
+        data?.payables,
         data?.suppliers,
         purchaseOrderId,
         qParam,
@@ -561,72 +577,77 @@ export function useSupplierAccountsPage() {
         patchUrl({ draftSessionId: nextDraftSessionId }, { replace: true })
     }
 
-    function openPreview(payableAccountId: string) {
-        setPreviewPaymentId(null)
-        setPreviewRefundId(null)
-        setPreviewReversalId(null)
-        setPreviewPayableId(payableAccountId)
-        patchUrl(
-            { detailId: payableAccountId, previewKind: null },
-            { replace: true },
-        )
-    }
+    const openPreview = React.useCallback(
+        (payableAccountId: string) => {
+            patchUrl(
+                {
+                    detailId: payableAccountId,
+                    previewKind: "payable",
+                },
+                { replace: true },
+            )
+        },
+        [patchUrl],
+    )
 
     /**
-     * 打开已登记供应商付款事实详情。
+     * 打开已登记供应商付款事实详情，并保持付款工作视图。
      *
      * @param paymentId 付款主键。
      */
-    function openPaymentPreview(paymentId: string) {
-        setPreviewPayableId(null)
-        setPreviewRefundId(null)
-        setPreviewReversalId(null)
-        setPreviewPaymentId(paymentId)
-        patchUrl(
-            { detailId: paymentId, previewKind: "payment" },
-            { replace: true },
-        )
-    }
+    const openPaymentPreview = React.useCallback(
+        (paymentId: string) => {
+            patchUrl(
+                {
+                    detailId: paymentId,
+                    previewKind: "payment",
+                    view: "payment",
+                },
+                { replace: true },
+            )
+        },
+        [patchUrl],
+    )
 
     /**
      * 打开供应商退款详情，嵌入通用审批区。
      *
      * @param refundId 退款主键。
      */
-    function openRefundPreview(refundId: string) {
-        setPreviewPayableId(null)
-        setPreviewPaymentId(null)
-        setPreviewReversalId(null)
-        setPreviewRefundId(refundId)
-        patchUrl(
-            { detailId: refundId, previewKind: "refund" },
-            { replace: true },
-        )
-    }
+    const openRefundPreview = React.useCallback(
+        (refundId: string) => {
+            patchUrl(
+                {
+                    detailId: refundId,
+                    previewKind: "refund",
+                },
+                { replace: true },
+            )
+        },
+        [patchUrl],
+    )
 
     /**
      * 打开付款冲正详情，嵌入通用审批区。
      *
      * @param reversalId 冲正主键。
      */
-    function openReversalPreview(reversalId: string) {
-        setPreviewPayableId(null)
-        setPreviewPaymentId(null)
-        setPreviewRefundId(null)
-        setPreviewReversalId(reversalId)
-        patchUrl(
-            { detailId: reversalId, previewKind: "reversal" },
-            { replace: true },
-        )
-    }
+    const openReversalPreview = React.useCallback(
+        (reversalId: string) => {
+            patchUrl(
+                {
+                    detailId: reversalId,
+                    previewKind: "reversal",
+                },
+                { replace: true },
+            )
+        },
+        [patchUrl],
+    )
 
-    function closePreview() {
-        setPreviewPayableId(null)
-        setPreviewPaymentId(null)
-        setPreviewRefundId(null)
-        setPreviewReversalId(null)
+    const closePreview = React.useCallback(() => {
         patchUrl({ detailId: null, previewKind: null }, { replace: true })
-    }
+    }, [patchUrl])
 
     function openSettlements() {
         const qs = searchParams.toString()

@@ -98,6 +98,7 @@ export function RetireDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={retire.isPending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消

@@ -117,6 +117,7 @@ export function PublishDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={publish.isPending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消

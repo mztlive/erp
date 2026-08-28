@@ -24,5 +24,10 @@ export function useInventoryExportJob() {
         setExportJob(null)
     }, [])
 
-    return { exportJob, startExport, closeExport }
+    return {
+        exportJob,
+        startExport,
+        closeExport,
+        isExporting: exportMutation.isPending,
+    }
 }

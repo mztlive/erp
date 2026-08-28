@@ -41,8 +41,8 @@ pub use runtime_query::{
     RuntimeRecoveryAction,
 };
 pub use runtime_service::{
-    ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListItem, RuntimeInstanceListPage,
-    RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
+    ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListCursor, RuntimeInstanceListItem,
+    RuntimeInstanceListPage, RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
 pub use start::{prepare_start, StartExecutionInput};
 pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};

@@ -89,6 +89,7 @@ export function ResumeApproverDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={resume.isPending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消

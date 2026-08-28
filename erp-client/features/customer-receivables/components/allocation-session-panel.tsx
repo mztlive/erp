@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { SaveIcon } from "lucide-react"
+import { LoaderCircleIcon, SaveIcon } from "lucide-react"
 
 import {
     AllocationWorkspace,
@@ -129,7 +129,16 @@ export function AllocationSessionPanel({
                                     onClick={() => void resolveUnknown()}
                                     disabled={resolveMutation.isPending}
                                 >
-                                    查询最终结果
+                                    {resolveMutation.isPending ? (
+                                        <LoaderCircleIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                            className="animate-spin"
+                                        />
+                                    ) : null}
+                                    {resolveMutation.isPending
+                                        ? "查询中…"
+                                        : "查询最终结果"}
                                 </Button>
                             ) : null}
                             {result.returnTo ? (
@@ -311,11 +320,19 @@ export function AllocationSessionPanel({
                             title={canOperate ? undefined : permissionReason}
                             onClick={() => void doSaveDraft()}
                         >
-                            <SaveIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            保存草稿
+                            {saveMutation.isPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : (
+                                <SaveIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {saveMutation.isPending ? "保存中…" : "保存草稿"}
                         </Button>
                         <Button
                             type="button"
@@ -330,7 +347,16 @@ export function AllocationSessionPanel({
                                 void form.handleSubmit()
                             }}
                         >
-                            确认登记并核销
+                            {postMutation.isPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {postMutation.isPending
+                                ? "提交中…"
+                                : "确认登记并核销"}
                         </Button>
                     </>
                 }
@@ -391,6 +417,7 @@ export function AllocationSessionPanel({
                         "重复提交不会重复生成记录",
                     ]}
                     nextDepartment="财务"
+                    pending={postMutation.isPending}
                     onConfirm={() => void doPost()}
                 />
             )}

@@ -75,6 +75,7 @@ export function ActualProfitLossPage() {
                     page.data.rows.total === 0 ||
                     page.exportMutation.isPending
                 }
+                exportPending={page.exportMutation.isPending}
                 onRefresh={() => void page.handleRefresh()}
                 onExport={() => void page.handleExport()}
             />

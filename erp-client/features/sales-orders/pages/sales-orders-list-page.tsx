@@ -137,6 +137,7 @@ export function SalesOrdersListPage() {
                 isFetching={ordersQuery.isFetching}
                 queriedAt={ordersQuery.data?.queriedAt}
                 exportDisabled={total === 0 || isExporting}
+                isExporting={isExporting}
                 onExport={() => {
                     void exportCsv()
                 }}

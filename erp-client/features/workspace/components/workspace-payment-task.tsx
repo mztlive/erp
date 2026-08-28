@@ -1,19 +1,24 @@
 "use client"
 
 import * as React from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
+import { cents } from "@/features/supplier-payables/lib/allocation-model"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
 import {
     supplierPayablesKeys,
     usePayableDetailQuery,
 } from "@/features/supplier-payables/hooks/queries"
 import { useAllocationSession } from "@/features/supplier-payables/hooks/use-allocation-session"
-import type { PaymentRecipient } from "@/features/supplier-payables/types"
+import type {
+    FormalSubmitResult,
+    PaymentRecipient,
+} from "@/features/supplier-payables/types"
 import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { workItemKeys } from "@/features/work-items/queries"
@@ -29,10 +34,14 @@ import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 
 type WorkspacePaymentTaskProps = Readonly<{
     item: WorkspaceWorkItem
+    onTaskCompleted?: (workItemId: string) => void
 }>
 
 /** W01 付款作业面：任务身份锁定一个采购应付，登记付款不离开工作台。 */
-export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
+export function WorkspacePaymentTask({
+    item,
+    onTaskCompleted,
+}: WorkspacePaymentTaskProps) {
     const descriptor = workspacePaymentDescriptor(item)
     const payableQuery = usePayableDetailQuery(
         descriptor?.payableAccountId ?? null,
@@ -143,7 +152,9 @@ export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
                         supplierId={payable.supplierId}
                         purchaseOrderId={descriptor.purchaseOrderId}
                         payableAccountId={payable.payableAccountId}
+                        openTotal={payable.openTotal}
                         paymentRecipient={payable.paymentRecipient}
+                        onTaskCompleted={onTaskCompleted}
                     />
                 )}
             </div>
@@ -151,22 +162,28 @@ export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
     )
 }
 
-/** 应付身份确认后展开核销工作面；提交结果留在当前任务。 */
+/** 应付身份确认后展开核销工作面；成功用 Toast 收口，失败留在当前任务。 */
 function WorkspacePaymentSession({
     item,
     supplierId,
     purchaseOrderId,
     payableAccountId,
+    openTotal,
     paymentRecipient,
+    onTaskCompleted,
 }: {
     item: WorkspaceWorkItem
     supplierId: string
     purchaseOrderId: string
     payableAccountId: string
+    openTotal: string
     paymentRecipient: PaymentRecipient
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const queryClient = useQueryClient()
     const [draftSessionId, setDraftSessionId] = React.useState<string>()
+    const startFreshRef = React.useRef<() => string>(() => "")
+
     const sessionState = useAllocationSession(
         {
             track: "payment",
@@ -181,28 +198,28 @@ function WorkspacePaymentSession({
             paymentRecipientBankAccountId: paymentRecipient.bankAccountId,
             paymentRecipientBankAccountVersion: paymentRecipient.version,
         },
-        { onDraftSessionIdChange: setDraftSessionId },
+        {
+            consumeSucceededResult: true,
+            onDraftSessionIdChange: setDraftSessionId,
+            onCompleted: (result) => {
+                announcePaymentSucceeded(result)
+                if (
+                    onTaskCompleted &&
+                    cents(result.allocatedTotal ?? "0") >= cents(openTotal)
+                ) {
+                    onTaskCompleted(item.workItemId)
+                    return
+                }
+                setDraftSessionId(startFreshRef.current())
+                void invalidatePaymentContext(queryClient)
+            },
+        },
     )
+    startFreshRef.current = sessionState.startFreshAttempt
 
     async function startNextPaymentAttempt() {
-        await Promise.all([
-            queryClient.invalidateQueries({
-                queryKey: supplierPayablesKeys.all,
-            }),
-            queryClient.invalidateQueries({
-                queryKey: purchaseOrderKeys.all,
-            }),
-            queryClient.invalidateQueries({
-                queryKey: fulfillmentKeys.all,
-            }),
-            queryClient.invalidateQueries({
-                queryKey: workItemKeys.all,
-            }),
-            queryClient.invalidateQueries({
-                queryKey: workspaceHomeKeys.all,
-            }),
-        ])
         setDraftSessionId(sessionState.startFreshAttempt())
+        await invalidatePaymentContext(queryClient)
     }
 
     if (sessionState.sessionQuery.isPending) {
@@ -302,4 +319,34 @@ function WorkspacePaymentSession({
             }}
         />
     )
+}
+
+function announcePaymentSucceeded(result: FormalSubmitResult) {
+    const documentNo = result.documentNo ?? result.reference
+    toast.add({
+        title: "付款已登记",
+        description: documentNo ? `${documentNo} 已过账并核销` : "已过账并核销",
+        type: "success",
+        timeout: 4000,
+    })
+}
+
+function invalidatePaymentContext(queryClient: QueryClient) {
+    return Promise.all([
+        queryClient.invalidateQueries({
+            queryKey: supplierPayablesKeys.all,
+        }),
+        queryClient.invalidateQueries({
+            queryKey: purchaseOrderKeys.all,
+        }),
+        queryClient.invalidateQueries({
+            queryKey: fulfillmentKeys.all,
+        }),
+        queryClient.invalidateQueries({
+            queryKey: workItemKeys.all,
+        }),
+        queryClient.invalidateQueries({
+            queryKey: workspaceHomeKeys.all,
+        }),
+    ])
 }

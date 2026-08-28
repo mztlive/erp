@@ -72,7 +72,13 @@ export function SupplierSaveReasonDialog({
                 </div>
                 <DialogFooter>
                     <DialogClose
-                        render={<Button type="button" variant="outline" />}
+                        render={
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={pending}
+                            />
+                        }
                     >
                         取消
                     </DialogClose>
@@ -82,9 +88,11 @@ export function SupplierSaveReasonDialog({
                         onClick={onConfirm}
                     >
                         <SaveIcon data-icon="inline-start" aria-hidden />
-                        {isCreate
-                            ? masterDataCopy.createSubmit
-                            : masterDataCopy.reviseSubmit}
+                        {pending
+                            ? "提交中…"
+                            : isCreate
+                              ? masterDataCopy.createSubmit
+                              : masterDataCopy.reviseSubmit}
                     </Button>
                 </DialogFooter>
             </DialogContent>

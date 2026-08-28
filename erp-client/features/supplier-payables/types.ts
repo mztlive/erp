@@ -95,13 +95,16 @@ export type PayableRow = Readonly<{
     actionBlockers: readonly ActionBlocker[]
 }>
 
-type PaymentAllocationLine = Readonly<{
+export type PaymentAllocationLine = Readonly<{
     allocationId: string
     action: "APPLY" | "REVERSE"
     payableAccountId: string
     payableEntryId: string
     sourceType: PayableSourceType
+    sourceDocumentId?: string
     sourceDocumentNo: string
+    sourceHref?: string
+    payableHref?: string
     amount: string
     occurredAt: string
     reverseOfAllocationId?: string
@@ -192,6 +195,8 @@ type InvoiceAllocationLine = Readonly<{
     payableAccountId: string
     sourceType: PayableSourceType
     sourceDocumentNo: string
+    sourceHref?: string
+    payableHref?: string
     amountGross: string
     occurredAt: string
     reverseOfAllocationId?: string
@@ -429,6 +434,19 @@ export const VIEW_LABEL: Record<SupplierAccountsView, string> = {
 export const SOURCE_TYPE_LABEL: Record<PayableSourceType, string> = {
     PURCHASE_ORDER: "采购单",
     SUPPLIER_SETTLEMENT: "供应商结算单",
+}
+
+export const ENTRY_TYPE_LABEL: Record<string, string> = {
+    original: "原始应付",
+    change_delta: "变更差额",
+    supplier_refund: "供应商退款",
+    reversal: "冲正",
+    settlement_delta: "结算差额",
+}
+
+export const ALLOCATION_ACTION_LABEL: Record<"APPLY" | "REVERSE", string> = {
+    APPLY: "核销",
+    REVERSE: "冲减",
 }
 
 export const PAYABLE_STATUS_LABEL: Record<PayableStatus, string> = {

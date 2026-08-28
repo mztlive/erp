@@ -1,6 +1,6 @@
 "use client"
 
-import { DownloadIcon, RefreshCwIcon } from "lucide-react"
+import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
 
 import {
     DataFreshness,
@@ -96,8 +96,15 @@ export function CustomerQualityPageHeader({
                         }
                         onClick={() => void onExport()}
                     >
-                        <DownloadIcon className="size-4" aria-hidden />
-                        导出
+                        {exportPending ? (
+                            <LoaderCircleIcon
+                                className="size-4 animate-spin"
+                                aria-hidden
+                            />
+                        ) : (
+                            <DownloadIcon className="size-4" aria-hidden />
+                        )}
+                        {exportPending ? "导出中…" : "导出"}
                     </GuardedBusinessAction>
                 </div>
             }

@@ -12,6 +12,7 @@ import {
     mapBackendSourceType,
     mapPayableStatus,
     mapSourceType,
+    payableEntryTypeLabel,
     projectInvoice,
     projectPayable,
     projectPayment,
@@ -31,7 +32,9 @@ import type {
     AllocationSessionView,
     AllocationTrack,
     PayableDetailView,
+    PayableRow,
     PaymentRow,
+    PurchaseInvoiceRow,
     SupplierAccountsListView,
     SupplierAccountsQuery,
     UnallocatedRow,
@@ -41,7 +44,16 @@ import {
     SOURCE_TYPE_LABEL,
 } from "@/features/supplier-payables/types"
 import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
+import { fetchPartyOption } from "@/features/entity-selectors/api/parties"
 import { fetchSupplierOption } from "@/features/entity-selectors/api/suppliers"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SUPPLIER_NAME,
+} from "@/features/supplier-payables/lib/display-labels"
+import {
+    missingSourceDocumentNo,
+    payablePreviewHref,
+} from "@/features/supplier-payables/lib/related-documents"
 
 export async function fetchSupplierAccounts(
     query: SupplierAccountsQuery,
@@ -76,12 +88,15 @@ export async function fetchSupplierAccounts(
     ])
 
     let payables = (payPage.items ?? []).map(projectPayable)
-    const payments = (paymentPage.items ?? []).map(projectPayment)
-    const invoices = (invPage.items ?? [])
+    let payments = (paymentPage.items ?? []).map(projectPayment)
+    let invoices = (invPage.items ?? [])
         .filter(
             (i) => i.invoice_direction === "purchase" || !i.invoice_direction,
         )
         .map(projectInvoice)
+    payments = await hydratePaymentSupplierNames(payments)
+    invoices = await hydrateInvoicePartyNames(invoices)
+    invoices = attachPayableSourceToInvoices(invoices, payables)
 
     if (query.purchaseOrderId) {
         payables = payables.filter(
@@ -253,10 +268,14 @@ export async function fetchPayableDetail(
             payable,
             entries: (a.entries ?? []).map((e) => ({
                 entryId: e.id,
-                entryTypeLabel: e.entry_type,
+                entryTypeLabel: payableEntryTypeLabel(e.entry_type),
                 direction: e.direction,
                 amount: e.amount,
-                sourceLabel: e.source_document_id,
+                sourceLabel: businessLabelOrPlaceholder(
+                    e.source_document_no,
+                    e.source_document_id,
+                    missingSourceDocumentNo(payable.sourceType),
+                ),
                 dueDate: e.due_date,
                 occurredAt: instantToIso(e.posted_at),
             })),
@@ -368,7 +387,11 @@ export async function fetchAllocationSession(input: {
             accountLockVersion: a.version,
             sourceType,
             sourceTypeLabel: SOURCE_TYPE_LABEL[sourceType],
-            sourceDocumentNo: a.source_document_no || a.source_document_id,
+            sourceDocumentNo: businessLabelOrPlaceholder(
+                a.source_document_no,
+                a.source_document_id,
+                missingSourceDocumentNo(sourceType),
+            ),
             sourceDocumentId: a.source_document_id,
             openTotal: a.open_total,
             openInvoiceableTotal: a.open_invoiceable_total,
@@ -391,7 +414,7 @@ export async function fetchAllocationSession(input: {
     }
 
     const draftSessionId = input.draftSessionId ?? nextSessionId()
-    // 会话内供应商名以主数据实时解析（缺失时回退供应商 ID，不阻断核销）
+    // 会话内供应商名以主数据实时解析；缺失时用业务占位，不上屏供应商 ID。
     const supplierOption = await fetchSupplierOption(input.supplierId).catch(
         () => null,
     )
@@ -399,7 +422,11 @@ export async function fetchAllocationSession(input: {
         draftSessionId,
         track: input.track,
         supplierId: input.supplierId,
-        supplierName: supplierOption?.supplierName ?? input.supplierId,
+        supplierName: businessLabelOrPlaceholder(
+            supplierOption?.supplierName,
+            input.supplierId,
+            MISSING_SUPPLIER_NAME,
+        ),
         pool,
         payablePriorityPolicy: {
             state: "MISSING",
@@ -422,4 +449,110 @@ export async function fetchAllocationSession(input: {
     }
     sessions.set(draftSessionId, view)
     return view
+}
+
+/**
+ * 付款列表若仍缺供应商名称，则按供应商主数据补全；失败时保留业务占位。
+ *
+ * @param payments 已投影的付款行。
+ */
+async function hydratePaymentSupplierNames(
+    payments: PaymentRow[],
+): Promise<PaymentRow[]> {
+    const missingIds = [
+        ...new Set(
+            payments
+                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
+                .map((row) => row.supplierId)
+                .filter(Boolean),
+        ),
+    ]
+    if (missingIds.length === 0) return payments
+    const resolved = new Map<string, string>()
+    await Promise.all(
+        missingIds.map(async (supplierId) => {
+            const option = await fetchSupplierOption(supplierId)
+            const name = businessLabelOrPlaceholder(
+                option?.supplierName,
+                supplierId,
+                MISSING_SUPPLIER_NAME,
+            )
+            if (name !== MISSING_SUPPLIER_NAME) {
+                resolved.set(supplierId, name)
+            }
+        }),
+    )
+    if (resolved.size === 0) return payments
+    return payments.map((row) => {
+        const supplierName = resolved.get(row.supplierId)
+        return supplierName ? { ...row, supplierName } : row
+    })
+}
+
+/**
+ * 进项发票往来主体按主体主数据补全名称；失败时保留业务占位。
+ *
+ * @param invoices 已投影的进项发票行。
+ */
+async function hydrateInvoicePartyNames(
+    invoices: PurchaseInvoiceRow[],
+): Promise<PurchaseInvoiceRow[]> {
+    const missingIds = [
+        ...new Set(
+            invoices
+                .filter((row) => row.supplierName === MISSING_SUPPLIER_NAME)
+                .map((row) => row.supplierId)
+                .filter(Boolean),
+        ),
+    ]
+    if (missingIds.length === 0) return invoices
+    const resolved = new Map<string, string>()
+    await Promise.all(
+        missingIds.map(async (partyId) => {
+            const option = await fetchPartyOption(partyId)
+            const name = businessLabelOrPlaceholder(
+                option?.displayName,
+                partyId,
+                MISSING_SUPPLIER_NAME,
+            )
+            if (name !== MISSING_SUPPLIER_NAME) {
+                resolved.set(partyId, name)
+            }
+        }),
+    )
+    if (resolved.size === 0) return invoices
+    return invoices.map((row) => {
+        const supplierName = resolved.get(row.supplierId)
+        return supplierName ? { ...row, supplierName } : row
+    })
+}
+
+/**
+ * 用本页已加载的应付台账补全进项票核销来源单号与跳转。
+ *
+ * @param invoices 进项发票行。
+ * @param payables 应付台账行。
+ */
+function attachPayableSourceToInvoices(
+    invoices: PurchaseInvoiceRow[],
+    payables: readonly PayableRow[],
+): PurchaseInvoiceRow[] {
+    if (invoices.length === 0 || payables.length === 0) return invoices
+    const byId = new Map(
+        payables.map((payable) => [payable.payableAccountId, payable]),
+    )
+    return invoices.map((invoice) => ({
+        ...invoice,
+        allocations: invoice.allocations.map((allocation) => {
+            const payable = byId.get(allocation.payableAccountId)
+            if (!payable) return allocation
+            return {
+                ...allocation,
+                sourceType: payable.sourceType,
+                sourceDocumentNo: payable.sourceDocumentNo,
+                sourceHref: payable.sourceHref,
+                payableHref: payablePreviewHref(payable.payableAccountId),
+            }
+        }),
+    }))
 }

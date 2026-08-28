@@ -25,12 +25,13 @@ import { SupplierPaymentDetailBody } from "@/features/supplier-payables/componen
 import { SupplierRefundDetailBody } from "@/features/supplier-payables/components/supplier-refund-detail-body"
 import { isUnsubmittedPaymentReversalStatus } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import { isUnsubmittedSupplierRefundStatus } from "@/features/supplier-payables/lib/supplier-refund-approval"
-import type {
-    PayableDetailView,
-    PaymentReversalRow,
-    PaymentRow,
-    SessionState,
-    SupplierRefundRow,
+import {
+    ALLOCATION_ACTION_LABEL,
+    type PayableDetailView,
+    type PaymentReversalRow,
+    type PaymentRow,
+    type SessionState,
+    type SupplierRefundRow,
 } from "@/features/supplier-payables/types"
 
 export interface SupplierAccountsPreviewProps {
@@ -387,11 +388,11 @@ export function SupplierAccountsPreview({
                                     (a) => (
                                         <li
                                             key={a.allocationId}
-                                            className="flex justify-between"
+                                            className="flex justify-between gap-2"
                                         >
                                             <span>
-                                                {a.action} ·{" "}
-                                                {a.sourceDocumentNo}
+                                                {ALLOCATION_ACTION_LABEL[a.action]}{" "}
+                                                · {a.sourceDocumentNo}
                                             </span>
                                             <MoneyValue value={a.amount} />
                                         </li>
@@ -412,11 +413,11 @@ export function SupplierAccountsPreview({
                                     (a) => (
                                         <li
                                             key={a.allocationId}
-                                            className="flex justify-between"
+                                            className="flex justify-between gap-2"
                                         >
                                             <span>
-                                                {a.action} ·{" "}
-                                                {a.sourceDocumentNo}
+                                                {ALLOCATION_ACTION_LABEL[a.action]}{" "}
+                                                · {a.sourceDocumentNo}
                                             </span>
                                             <MoneyValue value={a.amountGross} />
                                         </li>

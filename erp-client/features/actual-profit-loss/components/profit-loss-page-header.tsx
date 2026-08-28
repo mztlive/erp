@@ -1,4 +1,4 @@
-import { DownloadIcon, RefreshCwIcon } from "lucide-react"
+import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, PageActions, PageHeader } from "@/components/business"
 import type { DataFreshnessState } from "@/components/business/page"
@@ -11,6 +11,7 @@ export function ProfitLossPageHeader({
     freshnessUi,
     analysisReady,
     exportDisabled,
+    exportPending = false,
     onRefresh,
     onExport,
 }: {
@@ -19,6 +20,7 @@ export function ProfitLossPageHeader({
     freshnessUi: { uiState: DataFreshnessState; statusLabel: string }
     analysisReady: boolean
     exportDisabled: boolean
+    exportPending?: boolean
     onRefresh: () => void
     onExport: () => void
 }) {
@@ -65,8 +67,10 @@ export function ProfitLossPageHeader({
                         },
                         {
                             actionKey: "export",
-                            label: "导出",
-                            icon: DownloadIcon,
+                            label: exportPending ? "导出中…" : "导出",
+                            icon: exportPending
+                                ? LoaderCircleIcon
+                                : DownloadIcon,
                             variant: "outline",
                             mobileVisibility: "hide",
                             disabled: exportDisabled,

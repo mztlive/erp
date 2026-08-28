@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
-import { DownloadIcon } from "lucide-react"
+import { DownloadIcon, Loader2Icon } from "lucide-react"
 
 import {
     DataFreshness,
@@ -202,8 +202,12 @@ export function SupplierOrdersListPage() {
                             }
                             onClick={openExportPreview}
                         >
-                            <DownloadIcon className="size-3.5" />
-                            导出
+                            {exportMutation.isPending ? (
+                                <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                                <DownloadIcon className="size-3.5" />
+                            )}
+                            {exportMutation.isPending ? "导出中…" : "导出"}
                         </Button>
                     </div>
                 }

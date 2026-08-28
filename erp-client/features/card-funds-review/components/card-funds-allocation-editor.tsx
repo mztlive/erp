@@ -2,6 +2,8 @@
 
 import type * as React from "react"
 
+import { LoaderCircleIcon } from "lucide-react"
+
 import {
     AllocationWorkspace,
     surfacePanelClassName,
@@ -286,6 +288,7 @@ export function CardFundsAllocationEditor({
                                 <Button
                                     type="button"
                                     variant="outline"
+                                    disabled={receiptPending || invoicePending}
                                     onClick={() => setAllocationMode(null)}
                                 >
                                     取消
@@ -301,7 +304,16 @@ export function CardFundsAllocationEditor({
                                         }
                                     }}
                                 >
-                                    提交分配
+                                    {(receiptPending || invoicePending) ? (
+                                        <LoaderCircleIcon
+                                            data-icon="inline-start"
+                                            className="animate-spin"
+                                            aria-hidden="true"
+                                        />
+                                    ) : null}
+                                    {receiptPending || invoicePending
+                                        ? "提交中…"
+                                        : "提交分配"}
                                 </Button>
                             </>
                         }

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import type { ColumnPinningState } from "@tanstack/react-table"
-import { DownloadIcon, RefreshCwIcon } from "lucide-react"
+import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -127,8 +127,12 @@ export function ConsumptionOrdersListPage() {
                             },
                             {
                                 actionKey: "export",
-                                label: "导出",
-                                icon: DownloadIcon,
+                                label: exportMutation.isPending
+                                    ? "导出中…"
+                                    : "导出",
+                                icon: exportMutation.isPending
+                                    ? LoaderCircleIcon
+                                    : DownloadIcon,
                                 variant: "outline",
                                 mobileVisibility: "hide",
                                 disabled:

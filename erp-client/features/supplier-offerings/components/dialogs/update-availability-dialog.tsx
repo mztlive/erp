@@ -123,7 +123,13 @@ export function UpdateAvailabilityDialog({
                     </form.AppField>
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={mutation.isPending}
+                                />
+                            }
                         >
                             取消
                         </DialogClose>

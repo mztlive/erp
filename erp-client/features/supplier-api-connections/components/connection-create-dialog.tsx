@@ -193,12 +193,16 @@ export function ConnectionCreateDialog({
                         <Button
                             type="button"
                             variant="ghost"
+                            disabled={createMutation.isPending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消
                         </Button>
                         <form.AppForm>
-                            <form.SubmitButton label="创建" />
+                            <form.SubmitButton
+                                label="创建"
+                                disabled={createMutation.isPending}
+                            />
                         </form.AppForm>
                     </DialogFooter>
                 </form>

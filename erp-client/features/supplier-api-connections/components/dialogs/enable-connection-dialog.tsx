@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
     Dialog,
     DialogContent,
@@ -42,6 +43,7 @@ export function EnableConnectionDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -51,7 +53,10 @@ export function EnableConnectionDialog({
                         disabled={!canEnable || pending}
                         onClick={() => void onSubmit()}
                     >
-                        确认启用
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {pending ? "启用中…" : "确认启用"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -11,6 +11,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Spinner } from "@/components/ui/spinner"
 import type {
     CapabilityCode,
     ConnectionCenterView,
@@ -81,6 +82,7 @@ export function CapConfigDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -106,7 +108,10 @@ export function CapConfigDialog({
                             void onSubmit(changes)
                         }}
                     >
-                        提交能力配置
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {pending ? "提交中…" : "提交能力配置"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

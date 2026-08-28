@@ -1,6 +1,10 @@
 "use client"
 
-import { DownloadIcon, RefreshCwIcon } from "lucide-react"
+import {
+    DownloadIcon,
+    LoaderCircleIcon,
+    RefreshCwIcon,
+} from "lucide-react"
 
 import { DataFreshness, PageActions, PageHeader } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
@@ -10,6 +14,7 @@ interface LedgerHeaderProps {
     queriedAt: string
     canExport: boolean
     total: number
+    isExporting?: boolean
     onRefresh: () => void
     onExport: () => void
 }
@@ -19,6 +24,7 @@ export function LedgerHeader({
     queriedAt,
     canExport,
     total,
+    isExporting = false,
     onRefresh,
     onExport,
 }: LedgerHeaderProps) {
@@ -50,12 +56,17 @@ export function LedgerHeader({
                         },
                         {
                             actionKey: "export",
-                            label: "导出",
-                            icon: DownloadIcon,
+                            label: isExporting ? "导出中…" : "导出",
+                            icon: isExporting
+                                ? LoaderCircleIcon
+                                : DownloadIcon,
                             variant: "outline",
                             mobileVisibility: "hide",
                             disabled:
-                                !canExport || total === 0 || isPhoneNarrow,
+                                isExporting ||
+                                !canExport ||
+                                total === 0 ||
+                                isPhoneNarrow,
                             onClick: onExport,
                         },
                     ]}

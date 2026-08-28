@@ -1,4 +1,4 @@
-import { PlusIcon } from "lucide-react"
+import { LoaderCircleIcon, PlusIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -94,6 +94,7 @@ export function ReceivableActionDialogs({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={createPending}
                             onClick={() => onPartyPickerOpenChange(false)}
                         >
                             取消
@@ -105,11 +106,21 @@ export function ReceivableActionDialogs({
                                 onStartSession(partyPickerMode, selectedPartyId)
                             }
                         >
-                            <PlusIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            打开核销工作区
+                            {createPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : (
+                                <PlusIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {createPending
+                                ? "创建中…"
+                                : "打开核销工作区"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -191,6 +202,7 @@ export function ReceivableActionDialogs({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={reversePending}
                             onClick={onCancelReverse}
                         >
                             取消
@@ -204,7 +216,16 @@ export function ReceivableActionDialogs({
                             }
                             onClick={onConfirmReverse}
                         >
-                            确认追加反向记录
+                            {reversePending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {reversePending
+                                ? "提交中…"
+                                : "确认追加反向记录"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

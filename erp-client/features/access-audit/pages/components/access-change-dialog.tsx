@@ -54,7 +54,13 @@ function AccessChangeDialog({
     onApplyOutcome,
 }: AccessChangeDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(nextOpen) => {
+                if (!nextOpen && isSubmitting) return
+                onOpenChange(nextOpen)
+            }}
+        >
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>授权变更影响预览</DialogTitle>
@@ -214,6 +220,7 @@ function AccessChangeDialog({
                                     <Button
                                         type="button"
                                         variant="ghost"
+                                        disabled={isSubmitting}
                                         onClick={() => onOpenChange(false)}
                                     >
                                         取消

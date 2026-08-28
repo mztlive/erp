@@ -87,9 +87,11 @@ export function SupplierEditorDocumentHeader({
             primaryAction={
                 <Button type="submit" size="sm" disabled={!canEdit || pending}>
                     <SaveIcon data-icon="inline-start" aria-hidden />
-                    {isCreate
-                        ? masterDataCopy.createSubmit
-                        : masterDataCopy.reviseSubmit}
+                    {pending
+                        ? "提交中…"
+                        : isCreate
+                          ? masterDataCopy.createSubmit
+                          : masterDataCopy.reviseSubmit}
                 </Button>
             }
         />

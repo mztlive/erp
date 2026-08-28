@@ -317,6 +317,7 @@ export function useAdjustmentWorkflow({
         lastResult,
         actionError,
         pendingPayload,
+        isCreating: createDraftMutation.isPending,
         isSubmitting: submitMutation.isPending,
         isResolving: resolveUnknownMutation.isPending,
         startAdjustment,

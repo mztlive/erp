@@ -2,6 +2,8 @@
 
 import { KeyRoundIcon } from "lucide-react"
 
+import { Spinner } from "@/components/ui/spinner"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -106,6 +108,7 @@ export function ReferenceBindDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={pending}
                         onClick={() => onOpenChange(false)}
                     >
                         取消
@@ -115,10 +118,16 @@ export function ReferenceBindDialog({
                         disabled={!allowed || !value || pending}
                         onClick={() => void onSubmit()}
                     >
-                        <KeyRoundIcon className="size-4" aria-hidden="true" />
-                        {kind === "credential"
-                            ? "确认绑定引用"
-                            : "确认绑定地址"}
+                        {pending ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                            <KeyRoundIcon className="size-4" aria-hidden="true" />
+                        )}
+                        {pending
+                            ? "绑定中…"
+                            : kind === "credential"
+                              ? "确认绑定引用"
+                              : "确认绑定地址"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

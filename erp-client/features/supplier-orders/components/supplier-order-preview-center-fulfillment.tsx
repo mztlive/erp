@@ -1,6 +1,6 @@
 "use client"
 
-import { EyeIcon, EyeOffIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react"
 
 import { DocumentSection, surfaceInsetClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -129,8 +129,12 @@ export function FulfillmentSection({
                             disabled={!canReveal || revealPending}
                             onClick={onReveal}
                         >
-                            <EyeIcon className="size-3.5" />
-                            短时揭示
+                            {revealPending ? (
+                                <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                                <EyeIcon className="size-3.5" />
+                            )}
+                            {revealPending ? "揭示中…" : "短时揭示"}
                         </Button>
                         {address.revealed ? (
                             <Button

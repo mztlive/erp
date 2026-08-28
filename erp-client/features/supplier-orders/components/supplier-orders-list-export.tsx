@@ -7,6 +7,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { getErrorMessage } from "@/lib/api/errors"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
@@ -112,12 +113,22 @@ export function SupplierOrdersListExportPreview({
                     disabled={isPending}
                     onClick={onConfirm}
                 >
-                    {isRetry ? "按原快照重试" : "确认导出"}
+                    {isPending ? (
+                        <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {isPending
+                        ? isRetry
+                            ? "重试中…"
+                            : "导出中…"
+                        : isRetry
+                          ? "按原快照重试"
+                          : "确认导出"}
                 </Button>
                 <Button
                     type="button"
                     size="sm"
                     variant="ghost"
+                    disabled={isPending}
                     onClick={onCancel}
                 >
                     取消

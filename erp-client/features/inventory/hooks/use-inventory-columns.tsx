@@ -17,6 +17,7 @@ function useInventoryColumns({
     rowFocusRef,
     openDetail,
     startAdjustment,
+    isCreating,
 }: InventoryColumnsInput) {
     const balanceColumns = React.useMemo(
         () =>
@@ -25,8 +26,9 @@ function useInventoryColumns({
                 rowFocusRef,
                 openDetail,
                 startAdjustment,
+                isCreating,
             }),
-        [openDetail, startAdjustment, isPhoneNarrow, rowFocusRef],
+        [openDetail, startAdjustment, isCreating, isPhoneNarrow, rowFocusRef],
     )
 
     const movementColumns = React.useMemo(

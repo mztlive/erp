@@ -58,9 +58,11 @@ export function useSupplierAccountsColumns(input: {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [
             data?.canRegisterPayment,
+            openPreview,
+            openSession,
+            paymentTaskPayableAccountId,
             returnTo,
             fromWorkspace,
-            paymentTaskPayableAccountId,
         ],
     )
 
@@ -71,8 +73,7 @@ export function useSupplierAccountsColumns(input: {
                 setReverseTarget,
                 setRefundRequest,
             }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [setRefundRequest],
+        [openPaymentPreview, setRefundRequest, setReverseTarget],
     )
 
     const invoiceColumns = React.useMemo<ColumnDef<PurchaseInvoiceRow>[]>(

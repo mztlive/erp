@@ -9,18 +9,19 @@
 //!   采购审批形成付款授权，付款任务由当前责任出纳直接登记并过账。
 //!
 //! 跨域只经 `DatabaseExt` 调对方域 Repository：
-//! - D15 `purchase_orders()` 校验来源采购单存在；
+//! - D15 `purchase_orders()` 校验来源采购单存在，并解析采购单号供展示；
 //! - D09 `supplier_accounts()` 校验供应商存在并取 `party_id`（进项发票
 //!   与应付子账的往来主体相等键）；
 //! - D18 `invoices()` 复用发票仓储（`invoice` 由 D18 拥有实体与仓储，
-//!   D19 只拥有 `purchase_invoice_allocation`，禁止复制发票实体）。
+//!   D19 只拥有 `purchase_invoice_allocation`，禁止复制发票实体）；
+//! - D33 `supplier_settlement_statements()` 解析结算单号供展示。
 
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
     AccessControlExt, Executor, FileAssetExt, NoTransaction, PartyExt, PayableExt, PurchaseOrderExt,
-    ReceivableExt, SupplierExt, Transactional,
+    ReceivableExt, SupplierExt, SupplierSettlementExt, Transactional,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::document_registry::{BusinessDocument, DocumentType};
@@ -53,6 +54,7 @@ use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
 use crate::iam::{self, SharedRbacService};
 use crate::pending_file_assets::PendingFileAssets;
 
+mod display;
 mod dto;
 pub(crate) mod payment_task;
 use self::dto::SortDir;
@@ -826,6 +828,8 @@ impl PayableService {
             .find_by_id(&id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("应付往来子账不存在".to_string()))?;
+        let source_document_no = resolve_source_document_no(&self.db, &account).await?;
+        let account_source_id = account.source_document_id.clone();
         let entries = self
             .db
             .payable_entries()
@@ -838,7 +842,10 @@ impl PayableService {
                 direction: entry.direction,
                 amount: entry.amount,
                 due_date: entry.due_date,
-                source_document_id: entry.source_document_id,
+                source_document_id: entry.source_document_id.clone(),
+                source_document_no: (entry.source_document_id == account_source_id)
+                    .then(|| source_document_no.clone())
+                    .flatten(),
                 source_sequence: entry.source_sequence,
                 posted_at: entry.posted_at,
             })
@@ -853,7 +860,6 @@ impl PayableService {
         } else {
             None
         };
-        let source_document_no = resolve_source_document_no(&self.db, &account).await?;
         Ok(PayableAccountView {
             id: account.base.id.clone(),
             source_document_id: account.source_document_id,
@@ -916,11 +922,13 @@ impl PayableService {
         };
         let bank_receipt =
             payment_bank_receipt_view(&self.db, payment.bank_receipt_asset_id.as_ref()).await?;
-        Ok(SupplierPaymentView {
+        self.enrich_supplier_payment_view(SupplierPaymentView {
             id: payment.base.id.clone(),
             payment_no: payment.payment_no,
             status: payment.status,
             supplier_id: payment.supplier_id.to_string(),
+            supplier_no: None,
+            supplier_name: None,
             payment_recipient,
             paid_at: payment.paid_at,
             amount: payment.amount,
@@ -932,6 +940,7 @@ impl PayableService {
             allocated_total,
             allocations: views,
         })
+        .await
     }
 }
 
@@ -1357,26 +1366,36 @@ async fn resolve_supplier_display(
     Ok((supplier_no, revision.map(|value| value.legal_name)))
 }
 
-/// 解析应付子账来源单据的业务单号（采购单来源取采购单号）。
+/// 解析应付子账来源单据的业务单号。
+///
+/// 采购单来源取采购单号；供应商结算来源取结算单号。空单号视为缺失。
 ///
 /// # 参数
 /// * `db` - 数据库实例
 /// * `account` - 应付子账
 ///
 /// # 返回
-/// 返回业务单号；未知来源或单据缺失时返回 `None`。
+/// 返回业务单号；未知来源或单据缺失时返回 `None`，不得回退内部 ID。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
 async fn resolve_source_document_no(
     db: &mongodb::Database,
     account: &PayableAccount,
 ) -> Result<Option<String>> {
-    if account.source_type != entities::payable::PayableSourceType::PurchaseOrder {
-        return Ok(None);
-    }
-    let order = db
-        .purchase_orders()
-        .find_by_id(&account.source_document_id, &mut NoTransaction)
-        .await?;
-    Ok(order.map(|value| value.purchase_no.clone()))
+    let document_no = match account.source_type {
+        entities::payable::PayableSourceType::PurchaseOrder => db
+            .purchase_orders()
+            .find_by_id(&account.source_document_id, &mut NoTransaction)
+            .await?
+            .map(|value| value.purchase_no),
+        entities::payable::PayableSourceType::SupplierSettlement => db
+            .supplier_settlement_statements()
+            .find_by_id(&account.source_document_id, &mut NoTransaction)
+            .await?
+            .map(|value| value.statement_no),
+    };
+    Ok(document_no.filter(|value| !value.trim().is_empty()))
 }
 
 /// 返回固定零金额。

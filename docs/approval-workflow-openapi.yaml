@@ -1369,14 +1369,43 @@ components:
         current_assignee_participant_id:
           type: string
           nullable: true
+        current_assignee_name:
+          type: string
+          nullable: true
+        document_type:
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/DocumentType'
+          nullable: true
+        document_id:
+          type: string
+          nullable: true
+        document_label:
+          type: string
+          nullable: true
+        process_version:
+          type: integer
+          minimum: 1
+          nullable: true
+        started_at:
+          type: integer
+          format: int64
+          nullable: true
+        latest_rejection_summary:
+          type: string
+          nullable: true
     InstanceListPage:
       type: object
-      required: [items]
+      required: [items, total, next_cursor]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/InstanceListItem'
+        total:
+          type: integer
+          format: int64
+          minimum: 0
         next_cursor:
           type: string
           nullable: true

@@ -231,6 +231,29 @@ impl<'a> Repository<'a, PayableAccount> {
         })
     }
 
+    /// 按主键集合批量取回应付子账（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应付往来子账 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配子账；空集合直接返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_accounts_by_ids(
+        &self,
+        account_ids: &[PayableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>> {
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = account_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 条件核销：增加已核销进度（不超额核销）。
     ///
     /// 原子写入口（P2 计划 §5）：以写条件而非读后判断保证
@@ -470,6 +493,29 @@ impl<'a> Repository<'a, PayableEntry> {
         let account_ids: Vec<String> = account_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "payable_account_id": { "$in": account_ids } }, executor)
             .await
+    }
+
+    /// 按主键集合批量取回应付分录（`$in` 一次取回，禁止 N+1）。
+    ///
+    /// # 参数
+    /// * `entry_ids` - 应付分录 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配分录；空集合直接返回空列表。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_entries_by_ids(
+        &self,
+        entry_ids: &[PayableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntry>> {
+        if entry_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = entry_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
     }
 
     /// 按子账取回全部分录（按来源序号升序）。

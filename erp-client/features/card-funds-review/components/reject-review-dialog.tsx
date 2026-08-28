@@ -122,17 +122,24 @@ export function RejectReviewDialog({
                     />
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={pending}
+                                />
+                            }
                         >
                             取消
                         </DialogClose>
-                        <Button
-                            type="submit"
-                            variant="destructive"
-                            disabled={pending}
-                        >
-                            确认驳回
-                        </Button>
+                        <rejectForm.AppForm>
+                            <rejectForm.SubmitButton
+                                label="确认驳回"
+                                pendingLabel="提交中…"
+                                variant="destructive"
+                                disabled={pending}
+                            />
+                        </rejectForm.AppForm>
                     </DialogFooter>
                 </form>
             </DialogContent>

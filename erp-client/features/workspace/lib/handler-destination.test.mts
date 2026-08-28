@@ -259,6 +259,7 @@ test("W18 requires and carries its registered confirmation scope", () => {
 test("document_approval opens the destination document without requiring queueContextId", () => {
     const sales = parsedHref(
         buildHandlerHref({
+            businessObjectType: "sales_order",
             businessObjectId: "object / 42",
             workItemId: "wi-42",
             handlerKey: "document_approval",
@@ -272,6 +273,7 @@ test("document_approval opens the destination document without requiring queueCo
 
     const receipt = parsedHref(
         buildHandlerHref({
+            businessObjectType: "customer_receipt",
             businessObjectId: "object / 42",
             workItemId: "wi-42",
             handlerKey: "document_approval",
@@ -280,6 +282,29 @@ test("document_approval opens the destination document without requiring queueCo
     )
     assert.equal(receipt.pathname, "/finance/customer-accounts")
     assert.equal(receipt.searchParams.get("previewId"), "object / 42")
+})
+
+test("started payment reversal opens its W12 detail without pretending to be an approval task", () => {
+    const reversal = parsedHref(
+        buildHandlerHref({
+            handlerKey: "document_approval",
+            destinationWorkspaceId: "W12",
+            businessObjectType: "payment_reversal",
+            businessObjectId: "reversal / 42",
+            workItemId: "instance-42",
+            approvalInstanceId: "instance-42",
+            trackingOnly: true,
+        }),
+    )
+
+    assert.equal(reversal.pathname, "/finance/supplier-accounts")
+    assert.equal(reversal.searchParams.get("from"), "workspace")
+    assert.equal(reversal.searchParams.get("view"), "payable")
+    assert.equal(reversal.searchParams.get("previewKind"), "reversal")
+    assert.equal(reversal.searchParams.get("detailId"), "reversal / 42")
+    assert.equal(reversal.searchParams.get("approvalInstanceId"), "instance-42")
+    assert.equal(reversal.searchParams.has("workItemId"), false)
+    assert.equal(reversal.searchParams.has("currentWorkItemId"), false)
 })
 
 test("unknown, mismatched, and incomplete handlers fail closed", () => {

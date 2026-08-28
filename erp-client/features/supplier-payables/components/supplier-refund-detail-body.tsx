@@ -1,11 +1,14 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 
 import { MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { SupplierRefundApprovalArea } from "@/features/supplier-payables/components/supplier-refund-approval-area"
+import { paymentPreviewHref } from "@/features/supplier-payables/lib/related-documents"
 import { supplierRefundApprovalPhase } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type { SupplierRefundRow } from "@/features/supplier-payables/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -65,6 +68,28 @@ export function SupplierRefundDetailBody({
                     mono
                 />
                 <Fact label="原因说明" value={row.reasonText} />
+                {row.originalPaymentId ? (
+                    <div className="col-span-2">
+                        <div className="text-xs text-muted-foreground">
+                            原付款单
+                        </div>
+                        <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            className="mt-1"
+                            render={
+                                <Link
+                                    href={paymentPreviewHref(
+                                        row.originalPaymentId,
+                                    )}
+                                />
+                            }
+                        >
+                            查看原付款
+                        </Button>
+                    </div>
+                ) : null}
             </div>
         </div>
     )

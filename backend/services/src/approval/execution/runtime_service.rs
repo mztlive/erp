@@ -2,6 +2,8 @@
 //!
 //! Handler 只转换协议；本文件编排仓储、prepare_* 与事务写入。
 
+use std::collections::HashMap;
+
 use bpm::engine::{CommitRequired, Eligibility, TaskCloseReason, TaskIntent};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalCommandKind, ApprovalDecision, ModelError};
@@ -14,6 +16,7 @@ use database::{
     AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional,
     WorkItemExt,
 };
+use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::WorkItemId;
@@ -62,8 +65,19 @@ pub struct RuntimeInstanceListQuery {
     pub document_type: Option<String>,
     /// 可选状态。
     pub status: Option<RuntimeInstanceStatusFilter>,
+    /// 当前视图的稳定游标。
+    pub cursor: Option<RuntimeInstanceListCursor>,
     /// 页大小。
     pub limit: u32,
+}
+
+/// 实例列表稳定游标。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeInstanceListCursor {
+    /// 当前视图排序时间。
+    pub sort_time: i64,
+    /// 并列时的实例主键。
+    pub id: String,
 }
 
 /// 实例列表行。
@@ -81,8 +95,20 @@ pub struct RuntimeInstanceListItem {
     pub current_node_name: Option<String>,
     /// 当前审批人。
     pub current_assignee_participant_id: Option<String>,
+    /// 当前审批人显示名。
+    pub current_assignee_name: Option<String>,
+    /// 被审批单据类型稳定码。
+    pub document_type: Option<String>,
     /// 被审批业务对象 ID。
     pub document_id: Option<String>,
+    /// 被审批单据业务编号。
+    pub document_label: Option<String>,
+    /// 审批定义业务版本。
+    pub process_version: Option<u32>,
+    /// 发起时间。
+    pub started_at: Option<i64>,
+    /// 最近驳回原因摘要。
+    pub latest_rejection_summary: Option<String>,
 }
 
 /// 实例列表页。
@@ -90,6 +116,10 @@ pub struct RuntimeInstanceListItem {
 pub struct RuntimeInstanceListPage {
     /// 当前页。
     pub items: Vec<RuntimeInstanceListItem>,
+    /// 当前过滤条件下的完整数量。
+    pub total: u64,
+    /// 下一页稳定游标。
+    pub next_cursor: Option<RuntimeInstanceListCursor>,
 }
 
 /// 恢复选项。
@@ -718,8 +748,11 @@ impl ApprovalRuntimeService {
                 &mut NoTransaction,
             )
             .await?;
+        let total = rows.len() as u64;
         Ok(RuntimeInstanceListPage {
             items: rows.into_iter().map(item_from_mine_item).collect(),
+            total,
+            next_cursor: None,
         })
     }
 
@@ -728,39 +761,59 @@ impl ApprovalRuntimeService {
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        let view = match query.view {
-            RuntimeInstanceListView::Started => ApprovalInstanceListView::Started,
-            RuntimeInstanceListView::Blocked => ApprovalInstanceListView::Blocked,
-            _ => ApprovalInstanceListView::Managed,
-        };
-        let process_kind = query
-            .document_type
-            .as_deref()
-            .map(parse_document_type)
-            .transpose()?
-            .map(process_kind_of);
-        let status = query.status.map(map_status_filter);
-        let started_by = (query.view == RuntimeInstanceListView::Started).then(|| actor.id().to_string());
-        let rows = self
+        let mut filter = instance_list_filter(actor, query)?;
+        let total = self
             .db
             .bpm_workflow()
-            .list_instance_summaries(
-                &ApprovalInstanceListFilter {
-                    view,
-                    process_kind,
-                    status,
-                    started_by,
-                    subject_kind: None,
-                    subject_ids: None,
-                    cursor: None,
-                    limit: query.limit,
-                },
-                &mut NoTransaction,
-            )
+            .count_instance_summaries(&filter, &mut NoTransaction)
             .await?;
+        filter.limit = query.limit.saturating_add(1);
+        let mut rows = self
+            .db
+            .bpm_workflow()
+            .list_instance_summaries(&filter, &mut NoTransaction)
+            .await?;
+        let has_more = rows.len() > query.limit as usize;
+        if has_more {
+            rows.truncate(query.limit as usize);
+        }
+        let next_cursor = has_more
+            .then(|| rows.last().map(|row| cursor_from_summary(filter.view, row)))
+            .flatten();
+        let items = self.hydrate_instance_items(rows).await?;
         Ok(RuntimeInstanceListPage {
-            items: rows.into_iter().map(item_from_summary).collect(),
+            items,
+            total,
+            next_cursor,
         })
+    }
+
+    /// 用不可变业务快照批量补齐列表单号，禁止逐实例查询。
+    async fn hydrate_instance_items(
+        &self,
+        rows: Vec<ApprovalInstanceSummary>,
+    ) -> Result<Vec<RuntimeInstanceListItem>> {
+        let instance_ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let snapshots = self
+            .db
+            .approval_subject_snapshots()
+            .find_by_process_instance_ids(&instance_ids, &mut NoTransaction)
+            .await?;
+        let snapshots = snapshots
+            .into_iter()
+            .map(|snapshot| {
+                (
+                    snapshot.approval_process_instance_id.as_ref().to_string(),
+                    snapshot,
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        rows.into_iter()
+            .map(|row| {
+                let snapshot = snapshots.get(&row.id);
+                item_from_summary(row, snapshot)
+            })
+            .collect()
     }
 
     async fn require_recovery_action(
@@ -868,6 +921,57 @@ fn parse_document_type(code: &str) -> Result<DocumentType> {
         .ok_or_else(|| Error::ValidationError(format!("未登记单据类型: {code}")))
 }
 
+/// 构造实例列表的授权过滤与稳定游标。
+fn instance_list_filter(
+    actor: &AuditActor,
+    query: &RuntimeInstanceListQuery,
+) -> Result<ApprovalInstanceListFilter> {
+    let view = match query.view {
+        RuntimeInstanceListView::Started => ApprovalInstanceListView::Started,
+        RuntimeInstanceListView::Blocked => ApprovalInstanceListView::Blocked,
+        _ => ApprovalInstanceListView::Managed,
+    };
+    let process_kind = query
+        .document_type
+        .as_deref()
+        .map(parse_document_type)
+        .transpose()?
+        .map(process_kind_of);
+    Ok(ApprovalInstanceListFilter {
+        view,
+        process_kind,
+        status: query.status.map(map_status_filter),
+        started_by: (query.view == RuntimeInstanceListView::Started).then(|| actor.id().to_string()),
+        subject_kind: None,
+        subject_ids: None,
+        cursor: query
+            .cursor
+            .as_ref()
+            .map(|cursor| database::repository::bpm::ApprovalInstanceListCursor {
+                sort_time: cursor.sort_time,
+                id: cursor.id.clone(),
+            }),
+        limit: query.limit,
+    })
+}
+
+/// 从当前视图最后一行生成下一页游标。
+fn cursor_from_summary(
+    view: ApprovalInstanceListView,
+    row: &ApprovalInstanceSummary,
+) -> RuntimeInstanceListCursor {
+    let updated_at = i64::try_from(row.updated_at).unwrap_or(i64::MAX);
+    let sort_time = match view {
+        ApprovalInstanceListView::Started => row.started_at,
+        ApprovalInstanceListView::Blocked => row.blocked_at.unwrap_or(updated_at),
+        ApprovalInstanceListView::Managed => updated_at,
+    };
+    RuntimeInstanceListCursor {
+        sort_time,
+        id: row.id.clone(),
+    }
+}
+
 /// 映射列表状态过滤。
 fn map_status_filter(
     status: RuntimeInstanceStatusFilter,
@@ -880,21 +984,36 @@ fn map_status_filter(
     }
 }
 
-/// 由仓储摘要映射列表行。
-fn item_from_summary(row: ApprovalInstanceSummary) -> RuntimeInstanceListItem {
-    RuntimeInstanceListItem {
+/// 由仓储摘要与启动快照映射列表行。
+fn item_from_summary(
+    row: ApprovalInstanceSummary,
+    snapshot: Option<&ApprovalSubjectSnapshot>,
+) -> Result<RuntimeInstanceListItem> {
+    let document_type = document_type_from_subject_kind(row.subject.subject_kind())?;
+    let document_id = row.subject.subject_id().to_string();
+    let snapshot = snapshot.filter(|snapshot| {
+        snapshot.document_type == document_type && snapshot.business_object_id == document_id
+    });
+    Ok(RuntimeInstanceListItem {
         instance_id: row.id,
         status: row.status.as_str().to_string(),
         current_round_no: row.current_round_no,
         current_node_key: row.current_node_key,
         current_node_name: row.current_node_name,
         current_assignee_participant_id: row.current_assignee_participant_id,
-        document_id: Some(row.subject.subject_id().to_string()),
-    }
+        current_assignee_name: row.current_assignee_name,
+        document_type: Some(document_type.as_str().to_string()),
+        document_id: Some(document_id),
+        document_label: snapshot.map(|item| item.payload.document_no.clone()),
+        process_version: Some(row.definition_version),
+        started_at: Some(row.started_at),
+        latest_rejection_summary: row.latest_rejection_summary,
+    })
 }
 
 /// 由待我审批任务映射列表行。
 fn item_from_mine_item(item: entities::work_item::WorkItem) -> RuntimeInstanceListItem {
+    let document_type = item.business_object_type.clone();
     RuntimeInstanceListItem {
         instance_id: item
             .approval_node_execution_id
@@ -906,7 +1025,13 @@ fn item_from_mine_item(item: entities::work_item::WorkItem) -> RuntimeInstanceLi
         current_node_key: None,
         current_node_name: None,
         current_assignee_participant_id: item.owner_user_id,
+        current_assignee_name: None,
+        document_type: Some(document_type),
         document_id: Some(item.business_object_id),
+        document_label: None,
+        process_version: None,
+        started_at: Some(i64::try_from(item.base.created_at).unwrap_or(i64::MAX)),
+        latest_rejection_summary: None,
     }
 }
 
@@ -926,7 +1051,13 @@ fn item_from_instance_id(
         current_node_key,
         current_node_name,
         current_assignee_participant_id,
+        current_assignee_name: None,
+        document_type: None,
         document_id: None,
+        document_label: None,
+        process_version: None,
+        started_at: None,
+        latest_rejection_summary: None,
     }
 }
 
@@ -1300,4 +1431,88 @@ async fn finalize_approved_document(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
+    use bpm::model::types::ApprovalProcessInstanceStatus;
+    use bpm::{ProcessKind, SubjectRef};
+    use database::repository::bpm::{ApprovalInstanceListView, ApprovalInstanceSummary};
+    use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
+    use entities::common::time::Instant;
+    use entities::document_registry::DocumentType;
+    use entities::ids::ApprovalSubjectSnapshotId;
+    use entities::money::Quantity;
+
+    use super::{cursor_from_summary, item_from_summary};
+
+    fn summary() -> ApprovalInstanceSummary {
+        ApprovalInstanceSummary {
+            id: "inst-1".to_string(),
+            process_kind: ProcessKind::StockAdjustment,
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            definition_version: 2,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").expect("主体"),
+            subject_version: 1,
+            status: ApprovalProcessInstanceStatus::Running,
+            current_round_no: 1,
+            current_node_execution_id: Some(ApprovalNodeExecutionId::new("exec-1")),
+            current_node_key: Some("review".to_string()),
+            current_node_name: Some("仓储复核".to_string()),
+            current_assignee_participant_id: Some("warehouse-1".to_string()),
+            current_assignee_name: Some("仓库1".to_string()),
+            latest_rejected_execution_id: None,
+            latest_rejection_summary: None,
+            last_status_changed_at: Some(20),
+            started_by: "starter".to_string(),
+            started_at: 10,
+            blocked_at: None,
+            version: 1,
+            updated_at: 20,
+        }
+    }
+
+    fn snapshot() -> ApprovalSubjectSnapshot {
+        ApprovalSubjectSnapshot::new(
+            ApprovalSubjectSnapshotId::new("snapshot-1"),
+            ApprovalProcessInstanceId::new("inst-1"),
+            DocumentType::StockAdjustment,
+            "adj-1",
+            1,
+            ApprovalSubjectSnapshotPayload {
+                document_no: "ADJ-0001".to_string(),
+                responsible_org_id: "org-1".to_string(),
+                submitted_by: "starter".to_string(),
+                submitted_at: Instant::from_unix_secs(10),
+                counterparty: None,
+                total_amount: None,
+                total_quantity: Some(Quantity::from_str("1").expect("数量")),
+                line_count: 1,
+            },
+        )
+        .expect("快照")
+    }
+
+    #[test]
+    fn started_item_uses_snapshot_document_number_and_runtime_projection() {
+        let snapshot = snapshot();
+        let item = item_from_summary(summary(), Some(&snapshot)).expect("列表行");
+
+        assert_eq!(item.document_type.as_deref(), Some("stock_adjustment"));
+        assert_eq!(item.document_id.as_deref(), Some("adj-1"));
+        assert_eq!(item.document_label.as_deref(), Some("ADJ-0001"));
+        assert_eq!(item.current_assignee_name.as_deref(), Some("仓库1"));
+        assert_eq!(item.process_version, Some(2));
+        assert_eq!(item.started_at, Some(10));
+    }
+
+    #[test]
+    fn started_cursor_uses_started_time_and_stable_instance_id() {
+        let cursor = cursor_from_summary(ApprovalInstanceListView::Started, &summary());
+        assert_eq!(cursor.sort_time, 10);
+        assert_eq!(cursor.id, "inst-1");
+    }
 }

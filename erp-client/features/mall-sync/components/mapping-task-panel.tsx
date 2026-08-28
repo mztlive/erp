@@ -10,6 +10,8 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
+import { LoaderCircleIcon } from "lucide-react"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -269,7 +271,16 @@ export function MappingTaskPanel({
                                         disabled={reapplyPending}
                                         onClick={() => void onReapply()}
                                     >
-                                        重新归集
+                                        {reapplyPending ? (
+                                            <LoaderCircleIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                                className="animate-spin"
+                                            />
+                                        ) : null}
+                                        {reapplyPending
+                                            ? "重新归集中…"
+                                            : "重新归集"}
                                     </Button>
                                     {mappingTask.reapplyOperation?.status ===
                                     "UNKNOWN" ? (

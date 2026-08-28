@@ -1,3 +1,5 @@
+import { LoaderCircleIcon } from "lucide-react"
+
 import { QuickPreviewSheet } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -83,6 +85,7 @@ export function CardBusinessExportSheet({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={isExporting}
                             onClick={() => onOpenChange(false)}
                         >
                             取消
@@ -92,7 +95,14 @@ export function CardBusinessExportSheet({
                             disabled={isExporting}
                             onClick={onConfirmExport}
                         >
-                            确认导出
+                            {isExporting ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    className="animate-spin"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            {isExporting ? "导出中…" : "确认导出"}
                         </Button>
                     </div>
                 </div>

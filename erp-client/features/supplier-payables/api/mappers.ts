@@ -3,6 +3,7 @@
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     PayableRow,
+    PaymentAllocationLine,
     PaymentReversalRow,
     PaymentRow,
     PurchaseInvoiceRow,
@@ -10,11 +11,21 @@ import type {
     SupplierRefundRow,
 } from "@/features/supplier-payables/types"
 import {
+    ENTRY_TYPE_LABEL,
     PAYABLE_STATUS_LABEL,
     PAYABLE_STATUS_TONE,
     SOURCE_TYPE_LABEL,
     VIEW_LABEL,
 } from "@/features/supplier-payables/types"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SUPPLIER_NAME,
+} from "@/features/supplier-payables/lib/display-labels"
+import {
+    missingSourceDocumentNo,
+    payablePreviewHref,
+    sourceDocumentHref,
+} from "@/features/supplier-payables/lib/related-documents"
 import {
     supplierPaymentStatusLabel,
     supplierPaymentStatusTone,
@@ -39,6 +50,7 @@ type BackendPayableEntry = {
     amount: string
     due_date: string
     source_document_id: string
+    source_document_no?: string | null
     source_sequence: number
     posted_at: number
 }
@@ -78,6 +90,10 @@ type BackendPaymentAllocation = {
     allocation_seq: number
     allocation_action: "apply" | "reverse"
     payable_entry_id: string
+    payable_account_id?: string | null
+    source_type?: string | null
+    source_document_id?: string | null
+    source_document_no?: string | null
     allocated_amount: string
     allocated_at: number
     reverses_allocation_id?: string | null
@@ -88,6 +104,8 @@ export type BackendSupplierPayment = {
     payment_no: string
     status: string
     supplier_id: string
+    supplier_no?: string | null
+    supplier_name?: string | null
     payment_recipient?: BackendPaymentRecipient | null
     paid_at: number
     amount: string
@@ -265,11 +283,20 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
     return {
         payableAccountId: a.id,
         supplierId: a.supplier_id,
-        supplierName: a.supplier_name || a.supplier_id,
+        supplierName: businessLabelOrPlaceholder(
+            a.supplier_name,
+            a.supplier_id,
+            MISSING_SUPPLIER_NAME,
+        ),
         sourceType,
         sourceTypeLabel: SOURCE_TYPE_LABEL[sourceType],
         sourceDocumentId: a.source_document_id,
-        sourceDocumentNo: a.source_document_no || a.source_document_id,
+        sourceDocumentNo: businessLabelOrPlaceholder(
+            a.source_document_no,
+            a.source_document_id,
+            missingSourceDocumentNo(sourceType),
+        ),
+        sourceHref: sourceDocumentHref(sourceType, a.source_document_id),
         primaryEntryId: primary?.id ?? a.entries?.[0]?.id ?? a.id,
         entryLockVersion: a.version,
         accountLockVersion: a.version,
@@ -291,6 +318,48 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
 }
 
 /**
+ * 把付款核销分配投影为可读来源行。分录 ID 不得当作来源单号。
+ *
+ * @param a 付款核销分配 HTTP 载荷。
+ */
+function projectPaymentAllocation(
+    a: BackendPaymentAllocation,
+): PaymentAllocationLine {
+    const sourceType = mapSourceType(a.source_type ?? "purchase_order")
+    const payableAccountId = a.payable_account_id?.trim() ?? ""
+    return {
+        allocationId: a.id,
+        action: a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
+        payableAccountId,
+        payableEntryId: a.payable_entry_id,
+        sourceType,
+        sourceDocumentId: a.source_document_id ?? undefined,
+        sourceDocumentNo: businessLabelOrPlaceholder(
+            a.source_document_no,
+            a.source_document_id ?? a.payable_entry_id,
+            missingSourceDocumentNo(sourceType),
+        ),
+        sourceHref: sourceDocumentHref(sourceType, a.source_document_id),
+        payableHref: payableAccountId
+            ? payablePreviewHref(payableAccountId)
+            : undefined,
+        amount: a.allocated_amount,
+        occurredAt: instantToIso(a.allocated_at),
+        reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
+    }
+}
+
+/**
+ * 应付分录类型的可读标签。未知类型不上屏枚举原值。
+ *
+ * @param entryType 后端分录类型。
+ */
+export function payableEntryTypeLabel(entryType: string | undefined): string {
+    if (!entryType) return "应付分录"
+    return ENTRY_TYPE_LABEL[entryType] ?? "应付分录"
+}
+
+/**
  * 把付款 HTTP 视图投影为列表/详情行。
  *
  * @param p 付款 HTTP 载荷。
@@ -305,7 +374,11 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         paymentId: p.id,
         paymentNo: p.payment_no,
         supplierId: p.supplier_id,
-        supplierName: p.supplier_id,
+        supplierName: businessLabelOrPlaceholder(
+            p.supplier_name,
+            p.supplier_id,
+            MISSING_SUPPLIER_NAME,
+        ),
         paidAt: instantToIso(p.paid_at),
         amount: p.amount,
         bankReferenceMasked: maskBank(p.bank_reference),
@@ -323,17 +396,7 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         statusLabel: supplierPaymentStatusLabel(p.status),
         statusTone: supplierPaymentStatusTone(p.status),
         baselineVersion: p.version,
-        allocations: (p.allocations ?? []).map((a) => ({
-            allocationId: a.id,
-            action: a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
-            payableAccountId: "",
-            payableEntryId: a.payable_entry_id,
-            sourceType: "PURCHASE_ORDER" as const,
-            sourceDocumentNo: a.payable_entry_id,
-            amount: a.allocated_amount,
-            occurredAt: instantToIso(a.allocated_at),
-            reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
-        })),
+        allocations: (p.allocations ?? []).map(projectPaymentAllocation),
         allowedActions: allowed,
         actionBlockers: [],
         paymentRecipient: mapPaymentRecipient(p.payment_recipient),
@@ -431,7 +494,11 @@ export function projectInvoice(inv: BackendInvoice): PurchaseInvoiceRow {
         invoiceKind: inv.invoice_kind === "red" ? "RED" : "BLUE",
         invoiceKindLabel: inv.invoice_kind === "red" ? "红票" : "蓝票",
         supplierId: inv.party_id,
-        supplierName: inv.party_id,
+        supplierName: businessLabelOrPlaceholder(
+            undefined,
+            inv.party_id,
+            MISSING_SUPPLIER_NAME,
+        ),
         invoiceDate: inv.invoice_date,
         grossAmount: inv.gross_amount,
         netAmount: inv.net_amount,
@@ -442,17 +509,24 @@ export function projectInvoice(inv: BackendInvoice): PurchaseInvoiceRow {
         statusLabel: status === "REVERSED" ? "已红冲" : "已登记",
         statusTone: inv.invoice_kind === "red" ? "warning" : "success",
         originalInvoiceId: inv.original_invoice_id ?? undefined,
-        allocations: (inv.allocations ?? []).map((a) => ({
-            allocationId: a.id,
-            action: a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
-            payableAccountId:
-                a.payable_account_id ?? a.receivable_account_id ?? "",
-            sourceType: "PURCHASE_ORDER" as const,
-            sourceDocumentNo: a.payable_account_id ?? "",
-            amountGross: a.allocated_gross_amount,
-            occurredAt: "",
-            reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
-        })),
+        allocations: (inv.allocations ?? []).map((a) => {
+            const payableAccountId =
+                a.payable_account_id ?? a.receivable_account_id ?? ""
+            return {
+                allocationId: a.id,
+                action:
+                    a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
+                payableAccountId,
+                sourceType: "PURCHASE_ORDER" as const,
+                sourceDocumentNo: missingSourceDocumentNo("PURCHASE_ORDER"),
+                payableHref: payableAccountId
+                    ? payablePreviewHref(payableAccountId)
+                    : undefined,
+                amountGross: a.allocated_gross_amount,
+                occurredAt: "",
+                reverseOfAllocationId: a.reverses_allocation_id ?? undefined,
+            }
+        }),
         allowedActions:
             status === "POSTED" && inv.invoice_kind === "blue"
                 ? ["VIEW_DETAIL", "CONTINUE_ALLOCATE", "ISSUE_RED"]
@@ -463,7 +537,6 @@ export function projectInvoice(inv: BackendInvoice): PurchaseInvoiceRow {
 
 export function filterSummary(query: SupplierAccountsQuery): string {
     const parts = [VIEW_LABEL[query.view]]
-    if (query.supplierId) parts.push(query.supplierId)
     if (query.sourceType) parts.push(SOURCE_TYPE_LABEL[query.sourceType])
     if (query.q?.trim()) parts.push(`「${query.q.trim()}」`)
     return parts.join(" · ")

@@ -37,9 +37,12 @@ export function buildDocumentHref(item: WorkspaceWorkItem): string | null {
     return buildHandlerHref({
         handlerKey: item.handlerKey,
         destinationWorkspaceId: item.destinationWorkspaceId,
+        businessObjectType: item.businessObjectType,
         businessObjectId: item.businessObjectId,
         rootBusinessObjectId: item.rootBusinessObjectId,
         workItemId: item.workItemId,
+        approvalInstanceId: item.approvalProcessInstanceId,
+        trackingOnly: item.workItemType === "APPROVAL_INSTANCE",
         queueContextId: item.queueContextId,
         routeContext: item.routeContext,
     })

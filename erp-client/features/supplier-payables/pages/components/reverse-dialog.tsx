@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import type { ReverseTarget } from "@/features/supplier-payables/types"
 
@@ -86,6 +87,7 @@ export function ReverseDialog({
                     <Button
                         type="button"
                         variant="outline"
+                        disabled={submitting}
                         onClick={onCancel}
                     >
                         取消
@@ -100,7 +102,10 @@ export function ReverseDialog({
                         }
                         onClick={onSubmit}
                     >
-                        确认追加反向记录
+                        {submitting ? (
+                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        {submitting ? "提交中…" : "确认追加反向记录"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

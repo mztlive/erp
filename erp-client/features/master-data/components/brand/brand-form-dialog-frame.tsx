@@ -144,13 +144,14 @@ export function BrandFormDialogFrame({
                                         <Button
                                             type="button"
                                             variant="outline"
+                                            disabled={pending}
                                         />
                                     }
                                 >
                                     关闭
                                 </DialogClose>
                                 <Button type="submit" disabled={pending}>
-                                    {submitLabel}
+                                    {pending ? "提交中…" : submitLabel}
                                 </Button>
                             </DialogFooter>
                         </form>

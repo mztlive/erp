@@ -372,7 +372,10 @@ export function SupplierAccountsPage() {
                             ? `已按当前任务提交决定。${view.latestRejectionReason}`
                             : "已按当前任务提交决定。",
                         reference:
-                            focusedReversalId ?? focusedRefundId ?? undefined,
+                            reversalQuery.data?.reversalNo ??
+                            refundQuery.data?.refundNo ??
+                            paymentQuery.data?.paymentNo ??
+                            undefined,
                         facts: view.currentAssigneeName
                             ? [
                                   {

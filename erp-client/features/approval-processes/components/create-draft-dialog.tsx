@@ -188,6 +188,7 @@ export function CreateDraftDialog({
                         <Button
                             type="button"
                             variant="outline"
+                            disabled={createDraft.isPending}
                             onClick={() => onOpenChange(false)}
                         >
                             取消

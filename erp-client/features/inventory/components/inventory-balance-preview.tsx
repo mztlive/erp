@@ -8,6 +8,8 @@ import {
     QuickPreviewSheet,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { LoaderCircleIcon } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import type {
@@ -22,6 +24,7 @@ type InventoryBalancePreviewProps = {
     open: boolean
     detail: BalanceDetailView | null | undefined
     isPending: boolean
+    isCreating?: boolean
     onClose: () => void
     onViewMovements: (detail: BalanceDetailView) => void
     onStartAdjustment: (row: StockBalanceRow) => Promise<void>
@@ -32,6 +35,7 @@ function InventoryBalancePreview({
     open,
     detail,
     isPending,
+    isCreating = false,
     onClose,
     onViewMovements,
     onStartAdjustment,
@@ -85,6 +89,7 @@ function InventoryBalancePreview({
                         <Button
                             type="button"
                             disabled={
+                                isCreating ||
                                 !detail.balance.allowedActions.includes(
                                     "CREATE_ADJUSTMENT",
                                 )
@@ -98,7 +103,14 @@ function InventoryBalancePreview({
                                 void onStartAdjustment(detail.balance)
                             }
                         >
-                            发起库存调整
+                            {isCreating ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {isCreating ? "创建中…" : "发起库存调整"}
                         </Button>
                     </>
                 ) : null

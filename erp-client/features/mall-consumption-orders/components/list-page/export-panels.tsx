@@ -6,6 +6,8 @@ import {
     FormalActionResult,
     surfacePanelClassName,
 } from "@/components/business"
+import { LoaderCircleIcon } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import type { ExportResultState } from "@/features/mall-consumption-orders/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -55,9 +57,22 @@ export function ExportPreviewPanel({
                         void onConfirm()
                     }}
                 >
-                    确认导出
+                    {isPending ? (
+                        <LoaderCircleIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                            className="animate-spin"
+                        />
+                    ) : null}
+                    {isPending ? "导出中…" : "确认导出"}
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={onCancel}
+                >
                     取消
                 </Button>
             </div>

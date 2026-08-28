@@ -214,6 +214,8 @@ export type ApprovalInstanceListItemDto = Readonly<{
     process_name?: string | null
     process_version?: string | number | null
     blocker_code?: string | null
+    started_at?: number | null
+    latest_rejection_summary?: string | null
 }>
 
 /** 实例列表页。 */
@@ -324,6 +326,8 @@ export type ApprovalInstanceListItem = Readonly<{
     processName?: string
     processVersion?: string
     blockerCode?: string
+    startedAt?: number
+    latestRejectionSummary?: string
 }>
 
 export type ApprovalInstanceListPage = Readonly<{
@@ -530,6 +534,8 @@ export const mapInstanceListItemDto = (
     processName: optionalText(dto.process_name),
     processVersion: optionalVersion(dto.process_version),
     blockerCode: optionalText(dto.blocker_code),
+    startedAt: typeof dto.started_at === "number" ? dto.started_at : undefined,
+    latestRejectionSummary: optionalText(dto.latest_rejection_summary),
 })
 
 /**

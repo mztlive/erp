@@ -159,9 +159,12 @@ export function isRegisteredHandlerDestination(
 export type HandlerNavigationInput = Readonly<{
     handlerKey: string
     destinationWorkspaceId?: string
+    businessObjectType?: string
     businessObjectId: string
     rootBusinessObjectId?: string
     workItemId: string
+    approvalInstanceId?: string
+    trackingOnly?: boolean
     queueContextId?: string
     routeContext?: Readonly<{ confirmationScope?: string }>
 }>
@@ -177,14 +180,24 @@ function buildDocumentApprovalHref(
 ): string | null {
     const businessObjectId = requiredValue(item.businessObjectId)
     const workItemId = requiredValue(item.workItemId)
-    if (!businessObjectId || !workItemId) return null
+    const approvalInstanceId = requiredValue(item.approvalInstanceId)
+    if (
+        !businessObjectId ||
+        (item.trackingOnly ? !approvalInstanceId : !workItemId)
+    ) {
+        return null
+    }
 
-    const params = new URLSearchParams({
-        from: "workspace",
-        workItemId,
-    })
+    const params = new URLSearchParams({ from: "workspace" })
+    if (item.trackingOnly && approvalInstanceId) {
+        params.set("approvalInstanceId", approvalInstanceId)
+    } else if (workItemId) {
+        params.set("workItemId", workItemId)
+    }
     const queueContextId = requiredValue(item.queueContextId)
-    if (queueContextId) params.set("queueContextId", queueContextId)
+    if (!item.trackingOnly && queueContextId) {
+        params.set("queueContextId", queueContextId)
+    }
 
     switch (item.destinationWorkspaceId) {
         case "W05":
@@ -199,12 +212,75 @@ function buildDocumentApprovalHref(
                 `/procurement/orders/${encodeURIComponent(businessObjectId)}`,
                 params,
             )
+        case "W10":
+            params.set("adjustmentId", businessObjectId)
+            if (workItemId && !item.trackingOnly) {
+                params.set("currentWorkItemId", workItemId)
+            }
+            return withParams("/inventory", params)
         case "W11":
+            if (!customerApprovalPreviewKind(item.businessObjectType)) {
+                return null
+            }
             params.set("view", "receipt")
-            params.set("previewKind", "receipt")
+            params.set(
+                "previewKind",
+                customerApprovalPreviewKind(item.businessObjectType) ??
+                    "receipt",
+            )
             params.set("previewId", businessObjectId)
-            params.set("currentWorkItemId", workItemId)
+            if (workItemId && !item.trackingOnly) {
+                params.set("currentWorkItemId", workItemId)
+            }
             return withParams("/finance/customer-accounts", params)
+        case "W12": {
+            const previewKind = supplierApprovalPreviewKind(
+                item.businessObjectType,
+            )
+            if (!previewKind) return null
+            params.set(
+                "view",
+                previewKind === "payment" ? "payment" : "payable",
+            )
+            params.set("previewKind", previewKind)
+            params.set("detailId", businessObjectId)
+            if (workItemId && !item.trackingOnly) {
+                params.set("currentWorkItemId", workItemId)
+            }
+            return withParams("/finance/supplier-accounts", params)
+        }
+        default:
+            return null
+    }
+}
+
+/** 解析客户侧审批单据在 W11 使用的详情类型。 */
+function customerApprovalPreviewKind(
+    documentType?: string,
+): "receipt" | "refund" | "reversal" | null {
+    switch (documentType) {
+        case "customer_receipt":
+            return "receipt"
+        case "customer_refund":
+            return "refund"
+        case "receipt_reversal":
+            return "reversal"
+        default:
+            return null
+    }
+}
+
+/** 解析供应商侧审批单据在 W12 使用的详情类型。 */
+function supplierApprovalPreviewKind(
+    documentType?: string,
+): "payment" | "refund" | "reversal" | null {
+    switch (documentType) {
+        case "supplier_payment":
+            return "payment"
+        case "supplier_refund":
+            return "refund"
+        case "payment_reversal":
+            return "reversal"
         default:
             return null
     }

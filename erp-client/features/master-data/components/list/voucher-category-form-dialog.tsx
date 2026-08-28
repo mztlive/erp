@@ -294,6 +294,7 @@ export function VoucherCategoryFormDialog({
                                         <Button
                                             type="button"
                                             variant="outline"
+                                            disabled={mutationPending}
                                         />
                                     }
                                 >
@@ -303,7 +304,9 @@ export function VoucherCategoryFormDialog({
                                     type="submit"
                                     disabled={mutationPending}
                                 >
-                                    {submitLabel}
+                                    {mutationPending
+                                        ? "提交中…"
+                                        : submitLabel}
                                 </Button>
                             </DialogFooter>
                         </form>

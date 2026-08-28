@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { DownloadIcon, PlusIcon } from "lucide-react"
+import { DownloadIcon, LoaderCircleIcon, PlusIcon } from "lucide-react"
 
 import {
     DataFreshness,
@@ -17,6 +17,7 @@ export function SalesOrdersListHeader(props: {
     isFetching: boolean
     queriedAt?: string
     exportDisabled: boolean
+    isExporting?: boolean
     onExport: () => void
     exportJob: SalesOrdersListExportJob | null
 }) {
@@ -25,6 +26,7 @@ export function SalesOrdersListHeader(props: {
         isFetching,
         queriedAt,
         exportDisabled,
+        isExporting = false,
         onExport,
         exportJob,
     } = props
@@ -67,8 +69,10 @@ export function SalesOrdersListHeader(props: {
                             },
                             {
                                 actionKey: "export",
-                                label: "导出",
-                                icon: DownloadIcon,
+                                label: isExporting ? "导出中…" : "导出",
+                                icon: isExporting
+                                    ? LoaderCircleIcon
+                                    : DownloadIcon,
                                 variant: "outline",
                                 mobileVisibility: "hide",
                                 disabled: exportDisabled,

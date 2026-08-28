@@ -46,6 +46,8 @@ export type AllocationSessionParams = {
 
 export type AllocationSessionOptions = {
     onCompleted?: (result: FormalSubmitResult) => void
+    /** 成功结果不进入页内 FormalActionResult，由 onCompleted 收口。 */
+    consumeSucceededResult?: boolean
     /** 会话加载后把服务端/客户端会话主键回写页面状态，保持跨刷新会话身份稳定。 */
     onDraftSessionIdChange?: (draftSessionId: string) => void
 }
@@ -72,7 +74,11 @@ export function useAllocationSession(
         paymentRecipientBankAccountId,
         paymentRecipientBankAccountVersion,
     }: AllocationSessionParams,
-    { onCompleted, onDraftSessionIdChange }: AllocationSessionOptions = {},
+    {
+        onCompleted,
+        consumeSucceededResult = false,
+        onDraftSessionIdChange,
+    }: AllocationSessionOptions = {},
 ) {
     const sessionQuery = useAllocationSessionQuery({
         track,
@@ -496,6 +502,10 @@ export function useAllocationSession(
         }
 
         setConfirmOpen(false)
+        if (res.status === "succeeded" && consumeSucceededResult) {
+            onCompleted?.(res)
+            return
+        }
         setResult({ ...res, returnTo: returnTo ?? session.returnTo })
         if (res.status === "succeeded") {
             onCompleted?.(res)
@@ -506,6 +516,10 @@ export function useAllocationSession(
         if (!idempotencyRef.current) return false
         const r = await resolveUnknown.mutateAsync(idempotencyRef.current)
         if (r) {
+            if (r.status === "succeeded" && consumeSucceededResult) {
+                onCompleted?.(r)
+                return true
+            }
             setResult({ ...r, returnTo: returnTo ?? session?.returnTo })
             if (r.status === "succeeded") onCompleted?.(r)
             return true

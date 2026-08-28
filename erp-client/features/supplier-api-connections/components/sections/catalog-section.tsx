@@ -15,6 +15,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import { Spinner } from "@/components/ui/spinner"
 import { Row } from "@/features/supplier-api-connections/components/detail-row"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -91,7 +92,10 @@ export function CatalogSection({
                                 title={syncBlocker?.message}
                                 onClick={() => void onSync()}
                             >
-                                触发目录同步
+                                {syncing ? (
+                                    <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                                ) : null}
+                                {syncing ? "同步中…" : "触发目录同步"}
                             </Button>
                         </div>
                     ) : null}
