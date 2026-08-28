@@ -166,6 +166,7 @@ export function PurchaseOrderDetailDialogs({
                         <Button
                             type="button"
                             variant="destructive"
+                            disabled={savePending}
                             onClick={onDiscardAndLeave}
                         >
                             放弃修改并离开

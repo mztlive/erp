@@ -2,17 +2,15 @@
 
 import { ShieldAlertIcon } from "lucide-react"
 
-import { FormalActionConfirmDialog, MoneyValue } from "@/components/business"
+import { FormalActionConfirmDialog } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
-import { AllocationFactFormCard } from "@/features/supplier-payables/components/allocation-fact-form-card"
+    AllocationAmountSummary,
+    AllocationFactFormCard,
+} from "@/features/supplier-payables/components/allocation-fact-form-card"
 import { AllocationPoolCard } from "@/features/supplier-payables/components/allocation-pool-card"
 import { AllocationResultView } from "@/features/supplier-payables/components/allocation-result-view"
+import type { PaymentRecipientRevealProps } from "@/features/supplier-payables/components/payment-recipient-card"
 import { SupplierPaymentSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-payment-submit-confirm-dialog"
 import type { AllocationSessionState } from "@/features/supplier-payables/hooks/use-allocation-session"
 import type {
@@ -30,59 +28,10 @@ export type SupplierAllocationWorkspaceProps = {
     purchaseOrderId?: string
     returnTo?: string
     paymentRecipient?: PaymentRecipient
+    paymentRecipientReveal?: Omit<PaymentRecipientRevealProps, "recipient">
     embedded?: boolean
     onClose: () => void
     onGoToInvoiceView?: () => void
-}
-
-function AllocationAmountSummary({
-    track,
-    factAmount,
-    allocatedAmount,
-    unallocatedAmount,
-}: {
-    track: AllocationTrack
-    factAmount: string
-    allocatedAmount: string
-    unallocatedAmount: string
-}) {
-    const items =
-        track === "payment"
-            ? [
-                  ["付款总额", factAmount || "0"],
-                  ["核销金额", allocatedAmount],
-                  ["未核销金额", unallocatedAmount],
-              ]
-            : [
-                  ["记录金额", factAmount || "0"],
-                  ["拟分配", allocatedAmount],
-                  ["拟未分配", unallocatedAmount],
-              ]
-
-    return (
-        <DescriptionList
-            columns="three"
-            aria-label={track === "payment" ? "付款金额摘要" : "分配金额摘要"}
-            className="gap-0 border-y border-border sm:grid-cols-3 xl:grid-cols-3"
-        >
-            {items.map(([label, value], index) => (
-                <DescriptionItem
-                    key={label}
-                    className={cn(
-                        "px-1 py-3 sm:px-5",
-                        index > 0 &&
-                            "border-t border-border sm:border-l sm:border-t-0",
-                        index === 0 && "sm:pl-1",
-                    )}
-                >
-                    <DescriptionTerm>{label}</DescriptionTerm>
-                    <DescriptionDetails className="num text-lg font-semibold">
-                        <MoneyValue value={value} taxBasis="gross" />
-                    </DescriptionDetails>
-                </DescriptionItem>
-            ))}
-        </DescriptionList>
-    )
 }
 
 /**
@@ -95,6 +44,7 @@ export function SupplierAllocationWorkspace({
     purchaseOrderId,
     returnTo,
     paymentRecipient,
+    paymentRecipientReveal,
     embedded = false,
     onClose,
     onGoToInvoiceView,
@@ -175,12 +125,14 @@ export function SupplierAllocationWorkspace({
                 />
             ) : (
                 <>
-                    <AllocationAmountSummary
-                        track={track}
-                        factAmount={factAmount}
-                        allocatedAmount={allocatedHint}
-                        unallocatedAmount={unallocatedHint}
-                    />
+                    {embedded && track === "payment" ? null : (
+                        <AllocationAmountSummary
+                            track={track}
+                            factAmount={factAmount}
+                            allocatedAmount={allocatedHint}
+                            unallocatedAmount={unallocatedHint}
+                        />
+                    )}
                     <div
                         className={cn(
                             "grid items-start gap-4",
@@ -220,6 +172,12 @@ export function SupplierAllocationWorkspace({
                                     : undefined
                             }
                             onSubmitClick={requestSubmit}
+                            paymentRecipient={
+                                embedded ? paymentRecipient : undefined
+                            }
+                            paymentRecipientReveal={
+                                embedded ? paymentRecipientReveal : undefined
+                            }
                         />
                     </div>
                 </>
@@ -229,9 +187,7 @@ export function SupplierAllocationWorkspace({
                 <SupplierPaymentSubmitConfirmDialog
                     open={confirmOpen}
                     pending={isSubmitting}
-                    supplierName={session.supplierName}
                     paymentAmount={factAmount}
-                    allocatedAmount={allocatedHint}
                     recipient={paymentRecipient}
                     onOpenChange={setConfirmOpen}
                     onConfirm={() => void doSubmit()}

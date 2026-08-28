@@ -8,7 +8,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
-import { PaymentRecipientCard } from "@/features/supplier-payables/components/payment-recipient-card"
 import {
     supplierPayablesKeys,
     usePayableDetailQuery,
@@ -138,22 +137,14 @@ export function WorkspacePaymentTask({ item }: WorkspacePaymentTaskProps) {
                         </AlertDescription>
                     </Alert>
                 ) : (
-                    <div className="space-y-4">
-                        <PaymentRecipientCard
-                            key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}`}
-                            payableAccountId={payable.payableAccountId}
-                            workItemId={item.workItemId}
-                            expectedTaskVersion={item.taskVersion}
-                            recipient={payable.paymentRecipient}
-                        />
-                        <WorkspacePaymentSession
-                            key={item.workItemId}
-                            item={item}
-                            supplierId={payable.supplierId}
-                            purchaseOrderId={descriptor.purchaseOrderId}
-                            paymentRecipient={payable.paymentRecipient}
-                        />
-                    </div>
+                    <WorkspacePaymentSession
+                        key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}`}
+                        item={item}
+                        supplierId={payable.supplierId}
+                        purchaseOrderId={descriptor.purchaseOrderId}
+                        payableAccountId={payable.payableAccountId}
+                        paymentRecipient={payable.paymentRecipient}
+                    />
                 )}
             </div>
         </section>
@@ -165,11 +156,13 @@ function WorkspacePaymentSession({
     item,
     supplierId,
     purchaseOrderId,
+    payableAccountId,
     paymentRecipient,
 }: {
     item: WorkspaceWorkItem
     supplierId: string
     purchaseOrderId: string
+    payableAccountId: string
     paymentRecipient: PaymentRecipient
 }) {
     const queryClient = useQueryClient()
@@ -298,6 +291,11 @@ function WorkspacePaymentSession({
             track="payment"
             purchaseOrderId={purchaseOrderId}
             paymentRecipient={paymentRecipient}
+            paymentRecipientReveal={{
+                payableAccountId,
+                workItemId: item.workItemId,
+                expectedTaskVersion: item.taskVersion,
+            }}
             embedded
             onClose={() => {
                 void startNextPaymentAttempt()

@@ -124,22 +124,24 @@ export function AllocationPoolCard({
                                         </div>
                                     </div>
                                     <div className="border-t border-border pt-3 md:border-l md:border-t-0 md:py-1 md:pl-5">
-                                        <div className="text-xs font-medium text-muted-foreground">
+                                        <div className="text-xs font-medium text-destructive">
                                             剩余应付
                                         </div>
                                         <div className="mt-1 text-base font-semibold">
                                             <MoneyValue
+                                                className="text-destructive"
                                                 value={open}
                                                 taxBasis="gross"
                                             />
                                         </div>
                                     </div>
                                     <div className="border-t border-border pt-3 md:border-l md:border-t-0 md:py-1 md:pl-5">
-                                        <div className="text-xs font-medium text-muted-foreground">
+                                        <div className="text-xs font-medium text-success">
                                             本次核销
                                         </div>
                                         <div className="mt-1 text-base font-semibold">
                                             <MoneyValue
+                                                className="text-success"
                                                 value={
                                                     amounts[
                                                         item.payableAccountId

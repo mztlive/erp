@@ -9,6 +9,12 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
+    DescriptionDetails,
+    DescriptionItem,
+    DescriptionList,
+    DescriptionTerm,
+} from "@/components/ui/description-list"
+import {
     Field,
     FieldDescription,
     FieldError,
@@ -16,13 +22,71 @@ import {
 } from "@/components/ui/field"
 import { FileUpload } from "@/components/ui/file-upload"
 import { toFieldErrors } from "@/components/form"
-import { cn } from "@/lib/utils"
+import {
+    PaymentRecipientFields,
+    PaymentRecipientHeading,
+    type PaymentRecipientRevealProps,
+} from "@/features/supplier-payables/components/payment-recipient-card"
 import type {
     InvoiceFormApi,
     PaymentFormApi,
 } from "@/features/supplier-payables/lib/allocation-form-types"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
-import type { AllocationTrack } from "@/features/supplier-payables/types"
+import type {
+    AllocationTrack,
+    PaymentRecipient,
+} from "@/features/supplier-payables/types"
+import { cn } from "@/lib/utils"
+
+export function AllocationAmountSummary({
+    track,
+    factAmount,
+    allocatedAmount,
+    unallocatedAmount,
+}: {
+    track: AllocationTrack
+    factAmount: string
+    allocatedAmount: string
+    unallocatedAmount: string
+}) {
+    const items =
+        track === "payment"
+            ? [
+                  ["付款总额", factAmount || "0"],
+                  ["核销金额", allocatedAmount],
+                  ["未核销金额", unallocatedAmount],
+              ]
+            : [
+                  ["记录金额", factAmount || "0"],
+                  ["拟分配", allocatedAmount],
+                  ["拟未分配", unallocatedAmount],
+              ]
+
+    return (
+        <DescriptionList
+            columns="three"
+            aria-label={track === "payment" ? "付款金额摘要" : "分配金额摘要"}
+            className="gap-0 border-y border-border sm:grid-cols-3 xl:grid-cols-3"
+        >
+            {items.map(([label, value], index) => (
+                <DescriptionItem
+                    key={label}
+                    className={cn(
+                        "px-1 py-3 sm:px-5",
+                        index > 0 &&
+                            "border-t border-border sm:border-l sm:border-t-0",
+                        index === 0 && "sm:pl-1",
+                    )}
+                >
+                    <DescriptionTerm>{label}</DescriptionTerm>
+                    <DescriptionDetails className="num text-lg font-semibold">
+                        <MoneyValue value={value} taxBasis="gross" />
+                    </DescriptionDetails>
+                </DescriptionItem>
+            ))}
+        </DescriptionList>
+    )
+}
 
 export type AllocationFactFormCardProps = {
     track: AllocationTrack
@@ -43,9 +107,11 @@ export type AllocationFactFormCardProps = {
     isSavingDraft?: boolean
     onSaveDraft?: () => void
     onSubmitClick: () => void
+    paymentRecipient?: PaymentRecipient
+    paymentRecipientReveal?: Omit<PaymentRecipientRevealProps, "recipient">
 }
 
-/** 本次付款/进项发票记录卡：记录表单、分配汇总与提交校验。 */
+/** 本次付款/进项发票记录卡：收款信息、记录表单与提交校验。 */
 export function AllocationFactFormCard({
     track,
     existingInvoiceId,
@@ -62,6 +128,8 @@ export function AllocationFactFormCard({
     isSavingDraft = false,
     onSaveDraft,
     onSubmitClick,
+    paymentRecipient,
+    paymentRecipientReveal,
 }: AllocationFactFormCardProps) {
     return (
         <section
@@ -78,6 +146,22 @@ export function AllocationFactFormCard({
                         : "未分配余额以提交后的系统结果为准"}
                 </p>
             </div>
+            {paymentRecipient && paymentRecipientReveal ? (
+                <div className="space-y-3 border-b border-border px-4 py-3">
+                    <PaymentRecipientHeading />
+                    <PaymentRecipientFields
+                        key={`${paymentRecipientReveal.workItemId}:${paymentRecipient.bankAccountId}:${paymentRecipient.version}`}
+                        payableAccountId={
+                            paymentRecipientReveal.payableAccountId
+                        }
+                        workItemId={paymentRecipientReveal.workItemId}
+                        expectedTaskVersion={
+                            paymentRecipientReveal.expectedTaskVersion
+                        }
+                        recipient={paymentRecipient}
+                    />
+                </div>
+            ) : null}
             <div className="space-y-4 p-4">
                 {track === "payment" ? (
                     <form

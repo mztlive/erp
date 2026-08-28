@@ -238,15 +238,13 @@ export function DisableActionDialog({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button
-                                    type="submit"
-                                    disabled={
-                                        submitDisabled ||
-                                        !target
-                                    }
-                                >
-                                    {submitLabel}
-                                </Button>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        disabled={submitDisabled || !target}
+                                        label={submitLabel}
+                                        pendingLabel="提交中…"
+                                    />
+                                </form.AppForm>
                             </DialogFooter>
                         </form>
                     ) : null}

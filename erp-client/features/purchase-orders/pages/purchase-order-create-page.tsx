@@ -663,16 +663,19 @@ export function PurchaseOrderCreatePage({
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>返回预览</AlertDialogCancel>
+                        <AlertDialogCancel disabled={createMutation.isPending}>
+                            返回预览
+                        </AlertDialogCancel>
                         <AlertDialogAction
                             data-testid="purchase-create-confirm"
+                            disabled={createMutation.isPending}
                             onClick={() => {
                                 submittingFromConfirmRef.current = true
                                 setConfirmOpen(false)
                                 void form.handleSubmit()
                             }}
                         >
-                            确认提交
+                            {createMutation.isPending ? "提交中…" : "确认提交"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
