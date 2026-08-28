@@ -92,7 +92,6 @@ export function SupplierAccountsPage() {
         setLastResult,
         hasActiveFilters,
         clearFilters,
-        patchUrl,
         switchView,
         listQuery,
         data,
@@ -355,6 +354,7 @@ export function SupplierAccountsPage() {
                 paymentTaskPayableAccountId={
                     paymentExecutionTask?.businessObjectId
                 }
+                canRegisterInvoice={data?.canRegisterInvoice}
                 onClose={closePreview}
                 onOpenPayable={openPreview}
                 onOpenSession={openSession}
