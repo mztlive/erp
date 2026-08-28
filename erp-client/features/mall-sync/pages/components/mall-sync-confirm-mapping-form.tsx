@@ -43,6 +43,7 @@ export function MallSyncConfirmMappingForm({
                 children={(field) => (
                     <field.TextareaField
                         label="确认依据"
+                        required
                         placeholder="说明选择该 ERP 对象的业务依据"
                     />
                 )}

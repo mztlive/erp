@@ -76,7 +76,12 @@ export function RejectReviewDialog({
                         name="reasonCode"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label>驳回原因</Label>
+                                <Label>
+                                    驳回原因
+                                    <span className="text-destructive">
+                                        *
+                                    </span>
+                                </Label>
                                 <OptionCombobox
                                     value={field.state.value}
                                     onValueChange={(v) =>
@@ -102,7 +107,12 @@ export function RejectReviewDialog({
                         name="comment"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="reject-comment">补充说明</Label>
+                                <Label htmlFor="reject-comment">
+                                    补充说明
+                                    <span className="text-destructive">
+                                        *
+                                    </span>
+                                </Label>
                                 <Textarea
                                     id="reject-comment"
                                     value={field.state.value}

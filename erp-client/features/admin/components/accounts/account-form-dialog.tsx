@@ -164,6 +164,7 @@ export function AccountFormDialog({
                                 children={(field) => (
                                     <field.TextField
                                         label="账号"
+                                        required
                                         placeholder="登录账号，3-32 个字符"
                                         autoComplete="off"
                                     />
@@ -175,6 +176,7 @@ export function AccountFormDialog({
                             children={(field) => (
                                 <field.TextField
                                     label="姓名"
+                                    required
                                     placeholder="管理员姓名"
                                 />
                             )}
@@ -184,6 +186,7 @@ export function AccountFormDialog({
                             children={(field) => (
                                 <field.TextField
                                     label={isEdit ? "新密码" : "密码"}
+                                    required
                                     type="password"
                                     placeholder={
                                         isEdit ? "留空则不修改" : "6-32 个字符"
@@ -207,7 +210,7 @@ export function AccountFormDialog({
                                     <Field
                                         data-invalid={isInvalid || undefined}
                                     >
-                                        <FieldLabel>角色</FieldLabel>
+                                        <FieldLabel>角色<span className="text-destructive">*</span></FieldLabel>
                                         <RoleOptionsPanel
                                             options={roleOptions}
                                             selected={selected}

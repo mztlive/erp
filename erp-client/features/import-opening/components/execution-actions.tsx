@@ -86,6 +86,7 @@ function CancelPendingDialog({
                                 label="取消原因"
                                 options={CANCEL_PENDING_REASON_OPTIONS}
                                 allowClear={false}
+                                required
                             />
                         )}
                     />

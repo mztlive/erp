@@ -108,7 +108,7 @@ export function AuditSection({
                     void noteForm.handleSubmit()
                 }}
             >
-                <Label htmlFor="collab-note">记录协同说明</Label>
+                <Label htmlFor="collab-note">记录协同说明<span className="text-destructive">*</span></Label>
                 <noteForm.AppField
                     name="comment"
                     children={(field) => (

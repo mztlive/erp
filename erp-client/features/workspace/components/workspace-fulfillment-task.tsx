@@ -302,6 +302,7 @@ function WorkspaceFulfillmentReassignDialog({
                                     label="转交原因"
                                     placeholder="说明本次责任调整依据"
                                     maxLength={150}
+                                    required
                                 />
                             )}
                         </form.AppField>

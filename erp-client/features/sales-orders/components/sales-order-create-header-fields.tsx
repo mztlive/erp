@@ -43,6 +43,7 @@ export function SalesOrderCreateHeaderFields({
                 {(field) => (
                     <field.SelectField
                         label="业务性质"
+                        required
                         options={NATURE_OPTIONS}
                         disabled={natureLocked}
                         description={natureLocked ? "建单后不能改" : undefined}
@@ -96,6 +97,7 @@ export function SalesOrderCreateHeaderFields({
                 {(field) => (
                     <field.SelectField
                         label="福利场景"
+                        required
                         options={WELFARE_SCENARIO_OPTIONS}
                         placeholder="选择福利场景"
                     />
@@ -110,6 +112,7 @@ export function SalesOrderCreateHeaderFields({
                 {(field) => (
                     <field.SelectField
                         label="付款条件"
+                        required
                         options={PAYMENT_TERM_OPTIONS}
                     />
                 )}
@@ -125,7 +128,7 @@ export function SalesOrderCreateHeaderFields({
                                 }}
                             >
                                 {(field) => (
-                                    <field.DateField label="履约期限" />
+                                    <field.DateField label="履约期限" required />
                                 )}
                             </form.AppField>
                             <form.AppField
@@ -152,6 +155,7 @@ export function SalesOrderCreateHeaderFields({
                                         >
                                             <FieldLabel htmlFor="targetMallId">
                                                 目标商城
+                                                <span className="text-destructive">*</span>
                                             </FieldLabel>
                                             <MallSearchCombobox
                                                 purpose="form"
@@ -184,6 +188,7 @@ export function SalesOrderCreateHeaderFields({
                                 {(field) => (
                                     <field.DateField
                                         label="应收到期日"
+                                        required
                                         description="运营通过后按此日期形成应收；该日期不能早于提交日"
                                     />
                                 )}
@@ -204,6 +209,7 @@ export function SalesOrderCreateHeaderFields({
                 {(field) => (
                     <field.TextField
                         label="税率（%）"
+                        required
                         type="number"
                         inputClassName="num"
                     />

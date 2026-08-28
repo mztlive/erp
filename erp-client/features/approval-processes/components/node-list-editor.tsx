@@ -149,7 +149,7 @@ export function NodeListEditor({
                                         <Label
                                             htmlFor={`${node.client_id}-name`}
                                         >
-                                            节点名称
+                                            节点名称<span className="text-destructive">*</span>
                                         </Label>
                                         <Input
                                             id={`${node.client_id}-name`}
@@ -165,7 +165,7 @@ export function NodeListEditor({
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <Label>审批人</Label>
+                                        <Label>审批人<span className="text-destructive">*</span></Label>
                                         <AssigneeCombobox
                                             documentType={documentType}
                                             value={node.assignee_user_id}

@@ -50,7 +50,10 @@ export function FulfillmentShipForm({
                         </div>
                     ) : null}
                     <div className="space-y-1.5">
-                        <Label htmlFor="ship-carrier">承运方（必填）</Label>
+                        <Label htmlFor="ship-carrier">
+                            承运方
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <OptionCombobox
                             id="ship-carrier"
                             value={draft.carrier || null}
@@ -68,12 +71,15 @@ export function FulfillmentShipForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="ship-tracking">物流单号</Label>
+                        <Label htmlFor="ship-tracking">
+                            物流单号
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <Input
                             id="ship-tracking"
                             value={draft.trackingNo}
                             disabled={disabled}
-                            placeholder="可后补"
+                            placeholder="请输入物流单号"
                             onChange={(e) =>
                                 onChange({
                                     ...draft,

@@ -245,11 +245,16 @@ function UnitFormDialogFrame({
                 TextField: React.ComponentType<{
                     label: string
                     disabled?: boolean
+                    required?: boolean
                 }>
-                TextareaField: React.ComponentType<{ label: string }>
+                TextareaField: React.ComponentType<{
+                    label: string
+                    required?: boolean
+                }>
                 SelectField: React.ComponentType<{
                     label: string
                     options: readonly { value: string; label: string }[]
+                    required?: boolean
                 }>
             }) => React.ReactNode
         }>
@@ -304,7 +309,7 @@ function UnitFormDialogFrame({
                             <form.AppField
                                 name="name"
                                 children={(field) => (
-                                    <field.TextField label="名称" />
+                                    <field.TextField label="名称" required />
                                 )}
                             />
                             <form.AppField
@@ -313,6 +318,7 @@ function UnitFormDialogFrame({
                                     <field.TextField
                                         label={masterDataCopy.fUnitCode}
                                         disabled={codeReadOnly}
+                                        required
                                     />
                                 )}
                             />
@@ -321,6 +327,7 @@ function UnitFormDialogFrame({
                                 children={(field) => (
                                     <field.TextField
                                         label={masterDataCopy.fUnitSymbol}
+                                        required
                                     />
                                 )}
                             />
@@ -335,6 +342,7 @@ function UnitFormDialogFrame({
                                                 label: option,
                                             }),
                                         )}
+                                        required
                                     />
                                 )}
                             />
@@ -343,6 +351,7 @@ function UnitFormDialogFrame({
                                 children={(field) => (
                                     <field.TextareaField
                                         label={masterDataCopy.fieldChangeReason}
+                                        required
                                     />
                                 )}
                             />

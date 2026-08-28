@@ -18,6 +18,7 @@ type TextFieldProps = {
     placeholder?: string
     type?: React.ComponentProps<"input">["type"]
     disabled?: boolean
+    required?: boolean
     className?: string
     inputClassName?: string
     autoComplete?: string
@@ -39,6 +40,7 @@ export function TextField({
     placeholder,
     type = "text",
     disabled,
+    required,
     className,
     inputClassName,
     autoComplete,
@@ -67,6 +69,9 @@ export function TextField({
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
             </FieldLabel>
             <Input
                 id={field.name}

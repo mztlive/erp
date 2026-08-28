@@ -68,6 +68,7 @@ export function LoginForm() {
                             children={(field) => (
                                 <field.TextField
                                     label="账号"
+                                    required
                                     placeholder="请输入账号"
                                     autoComplete="username"
                                 />
@@ -78,6 +79,7 @@ export function LoginForm() {
                             children={(field) => (
                                 <field.TextField
                                     label="密码"
+                                    required
                                     type="password"
                                     placeholder="请输入密码"
                                     autoComplete="current-password"

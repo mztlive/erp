@@ -132,7 +132,7 @@ export function ContractUploadDialog({
                                                     }
                                                 >
                                                     <FieldLabel htmlFor="upload-customerId">
-                                                        客户
+                                                        客户<span className="text-destructive">*</span>
                                                     </FieldLabel>
                                                     <CustomerSearchCombobox
                                                         value={
@@ -185,7 +185,7 @@ export function ContractUploadDialog({
                                                     }
                                                 >
                                                     <FieldLabel htmlFor="upload-settlementPartyId">
-                                                        结算主体
+                                                        结算主体<span className="text-destructive">*</span>
                                                     </FieldLabel>
                                                     <SettlementPartySearchCombobox
                                                         value={
@@ -228,6 +228,7 @@ export function ContractUploadDialog({
                                                 label="付款条件"
                                                 options={PAYMENT_TERM_OPTIONS}
                                                 description="用于销售单快速带出；完整条款以 PDF 为准。"
+                                                required
                                             />
                                         )}
                                     />

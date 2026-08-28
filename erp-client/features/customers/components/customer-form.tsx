@@ -190,7 +190,7 @@ export function CustomerForm({
                         <form.AppField
                             name="legalName"
                             children={(field) => (
-                                <field.TextField label="法定名称" />
+                                <field.TextField label="法定名称" required />
                             )}
                         />
                         <form.AppField
@@ -204,6 +204,7 @@ export function CustomerForm({
                             children={(field) => (
                                 <field.TextField
                                     label="统一社会信用代码"
+                                    required
                                     placeholder="18 位字母或数字"
                                 />
                             )}
@@ -223,6 +224,7 @@ export function CustomerForm({
                             children={(field) => (
                                 <field.SelectField
                                     label="客户状态"
+                                    required
                                     options={[
                                         { value: "active", label: "启用" },
                                         { value: "disabled", label: "停用" },
@@ -236,6 +238,7 @@ export function CustomerForm({
                                 children={(field) => (
                                     <field.TextareaField
                                         label="修订原因"
+                                        required
                                         placeholder="必填，写入修订时间线"
                                     />
                                 )}
@@ -250,6 +253,7 @@ export function CustomerForm({
                         children={(field) => (
                             <field.TextField
                                 label="法定名称"
+                                required
                                 placeholder="企业全称"
                             />
                         )}
@@ -268,6 +272,7 @@ export function CustomerForm({
                         children={(field) => (
                             <field.TextField
                                 label="统一社会信用代码"
+                                required
                                 placeholder="18 位字母或数字"
                             />
                         )}

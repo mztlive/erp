@@ -205,6 +205,7 @@ function RuleDialog({
                             {(field) => (
                                 <field.SelectField
                                     label="规则类型"
+                                    required
                                     allowClear={false}
                                     options={RULE_TYPE_VALUES.map((value) => ({
                                         value,
@@ -226,6 +227,9 @@ function RuleDialog({
                                                 <Field>
                                                     <FieldLabel>
                                                         公司 SKU
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <CompanySkuSearchCombobox
                                                         purpose="form"
@@ -254,6 +258,9 @@ function RuleDialog({
                                                 <Field>
                                                     <FieldLabel>
                                                         商品分类
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <CategoryCombobox
                                                         categories={categories}
@@ -278,6 +285,7 @@ function RuleDialog({
                                             {(field) => (
                                                 <field.TextField
                                                     label="服务区域"
+                                                    required
                                                     placeholder="例如：华东、上海市"
                                                 />
                                             )}
@@ -288,6 +296,7 @@ function RuleDialog({
                                             {(field) => (
                                                 <field.SelectField
                                                     label="商品类型"
+                                                    required
                                                     allowClear={false}
                                                     options={PRODUCT_KIND_VALUES.map(
                                                         (value) => ({
@@ -308,6 +317,7 @@ function RuleDialog({
                             {(field) => (
                                 <field.SelectField
                                     label="采购负责人"
+                                    required
                                     options={ownerOptions}
                                     placeholder="选择现有账号"
                                     allowClear={false}

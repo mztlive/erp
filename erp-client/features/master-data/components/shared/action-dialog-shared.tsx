@@ -95,15 +95,22 @@ export function DateField({
     label,
     field,
     id,
+    required,
 }: {
     label: string
     field: FieldApi
     id: string
+    required?: boolean
 }) {
     const error = field.state.meta.errors[0]
     return (
         <div className="space-y-1.5">
-            <Label htmlFor={id}>{label}</Label>
+            <Label htmlFor={id}>
+                {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
+            </Label>
             <DatePicker
                 value={field.state.value || undefined}
                 onValueChange={(next) => field.handleChange(next ?? "")}

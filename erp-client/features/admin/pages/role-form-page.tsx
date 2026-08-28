@@ -274,6 +274,7 @@ function RoleForm({
                                 children={(field) => (
                                     <field.TextField
                                         label="角色名称"
+                                        required
                                         placeholder="如：销售经理"
                                         className="w-full max-w-xs"
                                     />

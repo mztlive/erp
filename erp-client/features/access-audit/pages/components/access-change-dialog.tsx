@@ -156,7 +156,7 @@ function AccessChangeDialog({
                             >
                                 <div className="space-y-1.5">
                                     <Label htmlFor="w19-reason">
-                                        变更原因
+                                        变更原因<span className="text-destructive">*</span>
                                     </Label>
                                     <form.AppField
                                         name="reasonCode"

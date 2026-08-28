@@ -50,7 +50,8 @@ export function SupplierSaveReasonDialog({
                 </DialogHeader>
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-save-reason">
-                        {masterDataCopy.fieldChangeReason} *
+                        {masterDataCopy.fieldChangeReason}
+                        <span className="text-destructive">*</span>
                     </Label>
                     <Textarea
                         id="supplier-save-reason"

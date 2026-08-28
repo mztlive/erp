@@ -19,6 +19,7 @@ type DateFieldProps = {
     description?: string
     placeholder?: string
     disabled?: boolean
+    required?: boolean
     clearable?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
@@ -35,6 +36,7 @@ export function DateField({
     description,
     placeholder = "选择日期",
     disabled,
+    required,
     clearable = true,
     disabledDates,
     className,
@@ -59,6 +61,9 @@ export function DateField({
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
             </FieldLabel>
             <DatePicker
                 id={field.name}
@@ -91,6 +96,7 @@ type DateTimeFieldProps = {
     description?: string
     placeholder?: string
     disabled?: boolean
+    required?: boolean
     clearable?: boolean
     timeZone?: string
     disabledDates?: Matcher | Matcher[]
@@ -108,6 +114,7 @@ export function DateTimeField({
     description,
     placeholder = "选择日期和时间",
     disabled,
+    required,
     clearable = true,
     timeZone = "Asia/Shanghai",
     disabledDates,
@@ -133,6 +140,9 @@ export function DateTimeField({
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
             </FieldLabel>
             <DateTimeLocalPicker
                 id={field.name}

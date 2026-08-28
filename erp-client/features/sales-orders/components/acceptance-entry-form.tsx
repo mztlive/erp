@@ -65,6 +65,7 @@ export function AcceptanceEntryForm({
                         {(field) => (
                             <field.DateTimeField
                                 label="客户验收时间"
+                                required
                                 disabled={!canPost}
                             />
                         )}

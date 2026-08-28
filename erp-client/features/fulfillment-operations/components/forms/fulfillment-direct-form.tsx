@@ -44,7 +44,10 @@ export function FulfillmentDirectForm({
                 </header>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                        <Label htmlFor="direct-carrier">承运方（必填）</Label>
+                        <Label htmlFor="direct-carrier">
+                            承运方
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <OptionCombobox
                             id="direct-carrier"
                             value={draft.carrier || null}
@@ -62,12 +65,15 @@ export function FulfillmentDirectForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="direct-tracking">物流单号</Label>
+                        <Label htmlFor="direct-tracking">
+                            物流单号
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <Input
                             id="direct-tracking"
                             value={draft.trackingNo}
                             disabled={disabled}
-                            placeholder="可后补"
+                            placeholder="请输入物流单号"
                             onChange={(e) =>
                                 onChange({
                                     ...draft,

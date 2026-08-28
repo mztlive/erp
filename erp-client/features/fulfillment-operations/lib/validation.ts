@@ -1,5 +1,5 @@
 /**
- * W09 提交前的客户端校验与影响预览。
+ * W09 提交前的客户端校验与确认说明。
  * 页面检查只用于提前拦截明显错误；最终以服务端复核为准。
  */
 
@@ -305,10 +305,11 @@ export function buildPostedFacts(outcome: FulfillmentFormalOutcome) {
     return facts
 }
 
-export function impactPreview(
-    operation: FulfillmentOperation,
-    draft: FulfillmentDraft,
-): string[] {
+/**
+ * 确认弹窗的一句话说明。明细、锁定字段和下一责任人不再重复列出。
+ */
+export function confirmDescription(draft: FulfillmentDraft): string {
+    const suffix = "确认后不能改。"
     if (draft.type === "RECEIPT") {
         const qual = draft.lines.reduce(
             (s, l) => s + Number(l.qualifiedQuantity || 0),
@@ -318,36 +319,19 @@ export function impactPreview(
             (s, l) => s + Number(l.rejectedQuantity || 0),
             0,
         )
-        return [
-            `合格 ${qual} 入库存，并按对应的销售单留货`,
-            `不合格 ${rej} 不入库，也不留货`,
-            "不影响客户验收，验收由销售另外登记",
-        ]
+        return rej > 0
+            ? `合格 ${qual} 入库存并留货，不合格 ${rej} 不入库。${suffix}`
+            : `合格 ${qual} 入库存并留货。${suffix}`
     }
     if (draft.type === "WAREHOUSE_SHIP") {
         const qty = draft.lines.reduce((s, l) => s + Number(l.quantity || 0), 0)
-        return [
-            `发出 ${qty}：用掉为这单留的货，库存相应减少`,
-            "客户签收不等于验收通过，验收由销售另外登记",
-        ]
+        return `发出 ${qty}，扣库存并核销留货。${suffix}`
     }
     if (draft.type === "SUPPLIER_DIRECT") {
-        return [
-            "记一笔供应商直接发客户",
-            "不动自己仓库的库存",
-            "接下来由销售登记客户验收",
-        ]
+        return `供应商直发给客户，不走自有仓库。${suffix}`
     }
     if (draft.type === "ELECTRONIC") {
-        return [
-            `交付结果：${RESULT_LABEL[draft.result]}`,
-            "不动库存。填「失败」也不能再改，要重做得新开一条",
-            "成功后由销售登记客户验收",
-        ]
+        return `交付结果：${RESULT_LABEL[draft.result]}。不动库存。${suffix}`
     }
-    return [
-        `服务结果：${RESULT_LABEL[draft.result]}`,
-        "记一笔服务完成，不动库存",
-        "成功后由销售登记客户验收",
-    ]
+    return `服务结果：${RESULT_LABEL[draft.result]}。不动库存。${suffix}`
 }

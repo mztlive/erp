@@ -3,9 +3,8 @@
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { FulfillmentQueueList } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-list"
-import { impactPreview } from "@/features/fulfillment-operations/lib/validation"
+import { confirmDescription } from "@/features/fulfillment-operations/lib/validation"
 import {
-    CORRECTION_NOTICE,
     OPERATION_ACTION_LABEL,
     OPERATION_CONFIRM_TITLE,
     OPERATION_DONE_LABEL,
@@ -203,7 +202,11 @@ export function FulfillmentOperationsWorkspace({
                           ]
                         : "确认？"
                 }
-                description="没确认成功之前，库存和留货都不会动。"
+                description={
+                    controller.draft
+                        ? confirmDescription(controller.draft)
+                        : "确认后不能改。"
+                }
                 actionLabel={
                     controller.operation
                         ? OPERATION_ACTION_LABEL[
@@ -227,14 +230,6 @@ export function FulfillmentOperationsWorkspace({
                         : "已完成",
                     tone: "success",
                 }}
-                lockedFields={["来源单据、版本和留货", "单据类型"]}
-                effects={
-                    controller.operation && controller.draft
-                        ? impactPreview(controller.operation, controller.draft)
-                        : []
-                }
-                irreversibleEffects={[CORRECTION_NOTICE]}
-                nextDepartment="做完之后由销售登记客户验收"
                 pending={controller.formalPending}
                 onConfirm={async () => {
                     await controller.handlePost()

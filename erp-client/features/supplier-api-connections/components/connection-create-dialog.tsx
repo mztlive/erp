@@ -114,6 +114,7 @@ export function ConnectionCreateDialog({
                         children={(field) => (
                             <field.TextField
                                 label="连接代码"
+                                required
                                 placeholder="CONN-XXX-PROD"
                             />
                         )}
@@ -130,7 +131,7 @@ export function ConnectionCreateDialog({
                             return (
                                 <Field data-invalid={isInvalid || undefined}>
                                     <FieldLabel htmlFor="create-supplierId">
-                                        供应商
+                                        供应商<span className="text-destructive">*</span>
                                     </FieldLabel>
                                     <SupplierSearchCombobox
                                         value={field.state.value || undefined}
@@ -156,7 +157,7 @@ export function ConnectionCreateDialog({
                         name="environment"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label>环境</Label>
+                                <Label>环境<span className="text-destructive">*</span></Label>
                                 <OptionCombobox
                                     value={field.state.value}
                                     onValueChange={(v) => {

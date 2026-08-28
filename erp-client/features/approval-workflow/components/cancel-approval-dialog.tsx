@@ -153,6 +153,7 @@ export function CancelApprovalDialog({
                         children={(field) => (
                             <field.TextareaField
                                 label="原因"
+                                required
                                 disabled={pending}
                             />
                         )}

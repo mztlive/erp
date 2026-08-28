@@ -75,6 +75,9 @@ export function SelectField({
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
             </FieldLabel>
             <OptionCombobox
                 id={field.name}

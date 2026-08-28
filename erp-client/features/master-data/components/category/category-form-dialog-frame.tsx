@@ -54,13 +54,20 @@ export function CategoryFormDialogFrame({
         AppField: React.ComponentType<{
             name: keyof CategoryFormValues
             children: (field: {
-                TextField: React.ComponentType<{ label: string }>
-                TextareaField: React.ComponentType<{ label: string }>
+                TextField: React.ComponentType<{
+                    label: string
+                    required?: boolean
+                }>
+                TextareaField: React.ComponentType<{
+                    label: string
+                    required?: boolean
+                }>
                 SelectField: React.ComponentType<{
                     label: string
                     options: readonly { value: string; label: string }[]
                     allowClear?: boolean
                     placeholder?: string
+                    required?: boolean
                 }>
                 handleChange: (value: string) => void
                 state: { value: string }
@@ -136,7 +143,7 @@ export function CategoryFormDialogFrame({
                             <form.AppField
                                 name="name"
                                 children={(field) => (
-                                    <field.TextField label="名称" />
+                                    <field.TextField label="名称" required />
                                 )}
                             />
                             <form.AppField
@@ -144,6 +151,7 @@ export function CategoryFormDialogFrame({
                                 children={(field) => (
                                     <field.TextField
                                         label={masterDataCopy.fCategoryCode}
+                                        required
                                     />
                                 )}
                             />
@@ -193,6 +201,7 @@ export function CategoryFormDialogFrame({
                                 children={(field) => (
                                     <field.TextareaField
                                         label={masterDataCopy.fieldChangeReason}
+                                        required
                                     />
                                 )}
                             />

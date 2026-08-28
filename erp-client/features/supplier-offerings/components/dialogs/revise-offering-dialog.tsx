@@ -120,23 +120,24 @@ export function ReviseOfferingDialog({
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <form.AppField name="dropshipPrice">
                                         {(field) => (
-                                            <field.TextField label="一件代发供给价（含税）*" />
+                                            <field.TextField label="一件代发供给价（含税）" required />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="bulkPrice">
                                         {(field) => (
-                                            <field.TextField label="集采供给价（含税）*" />
+                                            <field.TextField label="集采供给价（含税）" required />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="minimumQuantity">
                                         {(field) => (
-                                            <field.TextField label="集采起订量 *" />
+                                            <field.TextField label="集采起订量" required />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="inputTaxPercentage">
                                         {(field) => (
                                             <field.TextField
-                                                label="进项税率（%）*"
+                                                label="进项税率（%）"
+                                                required
                                                 description="例如 13 表示 13%"
                                             />
                                         )}
@@ -153,7 +154,8 @@ export function ReviseOfferingDialog({
                                         {(field) => (
                                             <div className="sm:col-span-2">
                                                 <field.TextField
-                                                    label="可供区域 *"
+                                                    label="可供区域"
+                                                    required
                                                     description="多个区域使用逗号分隔"
                                                 />
                                             </div>
@@ -161,7 +163,7 @@ export function ReviseOfferingDialog({
                                     </form.AppField>
                                     <form.AppField name="validFrom">
                                         {(field) => (
-                                            <field.DateField label="生效日期 *" />
+                                            <field.DateField label="生效日期" required />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="validTo">
@@ -205,7 +207,8 @@ export function ReviseOfferingDialog({
                                     <form.AppField name="status">
                                         {(field) => (
                                             <field.SelectField
-                                                label="供给关系状态 *"
+                                                label="供给关系状态"
+                                                required
                                                 options={Object.entries(
                                                     OFFERING_STATUS_LABELS,
                                                 ).map(([value, label]) => ({
@@ -218,7 +221,7 @@ export function ReviseOfferingDialog({
                                     </form.AppField>
                                     <form.AppField name="changeReason">
                                         {(field) => (
-                                            <field.TextField label="变更原因 *" />
+                                            <field.TextField label="变更原因" required />
                                         )}
                                     </form.AppField>
                                 </div>

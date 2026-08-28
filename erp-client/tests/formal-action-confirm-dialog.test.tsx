@@ -31,4 +31,25 @@ describe("FormalActionConfirmDialog", () => {
         )
         expect(description?.querySelector("p p")).toBeNull()
     })
+
+    it("keeps status change in the header text column", () => {
+        render(
+            <FormalActionConfirmDialog
+                open
+                onOpenChange={() => undefined}
+                title="确认发货？"
+                actionLabel="确认发货"
+                fromStatus={{ label: "待确认", tone: "warning" }}
+                toStatus={{ label: "已发货", tone: "success" }}
+                onConfirm={() => undefined}
+            />,
+        )
+
+        const header = document.querySelector(
+            '[data-slot="alert-dialog-header"]',
+        )
+        const status = document.querySelector('[aria-label="状态变化"]')
+        expect(header?.contains(status)).toBe(true)
+        expect(status?.parentElement?.className).toContain("col-start-2")
+    })
 })

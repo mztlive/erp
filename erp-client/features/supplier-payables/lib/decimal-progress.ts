@@ -25,12 +25,13 @@ export function decimalProgressPercent(
             allowNegative: true,
         })
         const scale = Math.max(part.scale, whole.scale)
-        const partUnscaled = part.unscaled * 10n ** BigInt(scale - part.scale)
+        const partUnscaled =
+            part.unscaled * BigInt(10) ** BigInt(scale - part.scale)
         const wholeUnscaled =
-            whole.unscaled * 10n ** BigInt(scale - whole.scale)
-        if (wholeUnscaled <= 0n || partUnscaled <= 0n) return 0
+            whole.unscaled * BigInt(10) ** BigInt(scale - whole.scale)
+        if (wholeUnscaled <= BigInt(0) || partUnscaled <= BigInt(0)) return 0
         if (partUnscaled >= wholeUnscaled) return 100
-        return Number((partUnscaled * 100n) / wholeUnscaled)
+        return Number((partUnscaled * BigInt(100)) / wholeUnscaled)
     } catch {
         return 0
     }

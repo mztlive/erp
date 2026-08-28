@@ -117,7 +117,7 @@ export function ContactRowsSection({
                                         name={`contacts[${index}].name`}
                                     >
                                         {(nested) => (
-                                            <nested.TextField label="姓名" />
+                                            <nested.TextField label="姓名" required />
                                         )}
                                     </form.AppField>
                                     <form.AppField
@@ -133,6 +133,7 @@ export function ContactRowsSection({
                                         {(nested) => (
                                             <nested.TextField
                                                 label="手机"
+                                                required
                                                 placeholder="11 位手机号"
                                             />
                                         )}
@@ -259,6 +260,7 @@ export function AddressRowsSection({
                                         {(nested) => (
                                             <nested.SelectField
                                                 label="地址类型"
+                                                required
                                                 options={ADDRESS_TYPE_OPTIONS}
                                             />
                                         )}
@@ -269,6 +271,7 @@ export function AddressRowsSection({
                                         {(nested) => (
                                             <nested.TextField
                                                 label="地址"
+                                                required
                                                 placeholder="省市区 + 详细地址"
                                             />
                                         )}

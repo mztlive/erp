@@ -214,6 +214,7 @@ export function DisableActionDialog({
                                         id="dis-ef-from"
                                         label={masterDataCopy.fieldDisableAt}
                                         field={field}
+                                        required
                                     />
                                 )}
                             />
@@ -224,6 +225,7 @@ export function DisableActionDialog({
                                         label={
                                             masterDataCopy.fieldDisableReason
                                         }
+                                        required
                                     />
                                 )}
                             />

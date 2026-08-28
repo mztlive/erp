@@ -202,6 +202,9 @@ export function DecisionDialog({
                                         ? "驳回原因"
                                         : "原因（可选）"
                                 }
+                                required={
+                                    form.state.values.decision === "REJECT"
+                                }
                                 disabled={submitDecision.isPending}
                             />
                         )}

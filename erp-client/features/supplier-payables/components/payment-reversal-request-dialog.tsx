@@ -86,6 +86,7 @@ export function PaymentReversalRequestDialog({
                         children={(field) => (
                             <field.TextareaField
                                 label="原因说明"
+                                required
                                 placeholder="业务依据与说明"
                                 disabled={pending}
                             />

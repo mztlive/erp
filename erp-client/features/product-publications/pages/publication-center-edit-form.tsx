@@ -54,28 +54,28 @@ export function PublicationCenterEditForm({
                     </AlertDescription>
                 </Alert>
                 <form.AppField name="name">
-                    {(field) => <field.TextField label="展示名称" />}
+                    {(field) => <field.TextField label="展示名称" required />}
                 </form.AppField>
                 <form.AppField name="specification">
-                    {(field) => <field.TextField label="规格" />}
+                    {(field) => <field.TextField label="规格" required />}
                 </form.AppField>
                 <form.AppField name="salesDescription">
                     {(field) => (
-                        <field.TextareaField label="商城销售说明" rows={3} />
+                        <field.TextareaField label="商城销售说明" rows={3} required />
                     )}
                 </form.AppField>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <form.AppField name="salesPriceGross">
                         {(field) => (
-                            <field.TextField label="含税销售价" />
+                            <field.TextField label="含税销售价" required />
                         )}
                     </form.AppField>
                     <form.AppField name="salesTaxRate">
-                        {(field) => <field.TextField label="销项税率" />}
+                        {(field) => <field.TextField label="销项税率" required />}
                     </form.AppField>
                     <form.AppField name="minimumPurchaseQuantity">
                         {(field) => (
-                            <field.TextField label="最小购买量（运营确认）" />
+                            <field.TextField label="最小购买量（运营确认）" required />
                         )}
                     </form.AppField>
                     <form.AppField name="saleStatus">
@@ -83,6 +83,7 @@ export function PublicationCenterEditForm({
                             <div className="space-y-1.5">
                                 <Label htmlFor="saleStatus">
                                     商城销售状态
+                                    <span className="text-destructive">*</span>
                                 </Label>
                                 <OptionCombobox
                                     id="saleStatus"
@@ -125,27 +126,27 @@ export function PublicationCenterEditForm({
                 <div className="grid gap-3 sm:grid-cols-2">
                     <form.AppField name="skuRevisionId">
                         {(field) => (
-                            <field.TextField label="SKU 修订编号" />
+                            <field.TextField label="SKU 修订编号" required />
                         )}
                     </form.AppField>
                     <form.AppField name="categoryId">
                         {(field) => (
-                            <field.TextField label="商城类目编号" />
+                            <field.TextField label="商城类目编号" required />
                         )}
                     </form.AppField>
                     <form.AppField name="supplierOfferingRevisionId">
                         {(field) => (
-                            <field.TextField label="唯一固定供给修订编号" />
+                            <field.TextField label="唯一固定供给修订编号" required />
                         )}
                     </form.AppField>
                     <form.AppField name="baseUnitCode">
                         {(field) => (
-                            <field.TextField label="基础单位代码" />
+                            <field.TextField label="基础单位代码" required />
                         )}
                     </form.AppField>
                     <form.AppField name="salesRegionText">
                         {(field) => (
-                            <field.TextField label="可销售区域（顿号/逗号分隔）" />
+                            <field.TextField label="可销售区域（顿号/逗号分隔）" required />
                         )}
                     </form.AppField>
                     <form.AppField name="productCapabilitiesText">
@@ -154,7 +155,7 @@ export function PublicationCenterEditForm({
                         )}
                     </form.AppField>
                     <form.AppField name="validFrom">
-                        {(field) => <field.TextField label="生效时间" />}
+                        {(field) => <field.TextField label="生效时间" required />}
                     </form.AppField>
                     <form.AppField name="validTo">
                         {(field) => (
@@ -177,7 +178,7 @@ export function PublicationCenterEditForm({
                                 name={`media[${index}].altText`}
                             >
                                 {(field) => (
-                                    <field.TextField label="图片说明" />
+                                    <field.TextField label="图片说明" required />
                                 )}
                             </form.AppField>
                         </div>

@@ -176,6 +176,7 @@ export function AllocationFactFormCard({
                             children={(field) => (
                                 <field.TextField
                                     label="付款金额"
+                                    required
                                     inputMode="decimal"
                                 />
                             )}
@@ -185,6 +186,7 @@ export function AllocationFactFormCard({
                             children={(field) => (
                                 <field.DateTimeField
                                     label="实际付款时间"
+                                    required
                                     clearable={false}
                                 />
                             )}
@@ -282,32 +284,32 @@ export function AllocationFactFormCard({
                                 <invoiceForm.AppField
                                     name="invoiceNo"
                                     children={(field) => (
-                                        <field.TextField label="发票号码" />
+                                        <field.TextField label="发票号码" required />
                                     )}
                                 />
                                 <invoiceForm.AppField
                                     name="invoiceDate"
                                     children={(field) => (
-                                        <field.DateField label="开票日期" />
+                                        <field.DateField label="开票日期" required />
                                     )}
                                 />
                                 <invoiceForm.AppField
                                     name="grossAmount"
                                     children={(field) => (
-                                        <field.TextField label="含税金额" />
+                                        <field.TextField label="含税金额" required />
                                     )}
                                 />
                                 <div className="grid grid-cols-2 gap-2">
                                     <invoiceForm.AppField
                                         name="netAmount"
                                         children={(field) => (
-                                            <field.TextField label="不含税" />
+                                            <field.TextField label="不含税" required />
                                         )}
                                     />
                                     <invoiceForm.AppField
                                         name="taxAmount"
                                         children={(field) => (
-                                            <field.TextField label="税额" />
+                                            <field.TextField label="税额" required />
                                         )}
                                     />
                                 </div>

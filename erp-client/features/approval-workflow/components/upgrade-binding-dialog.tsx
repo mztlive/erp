@@ -127,6 +127,7 @@ export function UpgradeBindingDialog({
                         children={(field) => (
                             <field.TextareaField
                                 label="更新原因"
+                                required
                                 disabled={upgrade.isPending}
                             />
                         )}

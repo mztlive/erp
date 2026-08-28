@@ -46,7 +46,10 @@ export function MallSyncSourceFixDialog({
                         name="reasonCode"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label>原因</Label>
+                                <Label>
+                                    原因
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <OptionCombobox
                                     value={field.state.value}
                                     onValueChange={(v) => {
@@ -73,7 +76,7 @@ export function MallSyncSourceFixDialog({
                     <form.AppField
                         name="note"
                         children={(field) => (
-                            <field.TextareaField label="修复说明" />
+                            <field.TextareaField label="修复说明" required />
                         )}
                     />
                     <form.AppField
@@ -81,6 +84,7 @@ export function MallSyncSourceFixDialog({
                         children={(field) => (
                             <field.TextareaField
                                 label="需要补充的来源证据"
+                                required
                                 placeholder="多项可用逗号或换行分隔"
                             />
                         )}

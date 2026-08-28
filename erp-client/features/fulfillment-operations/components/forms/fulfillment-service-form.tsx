@@ -46,7 +46,10 @@ export function FulfillmentServiceForm({
                 </header>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="service-loc">服务地点（必填）</Label>
+                        <Label htmlFor="service-loc">
+                            服务地点
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <Input
                             id="service-loc"
                             value={draft.serviceLocation}
@@ -61,7 +64,10 @@ export function FulfillmentServiceForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="service-start">开始时间（必填）</Label>
+                        <Label htmlFor="service-start">
+                            开始时间
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <DateTimeLocalPicker
                             id="service-start"
                             value={draft.startedAt || undefined}
@@ -74,7 +80,10 @@ export function FulfillmentServiceForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="service-ended">结束时间（必填）</Label>
+                        <Label htmlFor="service-ended">
+                            结束时间
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <DateTimeLocalPicker
                             id="service-ended"
                             value={draft.endedAt || undefined}
@@ -121,7 +130,10 @@ export function FulfillmentServiceForm({
                         </div>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="service-note">完成说明（必填）</Label>
+                        <Label htmlFor="service-note">
+                            完成说明
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <Textarea
                             id="service-note"
                             value={draft.completionNote}

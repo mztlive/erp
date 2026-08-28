@@ -49,6 +49,7 @@ export function SalesOrderCreateContractSection({
                         >
                             <FieldLabel htmlFor="contractId">
                                 有效合同
+                                <span className="text-destructive">*</span>
                             </FieldLabel>
                             <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">

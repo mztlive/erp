@@ -119,12 +119,12 @@ export function CreateDraftDialog({
                     }}
                 >
                     <form.AppField name="name">
-                        {(field) => <field.TextField label="审批流程名称" />}
+                        {(field) => <field.TextField label="审批流程名称" required />}
                     </form.AppField>
                     <form.AppField name="draft_source">
                         {(field) => (
                             <Field data-invalid={!field.state.meta.isValid}>
-                                <FieldLabel>草稿来源</FieldLabel>
+                                <FieldLabel>草稿来源<span className="text-destructive">*</span></FieldLabel>
                                 <div className="flex flex-col gap-2">
                                     <Label className="flex items-center gap-2 font-normal">
                                         <input

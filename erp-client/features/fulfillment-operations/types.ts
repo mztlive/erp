@@ -366,10 +366,3 @@ export const FACT_TYPE_LABEL: Record<
  */
 export const NOT_ACCEPTANCE_NOTICE =
     "客户签收不等于验收通过。要等销售在客户验收里登记，这一单才算验收完成。"
-
-/**
- * 记录不可覆盖。
- * 只在确认弹窗的不可逆区出现 —— 那时才是用户真的要下决定的时刻。
- */
-export const CORRECTION_NOTICE =
-    "确认之后这条记录就不能改了。写错了要走冲正、退货或库存调整，不能回来改这一条。"

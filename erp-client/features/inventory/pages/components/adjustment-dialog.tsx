@@ -105,7 +105,12 @@ export function AdjustmentDialog({
                             }}
                         >
                             <div className="grid gap-1.5">
-                                <Label htmlFor="reasonType">原因类型</Label>
+                                <Label htmlFor="reasonType">
+                                    原因类型
+                                    <span className="text-destructive">
+                                        *
+                                    </span>
+                                </Label>
                                 <form.AppField
                                     name="reasonType"
                                     children={(field) => (
@@ -144,6 +149,7 @@ export function AdjustmentDialog({
                                 children={(field) => (
                                     <field.TextField
                                         label={`调整数量（${meta.baseUnit}，正数）`}
+                                        required
                                     />
                                 )}
                             />
@@ -154,6 +160,9 @@ export function AdjustmentDialog({
                                     <div className="space-y-1.5">
                                         <Label htmlFor="adjust-occured-at">
                                             业务发生时间
+                                            <span className="text-destructive">
+                                                *
+                                            </span>
                                         </Label>
                                         <DateTimeLocalPicker
                                             value={
@@ -181,7 +190,10 @@ export function AdjustmentDialog({
                             <form.AppField
                                 name="note"
                                 children={(field) => (
-                                    <field.TextareaField label="原因说明" />
+                                    <field.TextareaField
+                                        label="原因说明"
+                                        required
+                                    />
                                 )}
                             />
 

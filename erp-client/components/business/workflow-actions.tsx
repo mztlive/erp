@@ -114,22 +114,20 @@ function StatusChangeStrip({
     compact?: boolean
 }) {
     return (
-        <section aria-label="状态变化">
-            <div
-                className={cn(
-                    "flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted",
-                    compact
-                        ? "justify-end px-3 py-2.5"
-                        : "justify-center p-4 sm:justify-start",
-                )}
-            >
-                <StatusBadge {...sourceStatus} />
-                <ArrowRightIcon
-                    aria-label="变更为"
-                    className="size-4 text-muted-foreground"
-                />
-                <StatusBadge {...targetStatus} />
-            </div>
+        <section
+            aria-label="状态变化"
+            className={cn(
+                "flex flex-wrap items-center gap-2",
+                !compact &&
+                    "justify-center gap-3 rounded-xl border border-border bg-muted p-4 sm:justify-start",
+            )}
+        >
+            <StatusBadge {...sourceStatus} />
+            <ArrowRightIcon
+                aria-label="变更为"
+                className="size-4 text-muted-foreground"
+            />
+            <StatusBadge {...targetStatus} />
         </section>
     )
 }
@@ -272,24 +270,34 @@ function FormalActionConfirmDialog({
         }
     }, [onConfirm, onConfirmError, setOpen])
 
+    const hasDetails =
+        lockedFields.length > 0 ||
+        effects.length > 0 ||
+        formContent != null ||
+        nextDepartment != null ||
+        irreversibleEffects.length > 0
+
     const header = (
-        <AlertDialogHeader
-            className={
-                layout === "landscape"
-                    ? "place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]"
-                    : undefined
-            }
-        >
-            <AlertDialogMedia className="text-primary">
+        <AlertDialogHeader className="place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]">
+            <AlertDialogMedia className="row-span-2 mb-0 self-start text-primary">
                 <FileCheck2Icon aria-hidden="true" />
             </AlertDialogMedia>
             <AlertDialogTitle>{title ?? `确认${actionLabel}`}</AlertDialogTitle>
             <AlertDialogDescription
                 render={<div />}
-                className={layout === "landscape" ? "text-left" : undefined}
+                className="col-start-2 text-left"
             >
                 {description ?? "请核对状态变化和业务影响后再继续。"}
             </AlertDialogDescription>
+            {layout === "stack" ? (
+                <div className="col-start-2 mt-1">
+                    <StatusChangeStrip
+                        sourceStatus={sourceStatus}
+                        targetStatus={targetStatus}
+                        compact
+                    />
+                </div>
+            ) : null}
         </AlertDialogHeader>
     )
 
@@ -317,44 +325,39 @@ function FormalActionConfirmDialog({
                     header
                 )}
 
-                <div className="flex flex-col gap-4">
-                    {layout === "stack" ? (
-                        <StatusChangeStrip
-                            sourceStatus={sourceStatus}
-                            targetStatus={targetStatus}
+                {hasDetails ? (
+                    <div className="flex flex-col gap-4">
+                        <WorkflowDetailList
+                            title="提交后锁定字段"
+                            icon={LockIcon}
+                            items={lockedFields}
                         />
-                    ) : null}
+                        <WorkflowDetailList
+                            title="本次动作产生的影响"
+                            icon={ListChecksIcon}
+                            items={effects}
+                        />
 
-                    <WorkflowDetailList
-                        title="提交后锁定字段"
-                        icon={LockIcon}
-                        items={lockedFields}
-                    />
-                    <WorkflowDetailList
-                        title="本次动作产生的影响"
-                        icon={ListChecksIcon}
-                        items={effects}
-                    />
+                        {formContent}
 
-                    {formContent}
+                        {nextDepartment != null ? (
+                            <Alert>
+                                <UsersRoundIcon aria-hidden="true" />
+                                <AlertTitle>下一责任部门</AlertTitle>
+                                <AlertDescription>
+                                    {nextDepartment}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
 
-                    {nextDepartment != null ? (
-                        <Alert>
-                            <UsersRoundIcon aria-hidden="true" />
-                            <AlertTitle>下一责任部门</AlertTitle>
-                            <AlertDescription>
-                                {nextDepartment}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    <WorkflowDetailList
-                        title="无法自动撤回的影响"
-                        icon={TriangleAlertIcon}
-                        items={irreversibleEffects}
-                        tone="destructive"
-                    />
-                </div>
+                        <WorkflowDetailList
+                            title="无法自动撤回的影响"
+                            icon={TriangleAlertIcon}
+                            items={irreversibleEffects}
+                            tone="destructive"
+                        />
+                    </div>
+                ) : null}
 
                 {confirmError != null && onConfirmError == null ? (
                     <Alert variant="destructive">

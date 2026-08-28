@@ -96,7 +96,7 @@ export function RoleAssignmentDialog({
                                 !field.state.meta.isValid
                             return (
                                 <Field data-invalid={isInvalid || undefined}>
-                                    <FieldLabel>角色</FieldLabel>
+                                    <FieldLabel>角色<span className="text-destructive">*</span></FieldLabel>
                                     <RoleOptionsPanel
                                         options={roleOptions}
                                         selected={selected}

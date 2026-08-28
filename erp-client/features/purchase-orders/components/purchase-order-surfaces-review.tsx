@@ -126,7 +126,10 @@ export function ReviewSurface({
                 >
                     <p className="text-sm font-medium">驳回</p>
                     <div className="space-y-1.5">
-                        <Label htmlFor="reject-reason">原因</Label>
+                        <Label htmlFor="reject-reason">
+                            原因
+                            <span className="text-destructive">*</span>
+                        </Label>
                         <reviewForm.AppField name="reasonCode">
                             {(field) => (
                                 <OptionCombobox
@@ -156,6 +159,7 @@ export function ReviewSurface({
                         {(field) => (
                             <field.TextareaField
                                 label="说明"
+                                required
                                 placeholder="结构化原因说明"
                                 rows={3}
                             />

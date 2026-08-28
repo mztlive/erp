@@ -79,7 +79,7 @@ export function CreateDraftDialog({
                         name="supplierId"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="supplierId">供应商</Label>
+                                <Label htmlFor="supplierId">供应商<span className="text-destructive">*</span></Label>
                                 <SupplierSearchCombobox
                                     value={field.state.value || undefined}
                                     onValueChange={(id) =>
@@ -94,7 +94,7 @@ export function CreateDraftDialog({
                         name="periodStart"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="periodStart">期间起</Label>
+                                <Label htmlFor="periodStart">期间起<span className="text-destructive">*</span></Label>
                                 <DatePicker
                                     className="w-full"
                                     value={field.state.value || undefined}
@@ -109,7 +109,7 @@ export function CreateDraftDialog({
                         name="periodEnd"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="periodEnd">期间止</Label>
+                                <Label htmlFor="periodEnd">期间止<span className="text-destructive">*</span></Label>
                                 <DatePicker
                                     className="w-full"
                                     value={field.state.value || undefined}

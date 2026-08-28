@@ -41,7 +41,9 @@ export function SupplierEditorBasicSection({
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
-                    <Label htmlFor="supplier-name">名称 *</Label>
+                    <Label htmlFor="supplier-name">
+                        名称<span className="text-destructive">*</span>
+                    </Label>
                     <Input
                         id="supplier-name"
                         value={values.name}
@@ -54,7 +56,8 @@ export function SupplierEditorBasicSection({
                 </FieldShell>
                 <FieldShell>
                     <Label htmlFor="supplier-company">
-                        {masterDataCopy.fCompany} *
+                        {masterDataCopy.fCompany}
+                        <span className="text-destructive">*</span>
                     </Label>
                     <Input
                         id="supplier-company"

@@ -90,7 +90,7 @@ export function UpdateAvailabilityDialog({
                     <form.AppField name="availabilityStatus">
                         {(field) => (
                             <div className="space-y-1.5">
-                                <Label>可供状态 *</Label>
+                                <Label>可供状态<span className="text-destructive">*</span></Label>
                                 <OptionCombobox
                                     value={field.state.value}
                                     onValueChange={(value) =>
@@ -119,7 +119,7 @@ export function UpdateAvailabilityDialog({
                         )}
                     </form.AppField>
                     <form.AppField name="changeReason">
-                        {(field) => <field.TextField label="变更原因 *" />}
+                        {(field) => <field.TextField label="变更原因" required />}
                     </form.AppField>
                     <DialogFooter>
                         <DialogClose

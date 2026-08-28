@@ -356,16 +356,14 @@ function FulfillmentSourceContext({
                 )}
             >
                 {fields.map((field) => (
-                    <div key={field.label} className="bg-card px-3 py-2.5">
+                    <div
+                        key={field.label}
+                        className="bg-card px-3 py-2.5 last:col-end-[-1]"
+                    >
                         <dt className="text-xs text-muted-foreground">
                             {field.label}
                         </dt>
-                        <dd
-                            className={cn(
-                                "mt-1 text-sm font-medium",
-                                field.numeric && "num",
-                            )}
-                        >
+                        <dd className="mt-1 text-sm font-medium">
                             {showSalesOrderLinks &&
                             field.href &&
                             operation.source.salesOrderId ? (

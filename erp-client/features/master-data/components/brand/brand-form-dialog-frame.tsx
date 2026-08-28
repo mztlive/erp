@@ -44,8 +44,14 @@ export function BrandFormDialogFrame({
         AppField: React.ComponentType<{
             name: keyof BrandFormValues
             children: (field: {
-                TextField: React.ComponentType<{ label: string }>
-                TextareaField: React.ComponentType<{ label: string }>
+                TextField: React.ComponentType<{
+                    label: string
+                    required?: boolean
+                }>
+                TextareaField: React.ComponentType<{
+                    label: string
+                    required?: boolean
+                }>
                 handleChange: (value: string) => void
                 state: { value: string }
             }) => React.ReactNode
@@ -103,7 +109,7 @@ export function BrandFormDialogFrame({
                                 <form.AppField
                                     name="name"
                                     children={(field) => (
-                                        <field.TextField label="名称" />
+                                        <field.TextField label="名称" required />
                                     )}
                                 />
                                 <form.AppField
@@ -111,6 +117,7 @@ export function BrandFormDialogFrame({
                                     children={(field) => (
                                         <field.TextField
                                             label={masterDataCopy.fBrandCode}
+                                            required
                                         />
                                     )}
                                 />
@@ -135,6 +142,7 @@ export function BrandFormDialogFrame({
                                 children={(field) => (
                                     <field.TextareaField
                                         label={masterDataCopy.fieldChangeReason}
+                                        required
                                     />
                                 )}
                             />

@@ -67,6 +67,7 @@ export function BankAccountRowsSection({
                                         {(nested) => (
                                             <nested.TextField
                                                 label="户名"
+                                                required
                                                 disabled={Boolean(
                                                     _row.existingId,
                                                 )}
@@ -79,6 +80,7 @@ export function BankAccountRowsSection({
                                         {(nested) => (
                                             <nested.TextField
                                                 label="银行名称"
+                                                required
                                                 disabled={Boolean(
                                                     _row.existingId,
                                                 )}
@@ -103,6 +105,7 @@ export function BankAccountRowsSection({
                                         {(nested) => (
                                             <nested.TextField
                                                 label="账号"
+                                                required
                                                 disabled={Boolean(
                                                     _row.existingId,
                                                 )}

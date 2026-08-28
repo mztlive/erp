@@ -24,8 +24,10 @@ import { FileUpload } from "@/components/ui/file-upload"
 
 type PdfUploadFieldProps = {
     label: string
+    hideLabel?: boolean
     description?: string
     disabled?: boolean
+    required?: boolean
 }
 
 function formatFileSize(size: number): string {
@@ -36,8 +38,10 @@ function formatFileSize(size: number): string {
 /** 绑定 TanStack Form 的单 PDF 上传字段。 */
 export function PdfUploadField({
     label,
+    hideLabel = false,
     description = "仅支持单个 PDF，文件不超过 20 MB。",
     disabled,
+    required,
 }: PdfUploadFieldProps) {
     const field = useFieldContext<File | null>()
     const file = field.state.value
@@ -46,7 +50,12 @@ export function PdfUploadField({
 
     return (
         <Field data-invalid={isInvalid || undefined}>
-            <FieldLabel>{label}</FieldLabel>
+            <FieldLabel className={hideLabel ? "sr-only" : undefined}>
+                {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
+            </FieldLabel>
             {file ? (
                 <AttachmentGroup>
                     <Attachment aria-label={file.name}>

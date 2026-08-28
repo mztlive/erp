@@ -271,13 +271,17 @@ export function VoucherCategoryFormDialog({
                                         label="卡券类目编号"
                                         placeholder="全局唯一，同时作为商品与 SKU 编号"
                                         disabled={isEdit}
+                                        required
                                     />
                                 )}
                             />
                             <form.AppField
                                 name="name"
                                 children={(field) => (
-                                    <field.TextField label="卡券类目名称" />
+                                    <field.TextField
+                                        label="卡券类目名称"
+                                        required
+                                    />
                                 )}
                             />
                             <form.AppField
@@ -285,6 +289,7 @@ export function VoucherCategoryFormDialog({
                                 children={(field) => (
                                     <field.TextareaField
                                         label={masterDataCopy.fDescription}
+                                        required
                                     />
                                 )}
                             />

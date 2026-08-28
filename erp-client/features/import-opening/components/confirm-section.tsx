@@ -94,6 +94,7 @@ function ReturnForFixDialog({
                                 label="退回原因"
                                 options={RETURN_REASON_OPTIONS}
                                 allowClear={false}
+                                required
                             />
                         )}
                     />
@@ -104,6 +105,7 @@ function ReturnForFixDialog({
                                 label="修复说明"
                                 rows={4}
                                 placeholder="说明需要修复的数据、口径或依据"
+                                required
                             />
                         )}
                     />

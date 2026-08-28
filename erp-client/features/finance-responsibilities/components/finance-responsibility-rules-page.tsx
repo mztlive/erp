@@ -181,6 +181,7 @@ function RuleDialog({
                                         label: FINANCE_OPERATION_LABEL[value],
                                     }))}
                                     allowClear={false}
+                                    required
                                     onValueChange={() => {
                                         form.setFieldValue("counterpartyId", "")
                                         form.setFieldValue("ownerUserId", "")
@@ -198,6 +199,7 @@ function RuleDialog({
                                     }))}
                                     description="每项业务最多启用一条默认规则；指定往来方可覆盖默认负责人。"
                                     allowClear={false}
+                                    required
                                     onValueChange={() =>
                                         form.setFieldValue("counterpartyId", "")
                                     }
@@ -221,6 +223,7 @@ function RuleDialog({
                                                         "SUPPLIER_PAYMENT"
                                                             ? "供应商"
                                                             : "客户"}
+                                                        <span className="text-destructive">*</span>
                                                     </FieldLabel>
                                                     {operation ===
                                                     "SUPPLIER_PAYMENT" ? (
@@ -274,6 +277,7 @@ function RuleDialog({
                                                 placeholder="选择具备完整执行权限的账号"
                                                 emptyLabel="没有符合资格的负责人，请先配置角色权限"
                                                 allowClear={false}
+                                                required
                                             />
                                         )}
                                     </form.AppField>

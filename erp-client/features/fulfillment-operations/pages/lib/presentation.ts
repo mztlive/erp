@@ -3,14 +3,8 @@
  * 全部为无副作用函数，便于单独验证。
  */
 
-import {
-    displayText,
-    formatRemainingLines,
-} from "@/features/fulfillment-operations/lib/readable-label"
-import type {
-    FulfillmentOperation,
-    FulfillmentOperationType,
-} from "@/features/fulfillment-operations/types"
+import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
+import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
 
 export type ResponsibilityStatus =
     | "blocked"
@@ -56,17 +50,16 @@ export type SourceContextField = Readonly<{
     label: string
     value: string
     href?: string
-    numeric?: boolean
 }>
 
 /**
  * 作业面来源摘要。空值和内部 id 不上屏，避免六宫格里一排破折号。
+ * 待处理数量不在这里展示：明细表单里已经按行写了还剩多少。
  */
 export function sourceContextFields(
     operation: FulfillmentOperation,
     salesOrderHref?: string,
 ): readonly SourceContextField[] {
-    const remaining = formatRemainingLines(operation.lines)
     const warehouse = displayText(operation.source.warehouseLabel)
     const fields: SourceContextField[] = []
     const salesOrderNo = displayText(operation.source.salesOrderNo)
@@ -92,27 +85,7 @@ export function sourceContextFields(
     ) {
         fields.push({ label: "仓库", value: warehouse })
     }
-    if (remaining) {
-        fields.push({
-            label: remainingLabel(operation.operationType),
-            value: remaining,
-            numeric: true,
-        })
-    }
     return fields
-}
-
-function remainingLabel(operationType: FulfillmentOperationType): string {
-    switch (operationType) {
-        case "RECEIPT":
-            return "待入库"
-        case "SERVICE":
-            return "待服务"
-        case "ELECTRONIC":
-            return "待交付"
-        default:
-            return "还剩多少"
-    }
 }
 
 export function sourceReturnHref(

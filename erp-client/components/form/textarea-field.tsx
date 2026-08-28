@@ -13,9 +13,11 @@ import { cn } from "@/lib/utils"
 
 type TextareaFieldProps = {
     label: string
+    hideLabel?: boolean
     description?: string
     placeholder?: string
     disabled?: boolean
+    required?: boolean
     rows?: number
     maxLength?: number
     className?: string
@@ -28,9 +30,11 @@ type TextareaFieldProps = {
  */
 export function TextareaField({
     label,
+    hideLabel = false,
     description,
     placeholder,
     disabled,
+    required,
     rows,
     maxLength,
     className,
@@ -50,7 +54,15 @@ export function TextareaField({
 
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
-            <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+            <FieldLabel
+                htmlFor={field.name}
+                className={hideLabel ? "sr-only" : undefined}
+            >
+                {label}
+                {required ? (
+                    <span className="text-destructive">*</span>
+                ) : null}
+            </FieldLabel>
             <Textarea
                 id={field.name}
                 name={field.name}

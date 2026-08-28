@@ -65,7 +65,7 @@ export function MallSyncIncrementalDialog({
                         <form.AppField
                             name="reason"
                             children={(field) => (
-                                <field.TextField label="触发理由" />
+                                <field.TextField label="触发理由" required />
                             )}
                         />
                         <DialogFooter>
@@ -136,13 +136,13 @@ export function MallSyncPullDialog({
                         <form.AppField
                             name="externalOrderNo"
                             children={(field) => (
-                                <field.TextField label="商城销售单号" />
+                                <field.TextField label="商城销售单号" required />
                             )}
                         />
                         <form.AppField
                             name="reason"
                             children={(field) => (
-                                <field.TextField label="补拉理由" />
+                                <field.TextField label="补拉理由" required />
                             )}
                         />
                         <DialogFooter>

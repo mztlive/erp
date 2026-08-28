@@ -133,6 +133,7 @@ export function DefinitionEditor({
                     {(field) => (
                         <field.TextField
                             label="审批流程名称"
+                            required
                             disabled={readOnly}
                             placeholder="例如：销售单审批"
                             className="max-w-xl"
