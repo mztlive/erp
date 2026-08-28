@@ -18,6 +18,7 @@ import { useAcceptanceWorkspaceUrlState } from "@/features/sales-orders/hooks/ac
 import { useAcceptanceSelection } from "@/features/sales-orders/hooks/use-acceptance-selection"
 import { useAcceptanceForm } from "@/features/sales-orders/hooks/use-acceptance-form"
 import { useAcceptanceMutations } from "@/features/sales-orders/hooks/use-acceptance-mutations"
+import type { WorkItemProjection } from "@/features/work-items/types"
 import {
     AcceptanceBlockedState,
     AcceptanceNoFactsState,
@@ -32,8 +33,10 @@ import { AcceptanceSummaryBar } from "@/features/sales-orders/components/accepta
 
 export function AcceptanceWorkspace({
     salesOrderId,
+    workItem,
 }: {
     salesOrderId: string
+    workItem?: WorkItemProjection
 }) {
     const router = useRouter()
     const { workItemId, remainingOnly, setRemainingOnly } =
@@ -63,12 +66,14 @@ export function AcceptanceWorkspace({
         queryKey: salesOrderKeys.acceptance(salesOrderId, {
             remainingOnly,
             workItemId,
+            expectedTaskVersion: workItem?.taskVersion,
         }),
         queryFn: () =>
             fetchCustomerAcceptanceWorkspace({
                 salesOrderId,
                 remainingOnly,
                 workItemId,
+                workItem,
             }),
     })
 
@@ -342,6 +347,8 @@ export function AcceptanceWorkspace({
                         selection.lineResults,
                     )
                     await postMutation.mutateAsync({
+                        workItemId: view.workItem?.id,
+                        expectedTaskVersion: view.workItem?.expectedTaskVersion,
                         salesOrderId,
                         acceptanceDraftId:
                             view.draft?.acceptanceDraftId ??

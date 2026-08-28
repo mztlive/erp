@@ -29,7 +29,11 @@ export const salesOrderKeys = {
         [...salesOrderKeys.all, "acceptance", id] as const,
     acceptance: (
         id: string,
-        filters: { remainingOnly?: boolean; workItemId?: string | null },
+        filters: {
+            remainingOnly?: boolean
+            workItemId?: string | null
+            expectedTaskVersion?: string
+        },
     ) => [...salesOrderKeys.acceptanceRoot(id), filters] as const,
     acceptanceEligibility: (id: string) =>
         [...salesOrderKeys.acceptanceRoot(id), "eligibility"] as const,

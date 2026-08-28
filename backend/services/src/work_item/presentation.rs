@@ -72,6 +72,9 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
         WorkItemType::FulfillmentOperation => "核对来源、数量和履约信息后，提交本次确认。",
+        WorkItemType::CustomerAcceptanceRegistration => {
+            "核对客户签收、短少或拒收结果后，登记并提交客户验收。"
+        }
         WorkItemType::SupplierPaymentExecution => "核对收款账户、应付金额和银行回单后，登记付款并完成核销。",
         WorkItemType::SalesInvoiceExecution => "核对本页待开金额后，登记销项发票并完成分配。",
         WorkItemType::ImportBusinessConfirmation => {
@@ -177,6 +180,8 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "receivable_invoice_required" => "销售应收已确认，需要安排销项开票",
         "invoiceable_reopened_by_red_invoice" => "销项发票已红冲，需要重新安排开票",
         "invoiceable_reopened_by_sales_change" => "销售变更增加了可开票金额，需要继续安排开票",
+        "customer_acceptance_required" => "发货或交付已完成，需要销售登记客户验收",
+        "customer_acceptance_reopened_by_reversal" => "客户验收已冲正，需要销售重新登记验收结果",
         other if other.ends_with("_active") => "当前审批步骤等待处理",
         _ => return None,
     })
@@ -186,6 +191,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "销售单已生效，需要分配供给",
         WorkItemType::FulfillmentOperation => "当前履约单据等待确认",
+        WorkItemType::CustomerAcceptanceRegistration => "发货或交付已完成，需要登记客户验收",
         WorkItemType::SupplierPaymentExecution => "采购应付已确认，需要安排付款",
         WorkItemType::SalesInvoiceExecution => "销售应收已确认，需要安排销项开票",
         WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
@@ -209,6 +215,7 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
         WorkItemType::FulfillmentOperation => "不确认则本次收货、发货或交付不能形成正式事实",
+        WorkItemType::CustomerAcceptanceRegistration => "不登记则销售明细不能完成履约",
         WorkItemType::SupplierPaymentExecution => "不登记则应付无法完成付款核销",
         WorkItemType::SalesInvoiceExecution => "不登记则销售应收无法完成销项开票",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",
@@ -330,6 +337,13 @@ mod tests {
             reason_label(Some("客户资料缺失"), WorkItemType::ImportBusinessConfirmation),
             "客户资料缺失"
         );
+        assert_eq!(
+            reason_label(
+                Some("CUSTOMER_ACCEPTANCE_REOPENED_BY_REVERSAL"),
+                WorkItemType::CustomerAcceptanceRegistration
+            ),
+            "客户验收已冲正，需要销售重新登记验收结果"
+        );
     }
 
     #[test]
@@ -390,6 +404,10 @@ mod tests {
         assert_eq!(
             next_action_hint(WorkItemType::FulfillmentOperation),
             "核对来源、数量和履约信息后，提交本次确认。"
+        );
+        assert_eq!(
+            next_action_hint(WorkItemType::CustomerAcceptanceRegistration),
+            "核对客户签收、短少或拒收结果后，登记并提交客户验收。"
         );
         assert_eq!(
             next_action_hint(WorkItemType::SalesInvoiceExecution),

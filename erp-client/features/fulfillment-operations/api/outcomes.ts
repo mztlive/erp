@@ -124,7 +124,8 @@ export function formalFromElectronic(
         factId: posted.id,
         factNo: posted.fulfillment_no,
         formalStatus: failed ? "FAILED" : "CONFIRMED",
-        occurredAt: secsToIso(posted.occurred_at) || draft.occurredAt || nowIso(),
+        occurredAt:
+            secsToIso(posted.occurred_at) || draft.occurredAt || nowIso(),
         operationType: "ELECTRONIC",
         inventoryDelta: [],
         reservationDelta: [],
@@ -154,7 +155,7 @@ export function formalFromService(
     operationId: string,
 ): FulfillmentFormalOutcome {
     const posted = stripServiceFulfillmentApprovalField(service)
-    const failed = posted.result === "FAILED"
+    const failed = posted.result === "FAILURE"
     return {
         kind: "POSTED",
         operationId,
@@ -162,7 +163,8 @@ export function formalFromService(
         factId: posted.id,
         factNo: posted.fulfillment_no,
         formalStatus: failed ? "FAILED" : "CONFIRMED",
-        occurredAt: secsToIso(posted.occurred_at) || draft.startedAt || nowIso(),
+        occurredAt:
+            secsToIso(posted.occurred_at) || draft.startedAt || nowIso(),
         operationType: "SERVICE",
         inventoryDelta: [],
         reservationDelta: [],

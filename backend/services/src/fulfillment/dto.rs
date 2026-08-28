@@ -603,6 +603,35 @@ pub struct CreateServiceFulfillmentRequest {
     pub evidence_attachment_id: Option<FileAssetId>,
 }
 
+/// 确认线下服务履约的原子命令。
+///
+/// 采购审核只生成占位草稿；确认时必须写入地点、时间窗、完成说明、数量和
+/// 图片凭证。`evidence_attachment_id` 可以是已登记资产，或本次 multipart
+/// 的 `pending-file:` 临时引用。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmServiceFulfillmentRequest {
+    /// 期望的服务履约记录版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 履约结果。
+    pub result: FulfillmentResult,
+    /// 完成说明。
+    #[validate(custom(function = "non_blank", message = "完成说明不能为空"))]
+    pub completion_note: String,
+    /// 服务地点（不透明值，由边界传入）。
+    #[validate(custom(function = "non_blank", message = "服务地点不能为空"))]
+    pub service_location: String,
+    /// 服务开始时间（秒级时间戳）。
+    pub service_started_at: i64,
+    /// 服务结束时间（秒级时间戳）。
+    pub service_ended_at: i64,
+    /// 本次完成数量。
+    pub quantity: Quantity,
+    /// 现场图片凭证。
+    pub evidence_attachment_id: FileAssetId,
+}
+
 /// 线下服务履约记录列表视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ServiceFulfillmentView {
@@ -736,6 +765,10 @@ pub struct CreateCustomerAcceptanceRequest {
 /// 客户验收过账请求（携带逐行分配；通过/短少/拒收数量以草稿行为准）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct PostCustomerAcceptanceRequest {
+    /// 从统一工作台进入时携带的客户验收任务主键；与期望任务版本同时提供。
+    pub work_item_id: Option<String>,
+    /// 从统一工作台进入时携带的任务乐观锁版本；与任务主键同时提供。
+    pub expected_task_version: Option<u64>,
     /// 逐行对履约事实的分配（行内合计必须等于该行通过数量）。
     #[validate(length(min = 1, max = 200, message = "验收行数必须在1-200之间"))]
     pub lines: Vec<PostAcceptanceLineInput>,
@@ -747,6 +780,10 @@ pub struct PostCustomerAcceptanceRequest {
 /// 草稿创建或替换、分配校验与写入、过账、销售单履约进度刷新和审计。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CommitCustomerAcceptanceRequest {
+    /// 从统一工作台进入时携带的客户验收任务主键；与期望任务版本同时提供。
+    pub work_item_id: Option<String>,
+    /// 从统一工作台进入时携带的任务乐观锁版本；与任务主键同时提供。
+    pub expected_task_version: Option<u64>,
     /// 已保存草稿主键；为空时在事务内新建草稿。
     pub acceptance_id: Option<String>,
     /// 已保存草稿的期望乐观锁版本；提交已有草稿时必填。

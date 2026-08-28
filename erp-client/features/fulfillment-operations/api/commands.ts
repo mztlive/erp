@@ -3,7 +3,7 @@
  * 直接对接到各领域强类型命令；不得用客户端责任状态补足缺失的任务合同。
  */
 
-import { apiGet, apiPost, apiPut } from "@/lib/api"
+import { apiGet, apiPost, apiPostForm, apiPut } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
 import type {
     FormalActionResponse,
@@ -13,9 +13,11 @@ import type {
 } from "@/features/fulfillment-operations/types"
 import {
     isApiError,
+    isoToUnixSecs,
     nowIso,
     secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
+import { SERVICE_EVIDENCE_PENDING_REFERENCE } from "@/features/fulfillment-operations/types"
 import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/lib/delivery-no-approval"
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
@@ -179,15 +181,58 @@ export async function postFulfillmentOperation(
                 message: "服务明细不能为空",
             }
         }
+        const startedAt = isoToUnixSecs(draft.startedAt)
+        const endedAt = isoToUnixSecs(draft.endedAt)
+        if (startedAt == null || endedAt == null) {
+            return {
+                status: "failed",
+                code: "VALIDATION_BLOCKED",
+                message: "开始与结束时间都要填",
+            }
+        }
+        if (draft.result !== "SUCCESS" && draft.result !== "FAILURE") {
+            return {
+                status: "failed",
+                code: "VALIDATION_BLOCKED",
+                message: "请选择成功或失败",
+            }
+        }
+        const evidenceAttachmentId = draft.evidenceFile
+            ? SERVICE_EVIDENCE_PENDING_REFERENCE
+            : draft.evidenceAttachmentId.trim()
+        if (!evidenceAttachmentId) {
+            return {
+                status: "failed",
+                code: "VALIDATION_BLOCKED",
+                message: "请上传现场图片凭证",
+            }
+        }
+        const form = new FormData()
+        form.append(
+            "command",
+            JSON.stringify({
+                version: input.expectedDocumentVersion,
+                result: draft.result,
+                completion_note: draft.completionNote.trim(),
+                service_location: draft.serviceLocation.trim(),
+                service_started_at: startedAt,
+                service_ended_at: endedAt,
+                quantity: line.quantity,
+                evidence_attachment_id: evidenceAttachmentId,
+            }),
+        )
+        if (draft.evidenceFile) {
+            form.append(
+                SERVICE_EVIDENCE_PENDING_REFERENCE,
+                draft.evidenceFile,
+                draft.evidenceFile.name,
+            )
+        }
         // ServiceFulfillment 为 NO_APPROVAL，确认后丢弃误带的审批绑定。
         const confirmed = stripServiceFulfillmentApprovalField(
-            await apiPost<BackendServiceFulfillment>(
+            await apiPostForm<BackendServiceFulfillment>(
                 `/admin/service-fulfillments/${encodeURIComponent(input.operationId)}/confirm`,
-                {
-                    version: input.expectedDocumentVersion,
-                    expected_source_version: input.expectedSourceVersion,
-                    idempotency_key: input.idempotencyKey,
-                },
+                form,
             ),
         )
         return {

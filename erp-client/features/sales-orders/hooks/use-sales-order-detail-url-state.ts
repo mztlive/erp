@@ -8,6 +8,15 @@ import type {
     WorkSectionId,
 } from "@/features/sales-orders/lib/sales-order-detail-model"
 
+/** 判断切换销售单分区时是否保留当前任务上下文。 */
+export const shouldRetainSalesOrderWorkItemId = (
+    next: NavSectionId | WorkSectionId | "versions",
+    isCustomerAcceptanceTask: boolean,
+): boolean =>
+    next === "approval" ||
+    next === "change-review" ||
+    (next === "acceptance" && isCustomerAcceptanceTask)
+
 /**
  * 详情页 URL 参数（returnTo / from / mode / workItemId / queueContextId）
  * 与切片导航（section/mode 的 replace 更新）的单一来源。
@@ -30,20 +39,27 @@ export function useSalesOrderDetailUrlState({
             : "/workspace/tasks")
 
     const selectSection = React.useCallback(
-        (next: NavSectionId | WorkSectionId | "versions") => {
+        (
+            next: NavSectionId | WorkSectionId | "versions",
+            isCustomerAcceptanceTask = false,
+        ) => {
             const params = new URLSearchParams()
             params.set("section", next)
             if (returnTo) params.set("returnTo", returnTo)
             if (fromWorkspace) params.set("from", fromWorkspace)
             const workItemId = searchParams.get("workItemId")
-            if (
+            const retainWorkItem = Boolean(
                 workItemId &&
-                (next === "approval" || next === "change-review")
-            ) {
+                shouldRetainSalesOrderWorkItemId(
+                    next,
+                    isCustomerAcceptanceTask,
+                ),
+            )
+            if (workItemId && retainWorkItem) {
                 params.set("workItemId", workItemId)
             }
             const queueContextId = searchParams.get("queueContextId")
-            if (queueContextId && workItemId) {
+            if (queueContextId && retainWorkItem) {
                 params.set("queueContextId", queueContextId)
             }
             const qs = params.toString()

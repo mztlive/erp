@@ -18,13 +18,17 @@
 //! `(source_document_id, source_line_id, movement_type)` 唯一索引 + 验收
 //! `Draft → Posted` 状态机三重防护，重复过账返回 409，不产生第二条正式事实。
 
+use std::sync::Arc;
+
 use mongodb::Database;
 
 use crate::iam::{self, SharedRbacService};
+use crate::party::SensitiveDataCodec;
 
 mod acceptance_eligibility;
 mod customer_acceptance;
 mod customer_acceptance_posting;
+mod customer_acceptance_task;
 mod delivery;
 mod delivery_posting;
 pub(crate) mod document_number;
@@ -34,30 +38,34 @@ mod purchase_context;
 mod purchase_receipt;
 mod purchase_receipt_posting;
 mod service_fulfillment;
+mod service_fulfillment_confirm;
 pub(crate) mod task;
 
 pub use self::dto::{
     AcceptanceAllocationInput, AcceptanceAllocationView, AcceptanceEligibilityView, AcceptanceLineInput,
     AcceptanceSalesLineGroupView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
-    CreateCustomerAcceptanceRequest, CreateDeliveryRequest, CreateElectronicDeliveryRequest,
-    CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView,
-    CustomerAcceptanceLineView, CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView,
-    DeliveryLineInput, DeliveryLineView, DeliveryListParams, DeliveryView, ElectronicDeliveryListParams,
-    ElectronicDeliveryView, EligibleFulfillmentFactView, PageView, PostAcceptanceLineInput,
-    PostCustomerAcceptanceRequest, PostDeliveryRequest, PostPurchaseReceiptRequest,
-    PurchaseReceiptDetailView, PurchaseReceiptLineInput, PurchaseReceiptLineView, PurchaseReceiptListParams,
-    PurchaseReceiptView, ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams,
-    ServiceFulfillmentView, UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
+    ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
+    CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
+    CustomerAcceptanceDetailView, CustomerAcceptanceLineView, CustomerAcceptanceListParams,
+    CustomerAcceptanceView, DeliveryDetailView, DeliveryLineInput, DeliveryLineView, DeliveryListParams,
+    DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView, EligibleFulfillmentFactView,
+    PageView, PostAcceptanceLineInput, PostCustomerAcceptanceRequest, PostDeliveryRequest,
+    PostPurchaseReceiptRequest, PurchaseReceiptDetailView, PurchaseReceiptLineInput, PurchaseReceiptLineView,
+    PurchaseReceiptListParams, PurchaseReceiptView, ReverseCustomerAcceptanceRequest,
+    ServiceFulfillmentListParams, ServiceFulfillmentView, UpdateDeliveryRequest,
+    UpdatePurchaseReceiptRequest,
 };
 
 /// 履约服务。
 ///
 /// 提供采购入库、发货（仓发/直发）、电子交付、服务履约、客户验收的
 /// 查询与过账编排；`fingerprint_key` 用于对履约对象快照计算查询指纹
-/// （§4.5.5，带密钥 HMAC，密钥不持久化）。
+/// （§4.5.5，带密钥 HMAC，密钥不持久化），`sensitive_data` 用于在服务端
+/// 加密现场地址等敏感输入。
 pub struct FulfillmentService {
     db: Database,
     fingerprint_key: Vec<u8>,
+    sensitive_data: Arc<SensitiveDataCodec>,
     rbac: SharedRbacService,
 }
 
@@ -67,14 +75,16 @@ impl FulfillmentService {
     /// # 参数
     /// * `db` - 数据库实例
     /// * `fingerprint_key` - 履约对象快照查询指纹密钥（取 `app.secret` 字节）
+    /// * `sensitive_data` - 启动期创建并共享的敏感数据编解码器
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database, fingerprint_key: Vec<u8>) -> Self {
+    pub fn new(db: Database, fingerprint_key: Vec<u8>, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
         let rbac = iam::shared_rbac_service(db.clone());
         Self {
             db,
             fingerprint_key,
+            sensitive_data,
             rbac,
         }
     }

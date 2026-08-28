@@ -14,6 +14,7 @@ import {
     FACT_TYPE_LABEL,
     FORMAL_STATUS_LABEL,
     RESULT_LABEL,
+    SERVICE_RESULT_LABEL,
 } from "@/features/fulfillment-operations/types"
 
 export function cloneDraft(draft: FulfillmentDraft): FulfillmentDraft {
@@ -192,11 +193,11 @@ export function clientValidation(
         })
     }
     if (draft.type === "SERVICE") {
-        if (!draft.result) {
+        if (draft.result !== "SUCCESS" && draft.result !== "FAILURE") {
             issues.push({
                 id: "svc-result",
                 label: "履约结果",
-                message: "请选择履约结果",
+                message: "请选择成功或失败",
                 targetId: "svc-result",
             })
         }
@@ -225,7 +226,7 @@ export function clientValidation(
                 id: "svc-time",
                 label: "服务时间",
                 message: "结束不得早于开始",
-                targetId: "service-ended",
+                targetId: "service-start",
             })
         }
         if (
@@ -238,6 +239,36 @@ export function clientValidation(
                 message: "至少 4 个字",
                 targetId: "service-note",
             })
+        }
+        if (!draft.evidenceFile && !draft.evidenceAttachmentId.trim()) {
+            issues.push({
+                id: "svc-evidence",
+                label: "图片凭证",
+                message: "请上传现场图片凭证",
+                targetId: "service-evidence",
+            })
+        } else if (draft.evidenceFile) {
+            const type = draft.evidenceFile.type
+            if (
+                type !== "image/jpeg" &&
+                type !== "image/png" &&
+                type !== "image/webp"
+            ) {
+                issues.push({
+                    id: "svc-evidence-type",
+                    label: "图片凭证",
+                    message: "仅支持 JPG、PNG 或 WebP",
+                    targetId: "service-evidence",
+                })
+            }
+            if (draft.evidenceFile.size > 5 * 1024 * 1024) {
+                issues.push({
+                    id: "svc-evidence-size",
+                    label: "图片凭证",
+                    message: "图片不能超过 5 MB",
+                    targetId: "service-evidence",
+                })
+            }
         }
         draft.lines.forEach((line, i) => {
             const qty = Number(line.quantity)
@@ -333,5 +364,5 @@ export function confirmDescription(draft: FulfillmentDraft): string {
     if (draft.type === "ELECTRONIC") {
         return `交付结果：${RESULT_LABEL[draft.result]}。不动库存。${suffix}`
     }
-    return `服务结果：${RESULT_LABEL[draft.result]}。不动库存。${suffix}`
+    return `服务结果：${SERVICE_RESULT_LABEL[draft.result || "SUCCESS"]}。已附现场图片凭证，不动库存。${suffix}`
 }

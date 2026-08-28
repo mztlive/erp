@@ -7,6 +7,7 @@ type HandlerFamily =
 
 type HandlerWorkspaceId =
     | "W01"
+    | "W06"
     | "W05"
     | "W08"
     | "W10"
@@ -39,6 +40,12 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         family: "fulfillment",
         destinationWorkspaceId: "W01",
         baseHref: "/workspace",
+    },
+    customer_acceptance_registration: {
+        workItemTypeLabel: "客户验收登记",
+        family: "fulfillment",
+        destinationWorkspaceId: "W06",
+        baseHref: "/sales/orders",
     },
     procurement_order_creation: {
         workItemTypeLabel: "待供给分配",
@@ -343,6 +350,21 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
                 family: "fulfillment",
                 currentWorkItemId: workItemId,
             }),
+        )
+    }
+
+    if (item.handlerKey === "customer_acceptance_registration") {
+        const params = new URLSearchParams({
+            section: "acceptance",
+            from: "W01",
+            workItemId,
+            returnTo: `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`,
+        })
+        const queueContextId = requiredValue(item.queueContextId)
+        if (queueContextId) params.set("queueContextId", queueContextId)
+        return withParams(
+            `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
+            params,
         )
     }
 

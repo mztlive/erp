@@ -87,6 +87,8 @@ export async function postCustomerAcceptanceWorkspace(
             acceptance: BackendAcceptanceHeader
             remaining_eligibility: BackendEligibilityView
         }>("/admin/customer-acceptances/commit", {
+            work_item_id: input.workItemId ?? null,
+            expected_task_version: input.expectedTaskVersion ?? null,
             acceptance_id: hasServerDraft ? input.acceptanceDraftId : null,
             expected_acceptance_version: hasServerDraft
                 ? input.expectedDraftVersion

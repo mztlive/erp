@@ -99,7 +99,10 @@ impl FulfillmentService {
             .db
             .fulfillment()
             .list_confirmed_service_fulfillments(&sales_order_line_ids, &mut NoTransaction)
-            .await?;
+            .await?
+            .into_iter()
+            .filter(ServiceFulfillment::is_acceptance_eligible)
+            .collect::<Vec<_>>();
         let delivery_fact_ids: Vec<String> = delivery_lines.iter().map(|line| line.base.id.clone()).collect();
         let electronic_fact_ids: Vec<String> =
             electronic.iter().map(|record| record.base.id.clone()).collect();

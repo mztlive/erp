@@ -1,7 +1,8 @@
 "use client"
 
-import { DateTimeLocalPicker } from "@/components/ui/date-picker"
-import { Button } from "@/components/ui/button"
+import { OptionCombobox } from "@/components/business"
+import { DateTimeRangeLocalPicker } from "@/components/ui/date-picker"
+import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -11,13 +12,16 @@ import {
 } from "@/features/fulfillment-operations/lib/readable-label"
 import type {
     FulfillmentDraft,
-    FulfillmentResultCode,
     FulfillmentOperation,
+    ServiceFulfillmentResultCode,
 } from "@/features/fulfillment-operations/types"
-import { RESULT_OPTIONS } from "@/features/fulfillment-operations/types"
+import {
+    SERVICE_EVIDENCE_PENDING_REFERENCE,
+    SERVICE_RESULT_OPTIONS,
+} from "@/features/fulfillment-operations/types"
 
 /**
- * 线下服务表单。先登记现场情况，再确认各服务项目数量。
+ * 线下服务表单。先选择成功或失败，再登记现场、凭证和完成数量。
  *
  * @param operation 服务履约工作单。
  * @param draft 线下服务草稿。
@@ -35,122 +39,9 @@ export function FulfillmentServiceForm({
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
 }) {
+    const failed = draft.result === "FAILURE"
     return (
-        <div className="space-y-5" aria-label="线下服务表单">
-            <section className="space-y-3">
-                <header className="space-y-1">
-                    <h3 className="text-sm font-semibold">服务情况</h3>
-                    <p className="text-xs text-muted-foreground">
-                        到客户现场完成安装、调试或培训，不走仓库。
-                    </p>
-                </header>
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="service-loc">
-                            服务地点
-                            <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                            id="service-loc"
-                            value={draft.serviceLocation}
-                            disabled={disabled}
-                            placeholder="客户现场或安装地址"
-                            onChange={(e) =>
-                                onChange({
-                                    ...draft,
-                                    serviceLocation: e.target.value,
-                                })
-                            }
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="service-start">
-                            开始时间
-                            <span className="text-destructive">*</span>
-                        </Label>
-                        <DateTimeLocalPicker
-                            id="service-start"
-                            value={draft.startedAt || undefined}
-                            disabled={disabled}
-                            showTimeZone={false}
-                            placeholder="选择开始时间"
-                            onValueChange={(next) =>
-                                onChange({ ...draft, startedAt: next ?? "" })
-                            }
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="service-ended">
-                            结束时间
-                            <span className="text-destructive">*</span>
-                        </Label>
-                        <DateTimeLocalPicker
-                            id="service-ended"
-                            value={draft.endedAt || undefined}
-                            disabled={disabled}
-                            showTimeZone={false}
-                            placeholder="选择结束时间"
-                            onValueChange={(next) =>
-                                onChange({ ...draft, endedAt: next ?? "" })
-                            }
-                        />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                        <Label id="svc-result-label">履约结果</Label>
-                        <div
-                            id="svc-result"
-                            tabIndex={-1}
-                            role="radiogroup"
-                            aria-labelledby="svc-result-label"
-                            className="grid grid-cols-3 gap-2 outline-none"
-                        >
-                            {RESULT_OPTIONS.map((option) => (
-                                <Button
-                                    key={option.value}
-                                    type="button"
-                                    size="sm"
-                                    variant={
-                                        draft.result === option.value
-                                            ? "default"
-                                            : "outline"
-                                    }
-                                    disabled={disabled}
-                                    aria-pressed={draft.result === option.value}
-                                    className="rounded-lg shadow-none"
-                                    onClick={() =>
-                                        onChange({
-                                            ...draft,
-                                            result: option.value as FulfillmentResultCode,
-                                        })
-                                    }
-                                >
-                                    {option.label}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="service-note">
-                            完成说明
-                            <span className="text-destructive">*</span>
-                        </Label>
-                        <Textarea
-                            id="service-note"
-                            value={draft.completionNote}
-                            disabled={disabled}
-                            rows={3}
-                            placeholder="例如：已上门安装并完成现场验收"
-                            onChange={(e) =>
-                                onChange({
-                                    ...draft,
-                                    completionNote: e.target.value,
-                                })
-                            }
-                        />
-                    </div>
-                </div>
-            </section>
-
+        <div className="space-y-6" aria-label="线下服务表单">
             <section className="space-y-3">
                 <h3 className="text-sm font-semibold">服务项目</h3>
                 {draft.lines.map((line, i) => {
@@ -205,6 +96,134 @@ export function FulfillmentServiceForm({
                         </div>
                     )
                 })}
+            </section>
+            <section className="space-y-3">
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="svc-result">
+                            履约结果
+                            <span className="text-destructive">*</span>
+                        </Label>
+                        <OptionCombobox
+                            id="svc-result"
+                            value={draft.result || null}
+                            onValueChange={(next) =>
+                                onChange({
+                                    ...draft,
+                                    result: (next ?? "") as
+                                        | ServiceFulfillmentResultCode
+                                        | "",
+                                })
+                            }
+                            options={SERVICE_RESULT_OPTIONS}
+                            allowClear={false}
+                            required
+                            disabled={disabled}
+                            aria-label="履约结果"
+                            placeholder="请选择成功或失败"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="service-start">
+                            服务时间
+                            <span className="text-destructive">*</span>
+                        </Label>
+                        <DateTimeRangeLocalPicker
+                            id="service-start"
+                            value={{
+                                from: draft.startedAt || undefined,
+                                to: draft.endedAt || undefined,
+                            }}
+                            disabled={disabled}
+                            showTimeZone={false}
+                            placeholder="选择开始到结束时间"
+                            onValueChange={(next) =>
+                                onChange({
+                                    ...draft,
+                                    startedAt: next?.from ?? "",
+                                    endedAt: next?.to ?? "",
+                                })
+                            }
+                        />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                        <Label htmlFor="service-loc">
+                            服务地点
+                            <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                            id="service-loc"
+                            value={draft.serviceLocation}
+                            disabled={disabled}
+                            placeholder="客户现场或安装地址"
+                            onChange={(e) =>
+                                onChange({
+                                    ...draft,
+                                    serviceLocation: e.target.value,
+                                })
+                            }
+                        />
+                    </div>
+                </div>
+            </section>
+
+            <section className="space-y-3">
+                <div className="space-y-1.5" id="service-evidence">
+                    <Label>
+                        图片凭证
+                        <span className="text-destructive">*</span>
+                    </Label>
+                    <FileUpload
+                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                        multiple={false}
+                        disabled={disabled}
+                        density="compact"
+                        label="上传现场图片"
+                        description="支持 JPG、PNG、WebP，单张不超过 5 MB"
+                        previewSelectedImage
+                        selectedImageFile={draft.evidenceFile ?? null}
+                        onFilesSelected={(files) => {
+                            const file = files[0]
+                            onChange({
+                                ...draft,
+                                evidenceFile: file,
+                                evidenceAttachmentId: file
+                                    ? SERVICE_EVIDENCE_PENDING_REFERENCE
+                                    : "",
+                            })
+                        }}
+                        onPreviewRemove={() =>
+                            onChange({
+                                ...draft,
+                                evidenceFile: undefined,
+                                evidenceAttachmentId: "",
+                            })
+                        }
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <Label htmlFor="service-note">
+                        完成说明
+                        <span className="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                        id="service-note"
+                        value={draft.completionNote}
+                        disabled={disabled}
+                        rows={3}
+                        placeholder={
+                            failed
+                                ? "例如：客户不在现场，未能完成安装"
+                                : "例如：已上门安装并完成现场验收"
+                        }
+                        onChange={(e) =>
+                            onChange({
+                                ...draft,
+                                completionNote: e.target.value,
+                            })
+                        }
+                    />
+                </div>
             </section>
         </div>
     )

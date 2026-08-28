@@ -110,6 +110,13 @@ impl FulfillmentService {
                         session,
                     )
                     .await?;
+                    super::customer_acceptance_task::ensure_customer_acceptance_task(
+                        &db,
+                        &delivery.sales_order_id,
+                        super::customer_acceptance_task::CustomerAcceptanceTaskReason::DeliveryAvailable,
+                        session,
+                    )
+                    .await?;
                     let audit = actor.resource_log("delivery.post", "delivery", delivery_id.to_string())?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<Delivery, crate::errors::Error>(delivery)

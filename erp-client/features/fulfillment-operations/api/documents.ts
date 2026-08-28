@@ -311,10 +311,9 @@ export function serviceToOperation(
             startedAt: "",
             endedAt: "",
             serviceLocation: "",
-            result:
-                (service.result as "SUCCESS" | "PARTIAL" | "FAILED") ||
-                "SUCCESS",
+            result: "",
             completionNote: "",
+            evidenceAttachmentId: "",
             lines: [
                 {
                     salesOrderLineId: service.sales_order_line_id,

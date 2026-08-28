@@ -3,9 +3,16 @@
 import { surfaceInsetClassName } from "@/components/business"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import type { WorkItemProjection } from "@/features/work-items/types"
 import { cn } from "@/lib/utils"
 
-export function AcceptancePanel({ order }: { order: SalesOrderDetailView }) {
+export function AcceptancePanel({
+    order,
+    workItem,
+}: {
+    order: SalesOrderDetailView
+    workItem?: WorkItemProjection
+}) {
     const latest = order.acceptance
 
     return (
@@ -21,7 +28,7 @@ export function AcceptancePanel({ order }: { order: SalesOrderDetailView }) {
                     交付进度：{order.fulfillment.label}
                 </p>
             </div>
-            <AcceptanceWorkspace salesOrderId={order.id} />
+            <AcceptanceWorkspace salesOrderId={order.id} workItem={workItem} />
         </div>
     )
 }

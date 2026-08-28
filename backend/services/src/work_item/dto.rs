@@ -12,10 +12,11 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 18] = [
+const WORK_ITEM_TYPES: [WorkItemType; 19] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::FulfillmentOperation,
+    WorkItemType::CustomerAcceptanceRegistration,
     WorkItemType::SupplierPaymentExecution,
     WorkItemType::SalesInvoiceExecution,
     WorkItemType::PurchaseOrderReview,
@@ -856,6 +857,12 @@ fn handler_route(
         (WorkItemType::FulfillmentOperation, _) => {
             return Err(Error::ValidationError("履约任务业务对象未注册".to_string()));
         }
+        (WorkItemType::CustomerAcceptanceRegistration, "sales_order") => {
+            ("customer_acceptance_registration", "W06")
+        }
+        (WorkItemType::CustomerAcceptanceRegistration, _) => {
+            return Err(Error::ValidationError("客户验收任务业务对象未注册".to_string()));
+        }
         (WorkItemType::SupplierPaymentExecution, "payable_account") => ("supplier_payment_execution", "W12"),
         (WorkItemType::SupplierPaymentExecution, _) => {
             return Err(Error::ValidationError("付款执行任务业务对象未注册".to_string()));
@@ -917,7 +924,9 @@ fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Opt
 pub(crate) fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => WorkItemFamily::Procurement,
-        WorkItemType::FulfillmentOperation => WorkItemFamily::Fulfillment,
+        WorkItemType::FulfillmentOperation | WorkItemType::CustomerAcceptanceRegistration => {
+            WorkItemFamily::Fulfillment
+        }
         WorkItemType::DocumentApproval | WorkItemType::OwnershipMigrationSalesConfirmation => {
             WorkItemFamily::Approval
         }
@@ -1038,6 +1047,7 @@ fn seconds(value: Option<entities::common::time::Instant>) -> Option<u64> {
 fn role_label(role: &str) -> String {
     match role {
         "role-sales" | "sales" => "销售",
+        "sales_order_owner" => "负责销售",
         "role-sales-leader" | "sales_leader" => "销售领导",
         "role-procurement" | "procurement" => "采购",
         "role-operations" | "operations" => "运营",
@@ -1221,6 +1231,32 @@ mod tests {
             WorkItemType::ProcurementOrderCreation,
             "purchase_order",
             "role-procurement"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn customer_acceptance_maps_to_w06_fulfillment_family() {
+        let route = handler_route(
+            WorkItemType::CustomerAcceptanceRegistration,
+            "sales_order",
+            "sales_order_owner",
+        )
+        .unwrap();
+
+        assert_eq!(route.handler_key, "customer_acceptance_registration");
+        assert_eq!(route.destination_workspace_id, "W06");
+        assert!(route.route_context.is_none());
+        assert_eq!(
+            family_of(WorkItemType::CustomerAcceptanceRegistration),
+            WorkItemFamily::Fulfillment
+        );
+        assert_eq!(role_label("sales_order_owner"), "负责销售");
+        assert!(WORK_ITEM_TYPES.contains(&WorkItemType::CustomerAcceptanceRegistration));
+        assert!(handler_route(
+            WorkItemType::CustomerAcceptanceRegistration,
+            "delivery",
+            "sales_order_owner"
         )
         .is_err());
     }

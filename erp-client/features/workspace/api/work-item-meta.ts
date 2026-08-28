@@ -64,6 +64,13 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeLabel: "收发履约",
         badgeVariant: "teal",
     },
+    CUSTOMER_ACCEPTANCE_REGISTRATION: {
+        label: "客户验收登记",
+        family: "fulfillment",
+        badgeLabel: "待客户验收",
+        badgeVariant: "success",
+        openActionLabel: "去登记客户验收",
+    },
     SUPPLIER_PAYMENT_EXECUTION: {
         label: "供应商付款处理",
         family: "finance",

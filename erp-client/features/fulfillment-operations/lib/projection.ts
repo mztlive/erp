@@ -15,6 +15,23 @@ export function secsToIso(secs: number | null | undefined): string {
     return new Date(secs * 1000).toISOString()
 }
 
+/**
+ * 把日期时间字符串转成秒级时间戳。
+ *
+ * `YYYY-MM-DDTHH:mm[:ss]` 按浏览器本地时区解析；带 `Z` 或偏移的 ISO
+ * 按绝对时间解析。
+ *
+ * @param value 日期时间字符串。
+ * @returns 合法时返回 Unix 秒；空白或无法解析时返回 `null`。
+ */
+export function isoToUnixSecs(value: string): number | null {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const ms = Date.parse(trimmed)
+    if (!Number.isFinite(ms)) return null
+    return Math.floor(ms / 1000)
+}
+
 export function isApiError(error: unknown): error is ApiError {
     return (
         typeof error === "object" &&

@@ -248,6 +248,13 @@ impl FulfillmentService {
                         session,
                     )
                     .await?;
+                    super::customer_acceptance_task::ensure_customer_acceptance_task(
+                        &db,
+                        &po.sales_order_id,
+                        super::customer_acceptance_task::CustomerAcceptanceTaskReason::DeliveryAvailable,
+                        session,
+                    )
+                    .await?;
                     let audit = actor.resource_log(
                         "electronic_delivery.confirm",
                         "electronic_delivery",

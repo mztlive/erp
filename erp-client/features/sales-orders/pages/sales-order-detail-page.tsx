@@ -69,7 +69,7 @@ export function SalesOrderDetailPage({
         fromQueue,
         backHref,
         backLabel,
-        selectSection,
+        selectSection: selectUrlSection,
     } = useSalesOrderDetailUrlState({ salesOrderId })
     const startChangeCommand = useSalesOrderDetailStartChange()
     const detailPermissions = useSalesOrderDetailPermissions()
@@ -77,6 +77,15 @@ export function SalesOrderDetailPage({
     const focusedWorkItem = focusedWorkItemQuery.data
         ? mapWorkItemDto(focusedWorkItemQuery.data)
         : undefined
+    const selectSection = React.useCallback(
+        (next: Parameters<typeof selectUrlSection>[0]) =>
+            selectUrlSection(
+                next,
+                focusedWorkItem?.workItemType ===
+                    "CUSTOMER_ACCEPTANCE_REGISTRATION",
+            ),
+        [focusedWorkItem?.workItemType, selectUrlSection],
+    )
 
     const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
     const [result, setResult] =
@@ -320,20 +329,10 @@ export function SalesOrderDetailPage({
                     navSection={derived.navSection}
                     visibleNav={derived.visibleNav}
                     canAccept={derived.canAccept}
-                    workItemId={
+                    focusedWorkItem={
                         section === "change-review"
                             ? undefined
-                            : focusedWorkItem?.workItemId
-                    }
-                    expectedTaskVersion={
-                        section === "change-review"
-                            ? undefined
-                            : focusedWorkItem?.taskVersion
-                    }
-                    workItemAllowedActions={
-                        section === "change-review"
-                            ? undefined
-                            : focusedWorkItem?.allowedActions
+                            : focusedWorkItem
                     }
                     onSelectSection={selectSection}
                     onApprovalResult={handleActionResult}

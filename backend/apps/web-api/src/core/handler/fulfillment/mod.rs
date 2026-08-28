@@ -5,27 +5,36 @@
 //! 履约对象快照查询指纹密钥取 `app.secret` 字节（Service 构造参数）。
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
+use entities::file_asset::SensitivityClass;
 use services::{
     audit::AuditActor,
     fulfillment::{
         AcceptanceEligibilityView, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
-        CreateCustomerAcceptanceRequest, CreateDeliveryRequest, CreateElectronicDeliveryRequest,
-        CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest, CustomerAcceptanceDetailView,
-        CustomerAcceptanceListParams, CustomerAcceptanceView, DeliveryDetailView, DeliveryListParams,
-        DeliveryView, ElectronicDeliveryListParams, ElectronicDeliveryView, FulfillmentService, PageView,
-        PostCustomerAcceptanceRequest, PostDeliveryRequest, PostPurchaseReceiptRequest,
-        PurchaseReceiptDetailView, PurchaseReceiptListParams, PurchaseReceiptView,
-        ReverseCustomerAcceptanceRequest, ServiceFulfillmentListParams, ServiceFulfillmentView,
-        UpdateDeliveryRequest, UpdatePurchaseReceiptRequest,
+        ConfirmServiceFulfillmentRequest, CreateCustomerAcceptanceRequest, CreateDeliveryRequest,
+        CreateElectronicDeliveryRequest, CreatePurchaseReceiptRequest, CreateServiceFulfillmentRequest,
+        CustomerAcceptanceDetailView, CustomerAcceptanceListParams, CustomerAcceptanceView,
+        DeliveryDetailView, DeliveryListParams, DeliveryView, ElectronicDeliveryListParams,
+        ElectronicDeliveryView, FulfillmentService, PageView, PostCustomerAcceptanceRequest,
+        PostDeliveryRequest, PostPurchaseReceiptRequest, PurchaseReceiptDetailView,
+        PurchaseReceiptListParams, PurchaseReceiptView, ReverseCustomerAcceptanceRequest,
+        ServiceFulfillmentListParams, ServiceFulfillmentView, UpdateDeliveryRequest,
+        UpdatePurchaseReceiptRequest,
     },
 };
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::{Error, Result},
+        handler::file_asset::{
+            delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
+            store_pending_asset_files, PendingAssetFile,
+        },
+        response::ApiResponse,
+    },
 };
 
 /// 构造履约服务实例（指纹密钥 = `app.secret` 字节）。
@@ -36,7 +45,11 @@ use crate::{
 /// # 返回
 /// 返回履约服务实例。
 fn service(state: &AppState) -> FulfillmentService {
-    FulfillmentService::new(state.db(), state.config_snapshot().app.secret.as_bytes().to_vec())
+    FulfillmentService::new(
+        state.db(),
+        state.config_snapshot().app.secret.as_bytes().to_vec(),
+        state.sensitive_data(),
+    )
 }
 
 #[permission_macros::permission(
@@ -480,12 +493,16 @@ pub async fn service_fulfillment_create(
     resource = "service_fulfillment",
     action = "confirm"
 )]
-/// 确认服务履约（草稿 → 已确认；门槛与分配有效性校验同事务）。
+/// 确认服务履约（草稿 → 已确认；门槛、现场事实与图片凭证同事务）。
+///
+/// 命令与现场图片一次 multipart 提交：`command` 为 JSON，图片字段名必须与
+/// `evidence_attachment_id` 的 `pending-file:` 临时引用一致。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
 /// * `id` - 记录主键
+/// * `multipart` - 确认命令与现场图片
 ///
 /// # 返回
 /// 返回确认后的记录视图。
@@ -493,10 +510,69 @@ pub async fn service_fulfillment_confirm(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
+    mut multipart: Multipart,
 ) -> Result<ServiceFulfillmentView> {
-    let view = service(&state).confirm_service_fulfillment(&id, &actor).await?;
+    let (req, files) =
+        extract_command_with_asset_files::<ConfirmServiceFulfillmentRequest>(&mut multipart).await?;
+    validate_service_evidence_upload(&req, &files)?;
+    let pending = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
+    let result = service(&state)
+        .confirm_service_fulfillment_with_assets(&id, req, pending.clone(), &actor)
+        .await;
+    match result {
+        Ok(view) => Ok(ApiResponse::ok_with_data(view)),
+        Err(service_error) => {
+            if should_compensate_pending_assets(&service_error) {
+                delete_pending_asset_objects(&state, &pending).await;
+            }
+            Err(service_error.into())
+        }
+    }
+}
 
-    Ok(ApiResponse::ok_with_data(view))
+/// 校验 multipart 中的现场图片字段与确认命令临时引用一一对应。
+///
+/// # 参数
+/// * `req` - 确认命令
+/// * `files` - 本次解析出的具名文件
+///
+/// # 返回
+/// 引用与文件匹配且均为图片时返回 `Ok(())`。
+///
+/// # 错误
+/// 文件数量、临时引用或 MIME 类型不匹配时返回 400。
+fn validate_service_evidence_upload(
+    req: &ConfirmServiceFulfillmentRequest,
+    files: &[PendingAssetFile],
+) -> std::result::Result<(), Error> {
+    let mut expected = Vec::new();
+    let reference = req.evidence_attachment_id.to_string();
+    if reference.starts_with("pending-file:") {
+        expected.push(reference);
+    }
+    if expected.len() != files.len() {
+        return Err(Error::BadRequest("现场图片凭证与确认命令不匹配".to_string()));
+    }
+    expected.sort();
+    let mut actual = files
+        .iter()
+        .map(|pending| pending.reference.clone())
+        .collect::<Vec<_>>();
+    actual.sort();
+    if actual != expected {
+        return Err(Error::BadRequest("现场图片凭证临时引用无效".to_string()));
+    }
+    if files.iter().any(|pending| {
+        !matches!(
+            pending.file.content_type.as_str(),
+            "image/jpeg" | "image/png" | "image/webp"
+        )
+    }) {
+        return Err(Error::BadRequest(
+            "现场凭证仅支持 JPG、PNG 或 WebP 图片".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[permission_macros::permission(
@@ -689,7 +765,10 @@ pub async fn customer_acceptance_eligible(
 
 #[cfg(test)]
 mod tests {
-    use services::fulfillment::{CreateDeliveryRequest, CreatePurchaseReceiptRequest};
+    use super::{validate_service_evidence_upload, PendingAssetFile};
+    use services::fulfillment::{
+        ConfirmServiceFulfillmentRequest, CreateDeliveryRequest, CreatePurchaseReceiptRequest,
+    };
 
     /// 采购收货 HTTP 只暴露创建/过账，不得提交审批或选择定义。
     #[test]
@@ -809,5 +888,53 @@ mod tests {
             }))
             .is_err()
         );
+    }
+
+    /// 服务履约确认走 multipart 现场图片，不启动审批。
+    #[test]
+    fn service_fulfillment_confirm_requires_matching_image() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(production.contains("confirm_service_fulfillment_with_assets"));
+        assert!(production.contains("validate_service_evidence_upload"));
+        assert!(!production.contains("submit_service_fulfillment"));
+        assert!(!production.contains("start_service_fulfillment"));
+        assert!(
+            serde_json::from_value::<ConfirmServiceFulfillmentRequest>(serde_json::json!({
+                "version": 1,
+                "result": "SUCCESS",
+                "completion_note": "上门安装完成",
+                "service_location": "客户现场",
+                "service_started_at": 1_700_000_000,
+                "service_ended_at": 1_700_003_600,
+                "quantity": "1",
+                "evidence_attachment_id": "pending-file:service-evidence"
+            }))
+            .is_ok()
+        );
+
+        let request = serde_json::from_value::<ConfirmServiceFulfillmentRequest>(serde_json::json!({
+            "version": 1,
+            "result": "SUCCESS",
+            "completion_note": "上门安装完成",
+            "service_location": "客户现场",
+            "service_started_at": 1_700_000_000,
+            "service_ended_at": 1_700_003_600,
+            "quantity": "1",
+            "evidence_attachment_id": "pending-file:service-evidence"
+        }))
+        .expect("确认命令合法");
+        let image = PendingAssetFile {
+            reference: "pending-file:service-evidence".to_string(),
+            file: crate::core::handler::file_asset::AssetFile {
+                file_name: "site.jpg".to_string(),
+                content_type: "image/jpeg".to_string(),
+                content: vec![1],
+            },
+        };
+        assert!(validate_service_evidence_upload(&request, &[image]).is_ok());
+        assert!(validate_service_evidence_upload(&request, &[]).is_err());
     }
 }

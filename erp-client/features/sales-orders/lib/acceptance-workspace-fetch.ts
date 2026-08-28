@@ -21,11 +21,47 @@ import {
     type PageView,
 } from "@/features/sales-orders/lib/acceptance-mappers"
 import { fetchSalesOrderDetail } from "@/features/sales-orders/api/sales-orders"
+import type { WorkItemProjection } from "@/features/work-items/types"
 
 export type FetchAcceptanceWorkspaceParams = {
     salesOrderId: string
     remainingOnly?: boolean
     workItemId?: string | null
+    workItem?: WorkItemProjection
+}
+
+function acceptanceTaskContext(params: FetchAcceptanceWorkspaceParams): {
+    workItem: CustomerAcceptanceWorkspaceView["workItem"]
+    blocker: string | null
+} {
+    const requestedId = params.workItemId?.trim()
+    if (!requestedId) return { workItem: null, blocker: null }
+
+    const task = params.workItem
+    const taskVersion = Number(task?.taskVersion)
+    const valid =
+        task?.workItemId === requestedId &&
+        task.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION" &&
+        task.handlerKey === "customer_acceptance_registration" &&
+        task.destinationWorkspaceId === "W06" &&
+        task.businessObjectType === "sales_order" &&
+        task.businessObjectId === params.salesOrderId &&
+        task.status === "OPEN" &&
+        task.allowedActions.includes("PROCESS") &&
+        Number.isSafeInteger(taskVersion) &&
+        taskVersion > 0
+
+    if (!valid) {
+        return {
+            workItem: null,
+            blocker:
+                "当前客户验收任务已变化、不可访问或与销售单不一致，请返回统一工作台刷新后重试。",
+        }
+    }
+    return {
+        workItem: { id: task.workItemId, expectedTaskVersion: taskVersion },
+        blocker: null,
+    }
 }
 
 /**
@@ -53,9 +89,8 @@ export async function fetchCustomerAcceptanceWorkspace(
     const order = await fetchSalesOrderDetail(params.salesOrderId)
     if (!order) return null
 
-    const workItemConfigBlocker = params.workItemId
-        ? "客户验收任务类型尚未注册。请从销售单直接登记验收，不要使用待办队列入口。"
-        : null
+    const taskContext = acceptanceTaskContext(params)
+    const workItemConfigBlocker = taskContext.blocker
 
     const factsUpdatedAt = order.sourceAsOf || new Date().toISOString()
 
@@ -95,7 +130,7 @@ export async function fetchCustomerAcceptanceWorkspace(
                 ],
                 fieldVisibility: { customerName: "full" },
             },
-            workItem: null,
+            workItem: taskContext.workItem,
             workItemConfigBlocker,
         }
     }
@@ -193,10 +228,10 @@ export async function fetchCustomerAcceptanceWorkspace(
         // 草稿读取失败不阻塞工作台
     }
 
-    const allowedActions = params.workItemId
+    const allowedActions = workItemConfigBlocker
         ? []
         : ["CREATE_ACCEPTANCE", "POST_ACCEPTANCE", "SAVE_DRAFT"]
-    if (!params.workItemId && history.some((h) => h.status === "POSTED")) {
+    if (!workItemConfigBlocker && history.some((h) => h.status === "POSTED")) {
         allowedActions.push("REVERSE_ACCEPTANCE")
     }
 
@@ -230,7 +265,7 @@ export async function fetchCustomerAcceptanceWorkspace(
         history,
         permissions: {
             allowedActions,
-            actionBlockers: params.workItemId
+            actionBlockers: workItemConfigBlocker
                 ? [
                       {
                           action: "CREATE_ACCEPTANCE",
@@ -254,7 +289,7 @@ export async function fetchCustomerAcceptanceWorkspace(
                 customerContact: "full",
             },
         },
-        workItem: null,
+        workItem: taskContext.workItem,
         workItemConfigBlocker,
     }
 }

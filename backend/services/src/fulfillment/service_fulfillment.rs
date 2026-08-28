@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, PurchaseOrderExt,
-    Transactional,
+    AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
 };
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
@@ -25,7 +24,6 @@ use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
 use super::dto::SortDir;
-use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::{
     CreateServiceFulfillmentRequest, FulfillmentService, PageView, ServiceFulfillmentListParams,
     ServiceFulfillmentView,
@@ -175,88 +173,6 @@ impl FulfillmentService {
         let record = service_fulfillment_from_request(req, actor, &self.fingerprint_key)?;
         persist_created_service_fulfillment(&self.db, &self.rbac, record.clone(), actor.clone()).await?;
         Ok(record.into())
-    }
-
-    /// 确认服务履约（草稿 → 已确认；§8.1.5 + §6.7 跨集合事务）。
-    ///
-    /// 与电子交付确认相同的门槛与分配有效性校验；重复确认由状态守卫防护。
-    ///
-    /// # 参数
-    /// * `id` - 记录主键
-    /// * `actor` - 已通过鉴权的审计操作人
-    ///
-    /// # 返回
-    /// 返回确认后的记录视图。
-    ///
-    /// # 错误
-    /// * `NotFound` - 记录/采购单/分配不存在
-    /// * `ConflictError` - 状态不允许确认或重复确认
-    /// * `BusinessLogicError` - 门槛未满足或分配无效
-    /// * `OutcomeUnknown` - 提交结果无法确认
-    #[tracing::instrument(
-        name = "fulfillment.service_fulfillment_confirm",
-        skip_all,
-        fields(
-            layer = "service",
-            domain = "fulfillment",
-            operation = "service_fulfillment_confirm"
-        )
-    )]
-    pub async fn confirm_service_fulfillment(
-        &self,
-        id: &str,
-        actor: &AuditActor,
-    ) -> Result<ServiceFulfillmentView> {
-        let record_id = ServiceFulfillmentId::new(id.to_string());
-        let actor = actor.clone();
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let confirmed = client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let mut record = db
-                        .service_fulfillments()
-                        .find_by_id(record_id.as_ref(), session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("服务履约记录不存在".to_string()))?;
-                    record
-                        .ensure_confirmable()
-                        .map_err(|error| Error::ConflictError(error.to_string()))?;
-                    let po = db
-                        .purchase_orders()
-                        .find_by_id(record.purchase_order_id.as_ref(), session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("来源采购单不存在".to_string()))?;
-                    ensure_po_fulfillable(&po)?;
-                    ensure_prepay_gate(&db, session, &po).await?;
-                    ensure_allocation_valid(
-                        &db,
-                        session,
-                        &po,
-                        &record.purchase_line_sales_allocation_id,
-                        &record.sales_order_line_id,
-                    )
-                    .await?;
-                    record.confirm()?;
-                    db.service_fulfillments().update(&mut record, session).await?;
-                    super::task::complete_fulfillment_task(
-                        &db,
-                        super::task::FulfillmentTaskObject::ServiceFulfillment(&record),
-                        actor.id(),
-                        session,
-                    )
-                    .await?;
-                    let audit = actor.resource_log(
-                        "service_fulfillment.confirm",
-                        "service_fulfillment",
-                        record_id.to_string(),
-                    )?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<ServiceFulfillment, crate::errors::Error>(record)
-                })
-            })
-            .await?;
-        Ok(confirmed.into())
     }
 }
 
@@ -650,7 +566,7 @@ mod service_fulfillment_no_approval_tests {
         let create = production
             .split("pub async fn create_service_fulfillment")
             .nth(1)
-            .and_then(|rest| rest.split("pub async fn confirm_service_fulfillment").next())
+            .and_then(|rest| rest.split("impl From<ServiceFulfillment>").next())
             .expect("create_service_fulfillment 生产片段");
         assert!(create.contains("persist_created_service_fulfillment"));
         assert!(!create.contains("prepare_start"));

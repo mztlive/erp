@@ -114,6 +114,28 @@ test("fulfillment operation stays in W01 and focuses the exact task", () => {
     assert.equal(url.searchParams.has("queueContextId"), false)
 })
 
+test("customer acceptance opens the exact sales order W06 section", () => {
+    const url = parsedHref(
+        buildHandlerHref({
+            businessObjectId: "sales-order / 7",
+            workItemId: "wi-42",
+            queueContextId: "queue-42",
+            handlerKey: "customer_acceptance_registration",
+            destinationWorkspaceId: "W06",
+        }),
+    )
+
+    assert.equal(url.pathname, "/sales/orders/sales-order%20%2F%207")
+    assert.equal(url.searchParams.get("section"), "acceptance")
+    assert.equal(url.searchParams.get("from"), "W01")
+    assert.equal(url.searchParams.get("workItemId"), "wi-42")
+    assert.equal(url.searchParams.get("queueContextId"), "queue-42")
+    assert.equal(
+        url.searchParams.get("returnTo"),
+        "/workspace?currentWorkItemId=wi-42",
+    )
+})
+
 test("purchase order review opens the exact W08 review mode", () => {
     const url = parsedHref(
         buildHandlerHref({

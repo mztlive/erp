@@ -9,6 +9,7 @@ import {
     saveCustomerAcceptanceDraft,
 } from "@/features/sales-orders/api/acceptance"
 import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
+import { workItemKeys } from "@/features/work-items/queries"
 import {
     OVERALL_RESULT_LABEL,
     type AcceptanceOverallResult,
@@ -120,6 +121,7 @@ export function useAcceptanceMutations({
             await queryClient.invalidateQueries({
                 queryKey: salesOrderKeys.detail(salesOrderId),
             })
+            await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
         },
         onError: () => {
             setFormalResult({
@@ -172,6 +174,7 @@ export function useAcceptanceMutations({
             await queryClient.invalidateQueries({
                 queryKey: salesOrderKeys.detail(salesOrderId),
             })
+            await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
         },
     })
 

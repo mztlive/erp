@@ -1423,10 +1423,7 @@ impl WorkItemService {
                 executor,
             )
             .await?;
-        if item.work_item_type.is_fulfillment_operation()
-            || item.work_item_type.is_supplier_payment_execution()
-            || item.work_item_type.is_sales_invoice_execution()
-        {
+        if item.work_item_type.requires_full_execution_permissions() {
             // 执行任务除注册表读取权限外，还要求目标工作面使用的完整操作权限。
             // 该快照由同一 policy revision 形成，外层授权事务会以该 revision
             // 做 CAS 后才允许提交。
@@ -3610,6 +3607,9 @@ fn execution_permission_codes(
     if work_item_type.is_fulfillment_operation() {
         return work_item_type.fulfillment_execution_permissions(business_object_type);
     }
+    if work_item_type.is_customer_acceptance_registration() {
+        return work_item_type.customer_acceptance_execution_permissions(business_object_type);
+    }
     if work_item_type.is_supplier_payment_execution() {
         return work_item_type.supplier_payment_execution_permissions(business_object_type);
     }
@@ -4303,6 +4303,7 @@ mod tests {
             .expect("生产代码必须存在");
 
         assert!(production.contains("run_authorized_policy_transaction(policy_revision"));
+        assert!(production.contains("item.work_item_type.requires_full_execution_permissions()"));
         assert!(!production.contains("ensure_policy_revision(&db, authorization.policy_revision"));
     }
 
@@ -4681,6 +4682,61 @@ mod tests {
                 "purchase_receipt:detail",
                 "purchase_receipt:update",
                 "purchase_receipt:post",
+            ]),
+            &facts,
+        ));
+    }
+
+    #[test]
+    fn customer_acceptance_candidate_requires_complete_execution_permissions() {
+        let item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-customer-acceptance"),
+            WorkItemData {
+                work_item_type: WorkItemType::CustomerAcceptanceRegistration,
+                business_object_type: "sales_order".to_string(),
+                business_object_id: "sales-order-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "sales_order_owner".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "sales-1".to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+                reason_code: Some("CUSTOMER_ACCEPTANCE_REQUIRED".to_string()),
+                impact_summary: None,
+            },
+            "sales_order:sales-order-1:customer_acceptance",
+        )
+        .unwrap();
+        let facts = HashMap::from([(
+            (ObjectKind::SalesOrder, "sales-order-1".to_string()),
+            ObjectFact::new("sales-order-1", "销售单 SO-1", "sales-1"),
+        )]);
+        let access = |codes: &[&str]| ActorAccess {
+            actor_id: "candidate-1".to_string(),
+            permissions: codes
+                .iter()
+                .map(|code| Permission::parse(code).unwrap())
+                .collect(),
+            participant_document_ids: HashSet::new(),
+            organization_ids: Vec::new(),
+            responsibility_scopes: Vec::new(),
+            can_manage: false,
+        };
+
+        assert!(!has_assignment_candidate_access(
+            &item,
+            &access(&["sales_order:detail"]),
+            &facts,
+        ));
+        assert!(has_assignment_candidate_access(
+            &item,
+            &access(&[
+                "customer_acceptance:list",
+                "customer_acceptance:detail",
+                "customer_acceptance:create",
+                "customer_acceptance:post",
+                "sales_order:detail",
             ]),
             &facts,
         ));

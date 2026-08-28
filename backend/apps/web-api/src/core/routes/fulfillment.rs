@@ -13,7 +13,7 @@ use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::fulfillment, middleware::with_permission},
+    core::{handler::fulfillment, middleware::with_permission, upload},
 };
 
 /// 返回本域管理端路由集合。
@@ -164,7 +164,10 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .route(
             "/service-fulfillments/{id}/confirm",
             with_permission(
-                post(fulfillment::service_fulfillment_confirm),
+                upload::multipart_route(
+                    post(fulfillment::service_fulfillment_confirm),
+                    upload::MAX_MULTIPART_REQUEST_BYTES,
+                ),
                 rbac,
                 fulfillment::service_fulfillment_confirm_permission_key(),
             ),

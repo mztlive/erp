@@ -473,13 +473,310 @@ function DateTimeLocalPicker({
     )
 }
 
+/**
+ * 日期时间范围。`from` / `to` 为 `YYYY-MM-DDTHH:mm[:ss]` 本地字符串。
+ */
+type DateTimeRangeValue = {
+    from?: string
+    to?: string
+}
+
+/**
+ * 返回当前本地时钟时刻。
+ *
+ * @returns `HH:mm:00`。
+ */
+function currentClockTime() {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, "0")
+    return `${pad(now.getHours())}:${pad(now.getMinutes())}:00`
+}
+
+/**
+ * 把起止日期时间收成一行展示文案。
+ *
+ * @param from 开始日期时间。
+ * @param to 结束日期时间。
+ * @returns 同一天只重复一次日期；缺结束时带未完成破折号。
+ */
+function formatZonedRangeLabel(
+    from?: ZonedDateTimeValue,
+    to?: ZonedDateTimeValue,
+) {
+    if (!from) return undefined
+    const fromTime = normalizeTimeValue(from.time).slice(0, 5)
+    if (!to) return `${from.date} ${fromTime} —`
+    const toTime = normalizeTimeValue(to.time).slice(0, 5)
+    if (from.date === to.date) return `${from.date} ${fromTime} — ${toTime}`
+    return `${from.date} ${fromTime} — ${to.date} ${toTime}`
+}
+
+/**
+ * 日期时间范围选择：日历选起止日期，底部补开始/结束时刻。
+ */
+function DateTimeRangePicker({
+    id,
+    value,
+    onValueChange,
+    timeZone = "Asia/Shanghai",
+    showTimeZone = true,
+    placeholder = "选择时间范围",
+    disabled,
+    disabledDates,
+    clearable = true,
+    className,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
+}: {
+    id?: string
+    value?: { from?: ZonedDateTimeValue; to?: ZonedDateTimeValue }
+    onValueChange?: (value?: {
+        from?: ZonedDateTimeValue
+        to?: ZonedDateTimeValue
+    }) => void
+    timeZone?: string
+    showTimeZone?: boolean
+    placeholder?: string
+    disabled?: boolean
+    disabledDates?: Matcher | Matcher[]
+    clearable?: boolean
+    className?: string
+    "aria-invalid"?: boolean
+    "aria-describedby"?: string
+}) {
+    const [open, setOpen] = React.useState(false)
+    const selected: CalendarDateRange | undefined = value?.from
+        ? {
+              from: parseDateValue(value.from.date),
+              to: parseDateValue(value.to?.date),
+          }
+        : undefined
+    const label = formatZonedRangeLabel(value?.from, value?.to) ?? placeholder
+
+    /** 把当前范围写回调用方；没有开始日期时视为清空。 */
+    const emit = (next: {
+        from?: ZonedDateTimeValue
+        to?: ZonedDateTimeValue
+    }) => {
+        if (!next.from) {
+            onValueChange?.(undefined)
+            return
+        }
+        onValueChange?.(next)
+    }
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <div className={cn("flex min-w-0 items-center gap-1", className)}>
+                <PopoverTrigger
+                    render={
+                        <Button
+                            id={id}
+                            type="button"
+                            variant="outline"
+                            size="lg"
+                            className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
+                            disabled={disabled}
+                            aria-invalid={ariaInvalid}
+                            aria-describedby={ariaDescribedby}
+                            aria-label={label}
+                        />
+                    }
+                >
+                    <CalendarDaysIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
+                    <span
+                        className={cn(
+                            "truncate",
+                            !value?.from && "text-muted-foreground",
+                        )}
+                    >
+                        {label}
+                    </span>
+                </PopoverTrigger>
+                {clearable && value?.from ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-lg"
+                        onClick={() => onValueChange?.(undefined)}
+                        disabled={disabled}
+                        aria-label="清除时间范围"
+                    >
+                        <XIcon aria-hidden="true" />
+                    </Button>
+                ) : null}
+            </div>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                    mode="range"
+                    selected={selected}
+                    disabled={disabledDates}
+                    onSelect={(next) => {
+                        if (!next?.from) {
+                            emit({})
+                            return
+                        }
+                        emit({
+                            from: {
+                                date: formatDateValue(next.from),
+                                time: normalizeTimeValue(
+                                    value?.from?.time || currentClockTime(),
+                                ),
+                                timeZone,
+                            },
+                            to: next.to
+                                ? {
+                                      date: formatDateValue(next.to),
+                                      time: normalizeTimeValue(
+                                          value?.to?.time ||
+                                              value?.from?.time ||
+                                              currentClockTime(),
+                                      ),
+                                      timeZone,
+                                  }
+                                : undefined,
+                        })
+                    }}
+                />
+                <div className="grid gap-2 border-t p-3 sm:grid-cols-2">
+                    <div className="flex items-center gap-2">
+                        <ClockIcon
+                            className="size-4 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        <Input
+                            type="time"
+                            step={60}
+                            value={normalizeTimeValue(value?.from?.time)}
+                            onChange={(event) => {
+                                if (!value?.from) return
+                                emit({
+                                    from: {
+                                        ...value.from,
+                                        time: event.target.value,
+                                    },
+                                    to: value.to,
+                                })
+                            }}
+                            disabled={disabled || !value?.from}
+                            aria-label="开始时间"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <ClockIcon
+                            className="size-4 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                        <Input
+                            type="time"
+                            step={60}
+                            value={normalizeTimeValue(value?.to?.time)}
+                            onChange={(event) => {
+                                if (!value?.to) return
+                                emit({
+                                    from: value.from,
+                                    to: {
+                                        ...value.to,
+                                        time: event.target.value,
+                                    },
+                                })
+                            }}
+                            disabled={disabled || !value?.to}
+                            aria-label="结束时间"
+                        />
+                    </div>
+                    {showTimeZone ? (
+                        <p className="text-xs text-muted-foreground sm:col-span-2">
+                            {timeZone}
+                        </p>
+                    ) : null}
+                    <Button
+                        type="button"
+                        size="sm"
+                        className="sm:col-span-2"
+                        onClick={() => setOpen(false)}
+                        disabled={!value?.from || !value?.to}
+                    >
+                        完成
+                    </Button>
+                </div>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+/**
+ * 日期时间范围选择，绑定 `YYYY-MM-DDTHH:mm[:ss]` 本地字符串。
+ */
+function DateTimeRangeLocalPicker({
+    id,
+    value,
+    onValueChange,
+    timeZone = "Asia/Shanghai",
+    showTimeZone = true,
+    placeholder = "选择时间范围",
+    disabled,
+    disabledDates,
+    clearable = true,
+    className,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
+}: {
+    id?: string
+    value?: DateTimeRangeValue
+    onValueChange?: (value?: DateTimeRangeValue) => void
+    timeZone?: string
+    showTimeZone?: boolean
+    placeholder?: string
+    disabled?: boolean
+    disabledDates?: Matcher | Matcher[]
+    clearable?: boolean
+    className?: string
+    "aria-invalid"?: boolean
+    "aria-describedby"?: string
+}) {
+    return (
+        <DateTimeRangePicker
+            id={id}
+            value={{
+                from: parseDatetimeLocalValue(value?.from, timeZone),
+                to: parseDatetimeLocalValue(value?.to, timeZone),
+            }}
+            onValueChange={(next) =>
+                onValueChange?.(
+                    next?.from
+                        ? {
+                              from: formatDatetimeLocalValue(next.from),
+                              to: formatDatetimeLocalValue(next.to),
+                          }
+                        : undefined,
+                )
+            }
+            timeZone={timeZone}
+            showTimeZone={showTimeZone}
+            placeholder={placeholder}
+            disabled={disabled}
+            disabledDates={disabledDates}
+            clearable={clearable}
+            className={className}
+            aria-invalid={ariaInvalid}
+            aria-describedby={ariaDescribedby}
+        />
+    )
+}
+
 export {
     DatePicker,
     DateRangePicker,
     DateTimePicker,
     DateTimeLocalPicker,
+    DateTimeRangeLocalPicker,
     parseDatetimeLocalValue,
     formatDatetimeLocalValue,
     type DateRangeValue,
+    type DateTimeRangeValue,
     type ZonedDateTimeValue,
 }

@@ -48,5 +48,6 @@ pub use purchase_receipt::{
     PurchaseReceiptLineData, PurchaseReceiptState, PurchaseReceiptUpdate, QualityResult,
 };
 pub use service_fulfillment::{
-    ServiceFulfillment, ServiceFulfillmentData, ServiceFulfillmentState, ServiceFulfillmentUpdate,
+    ServiceFulfillment, ServiceFulfillmentConfirmation, ServiceFulfillmentData, ServiceFulfillmentState,
+    ServiceFulfillmentUpdate,
 };

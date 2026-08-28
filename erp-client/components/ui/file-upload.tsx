@@ -47,6 +47,7 @@ function FileUpload({
     density = "default",
     preview,
     previewSelectedImage = false,
+    selectedImageFile,
     onPreviewRemove,
     className,
 }: {
@@ -61,6 +62,8 @@ function FileUpload({
     preview?: FileUploadImagePreview | null
     /** 选择单张本地图片后立即生成 blob URL 预览。 */
     previewSelectedImage?: boolean
+    /** 受控的本地图片；传入 `null` 时同步清除内部 blob 预览。 */
+    selectedImageFile?: File | null
     /** 移除已上传或待上传预览；调用方负责同步清空表单值。 */
     onPreviewRemove?: () => void
     className?: string
@@ -80,6 +83,24 @@ function FileUpload({
         setLocalPreview(null)
     }, [])
 
+    React.useEffect(() => {
+        if (selectedImageFile === undefined || !previewSelectedImage) return
+        clearLocalPreview()
+        if (
+            !selectedImageFile ||
+            !selectedImageFile.type.startsWith("image/")
+        ) {
+            return
+        }
+        const src = URL.createObjectURL(selectedImageFile)
+        localPreviewUrlRef.current = src
+        setLocalPreview({
+            src,
+            name: selectedImageFile.name,
+            status: "pending",
+        })
+    }, [clearLocalPreview, previewSelectedImage, selectedImageFile])
+
     React.useEffect(
         () => () => {
             if (localPreviewUrlRef.current) {
@@ -93,7 +114,7 @@ function FileUpload({
     const selectFiles = (files: FileList | null) => {
         if (disabled || !files?.length) return
         const selectedFiles = Array.from(files)
-        if (previewSelectedImage) {
+        if (previewSelectedImage && selectedImageFile === undefined) {
             const image = selectedFiles.find((file) =>
                 file.type.startsWith("image/"),
             )

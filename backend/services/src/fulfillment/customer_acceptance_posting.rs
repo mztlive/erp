@@ -61,6 +61,7 @@ impl FulfillmentService {
         actor: &AuditActor,
     ) -> Result<CommitCustomerAcceptanceView> {
         req.validate()?;
+        ensure_task_context_pair(req.work_item_id.as_deref(), req.expected_task_version)?;
         if req.acceptance_id.is_some() != req.expected_acceptance_version.is_some() {
             return Err(Error::ValidationError(
                 "已有草稿必须同时提交草稿主键和期望版本".to_string(),
@@ -123,6 +124,15 @@ impl FulfillmentService {
                             "销售单已变化，请刷新履约事实后重试".to_string(),
                         ));
                     }
+                    let task = super::customer_acceptance_task::prepare_customer_acceptance_task_command(
+                        &db,
+                        &req.sales_order_id,
+                        actor.id(),
+                        req.work_item_id.as_deref(),
+                        req.expected_task_version,
+                        session,
+                    )
+                    .await?;
 
                     let mut acceptance = match existing {
                         Some(mut acceptance) => {
@@ -198,11 +208,19 @@ impl FulfillmentService {
                     }
                     acceptance.mark_posted()?;
                     db.customer_acceptances().update(&mut acceptance, session).await?;
-                    update_sales_order_fulfillment_progress(
+                    let has_remaining_eligible = update_sales_order_fulfillment_progress(
                         &db,
                         session,
                         &acceptance.sales_order_id,
                         actor.id().to_string(),
+                    )
+                    .await?;
+                    super::customer_acceptance_task::persist_customer_acceptance_task_after_posting(
+                        &db,
+                        task,
+                        actor.id(),
+                        has_remaining_eligible,
+                        session,
                     )
                     .await?;
                     let audit = actor.resource_log(
@@ -262,6 +280,7 @@ impl FulfillmentService {
         actor: &AuditActor,
     ) -> Result<CustomerAcceptanceView> {
         req.validate()?;
+        ensure_task_context_pair(req.work_item_id.as_deref(), req.expected_task_version)?;
         let acceptance_id = CustomerAcceptanceId::new(id.to_string());
         let actor = actor.clone();
         let db = self.db.clone();
@@ -277,6 +296,15 @@ impl FulfillmentService {
                     acceptance
                         .ensure_draft()
                         .map_err(|error| Error::ConflictError(error.to_string()))?;
+                    let task = super::customer_acceptance_task::prepare_customer_acceptance_task_command(
+                        &db,
+                        &acceptance.sales_order_id,
+                        actor.id(),
+                        req.work_item_id.as_deref(),
+                        req.expected_task_version,
+                        session,
+                    )
+                    .await?;
                     let lines = db
                         .fulfillment()
                         .acceptance_lines_by_acceptance_ids(std::slice::from_ref(&acceptance_id), session)
@@ -311,11 +339,19 @@ impl FulfillmentService {
                     acceptance.mark_posted()?;
                     db.customer_acceptances().update(&mut acceptance, session).await?;
                     // 验收通过即履约完成（§4.3.1）：按净已验收汇总刷新销售单履约进度
-                    update_sales_order_fulfillment_progress(
+                    let has_remaining_eligible = update_sales_order_fulfillment_progress(
                         &db,
                         session,
                         &acceptance.sales_order_id,
                         actor.id().to_string(),
+                    )
+                    .await?;
+                    super::customer_acceptance_task::persist_customer_acceptance_task_after_posting(
+                        &db,
+                        task,
+                        actor.id(),
+                        has_remaining_eligible,
+                        session,
                     )
                     .await?;
                     let audit = actor.resource_log(
@@ -469,13 +505,22 @@ impl FulfillmentService {
                     original.reverse(reverse_acceptance.base.id.clone().into())?;
                     db.customer_acceptances().update(&mut original, session).await?;
                     // 冲正后净已验收减少：同步刷新销售单履约进度（可能从已完成回退）
-                    update_sales_order_fulfillment_progress(
+                    let has_remaining_eligible = update_sales_order_fulfillment_progress(
                         &db,
                         session,
                         &original.sales_order_id,
                         actor.id().to_string(),
                     )
                     .await?;
+                    if has_remaining_eligible {
+                        super::customer_acceptance_task::ensure_customer_acceptance_task(
+                            &db,
+                            &original.sales_order_id,
+                            super::customer_acceptance_task::CustomerAcceptanceTaskReason::ReopenedByReversal,
+                            session,
+                        )
+                        .await?;
+                    }
                     let audit = actor.resource_log(
                         "customer_acceptance.reverse",
                         "customer_acceptance",
@@ -488,6 +533,16 @@ impl FulfillmentService {
             .await?;
         Ok(reversed.into())
     }
+}
+
+/// 校验统一工作台任务身份和乐观锁版本必须成对出现。
+fn ensure_task_context_pair(work_item_id: Option<&str>, expected_task_version: Option<u64>) -> Result<()> {
+    if work_item_id.is_some() == expected_task_version.is_some() {
+        return Ok(());
+    }
+    Err(Error::ValidationError(
+        "客户验收任务主键和期望版本必须同时提供".to_string(),
+    ))
 }
 
 /// 校验过账分配与草稿验收行一一对应且数量一致（§8.2 第 5 条「锁定验收行」）。
@@ -662,20 +717,20 @@ async fn load_fulfillment_fact(
 /// * `actor_id` - 审计操作人
 ///
 /// # 返回
-/// 无返回值；进度变化时更新销售单并写版本触及。
+/// 返回是否仍存在可验收数量；进度变化时更新销售单并写版本触及。
 async fn update_sales_order_fulfillment_progress(
     db: &Database,
     session: &mut mongodb::ClientSession,
     sales_order_id: &SalesOrderId,
     actor_id: String,
-) -> Result<()> {
+) -> Result<bool> {
     let order = db
         .sales_orders()
         .find_by_id(sales_order_id.as_ref(), session)
         .await?
         .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
     if order.business_type != BusinessType::GoodsService {
-        return Ok(());
+        return Ok(false);
     }
     let revision_id = order
         .stable
@@ -765,8 +820,15 @@ async fn update_sales_order_fulfillment_progress(
         service_allocations: &service_allocations,
     })?;
     if groups.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
+    let zero = Quantity::from_str("0").unwrap();
+    let has_remaining_eligible = groups.iter().any(|group| {
+        group
+            .fulfillment_facts
+            .iter()
+            .any(|fact| fact.eligible_quantity != zero)
+    });
     let mut all_fulfilled = true;
     let mut any_accepted = false;
     for group in &groups {
@@ -799,14 +861,15 @@ async fn update_sales_order_fulfillment_progress(
         actor_id,
         Some(progress),
     )
-    .await
+    .await?;
+    Ok(has_remaining_eligible)
 }
 
 #[cfg(test)]
 mod tests {
-    /// 过账与冲正路径不得启动审批、不得创建任务、不得选择定义。
+    /// 过账与冲正可以同步 W06 责任，但不得启动审批或选择审批定义。
     #[test]
-    fn post_does_not_start_approval_or_create_tasks() {
+    fn post_does_not_start_approval() {
         let production = include_str!("customer_acceptance_posting.rs")
             .split("#[cfg(test)]")
             .next()
@@ -815,10 +878,10 @@ mod tests {
         assert!(production.contains("pub async fn reverse_customer_acceptance"));
         assert!(!production.contains("start_approval"));
         assert!(!production.contains("prepare_start"));
-        assert!(!production.contains("WorkItem"));
         assert!(!production.contains("definition_id"));
         assert!(!production.contains("CustomerAcceptanceAdapter"));
         assert!(!production.contains("bind_published_definition_on_document_create"));
+        assert!(production.contains("customer_acceptance_task"));
         let post = production
             .split("pub async fn post_customer_acceptance")
             .nth(1)
@@ -834,6 +897,5 @@ mod tests {
             .expect("reverse_customer_acceptance 生产片段");
         assert!(reverse.contains("original.reverse"));
         assert!(!reverse.contains("start_approval"));
-        assert!(!reverse.contains("WorkItem"));
     }
 }

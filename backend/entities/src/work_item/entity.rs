@@ -33,6 +33,8 @@ pub enum WorkItemType {
     ProcurementOrderCreation,
     /// 入库、仓发、供应商直发、电子交付或线下服务的具体履约操作。
     FulfillmentOperation,
+    /// 发货或交付完成后，由销售登记客户验收结果。
+    CustomerAcceptanceRegistration,
     /// 已确认应付的供应商付款执行。
     SupplierPaymentExecution,
     /// 应收子账尚有可开票额度时的销项开票执行。
@@ -309,6 +311,12 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         read_permission: "service_fulfillment:confirm",
     },
     WorkItemBriefRelation {
+        work_item_type: WorkItemType::CustomerAcceptanceRegistration,
+        object_kind: WorkItemBriefObjectKind::SalesOrder,
+        business_object_type: "sales_order",
+        read_permission: "sales_order:detail",
+    },
+    WorkItemBriefRelation {
         work_item_type: WorkItemType::ImportBusinessConfirmation,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
@@ -511,6 +519,7 @@ impl WorkItemType {
         match self {
             Self::ProcurementOrderCreation => "供给分配",
             Self::FulfillmentOperation => "履约处理",
+            Self::CustomerAcceptanceRegistration => "客户验收登记",
             Self::SupplierPaymentExecution => "供应商付款处理",
             Self::SalesInvoiceExecution => "销项开票处理",
             Self::PurchaseOrderReview => "采购单财务审核",
@@ -538,6 +547,7 @@ impl WorkItemType {
         match self {
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
             Self::FulfillmentOperation => "FULFILLMENT_OPERATION",
+            Self::CustomerAcceptanceRegistration => "CUSTOMER_ACCEPTANCE_REGISTRATION",
             Self::SupplierPaymentExecution => "SUPPLIER_PAYMENT_EXECUTION",
             Self::SalesInvoiceExecution => "SALES_INVOICE_EXECUTION",
             Self::PurchaseOrderReview => "PURCHASE_ORDER_REVIEW",
@@ -586,7 +596,9 @@ impl WorkItemType {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
             Self::ProcurementOrderCreation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
-            Self::FulfillmentOperation => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
+            Self::FulfillmentOperation | Self::CustomerAcceptanceRegistration => {
+                WorkItemAssignmentSeparationPolicy::RoleAndParticipation
+            }
             Self::SupplierPaymentExecution | Self::SalesInvoiceExecution => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
             }
@@ -623,6 +635,14 @@ impl WorkItemType {
         self == Self::FulfillmentOperation
     }
 
+    /// 判断任务是否为销售客户验收登记。
+    ///
+    /// # 返回
+    /// W06 客户验收登记任务返回 `true`。
+    pub fn is_customer_acceptance_registration(self) -> bool {
+        self == Self::CustomerAcceptanceRegistration
+    }
+
     /// 判断任务是否为供应商付款执行。
     ///
     /// # 返回
@@ -637,6 +657,20 @@ impl WorkItemType {
     /// 应收子账开票执行任务返回 `true`。
     pub fn is_sales_invoice_execution(self) -> bool {
         self == Self::SalesInvoiceExecution
+    }
+
+    /// 判断转派候选人校验是否必须携带完整工作面执行权限快照。
+    ///
+    /// # 返回
+    /// W01、W06、W11、W12 受控执行任务返回 `true`。
+    pub fn requires_full_execution_permissions(self) -> bool {
+        matches!(
+            self,
+            Self::FulfillmentOperation
+                | Self::CustomerAcceptanceRegistration
+                | Self::SupplierPaymentExecution
+                | Self::SalesInvoiceExecution
+        )
     }
 
     /// 返回具体履约对象在 W01 完整执行所需的权限集合。
@@ -673,6 +707,29 @@ impl WorkItemType {
             "service_fulfillment" => Some(&["service_fulfillment:list", "service_fulfillment:confirm"]),
             _ => None,
         }
+    }
+
+    /// 返回 W06 客户验收登记所需的完整权限集合。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 验收任务固定对象类型
+    ///
+    /// # 返回
+    /// `CUSTOMER_ACCEPTANCE_REGISTRATION + sales_order` 返回完整权限；其它组合返回 `None`。
+    pub fn customer_acceptance_execution_permissions(
+        self,
+        business_object_type: &str,
+    ) -> Option<&'static [&'static str]> {
+        if !self.is_customer_acceptance_registration() || business_object_type != "sales_order" {
+            return None;
+        }
+        Some(&[
+            "customer_acceptance:list",
+            "customer_acceptance:detail",
+            "customer_acceptance:create",
+            "customer_acceptance:post",
+            "sales_order:detail",
+        ])
     }
 
     /// 返回 W12 供应商付款执行所需的完整权限集合。
@@ -732,6 +789,7 @@ impl WorkItemType {
             self,
             Self::ProcurementOrderCreation
                 | Self::FulfillmentOperation
+                | Self::CustomerAcceptanceRegistration
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
         )
@@ -1170,6 +1228,7 @@ impl WorkItem {
         if matches!(
             normalized.work_item_type,
             WorkItemType::FulfillmentOperation
+                | WorkItemType::CustomerAcceptanceRegistration
                 | WorkItemType::SupplierPaymentExecution
                 | WorkItemType::SalesInvoiceExecution
         ) && responsibility_key.is_none()
@@ -1966,6 +2025,15 @@ mod tests {
             .unwrap();
         assert_eq!(payable.object_kind, WorkItemBriefObjectKind::PayableAccount);
         assert_eq!(payable.read_permission, "payable_account:detail");
+        let acceptance = WorkItemType::CustomerAcceptanceRegistration
+            .brief_relation("sales_order")
+            .unwrap();
+        assert_eq!(acceptance.object_kind, WorkItemBriefObjectKind::SalesOrder);
+        assert_eq!(acceptance.read_permission, "sales_order:detail");
+        assert_eq!(
+            WorkItemType::CustomerAcceptanceRegistration.assignment_separation_policy(),
+            WorkItemAssignmentSeparationPolicy::RoleAndParticipation
+        );
     }
 
     #[test]
@@ -2053,6 +2121,49 @@ mod tests {
             .is_none());
         assert!(WorkItemType::DocumentApproval
             .fulfillment_execution_permissions("delivery")
+            .is_none());
+    }
+
+    #[test]
+    fn customer_acceptance_task_requires_key_and_full_execution_permissions() {
+        let data = WorkItemData {
+            work_item_type: WorkItemType::CustomerAcceptanceRegistration,
+            business_object_type: "sales_order".to_string(),
+            owner_role: "sales_order_owner".to_string(),
+            reason_code: Some("CUSTOMER_ACCEPTANCE_REQUIRED".to_string()),
+            ..direct_data()
+        };
+        assert!(WorkItem::new_at(
+            WorkItemId::new("wi-acceptance-missing-key"),
+            data.clone(),
+            Instant::from_unix_secs(100),
+        )
+        .is_err());
+        let item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-acceptance"),
+            data,
+            "sales_order:so-1:customer_acceptance",
+        )
+        .unwrap();
+        assert_eq!(
+            item.responsibility_key(),
+            Some("sales_order:so-1:customer_acceptance")
+        );
+        assert_eq!(
+            WorkItemType::CustomerAcceptanceRegistration
+                .customer_acceptance_execution_permissions("sales_order"),
+            Some(&[
+                "customer_acceptance:list",
+                "customer_acceptance:detail",
+                "customer_acceptance:create",
+                "customer_acceptance:post",
+                "sales_order:detail",
+            ] as &[&str])
+        );
+        assert!(WorkItemType::CustomerAcceptanceRegistration.uses_explicit_owner_authorization());
+        assert!(WorkItemType::CustomerAcceptanceRegistration.requires_full_execution_permissions());
+        assert!(WorkItemType::CustomerAcceptanceRegistration
+            .customer_acceptance_execution_permissions("unknown")
             .is_none());
     }
 

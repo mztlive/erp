@@ -6,6 +6,7 @@ import {
     ObjectSectionTabsPanel,
 } from "@/components/business"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import type { WorkItemProjection } from "@/features/work-items/types"
 import { ApprovalPanel } from "@/features/sales-orders/components/sales-order-detail-approval-panel"
 import {
     AcceptancePanel,
@@ -31,9 +32,7 @@ export function SalesOrderDetailTabs({
     navSection,
     visibleNav,
     canAccept,
-    workItemId,
-    expectedTaskVersion,
-    workItemAllowedActions,
+    focusedWorkItem,
     onSelectSection,
     onApprovalResult,
     onDataChanged,
@@ -49,9 +48,7 @@ export function SalesOrderDetailTabs({
         show: boolean
     }>
     canAccept: boolean
-    workItemId?: string
-    expectedTaskVersion?: string
-    workItemAllowedActions?: readonly string[]
+    focusedWorkItem?: WorkItemProjection
     onSelectSection: (next: NavSectionId | WorkSectionId | "versions") => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
     onDataChanged: () => void
@@ -129,9 +126,9 @@ export function SalesOrderDetailTabs({
             <ObjectSectionTabsPanel value="approval">
                 <ApprovalPanel
                     order={order}
-                    workItemId={workItemId}
-                    expectedTaskVersion={expectedTaskVersion}
-                    workItemAllowedActions={workItemAllowedActions}
+                    workItemId={focusedWorkItem?.workItemId}
+                    expectedTaskVersion={focusedWorkItem?.taskVersion}
+                    workItemAllowedActions={focusedWorkItem?.allowedActions}
                     onApprovalResult={onApprovalResult}
                 />
             </ObjectSectionTabsPanel>
@@ -141,7 +138,7 @@ export function SalesOrderDetailTabs({
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="acceptance">
-                <AcceptancePanel order={order} />
+                <AcceptancePanel order={order} workItem={focusedWorkItem} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="receivable" keepMounted>

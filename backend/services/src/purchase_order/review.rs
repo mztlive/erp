@@ -516,8 +516,8 @@ const SERVICE_FULFILLMENT_FINGERPRINT_KEY: &[u8] = b"erp-service-fulfillment-dra
 ///
 /// 服务履约记录按采购版本行逐行生成（单记录单明细），引用同一事务内已创建
 /// 的「采购行→销售行」分配；草稿进入 W01 履约任务作业面的
-/// 服务类型，采购登记服务地点/时间/结果后确认完成。交付对象与服务地点为
-/// 占位快照（UI 不采集交付对象；确认后仍以占位值落库）。
+/// 服务类型。采购登记服务地点、时间、结果和现场图片凭证后确认完成。
+/// 交付对象为占位快照（UI 不采集）；服务地点占位值必须在确认时替换。
 async fn create_service_fulfillment_draft_for_order(
     db: &mongodb::Database,
     order: &PurchaseOrder,

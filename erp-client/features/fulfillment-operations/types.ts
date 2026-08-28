@@ -11,6 +11,9 @@ type GateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
 
 export type FulfillmentResultCode = "SUCCESS" | "PARTIAL" | "FAILED"
 
+/** 线下服务履约结果；只能记成功或失败。 */
+export type ServiceFulfillmentResultCode = "SUCCESS" | "FAILURE"
+
 export const OPERATION_TYPE_LABEL: Record<FulfillmentOperationType, string> = {
     RECEIPT: "入库",
     WAREHOUSE_SHIP: "公司仓发",
@@ -72,7 +75,7 @@ export const RESULT_LABEL: Record<FulfillmentResultCode, string> = {
     FAILED: "失败",
 }
 
-/** 电子交付 / 线下服务共用的履约结果选项 */
+/** 电子交付履约结果选项 */
 export const RESULT_OPTIONS: ReadonlyArray<{
     value: FulfillmentResultCode
     label: string
@@ -80,6 +83,30 @@ export const RESULT_OPTIONS: ReadonlyArray<{
     value,
     label: RESULT_LABEL[value],
 }))
+
+/** 线下服务履约结果文案。 */
+export const SERVICE_RESULT_LABEL: Record<
+    ServiceFulfillmentResultCode,
+    string
+> = {
+    SUCCESS: "成功",
+    FAILURE: "失败",
+}
+
+/** 线下服务履约结果选项；不含部分成功。 */
+export const SERVICE_RESULT_OPTIONS: ReadonlyArray<{
+    value: ServiceFulfillmentResultCode
+    label: string
+}> = (Object.keys(SERVICE_RESULT_LABEL) as ServiceFulfillmentResultCode[]).map(
+    (value) => ({
+        value,
+        label: SERVICE_RESULT_LABEL[value],
+    }),
+)
+
+/** 线下服务确认命令里现场图片的 multipart 临时引用。 */
+export const SERVICE_EVIDENCE_PENDING_REFERENCE =
+    "pending-file:service-evidence" as const
 
 /** URL type 参数 */
 export const TYPE_SLUG: Record<FulfillmentOperationType, string> = {
@@ -189,9 +216,13 @@ export type FulfillmentDraft =
           startedAt: string
           endedAt: string
           serviceLocation: string
-          result: FulfillmentResultCode
+          result: ServiceFulfillmentResultCode | ""
           completionNote: string
           evidenceNote?: string
+          /** 已登记资产或本次 `pending-file:` 临时引用。 */
+          evidenceAttachmentId: string
+          /** 确认时随 multipart 提交的现场图片；服务端投影不含此字段。 */
+          evidenceFile?: File
           lines: ServiceDraftLine[]
       }
 
