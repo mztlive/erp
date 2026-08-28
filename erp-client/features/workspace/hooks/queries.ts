@@ -33,7 +33,7 @@ export function useWorkspaceDashboardQuery(
     return useQuery({
         queryKey: workspaceHomeKeys.dashboard(query, profile),
         queryFn: () => {
-            if (!profile) throw new Error("当前账号资料未就绪")
+            if (!profile) throw new Error("账号信息加载中，请稍后重试")
             return fetchWorkspaceDashboard(query, profile)
         },
         enabled: Boolean(profile),

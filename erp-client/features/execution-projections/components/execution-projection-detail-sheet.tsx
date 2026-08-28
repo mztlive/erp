@@ -88,8 +88,8 @@ export function ExecutionProjectionDetailSheet({
             ) : !detail ? (
                 <BusinessEmptyState
                     kind="no-data"
-                    title="无法加载数据"
-                    description="数据不存在。"
+                    title="暂无执行信息"
+                    description="未找到对应记录，请刷新后重试或返回列表查看。"
                 />
             ) : (
                 <div className="flex flex-col gap-4">

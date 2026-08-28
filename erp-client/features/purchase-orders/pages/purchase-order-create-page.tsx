@@ -189,7 +189,7 @@ export function PurchaseOrderCreatePage({
             }
             setActionError({
                 title: "供给分配结果待确认",
-                description: `${result.message} 请保留当前页面并使用同一操作重试，系统会复用本次幂等键。`,
+                description: `${result.message} 请保留当前页面并使用同一操作重试，系统已记录本次提交，刷新后查看结果。`,
             })
         },
     })

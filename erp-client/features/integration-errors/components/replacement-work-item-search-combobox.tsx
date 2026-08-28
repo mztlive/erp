@@ -44,7 +44,10 @@ export function ReplacementWorkItemSearchCombobox({
             loading={query.isFetching}
             emptyLabel={
                 query.isError
-                    ? getErrorMessage(query.error, "替代任务加载失败，请重试")
+                    ? getErrorMessage(
+                          query.error,
+                          "替代任务加载失败，请刷新后重试",
+                      )
                     : emptyLabel
             }
         />

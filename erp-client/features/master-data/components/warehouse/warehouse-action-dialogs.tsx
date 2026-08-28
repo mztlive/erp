@@ -140,7 +140,7 @@ export function WarehouseReviseDialog({
                 })
                 onOpenChange(false)
             } catch (cause) {
-                setError(getErrorMessage(cause, "收发责任未更新"))
+                setError(getErrorMessage(cause, "收发责任未更新，请稍后重试。"))
             }
         },
     })

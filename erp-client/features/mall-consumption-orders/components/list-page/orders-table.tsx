@@ -68,7 +68,7 @@ export function ConsumptionOrdersTable({
     if (isError) {
         return (
             <BusinessFailureState
-                title="查询失败"
+                title="查询失败，请重试"
                 error={error}
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 action={

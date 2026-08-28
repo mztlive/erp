@@ -98,7 +98,7 @@ export function SensitiveEditableField({
             setRevealError(null)
             setRevealed(true)
         } catch (error) {
-            setRevealError(getErrorMessage(error, "无权查看"))
+            setRevealError(getErrorMessage(error, "无权查看，请联系管理员。"))
         }
     }
 

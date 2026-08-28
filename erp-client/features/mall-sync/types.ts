@@ -376,8 +376,8 @@ export const DIRECTION_LABEL: Record<SyncDirection, string> = {
 
 /** 同步任务失败分类中文映射（errorClass） */
 export const JOB_ERROR_CLASS_LABEL: Record<string, string> = {
-    SOURCE_PAGE_TIMEOUT: "来源分页读取超时",
-    SOURCE_ORDER_NOT_FOUND: "来源单号未命中",
+    SOURCE_PAGE_TIMEOUT: "来源数据读取超时",
+    SOURCE_ORDER_NOT_FOUND: "来源单号未找到",
 }
 
 export const MAPPING_TYPE_LABEL: Record<

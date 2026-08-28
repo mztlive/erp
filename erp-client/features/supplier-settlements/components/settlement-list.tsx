@@ -102,7 +102,7 @@ function SettlementList({
     return (
         <PageScaffold>
             <PageHeader
-                title="API 供应商结算"
+                title="供应商结算"
                 metadata={
                     <DataFreshness
                         updatedAt={

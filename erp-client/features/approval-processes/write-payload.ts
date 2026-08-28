@@ -100,11 +100,11 @@ export const assertWritePayloadSafe = (payload: unknown): void => {
     const serialized = JSON.stringify(payload)
     for (const key of FORBIDDEN_NODE_KEYS) {
         if (serialized.includes(`"${key}"`)) {
-            throw new Error("写请求包含不允许提交的字段")
+            throw new Error("提交内容包含不允许的字段，请检查后重试")
         }
     }
     if (serialized.includes("source_definition_id")) {
-        throw new Error("写请求不得提交源定义")
+        throw new Error("提交内容包含不支持的字段，请刷新后重试")
     }
 }
 

@@ -238,7 +238,7 @@ export function JobDetailContent({
                         if (!report) return
                         toast.add({
                             title: "报告下载信息",
-                            description: `${report.downloadLabel} · Schema ${report.schemaVersion} · 规则 ${report.ruleVersion}`,
+                            description: `${report.downloadLabel} · 结构版本 ${report.schemaVersion} · 规则 ${report.ruleVersion}`,
                             type: "info",
                             timeout: 4000,
                         })

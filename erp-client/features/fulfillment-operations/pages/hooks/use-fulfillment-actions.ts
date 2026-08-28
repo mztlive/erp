@@ -113,7 +113,7 @@ export function useFulfillmentActions({
             setActionError(null)
             return true
         } catch (error) {
-            setActionError(getErrorMessage(error, "保存失败"))
+            setActionError(getErrorMessage(error, "保存失败，请检查必填项后重试"))
             return false
         }
     }, [
@@ -191,7 +191,7 @@ export function useFulfillmentActions({
                 advanceIfNeeded(true, nextId, true)
             }
         } catch (error) {
-            setActionError(getErrorMessage(error, "没能提交成功"))
+            setActionError(getErrorMessage(error, "提交失败，请稍后重试"))
         }
     }, [
         advanceIfNeeded,

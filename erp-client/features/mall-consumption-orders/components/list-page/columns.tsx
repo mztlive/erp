@@ -212,7 +212,7 @@ export function buildConsumptionOrderColumns(
                                 />
                             }
                         >
-                            接口错误
+                            查看异常
                         </Button>
                     ) : null}
                 </div>

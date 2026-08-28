@@ -33,7 +33,7 @@ export function CenterPageErrorState({
     return (
         <PageScaffold>
             <BusinessFailureState
-                title="加载失败"
+                title="加载失败，请重试"
                 error={error}
                 action={
                     <div className="flex flex-wrap gap-2">

@@ -73,7 +73,10 @@ export function BrandReviseDialog({
                 setResult({
                     outcome: "blocked",
                     code: "MEDIA_UPLOAD_FAILED",
-                    message: getErrorMessage(error, "Logo 上传失败"),
+                    message: getErrorMessage(
+                        error,
+                        "品牌 Logo 上传失败，请检查图片后重试。",
+                    ),
                 })
                 return
             }

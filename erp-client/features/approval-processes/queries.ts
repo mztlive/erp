@@ -94,7 +94,7 @@ export function useDefinitionVersionsQuery(
             ? approvalProcessKeys.versions(documentType)
             : [...approvalProcessKeys.all, "versions", "idle"],
         queryFn: async () => {
-            if (!documentType) throw new Error("未选择单据类型")
+            if (!documentType) throw new Error("请选择单据类型后重试")
             return unwrapResult(await fetchDefinitionVersions(documentType))
         },
         enabled: Boolean(documentType) && enabled,
@@ -117,7 +117,7 @@ export function useDefinitionDetailQuery(
             ? approvalProcessKeys.detail(definitionId)
             : [...approvalProcessKeys.all, "detail", "idle"],
         queryFn: async () => {
-            if (!definitionId) throw new Error("未选择审批流程")
+            if (!definitionId) throw new Error("请选择审批流程后重试")
             return unwrapResult(await fetchDefinitionDetail(definitionId))
         },
         enabled: Boolean(definitionId) && enabled,
@@ -143,7 +143,7 @@ export function useEligibleAssigneesQuery(
             ? approvalProcessKeys.eligibleAssignees(documentType, normalized)
             : [...approvalProcessKeys.all, "eligibleAssignees", "idle"],
         queryFn: async () => {
-            if (!documentType) throw new Error("未选择单据类型")
+            if (!documentType) throw new Error("请选择单据类型后重试")
             return unwrapResult(
                 await fetchEligibleAssignees(documentType, normalized),
             )

@@ -29,9 +29,9 @@ export function MallSyncPageError({
 }: MallSyncPageErrorProps) {
     return (
         <PageScaffold>
-            <PageHeader title="商城同步与映射" description="加载失败" />
+            <PageHeader title="商城同步与映射" description="数据加载失败，请重试" />
             <Alert variant="destructive">
-                <AlertTitle>查询失败</AlertTitle>
+                <AlertTitle>查询失败，请重试</AlertTitle>
                 <AlertDescription>{message}</AlertDescription>
             </Alert>
             <Button

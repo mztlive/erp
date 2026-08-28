@@ -264,7 +264,10 @@ export function ExecutionProjectionsPage() {
             setResult({
                 status: "blocked",
                 title: resultText.operationBlocked,
-                description: getErrorMessage(err, "请刷新后重试"),
+                description: getErrorMessage(
+                    err,
+                    "网络连接异常，请刷新后重试",
+                ),
                 reference: row.projectionNo,
                 facts: [
                     { label: "对象", value: row.salesOrderNo },
@@ -303,7 +306,7 @@ export function ExecutionProjectionsPage() {
             setResult({
                 status: "blocked",
                 title: "批量操作被阻断",
-                description: getErrorMessage(err, "请重试"),
+                description: getErrorMessage(err, "操作未完成，请重试"),
                 reference: "bulk",
                 facts: [],
             })

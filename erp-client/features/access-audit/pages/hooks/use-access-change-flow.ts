@@ -65,7 +65,7 @@ function useAccessChangeFlow({
                 form.reset()
                 setChangeOpen(true)
             } catch (err) {
-                setActionError(getErrorMessage(err, "影响预览失败"))
+                setActionError(getErrorMessage(err, "影响预览失败，请稍后重试"))
             }
         },
         [previewMutation, form, setActionError, setLastResult],
@@ -108,7 +108,7 @@ function useAccessChangeFlow({
             setPendingCommand(null)
             setImpact(null)
         } catch (err) {
-            setActionError(getErrorMessage(err, "提交失败"))
+            setActionError(getErrorMessage(err, "提交失败，请稍后重试"))
         }
     }, [pendingCommand, impact, form, submitMutation, applyOutcome, setActionError])
 

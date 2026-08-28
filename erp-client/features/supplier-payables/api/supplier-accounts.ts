@@ -226,7 +226,7 @@ export async function fetchSupplierAccounts(
             state: "MISSING",
             mixedAutoAllocationAllowed: false,
             blockerMessage:
-                "应付优先级策略接口尚未提供，请显式逐项选择分配目标。",
+                "应付优先级策略尚未配置，请显式逐项选择分配目标。",
         },
         allowFullBankReveal: false,
     }
@@ -432,7 +432,7 @@ export async function fetchAllocationSession(input: {
             state: "MISSING",
             mixedAutoAllocationAllowed: false,
             blockerMessage:
-                "应付优先级策略接口尚未提供，请显式逐项选择分配目标。",
+                "应付优先级策略尚未配置，请显式逐项选择分配目标。",
         },
         preselectedPayableAccountIds: input.preselectPayableAccountId
             ? [input.preselectPayableAccountId]
