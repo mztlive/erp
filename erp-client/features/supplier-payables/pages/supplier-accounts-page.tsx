@@ -357,6 +357,7 @@ export function SupplierAccountsPage() {
                     paymentExecutionTask?.businessObjectId
                 }
                 onClose={closePreview}
+                onOpenPayable={openPreview}
                 onOpenSession={openSession}
                 workItemId={focusedWorkItem?.workItemId}
                 expectedTaskVersion={focusedWorkItem?.taskVersion}

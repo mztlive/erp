@@ -49,6 +49,8 @@ export interface SupplierAccountsPreviewProps {
     fromWorkspace: string | undefined
     paymentTaskPayableAccountId?: string
     onClose: () => void
+    /** 在当前页打开应付预览，保持付款工作视图，不跳到台账列表。 */
+    onOpenPayable: (payableAccountId: string) => void
     onOpenSession: (next: SessionState) => void
     workItemId?: string
     expectedTaskVersion?: string
@@ -75,6 +77,7 @@ export function SupplierAccountsPreview({
     fromWorkspace,
     paymentTaskPayableAccountId,
     onClose,
+    onOpenPayable,
     onOpenSession,
     workItemId,
     expectedTaskVersion,
@@ -217,7 +220,10 @@ export function SupplierAccountsPreview({
                 {paymentQuery.isPending ? (
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 ) : paymentQuery.data ? (
-                    <SupplierPaymentDetailBody row={paymentQuery.data} />
+                    <SupplierPaymentDetailBody
+                        row={paymentQuery.data}
+                        onOpenPayable={onOpenPayable}
+                    />
                 ) : paymentQuery.isError ? (
                     <div className="space-y-3 p-6">
                         <p className="text-sm text-muted-foreground">
@@ -391,7 +397,11 @@ export function SupplierAccountsPreview({
                                             className="flex justify-between gap-2"
                                         >
                                             <span>
-                                                {ALLOCATION_ACTION_LABEL[a.action]}{" "}
+                                                {
+                                                    ALLOCATION_ACTION_LABEL[
+                                                        a.action
+                                                    ]
+                                                }{" "}
                                                 · {a.sourceDocumentNo}
                                             </span>
                                             <MoneyValue value={a.amount} />
@@ -416,7 +426,11 @@ export function SupplierAccountsPreview({
                                             className="flex justify-between gap-2"
                                         >
                                             <span>
-                                                {ALLOCATION_ACTION_LABEL[a.action]}{" "}
+                                                {
+                                                    ALLOCATION_ACTION_LABEL[
+                                                        a.action
+                                                    ]
+                                                }{" "}
                                                 · {a.sourceDocumentNo}
                                             </span>
                                             <MoneyValue value={a.amountGross} />

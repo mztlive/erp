@@ -159,7 +159,7 @@ function relatedDocumentRefFromAllocation(
             sourceHref: allocation.sourceHref,
             sourceType: allocation.sourceType,
             amount: allocation.amount,
-            statusLabel: "已付款",
+            statusLabel: "已核销",
             statusTone: "success",
         }
     }

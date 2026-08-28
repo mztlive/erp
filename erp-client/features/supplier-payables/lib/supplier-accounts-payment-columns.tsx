@@ -42,7 +42,7 @@ export function buildPaymentColumns(input: {
         },
         {
             id: "amount",
-            header: "金额 / 未分配",
+            header: "金额 / 未付款",
             meta: {
                 label: "金额",
                 width: "amount",
@@ -53,7 +53,7 @@ export function buildPaymentColumns(input: {
                 <div className="text-end text-sm">
                     <MoneyValue value={row.original.amount} taxBasis="gross" />
                     <div className="text-xs text-muted-foreground">
-                        未分配{" "}
+                        未付款{" "}
                         <MoneyValue value={row.original.unallocatedAmount} />
                     </div>
                 </div>

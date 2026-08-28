@@ -1,0 +1,106 @@
+import type { ReactElement } from "react"
+import { QueryClientProvider } from "@tanstack/react-query"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
+
+import { SupplierPaymentDetailBody } from "@/features/supplier-payables/components/supplier-payment-detail-body"
+import { createFreshQueryClient } from "@/features/test-utils"
+import type { PaymentRow } from "@/features/supplier-payables/types"
+
+const payment: PaymentRow = {
+    paymentId: "pay-1",
+    paymentNo: "FK-1",
+    supplierId: "sup-1",
+    supplierName: "华东供应商",
+    paidAt: "2026-01-01T00:00:00.000Z",
+    amount: "10.00",
+    bankReferenceMasked: "****1234",
+    allocatedTotal: "10.00",
+    unallocatedAmount: "0.00",
+    status: "POSTED",
+    statusLabel: "已过账",
+    statusTone: "success",
+    baselineVersion: 1,
+    allocations: [
+        {
+            allocationId: "alloc-1",
+            action: "APPLY",
+            payableAccountId: "pa-1",
+            payableEntryId: "pe-1",
+            sourceType: "PURCHASE_ORDER",
+            sourceDocumentId: "po-1",
+            sourceDocumentNo: "PO-1001",
+            sourceHref: "/procurement/orders/po-1",
+            payableHref:
+                "/finance/supplier-accounts?view=payable&detailId=pa-1&previewKind=payable",
+            amount: "10.00",
+            occurredAt: "2026-01-01T00:00:00.000Z",
+        },
+    ],
+    allowedActions: [],
+    actionBlockers: [],
+    paymentRecipient: {
+        bankAccountId: "ba-1",
+        version: 1,
+        accountName: "上海示例供应商有限公司",
+        bankName: "招商银行",
+        bankBranchName: "上海分行营业部",
+        accountNumberMasked: "6222********88881234",
+    },
+    relatedReversals: [],
+}
+
+/**
+ * 带 Query 壳渲染付款详情，银行回单查询在无回单时不会发请求。
+ */
+function renderBody(ui: ReactElement) {
+    const client = createFreshQueryClient()
+    return render(
+        <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    )
+}
+
+describe("SupplierPaymentDetailBody", () => {
+    it("用业务用语展示金额，并完整显示收款账号", () => {
+        renderBody(<SupplierPaymentDetailBody row={payment} />)
+
+        expect(screen.getAllByText("已付款").length).toBeGreaterThan(0)
+        expect(screen.getAllByText("未付款").length).toBeGreaterThan(0)
+        expect(screen.queryByText("净已分配")).toBeNull()
+        expect(screen.queryByText("分配明细（新增不覆盖原金额）")).toBeNull()
+        expect(screen.getByText("6222********88881234")).toBeTruthy()
+        expect(screen.getByText("付款去向")).toBeTruthy()
+        expect(
+            screen.getByText(
+                "这笔付款分别付给了哪些应付、各付了多少。冲正不会改已经记下的行，只会再记一笔冲减。",
+            ),
+        ).toBeTruthy()
+        expect(screen.getByText(/付给 采购单 PO-1001/)).toBeTruthy()
+    })
+
+    it("关联单据不重复列出采购单，查看应付在当前页打开", () => {
+        const onOpenPayable = vi.fn()
+        renderBody(
+            <SupplierPaymentDetailBody
+                row={payment}
+                onOpenPayable={onOpenPayable}
+            />,
+        )
+
+        expect(
+            screen.getAllByRole("button", { name: "查看应付" }),
+        ).toHaveLength(1)
+        const sourceButton = screen
+            .getAllByRole("button", { name: "打开采购单" })
+            .find(
+                (el) => el.getAttribute("href") === "/procurement/orders/po-1",
+            )
+        expect(sourceButton).toBeTruthy()
+        expect(sourceButton?.getAttribute("href") ?? "").not.toContain(
+            "view=payable",
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "查看应付" }))
+        expect(onOpenPayable).toHaveBeenCalledWith("pa-1")
+    })
+})

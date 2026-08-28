@@ -27,13 +27,10 @@ import {
     sourceDocumentOpenLabel,
     type PaymentRelatedDocumentRef,
 } from "@/features/supplier-payables/lib/related-documents"
-import type {
-    PaymentAllocationLine,
-    PaymentRow,
-} from "@/features/supplier-payables/types"
 import {
-    ALLOCATION_ACTION_LABEL,
     SOURCE_TYPE_LABEL,
+    type PaymentAllocationLine,
+    type PaymentRow,
 } from "@/features/supplier-payables/types"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -86,7 +83,7 @@ export function SupplierPaymentDetailBody({
                         <MoneyValue value={row.amount} taxBasis="gross" />
                     </DescriptionDetails>
                 </DescriptionItem>
-                <DescriptionItem>
+                <DescriptionItem className="sm:col-span-2">
                     <DescriptionTerm>银行流水号</DescriptionTerm>
                     <DescriptionDetails className="num break-all font-medium">
                         {row.bankReferenceMasked}
@@ -139,10 +136,7 @@ export function SupplierPaymentDetailBody({
                             <DescriptionTerm>收款账号</DescriptionTerm>
                             <DescriptionDetails>
                                 <code className="num block break-all font-mono text-sm font-medium">
-                                    {
-                                        row.paymentRecipient
-                                            .accountNumberMasked
-                                    }
+                                    {row.paymentRecipient.accountNumberMasked}
                                 </code>
                             </DescriptionDetails>
                         </DescriptionItem>
@@ -327,6 +321,10 @@ function relatedDocumentsFromPayment(
 
 /**
  * 关联单据动作：应付在本页打开；采购单/结算单进入对象中心。
+ *
+ * @param refItem 去重后的关联单据。
+ * @param reverseOfPaymentId 冲正场景下的原付款主键。
+ * @param onOpenPayable 在当前页打开应付预览。
  */
 function RelatedDocumentActions({
     refItem,
@@ -337,6 +335,7 @@ function RelatedDocumentActions({
     reverseOfPaymentId?: string
     onOpenPayable?: (payableAccountId: string) => void
 }) {
+    const payableAccountId = refItem.payableAccountId
     if (refItem.kind === "original-payment" && reverseOfPaymentId) {
         return (
             <Button
@@ -352,12 +351,12 @@ function RelatedDocumentActions({
 
     return (
         <div className="flex flex-wrap justify-end gap-1">
-            {refItem.payableAccountId && onOpenPayable ? (
+            {payableAccountId && onOpenPayable ? (
                 <Button
                     type="button"
                     size="xs"
                     variant="outline"
-                    onClick={() => onOpenPayable(refItem.payableAccountId!)}
+                    onClick={() => onOpenPayable(payableAccountId)}
                 >
                     查看应付
                 </Button>
@@ -399,9 +398,7 @@ function AllocationLineItem({
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
                 {formatDateTime(allocation.occurredAt, "full", "passthrough")}
-                {allocation.reverseOfAllocationId
-                    ? " · 冲减此前一笔"
-                    : null}
+                {allocation.reverseOfAllocationId ? " · 冲减此前一笔" : null}
             </div>
         </li>
     )

@@ -577,6 +577,11 @@ export function useSupplierAccountsPage() {
         patchUrl({ draftSessionId: nextDraftSessionId }, { replace: true })
     }
 
+    /**
+     * 打开应付预览并保持当前工作视图。从付款详情点进应付时留在付款 tab。
+     *
+     * @param payableAccountId 应付子账主键。
+     */
     const openPreview = React.useCallback(
         (payableAccountId: string) => {
             patchUrl(
