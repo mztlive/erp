@@ -66,6 +66,34 @@ describe("projectPayment", () => {
         expect(row.allocations[0]?.sourceDocumentNo).toBe("采购单号待补全")
         expect(row.allocations[0]?.sourceDocumentNo).not.toContain("pe-secret")
     })
+
+    test("付款响应里的冲正摘要保留业务单号、状态与金额", () => {
+        const row = projectPayment({
+            ...paymentBase,
+            allocations: [],
+            related_reversals: [
+                {
+                    id: "reversal-1",
+                    reversal_no: "PCZ-1",
+                    status: "IN_APPROVAL",
+                    reason_text: "收款信息有误",
+                    amount: "10.00",
+                    occurred_at: 2,
+                    created_at: 3,
+                },
+            ],
+        })
+
+        expect(row.relatedReversals).toEqual([
+            expect.objectContaining({
+                reversalId: "reversal-1",
+                reversalNo: "PCZ-1",
+                status: "in_approval",
+                statusLabel: "审批中",
+                amount: "10.00",
+            }),
+        ])
+    })
 })
 
 describe("projectPayable", () => {

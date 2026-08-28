@@ -5,6 +5,7 @@ import type {
     PayableRow,
     PaymentAllocationLine,
     PaymentReversalRow,
+    PaymentReversalSummary,
     PaymentRow,
     PurchaseInvoiceRow,
     SupplierAccountsQuery,
@@ -121,6 +122,17 @@ export type BackendSupplierPayment = {
     allocated_total: string
     unallocated_amount: string
     allocations: BackendPaymentAllocation[]
+    related_reversals?: BackendPaymentReversalSummary[]
+}
+
+type BackendPaymentReversalSummary = {
+    id: string
+    reversal_no: string
+    status: string
+    reason_text: string
+    amount: string
+    occurred_at: number
+    created_at: number
 }
 
 /** SupplierRefund 为 PROCESS_REQUIRED：创建/详情 DTO 必须携带只读审批绑定。 */
@@ -400,6 +412,26 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         allowedActions: allowed,
         actionBlockers: [],
         paymentRecipient: mapPaymentRecipient(p.payment_recipient),
+        relatedReversals: (p.related_reversals ?? []).map(
+            projectPaymentReversalSummary,
+        ),
+    }
+}
+
+/** 把付款响应里的关联冲正裁剪为付款列表摘要。 */
+function projectPaymentReversalSummary(
+    reversal: BackendPaymentReversalSummary,
+): PaymentReversalSummary {
+    const status = mapReversalStatus(reversal.status)
+    return {
+        reversalId: reversal.id,
+        reversalNo: reversal.reversal_no,
+        reasonText: reversal.reason_text,
+        amount: reversal.amount,
+        occurredAt: instantToIso(reversal.occurred_at),
+        status,
+        statusLabel: paymentReversalStatusLabel(reversal.status),
+        statusTone: paymentReversalStatusTone(reversal.status),
     }
 }
 
@@ -514,8 +546,7 @@ export function projectInvoice(inv: BackendInvoice): PurchaseInvoiceRow {
                 a.payable_account_id ?? a.receivable_account_id ?? ""
             return {
                 allocationId: a.id,
-                action:
-                    a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
+                action: a.allocation_action === "reverse" ? "REVERSE" : "APPLY",
                 payableAccountId,
                 sourceType: "PURCHASE_ORDER" as const,
                 sourceDocumentNo: missingSourceDocumentNo("PURCHASE_ORDER"),

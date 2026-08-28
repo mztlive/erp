@@ -304,17 +304,25 @@ export function useCommitPaymentReversalMutation() {
         mutationFn: commitPaymentReversal,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
-                await queryClient.invalidateQueries({
-                    queryKey: approvalKeys.document(
-                        PAYMENT_REVERSAL_DOCUMENT_TYPE,
-                        result.reversal.reversalId,
-                    ),
-                })
-                await queryClient.invalidateQueries({
-                    queryKey: supplierPayablesKeys.reversal(
-                        result.reversal.reversalId,
-                    ),
-                })
+                await Promise.all([
+                    queryClient.invalidateQueries({
+                        queryKey: supplierPayablesKeys.all,
+                    }),
+                    queryClient.invalidateQueries({
+                        queryKey: workspaceHomeKeys.all,
+                    }),
+                    queryClient.invalidateQueries({
+                        queryKey: approvalKeys.document(
+                            PAYMENT_REVERSAL_DOCUMENT_TYPE,
+                            result.reversal.reversalId,
+                        ),
+                    }),
+                    queryClient.invalidateQueries({
+                        queryKey: supplierPayablesKeys.reversal(
+                            result.reversal.reversalId,
+                        ),
+                    }),
+                ])
             }
         },
     })

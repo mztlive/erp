@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { PaymentReversalApprovalArea } from "@/features/supplier-payables/components/payment-reversal-approval-area"
+import { useSupplierPaymentQuery } from "@/features/supplier-payables/hooks/queries"
 import { paymentPreviewHref } from "@/features/supplier-payables/lib/related-documents"
 import { paymentReversalApprovalPhase } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import type { PaymentReversalRow } from "@/features/supplier-payables/types"
@@ -30,6 +31,8 @@ export function PaymentReversalDetailBody({
     onDecisionApplied?: (view: ApprovalCommandView) => void
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
+    const originalPaymentQuery = useSupplierPaymentQuery(row.originalPaymentId)
+    const originalPayment = originalPaymentQuery.data
     return (
         <div className="space-y-5 overflow-auto p-6">
             {posted ? (
@@ -68,10 +71,31 @@ export function PaymentReversalDetailBody({
                     mono
                 />
                 <Fact label="原因说明" value={row.reasonText} />
-                <div className="col-span-2">
-                    <div className="text-xs text-muted-foreground">
-                        原付款单
-                    </div>
+                <Fact
+                    label="原付款单"
+                    value={
+                        originalPaymentQuery.isPending
+                            ? "正在读取…"
+                            : (originalPayment?.paymentNo ?? "付款信息待补全")
+                    }
+                    mono={Boolean(originalPayment?.paymentNo)}
+                />
+                <Fact
+                    label="供应商"
+                    value={originalPayment?.supplierName ?? "供应商信息待补全"}
+                />
+                {originalPayment ? (
+                    <Fact
+                        label="原付款金额"
+                        value={
+                            <MoneyValue
+                                value={originalPayment.amount}
+                                taxBasis="gross"
+                            />
+                        }
+                    />
+                ) : null}
+                <div>
                     <Button
                         type="button"
                         size="xs"
@@ -83,7 +107,7 @@ export function PaymentReversalDetailBody({
                             />
                         }
                     >
-                        查看原付款
+                        打开原付款
                     </Button>
                 </div>
             </div>

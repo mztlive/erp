@@ -11,6 +11,7 @@ use entities::payable::{
     AllocationAction, EntryDirection, PayableAccountStatus, PayableEntryType, PayableSourceType,
     PaymentAllocation, SupplierPaymentStatus,
 };
+use entities::returns::PaymentReversalStatus;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -432,6 +433,27 @@ pub struct SupplierPaymentView {
     pub unallocated_amount: Amount,
     /// 付款核销分配行。
     pub allocations: Vec<PaymentAllocationView>,
+    /// 关联付款冲正记录，按创建时间倒序；仅作追踪，不计入付款金额。
+    pub related_reversals: Vec<SupplierPaymentReversalView>,
+}
+
+/// 供应商付款关联的冲正记录摘要。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierPaymentReversalView {
+    /// 付款冲正主键，仅供受控详情路由使用。
+    pub id: String,
+    /// 冲正单号。
+    pub reversal_no: String,
+    /// 冲正状态。
+    pub status: PaymentReversalStatus,
+    /// 冲正原因。
+    pub reason_text: String,
+    /// 冲正金额。
+    pub amount: Amount,
+    /// 冲正发生时间。
+    pub occurred_at: Instant,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
 }
 
 /// 供应商付款银行回单的安全展示元数据。

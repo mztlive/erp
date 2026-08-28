@@ -99,6 +99,11 @@ describe("fetchWorkspaceDashboard started approvals", () => {
             destinationWorkspaceId: "W12",
             handlerKey: "document_approval",
             allowedActions: ["VIEW"],
+            listSummary: "采购复核 · 采购1",
+            impactSummary:
+                "审批通过前原付款保持不变；通过后系统追加冲正记录并回冲原付款。",
+            nextActionHint: "可打开冲正详情查看完整审批进度与原付款。",
         })
+        expect(dashboard.familyCounts).toBeUndefined()
     })
 })

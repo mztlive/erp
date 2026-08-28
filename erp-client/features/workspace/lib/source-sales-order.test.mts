@@ -5,6 +5,7 @@ import {
     findSourceSalesOrder,
     linkedDocumentHref,
     linkedDocumentPaperKind,
+    ORIGINAL_SUPPLIER_PAYMENT_LABEL,
     SOURCE_SALES_ORDER_LABEL,
     sourceSalesOrderHref,
     withSourceSalesOrder,
@@ -42,6 +43,16 @@ test("only 来源销售单 uses the sales paper adapter", () => {
     assert.equal(linkedDocumentPaperKind("来源采购单"), null)
     assert.equal(linkedDocumentHref("来源采购单", "po-1"), null)
     assert.ok(linkedDocumentHref(SOURCE_SALES_ORDER_LABEL, "so-1"))
+    const paymentHref = linkedDocumentHref(
+        ORIGINAL_SUPPLIER_PAYMENT_LABEL,
+        "payment-1",
+    )
+    assert.ok(paymentHref)
+    const paymentUrl = new URL(paymentHref, "https://erp.test")
+    assert.equal(paymentUrl.pathname, "/finance/supplier-accounts")
+    assert.equal(paymentUrl.searchParams.get("view"), "payment")
+    assert.equal(paymentUrl.searchParams.get("detailId"), "payment-1")
+    assert.equal(paymentUrl.searchParams.get("previewKind"), "payment")
 })
 
 test("injects or upgrades the source sales order section", () => {

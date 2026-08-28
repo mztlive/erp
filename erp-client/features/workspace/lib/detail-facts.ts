@@ -16,6 +16,8 @@ export type DetailSection = Readonly<{
 
 /** 抽到金额条的段，并按此顺序上屏；第一项作为主金额放大。 */
 const AMOUNT_ORDER: readonly string[] = [
+    "冲正金额",
+    "原付款金额",
     "待开票金额",
     "含税金额",
     "不含税金额",

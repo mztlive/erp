@@ -64,7 +64,7 @@ pub use self::dto::{
     PaymentRecipientRevealView, PaymentRecipientView, PurchaseInvoiceAllocationListParams,
     PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest,
     RevealPaymentRecipientRequest, SupplierPaymentBankReceiptView, SupplierPaymentListParams,
-    SupplierPaymentView,
+    SupplierPaymentReversalView, SupplierPaymentView,
 };
 use crate::party::SensitiveDataCodec;
 
@@ -335,6 +335,7 @@ impl PayableService {
         for row in page.items {
             views.push(self.supplier_payment_view(row.id, false).await?);
         }
+        self.attach_supplier_payment_reversals(&mut views).await?;
         Ok(PageView {
             items: views,
             total: page.total,
@@ -354,7 +355,11 @@ impl PayableService {
     /// # 错误
     /// * `NotFound` - 付款单不存在
     pub async fn supplier_payment_detail(&self, id: &str) -> Result<SupplierPaymentView> {
-        self.supplier_payment_view(id.to_string(), true).await
+        let mut views = vec![self.supplier_payment_view(id.to_string(), true).await?];
+        self.attach_supplier_payment_reversals(&mut views).await?;
+        views
+            .pop()
+            .ok_or_else(|| Error::Internal("供应商付款详情装配失败".to_string()))
     }
 
     /// 读取付款单归属的银行回单元数据，并记录受控预览审计。
@@ -939,6 +944,7 @@ impl PayableService {
             unallocated_amount: payment.amount.checked_sub(allocated_total),
             allocated_total,
             allocations: views,
+            related_reversals: Vec::new(),
         })
         .await
     }

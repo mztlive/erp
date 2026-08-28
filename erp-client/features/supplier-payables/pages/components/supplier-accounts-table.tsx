@@ -49,6 +49,7 @@ export interface SupplierAccountsTableProps {
     paymentTaskPayableAccountId?: string
     openPreview: (payableAccountId: string) => void
     openPaymentPreview: (paymentId: string) => void
+    openReversalPreview: (reversalId: string) => void
     openSession: (next: SessionState) => void
     setReverseTarget: React.Dispatch<React.SetStateAction<ReverseTarget | null>>
     setRedInvoiceNo: React.Dispatch<React.SetStateAction<string>>
@@ -78,6 +79,7 @@ export function SupplierAccountsTable({
     paymentTaskPayableAccountId,
     openPreview,
     openPaymentPreview,
+    openReversalPreview,
     openSession,
     setReverseTarget,
     setRedInvoiceNo,
@@ -96,6 +98,7 @@ export function SupplierAccountsTable({
         paymentTaskPayableAccountId,
         openPreview,
         openPaymentPreview,
+        openReversalPreview,
         openSession,
         setReverseTarget,
         setRedInvoiceNo,

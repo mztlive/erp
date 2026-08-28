@@ -25,6 +25,7 @@ export function useSupplierAccountsColumns(input: {
     paymentTaskPayableAccountId?: string
     openPreview: (payableAccountId: string) => void
     openPaymentPreview: (paymentId: string) => void
+    openReversalPreview: (reversalId: string) => void
     openSession: (next: SessionState) => void
     setReverseTarget: React.Dispatch<React.SetStateAction<ReverseTarget | null>>
     setRedInvoiceNo: React.Dispatch<React.SetStateAction<string>>
@@ -39,6 +40,7 @@ export function useSupplierAccountsColumns(input: {
         paymentTaskPayableAccountId,
         openPreview,
         openPaymentPreview,
+        openReversalPreview,
         openSession,
         setReverseTarget,
         setRedInvoiceNo,
@@ -70,10 +72,16 @@ export function useSupplierAccountsColumns(input: {
         () =>
             buildPaymentColumns({
                 openPaymentPreview,
+                openReversalPreview,
                 setReverseTarget,
                 setRefundRequest,
             }),
-        [openPaymentPreview, setRefundRequest, setReverseTarget],
+        [
+            openPaymentPreview,
+            openReversalPreview,
+            setRefundRequest,
+            setReverseTarget,
+        ],
     )
 
     const invoiceColumns = React.useMemo<ColumnDef<PurchaseInvoiceRow>[]>(

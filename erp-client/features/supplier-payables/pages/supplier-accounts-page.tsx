@@ -324,6 +324,7 @@ export function SupplierAccountsPage() {
                         }
                         openPreview={openPreview}
                         openPaymentPreview={openPaymentPreview}
+                        openReversalPreview={openReversalPreview}
                         openSession={openSession}
                         setReverseTarget={setReverseTarget}
                         setRedInvoiceNo={setRedInvoiceNo}

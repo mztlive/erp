@@ -395,7 +395,7 @@ export async function fetchWorkspaceDashboard(
             projectionState: updatedAt ? "fresh" : "stale",
         },
         metrics,
-        familyCounts: buildFamilyCounts(stats),
+        familyCounts: view === "started" ? undefined : buildFamilyCounts(stats),
         items,
         nextCursor: page.nextCursor,
         total: page.total,
@@ -428,6 +428,13 @@ function startedInstanceToWorkItem(
     const destinationWorkspaceId = approvalDestination(businessObjectType)
     const status = startedStatus(item.status)
     const createdAt = unixToIso(item.startedAt)
+    const currentNodeLabel = item.currentNodeName ?? item.currentNodeKey
+    const currentAssigneeLabel = item.currentAssigneeName
+    const listSummary = [currentNodeLabel, currentAssigneeLabel]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(" · ")
+    const paymentReversal = businessObjectType === "payment_reversal"
     return {
         workItemId: item.instanceId,
         taskVersion: "",
@@ -452,8 +459,13 @@ function startedInstanceToWorkItem(
         ownerOrganizationLabel: "",
         ownerUserLabel: item.currentAssigneeName ?? "处理人待确认",
         reasonLabel: "我发起的审批",
-        impactSummary: "",
-        nextActionHint: "打开单据查看审批进度。",
+        listSummary: listSummary || undefined,
+        impactSummary: paymentReversal
+            ? "审批通过前原付款保持不变；通过后系统追加冲正记录并回冲原付款。"
+            : "审批完成前，业务单据保持当前状态。",
+        nextActionHint: paymentReversal
+            ? "可打开冲正详情查看完整审批进度与原付款。"
+            : "打开单据查看完整审批进度。",
         allowedActions: ["VIEW"],
         actionBlockers: [],
         destinationWorkspaceId,

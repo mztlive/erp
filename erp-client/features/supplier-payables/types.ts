@@ -110,6 +110,18 @@ export type PaymentAllocationLine = Readonly<{
     reverseOfAllocationId?: string
 }>
 
+/** 原付款下的冲正跟踪摘要；待审批记录不改变付款金额与付款状态。 */
+export type PaymentReversalSummary = Readonly<{
+    reversalId: string
+    reversalNo: string
+    reasonText: string
+    amount: string
+    occurredAt: string
+    status: "draft" | "in_approval" | "posted" | "reversed"
+    statusLabel: string
+    statusTone: StatusTone
+}>
+
 export type PaymentRow = Readonly<{
     paymentId: string
     paymentNo: string
@@ -136,6 +148,7 @@ export type PaymentRow = Readonly<{
     reversedByPaymentId?: string
     reverseOfPaymentId?: string
     paymentRecipient?: PaymentRecipient
+    relatedReversals: readonly PaymentReversalSummary[]
 }>
 
 /** SupplierRefund 为 PROCESS_REQUIRED：行投影携带只读审批区。 */

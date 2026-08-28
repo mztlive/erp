@@ -139,26 +139,46 @@ export function WorkspaceHomePage() {
     const filterLabel = filterSummaryFor(activeMetric)
     const metrics = view.metrics.filter((metric) => metric.visible)
     const items = view.items
-    const emptyTitle = hasActiveFilter
-        ? "当前筛选没有待办"
-        : "当前没有待处理事项"
-    const emptyDescription = hasActiveFilter
-        ? "可清除筛选后回到待我处理。"
-        : "新任务到达后会出现在这里。"
-    const emptyAction = hasActiveFilter ? (
+    const startedView = urlState.view === "started"
+    const hasEffectiveFilter = !startedView && hasActiveFilter
+    const emptyTitle = startedView
+        ? "还没有我发起的审批"
+        : hasEffectiveFilter
+          ? "当前筛选没有待办"
+          : "当前没有待处理事项"
+    const emptyDescription = startedView
+        ? "你发起的审批会在这里持续显示当前节点、审批人和处理状态。"
+        : hasEffectiveFilter
+          ? "可清除筛选后回到待我处理。"
+          : "新任务到达后会出现在这里。"
+    const emptyAction = hasEffectiveFilter ? (
         <Button type="button" variant="secondary" onClick={clearFilters}>
             回到待我处理
         </Button>
     ) : undefined
 
-    const queueToolbar = (
-        <WorkspaceQueueToolbar
-            urlState={urlState}
-            searchDraft={searchDraft}
-            onSearchDraftChange={setSearchDraft}
-            onSortChange={onSortChange}
-            onSearch={applySearch}
-        />
+    const queueToolbar = startedView ? (
+        <div className="flex items-baseline justify-between gap-3 py-1">
+            <h2 className="text-sm font-medium">我发起的审批</h2>
+            <span className="text-xs text-muted-foreground">
+                {view.total.toLocaleString("zh-CN")} 条
+            </span>
+        </div>
+    ) : (
+        <>
+            <WorkspaceFamilyNav
+                urlState={urlState}
+                counts={view.familyCounts}
+                onFamilyChange={onFamilyChange}
+            />
+            <WorkspaceQueueToolbar
+                urlState={urlState}
+                searchDraft={searchDraft}
+                onSearchDraftChange={setSearchDraft}
+                onSortChange={onSortChange}
+                onSearch={applySearch}
+            />
+        </>
     )
 
     const detail = selected ? (
@@ -253,17 +273,14 @@ export function WorkspaceHomePage() {
                         <p className="sr-only" aria-live="polite">
                             {filterLabel} {view.total} 项
                         </p>
-                        <WorkspaceFamilyNav
-                            urlState={urlState}
-                            counts={view.familyCounts}
-                            onFamilyChange={onFamilyChange}
-                        />
                         {queueToolbar}
                     </header>
                     {items.length === 0 ? (
                         <div className="flex flex-1 items-center justify-center p-6">
                             <BusinessEmptyState
-                                kind={hasActiveFilter ? "filter" : "no-tasks"}
+                                kind={
+                                    hasEffectiveFilter ? "filter" : "no-tasks"
+                                }
                                 title={emptyTitle}
                                 description={emptyDescription}
                                 action={emptyAction}

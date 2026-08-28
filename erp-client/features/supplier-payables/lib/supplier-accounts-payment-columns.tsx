@@ -14,10 +14,16 @@ import type {
 
 export function buildPaymentColumns(input: {
     openPaymentPreview: (paymentId: string) => void
+    openReversalPreview: (reversalId: string) => void
     setReverseTarget: Dispatch<SetStateAction<ReverseTarget | null>>
     setRefundRequest?: Dispatch<SetStateAction<SupplierRefundRequest | null>>
 }): ColumnDef<PaymentRow>[] {
-    const { openPaymentPreview, setReverseTarget, setRefundRequest } = input
+    const {
+        openPaymentPreview,
+        openReversalPreview,
+        setReverseTarget,
+        setRefundRequest,
+    } = input
     return [
         {
             id: "doc",
@@ -62,6 +68,47 @@ export function buildPaymentColumns(input: {
                     {row.original.bankReferenceMasked}
                 </span>
             ),
+        },
+        {
+            id: "reversal",
+            header: "关联冲正",
+            meta: { label: "关联冲正", width: "default" },
+            cell: ({ row }) => {
+                const [latest, ...older] = row.original.relatedReversals
+                if (!latest) {
+                    return (
+                        <span className="text-sm text-muted-foreground">—</span>
+                    )
+                }
+                return (
+                    <div className="flex flex-col items-start gap-1">
+                        <Button
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            className="num h-auto px-0 font-medium"
+                            onClick={(event) => {
+                                event.stopPropagation()
+                                openReversalPreview(latest.reversalId)
+                            }}
+                        >
+                            {latest.reversalNo}
+                        </Button>
+                        <span className="flex items-center gap-1">
+                            <BusinessStatusBadge
+                                context="list"
+                                label={latest.statusLabel}
+                                tone={latest.statusTone}
+                            />
+                            {older.length > 0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                    另 {older.length} 条
+                                </span>
+                            ) : null}
+                        </span>
+                    </div>
+                )
+            },
         },
         {
             id: "status",

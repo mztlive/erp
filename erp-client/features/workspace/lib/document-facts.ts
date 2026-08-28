@@ -5,6 +5,10 @@ import type {
     BackendWorkingCopy,
     BackendWorkingCopyLine,
 } from "@/features/sales-orders/api/contracts"
+import type {
+    BackendPaymentReversal,
+    BackendSupplierPayment,
+} from "@/features/supplier-payables/api/mappers"
 
 export type WorkspaceFactSection = Readonly<{
     label: string
@@ -38,6 +42,8 @@ const SALES_ORDER_TYPES = new Set([
 
 const RECEIPT_TYPES = new Set(["customer_receipt", "customerreceipt"])
 
+const PAYMENT_REVERSAL_TYPES = new Set(["payment_reversal", "paymentreversal"])
+
 /**
  * 把工作台任务的业务对象类型收成小写稳定码。
  */
@@ -57,7 +63,11 @@ export function shouldLoadDocumentFacts(input: {
 }): boolean {
     if (input.hasSummary) return false
     const kind = normalizeObjectType(input.businessObjectType)
-    return SALES_ORDER_TYPES.has(kind) || RECEIPT_TYPES.has(kind)
+    return (
+        SALES_ORDER_TYPES.has(kind) ||
+        RECEIPT_TYPES.has(kind) ||
+        PAYMENT_REVERSAL_TYPES.has(kind)
+    )
 }
 
 /**
@@ -72,6 +82,9 @@ export async function fetchWorkspaceDocumentFacts(input: {
     const kind = normalizeObjectType(input.businessObjectType)
     if (SALES_ORDER_TYPES.has(kind)) return loadSalesOrderFacts(id)
     if (RECEIPT_TYPES.has(kind)) return loadCustomerReceiptFacts(id)
+    if (PAYMENT_REVERSAL_TYPES.has(kind)) {
+        return loadPaymentReversalFacts(id)
+    }
     return null
 }
 
@@ -139,6 +152,68 @@ async function loadCustomerReceiptFacts(
         sections,
         lines,
         moreCount: Math.max(0, (receipt.allocations?.length ?? 0) - LINE_LIMIT),
+    }
+}
+
+async function loadPaymentReversalFacts(
+    reversalId: string,
+): Promise<WorkspaceDocumentFacts> {
+    const reversal = await apiGet<BackendPaymentReversal>(
+        `/admin/payment-reversals/${encodeURIComponent(reversalId)}`,
+    )
+    const payment = await apiGet<BackendSupplierPayment>(
+        `/admin/supplier-payments/${encodeURIComponent(
+            reversal.original_supplier_payment_id,
+        )}`,
+    )
+    return paymentReversalDocumentFacts(reversal, payment)
+}
+
+/**
+ * 把付款冲正与原付款裁剪成工作台只读事实。
+ *
+ * 待审批冲正只说明潜在影响，不修改付款金额与状态。
+ */
+export function paymentReversalDocumentFacts(
+    reversal: BackendPaymentReversal,
+    payment: BackendSupplierPayment,
+): WorkspaceDocumentFacts {
+    const reversalAmount = formatYuan(reversal.amount)
+    const sections: WorkspaceFactSection[] = [
+        { label: "冲正金额", value: reversalAmount, numeric: true },
+        {
+            label: "原付款单",
+            value: payment.payment_no,
+            objectId: payment.id,
+        },
+        {
+            label: "原付款金额",
+            value: formatYuan(payment.amount),
+            numeric: true,
+        },
+        { label: "冲正原因", value: reversal.reason_text },
+        { label: "冲正日期", value: formatDate(reversal.occurred_at) },
+        { label: "付款日期", value: formatDate(payment.paid_at) },
+    ]
+    pushSection(sections, "供应商", payment.supplier_name)
+    pushSection(sections, "银行流水", payment.bank_reference)
+    const lines = payment.allocations
+        .slice(0, LINE_LIMIT)
+        .map((allocation): WorkspaceFactLine => ({
+            title: allocation.source_document_no?.trim() || "原付款核销明细",
+            quantity: formatYuan(allocation.allocated_amount),
+        }))
+    return {
+        counterparty: emptyToUndefined(payment.supplier_name),
+        impact: "审批通过前原付款保持不变；通过后系统追加冲正记录并回冲原付款。",
+        listSummary: joinSummary([
+            payment.supplier_name ?? undefined,
+            reversalAmount,
+            payment.payment_no,
+        ]),
+        sections,
+        lines,
+        moreCount: Math.max(0, payment.allocations.length - LINE_LIMIT),
     }
 }
 

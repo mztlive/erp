@@ -3,6 +3,9 @@ import type { WorkspacePaperKind } from "@/features/workspace/lib/paper-kind"
 /** 简报里来源销售单的展示标签。 */
 export const SOURCE_SALES_ORDER_LABEL = "来源销售单"
 
+/** 付款冲正简报里原付款单的展示标签。 */
+export const ORIGINAL_SUPPLIER_PAYMENT_LABEL = "原付款单"
+
 export type SourceSalesOrderRef = Readonly<{
     orderNo: string
     objectId?: string
@@ -62,8 +65,18 @@ export function linkedDocumentHref(
     objectId: string,
     returnTo = "/workspace",
 ): string | null {
-    if (label !== SOURCE_SALES_ORDER_LABEL) return null
-    return sourceSalesOrderHref(objectId, returnTo)
+    if (label === SOURCE_SALES_ORDER_LABEL) {
+        return sourceSalesOrderHref(objectId, returnTo)
+    }
+    if (label === ORIGINAL_SUPPLIER_PAYMENT_LABEL) {
+        const params = new URLSearchParams({
+            view: "payment",
+            detailId: objectId,
+            previewKind: "payment",
+        })
+        return `/finance/supplier-accounts?${params.toString()}`
+    }
+    return null
 }
 
 /**

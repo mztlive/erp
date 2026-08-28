@@ -39,6 +39,7 @@ export function WorkspaceTaskCard({
     ).amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
     const paymentTask = item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
+    const trackingTask = item.workItemType === "APPROVAL_INSTANCE"
     const sourceSales = findSourceSalesOrder(item.summarySections)
     const counterpartyLine = [
         item.counterpartyName,
@@ -49,9 +50,11 @@ export function WorkspaceTaskCard({
     const primaryLabel = paymentTask
         ? item.counterpartyName || "供应商付款"
         : number
-    const secondaryLine = paymentTask
-        ? `采购单 ${compactDocumentNumber(number)}`
-        : counterpartyLine
+    const secondaryLine = trackingTask
+        ? item.listSummary || item.statusLabel
+        : paymentTask
+          ? `采购单 ${compactDocumentNumber(number)}`
+          : counterpartyLine
 
     return (
         <button
@@ -63,7 +66,7 @@ export function WorkspaceTaskCard({
                     : undefined
             }
             aria-label={
-                paymentTask
+                paymentTask || trackingTask
                     ? `${item.workItemTypeLabel} ${primaryLabel} ${secondaryLine}`
                     : sourceSales
                       ? `${item.workItemTypeLabel} ${number} 来源 ${sourceSales.orderNo}`
@@ -101,7 +104,12 @@ export function WorkspaceTaskCard({
                     ) : null}
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
-                    {blocked ? (
+                    {trackingTask ? (
+                        <StatusBadge
+                            label={item.statusLabel}
+                            tone={item.statusTone}
+                        />
+                    ) : blocked ? (
                         <StatusBadge label="受阻" tone="warning" />
                     ) : overdue ? (
                         <StatusBadge label="已超期" tone="destructive" />
