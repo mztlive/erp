@@ -10,6 +10,7 @@ import {
     parsePreviewKind,
     parseView,
     parseWorkItemId,
+    patchForViewChange,
 } from "@/features/supplier-payables/lib/url-state"
 import type {
     AllocationTrack,
@@ -18,6 +19,7 @@ import type {
     ReverseTarget,
     SessionState,
     SupplierAccountsQuery,
+    SupplierAccountsView,
 } from "@/features/supplier-payables/types"
 import {
     DUE_LABEL,
@@ -231,6 +233,18 @@ export function useSupplierAccountsPage() {
             )
         },
         [pathname, router, searchParams, view],
+    )
+
+    /**
+     * 切换工作视图：回第 1 页，并清掉目标视图不使用的筛选。
+     *
+     * @param nextView 目标工作视图。
+     */
+    const switchView = React.useCallback(
+        (nextView: SupplierAccountsView) => {
+            patchUrl(patchForViewChange(nextView), { replace: true })
+        },
+        [patchUrl],
     )
 
     // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类参数）/排序/导航上下文
@@ -604,9 +618,9 @@ export function useSupplierAccountsPage() {
         (paymentId: string) => {
             patchUrl(
                 {
+                    ...patchForViewChange("payment"),
                     detailId: paymentId,
                     previewKind: "payment",
-                    view: "payment",
                 },
                 { replace: true },
             )
@@ -729,6 +743,7 @@ export function useSupplierAccountsPage() {
         hasActiveFilters,
         clearFilters,
         patchUrl,
+        switchView,
         listQuery,
         data,
         sortedPayables,

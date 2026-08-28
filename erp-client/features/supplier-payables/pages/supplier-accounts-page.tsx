@@ -93,6 +93,7 @@ export function SupplierAccountsPage() {
         hasActiveFilters,
         clearFilters,
         patchUrl,
+        switchView,
         listQuery,
         data,
         sortedPayables,
@@ -102,9 +103,6 @@ export function SupplierAccountsPage() {
     const filterToolbar = (
         <SupplierAccountsToolbar
             view={view}
-            onViewChange={(nextView) => {
-                patchUrl({ view: nextView, page: null })
-            }}
             searchInput={searchInput}
             onSearchInputChange={setSearchInput}
             searchInputRef={searchInputRef}
@@ -215,7 +213,7 @@ export function SupplierAccountsPage() {
                 onDraftSessionIdChange={syncSessionId}
                 onGoToInvoiceView={() => {
                     closeAllocationSession()
-                    patchUrl({ view: "purchase_invoice" })
+                    switchView("purchase_invoice")
                 }}
                 onCompleted={(result) => {
                     setLastResult(result)
@@ -304,6 +302,7 @@ export function SupplierAccountsPage() {
                 <>
                     <SupplierAccountsTable
                         view={view}
+                        onViewChange={switchView}
                         data={data}
                         pageRows={pageRows}
                         rowCount={rows.length}

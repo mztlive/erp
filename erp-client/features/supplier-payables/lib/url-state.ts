@@ -53,3 +53,31 @@ export function parseView(raw: string | null): SupplierAccountsView {
     }
     return "payable"
 }
+
+/**
+ * 切换工作视图时写入 URL 的补丁：回第 1 页，并清掉目标视图不使用的筛选。
+ *
+ * 应付专用条件：`sourceType` / `status` / `due` / `paymentGate`。
+ * 待核销专用条件：`track`。
+ * 关键词、供应商、采购单来源锁定保留。
+ *
+ * @param nextView 目标工作视图。
+ */
+export function patchForViewChange(
+    nextView: SupplierAccountsView,
+): Record<string, string | null | undefined> {
+    const patch: Record<string, string | null | undefined> = {
+        view: nextView,
+        page: null,
+    }
+    if (nextView !== "payable") {
+        patch.sourceType = null
+        patch.status = null
+        patch.due = null
+        patch.paymentGate = null
+    }
+    if (nextView !== "unallocated") {
+        patch.track = null
+    }
+    return patch
+}

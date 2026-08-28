@@ -23,9 +23,11 @@ import {
     type SupplierRefundRequest,
     type UnallocatedRow,
 } from "@/features/supplier-payables/types"
+import { SupplierAccountsViewTabs } from "./supplier-accounts-view-tabs"
 
 export interface SupplierAccountsTableProps {
     view: SupplierAccountsView
+    onViewChange: (view: SupplierAccountsView) => void
     data: SupplierAccountsListView | undefined
     pageRows: readonly (
         | PayableRow
@@ -61,6 +63,7 @@ export interface SupplierAccountsTableProps {
 
 export function SupplierAccountsTable({
     view,
+    onViewChange,
     data,
     pageRows,
     rowCount,
@@ -106,45 +109,48 @@ export function SupplierAccountsTable({
     })
 
     return (
-        <BusinessTableFrame
-            showHeader
-            title={
-                <span className="inline-flex items-baseline gap-2">
-                    {VIEW_LABEL[view]}
-                    <span
-                        className="font-normal text-muted-foreground"
-                        aria-live="polite"
-                    >
-                        {rowCount.toLocaleString("zh-CN")} 条
+        <>
+            <SupplierAccountsViewTabs view={view} onViewChange={onViewChange} />
+            <BusinessTableFrame
+                showHeader
+                title={
+                    <span className="inline-flex items-baseline gap-2">
+                        {VIEW_LABEL[view]}
+                        <span
+                            className="font-normal text-muted-foreground"
+                            aria-live="polite"
+                        >
+                            {rowCount.toLocaleString("zh-CN")} 条
+                        </span>
                     </span>
-                </span>
-            }
-            description={filterDescription}
-            toolbar={toolbar}
-            table={
-                <SupplierAccountsTableBody
-                    view={view}
-                    data={data}
-                    pageRows={pageRows}
-                    rowCount={rowCount}
-                    loading={loading}
-                    isError={isError}
-                    error={error}
-                    onRetry={onRetry}
-                    pagination={pagination}
-                    onPaginationChange={onPaginationChange}
-                    sorting={sorting}
-                    onSortingChange={onSortingChange}
-                    onClearFilters={onClearFilters}
-                    payableColumns={payableColumns}
-                    paymentColumns={paymentColumns}
-                    invoiceColumns={invoiceColumns}
-                    unallocatedColumns={unallocatedColumns}
-                    openPreview={openPreview}
-                    openPaymentPreview={openPaymentPreview}
-                />
-            }
-        />
+                }
+                description={filterDescription}
+                toolbar={toolbar}
+                table={
+                    <SupplierAccountsTableBody
+                        view={view}
+                        data={data}
+                        pageRows={pageRows}
+                        rowCount={rowCount}
+                        loading={loading}
+                        isError={isError}
+                        error={error}
+                        onRetry={onRetry}
+                        pagination={pagination}
+                        onPaginationChange={onPaginationChange}
+                        sorting={sorting}
+                        onSortingChange={onSortingChange}
+                        onClearFilters={onClearFilters}
+                        payableColumns={payableColumns}
+                        paymentColumns={paymentColumns}
+                        invoiceColumns={invoiceColumns}
+                        unallocatedColumns={unallocatedColumns}
+                        openPreview={openPreview}
+                        openPaymentPreview={openPaymentPreview}
+                    />
+                }
+            />
+        </>
     )
 }
 

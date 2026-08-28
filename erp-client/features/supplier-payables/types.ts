@@ -437,6 +437,14 @@ export type SaveAllocationDraftInput = {
     formSnapshot: Record<string, unknown>
 }
 
+/** 供应商往来四个工作视图，顺序即 Tab 展示顺序。 */
+export const SUPPLIER_ACCOUNT_VIEWS = [
+    "payable",
+    "payment",
+    "purchase_invoice",
+    "unallocated",
+] as const satisfies readonly SupplierAccountsView[]
+
 export const VIEW_LABEL: Record<SupplierAccountsView, string> = {
     payable: "应付台账",
     payment: "付款",

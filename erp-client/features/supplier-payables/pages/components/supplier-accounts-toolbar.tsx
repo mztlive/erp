@@ -16,11 +16,10 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
-import {
-    VIEW_LABEL,
-    type AllocationTrack,
-    type PayableSourceType,
-    type SupplierAccountsView,
+import type {
+    AllocationTrack,
+    PayableSourceType,
+    SupplierAccountsView,
 } from "@/features/supplier-payables/types"
 
 /** 可被单独移除的已生效条件。 */
@@ -86,16 +85,8 @@ const TRACK_OPTIONS: ReadonlyArray<{
     { value: "purchase_invoice", label: "进项票" },
 ]
 
-const VIEW_OPTIONS: ReadonlyArray<{
-    value: SupplierAccountsView
-    label: string
-}> = (["payable", "payment", "purchase_invoice", "unallocated"] as const).map(
-    (value) => ({ value, label: VIEW_LABEL[value] }),
-)
-
 export interface SupplierAccountsToolbarProps {
     view: SupplierAccountsView
-    onViewChange: (view: SupplierAccountsView) => void
     searchInput: string
     onSearchInputChange: (value: string) => void
     searchInputRef: React.Ref<HTMLInputElement>
@@ -124,7 +115,6 @@ export interface SupplierAccountsToolbarProps {
 
 export function SupplierAccountsToolbar({
     view,
-    onViewChange,
     searchInput,
     onSearchInputChange,
     searchInputRef,
@@ -178,60 +168,31 @@ export function SupplierAccountsToolbar({
                     </InputGroup>
                 }
                 filters={
-                    <>
-                        <div
-                            role="group"
-                            aria-label="供应商往来工作视图"
-                            className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
-                        >
-                            {VIEW_OPTIONS.map((option) => {
-                                const active = view === option.value
-                                return (
-                                    <Button
-                                        key={option.value}
-                                        type="button"
-                                        variant={active ? "secondary" : "ghost"}
-                                        className={
-                                            active
-                                                ? "bg-card shadow-xs"
-                                                : "shadow-none"
-                                        }
-                                        aria-pressed={active}
-                                        onClick={() =>
-                                            onViewChange(option.value)
-                                        }
-                                    >
-                                        {option.label}
-                                    </Button>
-                                )
-                            })}
-                        </div>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            aria-expanded={panelOpen}
-                            aria-controls={panelId}
-                            onClick={() => setPanelOpen((open) => !open)}
-                        >
-                            <FilterIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            更多筛选
-                            {hasStructuredFilters ? (
-                                <Badge variant="info">已启用</Badge>
-                            ) : null}
-                            <ChevronDownIcon
-                                data-icon="inline-end"
-                                aria-hidden="true"
-                                className={
-                                    panelOpen
-                                        ? "rotate-180 transition-transform"
-                                        : "transition-transform"
-                                }
-                            />
-                        </Button>
-                    </>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        aria-expanded={panelOpen}
+                        aria-controls={panelId}
+                        onClick={() => setPanelOpen((open) => !open)}
+                    >
+                        <FilterIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        更多筛选
+                        {hasStructuredFilters ? (
+                            <Badge variant="info">已启用</Badge>
+                        ) : null}
+                        <ChevronDownIcon
+                            data-icon="inline-end"
+                            aria-hidden="true"
+                            className={
+                                panelOpen
+                                    ? "rotate-180 transition-transform"
+                                    : "transition-transform"
+                            }
+                        />
+                    </Button>
                 }
                 secondary={
                     hasChips || panelOpen ? (
