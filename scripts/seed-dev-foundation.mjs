@@ -5,8 +5,9 @@
  * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
  * 仓库在主数据重置后由本脚本重建。
  * 付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
- * 财务三人分责：caiwu 仍只做审批；fukuan 为默认付款负责人；kaipiao 为默认开票负责人。
- * 审批定义由 publish-approval-definitions.mjs 单独发布，审批人仍是 caiwu。
+ * 财务三人分责：caiwu 为财务总监并审批采购单；fukuan 为出纳并执行付款任务；
+ * kaipiao 为默认开票负责人。供应商付款不得发布或启动独立审批。
+ * PROCESS_REQUIRED 审批定义由 publish-approval-definitions.mjs 单独发布。
  *
  * 幂等：客户、合同、仓储账号、仓库、财务三人、默认财务责任规则均按固定标识查找；
  * 已存在则跳过或只补绑定/校正。
@@ -22,8 +23,8 @@ const ACCOUNTS = {
     admin: { account: "admin", password: "123456" },
     sales: { account: "xiaoshou", password: "123456" },
     warehouse: { account: "cangchu", password: "123456", name: "仓储" },
-    finance: { account: "caiwu", password: "123456", name: "财务" },
-    payment: { account: "fukuan", password: "123456", name: "付款人" },
+    finance: { account: "caiwu", password: "123456", name: "财务总监" },
+    payment: { account: "fukuan", password: "123456", name: "出纳" },
     invoice: { account: "kaipiao", password: "123456", name: "开票人" },
 }
 
@@ -326,6 +327,15 @@ async function ensureRoleBoundAdmin(adminToken, { credentials, roleId, label }) 
         console.log(`${label}账号已存在: ${credentials.account}`)
     }
 
+    if (account.name !== credentials.name) {
+        await call("PUT", `/admin/admins/${encodeURIComponent(account.id)}`, {
+            token: adminToken,
+            body: { name: credentials.name },
+        })
+        account = { ...account, name: credentials.name }
+        console.log(`已将 ${credentials.account} 的姓名校正为${credentials.name}`)
+    }
+
     const roleIds = Array.isArray(account.role_ids) ? account.role_ids : []
     if (!roleIds.includes(roleId)) {
         await call("PUT", `/admin/admins/${encodeURIComponent(account.id)}/role`, {
@@ -357,12 +367,12 @@ async function ensureFinancePeople(adminToken) {
     const finance = await ensureRoleBoundAdmin(adminToken, {
         credentials: ACCOUNTS.finance,
         roleId: ROLE_FINANCE,
-        label: "财务",
+        label: "财务总监",
     })
     const payment = await ensureRoleBoundAdmin(adminToken, {
         credentials: ACCOUNTS.payment,
         roleId: ROLE_FINANCE,
-        label: "付款人",
+        label: "出纳",
     })
     const invoice = await ensureRoleBoundAdmin(adminToken, {
         credentials: ACCOUNTS.invoice,
@@ -370,7 +380,7 @@ async function ensureFinancePeople(adminToken) {
         label: "开票人",
     })
     if (new Set([finance.id, payment.id, invoice.id]).size !== 3) {
-        throw new Error("财务审批人、付款人和开票人必须是三个不同账号")
+        throw new Error("财务总监、出纳和开票人必须是三个不同账号")
     }
 
     const options = await call("GET", "/admin/finance-responsibility-owner-options", {
@@ -543,8 +553,8 @@ async function main() {
         `仓库: ${warehouses.map((row) => `${row.warehouse_code} ${row.name ?? ""}`.trim()).join("、")}（收发经办人 cangchu）`,
     )
     console.log("销售负责人: xiaoshou")
-    console.log("财务审批人: caiwu")
-    console.log("默认付款负责人: fukuan")
+    console.log("采购单审批人（财务总监）: caiwu")
+    console.log("默认付款任务负责人（出纳）: fukuan")
     console.log("默认开票负责人: kaipiao")
     console.log("登录账号: admin / xiaoshou / caigou / caiwu / fukuan / kaipiao / cangchu    密码: 123456")
     console.log("下一步: 用 xiaoshou 打开销售开单页，选择该合同")

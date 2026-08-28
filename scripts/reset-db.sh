@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
-# ERP 开发数据库重置封装（E2E 专用）。
+# ERP 开发数据库重置与种子填充入口。
 #
-# 复用 backend/scripts/reset-dev-business-data.sh 的 preview/execute/verify 合同：
-#   - 只清理业务数据集合（客户/合同/销售单/采购单/票款/库存/审批实例等）；
-#   - 默认保留：账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、
-#           对象存储、审计记录、编号计数器（即"不 reset 账号数据"）；
+# 默认执行合同：
+#   1. 停止 web-api，禁止清理期间继续写入；
+#   2. 复用 backend/scripts/reset-dev-business-data.sh 完成 preview/execute/verify；
+#   3. 启动 web-api，发布 PROCESS_REQUIRED 审批定义；
+#   4. 填充客户、合同、财务责任、供应商收款账户、商品与公司商品池；
+#   5. 保持 web-api 运行，执行结束后可直接使用。
+#
+# 数据范围：
+#   - 默认清理业务数据，保留账号/RBAC、供应商/商品/仓库主数据、source_systems、
+#     file_assets、对象存储、审计记录与编号计数器；
 #   - ERP_RESET_INCLUDE_CATALOG=1 时额外清供应商/商品/SKU/供给、仓库、分类/品牌/单位及全部 Party；
-#   - 不填充任何种子数据，流程从 0 开始跑。
+#   - ERP_RESET_ONLY=1 仅供 E2E 编排使用：只清库、不填种子、不重启 web-api。
 #
 # 安全门禁：
 #   - 必须显式 E2E_RESET=1（防止误执行）；
 #   - 目标为远程开发库时必须同时提供 E2E_ALLOW_REMOTE_RESET=1，
 #     且主机白名单从 config.toml 的 database.uri 精确解析（禁止通配符）。
 #
-# 用法：
+# 日常用法（清业务数据并恢复全部基础种子）：
 #   E2E_RESET=1 [E2E_ALLOW_REMOTE_RESET=1] bash scripts/reset-db.sh
 #
-# 本脚本只清库、不填种子。开发开单准备请用：
-#   E2E_RESET=1 [E2E_ALLOW_REMOTE_RESET=1] bash scripts/prepare-dev.sh
-#
-# 前置条件（由 run-flow.sh / prepare-dev.sh 保证）：执行前已停止 web-api 等写入方；执行后需重启应用。
+# E2E 只清库模式：
+#   E2E_RESET=1 ERP_RESET_ONLY=1 [E2E_ALLOW_REMOTE_RESET=1] bash scripts/reset-db.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +31,7 @@ E2E_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BACKEND_DIR="$(cd "${E2E_DIR}/backend" && pwd)"
 RESET_SCRIPT="${BACKEND_DIR}/scripts/reset-dev-business-data.sh"
 CONFIG_FILE="${BACKEND_DIR}/config.toml"
+RESET_ONLY="${ERP_RESET_ONLY:-0}"
 
 [[ "${E2E_RESET:-0}" == "1" ]] || {
     echo "错误: 数据库重置需要显式设置 E2E_RESET=1" >&2
@@ -34,6 +39,10 @@ CONFIG_FILE="${BACKEND_DIR}/config.toml"
 }
 [[ -f "${RESET_SCRIPT}" ]] || { echo "错误: 未找到 ${RESET_SCRIPT}" >&2; exit 2; }
 [[ -f "${CONFIG_FILE}" ]] || { echo "错误: 未找到 ${CONFIG_FILE}" >&2; exit 2; }
+[[ "${RESET_ONLY}" == "0" || "${RESET_ONLY}" == "1" ]] || {
+    echo "错误: ERP_RESET_ONLY 只能是 0 或 1" >&2
+    exit 2
+}
 
 DB_NAME="$(
     python3 - "${CONFIG_FILE}" <<'PY'
@@ -114,16 +123,24 @@ if [[ "${IS_REMOTE}" -eq 1 ]]; then
     export ERP_RESET_ALLOWED_REMOTE_HOSTS="${TARGET_HOSTS}"
 fi
 
-echo "== E2E 数据库重置 =="
+echo "== 开发数据库重置 =="
 echo "目标数据库: ${DB_NAME}"
 echo "目标主机: ${TARGET_HOSTS}"
+if [[ "${RESET_ONLY}" == "1" ]]; then
+    echo "完成模式: 只清库（不填种子、不重启 web-api）"
+else
+    echo "完成模式: 清库 + 审批定义 + 基础种子（web-api 保持运行）"
+fi
 if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
     echo "保留项: 账号/RBAC、source_systems、file_assets、审计、计数器"
-    echo "清理项: 业务单据及供应商/商品/SKU/供给/仓库/分类/品牌/单位（不填充种子）"
+    echo "清理项: 业务单据及供应商/商品/SKU/供给/仓库/分类/品牌/单位"
 else
     echo "保留项: 账号/RBAC、供应商/商品/仓库主数据、source_systems、file_assets、审计、计数器"
-    echo "清理项: 客户/合同/销售单/采购单/票款/库存/审批实例/待办等业务数据（不填充种子）"
+    echo "清理项: 客户/合同/销售单/采购单/票款/库存/审批实例/待办等业务数据"
 fi
+
+echo "-- 停止 web-api（停写） --"
+bash "${SCRIPT_DIR}/stop-backend.sh"
 
 # 1) preview：只读核对并输出集合摘要（同一目标与摘要贯穿 execute/verify）
 echo "-- [1/3] preview --"
@@ -146,8 +163,25 @@ fi
 echo "-- [3/3] verify --"
 "${RESET_SCRIPT}" --verify --expect-summary "${SCOPE_DIGEST}"
 
-if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
-    echo "== 重置完成：业务数据与主数据已清空，账号保留 =="
-else
-    echo "== 重置完成：业务数据已清空，账号与主数据保留 =="
+if [[ "${RESET_ONLY}" == "1" ]]; then
+    if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
+        echo "== 只清库完成：业务数据与主数据已清空，web-api 保持停止 =="
+    else
+        echo "== 只清库完成：业务数据已清空，账号与主数据保留，web-api 保持停止 =="
+    fi
+    exit 0
 fi
+
+echo "-- 启动 web-api（写审批定义与种子） --"
+bash "${SCRIPT_DIR}/restart-backend.sh"
+
+echo "-- 发布需审批单据的审批定义（供应商付款不审批） --"
+node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
+
+echo "-- 填充基础种子：账号职责 + 仓库 + 财务责任 + 客户 + 合同 --"
+node "${SCRIPT_DIR}/seed-dev-foundation.mjs"
+
+echo "-- 填充目录种子：供应商收款账户 + 商品 + 公司商品池 --"
+node "${SCRIPT_DIR}/seed-dev-catalog.mjs"
+
+echo "== 重置与种子填充完成：web-api 已运行，可直接使用 =="

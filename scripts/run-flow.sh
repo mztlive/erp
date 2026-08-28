@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 单个流程的完整 E2E 编排（每个 spec 文件即一个流程）：
 #   1. 确保前后端服务已启动（已启动则复用）；
-#   2. 停止 web-api（停写）→ 数据库 reset（清业务数据，保留账号/主数据，不填充种子）
+#   2. reset-db.sh 以 ERP_RESET_ONLY=1 停止 web-api 并只清业务数据（保留账号/主数据）
 #      → 重启 web-api 等待健康（重建索引/角色/RBAC）；
 #   3. 发布审批定义（reset 会删除全部定义，按合同必须先发布才能开单）；
 #   4. 执行对应 playwright spec。
@@ -41,10 +41,8 @@ run_one() {
     bash "${SCRIPT_DIR}/ensure-services.sh"
 
     if [[ "${RESET}" == "1" ]]; then
-        echo "-- 停止 web-api（停写） --"
-        bash "${SCRIPT_DIR}/stop-backend.sh"
-        echo "-- 数据库 reset --"
-        E2E_RESET=1 bash "${SCRIPT_DIR}/reset-db.sh"
+        echo "-- 数据库 reset（E2E 只清库） --"
+        E2E_RESET=1 ERP_RESET_ONLY=1 bash "${SCRIPT_DIR}/reset-db.sh"
         echo "-- 重启 web-api --"
         bash "${SCRIPT_DIR}/restart-backend.sh"
         echo "-- 发布审批定义 --"

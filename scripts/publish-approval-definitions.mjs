@@ -6,10 +6,12 @@
  * 按合同（approval-workflow-contract.md §4.3/§4.4）每个 PROCESS_REQUIRED 类型
  * 必须先创建并发布定义，单据才能进入审批；否则创建返回 APPROVAL_PROCESS_NOT_CONFIGURED。
  *
- * 本脚本以 admin 登录，为下列类型创建「空源草稿 + 线性单人节点」并发布：
+ * 本脚本以 admin 登录，只为下列 PROCESS_REQUIRED 类型创建「空源草稿 + 线性单人节点」并发布：
  *   sales_order / voucher_sales_order / sales_change_order / purchase_order /
- *   purchase_change_order / stock_adjustment / customer_receipt / supplier_payment /
- *   customer_refund / supplier_refund / receipt_reversal / payment_reversal
+ *   purchase_change_order / stock_adjustment / customer_receipt / customer_refund /
+ *   supplier_refund / receipt_reversal / payment_reversal
+ * SupplierPayment 固定为 NO_APPROVAL：采购单最终审批提供付款授权，出纳在付款任务中直接
+ * 登记并过账，不得为 supplier_payment 创建或发布审批定义。
  *
  * 审批人选择约束（代码事实）：
  *   - 审批人账号必须 active 且具备 approval_instance:decide（全部角色都有）；
@@ -41,7 +43,7 @@ const DEFINITIONS = [
         { node_name: "销售领导复核", display_order: 2, assignee: "salesLeader" },
     ]},
     { type: "purchase_order", name: "采购单审批（E2E）", nodes: [
-        { node_name: "财务审核", display_order: 1, assignee: "finance" },
+        { node_name: "财务总监审批", display_order: 1, assignee: "finance" },
     ]},
     { type: "purchase_change_order", name: "采购变更单审批（E2E）", nodes: [
         { node_name: "财务复核", display_order: 1, assignee: "finance" },
@@ -51,9 +53,6 @@ const DEFINITIONS = [
     ]},
     { type: "customer_receipt", name: "客户回款单审批（E2E）", nodes: [
         { node_name: "销售领导复核", display_order: 1, assignee: "salesLeader" },
-    ]},
-    { type: "supplier_payment", name: "供应商付款单审批（E2E）", nodes: [
-        { node_name: "采购复核", display_order: 1, assignee: "procurement" },
     ]},
     { type: "customer_refund", name: "客户退款单审批（E2E）", nodes: [
         { node_name: "销售领导复核", display_order: 1, assignee: "salesLeader" },
@@ -127,6 +126,30 @@ async function findDraftId(adminToken, documentType) {
     return draft ? draft.definition_id : null
 }
 
+/**
+ * 校验脚本定义与服务端审批政策完全一致，禁止遗漏必须审批类型或配置无需审批类型。
+ */
+function ensureDefinitionsMatchCatalog(catalog) {
+    const configuredTypes = new Set(DEFINITIONS.map((definition) => definition.type))
+    if (configuredTypes.size !== DEFINITIONS.length) {
+        throw new Error("审批种子存在重复单据类型")
+    }
+
+    const requiredTypes = new Set(
+        catalog
+            .filter((row) => row.approval_requirement === "PROCESS_REQUIRED")
+            .map((row) => row.document_type),
+    )
+    const missingTypes = [...requiredTypes].filter((type) => !configuredTypes.has(type))
+    const forbiddenTypes = [...configuredTypes].filter((type) => !requiredTypes.has(type))
+    if (missingTypes.length === 0 && forbiddenTypes.length === 0) return
+
+    const details = []
+    if (missingTypes.length > 0) details.push(`缺少 ${missingTypes.join("、")}`)
+    if (forbiddenTypes.length > 0) details.push(`不得配置 ${forbiddenTypes.join("、")}`)
+    throw new Error(`审批种子与服务端政策不一致：${details.join("；")}`)
+}
+
 async function main() {
     const adminToken = await login(ACCOUNTS.admin.account, ACCOUNTS.admin.password)
     console.log("admin 登录成功")
@@ -141,6 +164,7 @@ async function main() {
     console.log("账号 id:", JSON.stringify(userIds))
 
     const catalog = await call("GET", "/admin/approval-processes/catalog", { token: adminToken })
+    ensureDefinitionsMatchCatalog(catalog)
     const byType = new Map(catalog.map((row) => [row.document_type, row]))
 
     let created = 0

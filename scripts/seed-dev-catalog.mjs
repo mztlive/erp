@@ -6,6 +6,7 @@
  * 业务时点有效并当前可供的供给时，才进入销售查询视图。
  *
  * 幂等：公司主体、字典、供应商、商品、供给均按固定编号查找。
+ * 每个种子供应商必须存在当前默认收款账户，且详情必须返回付款提交所需的账户 ID 与版本。
  *
  * 用法: node scripts/seed-dev-catalog.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
@@ -482,6 +483,36 @@ async function ensureSupplier(token, spec, companyPartyId) {
     return { id: created.supplier_id, supplier_no: created.supplier_no }
 }
 
+/**
+ * 校验供应商默认收款账户满足工作台展示与付款并发校验合同。
+ */
+async function verifySupplierPaymentRecipient(token, supplier, spec) {
+    const detail = await call("GET", `/admin/suppliers/${encodeURIComponent(supplier.id)}`, { token })
+    const today = todayBusinessDate()
+    const account = (detail.bank_accounts ?? []).find(
+        (row) =>
+            row.is_default &&
+            row.status === "active" &&
+            row.valid_from <= today &&
+            (!row.valid_to || row.valid_to > today),
+    )
+    if (!account) {
+        throw new Error(`供应商 ${spec.supplierNo} 缺少当前默认收款账户`)
+    }
+    if (!account.id || !Number.isSafeInteger(account.version) || account.version < 0) {
+        throw new Error(`供应商 ${spec.supplierNo} 的默认收款账户缺少账户 ID 或版本`)
+    }
+    const expectedLast4 = spec.accountNumber.slice(-4)
+    if (
+        account.account_name !== spec.legalName ||
+        account.bank_name !== spec.bankName ||
+        !account.account_number_masked?.endsWith(expectedLast4)
+    ) {
+        throw new Error(`供应商 ${spec.supplierNo} 的默认收款账户与种子合同不一致`)
+    }
+    return account
+}
+
 async function findProduct(token, productNo) {
     const items = pageItems(
         await call(
@@ -663,6 +694,7 @@ async function main() {
     const suppliers = {}
     for (const spec of SUPPLIERS) {
         const row = await ensureSupplier(token, spec, companyParty.id)
+        await verifySupplierPaymentRecipient(token, row, spec)
         suppliers[spec.supplierNo] = row
     }
 
@@ -687,7 +719,7 @@ async function main() {
     console.log("")
     console.log("== 开发开单目录已就绪 ==")
     console.log(`公司主体: ${COMPANY_PARTY.legalName}`)
-    console.log(`供应商: ${SUPPLIERS.map((row) => row.shortName).join("、")}`)
+    console.log(`供应商（均已配置默认收款账户）: ${SUPPLIERS.map((row) => row.shortName).join("、")}`)
     console.log("公司商品池:")
     for (const line of seeded) {
         console.log(`  ${line}`)
