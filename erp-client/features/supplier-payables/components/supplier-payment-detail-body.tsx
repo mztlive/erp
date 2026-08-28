@@ -2,7 +2,17 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ExternalLinkIcon } from "lucide-react"
+import {
+    CircleHelpIcon,
+    ExternalLinkIcon,
+    GitCompareArrowsIcon,
+    ImageIcon,
+    InfoIcon,
+    LandmarkIcon,
+    Link2Icon,
+    Undo2Icon,
+    type LucideIcon,
+} from "lucide-react"
 
 import {
     BusinessStatusBadge,
@@ -12,18 +22,16 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    DescriptionDetails,
-    DescriptionItem,
-    DescriptionList,
-    DescriptionTerm,
-} from "@/components/ui/description-list"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { FileUpload } from "@/components/ui/file-upload"
+import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useSupplierPaymentBankReceiptQuery } from "@/features/supplier-payables/hooks/queries"
 import {
     paymentPreviewHref,
     paymentRelatedDocumentRefs,
     paymentReversalPreviewHref,
+    sourceDocumentHref,
     sourceDocumentOpenLabel,
     type PaymentRelatedDocumentRef,
 } from "@/features/supplier-payables/lib/related-documents"
@@ -33,9 +41,22 @@ import {
     type PaymentRow,
 } from "@/features/supplier-payables/types"
 import { formatDateTime } from "@/lib/datetime"
+import { cn } from "@/lib/utils"
+
+const PAYMENT_DETAIL_SECTIONS = [
+    { id: "basic", label: "基本信息", icon: InfoIcon },
+    { id: "recipient", label: "收款信息", icon: LandmarkIcon },
+    { id: "receipt", label: "银行回单", icon: ImageIcon },
+    { id: "reversals", label: "冲正记录", icon: Undo2Icon },
+    { id: "related", label: "关联单据", icon: Link2Icon },
+    { id: "allocations", label: "付款去向", icon: GitCompareArrowsIcon },
+] as const
+
+type PaymentDetailSectionId = (typeof PAYMENT_DETAIL_SECTIONS)[number]["id"]
 
 /**
  * 供应商付款事实详情；普通付款登记即过账，不包含独立审批区。
+ * 按分区展示，避免一张长页把核销、回单和收款信息叠在一起。
  *
  * @param row 已加载的付款事实。
  * @param onOpenPayable 在当前页打开应付预览，不跳到台账列表。
@@ -48,124 +69,159 @@ export function SupplierPaymentDetailBody({
     onOpenPayable?: (payableAccountId: string) => void
 }) {
     const posted = row.status === "POSTED" || row.status === "REVERSED"
+
     return (
-        <div className="space-y-5 overflow-auto p-6">
-            {posted ? (
-                <Alert variant="info">
-                    <AlertTitle>已过账记录只读</AlertTitle>
-                    <AlertDescription>
-                        已过账记录不可编辑、不可删除；纠错仅能追加冲正。
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            <DescriptionList columns="two">
-                <DescriptionItem>
-                    <DescriptionTerm>付款单号</DescriptionTerm>
-                    <DescriptionDetails className="num font-medium">
-                        {row.paymentNo}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>供应商</DescriptionTerm>
-                    <DescriptionDetails className="font-medium">
-                        {row.supplierName}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>付款时间</DescriptionTerm>
-                    <DescriptionDetails className="num font-medium">
-                        {formatDateTime(row.paidAt, "full", "passthrough")}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>付款金额</DescriptionTerm>
-                    <DescriptionDetails className="font-medium">
-                        <MoneyValue value={row.amount} taxBasis="gross" />
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem className="sm:col-span-2">
-                    <DescriptionTerm>银行流水号</DescriptionTerm>
-                    <DescriptionDetails className="num break-all font-medium">
-                        {row.bankReferenceMasked}
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>已付款</DescriptionTerm>
-                    <DescriptionDetails className="font-medium">
-                        <MoneyValue
-                            value={row.allocatedTotal}
-                            taxBasis="gross"
+        <Tabs
+            defaultValue="basic"
+            orientation="vertical"
+            className="flex min-h-0 min-w-0 flex-1 flex-row gap-0"
+        >
+            <TabsList
+                aria-label="付款详情分区"
+                className="h-auto w-44 shrink-0 flex-col items-stretch justify-start gap-1 rounded-none bg-transparent p-3 sm:w-52"
+            >
+                {PAYMENT_DETAIL_SECTIONS.map((section) => (
+                    <SectionTab
+                        key={section.id}
+                        value={section.id}
+                        icon={section.icon}
+                    >
+                        {section.label}
+                    </SectionTab>
+                ))}
+            </TabsList>
+            <SectionPanel value="basic" icon={InfoIcon} title="基本信息">
+                {posted ? (
+                    <Alert variant="info">
+                        <AlertTitle>已过账记录只读</AlertTitle>
+                        <AlertDescription>
+                            已过账记录不可编辑、不可删除；纠错仅能追加冲正。
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+                <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+                    <ReadOnlyField
+                        label="付款单号"
+                        value={row.paymentNo}
+                        description="过账后不可改号"
+                        mono
+                    />
+                    <ReadOnlyField
+                        label="供应商"
+                        value={row.supplierName}
+                        description="本付款对应的往来供应商"
+                    />
+                    <ReadOnlyField
+                        label="付款时间"
+                        value={formatDateTime(
+                            row.paidAt,
+                            "full",
+                            "passthrough",
+                        )}
+                        description="银行实际付款时间"
+                        mono
+                    />
+                    <ReadOnlyField
+                        label="付款金额"
+                        value={
+                            <MoneyValue value={row.amount} taxBasis="gross" />
+                        }
+                        description="本单含税付款总额"
+                    />
+                    <ReadOnlyField
+                        label="银行流水号"
+                        value={row.bankReferenceMasked}
+                        description="用于对账的银行引用"
+                        mono
+                        className="sm:col-span-2"
+                    />
+                    <ReadOnlyField
+                        label="已付款"
+                        value={
+                            <MoneyValue
+                                value={row.allocatedTotal}
+                                taxBasis="gross"
+                            />
+                        }
+                        description="已经付给具体应付的金额"
+                    />
+                    <ReadOnlyField
+                        label="未付款"
+                        value={
+                            <MoneyValue
+                                value={row.unallocatedAmount}
+                                taxBasis="gross"
+                            />
+                        }
+                        description="还没指定付给哪一笔应付的余额"
+                    />
+                </div>
+            </SectionPanel>
+            <SectionPanel
+                value="recipient"
+                icon={LandmarkIcon}
+                title="收款信息"
+            >
+                {row.paymentRecipient ? (
+                    <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+                        <ReadOnlyField
+                            label="收款户名"
+                            value={row.paymentRecipient.accountName}
+                            description="供应商收款账户户名"
                         />
-                    </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
-                    <DescriptionTerm>未付款</DescriptionTerm>
-                    <DescriptionDetails className="font-medium">
-                        <MoneyValue
-                            value={row.unallocatedAmount}
-                            taxBasis="gross"
+                        <ReadOnlyField
+                            label="收款银行"
+                            value={[
+                                row.paymentRecipient.bankName,
+                                row.paymentRecipient.bankBranchName,
+                            ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            description="开户银行与网点"
                         />
-                    </DescriptionDetails>
-                </DescriptionItem>
-            </DescriptionList>
-            <p className="text-xs text-muted-foreground">
-                已付款是这笔钱已经付给具体应付的金额；未付款是还没指定付给哪一笔应付的余额。
-            </p>
-            {row.paymentRecipient ? (
-                <section>
-                    <h4 className="mb-2 text-sm font-semibold">收款信息</h4>
-                    <DescriptionList columns="two">
-                        <DescriptionItem>
-                            <DescriptionTerm>收款户名</DescriptionTerm>
-                            <DescriptionDetails className="break-words font-medium">
-                                {row.paymentRecipient.accountName}
-                            </DescriptionDetails>
-                        </DescriptionItem>
-                        <DescriptionItem>
-                            <DescriptionTerm>收款银行</DescriptionTerm>
-                            <DescriptionDetails className="break-words font-medium">
-                                {[
-                                    row.paymentRecipient.bankName,
-                                    row.paymentRecipient.bankBranchName,
-                                ]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                            </DescriptionDetails>
-                        </DescriptionItem>
-                        <DescriptionItem className="sm:col-span-2">
-                            <DescriptionTerm>收款账号</DescriptionTerm>
-                            <DescriptionDetails>
-                                <code className="num block break-all font-mono text-sm font-medium">
-                                    {row.paymentRecipient.accountNumberMasked}
-                                </code>
-                            </DescriptionDetails>
-                        </DescriptionItem>
-                    </DescriptionList>
-                </section>
-            ) : null}
-            <BankReceiptPreview row={row} />
-            <PaymentReversalHistory row={row} />
-            <section>
-                <h4 className="mb-1 text-sm font-semibold">关联单据</h4>
-                <p className="mb-2 text-xs text-muted-foreground">
+                        <ReadOnlyField
+                            label="收款账号"
+                            value={row.paymentRecipient.accountNumberMasked}
+                            description="脱敏账号，完整号码需受控揭示"
+                            mono
+                            className="sm:col-span-2"
+                        />
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        未记录收款账户
+                    </p>
+                )}
+            </SectionPanel>
+            <SectionPanel value="receipt" icon={ImageIcon} title="银行回单">
+                <BankReceiptPreview row={row} />
+            </SectionPanel>
+            <SectionPanel value="reversals" icon={Undo2Icon} title="冲正记录">
+                <PaymentReversalHistory row={row} />
+            </SectionPanel>
+            <SectionPanel value="related" icon={Link2Icon} title="关联单据">
+                <p className="text-sm text-muted-foreground">
                     应付按来源采购单或结算单记账。查看应付在本页打开，打开采购单会进入该单据。
                 </p>
                 <RelatedDocumentList
                     documents={relatedDocumentsFromPayment(row, onOpenPayable)}
                     emptyContent="此付款尚未付到任何应付。"
                 />
-            </section>
-            <section>
-                <h4 className="mb-1 text-sm font-semibold">付款去向</h4>
-                <p className="mb-2 text-xs text-muted-foreground">
-                    这笔付款分别付给了哪些应付、各付了多少。冲正不会改已经记下的行，只会再记一笔冲减。
+            </SectionPanel>
+            <SectionPanel
+                value="allocations"
+                icon={GitCompareArrowsIcon}
+                title="付款去向"
+            >
+                <p className="text-sm text-muted-foreground">
+                    这笔付款分别付给了哪些应付、各付了多少。点来源单进入采购单或结算单。冲正不会改已经记下的行，只会再记一笔冲减。
                 </p>
                 {row.allocations.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                         尚未付到任何应付
                     </p>
                 ) : (
-                    <ul className="space-y-2">
+                    <ul className="flex flex-col gap-2">
                         {row.allocations.map((allocation) => (
                             <AllocationLineItem
                                 key={allocation.allocationId}
@@ -174,23 +230,125 @@ export function SupplierPaymentDetailBody({
                         ))}
                     </ul>
                 )}
-            </section>
-        </div>
+            </SectionPanel>
+        </Tabs>
+    )
+}
+
+function SectionTab({
+    value,
+    icon: Icon,
+    children,
+}: {
+    value: PaymentDetailSectionId
+    icon: LucideIcon
+    children: React.ReactNode
+}) {
+    return (
+        <TabsTrigger
+            value={value}
+            className={cn(
+                "h-10 flex-none justify-start gap-2 rounded-lg px-3 py-2 text-muted-foreground after:hidden",
+                "data-active:bg-muted data-active:font-medium data-active:text-foreground",
+                "before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-transparent data-active:before:bg-primary",
+            )}
+        >
+            <Icon />
+            {children}
+        </TabsTrigger>
+    )
+}
+
+function SectionPanel({
+    value,
+    icon: Icon,
+    title,
+    children,
+}: {
+    value: PaymentDetailSectionId
+    icon: LucideIcon
+    title: string
+    children: React.ReactNode
+}) {
+    return (
+        <TabsContent
+            value={value}
+            className="min-h-0 flex-1 overflow-y-auto p-6"
+        >
+            <div className="mb-5 flex items-center gap-2">
+                <span className="flex size-6 items-center justify-center rounded-full border border-border text-muted-foreground">
+                    <Icon className="size-3.5" aria-hidden />
+                </span>
+                <h3 className="text-sm font-medium">{title}</h3>
+            </div>
+            <div className="flex flex-col gap-5">{children}</div>
+        </TabsContent>
+    )
+}
+
+function ReadOnlyField({
+    label,
+    value,
+    description,
+    className,
+    mono = false,
+}: {
+    label: string
+    value: React.ReactNode
+    description?: string
+    className?: string
+    mono?: boolean
+}) {
+    const id = React.useId()
+    const isText = typeof value === "string"
+
+    return (
+        <Field className={className}>
+            <FieldLabel htmlFor={isText ? id : undefined}>{label}</FieldLabel>
+            {isText ? (
+                <Input
+                    id={id}
+                    readOnly
+                    value={value}
+                    className={cn(
+                        "bg-muted hover:border-input hover:bg-muted focus-visible:border-input focus-visible:ring-0",
+                        mono && "num font-mono",
+                    )}
+                />
+            ) : (
+                <div
+                    className={cn(
+                        "flex min-h-control items-center rounded-lg border border-input bg-muted px-3 py-1.5 text-sm",
+                        mono && "num font-mono",
+                    )}
+                >
+                    {value}
+                </div>
+            )}
+            {description ? (
+                <FieldDescription className="flex items-start justify-between gap-2">
+                    <span>{description}</span>
+                    <CircleHelpIcon
+                        className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70"
+                        aria-hidden
+                    />
+                </FieldDescription>
+            ) : null}
+        </Field>
     )
 }
 
 /** 原付款上的冲正追踪记录；审批中的记录不参与付款金额计算。 */
 function PaymentReversalHistory({ row }: { row: PaymentRow }) {
     return (
-        <section>
-            <h4 className="mb-1 text-sm font-semibold">冲正记录</h4>
-            <p className="mb-2 text-xs text-muted-foreground">
+        <>
+            <p className="text-sm text-muted-foreground">
                 待审批记录仅用于跟踪；审批通过后才改变原付款事实。
             </p>
             {row.relatedReversals.length === 0 ? (
                 <p className="text-sm text-muted-foreground">尚未发起冲正</p>
             ) : (
-                <ul className="space-y-2">
+                <ul className="flex flex-col gap-2">
                     {row.relatedReversals.map((reversal) => (
                         <li
                             key={reversal.reversalId}
@@ -237,7 +395,7 @@ function PaymentReversalHistory({ row }: { row: PaymentRow }) {
                     ))}
                 </ul>
             )}
-        </section>
+        </>
     )
 }
 
@@ -258,33 +416,32 @@ function BankReceiptPreview({ row }: { row: PaymentRow }) {
         return () => URL.revokeObjectURL(url)
     }, [query.data])
 
+    if (!row.bankReceipt) {
+        return (
+            <p className="text-sm text-muted-foreground">
+                历史付款未留存银行回单图片
+            </p>
+        )
+    }
+
     return (
-        <section>
-            <h4 className="mb-2 text-sm font-semibold">银行回单</h4>
-            {row.bankReceipt ? (
-                <div className="max-w-md space-y-2">
-                    <FileUpload
-                        onFilesSelected={() => undefined}
-                        multiple={false}
-                        density="compact"
-                        preview={{
-                            src: previewUrl,
-                            name: row.bankReceipt.fileName,
-                            status: "uploaded",
-                        }}
-                    />
-                    {query.isError ? (
-                        <p className="text-xs text-destructive">
-                            回单预览加载失败，请稍后重试。
-                        </p>
-                    ) : null}
-                </div>
-            ) : (
-                <p className="text-sm text-muted-foreground">
-                    历史付款未留存银行回单图片
+        <div className="max-w-md">
+            <FileUpload
+                onFilesSelected={() => undefined}
+                multiple={false}
+                density="compact"
+                preview={{
+                    src: previewUrl,
+                    name: row.bankReceipt.fileName,
+                    status: "uploaded",
+                }}
+            />
+            {query.isError ? (
+                <p className="mt-2 text-xs text-destructive">
+                    回单预览加载失败，请稍后重试。
                 </p>
-            )}
-        </section>
+            ) : null}
+        </div>
     )
 }
 
@@ -377,7 +534,7 @@ function RelatedDocumentActions({
 }
 
 /**
- * 单笔付款去向。只说明付给了哪张来源单、付了多少，导航放在关联单据。
+ * 单笔付款去向。说明付给了哪张来源单、付了多少，并可跳转到采购单或结算单。
  *
  * @param allocation 付款核销行。
  */
@@ -387,6 +544,9 @@ function AllocationLineItem({
     allocation: PaymentAllocationLine
 }) {
     const verb = allocation.action === "REVERSE" ? "冲减" : "付给"
+    const href =
+        allocation.sourceHref ??
+        sourceDocumentHref(allocation.sourceType, allocation.sourceDocumentId)
     return (
         <li className="rounded-xl border px-3 py-2 text-sm">
             <div className="flex justify-between gap-2">
@@ -396,9 +556,28 @@ function AllocationLineItem({
                 </span>
                 <MoneyValue value={allocation.amount} />
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-                {formatDateTime(allocation.occurredAt, "full", "passthrough")}
-                {allocation.reverseOfAllocationId ? " · 冲减此前一笔" : null}
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                    {formatDateTime(
+                        allocation.occurredAt,
+                        "full",
+                        "passthrough",
+                    )}
+                    {allocation.reverseOfAllocationId
+                        ? " · 冲减此前一笔"
+                        : null}
+                </span>
+                {href ? (
+                    <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        render={<Link href={href} />}
+                    >
+                        {sourceDocumentOpenLabel(allocation.sourceType)}
+                        <ExternalLinkIcon data-icon="inline-end" />
+                    </Button>
+                ) : null}
             </div>
         </li>
     )

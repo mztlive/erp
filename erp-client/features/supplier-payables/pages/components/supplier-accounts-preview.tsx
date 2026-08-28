@@ -21,7 +21,7 @@ import { Separator } from "@/components/ui/separator"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { PaymentReversalDetailBody } from "@/features/supplier-payables/components/payment-reversal-detail-body"
-import { SupplierPaymentDetailBody } from "@/features/supplier-payables/components/supplier-payment-detail-body"
+import { SupplierPaymentDetailDialog } from "@/features/supplier-payables/components/supplier-payment-detail-dialog"
 import { SupplierRefundDetailBody } from "@/features/supplier-payables/components/supplier-refund-detail-body"
 import { isUnsubmittedPaymentReversalStatus } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import { isUnsubmittedSupplierRefundStatus } from "@/features/supplier-payables/lib/supplier-refund-approval"
@@ -59,7 +59,7 @@ export interface SupplierAccountsPreviewProps {
 }
 
 /**
- * 供应商往来详情抽屉。付款展示正式事实；退款与付款冲正嵌入通用审批区。
+ * 供应商往来详情。付款走分区 Dialog；退款与付款冲正仍用详情抽屉并嵌入通用审批区。
  * 应付预览只能为当前付款任务打开付款作业。
  */
 export function SupplierAccountsPreview({
@@ -208,45 +208,18 @@ export function SupplierAccountsPreview({
 
     if (previewPaymentId) {
         return (
-            <QuickPreviewSheet
+            <SupplierPaymentDetailDialog
                 open
                 onOpenChange={(open) => {
                     if (!open) onClose()
                 }}
-                size="detail"
-                title={paymentQuery.data?.paymentNo ?? "付款详情"}
-                description="已过账付款记录与核销明细"
-            >
-                {paymentQuery.isPending ? (
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
-                ) : paymentQuery.data ? (
-                    <SupplierPaymentDetailBody
-                        row={paymentQuery.data}
-                        onOpenPayable={onOpenPayable}
-                    />
-                ) : paymentQuery.isError ? (
-                    <div className="space-y-3 p-6">
-                        <p className="text-sm text-muted-foreground">
-                            {getErrorMessage(
-                                paymentQuery.error,
-                                "付款详情加载失败，请重试。",
-                            )}
-                        </p>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void paymentQuery.refetch()}
-                        >
-                            重试
-                        </Button>
-                    </div>
-                ) : (
-                    <p className="p-6 text-sm text-muted-foreground">
-                        未找到付款详情
-                    </p>
-                )}
-            </QuickPreviewSheet>
+                isPending={paymentQuery.isPending}
+                isError={paymentQuery.isError}
+                error={paymentQuery.error}
+                onRetry={() => void paymentQuery.refetch()}
+                row={paymentQuery.data}
+                onOpenPayable={onOpenPayable}
+            />
         )
     }
 

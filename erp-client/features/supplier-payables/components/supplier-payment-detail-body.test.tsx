@@ -1,7 +1,7 @@
 import type { ReactElement } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { SupplierPaymentDetailBody } from "@/features/supplier-payables/components/supplier-payment-detail-body"
 import { createFreshQueryClient } from "@/features/test-utils"
@@ -60,22 +60,77 @@ function renderBody(ui: ReactElement) {
     )
 }
 
+afterEach(cleanup)
+
 describe("SupplierPaymentDetailBody", () => {
-    it("用业务用语展示金额，并完整显示收款账号", () => {
+    it("默认展示基本信息分区，并用业务用语展示金额", () => {
         renderBody(<SupplierPaymentDetailBody row={payment} />)
 
+        expect(screen.getByRole("tab", { name: "基本信息" })).toBeTruthy()
+        expect(screen.getByRole("tab", { name: "收款信息" })).toBeTruthy()
+        expect(screen.getByRole("tab", { name: "付款去向" })).toBeTruthy()
         expect(screen.getAllByText("已付款").length).toBeGreaterThan(0)
         expect(screen.getAllByText("未付款").length).toBeGreaterThan(0)
         expect(screen.queryByText("净已分配")).toBeNull()
         expect(screen.queryByText("分配明细（新增不覆盖原金额）")).toBeNull()
-        expect(screen.getByText("6222********88881234")).toBeTruthy()
-        expect(screen.getByText("付款去向")).toBeTruthy()
+        expect(screen.queryByText("6222********88881234")).toBeNull()
+        expect(
+            screen.queryByText(
+                "这笔付款分别付给了哪些应付、各付了多少。点来源单进入采购单或结算单。冲正不会改已经记下的行，只会再记一笔冲减。",
+            ),
+        ).toBeNull()
+    })
+
+    it("收款信息分区完整显示收款账号", () => {
+        renderBody(<SupplierPaymentDetailBody row={payment} />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "收款信息" }))
+        expect(screen.getByDisplayValue("6222********88881234")).toBeTruthy()
+    })
+
+    it("付款去向分区展示核销行，并可跳转到来源采购单", () => {
+        renderBody(<SupplierPaymentDetailBody row={payment} />)
+
+        fireEvent.click(screen.getByRole("tab", { name: "付款去向" }))
         expect(
             screen.getByText(
-                "这笔付款分别付给了哪些应付、各付了多少。冲正不会改已经记下的行，只会再记一笔冲减。",
+                "这笔付款分别付给了哪些应付、各付了多少。点来源单进入采购单或结算单。冲正不会改已经记下的行，只会再记一笔冲减。",
             ),
         ).toBeTruthy()
         expect(screen.getByText(/付给 采购单 PO-1001/)).toBeTruthy()
+        const sourceButton = screen.getByRole("button", { name: "打开采购单" })
+        expect(sourceButton.getAttribute("href")).toBe(
+            "/procurement/orders/po-1",
+        )
+    })
+
+    it("付款去向在缺少 sourceHref 时仍能按来源身份跳转结算单", () => {
+        renderBody(
+            <SupplierPaymentDetailBody
+                row={{
+                    ...payment,
+                    allocations: [
+                        {
+                            allocationId: "alloc-2",
+                            action: "APPLY",
+                            payableAccountId: "pa-2",
+                            payableEntryId: "pe-2",
+                            sourceType: "SUPPLIER_SETTLEMENT",
+                            sourceDocumentId: "st-9",
+                            sourceDocumentNo: "JS-9",
+                            amount: "10.00",
+                            occurredAt: "2026-01-01T00:00:00.000Z",
+                        },
+                    ],
+                }}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "付款去向" }))
+        const sourceButton = screen.getByRole("button", { name: "打开结算单" })
+        expect(sourceButton.getAttribute("href")).toBe(
+            "/supplier-api/settlements/st-9",
+        )
     })
 
     it("关联单据不重复列出采购单，查看应付在当前页打开", () => {
@@ -87,6 +142,7 @@ describe("SupplierPaymentDetailBody", () => {
             />,
         )
 
+        fireEvent.click(screen.getByRole("tab", { name: "关联单据" }))
         expect(
             screen.getAllByRole("button", { name: "查看应付" }),
         ).toHaveLength(1)
