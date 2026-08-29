@@ -49,7 +49,10 @@ export function SalesOrderDetailTabs({
     }>
     canAccept: boolean
     focusedWorkItem?: WorkItemProjection
-    onSelectSection: (next: NavSectionId | WorkSectionId | "versions") => void
+    onSelectSection: (
+        next: NavSectionId | WorkSectionId | "versions",
+        extras?: { mode?: "register" },
+    ) => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
     onDataChanged: () => void
 }) {

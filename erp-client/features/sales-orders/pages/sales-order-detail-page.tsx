@@ -78,11 +78,15 @@ export function SalesOrderDetailPage({
         ? mapWorkItemDto(focusedWorkItemQuery.data)
         : undefined
     const selectSection = React.useCallback(
-        (next: Parameters<typeof selectUrlSection>[0]) =>
+        (
+            next: Parameters<typeof selectUrlSection>[0],
+            extras?: { mode?: "register" },
+        ) =>
             selectUrlSection(
                 next,
                 focusedWorkItem?.workItemType ===
                     "CUSTOMER_ACCEPTANCE_REGISTRATION",
+                extras,
             ),
         [focusedWorkItem?.workItemType, selectUrlSection],
     )
@@ -202,7 +206,14 @@ export function SalesOrderDetailPage({
                     ? acceptanceFocusGate.reason
                     : undefined
             }
-            onClick={() => selectSection(derived.actionableFocusTask!.id)}
+            onClick={() =>
+                selectSection(
+                    derived.actionableFocusTask!.id,
+                    derived.actionableFocusTask!.id === "acceptance"
+                        ? { mode: "register" }
+                        : undefined,
+                )
+            }
         >
             {derived.actionableFocusTask.actionLabel}
         </Button>

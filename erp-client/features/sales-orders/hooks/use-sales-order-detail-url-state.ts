@@ -42,11 +42,15 @@ export function useSalesOrderDetailUrlState({
         (
             next: NavSectionId | WorkSectionId | "versions",
             isCustomerAcceptanceTask = false,
+            extras?: { mode?: "register" },
         ) => {
             const params = new URLSearchParams()
             params.set("section", next)
             if (returnTo) params.set("returnTo", returnTo)
             if (fromWorkspace) params.set("from", fromWorkspace)
+            if (next === "acceptance" && extras?.mode === "register") {
+                params.set("mode", "register")
+            }
             const workItemId = searchParams.get("workItemId")
             const retainWorkItem = Boolean(
                 workItemId &&

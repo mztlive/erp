@@ -356,6 +356,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
     if (item.handlerKey === "customer_acceptance_registration") {
         const params = new URLSearchParams({
             section: "acceptance",
+            mode: "register",
             from: "W01",
             workItemId,
             returnTo: `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`,

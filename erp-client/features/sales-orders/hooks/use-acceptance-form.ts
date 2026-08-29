@@ -9,8 +9,7 @@ import type { ValidationIssue } from "@/components/business"
 import {
     collectValidationIssues,
     todayLocalDateTimeInput,
-    type AcceptanceFactSelection,
-    type LineResultState,
+    type AcceptanceBatchSelection,
 } from "@/features/sales-orders/lib/acceptance-model"
 
 const draftHeaderSchema = z.object({
@@ -18,25 +17,22 @@ const draftHeaderSchema = z.object({
     comment: z.string(),
 })
 
-/** 表单实例类型：由本 hook 的返回类型推导，供拆分的面板组件复用。 */
 export type AcceptanceFormApi = ReturnType<typeof useAcceptanceForm>["form"]
 
-/**
- * 验收工作台的表单（表头）与提交前校验。
- * 提交时校验来源/行结果；校验通过后回调 onValidSubmit（打开确认框）。
- */
 export function useAcceptanceForm({
     selected,
-    lineResults,
     onValidSubmit,
 }: {
-    selected: AcceptanceFactSelection
-    lineResults: Map<string, LineResultState>
+    selected: AcceptanceBatchSelection
     onValidSubmit: () => void
 }) {
     const [clientIssues, setClientIssues] = React.useState<ValidationIssue[]>(
         [],
     )
+    const selectedRef = React.useRef(selected)
+    selectedRef.current = selected
+    const onValidSubmitRef = React.useRef(onValidSubmit)
+    onValidSubmitRef.current = onValidSubmit
 
     const form = useAppForm({
         defaultValues: {
@@ -45,14 +41,14 @@ export function useAcceptanceForm({
         },
         validators: { onChange: draftHeaderSchema },
         onSubmit: async () => {
-            const issues = collectValidationIssues(selected, lineResults)
+            const issues = collectValidationIssues(selectedRef.current)
             setClientIssues(issues)
             if (issues.length > 0) return
-            onValidSubmit()
+            onValidSubmitRef.current()
         },
     })
 
     const formDirty = useSelector(form.store, (state) => state.isDirty)
 
-    return { form, formDirty, clientIssues }
+    return { form, formDirty, clientIssues, setClientIssues }
 }

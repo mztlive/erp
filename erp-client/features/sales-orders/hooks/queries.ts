@@ -30,7 +30,6 @@ export const salesOrderKeys = {
     acceptance: (
         id: string,
         filters: {
-            remainingOnly?: boolean
             workItemId?: string | null
             expectedTaskVersion?: string
         },

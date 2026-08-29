@@ -223,4 +223,4 @@ export const OVERALL_RESULT_LABEL: Record<AcceptanceOverallResult, string> = {
 }
 
 export const FACT_ONLY_NOTICE =
-    "本结果仅记录客户验收记录，不表示已退货、已退款、已扣库存或已减少应收。后续处理请从「变更与异常」发起。"
+    "短少、拒收或服务不通过只记客户结果，不会自动退货、退款或改应收。请另开退货或拒收处理单。"

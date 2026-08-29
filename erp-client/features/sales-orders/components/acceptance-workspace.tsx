@@ -1,18 +1,24 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/api/acceptance"
 import {
     type AcceptanceHistoryItem,
     type AcceptanceOverallResult,
 } from "@/features/sales-orders/lib/acceptance-types"
-import { buildDraftLines } from "@/features/sales-orders/lib/acceptance-model"
+import {
+    buildDraftLines,
+    buildOrderProgress,
+    defaultBatchDraft,
+    pendingFactsOf,
+    type AcceptanceBatchSelection,
+} from "@/features/sales-orders/lib/acceptance-model"
 import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { useAcceptanceWorkspaceUrlState } from "@/features/sales-orders/hooks/acceptance-url-state"
 import { useAcceptanceSelection } from "@/features/sales-orders/hooks/use-acceptance-selection"
@@ -24,23 +30,25 @@ import {
     AcceptanceNoFactsState,
 } from "@/features/sales-orders/components/acceptance-blocked-states"
 import { AcceptanceDialogs } from "@/features/sales-orders/components/acceptance-dialogs"
-import { AcceptanceEntryForm } from "@/features/sales-orders/components/acceptance-entry-form"
-import { AcceptanceFactPool } from "@/features/sales-orders/components/acceptance-fact-pool"
-import { AcceptanceFooterBar } from "@/features/sales-orders/components/acceptance-footer-bar"
 import { AcceptanceFormalResult } from "@/features/sales-orders/components/acceptance-formal-result"
 import { AcceptanceHistoryList } from "@/features/sales-orders/components/acceptance-history-list"
-import { AcceptanceSummaryBar } from "@/features/sales-orders/components/acceptance-summary-bar"
+import { AcceptanceProgressTable } from "@/features/sales-orders/components/acceptance-progress-table"
+import { AcceptanceRegisterDialog } from "@/features/sales-orders/components/acceptance-register-dialog"
 
 export function AcceptanceWorkspace({
     salesOrderId,
+    ownerUserId,
+    ownerName,
     workItem,
 }: {
     salesOrderId: string
+    ownerUserId?: string
+    ownerName?: string
     workItem?: WorkItemProjection
 }) {
-    const router = useRouter()
-    const { workItemId, remainingOnly, setRemainingOnly } =
+    const { workItemId, isRegister, setRegisterMode } =
         useAcceptanceWorkspaceUrlState()
+    const accountQuery = useAccountProfileQuery()
     const selection = useAcceptanceSelection()
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [reverseTarget, setReverseTarget] =
@@ -49,29 +57,27 @@ export function AcceptanceWorkspace({
     const [idempotencyKey, setIdempotencyKey] = React.useState(
         () => `acc-${salesOrderId}-${crypto.randomUUID()}`,
     )
-    const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null)
     const [exitDiscardOpen, setExitDiscardOpen] = React.useState(false)
     const resultRef = React.useRef<HTMLDivElement>(null)
-    const restoredDraftRef = React.useRef(false)
-    /** 提交瞬间的总体结果快照（含服务不通过），用于结果反馈不被服务端降级。 */
     const submittedOverallRef = React.useRef<AcceptanceOverallResult>("PASS")
+    const pendingPostLinesRef = React.useRef(selection.selected)
 
     const { form, formDirty, clientIssues } = useAcceptanceForm({
         selected: selection.selected,
-        lineResults: selection.lineResults,
-        onValidSubmit: () => setConfirmOpen(true),
+        onValidSubmit: () => {
+            pendingPostLinesRef.current = selection.selected
+            setConfirmOpen(true)
+        },
     })
 
     const workspaceQuery = useQuery({
         queryKey: salesOrderKeys.acceptance(salesOrderId, {
-            remainingOnly,
             workItemId,
             expectedTaskVersion: workItem?.taskVersion,
         }),
         queryFn: () =>
             fetchCustomerAcceptanceWorkspace({
                 salesOrderId,
-                remainingOnly,
                 workItemId,
                 workItem,
             }),
@@ -79,100 +85,41 @@ export function AcceptanceWorkspace({
 
     const view = workspaceQuery.data
 
-    const {
-        saveDraftMutation,
-        postMutation,
-        reverseMutation,
-        formalResult,
-        setFormalResult,
-    } = useAcceptanceMutations({
-        salesOrderId,
-        idempotencyKey,
-        submittedOverallRef,
-        setDraftSavedAt,
-        onPostSucceeded: () => {
-            selection.reset()
-            form.reset()
-            setIdempotencyKey(`acc-${salesOrderId}-${crypto.randomUUID()}`)
-            restoredDraftRef.current = false
-            submittedOverallRef.current = "PASS"
-        },
-        onReverseSucceeded: () => {
-            setReverseTarget(null)
-            setReverseReason("")
-        },
-    })
-
-    const { restoreDraft } = selection
-
-    // 恢复草稿（刷新后 session-state 仍在）
-    React.useEffect(() => {
-        if (!view?.draft || restoredDraftRef.current) return
-        restoredDraftRef.current = true
-        form.setFieldValue("acceptedAt", view.draft.acceptedAt.slice(0, 16))
-        form.setFieldValue("comment", view.draft.comment)
-        setDraftSavedAt(view.draft.updatedAt)
-        restoreDraft(view.draft.lines, view.salesLines)
-    }, [view, form, restoreDraft])
+    const { postMutation, reverseMutation, formalResult, setFormalResult } =
+        useAcceptanceMutations({
+            salesOrderId,
+            idempotencyKey,
+            submittedOverallRef,
+            onPostSucceeded: () => {
+                selection.reset()
+                form.reset()
+                setIdempotencyKey(`acc-${salesOrderId}-${crypto.randomUUID()}`)
+                submittedOverallRef.current = "PASS"
+                setConfirmOpen(false)
+                setRegisterMode(false, { clearTask: true })
+            },
+            onReverseSucceeded: () => {
+                setReverseTarget(null)
+                setReverseReason("")
+            },
+        })
 
     React.useEffect(() => {
-        if (formalResult) {
-            resultRef.current?.focus()
-        }
+        if (formalResult) resultRef.current?.focus()
     }, [formalResult])
 
-    const handleSaveDraft = React.useCallback(async () => {
-        if (!view) return
-        if (!view.permissions.allowedActions.includes("SAVE_DRAFT")) return
-        const values = form.state.values
-        const lines = buildDraftLines(selection.selected, selection.lineResults)
-        await saveDraftMutation.mutateAsync({
-            salesOrderId,
-            acceptanceDraftId: view.draft?.acceptanceDraftId,
-            expectedDraftVersion: view.draft?.draftVersion,
-            acceptedAt: values.acceptedAt
-                ? new Date(values.acceptedAt).toISOString()
-                : new Date().toISOString(),
-            comment: values.comment,
-            lines,
-        })
-    }, [
-        form,
-        selection.lineResults,
-        salesOrderId,
-        saveDraftMutation,
-        selection.selected,
-        view,
-    ])
-
-    // 快捷键 ⌘S 保存草稿、⌘↵ 打开确认（界面在底栏给出提示）
-    React.useEffect(() => {
-        function onKeyDown(event: KeyboardEvent) {
-            const meta = event.metaKey || event.ctrlKey
-            if (!meta) return
-            if (event.key === "s") {
-                event.preventDefault()
-                void handleSaveDraft()
-            }
-            if (event.key === "Enter") {
-                event.preventDefault()
-                void form.handleSubmit()
-            }
-        }
-        window.addEventListener("keydown", onKeyDown)
-        return () => window.removeEventListener("keydown", onKeyDown)
-    }, [form, handleSaveDraft])
+    const currentUserId = accountQuery.data?.userid
+    const ownerId = workItem?.ownerUser?.id || ownerUserId
+    const ownerLabel = workItem?.ownerUser?.displayName || ownerName || ""
+    const isOwner = !ownerId || !currentUserId || currentUserId === ownerId
 
     if (workspaceQuery.isPending) {
         return (
             <div
-                className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,62fr)_minmax(18rem,38fr)]"
+                className="min-h-48 animate-pulse rounded-md bg-muted/40"
                 aria-busy="true"
-                aria-label="正在加载客户验收工作区"
-            >
-                <div className="min-h-64 animate-pulse rounded-md bg-muted/40" />
-                <div className="min-h-64 animate-pulse rounded-md bg-muted/40" />
-            </div>
+                aria-label="正在加载客户验收"
+            />
         )
     }
 
@@ -206,29 +153,44 @@ export function AcceptanceWorkspace({
     const acceptanceEntryBlocked = Boolean(view.workItemConfigBlocker)
     const canPost =
         !acceptanceEntryBlocked &&
+        isOwner &&
         view.permissions.allowedActions.includes("POST_ACCEPTANCE")
-    const canSave =
-        !acceptanceEntryBlocked &&
-        view.permissions.allowedActions.includes("SAVE_DRAFT")
     const canCreate =
         !acceptanceEntryBlocked &&
+        isOwner &&
         view.permissions.allowedActions.includes("CREATE_ACCEPTANCE")
     const postBlocker = view.permissions.actionBlockers.find(
-        (b) =>
-            b.action === "POST_ACCEPTANCE" || b.action === "CREATE_ACCEPTANCE",
+        (blocker) =>
+            blocker.action === "POST_ACCEPTANCE" ||
+            blocker.action === "CREATE_ACCEPTANCE",
     )
     const isCard = view.salesOrder.businessType === "CARD_VOUCHER"
+    const progress = buildOrderProgress(view.salesLines)
+    const pendingCount = pendingFactsOf(view.salesLines).length
+    const canRegister = canCreate && pendingCount > 0
+    const hasUnsavedInput = formDirty || selection.selected.size > 0
+    const registerOpen = isRegister && !isCard
 
-    const hasUnsavedInput =
-        formDirty ||
-        selection.selected.size > 0 ||
-        selection.lineResults.size > 0
+    const closeRegister = () => {
+        selection.reset()
+        form.reset()
+        setRegisterMode(false)
+    }
+
+    const requestCloseRegister = () => {
+        if (postMutation.isPending || confirmOpen) return
+        if (hasUnsavedInput) {
+            setExitDiscardOpen(true)
+            return
+        }
+        closeRegister()
+    }
 
     return (
         <div className="flex min-w-0 flex-col gap-4">
             {view.workItemConfigBlocker ? (
                 <Alert variant="warning" role="alert">
-                    <AlertTitle>验收入口暂不可用</AlertTitle>
+                    <AlertTitle>暂时不能从这条待办登记</AlertTitle>
                     <AlertDescription>
                         {view.workItemConfigBlocker}
                     </AlertDescription>
@@ -236,102 +198,113 @@ export function AcceptanceWorkspace({
             ) : null}
 
             <AcceptanceFormalResult
-                formalResult={formalResult}
+                formalResult={
+                    registerOpen &&
+                    formalResult &&
+                    formalResult.status !== "succeeded"
+                        ? null
+                        : formalResult
+                }
                 resultRef={resultRef}
-                onDismiss={() => {
-                    setFormalResult(null)
-                    const params = new URLSearchParams(window.location.search)
-                    params.set("section", "fulfillment")
-                    params.delete("mode")
-                    const qs = params.toString()
-                    router.replace(
-                        qs
-                            ? `/sales/orders/${salesOrderId}?${qs}`
-                            : `/sales/orders/${salesOrderId}?section=fulfillment`,
-                    )
-                }}
+                onDismiss={() => setFormalResult(null)}
                 onRetry={() => {
                     setFormalResult(null)
+                    if (!registerOpen) setRegisterMode(true)
                     setConfirmOpen(true)
                 }}
             />
 
-            <AcceptanceSummaryBar
-                metrics={view.metrics}
-                fulfillmentProgress={view.salesOrder.fulfillmentProgress}
-                freshness={view.freshness}
-                remainingOnly={remainingOnly}
-                onRemainingOnlyChange={setRemainingOnly}
-            />
-
-            {isCard || !canCreate ? (
+            {isCard ? (
                 <AcceptanceBlockedState
-                    isCard={isCard}
+                    isCard
                     blockerMessage={postBlocker?.message}
-                    salesOrderId={salesOrderId}
                 />
-            ) : view.metrics.eligibleFulfillmentCount === 0 &&
-              view.history.length === 0 ? (
+            ) : view.salesLines.length === 0 && view.history.length === 0 ? (
                 <AcceptanceNoFactsState />
             ) : (
                 <>
-                    {/* 1440：约 62/38；1024 以下单列 */}
-                    <div className="grid min-w-0 gap-4 lg:grid-cols-1 xl:grid-cols-[minmax(0,62fr)_minmax(20rem,38fr)]">
-                        <AcceptanceFactPool
-                            salesLines={view.salesLines}
-                            selected={selection.selected}
-                            canPost={canPost}
-                            onToggleFact={selection.toggleFact}
-                            onAllocQtyChange={selection.setAllocQty}
-                        />
+                    <AcceptanceProgressTable progress={progress} />
 
-                        <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-                            <AcceptanceEntryForm
-                                form={form}
-                                salesOrderNo={view.salesOrder.salesOrderNo}
-                                customerLabel={view.salesOrder.customerLabel}
-                                selection={selection}
-                                canPost={canPost}
-                                clientIssues={clientIssues}
-                                postBlockerMessage={postBlocker?.message}
-                                draftSavedAt={draftSavedAt}
-                                draftVersion={view.draft?.draftVersion}
-                            />
-
-                            <AcceptanceHistoryList
-                                history={view.history}
-                                canReverse={view.permissions.allowedActions.includes(
-                                    "REVERSE_ACCEPTANCE",
-                                )}
-                                onReverse={(item) => {
-                                    setReverseTarget(item)
-                                    setReverseReason("")
-                                }}
-                            />
+                    {canRegister ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm text-muted-foreground">
+                                还有 {progress.pendingFactCount} 批待客户验收。
+                            </p>
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={!canPost}
+                                onClick={() => setRegisterMode(true)}
+                            >
+                                登记客户验收
+                            </Button>
                         </div>
-                    </div>
+                    ) : !isOwner && pendingCount > 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            还有待验批次，由{ownerLabel || "负责销售"}
+                            登记。
+                        </p>
+                    ) : null}
 
-                    {/* 底栏：校验与主动作（桌面同屏） */}
-                    <AcceptanceFooterBar
-                        salesOrderNo={view.salesOrder.salesOrderNo}
-                        selectedCount={selection.selected.size}
-                        overallPreview={selection.overallPreview}
-                        hasExceptionResult={selection.hasExceptionResult}
-                        canSave={canSave}
-                        canPost={canPost}
-                        savePending={saveDraftMutation.isPending}
-                        postPending={postMutation.isPending}
-                        onExit={() => {
-                            if (hasUnsavedInput) {
-                                setExitDiscardOpen(true)
-                                return
-                            }
-                            router.push(`/sales/orders/${salesOrderId}`)
+                    <AcceptanceHistoryList
+                        history={view.history}
+                        canReverse={view.permissions.allowedActions.includes(
+                            "REVERSE_ACCEPTANCE",
+                        )}
+                        onReverse={(item) => {
+                            setReverseTarget(item)
+                            setReverseReason("")
                         }}
-                        onSaveDraft={() => void handleSaveDraft()}
                     />
                 </>
             )}
+
+            <AcceptanceRegisterDialog
+                open={registerOpen}
+                form={form}
+                salesLines={view.salesLines}
+                selection={selection}
+                canPost={canPost}
+                ownerLabel={ownerLabel}
+                isOwner={isOwner}
+                clientIssues={clientIssues}
+                postBlockerMessage={postBlocker?.message}
+                pendingCount={pendingCount}
+                postPending={postMutation.isPending}
+                onOpenChange={(open) => {
+                    if (open) setRegisterMode(true)
+                    else requestCloseRegister()
+                }}
+                onPassAll={() => {
+                    const next: AcceptanceBatchSelection = new Map()
+                    for (const fact of pendingFactsOf(view.salesLines)) {
+                        next.set(
+                            fact.fulfillmentLineId,
+                            defaultBatchDraft(fact),
+                        )
+                    }
+                    selection.replace(next)
+                    pendingPostLinesRef.current = next
+                    submittedOverallRef.current = "PASS"
+                    setConfirmOpen(true)
+                }}
+            >
+                {registerOpen &&
+                formalResult &&
+                formalResult.status !== "succeeded" ? (
+                    <div className="mb-4">
+                        <AcceptanceFormalResult
+                            formalResult={formalResult}
+                            resultRef={resultRef}
+                            onDismiss={() => setFormalResult(null)}
+                            onRetry={() => {
+                                setFormalResult(null)
+                                setConfirmOpen(true)
+                            }}
+                        />
+                    </div>
+                ) : null}
+            </AcceptanceRegisterDialog>
 
             <AcceptanceDialogs
                 confirmOpen={confirmOpen}
@@ -339,21 +312,15 @@ export function AcceptanceWorkspace({
                 overallPreview={selection.overallPreview}
                 hasExceptionResult={selection.hasExceptionResult}
                 onConfirmAcceptance={async () => {
-                    if (!view) return
                     submittedOverallRef.current = selection.overallPreview
                     const values = form.state.values
-                    const lines = buildDraftLines(
-                        selection.selected,
-                        selection.lineResults,
-                    )
+                    const lines = buildDraftLines(pendingPostLinesRef.current)
                     await postMutation.mutateAsync({
                         workItemId: view.workItem?.id,
                         expectedTaskVersion: view.workItem?.expectedTaskVersion,
                         salesOrderId,
-                        acceptanceDraftId:
-                            view.draft?.acceptanceDraftId ??
-                            `draft_${idempotencyKey}`,
-                        expectedDraftVersion: view.draft?.draftVersion ?? 0,
+                        acceptanceDraftId: `draft_${idempotencyKey}`,
+                        expectedDraftVersion: 0,
                         expectedSalesOrderLockVersion:
                             view.salesOrder.lockVersion,
                         idempotencyKey,
@@ -390,7 +357,7 @@ export function AcceptanceWorkspace({
                 onExitDiscardOpenChange={setExitDiscardOpen}
                 onConfirmExit={() => {
                     setExitDiscardOpen(false)
-                    router.push(`/sales/orders/${salesOrderId}`)
+                    closeRegister()
                 }}
             />
         </div>

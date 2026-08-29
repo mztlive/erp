@@ -8,24 +8,25 @@ export function useAcceptanceWorkspaceUrlState() {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const workItemId = searchParams.get("workItemId")
+    const isRegister = searchParams.get("mode") === "register"
 
-    /** 交付记录筛选随 URL 持久化，刷新/分享不丢失（契约：参数与控件一一对应）。 */
-    const [remainingOnly, setRemainingOnlyState] = React.useState(
-        searchParams.get("remainingOnly") !== "false",
-    )
-
-    const setRemainingOnly = React.useCallback(
-        (next: boolean) => {
-            setRemainingOnlyState(next)
+    const setRegisterMode = React.useCallback(
+        (next: boolean, options?: { clearTask?: boolean }) => {
             const params = new URLSearchParams(searchParams.toString())
             params.set("section", "acceptance")
-            params.set("remainingOnly", next ? "1" : "0")
-            router.replace(`${pathname}?${params.toString()}`, {
+            if (next) params.set("mode", "register")
+            else params.delete("mode")
+            if (options?.clearTask) {
+                params.delete("workItemId")
+                params.delete("queueContextId")
+            }
+            const qs = params.toString()
+            router.replace(qs ? `${pathname}?${qs}` : pathname, {
                 scroll: false,
             })
         },
         [pathname, router, searchParams],
     )
 
-    return { workItemId, remainingOnly, setRemainingOnly }
+    return { workItemId, isRegister, setRegisterMode }
 }

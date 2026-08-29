@@ -3,6 +3,7 @@
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { FormalResultState } from "@/features/sales-orders/lib/acceptance-model"
+import { resultText } from "@/lib/ui-text"
 
 export function AcceptanceFormalResult({
     formalResult,
@@ -13,10 +14,13 @@ export function AcceptanceFormalResult({
     formalResult: FormalResultState | null
     resultRef: React.Ref<HTMLDivElement>
     onDismiss: () => void
-    /** 结果未知时按原提交编号重试（关闭结果、重新打开确认框）。 */
     onRetry: () => void
 }) {
     if (!formalResult) return null
+
+    const succeeded =
+        formalResult.status === "succeeded" && formalResult.kind === "post"
+    const exceptionCta = succeeded && formalResult.hasException
 
     return (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
@@ -40,16 +44,21 @@ export function AcceptanceFormalResult({
                             variant="outline"
                             onClick={onRetry}
                         >
-                            用原提交编号重试
+                            {resultText.useOriginalTaskNoRetry}
                         </Button>
                     ) : (
                         <Button
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant={exceptionCta ? "outline" : "secondary"}
                             onClick={onDismiss}
                         >
-                            回到履约
+                            {exceptionCta
+                                ? "先看本单进度"
+                                : succeeded &&
+                                    formalResult.remainingEligibleCount === 0
+                                  ? "查看本单进度"
+                                  : "继续看本单进度"}
                         </Button>
                     )
                 }

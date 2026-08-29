@@ -46,9 +46,9 @@ export function AcceptanceDialogs({
                 open={confirmOpen}
                 onOpenChange={onConfirmOpenChange}
                 title="确认客户验收"
-                actionLabel="确认验收"
-                confirmLabel="确认验收"
-                fromStatus={{ label: "草稿", tone: "warning" }}
+                actionLabel="确认本次验收"
+                confirmLabel="确认本次验收"
+                fromStatus={{ label: "待登记", tone: "warning" }}
                 toStatus={{
                     label: OVERALL_RESULT_LABEL[overallPreview],
                     tone:
@@ -58,23 +58,16 @@ export function AcceptanceDialogs({
                               ? "warning"
                               : "destructive",
                 }}
-                lockedFields={[
-                    "履约记录版本",
-                    "净可验收量（系统）",
-                    "销售单数据版本",
-                ]}
+                lockedFields={["交付数量以当前记录为准"]}
                 effects={[
-                    "生成客户验收记录",
-                    "按本次结果分配履约数量",
-                    "更新销售履约数据",
+                    "记下本次客户验收结果",
+                    "按通过数量推进本单交付进度",
                     ...(hasExceptionResult
-                        ? ["不扣库存、不改应收、不自动退货（仅验收记录）"]
+                        ? ["短少或拒收不会自动退货、退款或改应收"]
                         : []),
                 ]}
                 nextDepartment={
-                    hasExceptionResult
-                        ? "变更与异常 / 销售协同"
-                        : "销售与财务协同"
+                    hasExceptionResult ? "退货或拒收处理" : "销售与财务"
                 }
                 onConfirm={onConfirmAcceptance}
             />
@@ -87,26 +80,24 @@ export function AcceptanceDialogs({
                 confirmLabel="确认冲正"
                 fromStatus={{ label: "已确认", tone: "success" }}
                 toStatus={{ label: "已冲正（新增反向记录）", tone: "warning" }}
-                lockedFields={["原验收单号", "原分配明细"]}
+                lockedFields={["原验收单号"]}
                 effects={[
                     "新增反向验收记录",
-                    "写入反向分配（不修改原记录）",
-                    "恢复对应履约批次净可验收量",
+                    "恢复对应批次的待验数量",
+                    "不删除原验收记录",
                 ]}
                 nextDepartment="销售"
                 description={
                     <div className="space-y-2">
-                        <span>
-                            冲正将新增反向记录，不会删除或改写原验收行。请填写冲正理由：
-                        </span>
+                        <span>请填写冲正理由，便于以后核对：</span>
                         <Textarea
                             aria-label="冲正理由"
                             rows={3}
                             value={reverseReason}
-                            onChange={(e) =>
-                                onReverseReasonChange(e.target.value)
+                            onChange={(event) =>
+                                onReverseReasonChange(event.target.value)
                             }
-                            placeholder="说明误录原因，供后续追溯"
+                            placeholder="说明误录原因"
                         />
                     </div>
                 }
@@ -117,8 +108,8 @@ export function AcceptanceDialogs({
                 open={exitDiscardOpen}
                 onOpenChange={onExitDiscardOpenChange}
                 title="放弃本次验收登记？"
-                description="已录入的分配数量与结果尚未保存为草稿，退出后将丢失。"
-                confirmLabel="放弃并退出"
+                description="已勾选的批次和填写的结果还没提交，取消后会丢掉。"
+                confirmLabel="放弃并返回"
                 cancelLabel="继续登记"
                 onConfirm={onConfirmExit}
             />

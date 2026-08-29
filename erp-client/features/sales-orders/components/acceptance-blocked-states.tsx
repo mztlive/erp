@@ -1,32 +1,23 @@
 "use client"
 
-import Link from "next/link"
-
 import { BusinessEmptyState } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
 
 export function AcceptanceBlockedState({
     isCard,
     blockerMessage,
-    salesOrderId,
 }: {
     isCard: boolean
     blockerMessage?: string
-    salesOrderId: string
 }) {
     return (
         <BusinessEmptyState
             kind="no-data"
             title={isCard ? "卡券单不用做客户验收" : "当前不能验收"}
-            description={blockerMessage ?? "请确认本单类型与你的权限后再试。"}
-            action={
-                <Button
-                    render={<Link href={`/sales/orders/${salesOrderId}`} />}
-                    variant="outline"
-                >
-                    返回本单
-                </Button>
+            description={
+                blockerMessage ??
+                (isCard
+                    ? "卡券履约完成按销售单履约期限到期判断。"
+                    : "请确认本单类型与你的权限后再试。")
             }
         />
     )
@@ -37,15 +28,7 @@ export function AcceptanceNoFactsState() {
         <BusinessEmptyState
             kind="no-data"
             title="还没有可验收的交付记录"
-            description="请先完成收货/发货或服务交付登记；也可以查看历史验收。"
-            action={
-                <Button
-                    render={<Link href={fulfillmentTasksHref()} />}
-                    variant="outline"
-                >
-                    去发货/交付
-                </Button>
-            }
+            description="仓储或采购把货发出、或把电子交付和服务登记完成后，待验会出现在这里。发完后也会回到负责销售的待办。"
         />
     )
 }
