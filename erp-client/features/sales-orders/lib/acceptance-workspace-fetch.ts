@@ -17,15 +17,36 @@ import {
 } from "@/features/sales-orders/lib/acceptance-mappers"
 import { parseQty } from "@/features/sales-orders/lib/acceptance-model"
 import { fetchSalesOrderDetail } from "@/features/sales-orders/api/sales-orders"
-import type { WorkItemProjection } from "@/features/work-items/types"
+
+export type AcceptanceTaskIdentity = Readonly<{
+    workItemId: string
+    workItemType: string
+    handlerKey: string
+    destinationWorkspaceId?: string
+    businessObjectType: string
+    businessObjectId: string
+    status: string
+    taskVersion: string
+    allowedActions: readonly string[]
+    ownerUser?: { id: string; displayName: string }
+}>
 
 export type FetchAcceptanceWorkspaceParams = {
     salesOrderId: string
     workItemId?: string | null
-    workItem?: WorkItemProjection
+    workItem?: AcceptanceTaskIdentity
 }
 
-function acceptanceTaskContext(params: FetchAcceptanceWorkspaceParams): {
+const TASK_MISMATCH_BLOCKER =
+    "当前客户验收任务已变化或与本单不一致，请返回工作台刷新后再登记。"
+
+/**
+ * 校验客户验收正式命令要携带的任务身份。
+ * 未带任务时由后端解析该销售单唯一开放任务；带了就必须与本单开放任务一致。
+ */
+export function resolveAcceptanceTaskContext(
+    params: FetchAcceptanceWorkspaceParams,
+): {
     workItem: CustomerAcceptanceWorkspaceView["workItem"]
     blocker: string | null
 } {
@@ -33,13 +54,18 @@ function acceptanceTaskContext(params: FetchAcceptanceWorkspaceParams): {
     if (!requestedId) return { workItem: null, blocker: null }
 
     const task = params.workItem
-    const taskVersion = Number(task?.taskVersion)
+    if (!task) {
+        return { workItem: null, blocker: TASK_MISMATCH_BLOCKER }
+    }
+
+    const taskVersion = Number(task.taskVersion)
+    const objectType = task.businessObjectType.trim().toLowerCase()
     const valid =
-        task?.workItemId === requestedId &&
+        task.workItemId === requestedId &&
         task.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION" &&
         task.handlerKey === "customer_acceptance_registration" &&
         task.destinationWorkspaceId === "W06" &&
-        task.businessObjectType === "sales_order" &&
+        objectType === "sales_order" &&
         task.businessObjectId === params.salesOrderId &&
         task.status === "OPEN" &&
         task.allowedActions.includes("PROCESS") &&
@@ -49,8 +75,7 @@ function acceptanceTaskContext(params: FetchAcceptanceWorkspaceParams): {
     if (!valid) {
         return {
             workItem: null,
-            blocker:
-                "当前客户验收任务已变化或与本单不一致，请返回工作台刷新后再登记。",
+            blocker: TASK_MISMATCH_BLOCKER,
         }
     }
     return {
@@ -84,9 +109,13 @@ export async function fetchCustomerAcceptanceWorkspace(
     const order = await fetchSalesOrderDetail(params.salesOrderId)
     if (!order) return null
 
-    const taskContext = acceptanceTaskContext(params)
+    const taskContext = resolveAcceptanceTaskContext(params)
     const workItemConfigBlocker = taskContext.blocker
     const factsUpdatedAt = order.sourceAsOf || new Date().toISOString()
+    const salesOrderOwner = {
+        ownerUserId: order.ownerUserId || undefined,
+        ownerName: order.ownerName || undefined,
+    }
 
     if (order.nature === "card_voucher") {
         return {
@@ -102,6 +131,7 @@ export async function fetchCustomerAcceptanceWorkspace(
                 invoiceProgress: order.invoicing.label,
                 lockVersion: order.lockVersion ?? order.version,
                 factsUpdatedAt,
+                ...salesOrderOwner,
             },
             freshness: { factsUpdatedAt, state: "fresh" },
             metrics: {
@@ -180,6 +210,7 @@ export async function fetchCustomerAcceptanceWorkspace(
             invoiceProgress: order.invoicing.label,
             lockVersion: order.lockVersion ?? order.version,
             factsUpdatedAt,
+            ...salesOrderOwner,
         },
         freshness: { factsUpdatedAt, state: "fresh" },
         metrics: {

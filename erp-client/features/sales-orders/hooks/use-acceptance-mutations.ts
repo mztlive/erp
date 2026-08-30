@@ -29,7 +29,10 @@ export function useAcceptanceMutations({
     salesOrderId: string
     idempotencyKey: string
     submittedOverallRef: React.RefObject<AcceptanceOverallResult>
-    onPostSucceeded: () => void
+    onPostSucceeded: (payload: {
+        remainingEligibleCount: number
+        acceptanceNo: string
+    }) => void
     onReverseSucceeded: () => void
 }) {
     const queryClient = useQueryClient()
@@ -75,7 +78,20 @@ export function useAcceptanceMutations({
                         },
                     ],
                 })
-                onPostSucceeded()
+                await queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(salesOrderId),
+                })
+                await queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                })
+                onPostSucceeded({
+                    remainingEligibleCount: result.remainingEligibleCount,
+                    acceptanceNo: result.acceptanceNo,
+                })
+                return
             } else if (result.status === "unknown") {
                 setFormalResult({
                     kind: "post",

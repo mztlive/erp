@@ -42,6 +42,7 @@ import {
 } from "../lib/source-sales-order"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
@@ -53,7 +54,7 @@ import {
 
 /**
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
- * 履约、付款与开票在本页提交正式命令；审批通过、驳回留在底栏。
+ * 履约、付款、开票与客户验收在本页提交正式命令；审批通过、驳回留在底栏。
  */
 export function WorkspaceTaskDetail({
     item,
@@ -92,6 +93,15 @@ export function WorkspaceTaskDetail({
 
     if (item.workItemType === "SALES_INVOICE_EXECUTION") {
         return <WorkspaceInvoiceTask item={item} />
+    }
+
+    if (item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION") {
+        return (
+            <WorkspaceAcceptanceTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
     }
 
     return (

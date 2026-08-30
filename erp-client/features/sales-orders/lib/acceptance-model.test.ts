@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+    applyResultChange,
     buildDraftLines,
     buildOrderProgress,
     collectValidationIssues,
@@ -117,6 +118,32 @@ describe("buildDraftLines", () => {
             },
         ])
         expect(deriveOverall(selected.values())).toBe("SHORT")
+    })
+})
+
+describe("applyResultChange", () => {
+    it("fills exception quantity with the batch qty when switching to short", () => {
+        const source = fact({
+            fulfillmentLineId: "f-1",
+            salesOrderLineId: "sol-1",
+            eligibleQuantity: "1",
+        })
+        const next = applyResultChange(defaultBatchDraft(source), "SHORT")
+        expect(next.result).toBe("SHORT")
+        expect(next.exceptionQty).toBe("1")
+        expect(passQuantity(next)).toBe(0)
+    })
+
+    it("clears exception when switching back to pass", () => {
+        const source = fact({
+            fulfillmentLineId: "f-1",
+            salesOrderLineId: "sol-1",
+        })
+        const short = applyResultChange(defaultBatchDraft(source), "SHORT")
+        const passed = applyResultChange(short, "PASS")
+        expect(passed.result).toBe("PASS")
+        expect(passed.exceptionQty).toBe("0")
+        expect(passed.reason).toBe("")
     })
 })
 

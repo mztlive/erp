@@ -5,7 +5,6 @@ import type { ReactNode } from "react"
 import { ValidationSummary, type ValidationIssue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
     DialogContent,
@@ -16,13 +15,14 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import type { AcceptanceFormApi } from "@/features/sales-orders/hooks/use-acceptance-form"
 import type { AcceptanceSelectionApi } from "@/features/sales-orders/hooks/use-acceptance-selection"
 import {
     formatOccurredAt,
+    hasFilledException,
+    isSinglePiece,
     parseQty,
     passQuantity,
     qtyWithUnit,
@@ -56,7 +56,6 @@ export function AcceptanceRegisterDialog({
     pendingCount,
     postPending,
     onOpenChange,
-    onPassAll,
     children,
 }: {
     open: boolean
@@ -71,9 +70,14 @@ export function AcceptanceRegisterDialog({
     pendingCount: number
     postPending: boolean
     onOpenChange: (open: boolean) => void
-    onPassAll: () => void
     children?: ReactNode
 }) {
+    const allPass =
+        !selection.hasExceptionResult &&
+        selection.selected.size === pendingCount &&
+        pendingCount > 0
+    const primaryLabel = allPass ? "全部通过并确认" : "确认本次验收"
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -83,7 +87,7 @@ export function AcceptanceRegisterDialog({
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <DialogTitle>登记客户验收</DialogTitle>
                     <DialogDescription>
-                        勾选要确认的交付批次。默认全部通过；有短少或拒收再改结果。
+                        每批选择通过、短少或拒收。打开时默认全部通过。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -120,6 +124,7 @@ export function AcceptanceRegisterDialog({
                                         label="客户验收时间"
                                         required
                                         disabled={!canPost}
+                                        showTimeZone={false}
                                     />
                                 )}
                             </form.AppField>
@@ -167,21 +172,6 @@ export function AcceptanceRegisterDialog({
                                 })}
                             </div>
 
-                            {selection.hasExceptionResult ? (
-                                <Alert variant="warning" role="status">
-                                    <AlertTitle>
-                                        {
-                                            OVERALL_RESULT_LABEL[
-                                                selection.overallPreview
-                                            ]
-                                        }
-                                    </AlertTitle>
-                                    <AlertDescription>
-                                        {FACT_ONLY_NOTICE}
-                                    </AlertDescription>
-                                </Alert>
-                            ) : null}
-
                             <form.AppField name="comment">
                                 {(field) => (
                                     <field.TextareaField
@@ -214,9 +204,8 @@ export function AcceptanceRegisterDialog({
 
                 <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:justify-between">
                     <p className="text-sm text-muted-foreground">
-                        已选 {selection.selected.size} / {pendingCount} 批 ·{" "}
-                        {OVERALL_RESULT_LABEL[selection.overallPreview]}
-                        {selection.hasExceptionResult ? " · 异常只记账" : ""}
+                        已选 {selection.selected.size} / {pendingCount} 批
+                        {selection.hasExceptionResult ? " · 含短少或拒收" : ""}
                     </p>
                     <div className="flex flex-wrap justify-end gap-2">
                         <Button
@@ -229,17 +218,6 @@ export function AcceptanceRegisterDialog({
                             取消
                         </Button>
                         <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                                !canPost || pendingCount === 0 || postPending
-                            }
-                            onClick={onPassAll}
-                        >
-                            本次待验全部通过
-                        </Button>
-                        <Button
                             type="submit"
                             form="acceptance-form"
                             size="sm"
@@ -249,7 +227,7 @@ export function AcceptanceRegisterDialog({
                                 selection.selected.size === 0
                             }
                         >
-                            {postPending ? "提交中…" : "确认本次验收"}
+                            {postPending ? "提交中…" : primaryLabel}
                         </Button>
                     </div>
                 </DialogFooter>
@@ -268,153 +246,177 @@ function BatchRow({
     canPost: boolean
 }) {
     const draft = selection.selected.get(fact.fulfillmentLineId)
-    const checked = Boolean(draft)
+    const singlePiece = isSinglePiece(fact.eligibleQuantity)
     const result = draft?.result ?? "PASS"
     const resultOptions =
         fact.fulfillmentFactType === "SERVICE"
             ? RESULT_OPTIONS
             : RESULT_OPTIONS.filter((option) => option !== "SERVICE_FAIL")
+    const passed = draft ? passQuantity(draft) : 0
+    const fullException = Boolean(draft && result !== "PASS" && passed <= 0)
+    const showExceptionNotice = Boolean(draft && hasFilledException(draft))
 
     return (
         <li
             className={cn(
-                "rounded-lg border border-border px-3 py-2",
-                checked && "border-primary/50 bg-primary/5",
+                "rounded-lg border px-3 py-3",
+                !draft && "border-border bg-card",
+                draft?.result === "PASS" && "border-success-border bg-card",
+                draft?.result === "SHORT" &&
+                    "border-warning-border bg-warning-soft",
+                (draft?.result === "REJECT" ||
+                    draft?.result === "SERVICE_FAIL") &&
+                    "border-destructive-border bg-destructive-soft",
             )}
         >
-            <div className="flex flex-wrap items-start gap-3">
-                <div className="flex items-center gap-2 pt-0.5">
-                    <Checkbox
-                        id={`fact-${fact.fulfillmentLineId}`}
-                        checked={checked}
-                        disabled={!canPost}
-                        onCheckedChange={(value) =>
-                            selection.toggleFact(fact, value === true)
-                        }
-                    />
-                    <Label
-                        htmlFor={`fact-${fact.fulfillmentLineId}`}
-                        className="cursor-pointer font-medium"
-                    >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="text-sm font-medium">
                         {FULFILLMENT_TYPE_LABEL[fact.fulfillmentFactType]}{" "}
-                        <span className="num font-mono text-xs">
+                        <span className="num font-mono text-xs font-normal">
                             {fact.fulfillmentNo}
                         </span>
-                    </Label>
-                </div>
-                <div className="min-w-0 flex-1 text-xs text-muted-foreground">
-                    {formatOccurredAt(fact.occurredAt)}
-                    {fact.trackingNo
-                        ? ` · ${fact.carrier ?? ""} ${fact.trackingNo}`
-                        : ""}
-                    <div className="mt-0.5 font-medium text-foreground">
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {formatOccurredAt(fact.occurredAt)}
+                        {fact.trackingNo
+                            ? ` · ${fact.carrier ?? ""} ${fact.trackingNo}`
+                            : ""}
+                    </p>
+                    <p className="mt-0.5 text-xs font-medium">
                         待验 {qtyWithUnit(fact.eligibleQuantity, fact.unitCode)}
-                    </div>
+                    </p>
                 </div>
+                {draft ? (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        disabled={!canPost}
+                        onClick={() =>
+                            selection.skipFact(fact.fulfillmentLineId)
+                        }
+                    >
+                        本次不验
+                    </Button>
+                ) : null}
             </div>
 
-            {draft ? (
-                <div className="mt-3 space-y-3">
-                    <div className="flex flex-wrap items-end gap-3">
+            <div className="mt-3 flex flex-wrap gap-1.5">
+                {resultOptions.map((option) => {
+                    const selected = Boolean(draft) && result === option
+                    return (
+                        <Button
+                            key={option}
+                            type="button"
+                            size="sm"
+                            variant={selected ? "default" : "outline"}
+                            disabled={!canPost}
+                            aria-pressed={selected}
+                            className={cn(
+                                selected &&
+                                    option === "PASS" &&
+                                    "border-transparent bg-success text-success-foreground hover:bg-success/90",
+                                selected &&
+                                    option === "SHORT" &&
+                                    "border-transparent bg-warning text-warning-foreground hover:bg-warning/90",
+                                selected &&
+                                    (option === "REJECT" ||
+                                        option === "SERVICE_FAIL") &&
+                                    "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/90",
+                            )}
+                            onClick={() => selection.selectResult(fact, option)}
+                        >
+                            {OVERALL_RESULT_LABEL[option]}
+                        </Button>
+                    )
+                })}
+            </div>
+
+            {!draft ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                    不计入本次验收。点通过、短少或拒收即可加入。
+                </p>
+            ) : null}
+
+            {draft && !singlePiece ? (
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <Field className="w-28">
+                        <FieldLabel
+                            htmlFor={`batch-qty-${fact.fulfillmentLineId}`}
+                        >
+                            本次数量
+                        </FieldLabel>
+                        <Input
+                            id={`batch-qty-${fact.fulfillmentLineId}`}
+                            className="num"
+                            inputMode="decimal"
+                            value={draft.qty}
+                            disabled={!canPost}
+                            onChange={(event) =>
+                                selection.updateDraft(fact.fulfillmentLineId, {
+                                    qty: event.target.value,
+                                })
+                            }
+                        />
+                    </Field>
+                    {result !== "PASS" ? (
                         <Field className="w-28">
                             <FieldLabel
-                                htmlFor={`batch-qty-${fact.fulfillmentLineId}`}
+                                htmlFor={`batch-exc-${fact.fulfillmentLineId}`}
                             >
-                                本次数量
+                                {result === "SHORT" ? "短少数量" : "拒收数量"}
                             </FieldLabel>
                             <Input
-                                id={`batch-qty-${fact.fulfillmentLineId}`}
+                                id={`batch-exc-${fact.fulfillmentLineId}`}
                                 className="num"
                                 inputMode="decimal"
-                                value={draft.qty}
+                                value={draft.exceptionQty}
                                 disabled={!canPost}
                                 onChange={(event) =>
                                     selection.updateDraft(
                                         fact.fulfillmentLineId,
-                                        {
-                                            qty: event.target.value,
-                                        },
+                                        { exceptionQty: event.target.value },
                                     )
                                 }
                             />
                         </Field>
-                        <div className="flex flex-wrap gap-1">
-                            {resultOptions.map((option) => (
-                                <Button
-                                    key={option}
-                                    type="button"
-                                    size="sm"
-                                    variant={
-                                        result === option
-                                            ? "secondary"
-                                            : "ghost"
-                                    }
-                                    disabled={!canPost}
-                                    onClick={() =>
-                                        selection.updateDraft(
-                                            fact.fulfillmentLineId,
-                                            { result: option },
-                                        )
-                                    }
-                                >
-                                    {OVERALL_RESULT_LABEL[option]}
-                                </Button>
-                            ))}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            通过{" "}
-                            {qtyWithUnit(passQuantity(draft), fact.unitCode)}
-                        </p>
-                    </div>
+                    ) : null}
+                    <p className="pb-2 text-xs text-muted-foreground">
+                        通过 {qtyWithUnit(passed, fact.unitCode)}
+                    </p>
+                </div>
+            ) : null}
 
-                    {result !== "PASS" ? (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <Field>
-                                <FieldLabel
-                                    htmlFor={`batch-exc-${fact.fulfillmentLineId}`}
-                                >
-                                    {result === "SHORT"
-                                        ? "短少数量"
-                                        : "拒收数量"}
-                                </FieldLabel>
-                                <Input
-                                    id={`batch-exc-${fact.fulfillmentLineId}`}
-                                    className="num"
-                                    inputMode="decimal"
-                                    value={draft.exceptionQty}
-                                    disabled={!canPost}
-                                    onChange={(event) =>
-                                        selection.updateDraft(
-                                            fact.fulfillmentLineId,
-                                            {
-                                                exceptionQty:
-                                                    event.target.value,
-                                            },
-                                        )
-                                    }
-                                />
-                            </Field>
-                            <Field className="sm:col-span-2">
-                                <FieldLabel
-                                    htmlFor={`batch-reason-${fact.fulfillmentLineId}`}
-                                >
-                                    客户反馈
-                                </FieldLabel>
-                                <Textarea
-                                    id={`batch-reason-${fact.fulfillmentLineId}`}
-                                    rows={2}
-                                    value={draft.reason}
-                                    disabled={!canPost}
-                                    placeholder="短少、拒收或服务不通过时必填"
-                                    onChange={(event) =>
-                                        selection.updateDraft(
-                                            fact.fulfillmentLineId,
-                                            { reason: event.target.value },
-                                        )
-                                    }
-                                />
-                            </Field>
-                        </div>
+            {draft && result !== "PASS" ? (
+                <div className="mt-3 space-y-2">
+                    <Field>
+                        <FieldLabel
+                            htmlFor={`batch-reason-${fact.fulfillmentLineId}`}
+                        >
+                            客户反馈
+                        </FieldLabel>
+                        <Textarea
+                            id={`batch-reason-${fact.fulfillmentLineId}`}
+                            rows={2}
+                            value={draft.reason}
+                            disabled={!canPost}
+                            placeholder="短少或拒收时必填"
+                            onChange={(event) =>
+                                selection.updateDraft(fact.fulfillmentLineId, {
+                                    reason: event.target.value,
+                                })
+                            }
+                        />
+                    </Field>
+                    {fullException ? (
+                        <p className="text-xs text-warning-soft-foreground">
+                            整件短少或拒收不能记入验收。请点「本次不验」，再另开退货处理。
+                        </p>
+                    ) : showExceptionNotice ? (
+                        <p className="text-xs text-warning-soft-foreground">
+                            {FACT_ONLY_NOTICE}
+                        </p>
                     ) : null}
                 </div>
             ) : null}

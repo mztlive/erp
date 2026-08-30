@@ -117,6 +117,31 @@ export function exceptionQuantity(draft: AcceptanceBatchDraft): number {
     return parseQty(draft.exceptionQty)
 }
 
+export function isSinglePiece(quantity: string): boolean {
+    const qty = parseQty(quantity)
+    return qty > 0 && qty <= 1
+}
+
+export function hasFilledException(draft: AcceptanceBatchDraft): boolean {
+    return draft.result !== "PASS" && parseQty(draft.exceptionQty) > 0
+}
+
+export function applyResultChange(
+    draft: AcceptanceBatchDraft,
+    result: AcceptanceOverallResult,
+): AcceptanceBatchDraft {
+    if (result === "PASS") {
+        return { ...draft, result, exceptionQty: "0", reason: "" }
+    }
+    const currentException = parseQty(draft.exceptionQty)
+    return {
+        ...draft,
+        result,
+        exceptionQty:
+            currentException > 0 ? draft.exceptionQty : formatQty(draft.qty),
+    }
+}
+
 export function defaultBatchDraft(
     fact: AcceptanceEligibleFact,
 ): AcceptanceBatchDraft {
@@ -127,6 +152,16 @@ export function defaultBatchDraft(
         exceptionQty: "0",
         reason: "",
     }
+}
+
+export function pendingAsPassSelection(
+    salesLines: AcceptanceSalesLineGroup[],
+): AcceptanceBatchSelection {
+    const next: AcceptanceBatchSelection = new Map()
+    for (const fact of pendingFactsOf(salesLines)) {
+        next.set(fact.fulfillmentLineId, defaultBatchDraft(fact))
+    }
+    return next
 }
 
 export function deriveOverall(
@@ -271,19 +306,15 @@ export function collectValidationIssues(
     const lines = buildDraftLines(selected)
     for (const line of lines) {
         if (parseQty(line.acceptedQuantity) <= 0) {
+            const sample = [...selected.values()].find(
+                (draft) =>
+                    draft.fact.salesOrderLineId === line.salesOrderLineId,
+            )
+            const name = sample?.fact.itemSnapshot ?? "本批"
             issues.push({
                 id: `line-pass-${line.salesOrderLineId}`,
-                label: "通过数量",
-                message:
-                    "整批短少或拒收时通过数量为 0，不能过账。请减少短少/拒收数量，或先不勾选本批、另开退货处理。",
-                targetId: "acceptance-register-list",
-            })
-        }
-        if (line.allocations.length === 0) {
-            issues.push({
-                id: `line-alloc-${line.salesOrderLineId}`,
-                label: "通过数量",
-                message: "至少要有一件通过，才能记到对应交付批次上。",
+                label: name,
+                message: `${name}整件短少或拒收不能记入验收。请点「本次不验」后另开退货处理，或多件时减少短少数量并保留通过。`,
                 targetId: "acceptance-register-list",
             })
         }

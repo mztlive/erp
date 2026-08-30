@@ -15,16 +15,17 @@ import {
 import {
     buildDraftLines,
     buildOrderProgress,
-    defaultBatchDraft,
+    pendingAsPassSelection,
     pendingFactsOf,
-    type AcceptanceBatchSelection,
 } from "@/features/sales-orders/lib/acceptance-model"
 import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { useAcceptanceWorkspaceUrlState } from "@/features/sales-orders/hooks/acceptance-url-state"
 import { useAcceptanceSelection } from "@/features/sales-orders/hooks/use-acceptance-selection"
 import { useAcceptanceForm } from "@/features/sales-orders/hooks/use-acceptance-form"
 import { useAcceptanceMutations } from "@/features/sales-orders/hooks/use-acceptance-mutations"
-import type { WorkItemProjection } from "@/features/work-items/types"
+import type { AcceptanceTaskIdentity } from "@/features/sales-orders/lib/acceptance-workspace-fetch"
+import { mapWorkItemDto } from "@/features/work-items/types"
+import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
     AcceptanceBlockedState,
     AcceptanceNoFactsState,
@@ -40,14 +41,44 @@ export function AcceptanceWorkspace({
     ownerUserId,
     ownerName,
     workItem,
+    persistRegisterInUrl = true,
+    onPosted,
 }: {
     salesOrderId: string
     ownerUserId?: string
     ownerName?: string
-    workItem?: WorkItemProjection
+    workItem?: AcceptanceTaskIdentity
+    persistRegisterInUrl?: boolean
+    onPosted?: (payload: {
+        remainingEligibleCount: number
+        acceptanceNo: string
+    }) => void
 }) {
-    const { workItemId, isRegister, setRegisterMode } =
-        useAcceptanceWorkspaceUrlState()
+    const {
+        workItemId: urlWorkItemId,
+        isRegister: urlRegister,
+        setRegisterMode: setUrlRegisterMode,
+    } = useAcceptanceWorkspaceUrlState()
+    const [localRegister, setLocalRegister] = React.useState(false)
+    const workItemId = workItem?.workItemId ?? urlWorkItemId
+    const isRegister = persistRegisterInUrl ? urlRegister : localRegister
+    const setRegisterMode = React.useCallback(
+        (next: boolean, options?: { clearTask?: boolean }) => {
+            if (!persistRegisterInUrl) {
+                setLocalRegister(next)
+                return
+            }
+            setUrlRegisterMode(next, options)
+        },
+        [persistRegisterInUrl, setUrlRegisterMode],
+    )
+    const inheritedTask = workItem
+    const workItemQuery = useWorkItemDetailQuery(workItemId ?? "")
+    const resolvedWorkItem = workItemQuery.data
+        ? mapWorkItemDto(workItemQuery.data)
+        : inheritedTask
+    const waitingForTask =
+        Boolean(workItemId) && !resolvedWorkItem && workItemQuery.isPending
     const accountQuery = useAccountProfileQuery()
     const selection = useAcceptanceSelection()
     const [confirmOpen, setConfirmOpen] = React.useState(false)
@@ -73,14 +104,16 @@ export function AcceptanceWorkspace({
     const workspaceQuery = useQuery({
         queryKey: salesOrderKeys.acceptance(salesOrderId, {
             workItemId,
-            expectedTaskVersion: workItem?.taskVersion,
+            expectedTaskVersion: resolvedWorkItem?.taskVersion,
         }),
         queryFn: () =>
             fetchCustomerAcceptanceWorkspace({
                 salesOrderId,
                 workItemId,
-                workItem,
+                workItem: resolvedWorkItem,
             }),
+        enabled:
+            !workItemId || Boolean(resolvedWorkItem) || workItemQuery.isFetched,
     })
 
     const view = workspaceQuery.data
@@ -90,13 +123,18 @@ export function AcceptanceWorkspace({
             salesOrderId,
             idempotencyKey,
             submittedOverallRef,
-            onPostSucceeded: () => {
+            onPostSucceeded: (payload) => {
                 selection.reset()
                 form.reset()
                 setIdempotencyKey(`acc-${salesOrderId}-${crypto.randomUUID()}`)
                 submittedOverallRef.current = "PASS"
                 setConfirmOpen(false)
-                setRegisterMode(false, { clearTask: true })
+                setRegisterMode(false, {
+                    clearTask:
+                        persistRegisterInUrl &&
+                        payload.remainingEligibleCount === 0,
+                })
+                onPosted?.(payload)
             },
             onReverseSucceeded: () => {
                 setReverseTarget(null)
@@ -108,12 +146,35 @@ export function AcceptanceWorkspace({
         if (formalResult) resultRef.current?.focus()
     }, [formalResult])
 
+    const prefilledOpenRef = React.useRef(false)
+    const replaceSelection = selection.replace
+    const registerOpen = Boolean(
+        isRegister && view && view.salesOrder.businessType !== "CARD_VOUCHER",
+    )
+
+    React.useEffect(() => {
+        if (!registerOpen || !view) {
+            prefilledOpenRef.current = false
+            return
+        }
+        if (prefilledOpenRef.current) return
+        prefilledOpenRef.current = true
+        replaceSelection(pendingAsPassSelection(view.salesLines))
+    }, [registerOpen, replaceSelection, view])
+
     const currentUserId = accountQuery.data?.userid
-    const ownerId = workItem?.ownerUser?.id || ownerUserId
-    const ownerLabel = workItem?.ownerUser?.displayName || ownerName || ""
+    const ownerId =
+        view?.salesOrder.ownerUserId ||
+        resolvedWorkItem?.ownerUser?.id ||
+        ownerUserId
+    const ownerLabel =
+        view?.salesOrder.ownerName ||
+        resolvedWorkItem?.ownerUser?.displayName ||
+        ownerName ||
+        ""
     const isOwner = !ownerId || !currentUserId || currentUserId === ownerId
 
-    if (workspaceQuery.isPending) {
+    if (waitingForTask || workspaceQuery.isPending) {
         return (
             <div
                 className="min-h-48 animate-pulse rounded-md bg-muted/40"
@@ -168,8 +229,10 @@ export function AcceptanceWorkspace({
     const progress = buildOrderProgress(view.salesLines)
     const pendingCount = pendingFactsOf(view.salesLines).length
     const canRegister = canCreate && pendingCount > 0
-    const hasUnsavedInput = formDirty || selection.selected.size > 0
-    const registerOpen = isRegister && !isCard
+    const hasUnsavedInput =
+        formDirty ||
+        selection.hasExceptionResult ||
+        selection.selected.size !== pendingCount
 
     const closeRegister = () => {
         selection.reset()
@@ -234,7 +297,13 @@ export function AcceptanceWorkspace({
                                 type="button"
                                 size="sm"
                                 disabled={!canPost}
-                                onClick={() => setRegisterMode(true)}
+                                onClick={() => {
+                                    prefilledOpenRef.current = true
+                                    selection.replace(
+                                        pendingAsPassSelection(view.salesLines),
+                                    )
+                                    setRegisterMode(true)
+                                }}
                             >
                                 登记客户验收
                             </Button>
@@ -274,19 +343,6 @@ export function AcceptanceWorkspace({
                 onOpenChange={(open) => {
                     if (open) setRegisterMode(true)
                     else requestCloseRegister()
-                }}
-                onPassAll={() => {
-                    const next: AcceptanceBatchSelection = new Map()
-                    for (const fact of pendingFactsOf(view.salesLines)) {
-                        next.set(
-                            fact.fulfillmentLineId,
-                            defaultBatchDraft(fact),
-                        )
-                    }
-                    selection.replace(next)
-                    pendingPostLinesRef.current = next
-                    submittedOverallRef.current = "PASS"
-                    setConfirmOpen(true)
                 }}
             >
                 {registerOpen &&

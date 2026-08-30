@@ -61,9 +61,7 @@ export function DateField({
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
-                {required ? (
-                    <span className="text-destructive">*</span>
-                ) : null}
+                {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <DatePicker
                 id={field.name}
@@ -99,6 +97,7 @@ type DateTimeFieldProps = {
     required?: boolean
     clearable?: boolean
     timeZone?: string
+    showTimeZone?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
     inputClassName?: string
@@ -117,6 +116,7 @@ export function DateTimeField({
     required,
     clearable = true,
     timeZone = "Asia/Shanghai",
+    showTimeZone = true,
     disabledDates,
     className,
     inputClassName,
@@ -140,9 +140,7 @@ export function DateTimeField({
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
-                {required ? (
-                    <span className="text-destructive">*</span>
-                ) : null}
+                {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <DateTimeLocalPicker
                 id={field.name}
@@ -155,6 +153,7 @@ export function DateTimeField({
                 disabled={disabled}
                 clearable={clearable}
                 timeZone={timeZone}
+                showTimeZone={showTimeZone}
                 disabledDates={disabledDates}
                 className={inputClassName}
                 aria-invalid={isInvalid || undefined}

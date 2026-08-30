@@ -122,6 +122,8 @@ export type CustomerAcceptanceWorkspaceView = {
         invoiceProgress: string
         lockVersion: number
         factsUpdatedAt: string
+        ownerUserId?: string
+        ownerName?: string
     }
     freshness: {
         factsUpdatedAt: string

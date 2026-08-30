@@ -3,8 +3,12 @@
 import * as React from "react"
 
 import {
+    applyResultChange,
     defaultBatchDraft,
     deriveOverall,
+    formatQty,
+    hasFilledException,
+    parseQty,
     type AcceptanceBatchSelection,
 } from "@/features/sales-orders/lib/acceptance-model"
 import type {
@@ -19,13 +23,24 @@ export function useAcceptanceSelection() {
         () => new Map(),
     )
 
-    const toggleFact = React.useCallback(
-        (fact: AcceptanceEligibleFact, checked: boolean) => {
+    const skipFact = React.useCallback((fulfillmentLineId: string) => {
+        setSelected((prev) => {
+            const next = new Map(prev)
+            next.delete(fulfillmentLineId)
+            return next
+        })
+    }, [])
+
+    const selectResult = React.useCallback(
+        (fact: AcceptanceEligibleFact, result: AcceptanceOverallResult) => {
             setSelected((prev) => {
                 const next = new Map(prev)
-                if (checked)
-                    next.set(fact.fulfillmentLineId, defaultBatchDraft(fact))
-                else next.delete(fact.fulfillmentLineId)
+                const current =
+                    next.get(fact.fulfillmentLineId) ?? defaultBatchDraft(fact)
+                next.set(
+                    fact.fulfillmentLineId,
+                    applyResultChange(current, result),
+                )
                 return next
             })
         },
@@ -37,7 +52,6 @@ export function useAcceptanceSelection() {
             fulfillmentLineId: string,
             patch: Partial<{
                 qty: string
-                result: AcceptanceOverallResult
                 exceptionQty: string
                 reason: string
             }>,
@@ -45,20 +59,16 @@ export function useAcceptanceSelection() {
             setSelected((prev) => {
                 const current = prev.get(fulfillmentLineId)
                 if (!current) return prev
+                const updated = { ...current, ...patch }
+                if (
+                    patch.qty !== undefined &&
+                    updated.result !== "PASS" &&
+                    parseQty(updated.exceptionQty) > parseQty(updated.qty)
+                ) {
+                    updated.exceptionQty = formatQty(updated.qty)
+                }
                 const next = new Map(prev)
-                const result = patch.result ?? current.result
-                next.set(fulfillmentLineId, {
-                    ...current,
-                    ...patch,
-                    exceptionQty:
-                        result === "PASS"
-                            ? "0"
-                            : (patch.exceptionQty ?? current.exceptionQty),
-                    reason:
-                        result === "PASS"
-                            ? ""
-                            : (patch.reason ?? current.reason),
-                })
+                next.set(fulfillmentLineId, updated)
                 return next
             })
         },
@@ -78,16 +88,19 @@ export function useAcceptanceSelection() {
         [selected],
     )
 
-    const hasExceptionResult =
-        overallPreview === "SHORT" ||
-        overallPreview === "REJECT" ||
-        overallPreview === "SERVICE_FAIL"
+    const hasExceptionResult = React.useMemo(() => {
+        for (const draft of selected.values()) {
+            if (hasFilledException(draft)) return true
+        }
+        return false
+    }, [selected])
 
     return {
         selected,
         overallPreview,
         hasExceptionResult,
-        toggleFact,
+        selectResult,
+        skipFact,
         updateDraft,
         replace,
         reset,
