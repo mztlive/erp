@@ -1,23 +1,35 @@
 #!/usr/bin/env node
 /**
- * 审批流程定义发布脚本（E2E 前置步骤，幂等）。
+ * 审批流程定义发布脚本（开发种子 / E2E 前置，幂等）。
  *
  * 数据库 reset 会删除全部审批定义（approval_process_definitions 等），
  * 按合同（approval-workflow-contract.md §4.3/§4.4）每个 PROCESS_REQUIRED 类型
  * 必须先创建并发布定义，单据才能进入审批；否则创建返回 APPROVAL_PROCESS_NOT_CONFIGURED。
  *
- * 本脚本以 admin 登录，只为下列 PROCESS_REQUIRED 类型创建「空源草稿 + 线性单人节点」并发布：
- *   sales_order / voucher_sales_order / sales_change_order / purchase_order /
- *   purchase_change_order / stock_adjustment / customer_receipt / customer_refund /
- *   supplier_refund / receipt_reversal / payment_reversal
  * SupplierPayment 固定为 NO_APPROVAL：采购单最终审批提供付款授权，出纳在付款任务中直接
  * 登记并过账，不得为 supplier_payment 创建或发布审批定义。
  *
+ * 节点与审批人按下列来源确定（文档有明确部门时序则照文档；未指定审批人时按岗位分离
+ * 与公司标准资金/库存控制设计）。提交人不得审批自己的单据（ForbidSubmitterAsApprover）。
+ *
+ * | 类型 | 审批链 | 来源 |
+ * | --- | --- | --- |
+ * | SalesOrder | 采购确认 | erp-phase-1.md §7.1 / §7.3.1：采购确认是生效闸门 |
+ * | VoucherSalesOrder | 销售领导 → 运营 → 财务总监 | 二期 §16 销售领导审商务、运营审执行；财务审应收/配赠为资金内控 |
+ * | SalesChangeOrder | 采购确认履约影响 → 财务复核 | erp-phase-1.md §6.5.1 |
+ * | PurchaseOrder | 财务总监审批 | erp-phase-1.md §11：财务总监审核采购单 |
+ * | PurchaseChangeOrder | 仓储确认库存发货影响 → 财务复核 | erp-phase-1.md §6.5.2 |
+ * | StockAdjustment | 财务审批成本影响 | erp-phase-1.md §6.5.5 未指定审批人；仓储提交，财务审成本，满足岗位分离 |
+ * | CustomerReceipt | 财务总监审批入账 | §6.5.4 业务部门事先确认依据，财务经办创建；总监过账审批 |
+ * | CustomerRefund | 销售领导确认退款依据 → 财务总监 | §6.4 销售确认依据 + 资金流出双控 |
+ * | SupplierRefund | 采购确认退款依据 → 财务总监 | §6.4 采购确认依据 + 资金双控 |
+ * | ReceiptReversal | 销售领导确认冲正依据 → 财务总监 | 与客户侧资金纠错同一责任 |
+ * | PaymentReversal | 采购确认冲正依据 → 财务总监 | 与供应商侧资金纠错同一责任 |
+ *
  * 审批人选择约束（代码事实）：
- *   - 审批人账号必须 active 且具备 approval_instance:decide（全部角色都有）；
+ *   - 审批人账号必须 active 且具备 approval_instance:decide（全部业务角色都有）；
  *   - 主体读取校验按类型实现但当前均放行（organization/assignee 非空即可）；
- *   - 岗位分离：提交人不得审批自己的单据（ForbidSubmitterAsApprover）。
- * 默认审批人按部门职责分配，且与常见提交人（销售/采购/财务）不同。
+ *   - 岗位分离：提交人不得审批自己的单据。
  *
  * 幂等策略：
  *   - 已发布 -> 跳过；
@@ -27,93 +39,87 @@
  * 用法: node scripts/publish-approval-definitions.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
-const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001"
+import { ADMIN, call, ensureDevAccounts, login } from "./dev-seed-lib.mjs"
 
 const DEFINITIONS = [
-    { type: "sales_order", name: "销售单审批（E2E）", nodes: [
-        { node_name: "采购确认", display_order: 1, assignee: "procurement" },
-    ]},
-    { type: "voucher_sales_order", name: "卡券销售单审批（E2E）", nodes: [
-        { node_name: "销售总监审批", display_order: 1, assignee: "salesLeader" },
-        { node_name: "运营审批", display_order: 2, assignee: "operations" },
-        { node_name: "财务审批", display_order: 3, assignee: "finance" },
-    ]},
-    { type: "sales_change_order", name: "销售变更单审批（E2E）", nodes: [
-        { node_name: "采购确认", display_order: 1, assignee: "procurement" },
-        { node_name: "销售领导复核", display_order: 2, assignee: "salesLeader" },
-    ]},
-    { type: "purchase_order", name: "采购单审批（E2E）", nodes: [
-        { node_name: "财务总监审批", display_order: 1, assignee: "finance" },
-    ]},
-    { type: "purchase_change_order", name: "采购变更单审批（E2E）", nodes: [
-        { node_name: "财务复核", display_order: 1, assignee: "finance" },
-    ]},
-    { type: "stock_adjustment", name: "库存调整单审批（E2E）", nodes: [
-        { node_name: "财务审批", display_order: 1, assignee: "finance" },
-    ]},
-    { type: "customer_receipt", name: "客户回款单审批（E2E）", nodes: [
-        { node_name: "销售领导复核", display_order: 1, assignee: "salesLeader" },
-    ]},
-    { type: "customer_refund", name: "客户退款单审批（E2E）", nodes: [
-        { node_name: "销售领导复核", display_order: 1, assignee: "salesLeader" },
-    ]},
-    { type: "supplier_refund", name: "供应商退款单审批（E2E）", nodes: [
-        { node_name: "采购复核", display_order: 1, assignee: "procurement" },
-    ]},
-    { type: "receipt_reversal", name: "回款冲正单审批（E2E）", nodes: [
-        { node_name: "销售领导复核", display_order: 1, assignee: "salesLeader" },
-    ]},
-    { type: "payment_reversal", name: "付款冲正单审批（E2E）", nodes: [
-        { node_name: "采购复核", display_order: 1, assignee: "procurement" },
-    ]},
+    {
+        type: "sales_order",
+        name: "销售单审批（实物及服务）",
+        nodes: [{ node_name: "采购确认", display_order: 1, assignee: "procurement" }],
+    },
+    {
+        type: "voucher_sales_order",
+        name: "卡券销售单审批",
+        nodes: [
+            { node_name: "销售领导审批商务条件", display_order: 1, assignee: "salesLeader" },
+            { node_name: "运营确认执行可行", display_order: 2, assignee: "operations" },
+            { node_name: "财务审批应收与配赠", display_order: 3, assignee: "finance" },
+        ],
+    },
+    {
+        type: "sales_change_order",
+        name: "销售变更单审批",
+        nodes: [
+            { node_name: "采购确认履约影响", display_order: 1, assignee: "procurement" },
+            { node_name: "财务复核金额与应收", display_order: 2, assignee: "finance" },
+        ],
+    },
+    {
+        type: "purchase_order",
+        name: "采购单审批",
+        nodes: [{ node_name: "财务总监审批", display_order: 1, assignee: "finance" }],
+    },
+    {
+        type: "purchase_change_order",
+        name: "采购变更单审批",
+        nodes: [
+            { node_name: "仓储确认库存发货影响", display_order: 1, assignee: "warehouse" },
+            { node_name: "财务复核金额与应付", display_order: 2, assignee: "finance" },
+        ],
+    },
+    {
+        type: "stock_adjustment",
+        name: "库存调整单审批",
+        nodes: [{ node_name: "财务审批成本影响", display_order: 1, assignee: "finance" }],
+    },
+    {
+        type: "customer_receipt",
+        name: "客户回款单审批",
+        nodes: [{ node_name: "财务总监审批入账", display_order: 1, assignee: "finance" }],
+    },
+    {
+        type: "customer_refund",
+        name: "客户退款单审批",
+        nodes: [
+            { node_name: "销售领导确认退款依据", display_order: 1, assignee: "salesLeader" },
+            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+        ],
+    },
+    {
+        type: "supplier_refund",
+        name: "供应商退款单审批",
+        nodes: [
+            { node_name: "采购确认退款依据", display_order: 1, assignee: "procurement" },
+            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+        ],
+    },
+    {
+        type: "receipt_reversal",
+        name: "回款冲正单审批",
+        nodes: [
+            { node_name: "销售领导确认冲正依据", display_order: 1, assignee: "salesLeader" },
+            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+        ],
+    },
+    {
+        type: "payment_reversal",
+        name: "付款冲正单审批",
+        nodes: [
+            { node_name: "采购确认冲正依据", display_order: 1, assignee: "procurement" },
+            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+        ],
+    },
 ]
-
-const ACCOUNTS = {
-    admin: { account: "admin", password: "123456" },
-    sales: { account: "xiaoshou", password: "123456" },
-    procurement: { account: "caigou", password: "123456" },
-    operations: { account: "yunying", password: "123456" },
-    finance: { account: "caiwu", password: "123456" },
-    salesLeader: { account: "lisiyong", password: "123456" },
-}
-
-async function call(method, path, { token, body } = {}) {
-    const headers = { "Content-Type": "application/json" }
-    if (token) headers.Authorization = `Bearer ${token}`
-    let res
-    try {
-        res = await fetch(`${API_BASE}${path}`, {
-            method,
-            headers,
-            body: body === undefined ? undefined : JSON.stringify(body),
-        })
-    } catch (error) {
-        throw new Error(`API ${method} ${path} 网络错误: ${error.message}`)
-    }
-    const text = await res.text()
-    let parsed = null
-    try {
-        parsed = text ? JSON.parse(text) : null
-    } catch {
-        throw new Error(`API ${method} ${path} 返回非 JSON（HTTP ${res.status}）: ${text.slice(0, 300)}`)
-    }
-    if (res.status === 401 || (parsed && parsed.status === 401)) {
-        throw new Error(`API ${method} ${path} 未授权`)
-    }
-    if (!res.ok || (parsed && parsed.success === false)) {
-        throw new Error(
-            `API ${method} ${path} 失败（HTTP ${res.status}）: ${parsed?.errorMessage ?? text}`,
-        )
-    }
-    return parsed.data
-}
-
-async function login(account, password) {
-    const data = await call("POST", "/login", {
-        body: { account, password, account_kind: "admin" },
-    })
-    return data.token
-}
 
 async function findDraftId(adminToken, documentType) {
     const versions = await call(
@@ -150,18 +156,21 @@ function ensureDefinitionsMatchCatalog(catalog) {
     throw new Error(`审批种子与服务端政策不一致：${details.join("；")}`)
 }
 
+function resolveAssigneeId(userIds, assignee) {
+    const userId = userIds[assignee]
+    if (!userId) {
+        throw new Error(`审批人 ${assignee} 未在开发账号目录中`)
+    }
+    return userId
+}
+
 async function main() {
-    const adminToken = await login(ACCOUNTS.admin.account, ACCOUNTS.admin.password)
+    const adminToken = await login(ADMIN.account, ADMIN.password)
     console.log("admin 登录成功")
 
-    // 解析审批人账号 id（动态获取，避免硬编码漂移）
-    const userIds = {}
-    for (const [key, acc] of Object.entries(ACCOUNTS)) {
-        const token = key === "admin" ? adminToken : await login(acc.account, acc.password)
-        const profile = await call("GET", "/account/profile", { token })
-        userIds[key] = profile.userid
-    }
-    console.log("账号 id:", JSON.stringify(userIds))
+    const seeded = await ensureDevAccounts(adminToken, { checkPassword: false })
+    const userIds = Object.fromEntries(Object.entries(seeded).map(([key, row]) => [key, row.id]))
+    console.log("审批人账号 id:", JSON.stringify(userIds))
 
     const catalog = await call("GET", "/admin/approval-processes/catalog", { token: adminToken })
     ensureDefinitionsMatchCatalog(catalog)
@@ -181,7 +190,6 @@ async function main() {
             continue
         }
 
-        // 复用上次失败残留的草稿，保证幂等
         let definitionId = await findDraftId(adminToken, def.type)
         let lockVersion
         if (definitionId) {
@@ -199,7 +207,7 @@ async function main() {
                     document_type: def.type,
                     name: def.name,
                     draft_source: "EMPTY",
-                    idempotency_key: `e2e-${def.type}-${Date.now()}`,
+                    idempotency_key: `dev-${def.type}-${Date.now()}`,
                 },
             })
             definitionId = draft.definition_id
@@ -210,9 +218,8 @@ async function main() {
         const nodes = def.nodes.map((n) => ({
             node_name: n.node_name,
             display_order: n.display_order,
-            assignee_user_id: userIds[n.assignee],
+            assignee_user_id: resolveAssigneeId(userIds, n.assignee),
         }))
-        // 注意：expected_definition_lock_version 必须是字符串（后端 422 已实测）
         const updated = await call(
             "PUT",
             `/admin/approval-process-definitions/${definitionId}/nodes`,
@@ -230,7 +237,7 @@ async function main() {
                 token: adminToken,
                 body: {
                     expected_definition_lock_version: String(lockVersion),
-                    idempotency_key: `e2e-${def.type}-publish-${Date.now()}`,
+                    idempotency_key: `dev-${def.type}-publish-${Date.now()}`,
                 },
             },
         )

@@ -4,14 +4,17 @@
 # 默认执行合同：
 #   1. 停止 web-api，禁止清理期间继续写入；
 #   2. 复用 backend/scripts/reset-dev-business-data.sh 完成 preview/execute/verify；
-#   3. 启动 web-api，发布 PROCESS_REQUIRED 审批定义；
-#   4. 填充客户、合同、财务责任、供应商收款账户、商品与公司商品池；
-#   5. 保持 web-api 运行，执行结束后可直接使用。
+#   3. 启动 web-api，必要时用 CLI init-admin 修复超级管理员；
+#   4. 按 §11 创建全部岗位账号，再写仓库、财务责任、客户与合同；
+#   5. 按文档发布 PROCESS_REQUIRED 审批定义（供应商付款不审批）；
+#   6. 填充供应商收款账户、商品与公司商品池；
+#   7. 保持 web-api 运行，执行结束后可直接使用。
 #
 # 数据范围：
 #   - 默认清理业务数据，保留账号/RBAC、供应商/商品/仓库主数据、source_systems、
 #     file_assets、对象存储、审计记录与编号计数器；
 #   - ERP_RESET_INCLUDE_CATALOG=1 时额外清供应商/商品/SKU/供给、仓库、分类/品牌/单位及全部 Party；
+#   - 账号/RBAC 始终保留；缺失的岗位账号由种子按固定登录名补齐，开发密码无法登录时重置；
 #   - ERP_RESET_ONLY=1 仅供 E2E 编排使用：只清库、不填种子、不重启 web-api。
 #
 # 安全门禁：
@@ -123,13 +126,47 @@ if [[ "${IS_REMOTE}" -eq 1 ]]; then
     export ERP_RESET_ALLOWED_REMOTE_HOSTS="${TARGET_HOSTS}"
 fi
 
+API_BASE="${API_BASE:-http://127.0.0.1:10001}"
+CLI_BIN="${HOME}/Development/rust-build-target/debug/cli"
+
+# 超级管理员只能由 CLI init-admin 创建。开发密码无法登录时修复为 admin / 123456。
+ensure_super_admin() {
+    local login_json=""
+    login_json="$(
+        curl -sf --max-time 8 -X POST "${API_BASE}/login" \
+            -H "Content-Type: application/json" \
+            -d '{"account":"admin","password":"123456","account_kind":"admin"}' || true
+    )"
+    if printf '%s' "${login_json}" | python3 -c '
+import json, sys
+raw = sys.stdin.read().strip()
+if not raw:
+    raise SystemExit(1)
+payload = json.loads(raw)
+token = (payload.get("data") or {}).get("token")
+raise SystemExit(0 if payload.get("success") and token else 1)
+'; then
+        echo "超级管理员 admin 可登录"
+        return 0
+    fi
+
+    echo "超级管理员无法以开发密码登录，执行 init-admin 修复"
+    if [[ ! -x "${CLI_BIN}" ]]; then
+        echo "未找到 ${CLI_BIN}，先构建 cli..."
+        (cd "${BACKEND_DIR}" && cargo build -p cli)
+    fi
+    [[ -x "${CLI_BIN}" ]] || { echo "错误: 构建后仍未找到 ${CLI_BIN}" >&2; exit 2; }
+    (cd "${BACKEND_DIR}" && "${CLI_BIN}" --config-path "${CONFIG_FILE}" init-admin \
+        --account admin --name "系统管理员" --password "123456")
+}
+
 echo "== 开发数据库重置 =="
 echo "目标数据库: ${DB_NAME}"
 echo "目标主机: ${TARGET_HOSTS}"
 if [[ "${RESET_ONLY}" == "1" ]]; then
     echo "完成模式: 只清库（不填种子、不重启 web-api）"
 else
-    echo "完成模式: 清库 + 审批定义 + 基础种子（web-api 保持运行）"
+    echo "完成模式: 清库 + 岗位账号 + 审批定义 + 基础种子（web-api 保持运行）"
 fi
 if [[ "${ERP_RESET_INCLUDE_CATALOG:-0}" == "1" ]]; then
     echo "保留项: 账号/RBAC、source_systems、file_assets、审计、计数器"
@@ -172,14 +209,17 @@ if [[ "${RESET_ONLY}" == "1" ]]; then
     exit 0
 fi
 
-echo "-- 启动 web-api（写审批定义与种子） --"
+echo "-- 启动 web-api（写账号、审批定义与种子） --"
 bash "${SCRIPT_DIR}/restart-backend.sh"
 
-echo "-- 发布需审批单据的审批定义（供应商付款不审批） --"
-node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
+echo "-- 确保超级管理员 admin 可登录 --"
+ensure_super_admin
 
-echo "-- 填充基础种子：账号职责 + 仓库 + 财务责任 + 客户 + 合同 --"
+echo "-- 填充基础种子：全部岗位账号 + 仓库 + 财务责任 + 客户 + 合同 --"
 node "${SCRIPT_DIR}/seed-dev-foundation.mjs"
+
+echo "-- 按文档发布需审批单据的审批定义（供应商付款不审批） --"
+node "${SCRIPT_DIR}/publish-approval-definitions.mjs"
 
 echo "-- 填充目录种子：供应商收款账户 + 商品 + 公司商品池 --"
 node "${SCRIPT_DIR}/seed-dev-catalog.mjs"

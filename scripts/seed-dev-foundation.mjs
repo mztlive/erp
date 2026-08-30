@@ -2,6 +2,7 @@
 /**
  * 开发开单底座：在业务数据已清空、web-api 已就绪后，补齐开单所需底座。
  *
+ * 先按 §11 创建全部岗位账号，再写仓库、财务责任、客户与合同。
  * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
  * 仓库在主数据重置后由本脚本重建。
  * 付款、销项开票与卡券票款复核任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
@@ -9,7 +10,7 @@
  * kaipiao 为默认开票负责人。供应商付款不得发布或启动独立审批。
  * PROCESS_REQUIRED 审批定义由 publish-approval-definitions.mjs 单独发布。
  *
- * 幂等：客户、合同、仓储账号、仓库、财务三人、默认财务责任规则均按固定标识查找；
+ * 幂等：岗位账号、客户、合同、仓库、财务三人、默认财务责任规则均按固定标识查找；
  * 已存在则跳过或只补绑定/校正。
  * 客户用 xiaoshou 创建（不含银行账户：销售无权维护该字段），负责销售一开始就是开单账号。
  * 银行账户由 admin 后补（财务有该字段权限，但客户资料修订还要 customer:update）。
@@ -17,19 +18,15 @@
  * 用法: node scripts/seed-dev-foundation.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
-const API_BASE = process.env.API_BASE || "http://127.0.0.1:10001"
+import {
+    ACCOUNTS,
+    ADMIN,
+    call,
+    ensureDevAccounts,
+    login,
+    printAccountDirectory,
+} from "./dev-seed-lib.mjs"
 
-const ACCOUNTS = {
-    admin: { account: "admin", password: "123456" },
-    sales: { account: "xiaoshou", password: "123456" },
-    warehouse: { account: "cangchu", password: "123456", name: "仓储" },
-    finance: { account: "caiwu", password: "123456", name: "财务总监" },
-    payment: { account: "fukuan", password: "123456", name: "出纳" },
-    invoice: { account: "kaipiao", password: "123456", name: "开票人" },
-}
-
-const ROLE_WAREHOUSE = "role-warehouse"
-const ROLE_FINANCE = "role-finance"
 const DEFAULT_FINANCE_RULES = [
     { operation: "SUPPLIER_PAYMENT", label: "默认付款负责人", accountKey: "payment" },
     { operation: "SALES_INVOICE", label: "默认开票负责人", accountKey: "invoice" },
@@ -79,45 +76,6 @@ function nextYearBusinessDate() {
 function foundationPdf() {
     const source = "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
     return new Blob([source], { type: "application/pdf" })
-}
-
-async function call(method, path, { token, body, form } = {}) {
-    const headers = {}
-    if (token) headers.Authorization = `Bearer ${token}`
-    if (body !== undefined) headers["Content-Type"] = "application/json"
-    let res
-    try {
-        res = await fetch(`${API_BASE}${path}`, {
-            method,
-            headers,
-            body: form ?? (body === undefined ? undefined : JSON.stringify(body)),
-        })
-    } catch (error) {
-        throw new Error(`API ${method} ${path} 网络错误: ${error.message}`)
-    }
-    const text = await res.text()
-    let parsed = null
-    try {
-        parsed = text ? JSON.parse(text) : null
-    } catch {
-        throw new Error(`API ${method} ${path} 返回非 JSON（HTTP ${res.status}）: ${text.slice(0, 300)}`)
-    }
-    if (res.status === 401 || parsed?.status === 401) {
-        throw new Error(`API ${method} ${path} 未授权`)
-    }
-    if (!res.ok || parsed?.success === false) {
-        throw new Error(
-            `API ${method} ${path} 失败（HTTP ${res.status}）: ${parsed?.errorMessage ?? text}`,
-        )
-    }
-    return parsed.data
-}
-
-async function login(account, password) {
-    const data = await call("POST", "/login", {
-        body: { account, password, account_kind: "admin" },
-    })
-    return data.token
 }
 
 async function findCustomer(adminToken) {
@@ -298,109 +256,39 @@ async function uploadContract(token, customer) {
     return call("POST", "/admin/contracts/upload", { token, form })
 }
 
-async function listAdmins(adminToken) {
-    const rows = await call("GET", "/admin/admins", { token: adminToken })
-    return Array.isArray(rows) ? rows : []
-}
-
-async function ensureRoleBoundAdmin(adminToken, { credentials, roleId, label }) {
-    const roles = await call("GET", "/admin/roles", { token: adminToken })
-    const role = (Array.isArray(roles) ? roles : []).find((row) => row.id === roleId)
-    if (!role) {
-        throw new Error(`未找到预定义角色 ${roleId}，无法创建${label}账号`)
-    }
-
-    let account = (await listAdmins(adminToken)).find((row) => row.account === credentials.account)
-    if (!account) {
-        await call("POST", "/admin/admins", {
-            token: adminToken,
-            body: {
-                account: credentials.account,
-                password: credentials.password,
-                name: credentials.name,
-                role_ids: [roleId],
-            },
-        })
-        account = (await listAdmins(adminToken)).find((row) => row.account === credentials.account)
-        if (!account) throw new Error(`${label}账号已创建但列表中找不到 ${credentials.account}`)
-        console.log(`${label}账号已创建: ${credentials.account}`)
-    } else {
-        console.log(`${label}账号已存在: ${credentials.account}`)
-    }
-
-    if (account.name !== credentials.name) {
-        await call("PUT", `/admin/admins/${encodeURIComponent(account.id)}`, {
-            token: adminToken,
-            body: { name: credentials.name },
-        })
-        account = { ...account, name: credentials.name }
-        console.log(`已将 ${credentials.account} 的姓名校正为${credentials.name}`)
-    }
-
-    const roleIds = Array.isArray(account.role_ids) ? account.role_ids : []
-    if (!roleIds.includes(roleId)) {
-        await call("PUT", `/admin/admins/${encodeURIComponent(account.id)}/role`, {
-            token: adminToken,
-            body: { role_ids: [...roleIds, roleId] },
-        })
-        console.log(`已为 ${credentials.account} 补上${role.name}角色`)
-    }
-    return account
-}
-
-async function ensureWarehouseAccount(adminToken) {
-    const account = await ensureRoleBoundAdmin(adminToken, {
-        credentials: ACCOUNTS.warehouse,
-        roleId: ROLE_WAREHOUSE,
-        label: "仓储",
-    })
+/**
+ * 校验仓储账号具备入库与仓发完整执行权限，否则不能绑定仓库经办人。
+ */
+async function verifyWarehouseEligibility(adminToken, warehouseAccount) {
     const options = await call("GET", "/admin/warehouse-fulfillment-handler-options", {
         token: adminToken,
     })
-    const option = (Array.isArray(options) ? options : []).find((row) => row.user_id === account.id)
+    const option = (Array.isArray(options) ? options : []).find((row) => row.user_id === warehouseAccount.id)
     if (!option?.inbound_eligible || !option?.outbound_eligible) {
         throw new Error("cangchu 不具备入库或仓发完整执行权限，无法绑定仓库")
     }
-    return account
 }
 
-async function ensureFinancePeople(adminToken) {
-    const finance = await ensureRoleBoundAdmin(adminToken, {
-        credentials: ACCOUNTS.finance,
-        roleId: ROLE_FINANCE,
-        label: "财务总监",
-    })
-    const payment = await ensureRoleBoundAdmin(adminToken, {
-        credentials: ACCOUNTS.payment,
-        roleId: ROLE_FINANCE,
-        label: "出纳",
-    })
-    const invoice = await ensureRoleBoundAdmin(adminToken, {
-        credentials: ACCOUNTS.invoice,
-        roleId: ROLE_FINANCE,
-        label: "开票人",
-    })
-    if (new Set([finance.id, payment.id, invoice.id]).size !== 3) {
-        throw new Error("财务总监、出纳和开票人必须是三个不同账号")
-    }
-
+/**
+ * 校验财务三人分别具备付款、开票与卡券票款复核执行权限。
+ */
+async function verifyFinanceEligibility(adminToken, people) {
     const options = await call("GET", "/admin/finance-responsibility-owner-options", {
         token: adminToken,
     })
     const rows = Array.isArray(options) ? options : []
-    const paymentOption = rows.find((row) => row.user_id === payment.id)
+    const paymentOption = rows.find((row) => row.user_id === people.payment.id)
     if (!paymentOption?.supplier_payment_eligible) {
         throw new Error("fukuan 不具备付款完整执行权限，无法配置默认付款负责人")
     }
-    const invoiceOption = rows.find((row) => row.user_id === invoice.id)
+    const invoiceOption = rows.find((row) => row.user_id === people.invoice.id)
     if (!invoiceOption?.sales_invoice_eligible) {
         throw new Error("kaipiao 不具备销项开票完整执行权限，无法配置默认开票负责人")
     }
-    const financeOption = rows.find((row) => row.user_id === finance.id)
+    const financeOption = rows.find((row) => row.user_id === people.finance.id)
     if (!financeOption?.card_funds_review_eligible) {
         throw new Error("caiwu 不具备卡券票款复核完整执行权限，无法配置默认复核负责人")
     }
-    return { finance, payment, invoice }
 }
 
 function findDefaultFinanceRule(rows, operation) {
@@ -500,15 +388,22 @@ async function ensureWarehouses(adminToken, handlerUserId) {
 }
 
 async function main() {
-    const adminToken = await login(ACCOUNTS.admin.account, ACCOUNTS.admin.password)
-    const salesToken = await login(ACCOUNTS.sales.account, ACCOUNTS.sales.password)
-    const salesProfile = await call("GET", "/account/profile", { token: salesToken })
-    const salesUserId = salesProfile.userid
-    console.log("登录成功；销售账号 id:", salesUserId)
+    const adminToken = await login(ADMIN.account, ADMIN.password)
+    console.log("admin 登录成功，开始补齐岗位账号")
+    const seeded = await ensureDevAccounts(adminToken)
 
-    const warehouseAccount = await ensureWarehouseAccount(adminToken)
-    const warehouses = await ensureWarehouses(adminToken, warehouseAccount.id)
-    const financePeople = await ensureFinancePeople(adminToken)
+    const salesToken = await login(ACCOUNTS.sales.account, ACCOUNTS.sales.password)
+    const salesUserId = seeded.sales.id
+    console.log("销售账号 id:", salesUserId)
+
+    await verifyWarehouseEligibility(adminToken, seeded.warehouse)
+    const warehouses = await ensureWarehouses(adminToken, seeded.warehouse.id)
+    const financePeople = {
+        finance: seeded.finance,
+        payment: seeded.payment,
+        invoice: seeded.invoice,
+    }
+    await verifyFinanceEligibility(adminToken, financePeople)
     await ensureDefaultFinanceRules(adminToken, financePeople)
 
     let customer = await findCustomer(adminToken)
@@ -561,7 +456,7 @@ async function main() {
     console.log("采购单审批人（财务总监）: caiwu")
     console.log("默认付款任务负责人（出纳）: fukuan")
     console.log("默认开票负责人: kaipiao")
-    console.log("登录账号: admin / xiaoshou / caigou / caiwu / fukuan / kaipiao / cangchu    密码: 123456")
+    printAccountDirectory()
     console.log("下一步: 用 xiaoshou 打开销售开单页，选择该合同")
 }
 
