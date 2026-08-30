@@ -59,14 +59,21 @@ import { useSupplierOrderCenterTaskActions } from "@/features/supplier-orders/ho
 export function SupplierOrderCenterPage({
     supplierOrderId,
     section: sectionProp,
+    workItemId: workItemIdProp,
+    embedded = false,
+    onTaskCompleted,
 }: {
     supplierOrderId: string
     section?: string
+    workItemId?: string
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const searchParams = useSearchParams()
     const from = searchParams.get("from")
     const sourceId = searchParams.get("sourceId")
-    const workItemId = searchParams.get("workItemId") ?? undefined
+    const workItemId =
+        workItemIdProp ?? searchParams.get("workItemId") ?? undefined
 
     const { activeSection, setSection } = useSupplierOrderCenterSection(
         supplierOrderId,
@@ -124,6 +131,7 @@ export function SupplierOrderCenterPage({
         completeTaskMutation,
         commandIdentity: identity.commandIdentity,
         forgetCommandIdentity: identity.forgetCommandIdentity,
+        onTaskCompleted,
     })
 
     React.useEffect(() => {
@@ -134,7 +142,10 @@ export function SupplierOrderCenterPage({
 
     if (query.isPending) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
                 <div className="h-28 animate-pulse rounded-lg bg-muted" />
                 <div className="h-64 animate-pulse rounded-lg bg-muted" />
@@ -144,7 +155,10 @@ export function SupplierOrderCenterPage({
 
     if (query.isError) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <BusinessFailureState
                     title="供应商订单加载失败"
                     error={query.error}
@@ -163,7 +177,10 @@ export function SupplierOrderCenterPage({
 
     if (!detail) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <Alert variant="warning">
                     <AlertTitle>未找到供应商订单</AlertTitle>
                     <AlertDescription>
@@ -185,7 +202,10 @@ export function SupplierOrderCenterPage({
     const o = detail.order
 
     return (
-        <PageScaffold>
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0" : undefined}
+        >
             <SupplierOrderCenterHeader
                 order={o}
                 from={from}

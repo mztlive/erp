@@ -121,15 +121,17 @@ export function useWorkspaceHome() {
     )
 
     const selectNextAfter = React.useCallback(
-        (completedWorkItemId: string) => {
+        (completedWorkItemId: string, preferredWorkItemId?: string) => {
             const items = view?.items ?? []
             const index = items.findIndex(
                 (item) => item.workItemId === completedWorkItemId,
             )
-            const next = items[index + 1] ?? items[index - 1]
+            const next = preferredWorkItemId
+                ? items.find((item) => item.workItemId === preferredWorkItemId)
+                : (items[index + 1] ?? items[index - 1])
             replaceUrl({
                 ...urlState,
-                currentWorkItemId: next?.workItemId,
+                currentWorkItemId: preferredWorkItemId ?? next?.workItemId,
             })
             if (!next) setNarrowDetailOpen(false)
             return next
@@ -142,15 +144,20 @@ export function useWorkspaceHome() {
      * 选中项只写 URL，不进入列表查询，避免把当前条提到队首。
      */
     const applyDecisionAfter = React.useCallback(
-        (completedWorkItemId: string) => {
-            const next = selectNextAfter(completedWorkItemId)
+        (completedWorkItemId: string, preferredWorkItemId?: string) => {
+            const next = selectNextAfter(
+                completedWorkItemId,
+                preferredWorkItemId,
+            )
             setCompletionAnnouncement((current) => ({
                 sequence: current.sequence + 1,
-                text: next
-                    ? `任务已完成，已切换到${next.objectTitle}`
-                    : "任务已完成，当前队列没有其他待办",
+                text: preferredWorkItemId
+                    ? "当前任务已完成，后继任务已进入工作台"
+                    : next
+                      ? `任务已完成，已切换到${next.objectTitle}`
+                      : "任务已完成，当前队列没有其他待办",
             }))
-            setPendingFocusWorkItemId(next?.workItemId)
+            setPendingFocusWorkItemId(preferredWorkItemId ?? next?.workItemId)
             void queryClient.invalidateQueries({
                 queryKey: workspaceHomeKeys.all,
             })

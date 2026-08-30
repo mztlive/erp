@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
+    completeSupplierSupplyExceptionTask,
     createSupplierOffering,
     fetchSupplierSupplyExceptionWorkItem,
     fetchSupplierOfferings,
@@ -11,11 +12,13 @@ import {
     updateSupplierOfferingAvailability,
 } from "@/features/supplier-offerings/api/offerings"
 import type {
+    CompleteSupplierSupplyExceptionTaskInput,
     CreateSupplierOfferingInput,
     ReviseSupplierOfferingInput,
     SupplierOfferingListQuery,
     UpdateOfferingAvailabilityInput,
 } from "@/features/supplier-offerings/types"
+import { workItemKeys } from "@/features/work-items/queries"
 
 const supplierOfferingKeys = {
     all: ["supplier-offerings"] as const,
@@ -36,6 +39,22 @@ export function useSupplierSupplyExceptionWorkItemQuery(workItemId?: string) {
         queryKey: [...supplierOfferingKeys.all, "supply-exception", workItemId],
         queryFn: () => fetchSupplierSupplyExceptionWorkItem(workItemId ?? ""),
         enabled: Boolean(workItemId),
+    })
+}
+
+export function useCompleteSupplierSupplyExceptionTaskMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: CompleteSupplierSupplyExceptionTaskInput) =>
+            completeSupplierSupplyExceptionTask(input),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: supplierOfferingKeys.all,
+                }),
+                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
+            ])
+        },
     })
 }
 

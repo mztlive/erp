@@ -30,15 +30,12 @@ export async function completeCardFundsReview(
                     | "NO_HISTORY_FROM_ZERO"
                     | "RECORDED_FACTS_RECONCILED"
                     | "REJECTED"
-                follow_up_configuration?: {
-                    status: "BLOCKED"
-                    blocker_code: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
-                    collaboration_message: string
-                    required_registration: readonly (
-                        | "WORK_ITEM_TYPE"
-                        | "OWNER_ASSIGNEE"
-                        | "HANDLER_KEY"
-                    )[]
+                follow_up_work_item?: {
+                    work_item_id: string
+                    work_item_type:
+                        | "CARD_FUNDS_REVIEW"
+                        | "CARD_FUNDS_DELTA_REVIEW"
+                    status: "OPEN"
                 }
             }
         }>("/admin/receivable-funds-reviews", {
@@ -121,14 +118,17 @@ export async function completeCardFundsReview(
         if (
             row.review_result !== "REJECTED" ||
             row.conclusion !== "REJECTED" ||
-            row.follow_up_configuration?.status !== "BLOCKED" ||
-            row.follow_up_configuration.blocker_code !==
-                "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
+            row.follow_up_work_item?.status !== "OPEN" ||
+            !row.follow_up_work_item.work_item_id ||
+            row.follow_up_work_item.work_item_type !==
+                (input.decision.reviewType === "OPENING"
+                    ? "CARD_FUNDS_REVIEW"
+                    : "CARD_FUNDS_DELTA_REVIEW")
         ) {
             return {
                 status: "failed",
                 code: "INCOMPLETE_FORMAL_RESULT",
-                message: "驳回后的处理规则不完整；当前结果不能按成功展示",
+                message: "驳回后的工作台后继任务不完整；当前结果不能按成功展示",
             }
         }
         return {
@@ -139,13 +139,10 @@ export async function completeCardFundsReview(
                     ...businessBase,
                     reviewResult: "REJECTED",
                     conclusion: "REJECTED",
-                    followUpConfiguration: {
-                        status: row.follow_up_configuration.status,
-                        blockerCode: row.follow_up_configuration.blocker_code,
-                        collaborationMessage:
-                            row.follow_up_configuration.collaboration_message,
-                        requiredRegistration:
-                            row.follow_up_configuration.required_registration,
+                    followUpWorkItem: {
+                        workItemId: row.follow_up_work_item.work_item_id,
+                        workItemType: row.follow_up_work_item.work_item_type,
+                        status: row.follow_up_work_item.status,
                     },
                 },
             },

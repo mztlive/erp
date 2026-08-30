@@ -356,6 +356,73 @@ pub struct UpdateSupplierOfferingAvailabilityResult {
     pub safety_pause: Option<SystemSafetyPauseOperationView>,
 }
 
+/// 供应停止后续任务的固定决定类型。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierSupplyExceptionDecisionType {
+    /// 确认停供来源与安全暂停影响已经核对，安全暂停继续生效。
+    AcknowledgeSafetyPause,
+}
+
+/// 供应停止后续任务的强类型决定。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SupplierSupplyExceptionDecision {
+    /// 固定决定类型。
+    #[serde(rename = "type")]
+    pub decision_type: SupplierSupplyExceptionDecisionType,
+    /// 任务绑定的供应商供给。
+    #[validate(length(min = 1, max = 128, message = "供给ID不能为空或过长"))]
+    pub offering_id: String,
+    /// 已核对处置的外部或内部证据引用。
+    #[validate(
+        length(min = 1, max = 256, message = "证据引用不能为空或过长"),
+        custom(function = "non_blank", message = "证据引用不能为空")
+    )]
+    pub evidence_reference: String,
+    /// 核对结论；不得表达为恢复供给或恢复发布。
+    #[validate(
+        length(min = 1, max = 500, message = "核对结论不能为空或过长"),
+        custom(function = "non_blank", message = "核对结论不能为空")
+    )]
+    pub comment: String,
+}
+
+/// 完成供应停止后续任务请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CompleteSupplierSupplyExceptionTaskRequest {
+    /// 当前正式工作项。
+    #[validate(length(min = 1, max = 128, message = "任务ID不能为空或过长"))]
+    pub work_item_id: String,
+    /// 当前工作项版本。
+    #[validate(length(min = 1, max = 20, message = "任务版本格式非法"))]
+    pub expected_task_version: String,
+    /// 工作项冻结的安全暂停来源版本。
+    #[validate(length(min = 1, max = 128, message = "来源版本不能为空或过长"))]
+    pub expected_subject_version: String,
+    /// 固定强类型决定。
+    #[validate(nested)]
+    pub decision: SupplierSupplyExceptionDecision,
+    /// 客户端操作号。
+    #[validate(
+        length(min = 1, max = 128, message = "操作号不能为空或过长"),
+        custom(function = "non_blank", message = "操作号不能为空")
+    )]
+    pub idempotency_key: String,
+}
+
+/// 完成供应停止后续任务结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CompleteSupplierSupplyExceptionTaskResult {
+    /// 已完成任务。
+    pub work_item_id: String,
+    /// 不可变安全暂停操作。
+    pub safety_pause_operation_id: String,
+    /// 本次核对证据引用。
+    pub evidence_reference: String,
+    /// 固定结果说明。
+    pub message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

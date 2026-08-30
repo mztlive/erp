@@ -5,14 +5,19 @@ import type * as React from "react"
 import { BusinessFailureState, PageScaffold } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { AllocationSessionPanel } from "@/features/customer-receivables/components/allocation-session-panel"
-import type { AllocationSessionView } from "@/features/customer-receivables/types"
+import type {
+    AllocationSessionView,
+    PostAllocationResult,
+} from "@/features/customer-receivables/types"
 
 type AllocationSessionScreenProps = {
     isPending: boolean
     session: AllocationSessionView | null | undefined
     onBackToList: () => void
     onClose: () => void
-    onPosted: () => void
+    onPosted: (
+        result: Extract<PostAllocationResult, { status: "succeeded" }>,
+    ) => void
     canOperate?: boolean
     permissionReason?: string
     workItemId?: string

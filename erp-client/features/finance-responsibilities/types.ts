@@ -1,6 +1,7 @@
 export type FinanceResponsibilityOperation =
     | "SUPPLIER_PAYMENT"
     | "SALES_INVOICE"
+    | "CARD_FUNDS_REVIEW"
 
 export type FinanceResponsibilityScope = "COUNTERPARTY" | "DEFAULT"
 
@@ -22,6 +23,7 @@ export type FinanceResponsibilityOwnerOption = Readonly<{
     account: string
     supplierPaymentEligible: boolean
     salesInvoiceEligible: boolean
+    cardFundsReviewEligible: boolean
 }>
 
 export type SaveFinanceResponsibilityRuleInput = {
@@ -39,6 +41,7 @@ export const FINANCE_OPERATION_LABEL: Readonly<
 > = {
     SUPPLIER_PAYMENT: "供应商付款",
     SALES_INVOICE: "销项开票",
+    CARD_FUNDS_REVIEW: "卡券票款复核",
 }
 
 export const FINANCE_SCOPE_LABEL: Readonly<

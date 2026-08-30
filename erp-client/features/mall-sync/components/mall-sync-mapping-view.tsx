@@ -31,6 +31,7 @@ type MallSyncMappingViewProps = {
     onResolveUnknownReapply: () => Promise<void>
     onBackToQueue: () => void
     onConfirm: () => Promise<void>
+    embedded?: boolean
 }
 
 function MallSyncMappingView({
@@ -49,6 +50,7 @@ function MallSyncMappingView({
     onResolveUnknownReapply,
     onBackToQueue,
     onConfirm,
+    embedded = false,
 }: MallSyncMappingViewProps) {
     return (
         <div className="space-y-4">
@@ -74,20 +76,28 @@ function MallSyncMappingView({
                 />
             ) : null}
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-                <BusinessTableFrame
-                    title="映射任务"
-                    description="映射状态与重新归集状态分列；责任未配置时不可执行。"
-                    table={
-                        <DataTable
-                            data={data?.mappingTasks ?? []}
-                            columns={mappingColumns}
-                            getRowId={(r) => r.mappingTaskId}
-                            rowCount={(data?.mappingTasks ?? []).length}
-                            layout="flush"
-                        />
-                    }
-                />
+            <div
+                className={
+                    embedded
+                        ? "grid gap-4"
+                        : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
+                }
+            >
+                {!embedded ? (
+                    <BusinessTableFrame
+                        title="映射任务"
+                        description="映射状态与重新归集状态分列；责任未配置时不可执行。"
+                        table={
+                            <DataTable
+                                data={data?.mappingTasks ?? []}
+                                columns={mappingColumns}
+                                getRowId={(r) => r.mappingTaskId}
+                                rowCount={(data?.mappingTasks ?? []).length}
+                                layout="flush"
+                            />
+                        }
+                    />
+                ) : null}
 
                 {mappingTask ? (
                     <MappingTaskPanel
@@ -104,6 +114,7 @@ function MallSyncMappingView({
                         onResolveUnknownReapply={onResolveUnknownReapply}
                         onBackToQueue={onBackToQueue}
                         onConfirm={onConfirm}
+                        showBack={!embedded}
                     />
                 ) : (
                     <BusinessEmptyState

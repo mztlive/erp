@@ -23,7 +23,10 @@ import { CustomerReceiptSubmitConfirmDialog } from "@/features/customer-receivab
 import { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
 import { money } from "@/features/customer-receivables/lib/allocation-math"
 import { customerReceiptApprovalPhase } from "@/features/customer-receivables/lib/customer-receipt-approval"
-import type { AllocationSessionView } from "@/features/customer-receivables/types"
+import type {
+    AllocationSessionView,
+    PostAllocationResult,
+} from "@/features/customer-receivables/types"
 
 /**
  * 核销工作区。回款创建后只读展示绑定，提交确认走通用审批路线。
@@ -43,7 +46,9 @@ export function AllocationSessionPanel({
 }: {
     session: AllocationSessionView
     onClose: () => void
-    onPosted: () => void
+    onPosted: (
+        result: Extract<PostAllocationResult, { status: "succeeded" }>,
+    ) => void
     canOperate?: boolean
     permissionReason?: string
     workItemId?: string

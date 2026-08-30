@@ -32,7 +32,6 @@ test("common inbox badges use distinct colors", () => {
         workspaceDocumentBadge("DOCUMENT_APPROVAL", "purchase_order"),
         workspaceDocumentBadge("DOCUMENT_APPROVAL", "customer_receipt"),
         workspaceDocumentBadge("DOCUMENT_APPROVAL", "stock_adjustment"),
-        workspaceDocumentBadge("DOCUMENT_APPROVAL", "supplier_payment"),
         workspaceDocumentBadge("DOCUMENT_APPROVAL", "customer_refund"),
         workspaceDocumentBadge("PROCUREMENT_ORDER_CREATION", "sales_order"),
     ]
@@ -50,11 +49,7 @@ test("workbench metadata contains only active and projectable work item types", 
         "FULFILLMENT_OPERATION",
         "IMPORT_BUSINESS_CONFIRMATION",
         "INTEGRATION_RESULT_UNKNOWN",
-        "INVENTORY_ADJUSTMENT_REVIEW",
         "PROCUREMENT_ORDER_CREATION",
-        "PURCHASE_ORDER_REVIEW",
-        "SALES_CHANGE_FINANCE_REVIEW",
-        "SALES_CHANGE_IMPACT_REVIEW",
         "SALES_INVOICE_EXECUTION",
         "SUPPLIER_PAYMENT_EXECUTION",
         "SUPPLIER_SETTLEMENT_REVIEW",
@@ -88,23 +83,6 @@ test("procurement creation stays a supply allocation badge for a sales order", (
     assert.deepEqual(
         workspaceDocumentBadge("PROCUREMENT_ORDER_CREATION", "sales_order"),
         { label: "供给分配", variant: "lime" },
-    )
-})
-
-test("sales change impact and finance reviews keep distinct badges", () => {
-    assert.deepEqual(
-        workspaceDocumentBadge(
-            "SALES_CHANGE_IMPACT_REVIEW",
-            "sales_change_review",
-        ),
-        { label: "变更履约", variant: "teal" },
-    )
-    assert.deepEqual(
-        workspaceDocumentBadge(
-            "SALES_CHANGE_FINANCE_REVIEW",
-            "sales_change_review",
-        ),
-        { label: "变更财务", variant: "violet" },
     )
 })
 
@@ -152,10 +130,6 @@ test("read and open actions are named by document and task", () => {
     assert.equal(
         workspaceOpenActionLabel("PROCUREMENT_ORDER_CREATION", "sales_order"),
         "去分配供给",
-    )
-    assert.equal(
-        workspaceOpenActionLabel("PURCHASE_ORDER_REVIEW", "purchase_order"),
-        "去审核采购单",
     )
     assert.equal(
         workspaceOpenActionLabel("CUSTOMER_RECEIPT_REVIEW", "customer_receipt"),

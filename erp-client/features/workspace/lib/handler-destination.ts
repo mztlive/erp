@@ -65,24 +65,6 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W11",
         baseHref: "/finance/customer-accounts",
     },
-    sales_change_impact_review: {
-        workItemTypeLabel: "销售变更履约影响复核",
-        family: "fulfillment",
-        destinationWorkspaceId: "W05",
-        baseHref: "/sales/orders",
-    },
-    sales_change_finance_review: {
-        workItemTypeLabel: "销售变更财务复核",
-        family: "finance",
-        destinationWorkspaceId: "W05",
-        baseHref: "/sales/orders",
-    },
-    po_review: {
-        workItemTypeLabel: "采购单财务审核",
-        family: "finance",
-        destinationWorkspaceId: "W08",
-        baseHref: "/procurement/orders",
-    },
     card_funds: {
         workItemTypeLabel: "卡券票款复核",
         family: "finance",
@@ -94,12 +76,6 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         family: "finance",
         destinationWorkspaceId: "W13",
         baseHref: "/finance/card-funds-review",
-    },
-    inventory_adj: {
-        workItemTypeLabel: "库存调整复核",
-        family: "fulfillment",
-        destinationWorkspaceId: "W10",
-        baseHref: "/inventory",
     },
     supplier_settlement: {
         workItemTypeLabel: "供应商结算复核",
@@ -214,7 +190,7 @@ function buildDocumentApprovalHref(
                 params,
             )
         case "W08":
-            params.set("mode", "review")
+            params.set("section", "approval")
             return withParams(
                 `/procurement/orders/${encodeURIComponent(businessObjectId)}`,
                 params,
@@ -245,10 +221,7 @@ function buildDocumentApprovalHref(
                 item.businessObjectType,
             )
             if (!previewKind) return null
-            params.set(
-                "view",
-                previewKind === "payment" ? "payment" : "payable",
-            )
+            params.set("view", "payable")
             params.set("previewKind", previewKind)
             params.set("detailId", businessObjectId)
             if (workItemId && !item.trackingOnly) {
@@ -280,10 +253,8 @@ function customerApprovalPreviewKind(
 /** 解析供应商侧审批单据在 W12 使用的详情类型。 */
 function supplierApprovalPreviewKind(
     documentType?: string,
-): "payment" | "refund" | "reversal" | null {
+): "refund" | "reversal" | null {
     switch (documentType) {
-        case "supplier_payment":
-            return "payment"
         case "supplier_refund":
             return "refund"
         case "payment_reversal":
@@ -379,22 +350,6 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
     })
 
     switch (item.handlerKey) {
-        case "sales_change_impact_review":
-        case "sales_change_finance_review": {
-            const salesOrderId = requiredValue(item.rootBusinessObjectId)
-            if (!salesOrderId || salesOrderId === businessObjectId) return null
-            params.set("section", "change-review")
-            return withParams(
-                `${registration.baseHref}/${encodeURIComponent(salesOrderId)}`,
-                params,
-            )
-        }
-        case "po_review":
-            params.set("mode", "review")
-            return withParams(
-                `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
-                params,
-            )
         case "supplier_payment_execution": {
             const purchaseOrderId = requiredValue(item.rootBusinessObjectId)
             if (!purchaseOrderId || purchaseOrderId === businessObjectId) {

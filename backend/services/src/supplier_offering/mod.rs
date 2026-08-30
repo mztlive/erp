@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, CatalogExt, NoTransaction, SupplierApiExt, SupplierExt, SupplierOfferingExt,
-    Transactional,
+    AccessControlExt, CatalogExt, NoTransaction, PublicationExt, SupplierApiExt, SupplierExt,
+    SupplierOfferingExt, Transactional, WorkItemExt,
 };
 use entities::catalog::{Product, ProductKind, Sku, SkuRevision};
 use entities::common::time::{BusinessDate, Instant};
@@ -32,16 +32,21 @@ use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
-use crate::audit::AuditActor;
+use crate::audit::{AuditActor, CommandReceipt};
 use crate::errors::{Error, Result};
 use crate::publication::{PublicationService, SystemSafetyPauseTrigger, UnavailableMallConnector};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
-use entities::publication::{SafetyPauseCause, SafetyPauseSourceObjectType};
+use crate::work_item::WorkItemService;
+use entities::publication::{
+    SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType, SystemSafetyPauseOperation,
+};
+use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use std::sync::Arc;
 
 mod dto;
 
 pub use self::dto::{
+    CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
     CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,
     ReviseSupplierOfferingResult, SupplierOfferingListParams, SupplierOfferingView,
     UpdateSupplierOfferingAvailabilityRequest, UpdateSupplierOfferingAvailabilityResult,
@@ -49,6 +54,8 @@ pub use self::dto::{
 use self::dto::{SortDir, SupplierOfferingTermsWrite, OFFERING_SORT_FIELDS};
 
 type SupplierOfferingFilter = <Database as SupplierOfferingExt>::SupplierOfferingFilter;
+
+const SUPPLY_EXCEPTION_COMPLETE_ACTION: &str = "supplier_offering.supply_exception.complete";
 
 /// 供应商供给服务。
 pub struct SupplierOfferingService {
@@ -571,6 +578,146 @@ impl SupplierOfferingService {
         .await
     }
 
+    /// 核对供应停止来源与安全暂停影响，并完成其唯一正式后续任务。
+    ///
+    /// 本命令只关闭人工核对责任；不可变安全暂停证据、暂停修订和发布暂停状态
+    /// 均保持不变，不得将“任务完成”解释为恢复供给或恢复发布。
+    ///
+    /// # 错误
+    /// 任务、来源对象、冻结版本、不可变安全暂停操作、当前责任或幂等请求任一
+    /// 不一致时失败关闭。
+    pub async fn complete_supply_exception_task(
+        &self,
+        id: &str,
+        req: CompleteSupplierSupplyExceptionTaskRequest,
+        actor: &AuditActor,
+    ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
+        req.validate()?;
+        let offering_id = id.trim();
+        if offering_id.is_empty() || req.decision.offering_id.trim() != offering_id {
+            return Err(Error::ValidationError("路径供给 ID 与任务决定不一致".to_string()));
+        }
+        let work_item_id = req.work_item_id.trim();
+        let subject_version = req.expected_subject_version.trim();
+        if work_item_id.is_empty() || subject_version.is_empty() {
+            return Err(Error::ValidationError("任务 ID 与来源版本不能为空".to_string()));
+        }
+        let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
+        let receipt = CommandReceipt::new(
+            "supplier-supply-exception:",
+            actor,
+            SUPPLY_EXCEPTION_COMPLETE_ACTION,
+            "work_item",
+            &req.idempotency_key,
+            &req,
+        )?;
+        if let Some(committed_id) = receipt.committed_resource_id(&self.db).await? {
+            return self.replay_supply_exception_completion(&committed_id, &req).await;
+        }
+
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let rbac = crate::iam::shared_rbac_service(db.clone());
+        let actor_for_tx = actor.clone();
+        let req_for_tx = req.clone();
+        let receipt_for_tx = receipt.clone();
+        let offering_id_for_tx = offering_id.to_string();
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let typed_offering_id = SupplierOfferingId::new(&offering_id_for_tx);
+                    db.supplier_offerings()
+                        .find_by_id(&typed_offering_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
+                    let mut work_item = db
+                        .work_items()
+                        .find_by_id(&req_for_tx.work_item_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("供应停止任务不存在".to_string()))?;
+                    ensure_supply_exception_work_item(
+                        &work_item,
+                        &offering_id_for_tx,
+                        expected_task_version,
+                        &req_for_tx.expected_subject_version,
+                    )?;
+                    WorkItemService::new(db.clone(), rbac.clone())
+                        .ensure_domain_decision_access(&actor_for_tx, &work_item, session)
+                        .await?;
+                    let operation = db
+                        .system_safety_pause_operations()
+                        .find_safety_pause_by_work_item(&work_item.base.id, session)
+                        .await?
+                        .ok_or_else(|| {
+                            Error::BusinessLogicError("供应停止任务缺少不可变安全暂停证据".to_string())
+                        })?;
+                    ensure_supply_exception_operation(&operation, &work_item)?;
+
+                    let completed_at = Instant::now();
+                    work_item.complete_by_domain_command(actor_for_tx.id(), completed_at)?;
+                    let decision_audit = actor_for_tx.clone().resource_log_with_message(
+                        SUPPLY_EXCEPTION_COMPLETE_ACTION,
+                        "supplier_offering",
+                        offering_id_for_tx.clone(),
+                        Some(format!(
+                            "证据引用：{}；核对结论：{}；安全暂停保持生效",
+                            req_for_tx.decision.evidence_reference.trim(),
+                            req_for_tx.decision.comment.trim()
+                        )),
+                    )?;
+                    let receipt_audit =
+                        receipt_for_tx.audit(actor_for_tx.clone(), work_item.base.id.clone())?;
+                    db.work_items().update(&mut work_item, session).await?;
+                    db.audit_logs().create(&decision_audit, session).await?;
+                    db.audit_logs().create(&receipt_audit, session).await?;
+
+                    Ok::<CompleteSupplierSupplyExceptionTaskResult, Error>(
+                        supply_exception_completion_result(&operation, &req_for_tx),
+                    )
+                })
+            })
+            .await;
+
+        match transaction_result {
+            Ok(result) => Ok(result),
+            Err(error) => match receipt.committed_resource_id(&self.db).await? {
+                Some(committed_id) => self.replay_supply_exception_completion(&committed_id, &req).await,
+                None => Err(error),
+            },
+        }
+    }
+
+    async fn replay_supply_exception_completion(
+        &self,
+        committed_work_item_id: &str,
+        req: &CompleteSupplierSupplyExceptionTaskRequest,
+    ) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
+        if committed_work_item_id != req.work_item_id.trim() {
+            return Err(Error::ConflictError(
+                "同一操作号已用于其它供应停止任务".to_string(),
+            ));
+        }
+        let work_item = self
+            .db
+            .work_items()
+            .find_by_id(committed_work_item_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::Internal("已提交任务结果不存在".to_string()))?;
+        if work_item.status != WorkItemStatus::Completed
+            || work_item.business_object_id != req.decision.offering_id.trim()
+        {
+            return Err(Error::Internal("已提交供应停止任务结果不完整".to_string()));
+        }
+        let operation = self
+            .db
+            .system_safety_pause_operations()
+            .find_safety_pause_by_work_item(committed_work_item_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::Internal("已提交任务缺少安全暂停证据".to_string()))?;
+        ensure_supply_exception_operation(&operation, &work_item)?;
+        Ok(supply_exception_completion_result(&operation, req))
+    }
+
     async fn ensure_identity_available(&self, offering: &SupplierOffering) -> Result<()> {
         let existing = self
             .db
@@ -749,6 +896,75 @@ impl SupplierOfferingService {
                 None => Err(error),
             },
         }
+    }
+}
+
+fn ensure_supply_exception_work_item(
+    work_item: &WorkItem,
+    offering_id: &str,
+    expected_task_version: u64,
+    expected_subject_version: &str,
+) -> Result<()> {
+    if work_item.work_item_type != WorkItemType::BusinessException
+        || work_item.business_object_type != "SUPPLIER_OFFERING"
+        || work_item.business_object_id != offering_id
+        || work_item.reason_code.as_deref() != Some("SUPPLIER_STOPPED")
+    {
+        return Err(Error::BusinessLogicError(
+            "当前任务不是已注册的供应停止核对任务".to_string(),
+        ));
+    }
+    if work_item.status != WorkItemStatus::Open {
+        return Err(Error::ConflictError("供应停止任务已不再开放".to_string()));
+    }
+    if work_item.base.version != expected_task_version {
+        return Err(Error::ConflictError(
+            "任务已被其他请求修改，请刷新后重试".to_string(),
+        ));
+    }
+    if work_item.subject_version != expected_subject_version.trim() {
+        return Err(Error::ConflictError(
+            "供应停止来源版本已变化，请刷新后重试".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_supply_exception_operation(
+    operation: &SystemSafetyPauseOperation,
+    work_item: &WorkItem,
+) -> Result<()> {
+    let bound = matches!(
+        &operation.follow_up,
+        SafetyPauseFollowUp::WorkItem(reference)
+            if reference.work_item_id == work_item.base.id
+                && reference.business_object_type == work_item.business_object_type
+                && reference.business_object_id == work_item.business_object_id
+                && reference.subject_version == work_item.subject_version
+                && reference.handler_key == "supplier_supply_exception"
+    );
+    if operation.cause != SafetyPauseCause::SupplierStopped
+        || operation.source_object_type != SafetyPauseSourceObjectType::SupplierOffering
+        || operation.source_object_id != work_item.business_object_id
+        || operation.source_version != work_item.subject_version
+        || !bound
+    {
+        return Err(Error::BusinessLogicError(
+            "供应停止任务与不可变安全暂停证据不一致".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn supply_exception_completion_result(
+    operation: &SystemSafetyPauseOperation,
+    req: &CompleteSupplierSupplyExceptionTaskRequest,
+) -> CompleteSupplierSupplyExceptionTaskResult {
+    CompleteSupplierSupplyExceptionTaskResult {
+        work_item_id: req.work_item_id.trim().to_string(),
+        safety_pause_operation_id: operation.base.id.clone(),
+        evidence_reference: req.decision.evidence_reference.trim().to_string(),
+        message: "供应停止来源与安全暂停影响已核对；任务已完成，安全暂停继续生效".to_string(),
     }
 }
 
@@ -1031,12 +1247,88 @@ fn replay_command<T: DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
-    use super::typed_id;
-    use entities::ids::SkuId;
+    use super::{ensure_supply_exception_operation, ensure_supply_exception_work_item, typed_id};
+    use entities::common::time::Instant;
+    use entities::ids::{
+        ProductPublicationDeliveryId, ProductPublicationId, ProductPublicationRevisionId, SkuId, WorkItemId,
+    };
+    use entities::publication::{
+        SafetyPauseAffectedPublication, SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType,
+        SafetyPauseWorkItemRef, SystemSafetyPauseOperation, SystemSafetyPauseOperationData,
+    };
+    use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 
     #[test]
     fn blank_filter_ids_are_omitted() {
         assert!(typed_id(Some("  "), SkuId::new).is_none());
         assert_eq!(typed_id(Some(" sku-1 "), SkuId::new).unwrap().as_ref(), "sku-1");
+    }
+
+    #[test]
+    fn supply_exception_completion_requires_exact_frozen_task_identity() {
+        let task = supply_exception_task();
+
+        ensure_supply_exception_work_item(&task, "offering-1", task.base.version, "offering:2").unwrap();
+        assert!(
+            ensure_supply_exception_work_item(&task, "offering-2", task.base.version, "offering:2",).is_err()
+        );
+        assert!(
+            ensure_supply_exception_work_item(&task, "offering-1", task.base.version, "offering:3",).is_err()
+        );
+    }
+
+    #[test]
+    fn supply_exception_completion_requires_bound_safety_pause_evidence() {
+        let task = supply_exception_task();
+        let operation = SystemSafetyPauseOperation::new(
+            "pause-1",
+            SystemSafetyPauseOperationData {
+                cause: SafetyPauseCause::SupplierStopped,
+                source_object_type: SafetyPauseSourceObjectType::SupplierOffering,
+                source_object_id: task.business_object_id.clone(),
+                source_version: task.subject_version.clone(),
+                idempotency_key: "pause-key-1".to_string(),
+                affected_publications: vec![SafetyPauseAffectedPublication {
+                    publication_id: ProductPublicationId::new("publication-1"),
+                    pause_revision_id: ProductPublicationRevisionId::new("revision-1"),
+                    delivery_id: ProductPublicationDeliveryId::new("delivery-1"),
+                }],
+                follow_up: SafetyPauseFollowUp::WorkItem(SafetyPauseWorkItemRef {
+                    work_item_id: task.base.id.clone(),
+                    task_version: task.base.version,
+                    business_object_type: task.business_object_type.clone(),
+                    business_object_id: task.business_object_id.clone(),
+                    subject_version: task.subject_version.clone(),
+                    handler_key: "supplier_supply_exception".to_string(),
+                }),
+                occurred_at: Instant::from_unix_secs(1),
+                committed_at: Instant::from_unix_secs(1),
+            },
+        )
+        .unwrap();
+
+        ensure_supply_exception_operation(&operation, &task).unwrap();
+    }
+
+    fn supply_exception_task() -> WorkItem {
+        WorkItem::new_at(
+            WorkItemId::new("work-item-1"),
+            WorkItemData {
+                work_item_type: WorkItemType::BusinessException,
+                business_object_type: "SUPPLIER_OFFERING".to_string(),
+                business_object_id: "offering-1".to_string(),
+                subject_version: "offering:2".to_string(),
+                owner_role: "role-operations".to_string(),
+                owner_organization_id: "company".to_string(),
+                owner_user_id: "operator-1".to_string(),
+                assignment_source: AssignmentSource::SystemRule,
+                priority: WorkItemPriority::High,
+                due_at: None,
+                reason_code: Some("SUPPLIER_STOPPED".to_string()),
+                impact_summary: Some("发布保持安全暂停".to_string()),
+            },
+            Instant::from_unix_secs(1),
+        )
+        .unwrap()
     }
 }

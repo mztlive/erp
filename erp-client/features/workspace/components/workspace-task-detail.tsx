@@ -47,9 +47,19 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { WorkspaceCardFundsTask } from "./workspace-card-funds-task"
 import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
+import { WorkspaceImportTask } from "./workspace-import-task"
+import { WorkspaceIntegrationTask } from "./workspace-integration-task"
+import { WorkspaceMasterMappingTask } from "./workspace-master-mapping-task"
 import { WorkspacePaymentTask } from "./workspace-payment-task"
+import { WorkspaceProcurementTask } from "./workspace-procurement-task"
+import { WorkspaceSettlementTask } from "./workspace-settlement-task"
+import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
+import { WorkspaceSupplyExceptionTask } from "./workspace-supply-exception-task"
+import { WorkspaceTaskContext } from "./workspace-task-context"
+import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
 import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
@@ -59,13 +69,7 @@ import {
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
  * 履约、付款、开票与客户验收在本页提交正式命令；审批通过、驳回留在底栏。
  */
-export function WorkspaceTaskDetail({
-    item,
-    canReadSensitive = true,
-    onDecisionApplied,
-    grantedPermissions = [],
-    onTaskCompleted,
-}: {
+type WorkspaceTaskDetailProps = Readonly<{
     item: WorkspaceWorkItem
     canReadSensitive?: boolean
     onDecisionApplied?: (
@@ -73,9 +77,143 @@ export function WorkspaceTaskDetail({
         completedWorkItemId: string,
     ) => void
     grantedPermissions?: readonly string[]
-    onTaskCompleted?: (workItemId: string) => void
-}) {
-    if (item.workItemType === "FULFILLMENT_OPERATION") {
+    onTaskCompleted?: (workItemId: string, preferredWorkItemId?: string) => void
+}>
+
+export function WorkspaceTaskDetail(props: WorkspaceTaskDetailProps) {
+    return (
+        <section
+            className="flex h-full min-h-0 flex-col px-4 pt-4 lg:px-0 lg:pt-0"
+            aria-label="当前工作台任务"
+        >
+            <WorkspaceTaskContext item={props.item} />
+            <div className="min-h-0 flex-1 pt-4">
+                <WorkspaceTaskSurfaceBoundary
+                    workItemId={props.item.workItemId}
+                >
+                    <WorkspaceTaskSurface {...props} />
+                </WorkspaceTaskSurfaceBoundary>
+            </div>
+        </section>
+    )
+}
+
+function WorkspaceTaskSurface({
+    item,
+    canReadSensitive = true,
+    onDecisionApplied,
+    grantedPermissions = [],
+    onTaskCompleted,
+}: WorkspaceTaskDetailProps) {
+    if (
+        item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
+        item.businessObjectType === "sales_order"
+    ) {
+        return (
+            <WorkspaceProcurementTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        item.workItemType === "SUPPLIER_SETTLEMENT_REVIEW" &&
+        item.businessObjectType === "supplier_settlement_statement"
+    ) {
+        return (
+            <WorkspaceSettlementTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        item.workItemType === "IMPORT_BUSINESS_CONFIRMATION" &&
+        item.businessObjectType === "LEGACY_IMPORT_BATCH"
+    ) {
+        return (
+            <WorkspaceImportTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        (item.workItemType === "CARD_FUNDS_REVIEW" ||
+            item.workItemType === "CARD_FUNDS_DELTA_REVIEW") &&
+        item.businessObjectType === "receivable_account"
+    ) {
+        return (
+            <WorkspaceCardFundsTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        item.workItemType === "BUSINESS_EXCEPTION" &&
+        item.businessObjectType === "MASTER_MAPPING_TASK"
+    ) {
+        return (
+            <WorkspaceMasterMappingTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        (item.workItemType === "INTEGRATION_RESULT_UNKNOWN" ||
+            item.workItemType === "BUSINESS_EXCEPTION") &&
+        (item.businessObjectType === "integration_error_task" ||
+            item.businessObjectType === "reconciliation_difference")
+    ) {
+        return (
+            <WorkspaceIntegrationTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        (item.workItemType === "INTEGRATION_RESULT_UNKNOWN" ||
+            item.workItemType === "BUSINESS_EXCEPTION") &&
+        item.businessObjectType === "SUPPLIER_FULFILLMENT_ORDER"
+    ) {
+        return (
+            <WorkspaceSupplierInvestigationTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        item.workItemType === "BUSINESS_EXCEPTION" &&
+        item.businessObjectType === "SUPPLIER_OFFERING"
+    ) {
+        return (
+            <WorkspaceSupplyExceptionTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        item.workItemType === "FULFILLMENT_OPERATION" &&
+        [
+            "purchase_receipt",
+            "delivery",
+            "electronic_delivery",
+            "service_fulfillment",
+        ].includes(item.businessObjectType)
+    ) {
         return (
             <WorkspaceFulfillmentTask
                 item={item}
@@ -85,7 +223,10 @@ export function WorkspaceTaskDetail({
         )
     }
 
-    if (item.workItemType === "SUPPLIER_PAYMENT_EXECUTION") {
+    if (
+        item.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
+        item.businessObjectType === "payable_account"
+    ) {
         return (
             <WorkspacePaymentTask
                 item={item}
@@ -94,16 +235,41 @@ export function WorkspaceTaskDetail({
         )
     }
 
-    if (item.workItemType === "SALES_INVOICE_EXECUTION") {
-        return <WorkspaceInvoiceTask item={item} />
+    if (
+        item.workItemType === "SALES_INVOICE_EXECUTION" &&
+        item.businessObjectType === "receivable_account"
+    ) {
+        return (
+            <WorkspaceInvoiceTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
     }
 
-    if (item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION") {
+    if (
+        item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION" &&
+        item.businessObjectType === "sales_order"
+    ) {
         return (
             <WorkspaceAcceptanceTask
                 item={item}
                 onTaskCompleted={onTaskCompleted}
             />
+        )
+    }
+
+    if (
+        item.workItemType !== "DOCUMENT_APPROVAL" &&
+        item.workItemType !== "APPROVAL_INSTANCE"
+    ) {
+        return (
+            <Alert variant="destructive">
+                <AlertTitle>任务处理器未登记</AlertTitle>
+                <AlertDescription>
+                    当前任务类型与业务对象没有签署原地处理面，系统已停止提供处理动作。请联系管理员核对任务类型、业务对象和处理器登记。
+                </AlertDescription>
+            </Alert>
         )
     }
 

@@ -6,7 +6,7 @@ export type PurchaseOrderDetailSectionId =
     | "changes"
     | "audit"
 
-export type PurchaseOrderDetailMode = "view" | "edit" | "review"
+export type PurchaseOrderDetailMode = "view" | "edit"
 
 export const PURCHASE_ORDER_DETAIL_NAV: readonly {
     id: PurchaseOrderDetailSectionId
@@ -32,7 +32,7 @@ export function resolvePurchaseOrderDetailSection(
 export function resolvePurchaseOrderDetailMode(
     mode?: string,
 ): PurchaseOrderDetailMode {
-    if (mode === "edit" || mode === "review") return mode
+    if (mode === "edit") return mode
     return "view"
 }
 

@@ -8,16 +8,10 @@ const KNOWN_REASON_LABELS: Record<string, string> = {
         "销售已按驳回意见重提，需要采购重新确认",
     procurement_rejection_low_margin_requested:
         "采购驳回后，需要上级确认是否按原条件承接",
-    change_impact_dispatched: "销售变更已提交，需要核对履约影响",
-    change_finance_dispatched: "销售变更已提交，需要核对财务影响",
     card_funds_delta_review: "票款出现差额，需要财务复核",
     card_funds_opening_review: "卡券销售已生效，需要核对准期初回款与开票",
     supplier_settlement_review_dispatched: "供应商结算单待复核",
     import_trial_confirmation: "导入试算已完成，需要业务确认范围",
-    purchase_order_review_dispatched:
-        "采购已提交，需要核对成本、进项税和付款条件",
-    purchase_order_review_resubmitted:
-        "采购已再次提交，需要重新核对成本与付款条件",
 }
 
 const LEGACY_OWNER_PLACEHOLDERS = new Set(["当前处理人", "处理人待确认"])
@@ -54,27 +48,16 @@ export function displayImpactSummary(input: {
     workItemTypeLabel?: string | null
 }): string {
     const text = input.impactSummary?.trim() ?? ""
-    const isPurchaseReview =
-        input.workItemType === "PURCHASE_ORDER_REVIEW" ||
-        input.workItemTypeLabel === "采购单财务审核"
     if (
         isUserFacingCopy(text) &&
         !text.includes("打开业务对象") &&
         !text.startsWith("采购二次确认：") &&
-        !text.startsWith("采购单财务审核：") &&
-        !(
-            isPurchaseReview &&
-            text.includes("待财务审核") &&
-            !text.includes("不审核")
-        )
+        !text.startsWith("采购单财务审核：")
     ) {
         return text
     }
     if (input.workItemTypeLabel === "采购二次确认") {
         return "不确认则销售单不能生效"
-    }
-    if (isPurchaseReview) {
-        return "不审核则不能形成应付、不能付款"
     }
     return "不处理将卡住后续业务，请进入对应页面核对。"
 }

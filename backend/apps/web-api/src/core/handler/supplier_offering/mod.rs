@@ -10,6 +10,7 @@ use entities::Permission;
 use services::{
     audit::AuditActor,
     supplier_offering::{
+        CompleteSupplierSupplyExceptionTaskRequest, CompleteSupplierSupplyExceptionTaskResult,
         CreateSupplierOfferingRequest, CreateSupplierOfferingResult, PageView, ReviseSupplierOfferingRequest,
         ReviseSupplierOfferingResult, SupplierOfferingListParams, SupplierOfferingService,
         SupplierOfferingView, UpdateSupplierOfferingAvailabilityRequest,
@@ -137,6 +138,28 @@ pub async fn update_availability(
 ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
     let result = SupplierOfferingService::new(state.db())
         .update_availability(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "供应商供给",
+    group_desc = "维护公司 SKU 的供应商供给、价格条款和可供状态",
+    desc = "完成供应停止影响核对任务",
+    resource = "supplier_offering",
+    action = "resolve_supply_exception"
+)]
+/// 核对供应停止来源与安全暂停影响并完成正式任务。
+///
+/// 本命令不恢复供给、不恢复商品发布；安全暂停事实继续生效。
+pub async fn complete_supply_exception_task(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<CompleteSupplierSupplyExceptionTaskRequest>,
+) -> Result<CompleteSupplierSupplyExceptionTaskResult> {
+    let result = SupplierOfferingService::new(state.db())
+        .complete_supply_exception_task(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
 }

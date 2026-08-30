@@ -469,7 +469,7 @@ async fn create_original_receivable(
             customer_id: order.customer_id.clone(),
             counterparty_party_id: order.settlement_party_id.clone(),
             source_sales_order_revision_id: revision_id.clone().into(),
-            review_status: AccountReviewStatus::NotApplicable,
+            review_status: AccountReviewStatus::initial_for_sales_business_type(order.business_type),
             reviewed_by: None,
             reviewed_at: None,
             review_evidence_reference: None,
@@ -500,6 +500,7 @@ async fn create_original_receivable(
     db.receivable()
         .create_receivable_with_entry(&account, &entry, session)
         .await?;
+    crate::receivable::card_funds_task::ensure_initial_card_funds_review_task(db, &account, session).await?;
     crate::receivable::invoice_task::ensure_sales_invoice_task(db, &account, session).await?;
     Ok(())
 }
@@ -836,6 +837,7 @@ async fn persist_voucher_projection(
 mod tests {
     use super::{ensure_final_approve_formalize, procurement_responsibility_key};
     use entities::ids::{CustomerAccountId, PartyId, SalesOrderId};
+    use entities::receivable::AccountReviewStatus;
     use entities::sales_order::{BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderData};
 
     fn draft_order() -> SalesOrder {
@@ -917,5 +919,13 @@ mod tests {
         order.start_approval_submission("user-1").expect("卡券进入审批中");
         assert_eq!(order.review_status, ReviewStatus::InApproval);
         assert!(ensure_final_approve_formalize(&order).is_ok());
+        assert_eq!(
+            AccountReviewStatus::initial_for_sales_business_type(order.business_type),
+            AccountReviewStatus::OpeningPending
+        );
+        assert_eq!(
+            AccountReviewStatus::initial_for_sales_business_type(BusinessType::GoodsService),
+            AccountReviewStatus::NotApplicable
+        );
     }
 }

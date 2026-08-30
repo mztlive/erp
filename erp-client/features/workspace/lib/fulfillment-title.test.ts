@@ -37,6 +37,21 @@ describe("fulfillment work item titles", () => {
         ).toBe("供应商直发 · 销售单 SO20260826-000001")
     })
 
+    it("keeps long sales and purchase business numbers", () => {
+        expect(
+            fulfillmentObjectTitle(
+                "仓库发货 · 销售单 SO-4024b6046fd64028984c1f25d52a81c4",
+                "履约处理",
+            ),
+        ).toContain("SO-4024b6046fd64028984c1f25d52a81c4")
+        expect(
+            fulfillmentObjectTitle(
+                "采购收货 · 采购单 PO-4024b6046fd64028984c1f25d52a81c4",
+                "履约处理",
+            ),
+        ).toContain("PO-4024b6046fd64028984c1f25d52a81c4")
+    })
+
     it("prefers the hydrated sales order number on the task header", () => {
         expect(
             fulfillmentTaskTitle(

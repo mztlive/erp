@@ -114,6 +114,25 @@ impl<'a> Repository<'a, SystemSafetyPauseOperation> {
             .await
     }
 
+    /// 按供应停止后续任务查找其不可变安全暂停操作。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_safety_pause_by_work_item(
+        &self,
+        work_item_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SystemSafetyPauseOperation>> {
+        self.find_one(
+            doc! {
+                "follow_up.kind": "WORK_ITEM",
+                "follow_up.work_item_id": work_item_id,
+            },
+            executor,
+        )
+        .await
+    }
+
     /// 判断发布是否存在任一已提交的系统安全暂停证据。
     ///
     /// # 错误

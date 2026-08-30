@@ -34,9 +34,9 @@ export function useSalesOrderDetailUrlState({
     const queueContextId = searchParams.get("queueContextId")?.trim() ?? ""
     const workItemReturnTo =
         returnTo?.trim() ||
-        (queueContextId && focusedWorkItemId
-            ? `/workspace/tasks?queueContextId=${encodeURIComponent(queueContextId)}&currentWorkItemId=${encodeURIComponent(focusedWorkItemId)}`
-            : "/workspace/tasks")
+        (focusedWorkItemId
+            ? `/workspace?currentWorkItemId=${encodeURIComponent(focusedWorkItemId)}`
+            : "/workspace")
 
     const selectSection = React.useCallback(
         (

@@ -28,10 +28,15 @@ type BackendOwnerOption = Readonly<{
     account: string
     supplier_payment_eligible: boolean
     sales_invoice_eligible: boolean
+    card_funds_review_eligible: boolean
 }>
 
 function operation(value: string): FinanceResponsibilityOperation {
-    if (value === "SUPPLIER_PAYMENT" || value === "SALES_INVOICE") {
+    if (
+        value === "SUPPLIER_PAYMENT" ||
+        value === "SALES_INVOICE" ||
+        value === "CARD_FUNDS_REVIEW"
+    ) {
         return value
     }
     throw new Error(`服务端返回了未注册的财务责任操作：${value}`)
@@ -90,6 +95,7 @@ export async function fetchFinanceResponsibilityOwnerOptions(): Promise<
         account: row.account,
         supplierPaymentEligible: row.supplier_payment_eligible,
         salesInvoiceEligible: row.sales_invoice_eligible,
+        cardFundsReviewEligible: row.card_funds_review_eligible,
     }))
 }
 

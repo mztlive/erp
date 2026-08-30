@@ -303,10 +303,10 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     },
     {
         id: "W02",
-        name: "待办队列（统一）",
+        name: "待办队列（已并入 W01）",
         mode: "M3",
-        mainRoute: "/workspace/tasks",
-        navHref: "/workspace/tasks",
+        mainRoute: "/workspace",
+        navHref: "/workspace",
     },
     {
         id: "W03",

@@ -317,36 +317,6 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         read_permission: "sales_order:detail",
     },
     WorkItemBriefRelation {
-        work_item_type: WorkItemType::ImportBusinessConfirmation,
-        object_kind: WorkItemBriefObjectKind::SalesOrder,
-        business_object_type: "sales_order",
-        read_permission: "sales_order:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::ImportBusinessConfirmation,
-        object_kind: WorkItemBriefObjectKind::ProcurementConfirmation,
-        business_object_type: "procurement_confirmation",
-        read_permission: "procurement_confirmation:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::PurchaseOrderReview,
-        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
-        business_object_type: "purchase_order",
-        read_permission: "purchase_order:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::SalesChangeImpactReview,
-        object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
-        business_object_type: "sales_change_review",
-        read_permission: "sales_change_order:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::SalesChangeFinanceReview,
-        object_kind: WorkItemBriefObjectKind::SalesChangeOrder,
-        business_object_type: "sales_change_review",
-        read_permission: "sales_change_order:detail",
-    },
-    WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
@@ -375,12 +345,6 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         object_kind: WorkItemBriefObjectKind::ReceivableAccount,
         business_object_type: "receivable_account",
         read_permission: "receivable_account:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::InventoryAdjustmentReview,
-        object_kind: WorkItemBriefObjectKind::StockAdjustment,
-        business_object_type: "stock_adjustment",
-        read_permission: "stock_adjustment:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierSettlementReview,
@@ -489,12 +453,6 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         object_kind: WorkItemBriefObjectKind::ReceiptReversal,
         business_object_type: "receipt_reversal",
         read_permission: "receivable_account:detail",
-    },
-    WorkItemBriefRelation {
-        work_item_type: WorkItemType::DocumentApproval,
-        object_kind: WorkItemBriefObjectKind::SupplierPayment,
-        business_object_type: "supplier_payment",
-        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
@@ -662,7 +620,7 @@ impl WorkItemType {
     /// 判断转派候选人校验是否必须携带完整工作面执行权限快照。
     ///
     /// # 返回
-    /// W01、W06、W11、W12 受控执行任务返回 `true`。
+    /// W01、W06、W11、W12、W13 受控执行任务返回 `true`。
     pub fn requires_full_execution_permissions(self) -> bool {
         matches!(
             self,
@@ -670,6 +628,8 @@ impl WorkItemType {
                 | Self::CustomerAcceptanceRegistration
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
+                | Self::CardFundsReview
+                | Self::CardFundsDeltaReview
         )
     }
 
@@ -777,6 +737,29 @@ impl WorkItemType {
             "invoice:detail",
             "invoice:create",
             "invoice:post",
+        ])
+    }
+
+    /// 返回 W13 卡券票款复核所需的完整权限集合。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 票款任务固定对象类型
+    ///
+    /// # 返回
+    /// 两类卡券票款任务绑定应收子账时返回读取与正式复核权限；其它组合返回 `None`。
+    pub fn card_funds_review_permissions(
+        self,
+        business_object_type: &str,
+    ) -> Option<&'static [&'static str]> {
+        if !matches!(self, Self::CardFundsReview | Self::CardFundsDeltaReview)
+            || business_object_type != "receivable_account"
+        {
+            return None;
+        }
+        Some(&[
+            "receivable_account:list",
+            "receivable_account:detail",
+            "receivable_funds_review:complete",
         ])
     }
 

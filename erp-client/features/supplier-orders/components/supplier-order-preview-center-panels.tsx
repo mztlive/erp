@@ -67,7 +67,7 @@ export function WorkItemProcessPanel({
                         processDisabled={!canCompleteTask}
                         showProcessNext={false}
                         pending={pending}
-                        onBack={() => router.push("/workspace/tasks")}
+                        onBack={() => router.push("/workspace")}
                         onProcess={onProcess}
                         onProcessNext={() => undefined}
                     />

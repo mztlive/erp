@@ -51,6 +51,8 @@ function SettlementCenter({
     patchUrl,
     returnTo,
     onBack,
+    embedded = false,
+    onTaskCompleted,
 }: {
     statementId: string
     workItemId?: string
@@ -58,12 +60,15 @@ function SettlementCenter({
     patchUrl: (patch: Partial<SettlementsUrlState>) => void
     returnTo?: string
     onBack: () => void
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const actions = useSettlementCenterActions({
         statementId,
         workItemId,
         urlState,
         patchUrl,
+        onTaskCompleted,
     })
     useSettlementResultFocus(actions.result, actions.resultRef)
     useSettlementSectionHotkey(patchUrl)
@@ -93,7 +98,10 @@ function SettlementCenter({
     const st = detail.statement
 
     return (
-        <PageScaffold>
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0" : undefined}
+        >
             <SettlementCenterDocumentHeader
                 statement={st}
                 immutableFactsAsOf={detail.freshness.immutableFactsAsOf}

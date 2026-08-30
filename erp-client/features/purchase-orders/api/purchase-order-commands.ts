@@ -7,7 +7,6 @@ import type {
     CreatePurchaseOrdersFromSourcingInput,
     CreatedPurchaseOrderDraft,
     PurchaseChangeOrderSummary,
-    ReviewPurchaseOrderInput,
     SavePurchaseOrderDraftInput,
     SubmitPurchaseOrderInput,
     VoidPurchaseOrderInput,
@@ -17,7 +16,6 @@ import type {
     BackendChangeStartResult,
     BackendCreateResult,
     BackendPurchaseChangeOrder,
-    BackendReviewResult,
     BackendSaveResult,
     BackendSourcingCreateResult,
     BackendSubmitResult,
@@ -167,72 +165,6 @@ export async function submitPurchaseOrderForReview(
     }
 }
 
-export async function reviewPurchaseOrder(
-    input: ReviewPurchaseOrderInput,
-): Promise<
-    FormalActionResponse<{
-        reviewResult: "APPROVED" | "REJECTED"
-        revisionId?: string
-        revisionNo?: number
-        payableOpenAmount?: string
-        lockVersion: number
-        reference: string
-    }>
-> {
-    try {
-        const decision = input.decision
-        const data = await apiPost<BackendReviewResult>(
-            `/admin/purchase-orders/${encodeURIComponent(decision.purchaseOrderId)}/review-decisions`,
-            {
-                work_item_id: input.workItemId,
-                expected_task_version: input.expectedTaskVersion,
-                expected_subject_version: input.expectedSubjectVersion,
-                decision: {
-                    purchase_order_id: decision.purchaseOrderId,
-                    submission_id: decision.submissionId,
-                    expected_purchase_order_lock_version:
-                        decision.expectedPurchaseOrderLockVersion,
-                    review_result: decision.reviewResult,
-                    reason_code:
-                        decision.reviewResult === "REJECTED"
-                            ? decision.reasonCode
-                            : undefined,
-                    comment: decision.comment,
-                },
-                idempotency_key: input.idempotencyKey,
-            },
-        )
-        if (
-            data.work_item_id !== input.workItemId ||
-            data.work_item_status !== "COMPLETED" ||
-            data.subject_version !== input.expectedSubjectVersion ||
-            data.review_result !== decision.reviewResult
-        ) {
-            return {
-                status: "unknown",
-                message:
-                    "处理结果待确认。返回结果不完整，请使用本次操作重试或刷新确认。",
-                idempotencyKey: input.idempotencyKey,
-            }
-        }
-        return {
-            status: "succeeded",
-            data: {
-                reviewResult:
-                    data.review_result === "REJECTED" ? "REJECTED" : "APPROVED",
-                revisionId: data.revision_id ?? undefined,
-                revisionNo: data.revision_no ?? undefined,
-                payableOpenAmount: undefined,
-                lockVersion: data.lock_version,
-                reference: data.reference,
-            },
-            reference: data.reference || `REVIEW-V${data.lock_version}`,
-        }
-    } catch (error) {
-        return formalActionFailure(error, input.idempotencyKey)
-    }
-}
-
 export async function startPurchaseChange(input: {
     purchaseOrderId: string
     expectedLockVersion: number
@@ -370,6 +302,7 @@ export async function createPurchaseOrdersFromSourcing(
     FormalActionResponse<{
         orders: CreatedPurchaseOrderDraft[]
         stockReservations: CreatedStockReservation[]
+        workItemStatus: "OPEN" | "COMPLETED"
     }>
 > {
     try {
@@ -402,6 +335,7 @@ export async function createPurchaseOrdersFromSourcing(
                         quantity: reservation.quantity,
                     }),
                 ),
+                workItemStatus: data.work_item_status,
             },
             reference: data.reference,
         }

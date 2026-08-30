@@ -31,16 +31,24 @@ import { ReviewResultBanner } from "../components/review-result-banner"
 import { TaskActionUnavailableAlert } from "../components/task-action-unavailable-alert"
 import { TaskDetailCard } from "../components/task-detail-card"
 
-export function CardFundsReviewPage() {
+export function CardFundsReviewPage({
+    forcedWorkItemId,
+    embedded = false,
+    onTaskCompleted,
+}: {
+    forcedWorkItemId?: string
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string, preferredWorkItemId?: string) => void
+} = {}) {
     const {
         scope,
         type,
         status,
         due,
         q,
-        currentWorkItemId,
-        queueContextId,
-        autoNext,
+        currentWorkItemId: urlWorkItemId,
+        queueContextId: urlQueueContextId,
+        autoNext: urlAutoNext,
         searchInput,
         setSearchInput,
         setAutoNext,
@@ -49,6 +57,9 @@ export function CardFundsReviewPage() {
         searchParams,
         router,
     } = useCardFundsReviewUrlState()
+    const currentWorkItemId = forcedWorkItemId ?? urlWorkItemId
+    const queryQueueContextId = embedded ? undefined : urlQueueContextId
+    const autoNext = embedded ? false : urlAutoNext
 
     const filters = React.useMemo(
         () => ({
@@ -58,16 +69,23 @@ export function CardFundsReviewPage() {
             due,
             q,
             currentWorkItemId,
-            queueContextId,
+            queueContextId: queryQueueContextId,
         }),
-        [scope, type, status, due, q, currentWorkItemId, queueContextId],
+        [scope, type, status, due, q, currentWorkItemId, queryQueueContextId],
     )
 
-    const queueQuery = useCardFundsReviewQueueQuery(filters)
+    const queueQuery = useCardFundsReviewQueueQuery(
+        filters,
+        embedded ? currentWorkItemId : undefined,
+    )
 
     const view = queueQuery.data
     const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
     const context = view?.context
+    const queueContextId =
+        context?.queueContextId ??
+        queryQueueContextId ??
+        `focused-card-funds:${currentWorkItemId ?? "pending"}`
     const task =
         tasks.find((t) => t.workItem.workItemId === currentWorkItemId) ??
         view?.current ??
@@ -82,7 +100,7 @@ export function CardFundsReviewPage() {
         : 0
 
     useCardFundsReviewDefaultUrlSync({
-        queuePending: queueQuery.isPending,
+        queuePending: embedded || queueQuery.isPending,
         view,
         task,
         taskCount: tasks.length,
@@ -102,6 +120,7 @@ export function CardFundsReviewPage() {
         autoNext,
         replaceUrl,
         setSearchInput,
+        onTaskCompleted: embedded ? onTaskCompleted : undefined,
     })
     const {
         confirmMode,
@@ -145,7 +164,6 @@ export function CardFundsReviewPage() {
         runApprove,
         submitReject,
     } = workflow
-
     const headingRef = React.useRef<HTMLHeadingElement>(null)
     const resultRef = React.useRef<HTMLDivElement>(null)
 
@@ -177,7 +195,10 @@ export function CardFundsReviewPage() {
 
     if (queueQuery.isError) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <PageHeader title="卡券票款复核" />
                 <BusinessFailureState
                     error={queueQuery.error}
@@ -188,20 +209,25 @@ export function CardFundsReviewPage() {
     }
 
     return (
-        <PageScaffold>
-            <ReviewPageHeader context={context} />
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0" : undefined}
+        >
+            {!embedded ? <ReviewPageHeader context={context} /> : null}
 
-            <QueueFilterToolbar
-                scope={scope}
-                type={type}
-                due={due}
-                status={status}
-                searchInput={searchInput}
-                onSearchInputChange={setSearchInput}
-                autoNext={autoNext}
-                setAutoNext={setAutoNext}
-                replaceUrl={replaceUrl}
-            />
+            {!embedded ? (
+                <QueueFilterToolbar
+                    scope={scope}
+                    type={type}
+                    due={due}
+                    status={status}
+                    searchInput={searchInput}
+                    onSearchInputChange={setSearchInput}
+                    autoNext={autoNext}
+                    setAutoNext={setAutoNext}
+                    replaceUrl={replaceUrl}
+                />
+            ) : null}
 
             {lastResult ? (
                 <div ref={resultRef} tabIndex={-1} className="outline-none">
@@ -235,34 +261,36 @@ export function CardFundsReviewPage() {
                 />
             ) : task ? (
                 <>
-                    <QueueNavBar
-                        current={context?.position ?? currentIndex + 1}
-                        total={context?.total ?? tasks.length}
-                        responsibilityStatus={responsibilityStatus}
-                        responsibilityStatusLabel={
-                            task.workItem.ownerUser
-                                ? `处理人：${task.workItem.ownerUser.displayName}`
-                                : undefined
-                        }
-                        formalPending={formalPending}
-                        evidenceOk={evidenceOk}
-                        canApprove={task.workItem.allowedActions.includes(
-                            "APPROVE",
-                        )}
-                        onBack={() => router.push("/workspace")}
-                        onApprove={(advance) =>
-                            setConfirmMode({
-                                kind: "approve",
-                                conclusion: "RECORDED_FACTS_RECONCILED",
-                                advance,
-                            })
-                        }
-                        onMissingEvidence={() =>
-                            setActionError(
-                                "请先填写凭证编号或证据说明；证据将随正式决定一并提交。",
-                            )
-                        }
-                    />
+                    {!embedded ? (
+                        <QueueNavBar
+                            current={context?.position ?? currentIndex + 1}
+                            total={context?.total ?? tasks.length}
+                            responsibilityStatus={responsibilityStatus}
+                            responsibilityStatusLabel={
+                                task.workItem.ownerUser
+                                    ? `处理人：${task.workItem.ownerUser.displayName}`
+                                    : undefined
+                            }
+                            formalPending={formalPending}
+                            evidenceOk={evidenceOk}
+                            canApprove={task.workItem.allowedActions.includes(
+                                "APPROVE",
+                            )}
+                            onBack={() => router.push("/workspace")}
+                            onApprove={(advance) =>
+                                setConfirmMode({
+                                    kind: "approve",
+                                    conclusion: "RECORDED_FACTS_RECONCILED",
+                                    advance,
+                                })
+                            }
+                            onMissingEvidence={() =>
+                                setActionError(
+                                    "请先填写凭证编号或证据说明；证据将随正式决定一并提交。",
+                                )
+                            }
+                        />
+                    ) : null}
 
                     {task.workItem.workItemStatus === "OPEN" ? (
                         <TaskActionUnavailableAlert task={task} />

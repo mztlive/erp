@@ -1,6 +1,6 @@
 /**
  * Sidebar active-state helper: longest matching href wins so parent routes
- * (e.g. /workspace) do not stay active on child routes (/workspace/tasks).
+ * (e.g. /workspace) do not stay active on unrelated child routes.
  *
  * Href 可带查询串（如 `/fulfillment?lane=warehouse`）。带查询约束的入口必须与
  * 当前 URL 对应参数一致才算激活；同 path 下更具体的查询项优先于无查询项。

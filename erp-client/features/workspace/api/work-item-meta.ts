@@ -85,27 +85,6 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "violet",
         openActionLabel: "去登记销项发票",
     },
-    PURCHASE_ORDER_REVIEW: {
-        label: "采购单财务审核",
-        family: "finance",
-        badgeLabel: "采购审核",
-        badgeVariant: "cyan",
-        openActionLabel: "去审核采购单",
-    },
-    SALES_CHANGE_IMPACT_REVIEW: {
-        label: "销售变更履约影响复核",
-        family: "fulfillment",
-        badgeLabel: "变更履约",
-        badgeVariant: "teal",
-        openActionLabel: "去复核履约影响",
-    },
-    SALES_CHANGE_FINANCE_REVIEW: {
-        label: "销售变更财务复核",
-        family: "finance",
-        badgeLabel: "变更财务",
-        badgeVariant: "violet",
-        openActionLabel: "去复核财务影响",
-    },
     CARD_FUNDS_REVIEW: {
         label: "卡券票款复核",
         family: "finance",
@@ -119,13 +98,6 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeLabel: "卡券差异",
         badgeVariant: "lime",
         openActionLabel: "去复核票款差额",
-    },
-    INVENTORY_ADJUSTMENT_REVIEW: {
-        label: "库存调整复核",
-        family: "fulfillment",
-        badgeLabel: "库存调整",
-        badgeVariant: "teal",
-        openActionLabel: "去复核库存调整",
     },
     SUPPLIER_SETTLEMENT_REVIEW: {
         label: "供应商结算复核",
@@ -203,11 +175,6 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         badgeLabel: "回款",
         documentName: "回款单",
         badgeVariant: "success",
-    },
-    supplier_payment: {
-        approvalLabel: "付款记录",
-        badgeLabel: "付款",
-        badgeVariant: "cyan",
     },
     payable_account: {
         approvalLabel: "供应商付款处理",

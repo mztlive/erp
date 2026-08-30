@@ -78,6 +78,23 @@ export type SupplierSupplyExceptionWorkItem = WorkItemProjection &
         businessObjectType: "SUPPLIER_OFFERING"
     }>
 
+export type CompleteSupplierSupplyExceptionTaskInput = Readonly<{
+    offeringId: string
+    workItemId: string
+    expectedTaskVersion: string
+    expectedSubjectVersion: string
+    evidenceReference: string
+    comment: string
+    idempotencyKey: string
+}>
+
+export type CompleteSupplierSupplyExceptionTaskResult = Readonly<{
+    work_item_id: string
+    safety_pause_operation_id: string
+    evidence_reference: string
+    message: string
+}>
+
 type SupplierOfferingTermsInput = Readonly<{
     dropship_supply_price_gross: string
     bulk_supply_price_gross: string

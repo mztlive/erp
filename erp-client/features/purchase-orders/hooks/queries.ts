@@ -13,7 +13,6 @@ import {
     fetchPurchaseOrderCenter,
     fetchPurchaseOrderExportData,
     fetchPurchaseOrders,
-    reviewPurchaseOrder,
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseChange,
@@ -182,20 +181,6 @@ export function useSubmitPurchaseOrderMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitPurchaseOrderForReview,
-        onSuccess: async (result) => {
-            if (result.status !== "succeeded") return
-            await invalidatePurchaseOrderApprovalCaches(queryClient)
-        },
-    })
-}
-
-/**
- * 旧财务审核命令。成功后同样失效审批缓存，避免与统一决定双写。
- */
-export function useReviewPurchaseOrderMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: reviewPurchaseOrder,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
             await invalidatePurchaseOrderApprovalCaches(queryClient)

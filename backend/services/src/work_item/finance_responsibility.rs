@@ -24,7 +24,7 @@ const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 #[derive(Debug, Clone, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreateFinanceResponsibilityRuleRequest {
-    /// 供应商付款或销项开票。
+    /// 供应商付款、销项开票或卡券票款复核。
     pub operation: FinanceResponsibilityOperation,
     /// 精确往来方或默认规则。
     pub scope: FinanceResponsibilityScope,
@@ -57,7 +57,7 @@ pub struct UpdateFinanceResponsibilityRuleRequest {
     /// 期望乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于0"))]
     pub version: u64,
-    /// 供应商付款或销项开票。
+    /// 供应商付款、销项开票或卡券票款复核。
     pub operation: FinanceResponsibilityOperation,
     /// 精确往来方或默认规则。
     pub scope: FinanceResponsibilityScope,
@@ -91,7 +91,7 @@ impl UpdateFinanceResponsibilityRuleRequest {
 pub struct FinanceResponsibilityRuleView {
     /// 规则主键。
     pub id: String,
-    /// 供应商付款或销项开票。
+    /// 供应商付款、销项开票或卡券票款复核。
     pub operation: FinanceResponsibilityOperation,
     /// 精确往来方或默认规则。
     pub scope: FinanceResponsibilityScope,
@@ -144,6 +144,8 @@ pub struct FinanceResponsibilityOwnerOptionView {
     pub supplier_payment_eligible: bool,
     /// 是否具备销项开票完整执行权限。
     pub sales_invoice_eligible: bool,
+    /// 是否具备卡券票款复核完整执行权限。
+    pub card_funds_review_eligible: bool,
 }
 
 /// 任务生产时冻结的财务责任解析结果。
@@ -322,6 +324,7 @@ impl WorkItemService {
     ) -> Result<Vec<FinanceResponsibilityOwnerOptionView>> {
         let payment = required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)?;
         let invoice = required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)?;
+        let card_funds = required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview)?;
         let accounts = self
             .db
             .accounts()
@@ -339,7 +342,8 @@ impl WorkItemService {
             );
             let supplier_payment_eligible = granted.covers(&payment);
             let sales_invoice_eligible = granted.covers(&invoice);
-            if !supplier_payment_eligible && !sales_invoice_eligible {
+            let card_funds_review_eligible = granted.covers(&card_funds);
+            if !supplier_payment_eligible && !sales_invoice_eligible && !card_funds_review_eligible {
                 continue;
             }
             options.push(FinanceResponsibilityOwnerOptionView {
@@ -348,6 +352,7 @@ impl WorkItemService {
                 account: account.secret.account().to_string(),
                 supplier_payment_eligible,
                 sales_invoice_eligible,
+                card_funds_review_eligible,
             });
         }
         options.sort_by(|left, right| {
@@ -449,7 +454,8 @@ impl WorkItemService {
                 }
                 Ok(supplier.supplier_no)
             }
-            FinanceResponsibilityOperation::SalesInvoice => {
+            FinanceResponsibilityOperation::SalesInvoice
+            | FinanceResponsibilityOperation::CardFundsReview => {
                 let customer = self
                     .db
                     .customer_accounts()
@@ -551,6 +557,9 @@ fn required_finance_permissions(operation: FinanceResponsibilityOperation) -> Re
         FinanceResponsibilityOperation::SalesInvoice => {
             WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
         }
+        FinanceResponsibilityOperation::CardFundsReview => {
+            WorkItemType::CardFundsReview.card_funds_review_permissions("receivable_account")
+        }
     }
     .ok_or_else(|| Error::Internal("财务执行权限合同未注册".to_string()))?;
     let permissions = codes
@@ -581,6 +590,14 @@ mod tests {
                 .unwrap()
                 .covers(&entities::PermissionSet::new(vec![Permission::parse(
                     "invoice:post"
+                )
+                .unwrap(),]))
+        );
+        assert!(
+            required_finance_permissions(FinanceResponsibilityOperation::CardFundsReview)
+                .unwrap()
+                .covers(&entities::PermissionSet::new(vec![Permission::parse(
+                    "receivable_funds_review:complete"
                 )
                 .unwrap(),]))
         );

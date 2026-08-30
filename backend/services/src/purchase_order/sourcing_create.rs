@@ -7,7 +7,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, Executor, FulfillmentExt, InventoryExt, NoTransaction, SalesOrderExt};
+use database::{
+    AccessControlExt, Executor, FulfillmentExt, InventoryExt, NoTransaction, SalesOrderExt, WorkItemExt,
+};
 use entities::common::time::BusinessDate;
 use entities::fulfillment::{Delivery, DeliveryData, DeliveryLine, DeliveryLineData, DeliveryType};
 use entities::ids::{
@@ -19,6 +21,7 @@ use entities::inventory::{
     StockReservationEntryData, StockReservationSourceType,
 };
 use entities::money::Quantity;
+use entities::work_item::{WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use mongodb::ClientSession;
 use rust_decimal::Decimal;
@@ -71,6 +74,9 @@ struct SourcingReceipt {
     /// 本次建立的现有库存预占。
     #[serde(default)]
     stock_reservations: Vec<ExistingStockReservationResult>,
+    /// 本次命令同步完成时的原任务状态。
+    #[serde(default)]
+    work_item_status: Option<WorkItemStatus>,
 }
 
 /// 已归入一张采购单的选源计划。
@@ -154,6 +160,7 @@ impl PurchaseOrderService {
             &request_fingerprint,
             actor,
             sales_order_id.as_ref(),
+            &req.work_item_id,
             &mut NoTransaction,
         )
         .await?
@@ -194,6 +201,7 @@ impl PurchaseOrderService {
                 &request_fingerprint,
                 actor,
                 sales_order_id.as_ref(),
+                &req.work_item_id,
                 &mut NoTransaction,
             )
             .await?
@@ -241,6 +249,7 @@ async fn create_from_sourcing_in_transaction(
         request_fingerprint,
         actor,
         sales_order_id.as_ref(),
+        &req.work_item_id,
         session,
     )
     .await?
@@ -326,6 +335,13 @@ async fn create_from_sourcing_in_transaction(
         orders.push(persist_basis_draft(db, rbac, &order, latest, &selected_lines, &command, session).await?);
     }
     sync_procurement_tasks_for_sales_order(db, sales_order_id, session).await?;
+    let work_item_status = db
+        .work_items()
+        .find_by_id(&req.work_item_id, session)
+        .await?
+        .ok_or_else(|| Error::ConflictError("供给分配任务在同步后不存在".to_string()))?
+        .status;
+    let response_work_item_status = sourcing_work_item_status(work_item_status, false)?;
     let receipt = SourcingReceipt {
         orders: orders
             .iter()
@@ -336,6 +352,7 @@ async fn create_from_sourcing_in_transaction(
             })
             .collect(),
         stock_reservations: stock_reservations.clone(),
+        work_item_status: Some(work_item_status),
     };
     write_sourcing_receipt(
         db,
@@ -350,6 +367,7 @@ async fn create_from_sourcing_in_transaction(
     Ok(CreatePurchaseOrdersFromSourcingResult {
         orders,
         stock_reservations,
+        work_item_status: response_work_item_status,
         replayed: false,
         reference: sales_order_id.to_string(),
     })
@@ -1057,6 +1075,7 @@ async fn write_sourcing_receipt(
 /// * `expected_fingerprint` - 当前命令载荷指纹
 /// * `actor` - 当前操作人
 /// * `sales_order_id` - 来源销售单
+/// * `work_item_id` - 发起该命令的供给分配工作项
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
@@ -1073,6 +1092,7 @@ async fn replay_sourcing(
     expected_fingerprint: &str,
     actor: &AuditActor,
     sales_order_id: &str,
+    work_item_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<CreatePurchaseOrdersFromSourcingResult>> {
     let Some(audit) = db.audit_logs().find_by_id(audit_id, executor).await? else {
@@ -1085,6 +1105,14 @@ async fn replay_sourcing(
         sales_order_id,
         expected_fingerprint,
     )?;
+    let work_item_status = sourcing_receipt_work_item_status(
+        db,
+        receipt.work_item_status,
+        work_item_id,
+        sales_order_id,
+        executor,
+    )
+    .await?;
     Ok(Some(CreatePurchaseOrdersFromSourcingResult {
         orders: receipt
             .orders
@@ -1098,9 +1126,48 @@ async fn replay_sourcing(
             })
             .collect(),
         stock_reservations: receipt.stock_reservations,
+        work_item_status,
         replayed: true,
         reference: sales_order_id.to_string(),
     }))
+}
+
+/// 解析新旧选源收据中的工作项状态。
+///
+/// 新收据冻结命令提交时的状态。旧收据没有该字段，优先按收据指向的同一工作项
+/// 读取当前事实；历史任务不存在时，已提交成功的旧命令按终态返回。
+async fn sourcing_receipt_work_item_status(
+    db: &mongodb::Database,
+    frozen_status: Option<WorkItemStatus>,
+    work_item_id: &str,
+    sales_order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<String> {
+    if let Some(status) = frozen_status {
+        return sourcing_work_item_status(status, false);
+    }
+    let Some(item) = db.work_items().find_by_id(work_item_id, executor).await? else {
+        return Ok(WorkItemStatus::Completed.as_str().to_string());
+    };
+    if item.work_item_type != WorkItemType::ProcurementOrderCreation
+        || item.business_object_type != "sales_order"
+        || item.business_object_id != sales_order_id
+    {
+        return Err(Error::Internal(
+            "旧版选源幂等收据对应的工作项身份非法".to_string(),
+        ));
+    }
+    sourcing_work_item_status(item.status, true)
+}
+
+/// 将供给分配任务状态投影为客户端结果合同。
+fn sourcing_work_item_status(status: WorkItemStatus, legacy: bool) -> Result<String> {
+    match status {
+        WorkItemStatus::Open => Ok(WorkItemStatus::Open.as_str().to_string()),
+        WorkItemStatus::Completed => Ok(WorkItemStatus::Completed.as_str().to_string()),
+        WorkItemStatus::Closed if legacy => Ok(WorkItemStatus::Completed.as_str().to_string()),
+        WorkItemStatus::Closed => Err(Error::Internal("选源幂等收据中的任务状态非法".to_string())),
+    }
 }
 
 #[cfg(test)]
@@ -1112,9 +1179,10 @@ mod tests {
     use rust_decimal::Decimal;
 
     use super::{
-        exceeds_any_cap, find_assignment_group_index, normalize_assignment_pairs, DedupError,
-        RequestedSourcingLine, SupplySourceType,
+        exceeds_any_cap, find_assignment_group_index, normalize_assignment_pairs, sourcing_work_item_status,
+        DedupError, RequestedSourcingLine, SourcingReceipt, SupplySourceType,
     };
+    use entities::work_item::WorkItemStatus;
 
     /// 同一销售行可拆到不同履约方案。
     #[test]
@@ -1169,6 +1237,35 @@ mod tests {
         let caps = HashMap::from([("line-1".to_string(), Decimal::from_str("10").unwrap())]);
 
         assert!(exceeds_any_cap(&totals, &caps));
+    }
+
+    /// 幂等回放必须保留同步后的任务状态，不能把部分分配误报为任务完成。
+    #[test]
+    fn sourcing_receipt_freezes_work_item_status() {
+        let receipt = SourcingReceipt {
+            orders: Vec::new(),
+            stock_reservations: Vec::new(),
+            work_item_status: Some(WorkItemStatus::Open),
+        };
+
+        let encoded = serde_json::to_string(&receipt).expect("选源回执必须可序列化");
+        let replayed: SourcingReceipt = serde_json::from_str(&encoded).expect("选源回执必须可回放");
+
+        assert_eq!(replayed.work_item_status, Some(WorkItemStatus::Open));
+    }
+
+    /// 旧版收据缺少任务状态时必须可解码，并由回放路径恢复其生命周期结果。
+    #[test]
+    fn legacy_sourcing_receipt_without_work_item_status_decodes() {
+        let replayed: SourcingReceipt =
+            serde_json::from_str(r#"{"orders":[],"stock_reservations":[]}"#).expect("旧版选源回执必须可回放");
+
+        assert_eq!(replayed.work_item_status, None);
+        assert_eq!(
+            sourcing_work_item_status(WorkItemStatus::Closed, true).unwrap(),
+            "COMPLETED"
+        );
+        assert!(sourcing_work_item_status(WorkItemStatus::Closed, false).is_err());
     }
 
     /// 验证选源创建的操作人授权提交栅栏。

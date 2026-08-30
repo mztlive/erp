@@ -23,7 +23,6 @@ export {
     cancelPurchaseOrderApproval,
     createPurchaseOrderFromBasis,
     createPurchaseOrdersFromSourcing,
-    reviewPurchaseOrder,
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseChange,

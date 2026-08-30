@@ -139,7 +139,7 @@ pub struct CreateReceivableAccountRequest {
     pub customer_id: CustomerAccountId,
     /// 收款和开票往来主体。
     pub counterparty_party_id: PartyId,
-    /// 卡券票款复核状态缓存（缺省不适用）。
+    /// 卡券票款复核状态缓存；缺省时由来源销售单业务性质派生，传入值必须与派生值一致。
     #[serde(default)]
     pub review_status: Option<AccountReviewStatus>,
     /// 含税应收总额。
@@ -1197,29 +1197,15 @@ pub enum CompletedWorkItemStatus {
     Completed,
 }
 
-/// 驳回后继尚未注册时所缺的固定配置项。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum FollowUpRequiredRegistration {
-    /// 后继任务类型。
-    WorkItemType,
-    /// 明确责任人路由。
-    OwnerAssignee,
-    /// 处理器键。
-    HandlerKey,
-}
-
-/// W13 驳回后的固定配置 blocker。
+/// W13 驳回后在同一事务形成的后继工作项。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct CardFundsReviewFollowUpConfiguration {
-    /// 固定为 `BLOCKED`。
+pub struct CardFundsReviewFollowUpWorkItem {
+    /// 新工作项 ID。
+    pub work_item_id: String,
+    /// 与当前复核类型一致的正式工作项类型。
+    pub work_item_type: String,
+    /// 固定为 `OPEN`。
     pub status: String,
-    /// 固定 blocker 代码。
-    pub blocker_code: String,
-    /// 人工协作说明。
-    pub collaboration_message: String,
-    /// 必须先完成的配置注册。
-    pub required_registration: Vec<FollowUpRequiredRegistration>,
 }
 
 /// W13 正式复核业务结果。
@@ -1243,9 +1229,9 @@ pub struct CardFundsReviewBusinessResult {
     pub review_result: CardFundsReviewResult,
     /// 正式复核结论。
     pub conclusion: CardFundsReviewConclusion,
-    /// 仅驳回时返回固定 blocker。
+    /// 仅驳回时返回同事务形成的后继待办。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub follow_up_configuration: Option<CardFundsReviewFollowUpConfiguration>,
+    pub follow_up_work_item: Option<CardFundsReviewFollowUpWorkItem>,
 }
 
 /// W13 强类型正式复核命令结果。

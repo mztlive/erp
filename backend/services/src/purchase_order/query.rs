@@ -2,22 +2,19 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, WorkItemExt};
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt};
 use entities::purchase_order::PurchaseOrder;
-use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use validator::Validate;
 
 use super::approval_query::load_document_approval;
 use super::dto::{
-    PageView, PurchaseActionBlockerView, PurchaseOrderCenterView, PurchaseOrderLineView,
-    PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseReviewDomainAction,
-    PurchaseReviewWorkItemView, PurchaseSalesAllocationView, TotalsView,
+    PageView, PurchaseOrderCenterView, PurchaseOrderLineView, PurchaseOrderListItemView,
+    PurchaseOrderListParams, PurchaseSalesAllocationView, TotalsView,
 };
 use super::view_mapping::{revision_line_to_view, revision_totals, submission_line_to_view};
 use super::PurchaseOrderService;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
-use crate::work_item::ProcessingState;
 
 /// 采购单列表筛选条件类型（经 `PurchaseOrderExt` 关联类型跨 crate 可达）。
 type PurchaseOrderFilter = <mongodb::Database as PurchaseOrderExt>::PurchaseOrderFilter;
@@ -158,7 +155,6 @@ impl PurchaseOrderService {
     ///
     /// # 参数
     /// * `id` - 采购单 ID
-    /// * `actor_id` - 当前已认证账号，用于计算审核责任动作
     ///
     /// # 返回
     /// 返回对象中心视图（当前内容按 版本 > 提交 > 草稿 优先级取用）。
@@ -166,7 +162,7 @@ impl PurchaseOrderService {
     /// # 错误
     /// * `NotFound` - 采购单不存在
     /// * `RepositoryError` - 数据库查询失败
-    pub async fn purchase_order_detail(&self, id: &str, actor_id: &str) -> Result<PurchaseOrderCenterView> {
+    pub async fn purchase_order_detail(&self, id: &str) -> Result<PurchaseOrderCenterView> {
         let order = self
             .db
             .purchase_orders()
@@ -219,7 +215,6 @@ impl PurchaseOrderService {
             }
             None => None,
         };
-        let review_work_item = self.resolve_review_work_item(&order, actor_id).await?;
         let payable_summary = self
             .db
             .purchase_order()
@@ -264,7 +259,6 @@ impl PurchaseOrderService {
             allocations,
             changes,
             payable_summary,
-            review_work_item,
             approval: load_document_approval(
                 &self.db,
                 order.base.id.as_ref(),
@@ -274,71 +268,6 @@ impl PurchaseOrderService {
             .await?,
             created_at: order.base.created_at,
         })
-    }
-
-    /// 解析当前采购审核任务并以服务端责任事实计算可用动作。
-    async fn resolve_review_work_item(
-        &self,
-        order: &PurchaseOrder,
-        actor_id: &str,
-    ) -> Result<Option<PurchaseReviewWorkItemView>> {
-        let Ok(submission_id) = order.submission_id_for_formalization() else {
-            return Ok(None);
-        };
-        let _ = (order, actor_id, &submission_id);
-        return Ok(None);
-        #[allow(unreachable_code)]
-        let mut items = self
-            .db
-            .work_items()
-            .list_active_by_object("purchase_order", &order.base.id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .filter(|item| {
-                item.work_item_type == WorkItemType::PurchaseOrderReview
-                    && item.subject_version == submission_id.as_ref()
-            })
-            .collect::<Vec<_>>();
-        if items.len() > 1 {
-            return Err(Error::ConflictError(
-                "采购单存在多个开放财务审核待办，已禁止操作".to_string(),
-            ));
-        }
-        let Some(item) = items.pop() else {
-            return Ok(None);
-        };
-        if false || item.business_object_id != order.base.id || item.business_object_type != "purchase_order"
-        {
-            return Err(Error::ConflictError(
-                "采购审核待办与当前采购单责任事实不一致，已禁止操作".to_string(),
-            ));
-        }
-        let assignment_eligible = true;
-        let submission = self
-            .db
-            .purchase_order_submissions()
-            .find_by_id(submission_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::ConflictError("采购审核待办引用的提交不存在，已禁止操作".to_string()))?;
-        submission.ensure_pending().map_err(|_| {
-            Error::ConflictError("采购审核待办引用的提交已不在待审核状态，已禁止操作".to_string())
-        })?;
-        let separation_satisfied = submission.reviewer_is_separated(actor_id);
-        let (domain_allowed_actions, action_blockers) =
-            review_task_access(&item, actor_id, assignment_eligible, separation_satisfied);
-        Ok(Some(PurchaseReviewWorkItemView {
-            work_item_id: item.base.id,
-            work_item_type: item.work_item_type,
-            task_version: item.base.version,
-            subject_version: item.subject_version,
-            status: item.status,
-            owner_role: item.owner_role,
-            owner_organization_id: item.owner_organization_id,
-            owner_user_id: item.owner_user_id,
-            processing_state: ProcessingState::Ready,
-            action_blockers,
-            domain_allowed_actions,
-        }))
     }
 
     /// 批量解析账号展示姓名。
@@ -584,130 +513,5 @@ impl PurchaseOrderService {
                 allocated_cost_net: allocation.allocated_cost_net.to_string(),
             })
             .collect())
-    }
-}
-
-/// 根据当前责任事实返回 W08 审核处理器动作。
-fn review_task_access(
-    item: &WorkItem,
-    actor_id: &str,
-    assignment_eligible: bool,
-    separation_satisfied: bool,
-) -> (Vec<PurchaseReviewDomainAction>, Vec<PurchaseActionBlockerView>) {
-    if item.status != WorkItemStatus::Open {
-        return (Vec::new(), Vec::new());
-    }
-    if !assignment_eligible {
-        return (
-            Vec::new(),
-            vec![review_blocker(
-                "TASK_RESPONSIBILITY_NOT_ELIGIBLE",
-                "当前账号不在该任务的有效责任范围内。",
-            )],
-        );
-    }
-    if !separation_satisfied {
-        return (
-            Vec::new(),
-            vec![review_blocker(
-                "SEGREGATION_OF_DUTIES",
-                "采购提交人与财务审核人必须分离。",
-            )],
-        );
-    }
-    if item.owner_user_id.as_deref() != Some(actor_id) {
-        return (
-            Vec::new(),
-            vec![review_blocker(
-                "TASK_OWNED_BY_ANOTHER",
-                "该任务当前由其他人员负责。",
-            )],
-        );
-    }
-    (
-        vec![
-            PurchaseReviewDomainAction::Approve,
-            PurchaseReviewDomainAction::Reject,
-        ],
-        Vec::new(),
-    )
-}
-
-fn review_blocker(code: &str, message: &str) -> PurchaseActionBlockerView {
-    PurchaseActionBlockerView {
-        action: "REVIEW".to_string(),
-        code: code.to_string(),
-        message: message.to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use entities::common::time::Instant;
-    use entities::ids::WorkItemId;
-    use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
-
-    use super::review_task_access;
-    use crate::purchase_order::PurchaseReviewDomainAction;
-
-    fn review_task() -> WorkItem {
-        WorkItem::new_at(
-            WorkItemId::new("wi-1"),
-            WorkItemData {
-                work_item_type: WorkItemType::PurchaseOrderReview,
-                business_object_type: "purchase_order".to_string(),
-                business_object_id: "po-1".to_string(),
-                subject_version: "submission-1".to_string(),
-                owner_role: "role-finance".to_string(),
-                owner_organization_id: "company".to_string(),
-                owner_user_id: "reviewer-1".to_string(),
-                assignment_source: AssignmentSource::SystemRule,
-                priority: WorkItemPriority::Normal,
-                due_at: None,
-                reason_code: None,
-                impact_summary: None,
-            },
-            Instant::from_unix_secs(1),
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn other_actor_cannot_review_owned_task() {
-        let task = review_task();
-
-        let (domain_actions, blockers) = review_task_access(&task, "other-reviewer", true, true);
-
-        assert!(domain_actions.is_empty());
-        assert_eq!(blockers[0].code, "TASK_OWNED_BY_ANOTHER");
-    }
-
-    #[test]
-    fn current_owner_allows_strong_decisions() {
-        let task = review_task();
-
-        let (domain_actions, blockers) = review_task_access(&task, "reviewer-1", true, true);
-
-        assert_eq!(
-            domain_actions,
-            vec![
-                PurchaseReviewDomainAction::Approve,
-                PurchaseReviewDomainAction::Reject,
-            ]
-        );
-        assert!(blockers.is_empty());
-    }
-
-    #[test]
-    fn ineligible_or_submitter_gets_no_review_action() {
-        let task = review_task();
-
-        let (domain_actions, blockers) = review_task_access(&task, "reviewer-1", false, true);
-        assert!(domain_actions.is_empty());
-        assert_eq!(blockers[0].code, "TASK_RESPONSIBILITY_NOT_ELIGIBLE");
-
-        let (domain_actions, blockers) = review_task_access(&task, "reviewer-1", true, false);
-        assert!(domain_actions.is_empty());
-        assert_eq!(blockers[0].code, "SEGREGATION_OF_DUTIES");
     }
 }

@@ -15,6 +15,7 @@ import { getErrorMessage } from "@/lib/api/errors"
 
 import type { WorkspaceWorkItem } from "../types"
 import {
+    invoiceExecutionIsComplete,
     workspaceInvoiceDescriptor,
     workspaceInvoiceMatchesReceivable,
 } from "../lib/workspace-invoice"
@@ -22,10 +23,14 @@ import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 
 type WorkspaceInvoiceTaskProps = Readonly<{
     item: WorkspaceWorkItem
+    onTaskCompleted?: (workItemId: string) => void
 }>
 
 /** W01 开票作业面：任务身份锁定一个销售应收，登记销项发票不离开工作台。 */
-export function WorkspaceInvoiceTask({ item }: WorkspaceInvoiceTaskProps) {
+export function WorkspaceInvoiceTask({
+    item,
+    onTaskCompleted,
+}: WorkspaceInvoiceTaskProps) {
     const descriptor = workspaceInvoiceDescriptor(item)
     const receivableQuery = useCustomerAccountsDetailQuery(
         descriptor ? "receivable" : null,
@@ -112,6 +117,7 @@ export function WorkspaceInvoiceTask({ item }: WorkspaceInvoiceTaskProps) {
                     <WorkspaceInvoiceSession
                         item={item}
                         receivable={receivable}
+                        onTaskCompleted={onTaskCompleted}
                     />
                 )}
             </div>
@@ -133,9 +139,11 @@ function InvoiceSessionSkeleton() {
 function WorkspaceInvoiceSession({
     item,
     receivable,
+    onTaskCompleted,
 }: {
     item: WorkspaceWorkItem
     receivable: ReceivableAccountRow
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const [resetNonce, setResetNonce] = React.useState(0)
     const fingerprint = `${item.workItemId}:${item.taskVersion}:${receivable.accountId}:${resetNonce}`
@@ -200,7 +208,16 @@ function WorkspaceInvoiceSession({
             session={sessionQuery.data}
             onBackToList={() => setResetNonce((value) => value + 1)}
             onClose={() => setResetNonce((value) => value + 1)}
-            onPosted={() => undefined}
+            onPosted={(result) => {
+                if (
+                    invoiceExecutionIsComplete(
+                        result.allocatedTotal,
+                        receivable.openInvoiceableTotal,
+                    )
+                ) {
+                    onTaskCompleted?.(item.workItemId)
+                }
+            }}
             canOperate
             workItemId={item.workItemId}
             expectedTaskVersion={item.taskVersion}

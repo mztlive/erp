@@ -89,14 +89,6 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/purchase-orders/{id}/review-decisions",
-            with_permission(
-                post(purchase_order::purchase_order_review),
-                rbac,
-                purchase_order::purchase_order_review_permission_key(),
-            ),
-        )
-        .route(
             "/purchase-creation-bases",
             with_permission(
                 get(purchase_order::purchase_creation_basis_list),

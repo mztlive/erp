@@ -22,6 +22,8 @@ export function useMallSyncMappingActions(
     data: MallSyncPageData,
     feedback: MallSyncActionFeedback,
     patchUrl: PatchUrl,
+    advanceAfterConfirm = true,
+    onTaskCompleted?: (workItemId: string) => void,
 ) {
     const { pageQuery, mappingTask, firstPhase, responsibilityStatus } = data
     const { setResult, setActionError } = feedback
@@ -126,12 +128,13 @@ export function useMallSyncMappingActions(
                 ],
             })
             void pageQuery.refetch()
+            onTaskCompleted?.(mappingTask.workItem.workItemId)
             const tasks = data.data?.mappingTasks ?? []
             const idx = tasks.findIndex(
                 (t) => t.mappingTaskId === mappingTask.mappingTaskId,
             )
             const next = tasks[idx + 1]
-            if (next) {
+            if (advanceAfterConfirm && next) {
                 patchUrl({
                     view: "mapping",
                     mappingTaskId: next.mappingTaskId,

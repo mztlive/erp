@@ -238,35 +238,8 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                 ...(approval?.allowedActions ?? []),
             ]),
         ),
-        actionBlockers: center.review_work_item?.action_blockers ?? [],
+        actionBlockers: [],
         fieldVisibility: {},
-        reviewWorkItem:
-            center.review_work_item?.work_item_type ===
-                "PURCHASE_ORDER_REVIEW" &&
-            center.review_work_item.subject_version &&
-            center.review_work_item.task_version != null &&
-            center.review_work_item.status === "OPEN"
-                ? {
-                      workItemId: center.review_work_item.work_item_id,
-                      workItemType: center.review_work_item.work_item_type,
-                      taskVersion: String(center.review_work_item.task_version),
-                      subjectVersion: center.review_work_item.subject_version,
-                      status: center.review_work_item.status,
-                      ownerRole: center.review_work_item.owner_role,
-                      ownerOrganizationId:
-                          center.review_work_item.owner_organization_id,
-                      ownerUserId:
-                          center.review_work_item.owner_user_id ?? undefined,
-                      processingState: center.review_work_item.processing_state,
-                      domainAllowedActions:
-                          center.review_work_item.processing_state === "READY"
-                              ? (center.review_work_item
-                                    .domain_allowed_actions ?? [])
-                              : [],
-                      actionBlockers:
-                          center.review_work_item.action_blockers ?? [],
-                  }
-                : undefined,
     }
 }
 

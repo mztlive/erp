@@ -2143,16 +2143,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/review-decisions",
-                description: "采购财务审核决定",
-                permission: {
-                    resource: "purchase_order",
-                    action: "review",
-                },
-            },
-            {
-                module: "admin",
                 method: "GET",
                 path: "/admin/purchase-creation-bases",
                 description: "查询供给分配依据",
@@ -3583,6 +3573,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "supplier_offering_availability",
                     action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/{id}/supply-exception-task/complete",
+                description: "完成供应停止影响核对任务",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "resolve_supply_exception",
                 },
             },
         ],

@@ -9,6 +9,7 @@ use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{CustomerAccountId, PartyId, ReceivableAccountId, SalesOrderId, SalesOrderRevisionId};
 use crate::money::Amount;
+use crate::sales_order::BusinessType;
 use crate::validation::normalize_optional_text;
 
 /// 复核证据引用最大长度。
@@ -74,6 +75,20 @@ pub enum AccountReviewStatus {
 }
 
 impl AccountReviewStatus {
+    /// 按来源销售单业务性质返回新建应收账户的唯一合法初始状态。
+    ///
+    /// # 参数
+    /// * `business_type` - 来源销售单创建后不可变的业务性质
+    ///
+    /// # 返回
+    /// 卡券销售返回期初待复核，实物及服务销售返回不适用。
+    pub fn initial_for_sales_business_type(business_type: BusinessType) -> Self {
+        match business_type {
+            BusinessType::Voucher => Self::OpeningPending,
+            BusinessType::GoodsService => Self::NotApplicable,
+        }
+    }
+
     /// 返回状态的中文展示名。
     ///
     /// # 返回
@@ -660,6 +675,18 @@ mod tests {
         assert_eq!(AccountReviewStatus::Reviewed.label(), "已复核");
         assert_eq!(ReceivableAccountStatus::Settled.as_str(), "settled");
         assert_eq!(AccountReviewStatus::OpeningPending.as_str(), "opening_pending");
+    }
+
+    #[test]
+    fn initial_review_status_is_derived_from_sales_business_type() {
+        assert_eq!(
+            AccountReviewStatus::initial_for_sales_business_type(BusinessType::Voucher),
+            AccountReviewStatus::OpeningPending
+        );
+        assert_eq!(
+            AccountReviewStatus::initial_for_sales_business_type(BusinessType::GoodsService),
+            AccountReviewStatus::NotApplicable
+        );
     }
 
     #[test]

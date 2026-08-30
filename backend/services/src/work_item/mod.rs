@@ -3604,6 +3604,9 @@ fn execution_permission_codes(
     work_item_type: WorkItemType,
     business_object_type: &str,
 ) -> Option<&'static [&'static str]> {
+    if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
+        return Some(&["supplier_offering:resolve_supply_exception"]);
+    }
     if work_item_type.is_fulfillment_operation() {
         return work_item_type.fulfillment_execution_permissions(business_object_type);
     }
@@ -3615,6 +3618,12 @@ fn execution_permission_codes(
     }
     if work_item_type.is_sales_invoice_execution() {
         return work_item_type.sales_invoice_execution_permissions(business_object_type);
+    }
+    if matches!(
+        work_item_type,
+        WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
+    ) {
+        return work_item_type.card_funds_review_permissions(business_object_type);
     }
     Some(&[])
 }

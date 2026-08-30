@@ -10,7 +10,10 @@ import type {
 } from "@/features/import-opening/types"
 
 /** 责任确认卡片组的本地交互状态与命令提交；写命令统一走 queries 的 mutation。 */
-export function useConfirmationActions(batch: ImportBatchView) {
+export function useConfirmationActions(
+    batch: ImportBatchView,
+    onTaskCompleted?: (workItemId: string) => void,
+) {
     const operations = useImportConfirmationOperations()
     const [confirming, setConfirming] = React.useState<ImportConfirmationView>()
     const [returning, setReturning] = React.useState<ImportConfirmationView>()
@@ -51,8 +54,9 @@ export function useConfirmationActions(batch: ImportBatchView) {
                     payloadIdentity,
                 ),
             })
+            onTaskCompleted?.(task.workItemId)
         },
-        [batch.batchId, batch.version, operations],
+        [batch.batchId, batch.version, onTaskCompleted, operations],
     )
 
     return {

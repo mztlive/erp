@@ -1071,8 +1071,16 @@ async fn write_receivable_delta(
     entry: entities::receivable::ReceivableEntry,
     session: &mut ClientSession,
 ) -> Result<()> {
+    let subject_version = entry.source_revision_id.to_string();
     db.receivable_entries().create(&entry, session).await?;
     db.receivable_accounts().update(&mut account, session).await?;
+    crate::receivable::card_funds_task::ensure_card_funds_review_task(
+        db,
+        &account,
+        &subject_version,
+        session,
+    )
+    .await?;
     let account_id = ReceivableAccountId::new(account.base.id.clone());
     crate::receivable::invoice_task::sync_sales_invoice_task(
         db,

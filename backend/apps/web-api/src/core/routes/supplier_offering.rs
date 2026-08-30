@@ -52,4 +52,12 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 supplier_offering::update_availability_permission_key(),
             ),
         )
+        .route(
+            "/supplier-offerings/{id}/supply-exception-task/complete",
+            with_permission(
+                post(supplier_offering::complete_supply_exception_task),
+                rbac,
+                supplier_offering::complete_supply_exception_task_permission_key(),
+            ),
+        )
 }

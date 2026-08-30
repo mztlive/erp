@@ -40,6 +40,7 @@ type MappingTaskPanelProps = {
     onResolveUnknownReapply: () => Promise<void>
     onBackToQueue: () => void
     onConfirm: () => Promise<void>
+    showBack?: boolean
 }
 
 export function MappingTaskPanel({
@@ -56,6 +57,7 @@ export function MappingTaskPanel({
     onResolveUnknownReapply,
     onBackToQueue,
     onConfirm,
+    showBack = true,
 }: MappingTaskPanelProps) {
     return (
         <div className="space-y-3">
@@ -325,6 +327,7 @@ export function MappingTaskPanel({
                     processLabel="确认映射"
                     // 没有独立的「并打开下一条」路径：两个 handler 同义
                     showProcessNext={false}
+                    showBack={showBack}
                     processDisabled={!canConfirmMapping}
                     pending={actionPending}
                     onBack={onBackToQueue}

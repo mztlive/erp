@@ -1,6 +1,6 @@
 //! 财务执行任务的具体负责人规则。
 //!
-//! 付款按供应商、销项开票按客户匹配；精确往来方优先于同业务的默认规则。
+//! 付款按供应商，销项开票与卡券票款复核按客户匹配；精确往来方优先于同业务的默认规则。
 //! 规则只决定新任务的初始负责人，已经形成的工作项责任事实不随规则更新漂移。
 
 use entity_core::BaseModel;
@@ -24,6 +24,8 @@ pub enum FinanceResponsibilityOperation {
     SupplierPayment,
     /// 客户销项开票执行。
     SalesInvoice,
+    /// 客户卡券票款复核。
+    CardFundsReview,
 }
 
 impl FinanceResponsibilityOperation {
@@ -32,6 +34,7 @@ impl FinanceResponsibilityOperation {
         match self {
             Self::SupplierPayment => "SUPPLIER_PAYMENT",
             Self::SalesInvoice => "SALES_INVOICE",
+            Self::CardFundsReview => "CARD_FUNDS_REVIEW",
         }
     }
 
@@ -40,6 +43,7 @@ impl FinanceResponsibilityOperation {
         match self {
             Self::SupplierPayment => "供应商付款",
             Self::SalesInvoice => "销项开票",
+            Self::CardFundsReview => "卡券票款复核",
         }
     }
 
@@ -47,7 +51,7 @@ impl FinanceResponsibilityOperation {
     pub fn counterparty_label(self) -> &'static str {
         match self {
             Self::SupplierPayment => "供应商",
-            Self::SalesInvoice => "客户",
+            Self::SalesInvoice | Self::CardFundsReview => "客户",
         }
     }
 }

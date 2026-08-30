@@ -15,7 +15,13 @@ import { useMallSyncManualSyncActions } from "@/features/mall-sync/pages/hooks/u
 export function useMallSyncPage(input: UseMallSyncPageInput) {
     const data = useMallSyncPageData(input)
     const feedback = useMallSyncActionFeedback()
-    const mapping = useMallSyncMappingActions(data, feedback, input.patchUrl)
+    const mapping = useMallSyncMappingActions(
+        data,
+        feedback,
+        input.patchUrl,
+        input.advanceAfterConfirm,
+        input.onTaskCompleted,
+    )
     const manual = useMallSyncManualSyncActions(data, feedback, input.patchUrl)
     return { ...data, ...feedback, ...mapping, ...manual }
 }

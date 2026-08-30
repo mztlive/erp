@@ -4,7 +4,10 @@ import * as React from "react"
 import { PageScaffold } from "@/components/business"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useIntegrationItemQuery, useIntegrationQueueQuery } from "../hooks/queries"
+import {
+    useIntegrationItemQuery,
+    useIntegrationQueueQuery,
+} from "../hooks/queries"
 import type { IntegrationFormalResult } from "../types"
 import { IntegrationActionResult } from "./components/integration-action-result"
 import { IntegrationDetailNav } from "./components/integration-detail-nav"
@@ -32,9 +35,13 @@ import {
 export function IntegrationErrorsPage({
     forcedTaskId,
     forcedDifferenceId,
+    embedded = false,
+    onTaskCompleted,
 }: {
     forcedTaskId?: string
     forcedDifferenceId?: string
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string) => void
 } = {}) {
     const {
         urlState,
@@ -56,13 +63,21 @@ export function IntegrationErrorsPage({
 
     const queueSelection = React.useMemo(
         () =>
-            selectQueueSelection(queueItems, currentTaskId, currentDifferenceId),
+            selectQueueSelection(
+                queueItems,
+                currentTaskId,
+                currentDifferenceId,
+            ),
         [queueItems, currentTaskId, currentDifferenceId],
     )
 
     const detailTarget = React.useMemo(
         () =>
-            resolveDetailTarget(forcedTaskId, forcedDifferenceId, queueSelection),
+            resolveDetailTarget(
+                forcedTaskId,
+                forcedDifferenceId,
+                queueSelection,
+            ),
         [forcedTaskId, forcedDifferenceId, queueSelection],
     )
 
@@ -73,7 +88,12 @@ export function IntegrationErrorsPage({
     })
 
     const item = React.useMemo(
-        () => resolveDisplayItem(detailTarget, detailItemQuery.data, queueSelection),
+        () =>
+            resolveDisplayItem(
+                detailTarget,
+                detailItemQuery.data,
+                queueSelection,
+            ),
         [detailTarget, detailItemQuery.data, queueSelection],
     )
 
@@ -118,16 +138,18 @@ export function IntegrationErrorsPage({
         refetch,
         goToItem,
         neighbor,
+        onTaskCompleted: embedded ? onTaskCompleted : undefined,
     })
 
-    const { searchDraft, setSearchDraft, searchInputRef } = useIntegrationSearch({
-        q: urlState.q,
-        onCommitSearch: React.useCallback(
-            (q: string | null) =>
-                replaceUrl({ q, taskId: null, differenceId: null }),
-            [replaceUrl],
-        ),
-    })
+    const { searchDraft, setSearchDraft, searchInputRef } =
+        useIntegrationSearch({
+            q: urlState.q,
+            onCommitSearch: React.useCallback(
+                (q: string | null) =>
+                    replaceUrl({ q, taskId: null, differenceId: null }),
+                [replaceUrl],
+            ),
+        })
 
     const clearQueueFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -205,12 +227,17 @@ export function IntegrationErrorsPage({
     }
 
     return (
-        <PageScaffold>
-            <IntegrationPageHeader
-                focusMode={focusMode}
-                itemNumber={item?.identity.number}
-                updatedAt={view?.context.updatedAt}
-            />
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0" : undefined}
+        >
+            {!embedded ? (
+                <IntegrationPageHeader
+                    focusMode={focusMode}
+                    itemNumber={item?.identity.number}
+                    updatedAt={view?.context.updatedAt}
+                />
+            ) : null}
 
             {metrics ? (
                 <IntegrationErrorMetricStrip
@@ -234,13 +261,13 @@ export function IntegrationErrorsPage({
                     patchUrl={replaceUrl}
                     onClearFilters={clearQueueFilters}
                 />
-            ) : (
+            ) : !embedded ? (
                 <IntegrationDetailNav
                     view={urlState.view}
                     queueContextId={urlState.queueContextId}
                     onRefresh={actions.refresh}
                 />
-            )}
+            ) : null}
 
             {!focusMode ? (
                 <p className="text-xs text-muted-foreground">

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     completeCardFundsReview,
     fetchCardFundsReviewQueue,
+    fetchFocusedCardFundsReviewTask,
     registerHistoricalInvoice,
     registerHistoricalReceipt,
 } from "@/features/card-funds-review/api"
@@ -14,12 +15,22 @@ const cardFundsReviewKeys = {
     all: ["card-funds-review"] as const,
     queue: (query: CardFundsReviewQueueQuery) =>
         [...cardFundsReviewKeys.all, "queue", query] as const,
+    focused: (workItemId: string) =>
+        [...cardFundsReviewKeys.all, "focused", workItemId] as const,
 }
 
-export function useCardFundsReviewQueueQuery(query: CardFundsReviewQueueQuery) {
+export function useCardFundsReviewQueueQuery(
+    query: CardFundsReviewQueueQuery,
+    focusedWorkItemId?: string,
+) {
     return useQuery({
-        queryKey: cardFundsReviewKeys.queue(query),
-        queryFn: () => fetchCardFundsReviewQueue(query),
+        queryKey: focusedWorkItemId
+            ? cardFundsReviewKeys.focused(focusedWorkItemId)
+            : cardFundsReviewKeys.queue(query),
+        queryFn: () =>
+            focusedWorkItemId
+                ? fetchFocusedCardFundsReviewTask(focusedWorkItemId)
+                : fetchCardFundsReviewQueue(query),
     })
 }
 

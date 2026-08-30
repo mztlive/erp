@@ -8,10 +8,6 @@ import type {
     FulfillmentResponsibility,
     PurchaseType,
 } from "@/features/purchase-orders/types"
-import type {
-    WorkItemProcessingState,
-    WorkItemStatus,
-} from "@/features/work-items"
 
 export type BackendPage<T> = {
     items: T[]
@@ -109,23 +105,6 @@ export type BackendCenter = {
         reason: string
         created_at: number
     }>
-    review_work_item?: {
-        work_item_id: string
-        work_item_type: "PURCHASE_ORDER_REVIEW"
-        task_version: string | number
-        subject_version: string
-        status: WorkItemStatus
-        owner_role: string
-        owner_organization_id: string
-        owner_user_id?: string | null
-        processing_state: WorkItemProcessingState
-        domain_allowed_actions: readonly ("APPROVE" | "REJECT")[]
-        action_blockers: readonly {
-            action: string
-            code: string
-            message: string
-        }[]
-    } | null
     payable_summary?: {
         payable_open_amount: string
         paid_allocated_amount: string
@@ -196,6 +175,7 @@ export type BackendSourcingCreateResult = {
         warehouse_id: string
         quantity: string
     }>
+    work_item_status: "OPEN" | "COMPLETED"
     replayed?: boolean
     reference: string
 }
@@ -222,19 +202,6 @@ export type BackendSubmitResult = {
     work_item_id: string
     task_version: string | number
     subject_version: string
-    lock_version: number
-    reference: string
-}
-
-export type BackendReviewResult = {
-    work_item_id: string
-    work_item_status: "COMPLETED"
-    task_version: string | number
-    subject_version: string
-    review_result: string
-    revision_id?: string | null
-    revision_no?: number | null
-    payable_entry_id?: string | null
     lock_version: number
     reference: string
 }

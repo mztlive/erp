@@ -24,8 +24,6 @@ export function PurchaseOrderDetailDialogs({
     order,
     submitConfirmOpen,
     onSubmitConfirmOpenChange,
-    approveConfirmOpen,
-    onApproveConfirmOpenChange,
     voidConfirmOpen,
     onVoidConfirmOpenChange,
     changeConfirmOpen,
@@ -34,11 +32,9 @@ export function PurchaseOrderDetailDialogs({
     onLeaveGuardOpenChange,
     submitPending,
     savePending,
-    reviewPending,
     voidPending,
     changePending,
     onConfirmSubmit,
-    onConfirmApprove,
     onConfirmVoid,
     onConfirmChange,
     onSaveAndLeave,
@@ -47,8 +43,6 @@ export function PurchaseOrderDetailDialogs({
     order: PurchaseOrderCenterView
     submitConfirmOpen: boolean
     onSubmitConfirmOpenChange: (open: boolean) => void
-    approveConfirmOpen: boolean
-    onApproveConfirmOpenChange: (open: boolean) => void
     voidConfirmOpen: boolean
     onVoidConfirmOpenChange: (open: boolean) => void
     changeConfirmOpen: boolean
@@ -57,11 +51,9 @@ export function PurchaseOrderDetailDialogs({
     onLeaveGuardOpenChange: (open: boolean) => void
     submitPending: boolean
     savePending: boolean
-    reviewPending: boolean
     voidPending: boolean
     changePending: boolean
     onConfirmSubmit: () => void
-    onConfirmApprove: () => void
     onConfirmVoid: () => void
     onConfirmChange: () => void
     onSaveAndLeave: () => void
@@ -75,28 +67,6 @@ export function PurchaseOrderDetailDialogs({
                 approval={order.approval}
                 onOpenChange={onSubmitConfirmOpenChange}
                 onConfirm={onConfirmSubmit}
-            />
-
-            <FormalActionConfirmDialog
-                open={approveConfirmOpen}
-                onOpenChange={onApproveConfirmOpenChange}
-                title="审批通过"
-                actionLabel="通过"
-                confirmLabel="确认通过"
-                fromStatus={{ label: "审批中", tone: "warning" }}
-                toStatus={{ label: "已生效", tone: "success" }}
-                lockedFields={[
-                    `本次审核的提交内容（销售单 ${order.header.salesOrderNo}）`,
-                    "不可变提交头行与销售分配",
-                ]}
-                effects={[
-                    "形成采购版本与应付原始分录",
-                    "完成当前审核任务",
-                    "不登记实际付款；履约受先款门禁约束",
-                ]}
-                nextDepartment="履约 / 付款"
-                pending={reviewPending}
-                onConfirm={onConfirmApprove}
             />
 
             <FormalActionConfirmDialog

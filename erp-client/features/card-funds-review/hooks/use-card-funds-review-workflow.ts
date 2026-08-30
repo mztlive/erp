@@ -37,6 +37,7 @@ export function useCardFundsReviewWorkflow(args: {
     autoNext: boolean
     replaceUrl: ReplaceUrlFn
     setSearchInput: React.Dispatch<React.SetStateAction<string>>
+    onTaskCompleted?: (workItemId: string, preferredWorkItemId?: string) => void
 }) {
     const {
         task,
@@ -47,6 +48,7 @@ export function useCardFundsReviewWorkflow(args: {
         autoNext,
         replaceUrl,
         setSearchInput,
+        onTaskCompleted,
     } = args
 
     const completeMutation = useCompleteCardFundsMutation()
@@ -205,6 +207,7 @@ export function useCardFundsReviewWorkflow(args: {
         setConfirmMode,
         setLastResult,
         setActionError,
+        onTaskCompleted,
     })
 
     const { submitReceipt, submitInvoice } = useCardFundsRegistration({

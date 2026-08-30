@@ -31,7 +31,6 @@ import {
 import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-actions"
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
-import { usePurchaseOrderDetailReviewActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-review-actions"
 import { isPurchaseChangeOrderWorkItem } from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import { purchaseOrderApprovalPhase } from "@/features/purchase-orders/lib/purchase-order-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
@@ -101,14 +100,6 @@ export function PurchaseOrderDetailPage({
         [queryClient, purchaseOrderId, result, setResult],
     )
 
-    const reviewActions = usePurchaseOrderDetailReviewActions({
-        purchaseOrderId,
-        order,
-        refetch: query.refetch,
-        commandLedger,
-        setResult: handleResult,
-    })
-
     const draftForm = useAppForm({
         defaultValues: {
             paymentTermCode: order?.header.paymentTermCode ?? "POSTPAY_NET15",
@@ -132,7 +123,7 @@ export function PurchaseOrderDetailPage({
             draftForm.setFieldValue("paymentTermCode", value),
     })
 
-    const permissions = usePurchaseOrderDetailPermissions(order, commandLedger)
+    const permissions = usePurchaseOrderDetailPermissions(order)
 
     const guard = usePurchaseOrderDetailEditGuard({
         mode,
@@ -245,9 +236,7 @@ export function PurchaseOrderDetailPage({
             ? order.identity.reviewStatus === "REJECTED"
                 ? "被驳回待修改"
                 : "采购草稿编辑"
-            : mode === "review"
-              ? "审批中（只读）"
-              : "详情"
+            : "详情"
 
     return (
         <PageScaffold>
@@ -266,7 +255,6 @@ export function PurchaseOrderDetailPage({
                 canEdit={permissions.canEdit}
                 canSubmit={permissions.canSubmit}
                 canVoid={permissions.canVoid}
-                canOpenReview={permissions.canOpenReview}
                 canChange={permissions.canChange}
                 requestLeave={guard.requestLeave}
                 onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
@@ -365,8 +353,6 @@ export function PurchaseOrderDetailPage({
                 order={order}
                 submitConfirmOpen={editActions.submitConfirmOpen}
                 onSubmitConfirmOpenChange={editActions.setSubmitConfirmOpen}
-                approveConfirmOpen={reviewActions.approveConfirmOpen}
-                onApproveConfirmOpenChange={reviewActions.setApproveConfirmOpen}
                 voidConfirmOpen={editActions.voidConfirmOpen}
                 onVoidConfirmOpenChange={editActions.setVoidConfirmOpen}
                 changeConfirmOpen={editActions.changeConfirmOpen}
@@ -375,11 +361,9 @@ export function PurchaseOrderDetailPage({
                 onLeaveGuardOpenChange={guard.setLeaveGuardOpen}
                 submitPending={editActions.submitPending}
                 savePending={editActions.savePending}
-                reviewPending={reviewActions.reviewPending}
                 voidPending={editActions.voidPending}
                 changePending={editActions.changePending}
                 onConfirmSubmit={() => void editActions.handleSubmit()}
-                onConfirmApprove={() => void reviewActions.handleApprove()}
                 onConfirmVoid={() => void editActions.handleVoid()}
                 onConfirmChange={() => void editActions.handleStartChange()}
                 onSaveAndLeave={() => void guard.saveAndLeave()}

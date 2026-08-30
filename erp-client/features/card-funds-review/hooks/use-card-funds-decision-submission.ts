@@ -46,6 +46,7 @@ export function useCardFundsDecisionSubmission(args: {
     setConfirmMode: React.Dispatch<React.SetStateAction<ConfirmMode>>
     setLastResult: React.Dispatch<React.SetStateAction<ResultState>>
     setActionError: React.Dispatch<React.SetStateAction<string | null>>
+    onTaskCompleted?: (workItemId: string, preferredWorkItemId?: string) => void
 }): {
     runApprove: (
         conclusion: ApproveConclusion,
@@ -63,6 +64,7 @@ export function useCardFundsDecisionSubmission(args: {
         setConfirmMode,
         setLastResult,
         setActionError,
+        onTaskCompleted,
     } = args
 
     const runApprove = React.useCallback(
@@ -114,6 +116,7 @@ export function useCardFundsDecisionSubmission(args: {
                     outcome: response.outcome,
                     stayOnItem: !(advance && autoNext),
                 })
+                onTaskCompleted?.(task.workItem.workItemId)
                 // 成功先展示固定复核号；若 autoNext 则短暂停留后前进
                 if (advance && autoNext) {
                     window.setTimeout(() => advanceIfNeeded(true), 2200)
@@ -131,6 +134,7 @@ export function useCardFundsDecisionSubmission(args: {
             setActionError,
             setConfirmMode,
             setLastResult,
+            onTaskCompleted,
             task,
         ],
     )
@@ -178,11 +182,15 @@ export function useCardFundsDecisionSubmission(args: {
                 setLastResult({
                     status: "rejected",
                     title: `已驳回 · 复核号 ${biz.reviewNo}`,
-                    description: biz.followUpConfiguration.collaborationMessage,
+                    description: `当前任务已完成，后继待办 ${biz.followUpWorkItem.workItemId} 已进入工作台。`,
                     reference: biz.operationId,
                     outcome: response.outcome,
                     stayOnItem: !autoNext,
                 })
+                onTaskCompleted?.(
+                    task.workItem.workItemId,
+                    biz.followUpWorkItem.workItemId,
+                )
                 if (autoNext) {
                     window.setTimeout(() => advanceIfNeeded(true), 2200)
                 }
@@ -199,6 +207,7 @@ export function useCardFundsDecisionSubmission(args: {
             setActionError,
             setConfirmMode,
             setLastResult,
+            onTaskCompleted,
             task,
         ],
     )

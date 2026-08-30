@@ -2,10 +2,6 @@
 
 import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import type {
-    WorkItemProcessingState,
-    WorkItemStatus,
-} from "@/features/work-items"
 
 export type PurchaseType = "PHYSICAL" | "VIRTUAL" | "SERVICE"
 
@@ -24,8 +20,6 @@ export type PurchaseOrderStatus =
     | "VOID"
 
 export type PurchaseReviewStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED"
-
-export type PurchaseReviewDomainAction = "APPROVE" | "REJECT"
 
 export type PaymentGateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
 
@@ -254,20 +248,6 @@ export type PurchaseOrderCenterView = Readonly<{
     approval?: DocumentApprovalView
     /** 当前进行中的采购变更单；缺省表示无在途改单。 */
     activeChangeOrder?: PurchaseChangeOrderSummary | null
-    /** 审核任务（仅待审核且存在提交时） */
-    reviewWorkItem?: {
-        workItemId: string
-        workItemType: "PURCHASE_ORDER_REVIEW"
-        taskVersion: string
-        subjectVersion: string
-        status: WorkItemStatus
-        ownerRole: string
-        ownerOrganizationId: string
-        ownerUserId?: string
-        processingState: WorkItemProcessingState
-        domainAllowedActions: readonly PurchaseReviewDomainAction[]
-        actionBlockers: readonly ActionBlocker[]
-    }
 }>
 
 export type SupplySourceType = "PURCHASE" | "EXISTING_STOCK"
@@ -353,29 +333,6 @@ export type SubmitPurchaseOrderPayload = Omit<
     SubmitPurchaseOrderInput,
     "idempotencyKey"
 >
-
-export type ReviewPurchaseOrderInput = {
-    workItemId: string
-    expectedTaskVersion: string
-    expectedSubjectVersion: string
-    decision:
-        | {
-              purchaseOrderId: string
-              submissionId: string
-              expectedPurchaseOrderLockVersion: number
-              reviewResult: "APPROVED"
-              comment?: string
-          }
-        | {
-              purchaseOrderId: string
-              submissionId: string
-              expectedPurchaseOrderLockVersion: number
-              reviewResult: "REJECTED"
-              reasonCode: string
-              comment?: string
-          }
-    idempotencyKey: string
-}
 
 export type CreatePurchaseOrderFromBasisInput = {
     basisId: string
@@ -463,15 +420,6 @@ export const REVIEW_STATUS_LABEL: Record<PurchaseReviewStatus, string> = {
     PENDING: "审批中",
     APPROVED: "已通过",
     REJECTED: "已驳回",
-}
-
-export const REJECT_REASON_LABEL: Record<string, string> = {
-    COST_TAX: "成本/税率不符",
-    FEE: "费用行问题",
-    PAYMENT_TERM: "付款条件问题",
-    SUPPLIER: "供应商资料问题",
-    ALLOCATION: "销售分配错误",
-    OTHER: "其它",
 }
 
 /** 采购付款条件只暴露可形成计划付款日的受控代码。 */

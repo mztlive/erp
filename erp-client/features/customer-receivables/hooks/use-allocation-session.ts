@@ -49,7 +49,9 @@ export function useAllocationSession({
 }: {
     session: AllocationSessionView
     onClose: () => void
-    onPosted: () => void
+    onPosted: (
+        result: Extract<PostAllocationResult, { status: "succeeded" }>,
+    ) => void
     canOperate?: boolean
     permissionReason?: string
     workItemId?: string
@@ -389,7 +391,7 @@ export function useAllocationSession({
                 returnTo: res.returnTo,
             })
             setConfirmOpen(false)
-            onPosted()
+            onPosted(res)
             return
         }
         if (res.status === "unknown") {

@@ -6,7 +6,6 @@ import {
     ArrowLeftIcon,
     FilePenLineIcon,
     SendIcon,
-    ShieldCheckIcon,
     Trash2Icon,
 } from "lucide-react"
 
@@ -44,7 +43,6 @@ export function PurchaseOrderDetailHeader({
     canEdit,
     canSubmit,
     canVoid,
-    canOpenReview,
     canChange,
     requestLeave,
     onRequestVoid,
@@ -68,7 +66,6 @@ export function PurchaseOrderDetailHeader({
     canEdit: boolean
     canSubmit: boolean
     canVoid: boolean
-    canOpenReview: boolean
     canChange: boolean
     requestLeave: (go: () => void) => void
     onRequestVoid: () => void
@@ -174,19 +171,6 @@ export function PurchaseOrderDetailHeader({
                                               icon: Trash2Icon,
                                               variant: "destructive" as const,
                                               onClick: () => onRequestVoid(),
-                                          },
-                                      ]
-                                    : []),
-                                ...(canOpenReview && mode !== "review"
-                                    ? [
-                                          {
-                                              actionKey: "review",
-                                              label: "打开审核",
-                                              icon: ShieldCheckIcon,
-                                              onClick: () =>
-                                                  router.push(
-                                                      `${baseHref}?mode=review`,
-                                                  ),
                                           },
                                       ]
                                     : []),

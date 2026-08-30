@@ -36,11 +36,13 @@ function useSettlementCenterActions({
     workItemId,
     urlState,
     patchUrl,
+    onTaskCompleted,
 }: {
     statementId: string
     workItemId?: string
     urlState: SettlementsUrlState
     patchUrl: (patch: Partial<SettlementsUrlState>) => void
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const detailQuery = useSettlementDetailQuery(statementId, workItemId)
     const refreshMutation = useRefreshTrialMutation()
@@ -268,6 +270,7 @@ function useSettlementCenterActions({
         if (outcome.status === "succeeded") {
             setConfirmOpen(false)
             patchUrl({ section: "payable" })
+            onTaskCompleted?.(workItem.workItemId)
         }
     }
 
@@ -296,6 +299,7 @@ function useSettlementCenterActions({
         setResult(outcomeToResult(outcome))
         if (outcome.status === "rejected" || outcome.status === "succeeded") {
             setRejectOpen(false)
+            onTaskCompleted?.(workItem.workItemId)
         }
     }
 

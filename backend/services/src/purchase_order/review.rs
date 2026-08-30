@@ -27,30 +27,13 @@ use entities::work_item::WorkItemStatus;
 use id_generator::next_id;
 
 use super::allocation_maintenance::{persist_current_sales_allocations, prepare_current_sales_allocations};
-use super::dto::{PurchaseReviewResult, ReviewPurchaseOrderCommand};
+use super::dto::PurchaseReviewResult;
 use super::shared::{zero_amount, zero_rate};
 use super::PurchaseOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
-use crate::iam::SharedRbacService;
 
 impl PurchaseOrderService {
-    /// 旧财务审核旁路。审批改造后立即失败关闭。
-    ///
-    /// # 错误
-    /// 恒返回冲突，不得再写入 `PurchaseReviewStatus`。
-    pub async fn review_purchase_order(
-        &self,
-        _path_purchase_order_id: &str,
-        _command: ReviewPurchaseOrderCommand,
-        _actor: &AuditActor,
-        _rbac: SharedRbacService,
-    ) -> Result<PurchaseReviewResult> {
-        Err(Error::ConflictError(
-            "采购单必须走统一审批，禁止写入财务审核旁路".to_string(),
-        ))
-    }
-
     /// 最终通过并生效：形成采购版本、应付与成本事实。
     ///
     /// 仅由合同 §4.4.4 `on_final_approve` 调用，不得再作为人工财务审核旁路。

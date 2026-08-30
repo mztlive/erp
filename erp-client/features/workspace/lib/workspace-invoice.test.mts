@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+    invoiceExecutionIsComplete,
     workspaceInvoiceDescriptor,
     workspaceInvoiceMatchesReceivable,
     // @ts-expect-error TS5097 -- runtime TypeScript module under node:test
@@ -95,4 +96,11 @@ test("receivable source must match the frozen sales order", () => {
         }),
         false,
     )
+})
+
+test("partial invoice keeps the execution task open", () => {
+    assert.equal(invoiceExecutionIsComplete("30.00", "100.00"), false)
+    assert.equal(invoiceExecutionIsComplete("100.00", "100.00"), true)
+    assert.equal(invoiceExecutionIsComplete("100", "100.00"), true)
+    assert.equal(invoiceExecutionIsComplete("not-an-amount", "100.00"), false)
 })

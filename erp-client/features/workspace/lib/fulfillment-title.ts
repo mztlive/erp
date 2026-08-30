@@ -13,8 +13,7 @@ const DRAFT_STATUS_SUFFIX = /\s*·\s*(草稿|已发货|已签收|已冲正|待�
 const OPAQUE_ID =
     /^(?:[0-9a-f]{24,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
 
-const PREFIXED_OPAQUE_ID =
-    /^(?:DLV|FH|GRN|SF|DN|PR|ED|PO|SO|CG)-[0-9a-f]{24,}$/i
+const PREFIXED_OPAQUE_ID = /^(?:DLV|FH|GRN|SF|DN|PR|ED)-[0-9a-f]{24,}$/i
 
 const SOURCE_NUMBER = /(?:销售单|采购单)\s+(\S+)/
 

@@ -6,6 +6,7 @@
 
 import { apiGet } from "@/lib/api"
 import {
+    getWorkItem,
     listWorkItems,
     mapWorkItemDto,
     type WorkItemProjection,
@@ -233,6 +234,45 @@ async function projectItem(
             evidenceReferences: [],
             comment: undefined,
         },
+    }
+}
+
+/**
+ * 按稳定任务 ID 读取 W01 嵌入式 W13 所需的单条任务投影。
+ *
+ * 嵌入式页面不得复用父 W01 的队列上下文，因为父队列与 W13 专用筛选的
+ * 查询形状不同；单条读取由服务端直接重验当前用户对该任务的可见性。
+ */
+export const fetchFocusedCardFundsReviewTask = async (
+    workItemId: string,
+): Promise<CardFundsReviewQueueView> => {
+    const normalizedId = workItemId.trim()
+    if (!normalizedId) throw new Error("任务标识不能为空")
+
+    const workItem = mapWorkItemDto(await getWorkItem(normalizedId))
+    if (
+        workItem.workItemId !== normalizedId ||
+        (workItem.workItemType !== "CARD_FUNDS_REVIEW" &&
+            workItem.workItemType !== "CARD_FUNDS_DELTA_REVIEW") ||
+        workItem.businessObjectType !== "receivable_account"
+    ) {
+        throw new Error("当前任务不符合卡券票款复核合同，已阻止处理。")
+    }
+    const task = await projectItem(workItem)
+    if (!task) throw new Error("当前卡券票款复核任务不存在")
+
+    return {
+        preferences: { autoNextDefault: false },
+        context: {
+            queueContextId: `focused-card-funds:${normalizedId}`,
+            position: 1,
+            total: 1,
+            currentWorkItemId: normalizedId,
+            filterSummary: "当前工作台任务",
+            queueContextUpdatedAt: new Date().toISOString(),
+        },
+        tasks: [task],
+        current: task,
     }
 }
 

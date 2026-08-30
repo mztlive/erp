@@ -64,9 +64,13 @@ import { cn } from "@/lib/utils"
 export function PurchaseOrderCreatePage({
     initialSalesOrderId = "",
     initialWorkItemId = "",
+    embedded = false,
+    onTaskCompleted,
 }: {
     initialSalesOrderId?: string
     initialWorkItemId?: string
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const router = useRouter()
     const basesQuery = useCreationBasesQuery({
@@ -157,20 +161,30 @@ export function PurchaseOrderCreatePage({
                 createIntentRef.current = null
                 const count = result.data.orders.length
                 const stockCount = result.data.stockReservations.length
+                const taskCompleted = result.data.workItemStatus === "COMPLETED"
                 toast.add({
-                    title: "供给分配已完成",
-                    description:
-                        count === 0
-                            ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
-                            : stockCount > 0
-                              ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
-                              : count > 1
-                                ? `已将缺口拆成 ${count} 张采购单并提交审批。`
-                                : "已创建 1 张采购单并提交审批。",
+                    title: taskCompleted
+                        ? "供给分配已完成"
+                        : "本次供给分配已保存",
+                    description: !taskCompleted
+                        ? "当前责任范围仍有未分配数量，任务继续保留在工作台，请完成剩余供给分配。"
+                        : count === 0
+                          ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
+                          : stockCount > 0
+                            ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
+                            : count > 1
+                              ? `已将缺口拆成 ${count} 张采购单并提交审批。`
+                              : "已创建 1 张采购单并提交审批。",
                     type: "success",
                     timeout: 4000,
                 })
-                router.replace("/procurement/orders")
+                if (embedded && order.workItemId && taskCompleted) {
+                    onTaskCompleted?.(order.workItemId)
+                } else if (taskCompleted) {
+                    router.replace("/procurement/orders")
+                } else {
+                    await basesQuery.refetch()
+                }
                 return
             }
             if (result.status === "failed") {
@@ -438,7 +452,10 @@ export function PurchaseOrderCreatePage({
 
     if (basesQuery.isPending) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <PageHeader
                     title="供给分配"
                     description="正在加载库存与采购供给…"
@@ -457,20 +474,25 @@ export function PurchaseOrderCreatePage({
 
     if (basesQuery.isError) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <PageHeader title="供给分配" description="供给依据加载失败" />
                 <BusinessFailureState
                     error={basesQuery.error}
                     onRetry={() => void basesQuery.refetch()}
                     retryLabel="重新加载"
                     details={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            render={<Link href="/procurement/orders" />}
-                        >
-                            返回列表
-                        </Button>
+                        !embedded ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                render={<Link href="/procurement/orders" />}
+                            >
+                                返回列表
+                            </Button>
+                        ) : undefined
                     }
                 />
             </PageScaffold>
@@ -478,23 +500,28 @@ export function PurchaseOrderCreatePage({
     }
 
     return (
-        <PageScaffold className="pb-8">
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0 pb-8" : "pb-8"}
+        >
             <PageHeader
                 title="供给分配"
                 description="系统优先推荐现有库存，不足部分再推荐采购；确认后一次完成库存预留和采购缺口建单。"
                 actions={
-                    <PageActions
-                        actions={[
-                            {
-                                actionKey: "back",
-                                label: "返回列表",
-                                icon: ArrowLeftIcon,
-                                variant: "outline",
-                                onClick: () =>
-                                    router.push("/procurement/orders"),
-                            },
-                        ]}
-                    />
+                    !embedded ? (
+                        <PageActions
+                            actions={[
+                                {
+                                    actionKey: "back",
+                                    label: "返回列表",
+                                    icon: ArrowLeftIcon,
+                                    variant: "outline",
+                                    onClick: () =>
+                                        router.push("/procurement/orders"),
+                                },
+                            ]}
+                        />
+                    ) : undefined
                 }
             />
 
@@ -517,13 +544,15 @@ export function PurchaseOrderCreatePage({
                             : "当前没有待分配供给。请检查已生效销售单、库存余额和供应商供给。"
                     }
                     action={
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            render={<Link href="/procurement/orders" />}
-                        >
-                            返回列表
-                        </Button>
+                        !embedded ? (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                render={<Link href="/procurement/orders" />}
+                            >
+                                返回列表
+                            </Button>
+                        ) : undefined
                     }
                 />
             ) : (

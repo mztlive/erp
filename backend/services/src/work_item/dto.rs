@@ -12,22 +12,15 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 const DEFAULT_TIMEZONE: &str = "Asia/Shanghai";
-const WORK_ITEM_TYPES: [WorkItemType; 19] = [
+const WORK_ITEM_TYPES: [WorkItemType; 12] = [
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::FulfillmentOperation,
     WorkItemType::CustomerAcceptanceRegistration,
     WorkItemType::SupplierPaymentExecution,
     WorkItemType::SalesInvoiceExecution,
-    WorkItemType::PurchaseOrderReview,
-    WorkItemType::SalesChangeImpactReview,
-    WorkItemType::SalesChangeFinanceReview,
     WorkItemType::CardFundsReview,
     WorkItemType::CardFundsDeltaReview,
-    WorkItemType::OwnershipMigrationSalesConfirmation,
-    WorkItemType::OwnershipMigrationFinanceConfirmation,
-    WorkItemType::InventoryAdjustmentReview,
-    WorkItemType::FinanceCorrectionReview,
     WorkItemType::SupplierSettlementReview,
     WorkItemType::ImportBusinessConfirmation,
     WorkItemType::IntegrationResultUnknown,
@@ -873,27 +866,50 @@ fn handler_route(
                 "销项开票执行任务业务对象未注册".to_string(),
             ));
         }
-        (WorkItemType::PurchaseOrderReview, _) => ("po_review", "W08"),
-        (WorkItemType::SalesChangeImpactReview, _) => ("sales_change_impact_review", "W05"),
-        (WorkItemType::SalesChangeFinanceReview, _) => ("sales_change_finance_review", "W05"),
-        (WorkItemType::CardFundsReview, _) => ("card_funds", "W13"),
-        (WorkItemType::CardFundsDeltaReview, _) => ("card_funds_delta", "W13"),
-        (WorkItemType::OwnershipMigrationSalesConfirmation, _) => ("ownership_sales", "W03"),
-        (WorkItemType::OwnershipMigrationFinanceConfirmation, _) => ("ownership_finance", "W17"),
-        (WorkItemType::InventoryAdjustmentReview, _) => ("inventory_adj", "W10"),
-        (WorkItemType::FinanceCorrectionReview, _) => ("finance_correction", "W17"),
-        (WorkItemType::SupplierSettlementReview, _) => ("supplier_settlement", "W27"),
-        (WorkItemType::ImportBusinessConfirmation, _) => ("import_business_confirmation", "W18"),
+        (WorkItemType::CardFundsReview, "receivable_account") => ("card_funds", "W13"),
+        (WorkItemType::CardFundsDeltaReview, "receivable_account") => ("card_funds_delta", "W13"),
+        (WorkItemType::SupplierSettlementReview, "supplier_settlement_statement") => {
+            ("supplier_settlement", "W27")
+        }
+        (WorkItemType::ImportBusinessConfirmation, "LEGACY_IMPORT_BATCH") => {
+            ("import_business_confirmation", "W18")
+        }
+        (
+            WorkItemType::PurchaseOrderReview
+            | WorkItemType::SalesChangeImpactReview
+            | WorkItemType::SalesChangeFinanceReview
+            | WorkItemType::OwnershipMigrationSalesConfirmation
+            | WorkItemType::OwnershipMigrationFinanceConfirmation
+            | WorkItemType::InventoryAdjustmentReview
+            | WorkItemType::FinanceCorrectionReview,
+            _,
+        ) => {
+            return Err(Error::ValidationError("WORK_ITEM_TYPE_RETIRED".to_string()));
+        }
+        (
+            WorkItemType::CardFundsReview
+            | WorkItemType::CardFundsDeltaReview
+            | WorkItemType::SupplierSettlementReview
+            | WorkItemType::ImportBusinessConfirmation,
+            _,
+        ) => {
+            return Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".to_string()));
+        }
         (WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException, _) => {
-            ("unregistered_work_item", "W01")
+            return Err(Error::ValidationError("WORK_ITEM_HANDLER_UNMAPPED".to_string()));
         }
         (WorkItemType::DocumentApproval, object_type) => document_approval_route(object_type)?,
     };
-    let mut route_context =
-        w18_confirmation_scope(work_item_type, owner_role).map(|scope| WorkItemRouteContext {
+    let mut route_context = if work_item_type == WorkItemType::ImportBusinessConfirmation {
+        let scope = w18_confirmation_scope(owner_role)
+            .ok_or_else(|| Error::ValidationError("IMPORT_CONFIRMATION_SCOPE_UNMAPPED".to_string()))?;
+        Some(WorkItemRouteContext {
             confirmation_scope: Some(scope.to_string()),
             document_type: None,
-        });
+        })
+    } else {
+        None
+    };
     if work_item_type == WorkItemType::DocumentApproval {
         route_context = Some(WorkItemRouteContext {
             confirmation_scope: None,
@@ -907,10 +923,7 @@ fn handler_route(
     })
 }
 
-fn w18_confirmation_scope(work_item_type: WorkItemType, owner_role: &str) -> Option<&'static str> {
-    if work_item_type != WorkItemType::ImportBusinessConfirmation {
-        return None;
-    }
+fn w18_confirmation_scope(owner_role: &str) -> Option<&'static str> {
     match owner_role {
         "role-sales" => Some("SALES"),
         "role-procurement" => Some("PROCUREMENT"),
@@ -964,7 +977,7 @@ fn document_approval_route(business_object_type: &str) -> Result<(&'static str, 
         "purchase_order" | "purchase_change_order" => Ok(("document_approval", "W08")),
         "stock_adjustment" => Ok(("document_approval", "W10")),
         "customer_receipt" | "customer_refund" | "receipt_reversal" => Ok(("document_approval", "W11")),
-        "supplier_payment" | "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
+        "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
         _ => Err(Error::ValidationError(
             "APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string(),
         )),
@@ -975,8 +988,11 @@ fn normalize_work_item_types(
     family: Option<WorkItemFamily>,
     work_item_type: Option<WorkItemType>,
 ) -> Result<Vec<WorkItemType>> {
+    if work_item_type.is_some_and(|value| !WORK_ITEM_TYPES.contains(&value)) {
+        return Err(Error::ValidationError("WORK_ITEM_TYPE_RETIRED".to_string()));
+    }
     let Some(family) = family else {
-        return Ok(work_item_type.into_iter().collect());
+        return Ok(work_item_type.map_or_else(|| WORK_ITEM_TYPES.to_vec(), |value| vec![value]));
     };
     if let Some(work_item_type) = work_item_type {
         if family_of(work_item_type) != family {
@@ -1105,6 +1121,9 @@ mod tests {
 
     #[test]
     fn family_and_type_must_match_registered_mapping() {
+        let all = params(WorkItemScope::Mine).normalized().unwrap();
+        assert_eq!(all.work_item_types, WORK_ITEM_TYPES);
+
         let mut query = params(WorkItemScope::Mine);
         query.family = Some(WorkItemFamily::Finance);
         query.work_item_type = Some(WorkItemType::BusinessException);
@@ -1206,9 +1225,51 @@ mod tests {
             WorkItemType::ImportBusinessConfirmation,
             "LEGACY_IMPORT_BATCH",
             "role-unregistered",
-        )
-        .unwrap();
-        assert!(unknown.route_context.is_none());
+        );
+        match unknown {
+            Err(error) => assert!(error.to_string().contains("IMPORT_CONFIRMATION_SCOPE_UNMAPPED")),
+            Ok(_) => panic!("未登记的导入确认责任角色必须失败关闭"),
+        }
+    }
+
+    #[test]
+    fn retired_and_unmapped_work_items_fail_closed() {
+        let mut retired_query = params(WorkItemScope::Mine);
+        retired_query.work_item_type = Some(WorkItemType::PurchaseOrderReview);
+        assert!(retired_query.normalized().is_err());
+
+        let retired = handler_route(
+            WorkItemType::PurchaseOrderReview,
+            "purchase_order",
+            "role-finance",
+        );
+        match retired {
+            Err(error) => assert!(error.to_string().contains("WORK_ITEM_TYPE_RETIRED")),
+            Ok(_) => panic!("已退役任务类型必须失败关闭"),
+        }
+
+        let wrong_card_subject = handler_route(WorkItemType::CardFundsReview, "sales_order", "role-finance");
+        match wrong_card_subject {
+            Err(error) => assert!(error.to_string().contains("WORK_ITEM_HANDLER_UNMAPPED")),
+            Ok(_) => panic!("票款任务绑定非应收对象时必须失败关闭"),
+        }
+
+        let unknown_exception = handler_route(
+            WorkItemType::BusinessException,
+            "UNREGISTERED_SUBJECT",
+            "role-operations",
+        );
+        match unknown_exception {
+            Err(error) => assert!(error.to_string().contains("WORK_ITEM_HANDLER_UNMAPPED")),
+            Ok(_) => panic!("异常任务缺少处理器时必须失败关闭"),
+        }
+
+        let non_approval_document =
+            handler_route(WorkItemType::DocumentApproval, "supplier_payment", "approver");
+        match non_approval_document {
+            Err(error) => assert!(error.to_string().contains("APPROVAL_DOCUMENT_ROUTE_UNMAPPED")),
+            Ok(_) => panic!("非审批单据不得进入单据审批任务"),
+        }
     }
 
     #[test]

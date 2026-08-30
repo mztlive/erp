@@ -39,6 +39,7 @@ use entities::receivable::{
     ReceivableAccountData, ReceivableEntry, ReceivableEntryData, ReceivableEntryType, ReceivableFundsReview,
     ReceivableFundsReviewData, ReviewResult, SalesInvoiceAllocation, SalesInvoiceAllocationData,
 };
+use entities::sales_order::BusinessType;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entities::Permission;
 use id_generator::next_id;
@@ -64,6 +65,7 @@ use crate::work_item::{WorkItemAllowedAction, WorkItemService};
 
 mod adapter;
 mod cancel_approval;
+pub(crate) mod card_funds_task;
 mod dto;
 pub(crate) mod invoice_task;
 mod start_approval;
@@ -85,15 +87,15 @@ pub use self::dto::{
     CancelCustomerReceiptApprovalRequest, CardFundsRegistrationAllocation, CardFundsRegistrationResult,
     CardFundsReviewActionBlockerView, CardFundsReviewAllowedAction, CardFundsReviewBusinessResult,
     CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewDetailParams,
-    CardFundsReviewFollowUpConfiguration, CardFundsReviewResult, CardFundsReviewType,
+    CardFundsReviewFollowUpWorkItem, CardFundsReviewResult, CardFundsReviewType,
     CommitCustomerReceiptRequest, CommitInvoiceRequest, CommitRedInvoiceRequest,
     CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CompletedWorkItemStatus,
     CreateCustomerReceiptRequest, CreateInvoiceRequest, CreateReceivableAccountRequest,
-    CustomerReceiptListParams, CustomerReceiptView, DocumentApprovalView, FollowUpRequiredRegistration,
-    FundsReviewView, InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest,
-    PostInvoiceRequest, ReceiptAllocationView, ReceivableAccountListParams, ReceivableAccountView,
-    ReceivableInvoiceFactView, ReceivableReceiptFactView, RegisterCardFundsInvoiceRequest,
-    RegisterCardFundsReceiptRequest, SalesInvoiceAllocationView, SubmitCustomerReceiptRequest,
+    CustomerReceiptListParams, CustomerReceiptView, DocumentApprovalView, FundsReviewView, InvoiceListParams,
+    InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest, ReceiptAllocationView,
+    ReceivableAccountListParams, ReceivableAccountView, ReceivableInvoiceFactView, ReceivableReceiptFactView,
+    RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest, SalesInvoiceAllocationView,
+    SubmitCustomerReceiptRequest,
 };
 use self::start_approval::{
     build_customer_receipt_start_input, load_bound_definition_graph,
@@ -401,11 +403,22 @@ impl ReceivableService {
         actor: &AuditActor,
     ) -> Result<ReceivableAccountView> {
         req.validate()?;
-        self.db
+        let sales_order = self
+            .db
             .sales_orders()
             .find_by_id(&req.sales_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+        let review_status =
+            resolve_initial_receivable_review_status(req.review_status, sales_order.business_type)?;
+        if review_status == AccountReviewStatus::OpeningPending
+            && sales_order.stable.current_revision_id.as_deref()
+                != Some(req.source_sales_order_revision_id.as_str())
+        {
+            return Err(Error::ConflictError(
+                "卡券票款复核必须绑定来源销售单的当前正式版本".to_string(),
+            ));
+        }
 
         let account_id = ReceivableAccountId::new(next_id());
         let entry_id = ReceivableEntryId::new(next_id());
@@ -420,7 +433,7 @@ impl ReceivableService {
                 source_sales_order_revision_id: SalesOrderRevisionId::new(
                     &req.source_sales_order_revision_id,
                 ),
-                review_status: req.review_status.unwrap_or(AccountReviewStatus::NotApplicable),
+                review_status,
                 reviewed_by: None,
                 reviewed_at: None,
                 review_evidence_reference: None,
@@ -460,6 +473,7 @@ impl ReceivableService {
                     db.receivable()
                         .create_receivable_with_entry(&account, &entry, session)
                         .await?;
+                    card_funds_task::ensure_initial_card_funds_review_task(&db, &account, session).await?;
                     invoice_task::ensure_sales_invoice_task(&db, &account, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
@@ -474,7 +488,8 @@ impl ReceivableService {
     ///
     /// 单事务锁定任务、应收账户、复核链和当前票款事实，重验全部任务/领域版本、
     /// 当前责任与岗位分离后，追加复核事实和 `workflow_action`，刷新账户查询缓存，
-    /// 并由领域命令完成原任务。驳回只完成当前任务，不创建或转交后继任务。
+    /// 并由领域命令完成原任务。驳回在同一事务按当前责任规则创建同类型后继任务，
+    /// 未决复核责任不得离开工作台。
     /// 审计记录同时充当不泄漏原始幂等键的稳定结果收据。
     ///
     /// # 错误
@@ -617,6 +632,20 @@ impl ReceivableService {
                     db.receivable_accounts().update(&mut account, session).await?;
                     db.workflow_actions().create(&workflow, session).await?;
                     db.work_items().update(&mut work_item, session).await?;
+                    let follow_up_work_item = if decision.review_result == CardFundsReviewResult::Rejected {
+                        Some(
+                            card_funds_task::ensure_card_funds_review_task(
+                                &db,
+                                &account,
+                                &work_item.subject_version,
+                                session,
+                            )
+                            .await?
+                            .ok_or_else(|| Error::Internal("驳回后账户未形成待复核后继任务".to_string()))?,
+                        )
+                    } else {
+                        None
+                    };
 
                     let receipt = CardFundsReviewReceipt {
                         receivable_funds_review_id: review.base.id.clone(),
@@ -626,6 +655,9 @@ impl ReceivableService {
                         completed_at: completed_at.unix_secs(),
                         review_result: decision.review_result,
                         conclusion: decision.conclusion,
+                        follow_up_work_item_id: follow_up_work_item.as_ref().map(|item| item.base.id.clone()),
+                        follow_up_work_item_type: follow_up_work_item
+                            .map(|item| item.work_item_type.as_str().to_string()),
                     };
                     let audit = actor_owned.resource_log_with_id(
                         audit_id_for_tx,
@@ -684,18 +716,151 @@ impl ReceivableService {
             .resource_id
             .as_deref()
             .ok_or_else(|| Error::Internal("卡券票款复核幂等收据缺少应收账户".to_string()))?;
-        let receipt = parse_card_funds_receipt(
+        let mut receipt = parse_card_funds_receipt(
             audit
                 .message
                 .as_deref()
                 .ok_or_else(|| Error::Internal("卡券票款复核幂等收据为空".to_string()))?,
             expected_fingerprint,
         )?;
+        if receipt.requires_legacy_rejected_follow_up() {
+            let follow_up = self
+                .ensure_legacy_rejected_card_funds_follow_up(
+                    &receipt.receivable_funds_review_id,
+                    work_item_id,
+                    account_id,
+                )
+                .await?;
+            receipt.attach_follow_up(&follow_up);
+        }
         Ok(Some(receipt.into_result(
             work_item_id.as_ref(),
             account_id,
             audit_id,
         )))
+    }
+
+    /// 为七字段旧版驳回收据补建或复用正式 W13 后继任务。
+    ///
+    /// 旧版驳回事务已经完成原任务并保留账户待复核状态，但收据没有记录后继任务。
+    /// 本迁移在事务内核对原任务、正式复核事实和账户状态，再按当前财务责任规则
+    /// 建立后继任务；重复回放复用同一开放任务，后继已处理时由相邻复核事实定位，
+    /// 不修改历史审计收据。
+    async fn ensure_legacy_rejected_card_funds_follow_up(
+        &self,
+        review_id: &str,
+        work_item_id: &entities::ids::WorkItemId,
+        account_id: &str,
+    ) -> Result<WorkItem> {
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let review_id = review_id.to_string();
+        let work_item_id = work_item_id.clone();
+        let account_id = ReceivableAccountId::new(account_id.to_string());
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let original = db
+                        .work_items()
+                        .find_by_id(&work_item_id, session)
+                        .await?
+                        .ok_or_else(|| {
+                            Error::ConflictError("旧版驳回复核的原工作项不存在，无法补建后继任务".to_string())
+                        })?;
+                    if original.status != WorkItemStatus::Completed
+                        || original.business_object_type != "receivable_account"
+                        || original.business_object_id != account_id.to_string()
+                        || !matches!(
+                            original.work_item_type,
+                            WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
+                        )
+                    {
+                        return Err(Error::ConflictError(
+                            "旧版驳回复核的原工作项身份或状态不一致".to_string(),
+                        ));
+                    }
+
+                    let reviews = db
+                        .receivable_funds_reviews()
+                        .find_reviews_by_account(&account_id, session)
+                        .await?;
+                    let review = reviews
+                        .iter()
+                        .find(|review| review.base.id == review_id)
+                        .ok_or_else(|| {
+                            Error::ConflictError("旧版驳回复核的正式复核事实不存在".to_string())
+                        })?;
+                    if review.work_item_id != work_item_id || review.review_result != ReviewResult::Rejected {
+                        return Err(Error::ConflictError(
+                            "旧版驳回复核的正式事实与原工作项不一致".to_string(),
+                        ));
+                    }
+                    let next_review_no = review
+                        .review_no
+                        .checked_add(1)
+                        .ok_or_else(|| Error::Internal("旧版驳回复核的复核号已达到上限".to_string()))?;
+                    let completed_successor_id = reviews
+                        .iter()
+                        .find(|candidate| {
+                            candidate.review_no == next_review_no
+                                && candidate
+                                    .supersedes_review_id
+                                    .as_ref()
+                                    .is_some_and(|id| id.as_ref() == review_id.as_str())
+                        })
+                        .map(|candidate| candidate.work_item_id.clone());
+                    if let Some(successor_id) = completed_successor_id {
+                        let successor = db
+                            .work_items()
+                            .find_by_id(&successor_id, session)
+                            .await?
+                            .ok_or_else(|| {
+                                Error::ConflictError("旧版驳回复核的已处理后继工作项不存在".to_string())
+                            })?;
+                        if successor.status != WorkItemStatus::Completed
+                            || successor.work_item_type != original.work_item_type
+                            || successor.business_object_type != "receivable_account"
+                            || successor.business_object_id != account_id.to_string()
+                            || successor.subject_version != original.subject_version
+                        {
+                            return Err(Error::ConflictError(
+                                "旧版驳回复核的已处理后继工作项身份不一致".to_string(),
+                            ));
+                        }
+                        return Ok(successor);
+                    }
+
+                    let account = db
+                        .receivable_accounts()
+                        .find_by_id(&account_id, session)
+                        .await?
+                        .ok_or_else(|| Error::ConflictError("旧版驳回复核的应收账户不存在".to_string()))?;
+                    let expected_type = match account.review_status {
+                        AccountReviewStatus::OpeningPending => WorkItemType::CardFundsReview,
+                        AccountReviewStatus::SyncDeltaPending => WorkItemType::CardFundsDeltaReview,
+                        AccountReviewStatus::NotApplicable | AccountReviewStatus::Reviewed => {
+                            return Err(Error::ConflictError(
+                                "旧版驳回复核的应收账户已离开待复核状态，不能自动补建后继任务".to_string(),
+                            ));
+                        }
+                    };
+                    if original.work_item_type != expected_type {
+                        return Err(Error::ConflictError(
+                            "旧版驳回复核的任务类型与账户待复核状态不一致".to_string(),
+                        ));
+                    }
+
+                    card_funds_task::ensure_card_funds_review_task(
+                        &db,
+                        &account,
+                        &original.subject_version,
+                        session,
+                    )
+                    .await?
+                    .ok_or_else(|| Error::ConflictError("旧版驳回复核未处于可补建后继任务的状态".to_string()))
+                })
+            })
+            .await
     }
 
     /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。
@@ -2806,10 +2971,6 @@ const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 const CARD_FUNDS_RECEIPT_REGISTRATION_ACTION: &str = "card_funds.receipt.register";
 const CARD_FUNDS_INVOICE_REGISTRATION_ACTION: &str = "card_funds.invoice.register";
 const CARD_FUNDS_REGISTRATION_RECEIPT_PREFIX: &str = "card-funds-registration-";
-const REJECT_FOLLOW_UP_BLOCKER: &str = "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED";
-const REJECT_FOLLOW_UP_MESSAGE: &str =
-    "本次复核已驳回并完成当前任务；驳回后继任务尚未注册，请联系流程管理员协作处理。";
-
 /// W13 校验所需的当前应收、票款与复核链事实快照。
 struct CardFundsSnapshot {
     current_sales_order_revision_id: String,
@@ -3077,9 +3238,24 @@ struct CardFundsReviewReceipt {
     completed_at: i64,
     review_result: CardFundsReviewResult,
     conclusion: CardFundsReviewConclusion,
+    follow_up_work_item_id: Option<String>,
+    follow_up_work_item_type: Option<String>,
 }
 
 impl CardFundsReviewReceipt {
+    /// 判断七字段旧版驳回收据是否仍缺正式后继任务。
+    fn requires_legacy_rejected_follow_up(&self) -> bool {
+        self.review_result == CardFundsReviewResult::Rejected
+            && self.follow_up_work_item_id.is_none()
+            && self.follow_up_work_item_type.is_none()
+    }
+
+    /// 绑定已迁移形成的正式后继任务。
+    fn attach_follow_up(&mut self, item: &WorkItem) {
+        self.follow_up_work_item_id = Some(item.base.id.clone());
+        self.follow_up_work_item_type = Some(item.work_item_type.as_str().to_string());
+    }
+
     /// 将持久化收据装配为固定 W13 HTTP 结果。
     fn into_result(
         self,
@@ -3087,18 +3263,14 @@ impl CardFundsReviewReceipt {
         receivable_account_id: &str,
         operation_id: &str,
     ) -> CompleteCardFundsReviewResult {
-        let follow_up_configuration = (self.review_result == CardFundsReviewResult::Rejected).then(|| {
-            CardFundsReviewFollowUpConfiguration {
-                status: "BLOCKED".to_string(),
-                blocker_code: REJECT_FOLLOW_UP_BLOCKER.to_string(),
-                collaboration_message: REJECT_FOLLOW_UP_MESSAGE.to_string(),
-                required_registration: vec![
-                    FollowUpRequiredRegistration::WorkItemType,
-                    FollowUpRequiredRegistration::OwnerAssignee,
-                    FollowUpRequiredRegistration::HandlerKey,
-                ],
-            }
-        });
+        let follow_up_work_item = self
+            .follow_up_work_item_id
+            .zip(self.follow_up_work_item_type)
+            .map(|(work_item_id, work_item_type)| CardFundsReviewFollowUpWorkItem {
+                work_item_id,
+                work_item_type,
+                status: "OPEN".to_string(),
+            });
         CompleteCardFundsReviewResult {
             work_item_id: work_item_id.to_string(),
             work_item_status: CompletedWorkItemStatus::Completed,
@@ -3112,7 +3284,7 @@ impl CardFundsReviewReceipt {
                 completed_at: Instant::from_unix_secs(self.completed_at).as_utc().to_rfc3339(),
                 review_result: self.review_result,
                 conclusion: self.conclusion,
-                follow_up_configuration,
+                follow_up_work_item,
             },
         }
     }
@@ -3752,6 +3924,23 @@ fn pending_review_status(review_type: CardFundsReviewType) -> AccountReviewStatu
     }
 }
 
+/// 派生并校验新建应收账户的票款复核初始状态。
+///
+/// 同步差额待复核只能由既有期初复核链上的销售变更事务形成，任何新建入口均
+/// 不得直接指定该状态。
+fn resolve_initial_receivable_review_status(
+    requested: Option<AccountReviewStatus>,
+    business_type: BusinessType,
+) -> Result<AccountReviewStatus> {
+    let expected = AccountReviewStatus::initial_for_sales_business_type(business_type);
+    if requested.is_some_and(|status| status != expected) {
+        return Err(Error::ValidationError(
+            "新建应收账户的票款复核状态必须由来源销售单业务性质决定".to_string(),
+        ));
+    }
+    Ok(expected)
+}
+
 /// 返回账户复核状态的稳定工作流代码。
 fn account_review_status_code(status: AccountReviewStatus) -> &'static str {
     match status {
@@ -3970,7 +4159,7 @@ fn card_funds_audit_id(actor_id: &str, key: &str) -> String {
 /// 将正式结果编码为受审计消息长度约束的幂等收据。
 fn card_funds_receipt_message(fingerprint: &str, receipt: &CardFundsReviewReceipt) -> String {
     format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{}|{}|{}|{}|{}|{}",
+        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{}|{}|{}|{}|{}|{}|{}|{}",
         receipt.receivable_funds_review_id,
         receipt.workflow_action_id,
         receipt.review_no,
@@ -3978,6 +4167,8 @@ fn card_funds_receipt_message(fingerprint: &str, receipt: &CardFundsReviewReceip
         receipt.completed_at,
         receipt.review_result.as_str(),
         receipt.conclusion.as_str(),
+        receipt.follow_up_work_item_id.as_deref().unwrap_or_default(),
+        receipt.follow_up_work_item_type.as_deref().unwrap_or_default(),
     )
 }
 
@@ -3993,7 +4184,7 @@ fn parse_card_funds_receipt(message: &str, expected_fingerprint: &str) -> Result
         ));
     }
     let fields = result.split('|').collect::<Vec<_>>();
-    let [review_id, workflow_id, review_no, account_status, completed_at, result, conclusion] =
+    let [review_id, workflow_id, review_no, account_status, completed_at, result, conclusion, follow_up @ ..] =
         fields.as_slice()
     else {
         return Err(Error::Internal("卡券票款复核幂等收据结果非法".to_string()));
@@ -4009,6 +4200,24 @@ fn parse_card_funds_receipt(message: &str, expected_fingerprint: &str) -> Result
         "REJECTED" => CardFundsReviewConclusion::Rejected,
         _ => return Err(Error::Internal("卡券票款复核收据结论代码非法".to_string())),
     };
+    let (follow_up_work_item_id, follow_up_work_item_type) = match follow_up {
+        [] => (None, None),
+        [follow_up_work_item_id, follow_up_work_item_type] => match (
+            review_result,
+            follow_up_work_item_id.is_empty(),
+            follow_up_work_item_type.is_empty(),
+        ) {
+            (CardFundsReviewResult::Approved, true, true) => (None, None),
+            (CardFundsReviewResult::Rejected, false, false) => (
+                Some((*follow_up_work_item_id).to_string()),
+                Some((*follow_up_work_item_type).to_string()),
+            ),
+            _ => {
+                return Err(Error::Internal("卡券票款复核后继任务收据不完整".to_string()));
+            }
+        },
+        _ => return Err(Error::Internal("卡券票款复核幂等收据结果非法".to_string())),
+    };
     Ok(CardFundsReviewReceipt {
         receivable_funds_review_id: (*review_id).to_string(),
         workflow_action_id: (*workflow_id).to_string(),
@@ -4021,6 +4230,8 @@ fn parse_card_funds_receipt(message: &str, expected_fingerprint: &str) -> Result
             .map_err(|_| Error::Internal("卡券票款复核收据完成时间非法".to_string()))?,
         review_result,
         conclusion,
+        follow_up_work_item_id,
+        follow_up_work_item_type,
     })
 }
 
@@ -4580,10 +4791,12 @@ mod card_funds_review_tests {
 
     use super::{
         canonical_review_evidence, card_funds_audit_id, card_funds_receipt_message, parse_card_funds_receipt,
-        parse_task_version, validate_card_funds_decision, CardFundsReviewConclusion, CardFundsReviewDecision,
-        CardFundsReviewReceipt, CardFundsReviewResult, CardFundsReviewType, Error,
-        FollowUpRequiredRegistration,
+        parse_task_version, resolve_initial_receivable_review_status, validate_card_funds_decision,
+        CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewReceipt, CardFundsReviewResult,
+        CardFundsReviewType, Error, COMMAND_FINGERPRINT_PREFIX,
     };
+    use entities::receivable::AccountReviewStatus;
+    use entities::sales_order::BusinessType;
 
     fn opening_decision() -> CardFundsReviewDecision {
         CardFundsReviewDecision {
@@ -4641,6 +4854,21 @@ mod card_funds_review_tests {
     }
 
     #[test]
+    fn initial_account_rejects_delta_review_and_derives_opening_review() {
+        assert_eq!(
+            resolve_initial_receivable_review_status(None, BusinessType::Voucher).unwrap(),
+            AccountReviewStatus::OpeningPending
+        );
+        assert!(matches!(
+            resolve_initial_receivable_review_status(
+                Some(AccountReviewStatus::SyncDeltaPending),
+                BusinessType::Voucher,
+            ),
+            Err(Error::ValidationError(_))
+        ));
+    }
+
+    #[test]
     fn receipt_replays_exact_result_and_rejects_payload_drift() {
         let receipt = CardFundsReviewReceipt {
             receivable_funds_review_id: "review-1".to_string(),
@@ -4650,6 +4878,8 @@ mod card_funds_review_tests {
             completed_at: 1_700_000_000,
             review_result: CardFundsReviewResult::Rejected,
             conclusion: CardFundsReviewConclusion::Rejected,
+            follow_up_work_item_id: Some("wi-2".to_string()),
+            follow_up_work_item_type: Some("CARD_FUNDS_REVIEW".to_string()),
         };
         let message = card_funds_receipt_message(&"a".repeat(64), &receipt);
         assert_eq!(
@@ -4662,16 +4892,31 @@ mod card_funds_review_tests {
         ));
 
         let result = receipt.into_result("wi-1", "ra-1", "operation-1");
-        let blocker = result.business_result.follow_up_configuration.unwrap();
-        assert_eq!(blocker.blocker_code, "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED");
-        assert_eq!(
-            blocker.required_registration,
-            vec![
-                FollowUpRequiredRegistration::WorkItemType,
-                FollowUpRequiredRegistration::OwnerAssignee,
-                FollowUpRequiredRegistration::HandlerKey,
-            ]
+        let follow_up = result.business_result.follow_up_work_item.unwrap();
+        assert_eq!(follow_up.work_item_id, "wi-2");
+        assert_eq!(follow_up.work_item_type, "CARD_FUNDS_REVIEW");
+        assert_eq!(follow_up.status, "OPEN");
+    }
+
+    #[test]
+    fn legacy_seven_field_receipts_decode_with_explicit_rejected_migration_state() {
+        let fingerprint = "c".repeat(64);
+        let approved_message = format!(
+            "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result=review-1|workflow-1|1|reviewed|1700000000|APPROVED|NO_HISTORY_FROM_ZERO"
         );
+        let approved = parse_card_funds_receipt(&approved_message, &fingerprint).unwrap();
+        assert!(!approved.requires_legacy_rejected_follow_up());
+        assert!(approved
+            .into_result("wi-1", "ra-1", "operation-1")
+            .business_result
+            .follow_up_work_item
+            .is_none());
+
+        let rejected_message = format!(
+            "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result=review-2|workflow-2|2|opening_pending|1700000001|REJECTED|REJECTED"
+        );
+        let rejected = parse_card_funds_receipt(&rejected_message, &fingerprint).unwrap();
+        assert!(rejected.requires_legacy_rejected_follow_up());
     }
 
     #[test]

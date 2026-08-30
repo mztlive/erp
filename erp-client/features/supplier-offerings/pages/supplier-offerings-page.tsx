@@ -70,10 +70,10 @@ export const SupplierOfferingsPage = () => {
         () =>
             buildSupplierOfferingAppliedChips(state.urlState, {
                 skuNoLabel: state.urlState.skuId
-                    ? items[0]?.sku_no ?? null
+                    ? (items[0]?.sku_no ?? null)
                     : null,
                 supplierNameLabel: state.urlState.supplierId
-                    ? items[0]?.supplier_name ?? null
+                    ? (items[0]?.supplier_name ?? null)
                     : null,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,7 +92,7 @@ export const SupplierOfferingsPage = () => {
                 }
                 description={
                     state.taskMode
-                        ? "只读核对安全暂停来源与影响；不选定替代供给，不恢复商品销售。"
+                        ? "核对安全暂停来源与影响并登记处置证据；完成任务不恢复供给或商品销售。"
                         : state.skuLocked
                           ? "维护当前公司 SKU 的供应商、订货编码、商业条款与可供情况。"
                           : "每条记录直接连接一个公司 SKU 与一个供应商；不存在独立的供应商商品主档。"
@@ -105,19 +105,11 @@ export const SupplierOfferingsPage = () => {
                                 variant="outline"
                                 render={
                                     <Link
-                                        href={`/workspace/tasks?${new URLSearchParams(
+                                        href={`/workspace?${new URLSearchParams(
                                             {
                                                 currentWorkItemId:
                                                     state.urlState.workItemId ??
                                                     "",
-                                                ...(state.urlState
-                                                    .queueContextId
-                                                    ? {
-                                                          queueContextId:
-                                                              state.urlState
-                                                                  .queueContextId,
-                                                      }
-                                                    : {}),
                                             },
                                         ).toString()}`}
                                     />
@@ -129,9 +121,7 @@ export const SupplierOfferingsPage = () => {
                             <Button
                                 type="button"
                                 variant="outline"
-                                render={
-                                    <Link href={state.urlState.returnTo} />
-                                }
+                                render={<Link href={state.urlState.returnTo} />}
                             >
                                 返回商品
                             </Button>
@@ -155,7 +145,6 @@ export const SupplierOfferingsPage = () => {
             {state.taskMode && state.urlState.workItemId ? (
                 <SupplyExceptionTaskPanel
                     workItemId={state.urlState.workItemId}
-                    queueContextId={state.urlState.queueContextId}
                     task={taskQuery.data}
                     offering={taskOffering}
                     isPending={taskQuery.isPending}
@@ -236,9 +225,7 @@ export const SupplierOfferingsPage = () => {
                                 skuNoDraft={state.skuNoDraft}
                                 onSkuNoDraftChange={state.setSkuNoDraft}
                                 productNoDraft={state.productNoDraft}
-                                onProductNoDraftChange={
-                                    state.setProductNoDraft
-                                }
+                                onProductNoDraftChange={state.setProductNoDraft}
                                 supplierIdDraft={state.supplierIdDraft}
                                 onSupplierIdDraftChange={
                                     state.setSupplierIdDraft

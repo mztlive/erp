@@ -6,7 +6,10 @@
  * 实现按资源拆分：queue.ts（队列）、complete.ts（提交复核）、registration.ts（登记回款/发票）。
  */
 
-export { fetchCardFundsReviewQueue } from "./queue"
+export {
+    fetchCardFundsReviewQueue,
+    fetchFocusedCardFundsReviewTask,
+} from "./queue"
 export { completeCardFundsReview } from "./complete"
 export {
     registerHistoricalReceipt,

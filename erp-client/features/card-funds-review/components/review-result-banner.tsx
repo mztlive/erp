@@ -11,7 +11,7 @@ import { buildResultFacts } from "../lib/result-facts"
 
 type ResultState = SharedResultState<FormalOutcome>
 
-/** 提交后的复核结果条（含驳回后继未配置提示与下一项动作）。 */
+/** 提交后的复核结果条（含驳回后继待办与下一项动作）。 */
 export function ReviewResultBanner({
     lastResult,
     onNext,
@@ -23,9 +23,9 @@ export function ReviewResultBanner({
     w05Href: string
     hasTask: boolean
 }) {
-    const followUpConfiguration =
+    const followUpWorkItem =
         lastResult.outcome?.kind === "REJECTED"
-            ? lastResult.outcome.business.followUpConfiguration
+            ? lastResult.outcome.business.followUpWorkItem
             : undefined
 
     return (
@@ -41,11 +41,11 @@ export function ReviewResultBanner({
                 reference={lastResult.reference}
                 facts={[
                     ...buildResultFacts(lastResult.outcome),
-                    ...(followUpConfiguration
+                    ...(followUpWorkItem
                         ? [
                               {
-                                  label: "后继流程未配置",
-                                  value: followUpConfiguration.collaborationMessage,
+                                  label: "后继待办",
+                                  value: `${followUpWorkItem.workItemId} · ${followUpWorkItem.status}`,
                               },
                           ]
                         : []),

@@ -18,13 +18,11 @@ use entities::purchase_order::{
     FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
     PurchaseType,
 };
-use entities::work_item::{WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
-use crate::work_item::ProcessingState;
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no"];
@@ -312,43 +310,6 @@ pub struct PurchaseChangeSummaryView {
     pub created_at: u64,
 }
 
-/// 采购单详情中的财务审核责任事实。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct PurchaseReviewWorkItemView {
-    /// 待办稳定身份。
-    pub work_item_id: String,
-    /// 固定任务类型。
-    pub work_item_type: WorkItemType,
-    /// 待办自身的乐观锁版本。
-    pub task_version: u64,
-    /// 锁定的不可变采购提交版本。
-    pub subject_version: String,
-    /// 待办生命周期状态。
-    pub status: WorkItemStatus,
-    /// 责任角色。
-    pub owner_role: String,
-    /// 责任组织。
-    pub owner_organization_id: String,
-    /// 当前个人责任人。
-    pub owner_user_id: Option<String>,
-    /// 当前处理状态；当前非审批步骤待办固定为 `READY`。
-    pub processing_state: ProcessingState,
-    /// 服务端处理阻断摘要。
-    pub action_blockers: Vec<PurchaseActionBlockerView>,
-    /// 仅由 W08 强类型审核命令执行的领域动作。
-    pub domain_allowed_actions: Vec<PurchaseReviewDomainAction>,
-}
-
-/// 采购财务审核工作面允许提交的领域决定。
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum PurchaseReviewDomainAction {
-    /// 提交审核通过决定。
-    Approve,
-    /// 提交审核驳回决定。
-    Reject,
-}
-
 /// 采购工作面可安全展示的动作阻断摘要。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseActionBlockerView {
@@ -417,8 +378,6 @@ pub struct PurchaseOrderCenterView {
     pub changes: Vec<PurchaseChangeSummaryView>,
     /// 应付往来子账汇总（采购单生效形成应付后存在，否则为空）。
     pub payable_summary: Option<PurchaseOrderPayableSummaryView>,
-    /// 当前开放的财务审核责任；统一审批后为空。
-    pub review_work_item: Option<PurchaseReviewWorkItemView>,
     /// 统一只读审批结构。客户端不得据此选择定义或审批人。
     pub approval: DocumentApprovalView,
     /// 创建时间（秒级时间戳）。
@@ -791,6 +750,8 @@ pub struct CreatePurchaseOrdersFromSourcingResult {
     pub orders: Vec<CreatePurchaseOrderResult>,
     /// 本次建立或幂等回放的现有库存销售预占。
     pub stock_reservations: Vec<ExistingStockReservationResult>,
+    /// 本次同步后的供给分配任务状态；部分分配固定保持 `OPEN`。
+    pub work_item_status: String,
     /// 是否复用已有供给分配结果（幂等重放）。
     pub replayed: bool,
     /// 业务引用，指向来源销售单。
@@ -966,70 +927,6 @@ pub struct SubmitPurchaseOrderResult {
     pub lock_version: u64,
     /// 业务引用。
     pub reference: String,
-}
-
-/// 采购财务审核决定类型。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum PurchaseOrderReviewDecisionResult {
-    /// 审核通过并形成正式采购版本、应付与成本事实。
-    Approved,
-    /// 审核驳回并把采购对象恢复为可编辑草稿。
-    Rejected,
-}
-
-impl PurchaseOrderReviewDecisionResult {}
-
-/// W08 财务审核的完整领域决定。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[serde(deny_unknown_fields)]
-pub struct PurchaseOrderReviewDecisionCommand {
-    /// 路径必须指向的采购单。
-    #[validate(custom(function = "non_blank", message = "采购单ID不能为空"))]
-    #[validate(length(max = 128, message = "采购单ID过长"))]
-    pub purchase_order_id: String,
-    /// 待审核的不可变提交。
-    #[validate(custom(function = "non_blank", message = "提交ID不能为空"))]
-    #[validate(length(max = 128, message = "提交ID过长"))]
-    pub submission_id: String,
-    /// 期望的采购单乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub expected_purchase_order_lock_version: u64,
-    /// 唯一审核结论分支。
-    pub review_result: PurchaseOrderReviewDecisionResult,
-    /// 驳回原因；仅 `REJECTED` 分支必填，`APPROVED` 分支禁止携带。
-    #[validate(length(max = 64, message = "驳回原因代码过长"))]
-    pub reason_code: Option<String>,
-    /// 补充说明。
-    #[validate(length(max = 512, message = "补充说明过长"))]
-    pub comment: Option<String>,
-}
-
-impl PurchaseOrderReviewDecisionCommand {}
-
-/// W08 唯一采购财务审核命令。
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[serde(deny_unknown_fields)]
-pub struct ReviewPurchaseOrderCommand {
-    /// 当前正式审核待办。
-    #[validate(custom(function = "non_blank", message = "审核待办ID不能为空"))]
-    #[validate(length(max = 128, message = "审核待办ID过长"))]
-    pub work_item_id: String,
-    /// 最近一次查询返回的不透明任务版本。
-    #[validate(custom(function = "non_blank", message = "待办版本不能为空"))]
-    #[validate(length(max = 20, message = "待办版本过长"))]
-    pub expected_task_version: String,
-    /// 待办冻结的不可变采购提交版本。
-    #[validate(custom(function = "non_blank", message = "提交版本不能为空"))]
-    #[validate(length(max = 128, message = "提交版本过长"))]
-    pub expected_subject_version: String,
-    /// 完整领域决定；审核结论不得出现在命令顶层或 URL 路径中。
-    #[validate(nested)]
-    pub decision: PurchaseOrderReviewDecisionCommand,
-    /// 幂等键（同一键重试不得重复形成审核事实）。
-    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
-    #[validate(length(max = 128, message = "幂等键过长"))]
-    pub idempotency_key: String,
 }
 
 /// 财务审核结果（通过/驳回共用形状）。

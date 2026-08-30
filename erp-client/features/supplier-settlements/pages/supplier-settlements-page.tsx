@@ -58,12 +58,9 @@ export function SupplierSettlementsPage() {
     )
 
     if (urlState.statementId) {
-        const taskReturnTo =
-            urlState.from === "W02" &&
-            urlState.workItemId &&
-            urlState.queueContextId
-                ? `/workspace/tasks?queueContextId=${encodeURIComponent(urlState.queueContextId)}&currentWorkItemId=${encodeURIComponent(urlState.workItemId)}`
-                : undefined
+        const taskReturnTo = urlState.workItemId
+            ? `/workspace?currentWorkItemId=${encodeURIComponent(urlState.workItemId)}`
+            : undefined
         return (
             <SettlementCenter
                 statementId={urlState.statementId}

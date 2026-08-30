@@ -37,6 +37,10 @@ test("inactive handlers are absent and fail closed", () => {
         "ownership_sales",
         "ownership_finance",
         "finance_correction",
+        "sales_change_impact_review",
+        "sales_change_finance_review",
+        "po_review",
+        "inventory_adj",
     ]) {
         assert.equal(HANDLER_REGISTRY[handlerKey], undefined)
         assert.equal(
@@ -51,33 +55,6 @@ test("inactive handlers are absent and fail closed", () => {
     assert.equal(
         HANDLER_REGISTRY.procurement_order_creation?.family,
         "procurement",
-    )
-})
-
-test("sales change review opens its root sales order instead of the review id", () => {
-    for (const handlerKey of [
-        "sales_change_impact_review",
-        "sales_change_finance_review",
-    ] as const) {
-        const url = parsedHref(
-            buildHandlerHref({
-                ...REQUIRED_CONTEXT,
-                rootBusinessObjectId: "sales-order / 7",
-                handlerKey,
-                destinationWorkspaceId: "W05",
-            }),
-        )
-        assert.equal(url.pathname, "/sales/orders/sales-order%20%2F%207")
-        assert.equal(url.searchParams.get("section"), "change-review")
-        assertStableContext(url)
-    }
-    assert.equal(
-        buildHandlerHref({
-            ...REQUIRED_CONTEXT,
-            handlerKey: "sales_change_impact_review",
-            destinationWorkspaceId: "W05",
-        }),
-        null,
     )
 })
 
@@ -134,20 +111,6 @@ test("customer acceptance opens the exact sales order W06 section", () => {
         url.searchParams.get("returnTo"),
         "/workspace?currentWorkItemId=wi-42",
     )
-})
-
-test("purchase order review opens the exact W08 review mode", () => {
-    const url = parsedHref(
-        buildHandlerHref({
-            ...REQUIRED_CONTEXT,
-            handlerKey: "po_review",
-            destinationWorkspaceId: "W08",
-        }),
-    )
-
-    assert.equal(url.pathname, "/procurement/orders/object%20%2F%2042")
-    assert.equal(url.searchParams.get("mode"), "review")
-    assertStableContext(url)
 })
 
 test("supplier payment execution opens W12 with the exact payable preselected", () => {
@@ -293,6 +256,19 @@ test("document_approval opens the destination document without requiring queueCo
     assert.equal(sales.searchParams.get("from"), "workspace")
     assert.equal(sales.searchParams.get("workItemId"), "wi-42")
 
+    const purchase = parsedHref(
+        buildHandlerHref({
+            businessObjectType: "purchase_order",
+            businessObjectId: "purchase / 42",
+            workItemId: "wi-42",
+            handlerKey: "document_approval",
+            destinationWorkspaceId: "W08",
+        }),
+    )
+    assert.equal(purchase.pathname, "/procurement/orders/purchase%20%2F%2042")
+    assert.equal(purchase.searchParams.get("section"), "approval")
+    assert.equal(purchase.searchParams.has("mode"), false)
+
     const receipt = parsedHref(
         buildHandlerHref({
             businessObjectType: "customer_receipt",
@@ -350,8 +326,8 @@ test("unknown, mismatched, and incomplete handlers fail closed", () => {
         buildHandlerHref({
             ...REQUIRED_CONTEXT,
             queueContextId: undefined,
-            handlerKey: "po_review",
-            destinationWorkspaceId: "W08",
+            handlerKey: "supplier_settlement",
+            destinationWorkspaceId: "W27",
         }),
         null,
     )

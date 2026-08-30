@@ -207,8 +207,11 @@ export function WorkspaceHomePage() {
         <WorkspaceTaskDetail
             item={selected}
             grantedPermissions={accountProfileQuery.data?.permissions ?? []}
-            onDecisionApplied={(_view, workItemId) => {
-                applyDecisionAfter(workItemId)
+            onDecisionApplied={(commandView, workItemId) => {
+                applyDecisionAfter(
+                    workItemId,
+                    commandView.nextOpenTask?.workItemId,
+                )
             }}
             onTaskCompleted={applyDecisionAfter}
         />
@@ -338,12 +341,21 @@ export function WorkspaceHomePage() {
                             grantedPermissions={
                                 accountProfileQuery.data?.permissions ?? []
                             }
-                            onDecisionApplied={(_view, workItemId) => {
-                                applyDecisionAfter(workItemId)
+                            onDecisionApplied={(commandView, workItemId) => {
+                                applyDecisionAfter(
+                                    workItemId,
+                                    commandView.nextOpenTask?.workItemId,
+                                )
                                 setNarrowDetailOpen(false)
                             }}
-                            onTaskCompleted={(workItemId) => {
-                                applyDecisionAfter(workItemId)
+                            onTaskCompleted={(
+                                workItemId,
+                                preferredWorkItemId,
+                            ) => {
+                                applyDecisionAfter(
+                                    workItemId,
+                                    preferredWorkItemId,
+                                )
                                 setNarrowDetailOpen(false)
                             }}
                         />

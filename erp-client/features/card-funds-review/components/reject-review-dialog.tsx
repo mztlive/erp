@@ -62,7 +62,7 @@ export function RejectReviewDialog({
                 <DialogHeader>
                     <DialogTitle>驳回复核</DialogTitle>
                     <DialogDescription>
-                        仅记录本次驳回并完成任务；未决问题不会自动创建后续任务。
+                        本次驳回会完成当前任务，并按当前财务责任规则在同一事务创建后继待办；未决问题继续保留在工作台。
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -78,9 +78,7 @@ export function RejectReviewDialog({
                             <div className="space-y-1.5">
                                 <Label>
                                     驳回原因
-                                    <span className="text-destructive">
-                                        *
-                                    </span>
+                                    <span className="text-destructive">*</span>
                                 </Label>
                                 <OptionCombobox
                                     value={field.state.value}
@@ -109,9 +107,7 @@ export function RejectReviewDialog({
                             <div className="space-y-1.5">
                                 <Label htmlFor="reject-comment">
                                     补充说明
-                                    <span className="text-destructive">
-                                        *
-                                    </span>
+                                    <span className="text-destructive">*</span>
                                 </Label>
                                 <Textarea
                                     id="reject-comment"

@@ -139,10 +139,12 @@ export function ConfirmSection({
     batch,
     workItemTypeMissing,
     confirmBlocked,
+    onTaskCompleted,
 }: {
     batch: ImportBatchView
     workItemTypeMissing: boolean
     confirmBlocked: ImportBatchView["actionBlockers"]
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const {
         confirming,
@@ -152,7 +154,7 @@ export function ConfirmSection({
         complete,
         isCompleting,
         error,
-    } = useConfirmationActions(batch)
+    } = useConfirmationActions(batch, onTaskCompleted)
 
     return (
         <div className="space-y-4">

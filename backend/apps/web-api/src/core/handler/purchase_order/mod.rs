@@ -16,10 +16,9 @@ use services::{
         CreationBasisListParams, CreationBasisView, EffectPurchaseChangeRequest, PageView,
         PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseChangeOrderView,
         PurchaseOrderCenterView, PurchaseOrderListItemView, PurchaseOrderListParams, PurchaseOrderService,
-        PurchaseReviewResult, ReviewPurchaseOrderCommand, SavePurchaseOrderDraftRequest,
-        SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-        SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
-        VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+        SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, StartPurchaseChangeRequest,
+        StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
+        SubmitPurchaseOrderResult, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
     },
 };
 
@@ -72,11 +71,10 @@ pub async fn purchase_order_list(
 /// 返回对象中心视图。
 pub async fn purchase_order_detail(
     State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<PurchaseOrderCenterView> {
     let view = PurchaseOrderService::new(state.db())
-        .purchase_order_detail(&id, actor.id())
+        .purchase_order_detail(&id)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
@@ -256,36 +254,6 @@ pub async fn purchase_order_cancel_approval(
         .await?;
 
     Ok(ApiResponse::ok())
-}
-
-#[permission_macros::permission(
-    group = "采购单",
-    group_desc = "采购单、采购提交与采购变更管理",
-    desc = "采购财务审核决定",
-    resource = "purchase_order",
-    action = "review"
-)]
-/// 提交唯一 W08 采购财务审核命令。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 采购单 ID
-/// * `command` - 嵌套领域决定与任务/对象版本
-///
-/// # 返回
-/// 返回审核结果（版本与应付分录）。
-pub async fn purchase_order_review(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(command): Json<ReviewPurchaseOrderCommand>,
-) -> Result<PurchaseReviewResult> {
-    let view = PurchaseOrderService::new(state.db())
-        .review_purchase_order(&id, command, &actor, state.rbac())
-        .await?;
-
-    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(

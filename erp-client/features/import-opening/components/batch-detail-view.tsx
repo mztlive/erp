@@ -61,11 +61,15 @@ export function BatchDetailView({
     urlState,
     patchUrl,
     replaceUrl,
+    embedded = false,
+    onTaskCompleted,
 }: {
     batchId: string
     urlState: ImportOpeningUrlState
     patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
     replaceUrl: (next: ImportOpeningUrlState) => void
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const detailQuery = useImportBatchDetailQuery({
         batchId,
@@ -90,7 +94,10 @@ export function BatchDetailView({
 
     if (detailQuery.isPending) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
                 <div className="h-24 animate-pulse rounded-lg bg-muted" />
                 <div className="h-40 animate-pulse rounded-lg bg-muted" />
@@ -100,7 +107,10 @@ export function BatchDetailView({
 
     if (detailQuery.isError) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <BusinessFailureState
                     title="批次加载失败"
                     error={detailQuery.error}
@@ -112,7 +122,10 @@ export function BatchDetailView({
 
     if (!batch) {
         return (
-            <PageScaffold>
+            <PageScaffold
+                density={embedded ? "compact" : "default"}
+                className={embedded ? "max-w-none p-0" : undefined}
+            >
                 <BusinessEmptyState
                     kind="no-data"
                     title="批次不存在"
@@ -149,33 +162,38 @@ export function BatchDetailView({
     const workItemTypeMissing = !batch.productionGates.workItemTypeRegistered
 
     return (
-        <PageScaffold>
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                            replaceUrl({
-                                ...urlState,
-                                batchId: undefined,
-                                section: "overview",
-                                issueCode: undefined,
-                                issueObjectType: undefined,
-                                rowStatus: undefined,
-                                workItemId: undefined,
-                                confirmationScope: undefined,
-                                queueContextId: undefined,
-                            })
-                        }
-                    >
-                        <ArrowLeftIcon className="size-4" />
-                        返回批次列表
-                    </Button>
-                }
-            />
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0" : undefined}
+        >
+            {!embedded ? (
+                <PageHeader
+                    variant="object-chrome"
+                    actions={
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                                replaceUrl({
+                                    ...urlState,
+                                    batchId: undefined,
+                                    section: "overview",
+                                    issueCode: undefined,
+                                    issueObjectType: undefined,
+                                    rowStatus: undefined,
+                                    workItemId: undefined,
+                                    confirmationScope: undefined,
+                                    queueContextId: undefined,
+                                })
+                            }
+                        >
+                            <ArrowLeftIcon className="size-4" />
+                            返回批次列表
+                        </Button>
+                    }
+                />
+            ) : null}
 
             <DocumentHeader
                 density="compact"
@@ -275,21 +293,23 @@ export function BatchDetailView({
                 aria-label="导入六段流水线"
             />
 
-            <Tabs
-                value={section}
-                onValueChange={(v) => {
-                    if (v == null) return
-                    patchUrl({ section: v as BatchSection })
-                }}
-            >
-                <TabsList className="flex h-auto flex-wrap">
-                    {SECTION_TABS.map((tab) => (
-                        <TabsTrigger key={tab.id} value={tab.id}>
-                            {tab.label}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
-            </Tabs>
+            {!embedded ? (
+                <Tabs
+                    value={section}
+                    onValueChange={(v) => {
+                        if (v == null) return
+                        patchUrl({ section: v as BatchSection })
+                    }}
+                >
+                    <TabsList className="flex h-auto flex-wrap">
+                        {SECTION_TABS.map((tab) => (
+                            <TabsTrigger key={tab.id} value={tab.id}>
+                                {tab.label}
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
+            ) : null}
 
             {section === "overview" ? (
                 <OverviewSection
@@ -314,6 +334,7 @@ export function BatchDetailView({
                     batch={batch}
                     workItemTypeMissing={workItemTypeMissing}
                     confirmBlocked={confirmBlocked}
+                    onTaskCompleted={onTaskCompleted}
                 />
             ) : null}
 
@@ -330,15 +351,19 @@ export function BatchDetailView({
 
             {section === "audit" ? <AuditSection batch={batch} /> : null}
 
-            <ImportExecutionActions
-                batch={batch}
-                onGoSection={(nextSection) =>
-                    patchUrl({ section: nextSection })
-                }
-            />
+            {!embedded ? (
+                <ImportExecutionActions
+                    batch={batch}
+                    onGoSection={(nextSection) =>
+                        patchUrl({ section: nextSection })
+                    }
+                />
+            ) : null}
 
             {/* 生产应用门禁：仅提交应用前阶段展示 */}
-            {batch.stage !== "RESULT" && batch.stage !== "APPLY" ? (
+            {!embedded &&
+            batch.stage !== "RESULT" &&
+            batch.stage !== "APPLY" ? (
                 <ProductionGateCard batch={batch} />
             ) : null}
         </PageScaffold>

@@ -1,5 +1,5 @@
 /** 登录成功后默认落地页。 */
-export const DEFAULT_RETURN_TO = "/workspace/tasks"
+export const DEFAULT_RETURN_TO = "/workspace"
 
 /**
  * 解析登录后跳转目标：仅接受站内绝对路径，且拒绝 `//` 开头的协议相对地址。

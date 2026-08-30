@@ -66,3 +66,27 @@ export function workspaceInvoiceMatchesReceivable(
         receivable.salesOrderId === descriptor.salesOrderId
     )
 }
+
+/** 只在本次正式开票覆盖提交前全部待开票金额时离开当前任务。 */
+export function invoiceExecutionIsComplete(
+    allocatedTotal: string,
+    openInvoiceableTotalBeforePost: string,
+): boolean {
+    const allocated = amountInCents(allocatedTotal)
+    const openBefore = amountInCents(openInvoiceableTotalBeforePost)
+    return (
+        allocated !== null &&
+        openBefore !== null &&
+        openBefore !== "0" &&
+        (allocated.length > openBefore.length ||
+            (allocated.length === openBefore.length &&
+                allocated.localeCompare(openBefore) >= 0))
+    )
+}
+
+function amountInCents(value: string): string | null {
+    const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim())
+    if (!match) return null
+    const fraction = (match[2] ?? "").padEnd(2, "0")
+    return `${match[1]}${fraction}`.replace(/^0+(?=\d)/, "")
+}

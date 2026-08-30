@@ -23,6 +23,8 @@ export type UseMallSyncPageInput = {
     queueContextId: string
     searchParams: ReadonlyURLSearchParams
     patchUrl: PatchUrl
+    advanceAfterConfirm?: boolean
+    onTaskCompleted?: (workItemId: string) => void
 }
 
 export function useMallSyncPageData(input: UseMallSyncPageInput) {

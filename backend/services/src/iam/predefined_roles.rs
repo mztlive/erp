@@ -425,7 +425,6 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     "sales_order:detail",
     "purchase_order:list",
     "purchase_order:detail",
-    "purchase_order:review",
     // 采购变更复核：审批区与变更清单需要读取变更单（决定走 approval_instance:decide）
     "purchase_change_order:list",
     "purchase_change_order:detail",
@@ -626,7 +625,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
         seed_one(rbac, role).await?;
     }
     upgrade_workflow_permissions(rbac).await?;
-    upgrade_purchase_review_permissions(rbac).await?;
+    upgrade_retired_purchase_review_permission(rbac).await?;
     upgrade_sales_role_permissions(rbac).await?;
     upgrade_finance_role_party_read_permissions(rbac).await?;
     upgrade_customer_role_boundaries(rbac).await?;
@@ -671,19 +670,12 @@ async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
     Ok(())
 }
 
-/// 将仍保持 W08 双路由权限种子的财务角色硬切到唯一审核命令权限。
-async fn upgrade_purchase_review_permissions(rbac: &SharedRbacService) -> Result<()> {
+/// 从仍保持上一版默认权限快照的财务角色移除已退役采购审核旁路权限。
+async fn upgrade_retired_purchase_review_permission(rbac: &SharedRbacService) -> Result<()> {
     let desired = parse_permissions(FINANCE_PERMISSIONS)?;
-    let previous = purchase_review_legacy_snapshot(&desired)?;
+    let mut previous = desired.clone();
+    previous.push(Permission::parse("purchase_order:review")?);
     upgrade_exact(rbac, "role-finance", previous, desired).await
-}
-
-/// 从 W08 当前权限确定性还原双审核路由时期的财务默认快照。
-fn purchase_review_legacy_snapshot(desired: &[Permission]) -> Result<Vec<Permission>> {
-    let mut previous = remove_permissions(desired, &["purchase_order:review"]);
-    previous.push(Permission::parse("purchase_order:approve")?);
-    previous.push(Permission::parse("purchase_order:reject")?);
-    Ok(previous)
 }
 
 /// 将仍保持上一版默认种子的采购/系统管理员权限收口到 W20 固定职责。
@@ -1114,9 +1106,9 @@ mod tests {
     use super::{
         approval_http_legacy_snapshot, integration_task_legacy_snapshot, legacy_workflow_permission_snapshot,
         low_margin_confirmation_legacy_snapshot, parse_permissions, predefined_role_ids,
-        procurement_legacy_permission_snapshots, purchase_review_legacy_snapshot,
-        sales_legacy_permission_snapshots, APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS,
-        PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS, SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS,
+        procurement_legacy_permission_snapshots, sales_legacy_permission_snapshots,
+        APPROVAL_HTTP_ACTION_PERMISSIONS, FINANCE_PERMISSIONS, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS,
+        SALES_LEADER_PERMISSIONS, SALES_PERMISSIONS,
     };
     use entities::{Permission, PermissionSet};
 
@@ -1141,18 +1133,17 @@ mod tests {
     }
 
     #[test]
-    fn finance_purchase_review_permission_hard_cuts_legacy_actions() {
+    fn finance_seed_excludes_retired_purchase_review_permission() {
         let desired = parse_permissions(FINANCE_PERMISSIONS).unwrap();
-        let previous = purchase_review_legacy_snapshot(&desired).unwrap();
-        let desired_codes = desired.iter().map(ToString::to_string).collect::<Vec<_>>();
-        let previous_codes = previous.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let mut previous = desired.clone();
+        previous.push(Permission::parse("purchase_order:review").unwrap());
 
-        assert!(desired_codes.contains(&"purchase_order:review".to_string()));
-        assert!(!desired_codes.contains(&"purchase_order:approve".to_string()));
-        assert!(!desired_codes.contains(&"purchase_order:reject".to_string()));
-        assert!(!previous_codes.contains(&"purchase_order:review".to_string()));
-        assert!(previous_codes.contains(&"purchase_order:approve".to_string()));
-        assert!(previous_codes.contains(&"purchase_order:reject".to_string()));
+        assert!(!desired
+            .iter()
+            .any(|permission| permission.to_string() == "purchase_order:review"));
+        assert!(previous
+            .iter()
+            .any(|permission| permission.to_string() == "purchase_order:review"));
     }
 
     #[test]
@@ -1495,12 +1486,6 @@ mod tests {
         assert!(!permissions
             .iter()
             .any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
-        assert!(
-            !permissions
-                .iter()
-                .any(|p| p.covers(&Permission::parse("purchase_order:review").unwrap())),
-            "销售不应默认具备采购财务审核权"
-        );
     }
 
     #[test]

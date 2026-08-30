@@ -17,7 +17,10 @@ import { MallSyncMappingView } from "@/features/mall-sync/components/mall-sync-m
 import { MallSyncReadViews } from "@/features/mall-sync/components/mall-sync-read-views"
 import { SourceSystemsCard } from "@/features/mall-sync/components/source-systems-card"
 import { useMallSyncUrlState } from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
-import type { MallSyncAppliedChip } from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
+import type {
+    MallSyncAppliedChip,
+    PatchUrl,
+} from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
 import { useMallSyncPage } from "@/features/mall-sync/pages/hooks/use-mall-sync-page"
 import { MallSyncPageHeader } from "@/features/mall-sync/pages/components/mall-sync-page-header"
 import { MallSyncOwnershipBanner } from "@/features/mall-sync/pages/components/mall-sync-ownership-banner"
@@ -31,21 +34,45 @@ import { MallSyncSourceFixDialog } from "@/features/mall-sync/pages/components/m
 import { MallSyncConfirmMappingForm } from "@/features/mall-sync/pages/components/mall-sync-confirm-mapping-form"
 import { MAPPING_TYPE_LABEL } from "@/features/mall-sync/types"
 
-export function MallSyncPage() {
+export function MallSyncPage({
+    forcedMappingTaskId,
+    forcedWorkItemId,
+    forcedQueueContextId,
+    embedded = false,
+    onTaskCompleted,
+}: {
+    forcedMappingTaskId?: string
+    forcedWorkItemId?: string
+    forcedQueueContextId?: string
+    embedded?: boolean
+    onTaskCompleted?: (workItemId: string) => void
+} = {}) {
     const router = useRouter()
     const url = useMallSyncUrlState()
+    const patchUrl = React.useCallback<PatchUrl>(
+        (patch) => {
+            if (!embedded) url.patchUrl(patch)
+        },
+        [embedded, url],
+    )
+    const view = embedded ? "mapping" : url.view
+    const mappingTaskId = forcedMappingTaskId ?? url.mappingTaskId
+    const workItemId = forcedWorkItemId ?? url.workItemId
+    const queueContextId = forcedQueueContextId ?? url.queueContextId
     const page = useMallSyncPage({
-        view: url.view,
-        q: url.q,
-        mappingType: url.mappingType,
-        jobId: url.jobId,
-        snapshotId: url.snapshotId,
-        mappingTaskId: url.mappingTaskId,
-        workItemId: url.workItemId,
-        differenceId: url.differenceId,
-        queueContextId: url.queueContextId,
+        view,
+        q: embedded ? "" : url.q,
+        mappingType: embedded ? undefined : url.mappingType,
+        jobId: embedded ? undefined : url.jobId,
+        snapshotId: embedded ? undefined : url.snapshotId,
+        mappingTaskId,
+        workItemId,
+        differenceId: embedded ? undefined : url.differenceId,
+        queueContextId,
         searchParams: url.searchParams,
-        patchUrl: url.patchUrl,
+        patchUrl,
+        advanceAfterConfirm: !embedded,
+        onTaskCompleted,
     })
 
     /** 已生效条件全部显性化为可单独移除的 chip（含深链对象定位条件）。 */
@@ -119,28 +146,33 @@ export function MallSyncPage() {
     }
 
     return (
-        <PageScaffold>
-            <MallSyncPageHeader
-                context={context}
-                canManualSync={page.canManualSync}
-                manualSyncDisabledReason={page.manualSyncDisabledReason}
-                onOpenIncremental={() => {
-                    page.setActionError(null)
-                    page.setIncrementalOpen(true)
-                }}
-                onOpenPull={() => {
-                    page.setActionError(null)
-                    page.setPullOpen(true)
-                }}
-                onRefresh={() => void page.pageQuery.refetch()}
-            />
+        <PageScaffold
+            density={embedded ? "compact" : "default"}
+            className={embedded ? "max-w-none p-0" : undefined}
+        >
+            {!embedded ? (
+                <MallSyncPageHeader
+                    context={context}
+                    canManualSync={page.canManualSync}
+                    manualSyncDisabledReason={page.manualSyncDisabledReason}
+                    onOpenIncremental={() => {
+                        page.setActionError(null)
+                        page.setIncrementalOpen(true)
+                    }}
+                    onOpenPull={() => {
+                        page.setActionError(null)
+                        page.setPullOpen(true)
+                    }}
+                    onRefresh={() => void page.pageQuery.refetch()}
+                />
+            ) : null}
 
-            {!page.pageQuery.isError ? (
+            {!embedded && !page.pageQuery.isError ? (
                 <>
                     <MallSyncOwnershipBanner
                         ownership={page.ownership}
                         sealed={page.sealed}
-                        view={url.view}
+                        view={view}
                         onEnterHistory={() => url.patchUrl({ view: "history" })}
                     />
 
@@ -181,7 +213,7 @@ export function MallSyncPage() {
                                     m.count != null ? m.count : (m.value ?? "—")
                                 }
                                 detail={m.detail}
-                                active={url.view === m.targetView}
+                                active={view === m.targetView}
                                 onClick={() => {
                                     url.patchUrl({
                                         view: m.targetView,
@@ -196,30 +228,32 @@ export function MallSyncPage() {
                 </>
             ) : null}
 
-            <MallSyncViewToolbar
-                view={url.view}
-                onViewChange={(next) =>
-                    url.patchUrl({
-                        view: next,
-                        // 清理跨视图残留的对象定位参数；保留当前视图归属的对象参数
-                        ...url.clearObjectParamsForView(next),
-                    })
-                }
-                searchInputRef={url.searchInputRef}
-                searchDraft={url.searchDraft}
-                setSearchDraft={url.setSearchDraft}
-                mappingTypeDraft={url.mappingTypeDraft}
-                setMappingTypeDraft={url.setMappingTypeDraft}
-                panelOpen={url.panelOpen}
-                setPanelOpen={url.setPanelOpen}
-                hasStructuredFilters={url.hasStructuredFilters}
-                hasActiveFilters={url.hasActiveFilters}
-                appliedChips={appliedChips}
-                removeFilter={url.removeFilter}
-                applyFilters={url.applyFilters}
-                resetMoreFilters={url.resetMoreFilters}
-                clearAllFilters={url.clearAllFilters}
-            />
+            {!embedded ? (
+                <MallSyncViewToolbar
+                    view={view}
+                    onViewChange={(next) =>
+                        url.patchUrl({
+                            view: next,
+                            // 清理跨视图残留的对象定位参数；保留当前视图归属的对象参数
+                            ...url.clearObjectParamsForView(next),
+                        })
+                    }
+                    searchInputRef={url.searchInputRef}
+                    searchDraft={url.searchDraft}
+                    setSearchDraft={url.setSearchDraft}
+                    mappingTypeDraft={url.mappingTypeDraft}
+                    setMappingTypeDraft={url.setMappingTypeDraft}
+                    panelOpen={url.panelOpen}
+                    setPanelOpen={url.setPanelOpen}
+                    hasStructuredFilters={url.hasStructuredFilters}
+                    hasActiveFilters={url.hasActiveFilters}
+                    appliedChips={appliedChips}
+                    removeFilter={url.removeFilter}
+                    applyFilters={url.applyFilters}
+                    resetMoreFilters={url.resetMoreFilters}
+                    clearAllFilters={url.clearAllFilters}
+                />
+            ) : null}
 
             {page.pageQuery.isError ? (
                 <BusinessFailureState
@@ -271,32 +305,34 @@ export function MallSyncPage() {
                     ) : null}
 
                     {/* ── 子视图内容 ── */}
-                    <MallSyncReadViews
-                        view={url.view}
-                        context={context}
-                        ownership={page.ownership}
-                        data={page.data}
-                        pageJobs={page.pageJobs}
-                        jobColumns={page.jobColumns}
-                        snapshotColumns={page.snapshotColumns}
-                        diffColumns={page.diffColumns}
-                        pagination={page.pagination}
-                        onPaginationChange={page.setPagination}
-                        retryPending={page.retryPending}
-                        onRetryJob={() => page.setRetryConfirmOpen(true)}
-                        patchUrl={url.patchUrl}
-                        firstPhase={page.firstPhase}
-                        sealed={page.sealed}
-                        onPullDifference={(externalOrderNo) => {
-                            page.setPullOpen(true)
-                            page.pullForm.setFieldValue(
-                                "externalOrderNo",
-                                externalOrderNo,
-                            )
-                        }}
-                    />
+                    {!embedded ? (
+                        <MallSyncReadViews
+                            view={view}
+                            context={context}
+                            ownership={page.ownership}
+                            data={page.data}
+                            pageJobs={page.pageJobs}
+                            jobColumns={page.jobColumns}
+                            snapshotColumns={page.snapshotColumns}
+                            diffColumns={page.diffColumns}
+                            pagination={page.pagination}
+                            onPaginationChange={page.setPagination}
+                            retryPending={page.retryPending}
+                            onRetryJob={() => page.setRetryConfirmOpen(true)}
+                            patchUrl={url.patchUrl}
+                            firstPhase={page.firstPhase}
+                            sealed={page.sealed}
+                            onPullDifference={(externalOrderNo) => {
+                                page.setPullOpen(true)
+                                page.pullForm.setFieldValue(
+                                    "externalOrderNo",
+                                    externalOrderNo,
+                                )
+                            }}
+                        />
+                    ) : null}
 
-                    {url.view === "mapping" ? (
+                    {view === "mapping" ? (
                         <MallSyncMappingView
                             data={page.data}
                             mappingTask={page.mappingTask}
@@ -330,34 +366,41 @@ export function MallSyncPage() {
                             }
                             onBackToQueue={() =>
                                 router.push(
-                                    `/workspace/tasks?queueContextId=${encodeURIComponent(url.queueContextId)}`,
+                                    workItemId
+                                        ? `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`
+                                        : "/workspace",
                                 )
                             }
                             onConfirm={() => page.confirmForm.handleSubmit()}
+                            embedded={embedded}
                         />
                     ) : null}
                 </>
             )}
 
             {/* 立即增量 */}
-            <MallSyncIncrementalDialog
-                open={page.incrementalOpen}
-                onOpenChange={page.setIncrementalOpen}
-                firstPhase={page.firstPhase}
-                manualSyncDisabledReason={page.manualSyncDisabledReason}
-                stage={page.stage}
-                currentWatermark={context?.freshness.currentWatermark}
-                form={page.incrementalForm}
-            />
+            {!embedded ? (
+                <MallSyncIncrementalDialog
+                    open={page.incrementalOpen}
+                    onOpenChange={page.setIncrementalOpen}
+                    firstPhase={page.firstPhase}
+                    manualSyncDisabledReason={page.manualSyncDisabledReason}
+                    stage={page.stage}
+                    currentWatermark={context?.freshness.currentWatermark}
+                    form={page.incrementalForm}
+                />
+            ) : null}
 
             {/* 按单补拉 */}
-            <MallSyncPullDialog
-                open={page.pullOpen}
-                onOpenChange={page.setPullOpen}
-                firstPhase={page.firstPhase}
-                manualSyncDisabledReason={page.manualSyncDisabledReason}
-                form={page.pullForm}
-            />
+            {!embedded ? (
+                <MallSyncPullDialog
+                    open={page.pullOpen}
+                    onOpenChange={page.setPullOpen}
+                    firstPhase={page.firstPhase}
+                    manualSyncDisabledReason={page.manualSyncDisabledReason}
+                    form={page.pullForm}
+                />
+            ) : null}
 
             <MallSyncSourceFixDialog
                 open={page.sourceFixOpen}
@@ -365,22 +408,24 @@ export function MallSyncPage() {
                 form={page.sourceFixForm}
             />
 
-            <FormalActionConfirmDialog
-                open={page.retryConfirmOpen}
-                onOpenChange={page.setRetryConfirmOpen}
-                actionLabel="重试失败任务"
-                title="确认重试失败任务"
-                description="沿原任务范围与同步规则重试未成功部分；不回退已捕获的同步进度。"
-                fromStatus={{
-                    label: page.data?.selectedJob?.statusLabel ?? "失败",
-                    tone: "warning",
-                }}
-                toStatus={{ label: "重试中", tone: "info" }}
-                effects={["仅重试未成功的分页", "不修改来源数据"]}
-                irreversibleEffects={["重试记录进入任务审计"]}
-                pending={page.retryPending}
-                onConfirm={() => page.handleRetryJob()}
-            />
+            {!embedded ? (
+                <FormalActionConfirmDialog
+                    open={page.retryConfirmOpen}
+                    onOpenChange={page.setRetryConfirmOpen}
+                    actionLabel="重试失败任务"
+                    title="确认重试失败任务"
+                    description="沿原任务范围与同步规则重试未成功部分；不回退已捕获的同步进度。"
+                    fromStatus={{
+                        label: page.data?.selectedJob?.statusLabel ?? "失败",
+                        tone: "warning",
+                    }}
+                    toStatus={{ label: "重试中", tone: "info" }}
+                    effects={["仅重试未成功的分页", "不修改来源数据"]}
+                    irreversibleEffects={["重试记录进入任务审计"]}
+                    pending={page.retryPending}
+                    onConfirm={() => page.handleRetryJob()}
+                />
+            ) : null}
 
             <FormalActionConfirmDialog
                 open={page.confirmOpen}

@@ -6,6 +6,8 @@ import {
 } from "@/features/work-items/types"
 
 import type {
+    CompleteSupplierSupplyExceptionTaskInput,
+    CompleteSupplierSupplyExceptionTaskResult,
     CreateSupplierOfferingInput,
     ReviseSupplierOfferingInput,
     SupplierOfferingListQuery,
@@ -51,6 +53,27 @@ export async function fetchSupplierSupplyExceptionWorkItem(
     }
 
     return task as SupplierSupplyExceptionWorkItem
+}
+
+/** 完成供应停止核对责任；该命令不会恢复供给或商品发布。 */
+export function completeSupplierSupplyExceptionTask(
+    input: CompleteSupplierSupplyExceptionTaskInput,
+): Promise<CompleteSupplierSupplyExceptionTaskResult> {
+    return apiPost<CompleteSupplierSupplyExceptionTaskResult>(
+        `/admin/supplier-offerings/${encodeURIComponent(input.offeringId)}/supply-exception-task/complete`,
+        {
+            work_item_id: input.workItemId,
+            expected_task_version: input.expectedTaskVersion,
+            expected_subject_version: input.expectedSubjectVersion,
+            decision: {
+                type: "ACKNOWLEDGE_SAFETY_PAUSE",
+                offering_id: input.offeringId,
+                evidence_reference: input.evidenceReference,
+                comment: input.comment,
+            },
+            idempotency_key: input.idempotencyKey,
+        },
+    )
 }
 
 export function fetchSupplierOfferings(

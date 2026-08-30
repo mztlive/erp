@@ -54,7 +54,7 @@ export function WorkspaceTaskCard({
         ? item.listSummary || item.statusLabel
         : paymentTask
           ? `采购单 ${compactDocumentNumber(number)}`
-          : counterpartyLine
+          : item.listSummary || counterpartyLine || item.reasonLabel
 
     return (
         <button

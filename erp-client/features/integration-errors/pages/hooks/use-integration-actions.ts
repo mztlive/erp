@@ -37,6 +37,7 @@ export function useIntegrationActions({
     refetch,
     goToItem,
     neighbor,
+    onTaskCompleted,
 }: {
     item: IntegrationResolutionItemView | undefined
     focusMode: boolean
@@ -48,6 +49,7 @@ export function useIntegrationActions({
     refetch: () => void
     goToItem: (next: IntegrationResolutionItemView | null | undefined) => void
     neighbor: (delta: number) => IntegrationResolutionItemView | null
+    onTaskCompleted?: (workItemId: string) => void
 }) {
     const responsibilityMutation = useWorkItemResponsibilityMutation()
     const actionMutation = useIntegrationActionMutation()
@@ -73,6 +75,15 @@ export function useIntegrationActions({
     const afterResult = React.useCallback(
         (result: IntegrationFormalResult) => {
             setLastResult(result)
+            const workItemId = item?.workItem?.workItemId
+            if (
+                workItemId &&
+                result.status === "succeeded" &&
+                (result.workItemStatus === "COMPLETED" ||
+                    result.workItemStatus === "CLOSED")
+            ) {
+                onTaskCompleted?.(workItemId)
+            }
             // 详情模式（focusMode）无队列导航控件，autoNext 不得静默自动跳转；
             // 自动下一项仅在带队列的列表模式生效，避免 URL 隐形状态驱动用户预期外的跳转。
             if (
@@ -88,7 +99,15 @@ export function useIntegrationActions({
                 }
             }
         },
-        [autoNext, focusMode, goToItem, neighbor, setLastResult],
+        [
+            autoNext,
+            focusMode,
+            goToItem,
+            item?.workItem?.workItemId,
+            neighbor,
+            onTaskCompleted,
+            setLastResult,
+        ],
     )
 
     const responsibilityStatus = deriveResponsibilityStatus(item, userId)

@@ -260,15 +260,10 @@ export type FormalOutcome =
           business: CardFundsReviewBusinessResultBase & {
               reviewResult: "REJECTED"
               conclusion: "REJECTED"
-              followUpConfiguration: {
-                  status: "BLOCKED"
-                  blockerCode: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED"
-                  collaborationMessage: string
-                  requiredRegistration: readonly (
-                      | "WORK_ITEM_TYPE"
-                      | "OWNER_ASSIGNEE"
-                      | "HANDLER_KEY"
-                  )[]
+              followUpWorkItem: {
+                  workItemId: string
+                  workItemType: WorkItemType
+                  status: "OPEN"
               }
           }
       }
@@ -311,9 +306,6 @@ export const APPROVE_CONCLUSION_LABEL: Record<ApproveConclusion, string> = {
     NO_HISTORY_FROM_ZERO: "无历史票款，从 0 起",
     RECORDED_FACTS_RECONCILED: "已登记记录并核对一致",
 }
-
-export const REJECT_FOLLOW_UP_COLLABORATION =
-    "驳回后续待定：驳回仅形成本次复核记录并完成当前任务，不创建或转交后继任务。请人工与财务负责人协作登记任务类型与责任分工后再启用驳回后继。"
 
 /** 登记历史回款表单草稿。 */
 export type ReceiptDraft = Readonly<{

@@ -29,6 +29,7 @@ type SupplierOrderCenterTaskActionsInput = {
     >
     commandIdentity: (kind: string, objectId: string) => CommandIdentity
     forgetCommandIdentity: (key: string) => void
+    onTaskCompleted?: (workItemId: string) => void
 }
 
 /** 任务级命令：依据已核实的终态结果确认完成。 */
@@ -43,6 +44,7 @@ export function useSupplierOrderCenterTaskActions(
         completeTaskMutation,
         commandIdentity,
         forgetCommandIdentity,
+        onTaskCompleted,
     } = input
 
     const [completeOpen, setCompleteOpen] = React.useState(false)
@@ -103,6 +105,9 @@ export function useSupplierOrderCenterTaskActions(
                 description: response.message,
                 reference: response.reference,
             })
+            if (response.status === "succeeded") {
+                onTaskCompleted?.(workItem.workItemId)
+            }
         } catch (error) {
             setResult({
                 status: "rejected",
