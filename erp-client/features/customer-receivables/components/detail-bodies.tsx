@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, taxAmountToneClass } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
@@ -358,7 +358,11 @@ export function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
                 <Fact
                     label="含税"
                     value={
-                        <MoneyValue value={row.grossAmount} taxBasis="gross" />
+                        <MoneyValue
+                            value={row.grossAmount}
+                            taxBasis="gross"
+                            className={taxAmountToneClass("含税金额")}
+                        />
                     }
                 />
                 <Fact
@@ -366,7 +370,10 @@ export function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
                     value={
                         <span>
                             <MoneyValue value={row.netAmount} /> /{" "}
-                            <MoneyValue value={row.taxAmount} />
+                            <MoneyValue
+                                value={row.taxAmount}
+                                className={taxAmountToneClass("税额")}
+                            />
                         </span>
                     }
                 />

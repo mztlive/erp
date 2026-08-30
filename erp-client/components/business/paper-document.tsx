@@ -12,6 +12,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { taxAmountToneClass } from "@/components/business/values"
 import { documentText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
@@ -349,6 +350,7 @@ function PaperDocument<Row>({
                                         "num text-right text-sm font-medium",
                                         total.emphasized &&
                                             "text-lg font-semibold",
+                                        taxAmountToneClass(total.label),
                                     )}
                                 >
                                     {total.value}

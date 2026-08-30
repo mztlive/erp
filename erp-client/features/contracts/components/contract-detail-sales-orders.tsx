@@ -6,6 +6,7 @@ import {
     BusinessStatusBadge,
     DocumentSection,
     MoneyValue,
+    taxAmountToneClass,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -80,6 +81,9 @@ export function ContractDetailSalesOrders({
                                         <MoneyValue
                                             value={so.amountGross}
                                             taxBasis="gross"
+                                            className={taxAmountToneClass(
+                                                "含税金额",
+                                            )}
                                         />
                                     </TableCell>
                                     <TableCell data-align="end">

@@ -8,6 +8,7 @@ import {
     BusinessStatusBadge,
     MoneyValue,
     StatusTrackSummary,
+    taxAmountToneClass,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -197,6 +198,7 @@ export function buildPurchaseOrdersListColumns({
                     <MoneyValue
                         value={row.original.grossAmount}
                         taxBasis="gross"
+                        className={taxAmountToneClass("含税金额")}
                     />
                 ),
         },

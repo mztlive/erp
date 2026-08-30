@@ -391,6 +391,29 @@ function formatDecimal(
 
 type TaxBasis = "gross" | "net"
 
+/**
+ * 税额三角（含税金额 / 不含税金额 / 税额）数字的语义配色：
+ * 含税金额=信息蓝加粗、税额=深橙、不含税金额=默认前景色。
+ * 按展示标签精确匹配；列头/标签已写明口径的列表与表单同样适用。
+ */
+const TAX_AMOUNT_LABEL_TONES: Readonly<Record<string, string>> = {
+    含税金额: "text-info-soft-foreground font-semibold",
+    含税合计: "text-info-soft-foreground font-semibold",
+    含税: "text-info-soft-foreground font-semibold",
+    行含税: "text-info-soft-foreground font-semibold",
+    含税小计: "text-info-soft-foreground font-semibold",
+    不含税金额: "",
+    不含税: "",
+    税额: "text-orange-soft-foreground",
+}
+
+/** 按展示标签取税额三角的配色类；不认识的标签返回空串（保持默认色）。 */
+export function taxAmountToneClass(label: unknown): string {
+    return typeof label === "string"
+        ? (TAX_AMOUNT_LABEL_TONES[label.trim()] ?? "")
+        : ""
+}
+
 interface MoneyValueProps extends Omit<
     React.ComponentProps<"span">,
     "children"
@@ -539,7 +562,12 @@ function DocumentTotals({
                             ) : null}
                         </dt>
                         <dd className="min-w-0 text-sm sm:text-right">
-                            <div className="num font-medium text-foreground">
+                            <div
+                                className={cn(
+                                    "num font-medium text-foreground",
+                                    taxAmountToneClass(item.label),
+                                )}
+                            >
                                 {item.value}
                             </div>
                             {item.warning != null ? (

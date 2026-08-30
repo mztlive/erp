@@ -8,6 +8,7 @@ import {
     PaperDocumentViewport,
     QuantityValue,
     RateValue,
+    taxAmountToneClass,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -339,7 +340,12 @@ function PurchaseOrderPreviewPaper({
                         header: "含税金额",
                         align: "end",
                         numeric: true,
-                        cell: (row) => <MoneyValue value={row.grossAmount} />,
+                        cell: (row) => (
+                            <MoneyValue
+                                value={row.grossAmount}
+                                className={taxAmountToneClass("含税金额")}
+                            />
+                        ),
                     },
                     {
                         id: "due",

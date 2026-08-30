@@ -35,6 +35,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { GuardedBusinessAction } from "@/components/business/feedback"
+import { taxAmountToneClass } from "@/components/business/values"
 import { sequentialText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
@@ -144,7 +145,12 @@ function StickyTotalBar({
                             <div className="text-xs text-muted-foreground">
                                 {item.label}
                             </div>
-                            <div className="num mt-0.5 font-medium text-foreground">
+                            <div
+                                className={cn(
+                                    "num mt-0.5 font-medium text-foreground",
+                                    taxAmountToneClass(item.label),
+                                )}
+                            >
                                 {item.value}
                             </div>
                             {item.description ? (

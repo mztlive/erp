@@ -8,6 +8,7 @@ import {
     MoneyValue,
     QuantityValue,
     RateValue,
+    taxAmountToneClass,
 } from "@/components/business"
 import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
 import { multiplyFixed } from "@/lib/fixed-decimal"
@@ -155,7 +156,10 @@ function buildPurchaseOrderLinesColumns(
                 costMasked ? (
                     <MaskedAmount />
                 ) : (
-                    <MoneyValue value={row.original.grossAmount} />
+                    <MoneyValue
+                        value={row.original.grossAmount}
+                        className={taxAmountToneClass("行含税")}
+                    />
                 ),
         },
         {
@@ -172,7 +176,10 @@ function buildPurchaseOrderLinesColumns(
                 costMasked ? (
                     <MaskedAmount />
                 ) : (
-                    <MoneyValue value={row.original.taxAmount} />
+                    <MoneyValue
+                        value={row.original.taxAmount}
+                        className={taxAmountToneClass("税额")}
+                    />
                 ),
         },
     ]

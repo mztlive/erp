@@ -20,7 +20,10 @@ import {
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
-import { StatusTrackSummary } from "@/components/business/values"
+import {
+    StatusTrackSummary,
+    taxAmountToneClass,
+} from "@/components/business/values"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Timeline,
@@ -274,6 +277,7 @@ function DocumentSummary({
                             className={cn(
                                 item.numeric && "num",
                                 item.emphasized && "font-medium",
+                                taxAmountToneClass(item.label),
                             )}
                         >
                             {item.value}
@@ -613,7 +617,14 @@ function RelatedDocumentList({
                                         <div className="text-xs text-muted-foreground">
                                             {measureLabel}
                                         </div>
-                                        <div className="num text-sm font-medium">
+                                        <div
+                                            className={cn(
+                                                "num text-sm font-medium",
+                                                taxAmountToneClass(
+                                                    measureLabel,
+                                                ),
+                                            )}
+                                        >
                                             {document.measure.value}
                                             {document.measure.kind ===
                                                 "quantity" &&

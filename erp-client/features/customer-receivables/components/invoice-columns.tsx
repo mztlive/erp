@@ -1,6 +1,10 @@
 import type { ColumnDef } from "@tanstack/react-table"
 
-import { BusinessStatusBadge, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    taxAmountToneClass,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
@@ -65,7 +69,11 @@ export function createInvoiceColumns({
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue value={row.original.grossAmount} taxBasis="gross" />
+                <MoneyValue
+                    value={row.original.grossAmount}
+                    taxBasis="gross"
+                    className={taxAmountToneClass("含税金额")}
+                />
             ),
         },
         {

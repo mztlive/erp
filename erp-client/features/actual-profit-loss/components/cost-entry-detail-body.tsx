@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
+import { taxAmountToneClass } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/description-list"
 import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentation"
 import type { CostEntryDetail } from "@/features/actual-profit-loss/types"
+import { cn } from "@/lib/utils"
 
 export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
     return (
@@ -45,7 +47,12 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                 <DescriptionItem>
                     <DescriptionTerm>含税金额</DescriptionTerm>
                     <DescriptionDetails>
-                        <span className="num">
+                        <span
+                            className={cn(
+                                "num",
+                                taxAmountToneClass("含税金额"),
+                            )}
+                        >
                             {formatMoneyDisplay(entry.amountGross)}
                         </span>
                         <span className="ml-1 text-xs text-muted-foreground">
@@ -58,14 +65,21 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                     <DescriptionDetails>
                         <span className="num">
                             {entry.taxRate} /{" "}
-                            {formatMoneyDisplay(entry.taxAmount)}
+                            <span className={taxAmountToneClass("税额")}>
+                                {formatMoneyDisplay(entry.taxAmount)}
+                            </span>
                         </span>
                     </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>
                     <DescriptionTerm>不含税金额</DescriptionTerm>
                     <DescriptionDetails>
-                        <span className="num font-medium">
+                        <span
+                            className={cn(
+                                "num font-medium",
+                                taxAmountToneClass("不含税金额"),
+                            )}
+                        >
                             {formatMoneyDisplay(entry.amountNet)}
                         </span>
                         <span className="ml-1 text-xs text-muted-foreground">

@@ -1,6 +1,10 @@
 "use client"
 
-import { MoneyValue, type EditableLineItemColumn } from "@/components/business"
+import {
+    MoneyValue,
+    taxAmountToneClass,
+    type EditableLineItemColumn,
+} from "@/components/business"
 import {
     CARD_FORM_OPTIONS,
     calculateTotals,
@@ -290,6 +294,7 @@ export function buildSalesOrderCreateLineItemColumns(
             renderValue: ({ item }) => (
                 <MoneyValue
                     value={calculateTotals([item], values.taxRatePercent).gross}
+                    className={taxAmountToneClass("含税小计")}
                 />
             ),
         },

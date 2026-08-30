@@ -8,7 +8,10 @@ import { ApprovalActionBar } from "@/features/approval-workflow/components/appro
 import { RuntimeSummary } from "@/features/approval-workflow/components/runtime-summary"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
-import { surfaceInsetClassName } from "@/components/business"
+import {
+    surfaceInsetClassName,
+    taxAmountToneClass,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -294,7 +297,14 @@ function WorkspaceDocumentTaskDetail({
                                 )}
                             >
                                 <div className="flex flex-col gap-1">
-                                    <span className="num text-3xl font-semibold tracking-tight">
+                                    <span
+                                        className={cn(
+                                            "num text-3xl font-semibold tracking-tight",
+                                            taxAmountToneClass(
+                                                primaryAmount.label,
+                                            ),
+                                        )}
+                                    >
                                         {primaryAmount.value}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
@@ -306,7 +316,14 @@ function WorkspaceDocumentTaskDetail({
                                         key={amount.label}
                                         className="flex flex-col gap-1"
                                     >
-                                        <span className="num text-lg font-medium">
+                                        <span
+                                            className={cn(
+                                                "num text-lg font-medium",
+                                                taxAmountToneClass(
+                                                    amount.label,
+                                                ),
+                                            )}
+                                        >
                                             {amount.value}
                                         </span>
                                         <span className="text-xs text-muted-foreground">

@@ -3,7 +3,11 @@
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
-import { MoneyValue, surfaceInsetClassName } from "@/components/business"
+import {
+    MoneyValue,
+    surfaceInsetClassName,
+    taxAmountToneClass,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -46,6 +50,7 @@ function SettlementCenterPayable({
                             <MoneyValue
                                 value={payable.grossAmount}
                                 taxBasis="gross"
+                                className={taxAmountToneClass("含税金额")}
                             />{" "}
                             · 到期 {payable.dueDate} · {payable.statusLabel}
                         </p>
