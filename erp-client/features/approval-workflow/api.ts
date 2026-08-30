@@ -30,6 +30,7 @@ export type ApprovalInstanceListParams = Readonly<{
     view: ApprovalInstanceListView
     documentType?: string
     status?: "RUNNING" | "APPROVED" | "CANCELLED" | "BLOCKED"
+    query?: string
     cursor?: string
     limit?: number
 }>
@@ -103,6 +104,7 @@ export const listApprovalInstances = async (
             view: params.view,
             document_type: params.documentType,
             status: params.status,
+            q: params.query,
             cursor: params.cursor,
             limit: params.limit ?? 20,
         },

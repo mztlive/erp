@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vitest"
 
 import type { TodayWorkspaceView } from "@/features/workspace/types"
@@ -114,6 +114,7 @@ function stubHome(
         onFamilyChange: vi.fn(),
         onSortChange: vi.fn(),
         applySearch: vi.fn(),
+        clearSearch: vi.fn(),
         refresh: vi.fn(),
         ...extras,
     }
@@ -150,4 +151,39 @@ test("筛选无结果时清空动作留在左列，右列作业面仍在", () =>
     ).toBe(true)
     expect(detail).toBeTruthy()
     expect(screen.getByText("在此处理任务")).toBeTruthy()
+})
+
+test("我发起的审批显示搜索且不展示任务类型", () => {
+    const applySearch = vi.fn()
+    stubHome(emptyAllowedView(), {
+        urlState: { view: "started", sort: "priority_due" },
+        activeMetric: "started",
+        applySearch,
+    })
+    render(<WorkspaceHomePage />)
+
+    const search = screen.getByLabelText("搜索我发起的审批")
+    expect(search).toBeTruthy()
+    expect(screen.queryByRole("group", { name: "任务类型" })).toBeNull()
+    expect(screen.queryByLabelText("排序：超期与优先级")).toBeNull()
+    expect(screen.getByText("还没有我发起的审批")).toBeTruthy()
+    fireEvent.submit(search.closest("form") as HTMLFormElement)
+    expect(applySearch).toHaveBeenCalledTimes(1)
+})
+
+test("我发起的审批搜索无结果时可以清除关键词", () => {
+    const clearSearch = vi.fn()
+    stubHome(emptyAllowedView(), {
+        urlState: { view: "started", sort: "priority_due", query: "SO-1" },
+        activeMetric: "started",
+        searchDraft: "SO-1",
+        clearSearch,
+    })
+    render(<WorkspaceHomePage />)
+
+    expect(screen.getByText("没有匹配的审批")).toBeTruthy()
+    const action = screen.getByRole("button", { name: "清除搜索" })
+    expect(action).toBeTruthy()
+    action.click()
+    expect(clearSearch).toHaveBeenCalledTimes(1)
 })

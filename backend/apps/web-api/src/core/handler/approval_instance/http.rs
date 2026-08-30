@@ -14,6 +14,8 @@ pub const DEFAULT_HISTORY_LIMIT: u32 = 50;
 pub const MAX_HISTORY_LIMIT: u32 = 100;
 /// 详情最近执行条数上限。
 pub const DETAIL_HISTORY_LIMIT: u32 = 20;
+/// 实例列表字面量检索上限。
+pub const INSTANCE_QUERY_MAX_LEN: usize = 128;
 
 /// 实例列表固定视图。
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -87,6 +89,8 @@ pub struct InstanceListQuery {
     pub cursor: Option<String>,
     /// 页大小，默认 20，最大 100。
     pub limit: Option<u32>,
+    /// 可选字面量检索，匹配单据编号、对象 ID、当前节点或当前审批人。
+    pub q: Option<String>,
 }
 
 /// 规范化后的列表查询。
@@ -102,6 +106,8 @@ pub struct NormalizedInstanceListQuery {
     pub cursor: Option<InstanceListCursor>,
     /// 页大小。
     pub limit: u32,
+    /// 规范化后的字面量检索。
+    pub query: Option<String>,
 }
 
 /// 编码当前 view 与两个排序字段的游标。
@@ -148,7 +154,7 @@ impl InstanceListCursor {
 }
 
 impl InstanceListQuery {
-    /// 校验 view/status/limit/cursor 合同。
+    /// 校验 view/status/limit/cursor/q 合同。
     ///
     /// # 错误
     /// 非法组合返回说明，调用方映射为 422。
@@ -170,8 +176,32 @@ impl InstanceListQuery {
             status: self.status,
             cursor,
             limit,
+            query: normalize_list_query_text(self.q.as_deref())?,
         })
     }
+}
+
+/// 规范化实例列表检索串。
+///
+/// # 参数
+/// * `raw` - 原始 `q`
+///
+/// # 返回
+/// 空白视为未检索；否则返回去掉首尾空白的检索串。
+///
+/// # 错误
+/// 超过字数上限时返回说明。
+///
+/// # 关键业务约束
+/// 空串不得变成伪过滤条件。超长必须 422，不得截断后静默检索。
+fn normalize_list_query_text(raw: Option<&str>) -> Result<Option<String>, String> {
+    let Some(value) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    if value.chars().count() > INSTANCE_QUERY_MAX_LEN {
+        return Err(format!("q 不能超过 {INSTANCE_QUERY_MAX_LEN} 个字符"));
+    }
+    Ok(Some(value.to_string()))
 }
 
 /// 历史查询。
@@ -408,6 +438,7 @@ mod tests {
             status: Some(InstanceStatusFilter::Blocked),
             cursor: None,
             limit: None,
+            q: None,
         };
         assert!(mine.normalize().is_err());
         let blocked = InstanceListQuery {
@@ -416,6 +447,7 @@ mod tests {
             status: Some(InstanceStatusFilter::Running),
             cursor: None,
             limit: Some(20),
+            q: None,
         };
         assert!(blocked.normalize().is_err());
         let managed = InstanceListQuery {
@@ -424,8 +456,15 @@ mod tests {
             status: Some(InstanceStatusFilter::Approved),
             cursor: None,
             limit: Some(20),
+            q: Some("  SO-1  ".to_string()),
         };
-        assert!(managed.normalize().is_ok());
+        let normalized = managed.normalize().expect("合法组合");
+        assert_eq!(normalized.query.as_deref(), Some("SO-1"));
+        let too_long = InstanceListQuery {
+            q: Some("a".repeat(super::INSTANCE_QUERY_MAX_LEN + 1)),
+            ..managed
+        };
+        assert!(too_long.normalize().unwrap_err().contains("q 不能超过"));
         let cross = InstanceListCursor::decode("mine|1|wi-1", InstanceListView::Started);
         assert!(cross.unwrap_err().contains("跨 view"));
         let encoded = InstanceListCursor {

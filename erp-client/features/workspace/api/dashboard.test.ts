@@ -82,6 +82,25 @@ describe("fetchWorkspaceDashboard started approvals", () => {
         })
     })
 
+    it("passes the search query when listing started approvals", async () => {
+        await fetchWorkspaceDashboard(
+            { ...baseQuery, view: "started", query: "PCZ-000042" },
+            profile,
+        )
+
+        expect(mocks.listApprovalInstances).toHaveBeenCalledWith({
+            view: "started",
+            cursor: undefined,
+            limit: 1,
+        })
+        expect(mocks.listApprovalInstances).toHaveBeenCalledWith({
+            view: "started",
+            cursor: undefined,
+            limit: 20,
+            query: "PCZ-000042",
+        })
+    })
+
     it("maps a started payment reversal to its W12 tracking detail", async () => {
         const dashboard = await fetchWorkspaceDashboard(
             { ...baseQuery, view: "started" },

@@ -1063,7 +1063,7 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 - 待我审批：上一项中 `approval_node_execution_id != null` 的子集，只作为类型页签，不作为独立数量口径；
 - 已超期：待我处理中 `due_at < now`；
 - 受阻：待我处理中关联实例或执行为 `BLOCKED`；
-- 我发起的审批：`approval_process_instance.started_by=当前用户`；
+- 我发起的审批：`approval_process_instance.started_by=当前用户`；左列支持按单据编号、对象 ID、当前节点和当前审批人字面量检索（`q`），检索不得只过滤当前页；
 - 当前审批人：实例当前执行关联任务的 `owner_user_id`；
 - 当前轮次：实例 `current_round_no`；
 - 审批历史：按实例、轮次、`execution_no` 查询节点执行；

@@ -167,6 +167,7 @@ export function WorkspaceFamilyNav({
 
 /**
  * 队列内搜索与排序。同属一条搜索栏，Enter 提交关键词。
+ * 我发起的审批不提供待办排序，只保留检索。
  */
 export function WorkspaceQueueToolbar({
     urlState,
@@ -174,12 +175,16 @@ export function WorkspaceQueueToolbar({
     onSearchDraftChange,
     onSortChange,
     onSearch,
+    showSort = true,
+    searchAriaLabel = "搜索待办",
 }: {
     urlState: WorkspaceUrlState
     searchDraft: string
     onSearchDraftChange: (value: string) => void
     onSortChange: (sort: WorkspaceSort) => void
     onSearch: () => void
+    showSort?: boolean
+    searchAriaLabel?: string
 }) {
     const sortLabel =
         SORT_OPTIONS.find((option) => option.value === urlState.sort)?.label ??
@@ -202,51 +207,55 @@ export function WorkspaceQueueToolbar({
                         onSearchDraftChange(event.target.value)
                     }
                     placeholder="搜索单号或往来方"
-                    aria-label="搜索待办"
+                    aria-label={searchAriaLabel}
                 />
-                <InputGroupAddon
-                    align="inline-end"
-                    className="border-l border-border/60 pl-1"
-                >
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            render={
-                                <InputGroupButton
-                                    variant="ghost"
-                                    size="xs"
-                                    aria-label={`排序：${sortLabel}`}
-                                />
-                            }
-                        >
-                            排序
-                            <ChevronDownIcon data-icon="inline-end" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                            align="end"
-                            className="w-auto min-w-40"
-                        >
-                            <DropdownMenuGroup>
-                                <DropdownMenuRadioGroup
-                                    value={urlState.sort}
-                                    onValueChange={(value) => {
-                                        if (value) {
-                                            onSortChange(value as WorkspaceSort)
-                                        }
-                                    }}
-                                >
-                                    {SORT_OPTIONS.map((option) => (
-                                        <DropdownMenuRadioItem
-                                            key={option.value}
-                                            value={option.value}
-                                        >
-                                            {option.label}
-                                        </DropdownMenuRadioItem>
-                                    ))}
-                                </DropdownMenuRadioGroup>
-                            </DropdownMenuGroup>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </InputGroupAddon>
+                {showSort ? (
+                    <InputGroupAddon
+                        align="inline-end"
+                        className="border-l border-border/60 pl-1"
+                    >
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                render={
+                                    <InputGroupButton
+                                        variant="ghost"
+                                        size="xs"
+                                        aria-label={`排序：${sortLabel}`}
+                                    />
+                                }
+                            >
+                                排序
+                                <ChevronDownIcon data-icon="inline-end" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                className="w-auto min-w-40"
+                            >
+                                <DropdownMenuGroup>
+                                    <DropdownMenuRadioGroup
+                                        value={urlState.sort}
+                                        onValueChange={(value) => {
+                                            if (value) {
+                                                onSortChange(
+                                                    value as WorkspaceSort,
+                                                )
+                                            }
+                                        }}
+                                    >
+                                        {SORT_OPTIONS.map((option) => (
+                                            <DropdownMenuRadioItem
+                                                key={option.value}
+                                                value={option.value}
+                                            >
+                                                {option.label}
+                                            </DropdownMenuRadioItem>
+                                        ))}
+                                    </DropdownMenuRadioGroup>
+                                </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </InputGroupAddon>
+                ) : null}
             </InputGroup>
         </form>
     )

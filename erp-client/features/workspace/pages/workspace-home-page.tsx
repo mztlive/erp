@@ -58,6 +58,7 @@ export function WorkspaceHomePage() {
         onFamilyChange,
         onSortChange,
         applySearch,
+        clearSearch,
         refresh,
     } = useWorkspaceHome()
 
@@ -140,29 +141,50 @@ export function WorkspaceHomePage() {
     const metrics = view.metrics.filter((metric) => metric.visible)
     const items = view.items
     const startedView = urlState.view === "started"
-    const hasEffectiveFilter = !startedView && hasActiveFilter
-    const emptyTitle = startedView
-        ? "还没有我发起的审批"
-        : hasEffectiveFilter
-          ? "当前筛选没有待办"
-          : "当前没有待处理事项"
-    const emptyDescription = startedView
-        ? "你发起的审批会在这里持续显示当前节点、审批人和处理状态。"
-        : hasEffectiveFilter
-          ? "可清除筛选后回到待我处理。"
-          : "新任务到达后会出现在这里。"
-    const emptyAction = hasEffectiveFilter ? (
+    const startedHasQuery = startedView && Boolean(urlState.query)
+    const hasEffectiveFilter =
+        startedHasQuery || (!startedView && hasActiveFilter)
+    const emptyTitle = startedHasQuery
+        ? "没有匹配的审批"
+        : startedView
+          ? "还没有我发起的审批"
+          : hasEffectiveFilter
+            ? "当前筛选没有待办"
+            : "当前没有待处理事项"
+    const emptyDescription = startedHasQuery
+        ? "可清除关键词后查看全部我发起的审批。"
+        : startedView
+          ? "你发起的审批会在这里持续显示当前节点、审批人和处理状态。"
+          : hasEffectiveFilter
+            ? "可清除筛选后回到待我处理。"
+            : "新任务到达后会出现在这里。"
+    const emptyAction = startedHasQuery ? (
+        <Button type="button" variant="secondary" onClick={clearSearch}>
+            清除搜索
+        </Button>
+    ) : hasEffectiveFilter ? (
         <Button type="button" variant="secondary" onClick={clearFilters}>
             回到待我处理
         </Button>
     ) : undefined
 
     const queueToolbar = startedView ? (
-        <div className="flex items-baseline justify-between gap-3 py-1">
-            <h2 className="text-sm font-medium">我发起的审批</h2>
-            <span className="text-xs text-muted-foreground">
-                {view.total.toLocaleString("zh-CN")} 条
-            </span>
+        <div className="flex flex-col gap-2">
+            <div className="flex items-baseline justify-between gap-3 py-1">
+                <h2 className="text-sm font-medium">我发起的审批</h2>
+                <span className="text-xs text-muted-foreground">
+                    {view.total.toLocaleString("zh-CN")} 条
+                </span>
+            </div>
+            <WorkspaceQueueToolbar
+                urlState={urlState}
+                searchDraft={searchDraft}
+                onSearchDraftChange={setSearchDraft}
+                onSortChange={onSortChange}
+                onSearch={applySearch}
+                showSort={false}
+                searchAriaLabel="搜索我发起的审批"
+            />
         </div>
     ) : (
         <>

@@ -46,7 +46,7 @@ info:
       处理器、业务动作、下一节点、驳回目标、下一审批人、源定义 ID 和 actor 一律拒绝。
     - 全部乐观锁版本均为十进制正整数字符串，禁止向浏览器暴露 JS 不安全整数。
     - 变更请求必须携带幂等键。同键同 canonical payload 且仍有权时返回 2xx 最新摘要，不得描述为原请求时刻快照。
-    - 列表只接受固定 `view`、可选 `document_type`/`status`、编码当前 view 两个排序字段的 `cursor` 和页上限。
+    - 列表只接受固定 `view`、可选 `document_type`/`status`/`q`、编码当前 view 两个排序字段的 `cursor` 和页上限。
     - 403/404 不得附带可推断资源存在性或内部版本的 `data`。409 必须带稳定码、`correlation_id` 和调用者有权查看的最新版本。
     - `APPROVAL_POLICY_NOT_REGISTERED` 只允许映射为 500 并触发 readiness 失败，不得映射为 4xx。
 servers:
@@ -385,9 +385,11 @@ paths:
       description: |
         动作级权限 `approval_instance:read`。只允许：
         `view=mine|started|managed|blocked`、可选 `document_type`、可选 `status`、
+        可选 `q`（单据编号、对象 ID、当前节点或当前审批人的字面量包含匹配，最长 128）、
         `cursor` 和 `limit`（默认 20，最大 100）。
         `mine` 只接受省略 `status` 或 `status=RUNNING`；`blocked` 只接受省略 `status` 或 `status=BLOCKED`。
         其他组合必须 422，不得返回伪空列表。不得接受任意排序、任意 owner ID 或 `all=true`。
+        `q` 按字面量检索，不得当作正则执行。
         cursor 必须编码当前 view 名称及该 view 的两个排序字段，跨 view 使用必须拒绝。
         排序固定为：
         `mine`=`assigned_at desc, work_item_id desc`；
@@ -409,6 +411,12 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/InstanceStatus'
+        - name: q
+          in: query
+          description: 按单据编号、对象 ID、当前节点名或当前审批人做字面量包含匹配。
+          schema:
+            type: string
+            maxLength: 128
         - $ref: '#/components/parameters/Cursor'
         - name: limit
           in: query

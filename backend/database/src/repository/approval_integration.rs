@@ -70,6 +70,39 @@ impl<'a> Repository<'a, ApprovalSubjectSnapshot> {
         )
         .await
     }
+
+    /// 按单据编号字面量检索快照，返回关联的审批实例主键。
+    ///
+    /// # 参数
+    /// * `query` - 已规范化的检索串
+    /// * `submitted_by` - 可选提交人；`Started` 视图传入当前用户以收窄扫描
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回单据编号包含检索串的实例 ID；检索串为空时返回空列表。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 检索按字面量转义，不得把调用方输入当正则执行。单据编号只存在于快照，不得在实例集合猜测该字段。
+    pub async fn find_instance_ids_matching_document_query(
+        &self,
+        query: &str,
+        submitted_by: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let snapshots = self
+            .find_many(snapshot_document_query_filter(query, submitted_by), executor)
+            .await?;
+        Ok(snapshots
+            .into_iter()
+            .map(|snapshot| snapshot.approval_process_instance_id.as_ref().to_string())
+            .collect())
+    }
 }
 
 impl<'a> Repository<'a, ApprovalNotificationOutbox> {
@@ -239,6 +272,31 @@ fn snapshot_by_process_instances_filter(approval_process_instance_ids: &[String]
     }
 }
 
+/// 构造快照单据编号字面量检索。
+///
+/// # 参数
+/// * `query` - 检索串
+/// * `submitted_by` - 可选提交人等值条件
+///
+/// # 返回
+/// 返回 `payload.document_no` 的忽略大小写字面量正则，以及可选的 `payload.submitted_by`。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 必须转义正则元字符，调用方输入不得改变匹配语义。
+fn snapshot_document_query_filter(query: &str, submitted_by: Option<&str>) -> Document {
+    let literal = regex::escape(query.trim());
+    let mut document = doc! {
+        "payload.document_no": { "$regex": literal, "$options": "i" },
+    };
+    if let Some(submitted_by) = submitted_by.filter(|value| !value.is_empty()) {
+        document.insert("payload.submitted_by", submitted_by);
+    }
+    document
+}
+
 fn outbox_lease_filter(now: Instant) -> Document {
     let now = now.unix_secs();
     doc! {
@@ -374,7 +432,7 @@ mod tests {
     use super::{
         clamp_outbox_limit, dead_letter_outbox_pipeline, lease_owner_filter, lease_take_pipeline,
         lease_take_sort, mark_outbox_delivered_pipeline, outbox_lease_filter, reschedule_outbox_pipeline,
-        snapshot_by_process_instances_filter, MAX_OUTBOX_BATCH,
+        snapshot_by_process_instances_filter, snapshot_document_query_filter, MAX_OUTBOX_BATCH,
     };
     use entities::approval_integration::ApprovalNotificationDeliveryStatus;
     use entities::common::time::Instant;
@@ -392,6 +450,19 @@ mod tests {
                 }
             }
         );
+    }
+
+    /// 单据编号检索转义正则，并可按提交人收窄。
+    #[test]
+    fn snapshot_document_query_is_literal_and_can_scope_submitter() {
+        let filter = snapshot_document_query_filter("SO.[1]", Some("starter"));
+        assert_eq!(
+            filter.get_document("payload.document_no").unwrap(),
+            &doc! { "$regex": r"SO\.\[1\]", "$options": "i" }
+        );
+        assert_eq!(filter.get_str("payload.submitted_by").unwrap(), "starter");
+        let open = snapshot_document_query_filter("SO-1", None);
+        assert!(!open.contains_key("payload.submitted_by"));
     }
 
     #[test]

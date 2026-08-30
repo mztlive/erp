@@ -114,6 +114,7 @@ pub async fn instance_list(
                 status: normalized.status.map(map_status_filter),
                 cursor,
                 limit: normalized.limit,
+                query: normalized.query,
             },
         )
         .await

@@ -10,7 +10,7 @@ use bpm::model::types::{ApprovalCommandKind, ApprovalDecision, ModelError};
 use bpm::model::{ParticipantId, Timestamp};
 use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
-    ApprovalInstanceSummary,
+    ApprovalInstanceSummary, ApprovalInstanceTextQuery,
 };
 use database::{
     AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional,
@@ -69,6 +69,8 @@ pub struct RuntimeInstanceListQuery {
     pub cursor: Option<RuntimeInstanceListCursor>,
     /// 页大小。
     pub limit: u32,
+    /// 可选字面量检索；空表示不按关键词过滤。
+    pub query: Option<String>,
 }
 
 /// 实例列表稳定游标。
@@ -756,12 +758,27 @@ impl ApprovalRuntimeService {
         })
     }
 
+    /// 查询本人发起或管理范围内的审批实例。
+    ///
+    /// # 参数
+    /// * `actor` - 当前已认证账号
+    /// * `query` - 已规范化查询，可含字面量检索
+    ///
+    /// # 返回
+    /// 返回仓储过滤后的实例页；检索命中单据编号时先查快照再回填实例 ID。
+    ///
+    /// # 错误
+    /// 单据类型未登记或仓储失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 检索必须在 MongoDB 内施加。不得先取当前页再内存过滤。
     async fn list_managed_or_started(
         &self,
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        let mut filter = instance_list_filter(actor, query)?;
+        let snapshot_instance_ids = self.snapshot_instance_ids_for_list_query(actor, query).await?;
+        let mut filter = instance_list_filter(actor, query, snapshot_instance_ids)?;
         let total = self
             .db
             .bpm_workflow()
@@ -786,6 +803,39 @@ impl ApprovalRuntimeService {
             total,
             next_cursor,
         })
+    }
+
+    /// 按单据编号检索快照，得到可并入实例列表 `$or` 的实例主键。
+    ///
+    /// # 参数
+    /// * `actor` - 当前账号；`Started` 视图用其收窄快照扫描
+    /// * `query` - 已规范化列表查询
+    ///
+    /// # 返回
+    /// 无检索串时返回空列表；否则返回单据编号命中的实例 ID。
+    ///
+    /// # 错误
+    /// 快照仓储查询失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 不得把检索串当正则执行。`Started` 必须带提交人，避免对全库快照做编号扫描。
+    async fn snapshot_instance_ids_for_list_query(
+        &self,
+        actor: &AuditActor,
+        query: &RuntimeInstanceListQuery,
+    ) -> Result<Vec<String>> {
+        let Some(text) = query.query.as_deref() else {
+            return Ok(Vec::new());
+        };
+        Ok(self
+            .db
+            .approval_subject_snapshots()
+            .find_instance_ids_matching_document_query(
+                text,
+                (query.view == RuntimeInstanceListView::Started).then_some(actor.id()),
+                &mut NoTransaction,
+            )
+            .await?)
     }
 
     /// 用不可变业务快照批量补齐列表单号，禁止逐实例查询。
@@ -922,9 +972,24 @@ fn parse_document_type(code: &str) -> Result<DocumentType> {
 }
 
 /// 构造实例列表的授权过滤与稳定游标。
+///
+/// # 参数
+/// * `actor` - 当前账号
+/// * `query` - 已规范化列表查询
+/// * `snapshot_instance_ids` - 单据编号命中的实例主键
+///
+/// # 返回
+/// 返回仓储过滤条件；无检索串时 `text_query` 为空。
+///
+/// # 错误
+/// 单据类型未登记时返回校验错误。
+///
+/// # 关键业务约束
+/// `Started` 必须带 `started_by`。检索在仓储内施加，不得先分页再内存过滤。
 fn instance_list_filter(
     actor: &AuditActor,
     query: &RuntimeInstanceListQuery,
+    snapshot_instance_ids: Vec<String>,
 ) -> Result<ApprovalInstanceListFilter> {
     let view = match query.view {
         RuntimeInstanceListView::Started => ApprovalInstanceListView::Started,
@@ -944,6 +1009,10 @@ fn instance_list_filter(
         started_by: (query.view == RuntimeInstanceListView::Started).then(|| actor.id().to_string()),
         subject_kind: None,
         subject_ids: None,
+        text_query: query.query.as_ref().map(|text| ApprovalInstanceTextQuery {
+            query: text.clone(),
+            snapshot_instance_ids,
+        }),
         cursor: query
             .cursor
             .as_ref()

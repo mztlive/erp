@@ -317,17 +317,30 @@ export async function fetchWorkspaceDashboard(
             ? "inbox"
             : query.view
 
-    const startedPagePromise: Promise<ApprovalInstanceListPage> = canReadStarted
-        ? listApprovalInstances({
-              view: "started",
-              cursor: view === "started" ? query.cursor : undefined,
-              limit: view === "started" ? 20 : 1,
-          })
-        : Promise.resolve({ items: [], total: 0 })
+    const startedMetricPromise: Promise<ApprovalInstanceListPage> =
+        canReadStarted
+            ? listApprovalInstances({
+                  view: "started",
+                  cursor:
+                      view === "started" && !query.query
+                          ? query.cursor
+                          : undefined,
+                  limit: view === "started" && !query.query ? 20 : 1,
+              })
+            : Promise.resolve({ items: [], total: 0 })
+    const startedListPromise: Promise<ApprovalInstanceListPage> =
+        canReadStarted && view === "started" && query.query
+            ? listApprovalInstances({
+                  view: "started",
+                  cursor: query.cursor,
+                  limit: 20,
+                  query: query.query,
+              })
+            : startedMetricPromise
 
     const [page, stats, startedPage] = await Promise.all([
         view === "started"
-            ? startedPagePromise.then((result) => ({
+            ? startedListPromise.then((result) => ({
                   items: [] as WorkItemDto[],
                   startedItems: result.items,
                   total: result.total ?? result.items.length,
@@ -359,7 +372,7 @@ export async function fetchWorkspaceDashboard(
             blocked: query.blocked,
             timezone: query.timezone,
         }),
-        startedPagePromise,
+        startedMetricPromise,
     ])
 
     const items =

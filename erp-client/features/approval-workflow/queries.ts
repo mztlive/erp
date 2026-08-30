@@ -83,6 +83,7 @@ export const useApprovalInstancesQuery = (
             view: params.view,
             documentType: params.documentType,
             status: params.status,
+            query: params.query,
             limit: params.limit,
         }),
         queryFn: () => listApprovalInstances(params),

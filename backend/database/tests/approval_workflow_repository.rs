@@ -1304,6 +1304,7 @@ async fn execution_history_is_bounded_and_has_no_n_plus_one() {
                     started_by: Some("starter".to_string()),
                     subject_kind: None,
                     subject_ids: None,
+                    text_query: None,
                     cursor: None,
                     limit: 20,
                 },

@@ -207,6 +207,15 @@ export function useWorkspaceHome() {
         })
     }, [replaceUrl, searchDraft, urlState])
 
+    const clearSearch = React.useCallback(() => {
+        setSearchDraft("")
+        replaceUrl({
+            ...urlState,
+            query: undefined,
+            currentWorkItemId: undefined,
+        })
+    }, [replaceUrl, urlState])
+
     const refresh = React.useCallback(() => {
         void accountProfileQuery.refetch().then((profileResult) => {
             if (profileResult.isSuccess) void dashboardQuery.refetch()
@@ -241,6 +250,7 @@ export function useWorkspaceHome() {
         onFamilyChange,
         onSortChange,
         applySearch,
+        clearSearch,
         refresh,
     }
 }

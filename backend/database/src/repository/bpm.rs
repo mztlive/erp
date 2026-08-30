@@ -99,10 +99,21 @@ pub struct ApprovalInstanceListFilter {
     pub subject_kind: Option<String>,
     /// 授权范围内的对象主键；`Some(空)` 表示无可见对象。
     pub subject_ids: Option<Vec<String>>,
+    /// 字面量检索；空表示不按关键词过滤。
+    pub text_query: Option<ApprovalInstanceTextQuery>,
     /// 稳定游标；首页为空。
     pub cursor: Option<ApprovalInstanceListCursor>,
     /// 请求页大小，仓储会施加上限。
     pub limit: u32,
+}
+
+/// 实例列表字面量检索。仓储在 MongoDB 内施加，不得在内存过滤当前页。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovalInstanceTextQuery {
+    /// 调用方已规范化的检索串，仓储再转义为字面量正则。
+    pub query: String,
+    /// 快照中单据编号命中的实例主键；空表示编号未命中，仍可匹配对象 ID 与审批人。
+    pub snapshot_instance_ids: Vec<String>,
 }
 
 /// 运行事务写入的有界列表投影。
@@ -1420,6 +1431,19 @@ fn started_by_present(filter: &ApprovalInstanceListFilter) -> bool {
         .is_some_and(|started_by| !started_by.is_empty())
 }
 
+/// 把列表过滤条件编译为 MongoDB 文档。
+///
+/// # 参数
+/// * `filter` - Service 已计算的视图、启动人、对象范围、游标与字面量检索
+///
+/// # 返回
+/// 返回可直接交给 `find` / `count_documents` 的过滤文档。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 字面量检索与游标都使用 `$or` 时必须用 `$and` 组合，不得互相覆盖。
 fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> Document {
     let mut document = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(process_kind) = filter.process_kind {
@@ -1435,10 +1459,72 @@ fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> Document {
     if let Some(subject_ids) = &filter.subject_ids {
         document.insert("subject.subject_id", doc! { "$in": subject_ids.clone() });
     }
-    if let Some(cursor) = &filter.cursor {
-        document.insert("$or", instance_cursor_or(filter.view, cursor));
-    }
+    insert_list_disjunctions(&mut document, filter);
     document
+}
+
+/// 把游标与字面量检索的 `$or` 组合成互不覆盖的过滤条件。
+///
+/// # 参数
+/// * `document` - 已写入等值条件的过滤文档
+/// * `filter` - 列表过滤条件
+///
+/// # 返回
+/// 无；就地写入 `$or` 或 `$and`。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 顶层只能有一个 `$or`。游标与检索同时存在时必须用 `$and` 连接两组 `$or`，不得互相覆盖。
+fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceListFilter) {
+    let mut groups = Vec::new();
+    if let Some(cursor) = &filter.cursor {
+        groups.push(doc! { "$or": instance_cursor_or(filter.view, cursor) });
+    }
+    if let Some(text_query) = &filter.text_query {
+        groups.push(doc! { "$or": instance_text_query_or(text_query) });
+    }
+    match groups.len() {
+        0 => {}
+        1 => {
+            if let Some(or) = groups[0].get("$or").cloned() {
+                document.insert("$or", or);
+            }
+        }
+        _ => {
+            document.insert("$and", groups);
+        }
+    }
+}
+
+/// 构造字面量检索的 `$or` 分支。
+///
+/// # 参数
+/// * `text_query` - 检索串与快照命中的实例主键
+///
+/// # 返回
+/// 对象 ID、当前节点名、当前审批人和快照编号命中的实例 ID。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 检索串按字面量转义，调用方不得传入正则。快照编号不在实例文档上，必须经 `snapshot_instance_ids` 回查。
+fn instance_text_query_or(text_query: &ApprovalInstanceTextQuery) -> Vec<Document> {
+    let literal = regex::escape(text_query.query.trim());
+    let regex = doc! { "$regex": &literal, "$options": "i" };
+    let mut alternatives = vec![
+        doc! { "subject.subject_id": regex.clone() },
+        doc! { "current_assignee_name": regex.clone() },
+        doc! { "current_node_name": regex },
+    ];
+    if !text_query.snapshot_instance_ids.is_empty() {
+        alternatives.push(doc! {
+            "id": { "$in": text_query.snapshot_instance_ids.clone() }
+        });
+    }
+    alternatives
 }
 
 fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceListFilter) {
@@ -1642,10 +1728,11 @@ mod tests {
         definition_child_filter, definition_graph_transition_limit, execution_end_filter,
         execution_history_filter, execution_history_limit, instance_advance_filter, instance_insert_document,
         instance_list_filter_doc, instance_list_scope_empty, instance_list_sort, instance_summary_projection,
-        latest_subject_filter, merge_documents, non_terminal_subject_filter, previous_version,
-        receipt_key_filter, require_cas_applied, ApprovalInstanceListCursor, ApprovalInstanceListFilter,
-        ApprovalInstanceListProjection, ApprovalInstanceListView, AssignDocumentNoOutcome, CasWriteOutcome,
-        MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
+        instance_text_query_or, latest_subject_filter, merge_documents, non_terminal_subject_filter,
+        previous_version, receipt_key_filter, require_cas_applied, ApprovalInstanceListCursor,
+        ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
+        ApprovalInstanceTextQuery, AssignDocumentNoOutcome, CasWriteOutcome, MAX_DEFINITION_GRAPH_DOCS,
+        MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
     };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
@@ -1919,6 +2006,7 @@ mod tests {
             started_by: None,
             subject_kind: Some("stock_adjustment".into()),
             subject_ids: Some(vec!["adj-1".into()]),
+            text_query: None,
             cursor: Some(ApprovalInstanceListCursor {
                 sort_time: 10,
                 id: "inst-9".into(),
@@ -1947,6 +2035,7 @@ mod tests {
             started_by: Some("u1".into()),
             subject_kind: None,
             subject_ids: None,
+            text_query: None,
             cursor: Some(ApprovalInstanceListCursor {
                 sort_time: 20,
                 id: "inst-2".into(),
@@ -1972,6 +2061,7 @@ mod tests {
             started_by: None,
             subject_kind: None,
             subject_ids: None,
+            text_query: None,
             cursor: Some(ApprovalInstanceListCursor {
                 sort_time: 8,
                 id: "inst-3".into(),
@@ -1999,6 +2089,7 @@ mod tests {
             started_by: None,
             subject_kind: None,
             subject_ids: None,
+            text_query: None,
             cursor: Some(ApprovalInstanceListCursor {
                 sort_time: 4,
                 id: "inst-4".into(),
@@ -2023,6 +2114,7 @@ mod tests {
             started_by: None,
             subject_kind: None,
             subject_ids: Some(Vec::new()),
+            text_query: None,
             cursor: None,
             limit: 20,
         };
@@ -2048,6 +2140,7 @@ mod tests {
             started_by: None,
             subject_kind: None,
             subject_ids: None,
+            text_query: None,
             cursor: None,
             limit: 20,
         };
@@ -2066,6 +2159,7 @@ mod tests {
             started_by: Some("u1".into()),
             subject_kind: None,
             subject_ids: None,
+            text_query: None,
             cursor: None,
             limit: 20,
         };
@@ -2086,6 +2180,7 @@ mod tests {
             started_by: Some("u1".into()),
             subject_kind: None,
             subject_ids: None,
+            text_query: None,
             cursor: None,
             limit: 20,
         };
@@ -2098,6 +2193,55 @@ mod tests {
             instance_list_sort(&status_only),
             doc! { "started_at": -1, "id": -1 }
         );
+    }
+
+    /// 字面量检索转义正则，并与游标 `$or` 用 `$and` 组合。
+    #[test]
+    fn instance_list_text_query_is_literal_and_composes_with_cursor() {
+        let text_query = ApprovalInstanceTextQuery {
+            query: "SO.[1]".to_string(),
+            snapshot_instance_ids: vec!["inst-a".into()],
+        };
+        let alternatives = instance_text_query_or(&text_query);
+        assert_eq!(alternatives.len(), 4);
+        let regex = alternatives[0]
+            .get_document("subject.subject_id")
+            .unwrap()
+            .get_str("$regex")
+            .unwrap();
+        assert_eq!(regex, r"SO\.\[1\]");
+        assert_eq!(alternatives[3], doc! { "id": { "$in": ["inst-a"] } });
+
+        let with_cursor = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Started,
+            process_kind: None,
+            status: None,
+            started_by: Some("u1".into()),
+            subject_kind: None,
+            subject_ids: None,
+            text_query: Some(text_query.clone()),
+            cursor: Some(ApprovalInstanceListCursor {
+                sort_time: 20,
+                id: "inst-2".into(),
+            }),
+            limit: 20,
+        };
+        let document = instance_list_filter_doc(&with_cursor);
+        let and = document.get_array("$and").unwrap();
+        assert_eq!(and.len(), 2);
+        assert!(and[0].as_document().unwrap().contains_key("$or"));
+        assert!(and[1].as_document().unwrap().contains_key("$or"));
+        assert_eq!(document.get_str("started_by").unwrap(), "u1");
+        assert!(!document.contains_key("$or"));
+
+        let query_only = ApprovalInstanceListFilter {
+            cursor: None,
+            ..with_cursor
+        };
+        let query_doc = instance_list_filter_doc(&query_only);
+        assert!(query_doc.contains_key("$or"));
+        assert!(!query_doc.contains_key("$and"));
+        assert_eq!(query_doc.get_array("$or").unwrap().len(), 4);
     }
 
     #[test]
