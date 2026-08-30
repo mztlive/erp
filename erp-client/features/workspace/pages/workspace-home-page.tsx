@@ -194,8 +194,8 @@ export function WorkspaceHomePage() {
         <div className="flex flex-1 items-center justify-center p-8">
             <BusinessEmptyState
                 kind="no-tasks"
-                title="选择一条待办开始处理"
-                description="从左侧队列选中任务后，可在此核对并提交决定。"
+                title="在此处理任务"
+                description="选中左侧待办后，可在此核对并提交决定。"
                 className="bg-transparent ring-0"
             />
         </div>
@@ -254,29 +254,18 @@ export function WorkspaceHomePage() {
                 )}
             >
                 <section
-                    className={cn(
-                        "flex min-h-0 flex-col",
-                        items.length === 0
-                            ? "flex-1 p-3"
-                            : "w-full lg:w-80 lg:shrink-0 xl:w-96",
-                    )}
+                    data-slot="workspace-queue"
+                    className="flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0 xl:w-96"
                     aria-label={filterLabel}
                 >
-                    <header
-                        className={cn(
-                            "flex flex-col gap-2",
-                            items.length === 0
-                                ? "max-w-xl pb-3"
-                                : "border-b border-grid px-3 pt-3 pb-3",
-                        )}
-                    >
+                    <header className="flex flex-col gap-2 border-b border-grid px-3 pt-3 pb-3">
                         <p className="sr-only" aria-live="polite">
                             {filterLabel} {view.total} 项
                         </p>
                         {queueToolbar}
                     </header>
                     {items.length === 0 ? (
-                        <div className="flex flex-1 items-center justify-center p-6">
+                        <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-8">
                             <BusinessEmptyState
                                 kind={
                                     hasEffectiveFilter ? "filter" : "no-tasks"
@@ -284,7 +273,7 @@ export function WorkspaceHomePage() {
                                 title={emptyTitle}
                                 description={emptyDescription}
                                 action={emptyAction}
-                                className="bg-transparent ring-0"
+                                className="bg-transparent p-0 ring-0"
                             />
                         </div>
                     ) : (
@@ -295,17 +284,14 @@ export function WorkspaceHomePage() {
                         />
                     )}
                 </section>
-                {items.length > 0 ? (
-                    <>
-                        <Separator
-                            orientation="vertical"
-                            className="hidden lg:block"
-                        />
-                        <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:p-5">
-                            {detail}
-                        </div>
-                    </>
-                ) : null}
+                <Separator orientation="vertical" className="hidden lg:block" />
+                <section
+                    data-slot="workspace-detail"
+                    aria-label="任务处理"
+                    className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:p-5"
+                >
+                    {detail}
+                </section>
             </div>
 
             <Sheet
