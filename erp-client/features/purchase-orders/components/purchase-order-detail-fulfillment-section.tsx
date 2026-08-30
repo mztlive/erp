@@ -14,7 +14,7 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import { Button } from "@/components/ui/button"
-import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
+import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 

@@ -1,13 +1,9 @@
-import {
-    CartesianGrid,
-    Legend,
-    Line,
-    LineChart,
-    XAxis,
-    YAxis,
-} from "recharts"
+import { CartesianGrid, Legend, Line, LineChart, XAxis, YAxis } from "recharts"
 
-import { BusinessEmptyState, surfacePanelClassName } from "@/components/business"
+import {
+    BusinessEmptyState,
+    surfacePanelClassName,
+} from "@/components/business"
 import {
     Card,
     CardContent,
@@ -40,9 +36,12 @@ export function ContributionChart({
     points,
     canViewProfit,
 }: ContributionChartProps) {
+    // fixed-decimal-display-boundary: Recharts coordinates require number.
     const contributionChartData = points.map((point) => ({
         period: point.period,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         contribution: Number(point.contributionNet) / 10000,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         margin: Number(point.marginNet) / 10000,
         coverage: point.coveragePercent,
         contributionLabel: formatMoneyDisplay(point.contributionNet),
@@ -130,28 +129,16 @@ export function ContributionChart({
                                 </caption>
                                 <thead>
                                     <tr className="border-b text-muted-foreground">
-                                        <th
-                                            scope="col"
-                                            className="py-1 pr-2"
-                                        >
+                                        <th scope="col" className="py-1 pr-2">
                                             周
                                         </th>
-                                        <th
-                                            scope="col"
-                                            className="py-1 pr-2"
-                                        >
+                                        <th scope="col" className="py-1 pr-2">
                                             经营贡献(不含税)
                                         </th>
-                                        <th
-                                            scope="col"
-                                            className="py-1 pr-2"
-                                        >
+                                        <th scope="col" className="py-1 pr-2">
                                             消费毛差(不含税)
                                         </th>
-                                        <th
-                                            scope="col"
-                                            className="py-1"
-                                        >
+                                        <th scope="col" className="py-1">
                                             覆盖率
                                         </th>
                                     </tr>

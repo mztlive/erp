@@ -19,6 +19,7 @@ import type {
     SalesOrderOrigin,
     SalesOrderRevisionSnapshot,
 } from "@/features/sales-orders/types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { deriveVoucherGiftPreview } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { ApiError } from "@/lib/api/errors"
 
@@ -114,12 +115,14 @@ export function mapProcurementProgress(
     const salesQuantity = coverage?.total_quantity ?? "0"
     const coveredQuantity = coverage?.covered_quantity ?? "0"
     const remainingQuantity = coverage?.remaining_quantity ?? "0"
-    const progress = Number(coverage?.progress ?? "0")
+    const progress = coverage?.progress ?? "0"
     const status =
-        Number(salesQuantity) > 0 &&
-        (Number(remainingQuantity) <= 0 || progress >= 1)
+        compareDecimal(salesQuantity, "0", 6) > 0 &&
+        (compareDecimal(remainingQuantity, "0", 6) <= 0 ||
+            compareDecimal(progress, "1", 6) >= 0)
             ? "covered"
-            : Number(coveredQuantity) > 0 || progress > 0
+            : compareDecimal(coveredQuantity, "0", 6) > 0 ||
+                compareDecimal(progress, "0", 6) > 0
               ? "partial"
               : "pending"
 

@@ -51,31 +51,14 @@ export async function fetchExecutionProjectionList(
         listQuery,
     )
 
-    const deliveryPage = await apiGet<Page<BackendDelivery>>(
-        "/admin/sales-order-projection-deliveries",
-        {
-            page: 1,
-            page_size: 100,
-            target_mall_id: query.mallId || undefined,
-        },
-    ).catch(() => ({
-        items: [] as BackendDelivery[],
-        total: 0,
-        page: 1,
-        page_size: 100,
-    }))
-
-    const rows: ExecutionProjectionRow[] = []
-    for (const proj of pageResult.items) {
-        const revisions = await apiGet<BackendRevision[]>(
-            `/admin/sales-order-projections/${encodeURIComponent(proj.id)}/revisions`,
-        ).catch(() => [] as BackendRevision[])
-        const latest = revisions[0]
-        const delivery = deliveryPage.items.find(
-            (d) => d.projection_revision_id === latest?.id,
-        )
-        rows.push(toRow(proj, latest, delivery, malls))
-    }
+    const rows: ExecutionProjectionRow[] = pageResult.items.map((projection) =>
+        toRow(
+            projection,
+            projection.latest_revision ?? undefined,
+            projection.latest_delivery ?? undefined,
+            malls,
+        ),
+    )
 
     let filtered = rows
     if (query.q?.trim()) {

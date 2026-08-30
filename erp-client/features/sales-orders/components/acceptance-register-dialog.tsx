@@ -23,7 +23,7 @@ import {
     formatOccurredAt,
     hasFilledException,
     isSinglePiece,
-    parseQty,
+    isPositiveQty,
     passQuantity,
     qtyWithUnit,
 } from "@/features/sales-orders/lib/acceptance-model"
@@ -136,7 +136,9 @@ export function AcceptanceRegisterDialog({
                                 {salesLines.map((line) => {
                                     const facts = line.fulfillmentFacts.filter(
                                         (fact) =>
-                                            parseQty(fact.eligibleQuantity) > 0,
+                                            isPositiveQty(
+                                                fact.eligibleQuantity,
+                                            ),
                                     )
                                     if (facts.length === 0) return null
                                     return (
@@ -252,8 +254,10 @@ function BatchRow({
         fact.fulfillmentFactType === "SERVICE"
             ? RESULT_OPTIONS
             : RESULT_OPTIONS.filter((option) => option !== "SERVICE_FAIL")
-    const passed = draft ? passQuantity(draft) : 0
-    const fullException = Boolean(draft && result !== "PASS" && passed <= 0)
+    const passed = draft ? passQuantity(draft) : "0"
+    const fullException = Boolean(
+        draft && result !== "PASS" && !isPositiveQty(passed),
+    )
     const showExceptionNotice = Boolean(draft && hasFilledException(draft))
 
     return (

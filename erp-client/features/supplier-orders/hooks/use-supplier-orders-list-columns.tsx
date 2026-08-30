@@ -34,16 +34,6 @@ export function useSupplierOrdersListColumns({
                 cell: ({ row }) => (
                     <div
                         className="flex min-w-0 flex-col gap-0.5"
-                        ref={(el) => {
-                            if (el)
-                                rowRefs.current.set(row.original.orderId, el)
-                            else rowRefs.current.delete(row.original.orderId)
-                        }}
-                        tabIndex={
-                            rows[focusedIndex]?.orderId === row.original.orderId
-                                ? 0
-                                : -1
-                        }
                         data-focused={
                             rows[focusedIndex]?.orderId === row.original.orderId
                                 ? "true"
@@ -56,6 +46,22 @@ export function useSupplierOrdersListColumns({
                             size="xs"
                             className="num h-auto justify-start px-0"
                             aria-label={`预览 ${row.original.orderNo}`}
+                            ref={(element) => {
+                                if (element) {
+                                    rowRefs.current.set(
+                                        row.original.orderId,
+                                        element,
+                                    )
+                                } else {
+                                    rowRefs.current.delete(row.original.orderId)
+                                }
+                            }}
+                            tabIndex={
+                                rows[focusedIndex]?.orderId ===
+                                row.original.orderId
+                                    ? 0
+                                    : -1
+                            }
                             onClick={() => onPreview(row.original.orderId)}
                         >
                             {row.original.orderNo}

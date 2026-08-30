@@ -11,7 +11,8 @@ use entities::{common::time::Instant, Permission};
 use services::audit::AuditActor;
 use services::customer::{
     assignment::CustomerAssignmentService, profile::CustomerProfileService, CreateCustomerRequest,
-    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView, CustomerDetailView,
+    CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
+    CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView, CustomerDetailView,
     CustomerListParams, CustomerProfileDetailView, CustomerProfileMutationView, CustomerScope,
     CustomerSensitiveRevealView, CustomerService, CustomerView, PageView, RevealCustomerSensitiveRequest,
     SaveCustomerProfileRequest, UpdateCustomerRequest,
@@ -137,6 +138,47 @@ pub async fn customer_profile_detail(
     if !can_view_tax {
         view.tax_profiles.clear();
     }
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "客户",
+    group_desc = "客户角色与归属管理",
+    desc = "查询客户中心合同与销售摘要",
+    resource = "customer",
+    action = "detail"
+)]
+/// 查询客户中心合同/销售最近摘要与跨页指标。
+pub async fn customer_center_related(
+    State(state): State<AppState>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(UserID(user_id)): Extension<UserID>,
+    Path(id): Path<String>,
+) -> Result<CustomerCenterRelatedView> {
+    ensure_customer_access(&state, &subject, &user_id, &id).await?;
+    ensure_permission(&state, &subject, "contract:list").await?;
+    ensure_permission(&state, &subject, "sales_order:list").await?;
+    let view = CustomerCenterReadService::new(state.db()).related(&id).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "客户",
+    group_desc = "客户角色与归属管理",
+    desc = "查询客户中心应收汇总",
+    resource = "customer",
+    action = "detail"
+)]
+/// 查询客户中心跨应收账户的定点金额汇总。
+pub async fn customer_center_receivable(
+    State(state): State<AppState>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(UserID(user_id)): Extension<UserID>,
+    Path(id): Path<String>,
+) -> Result<CustomerCenterReceivableView> {
+    ensure_customer_access(&state, &subject, &user_id, &id).await?;
+    ensure_permission(&state, &subject, "receivable_account:list").await?;
+    let view = CustomerCenterReadService::new(state.db()).receivable(&id).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

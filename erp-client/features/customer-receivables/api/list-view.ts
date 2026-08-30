@@ -1,6 +1,6 @@
 /** List view + detail view composition (client projection of server data). */
 
-import { apiGet } from "@/lib/api"
+import { apiGet, type Page } from "@/lib/api"
 
 import type {
     CustomerAccountsDetailView,
@@ -77,13 +77,25 @@ void emptyView
 export async function fetchCustomerAccountsList(
     query: CustomerAccountsQuery,
 ): Promise<CustomerAccountsListView> {
+    const emptyPage = {
+        items: [],
+        total: 0,
+        page: query.page,
+        page_size: query.pageSize,
+    }
     const [recvPage, rcptPage, invPage] = await Promise.all([
-        loadReceivables(query),
-        loadReceipts(query),
-        loadSalesInvoices(query),
+        query.view === "receivable"
+            ? loadReceivables(query)
+            : Promise.resolve(emptyPage as Page<BackendReceivableAccount>),
+        query.view === "receipt" || query.view === "unallocated"
+            ? loadReceipts(query)
+            : Promise.resolve(emptyPage as Page<BackendCustomerReceipt>),
+        query.view === "sales_invoice" || query.view === "unallocated"
+            ? loadSalesInvoices(query)
+            : Promise.resolve(emptyPage as Page<BackendInvoice>),
     ])
 
-    let receivables = (recvPage.items ?? []).map(projectReceivable)
+    const receivables = (recvPage.items ?? []).map(projectReceivable)
     const partyDisplay = new Map(
         receivables.map((row) => [
             row.counterpartyPartyId,
@@ -93,53 +105,17 @@ export async function fetchCustomerAccountsList(
             },
         ]),
     )
-    let receipts = (rcptPage.items ?? []).map((receipt) =>
+    const receipts = (rcptPage.items ?? []).map((receipt) =>
         projectReceipt(
             receipt,
             partyDisplay.get(receipt.counterparty_party_id),
         ),
     )
-    let invoices = (invPage.items ?? [])
+    const invoices = (invPage.items ?? [])
         .filter((i) => i.invoice_direction === "sales" || !i.invoice_direction)
         .map((invoice) =>
             projectInvoice(invoice, partyDisplay.get(invoice.party_id)),
         )
-
-    if (query.receivableAccountId) {
-        receivables = receivables.filter(
-            (r) => r.accountId === query.receivableAccountId,
-        )
-    }
-    if (query.q?.trim()) {
-        const q = query.q.trim().toLowerCase()
-        if (query.view === "receivable" || query.view === "unallocated") {
-            receivables = receivables.filter(
-                (r) =>
-                    r.accountId.toLowerCase().includes(q) ||
-                    r.salesOrderId.toLowerCase().includes(q) ||
-                    r.customerId.toLowerCase().includes(q) ||
-                    r.counterpartyPartyId.toLowerCase().includes(q),
-            )
-        }
-    }
-
-    if (query.salesOrderId || query.receivableAccountId) {
-        const targetIds = new Set<string>()
-        for (const account of receivables) {
-            targetIds.add(account.accountId)
-            for (const entry of account.entries) targetIds.add(entry.entryId)
-        }
-        const belongsToCurrentOrder = (
-            allocations: readonly { targetId: string }[],
-        ) =>
-            allocations.some((allocation) => targetIds.has(allocation.targetId))
-        receipts = receipts.filter((receipt) =>
-            belongsToCurrentOrder(receipt.allocations),
-        )
-        invoices = invoices.filter((invoice) =>
-            belongsToCurrentOrder(invoice.allocations),
-        )
-    }
 
     // due filter: backend gap — cannot filter overdue without due_state
     const unallocatedReceipts = receipts.filter(
@@ -158,20 +134,13 @@ export async function fetchCustomerAccountsList(
             i.unallocatedAmount !== "0.00",
     )
 
-    const orderScoped = Boolean(query.salesOrderId || query.receivableAccountId)
     let total = 0
     if (query.view === "receivable") {
-        total = orderScoped
-            ? receivables.length
-            : (recvPage.total ?? receivables.length)
+        total = recvPage.total ?? receivables.length
     } else if (query.view === "receipt") {
-        total = orderScoped
-            ? receipts.length
-            : (rcptPage.total ?? receipts.length)
+        total = rcptPage.total ?? receipts.length
     } else if (query.view === "sales_invoice") {
-        total = orderScoped
-            ? invoices.length
-            : (invPage.total ?? invoices.length)
+        total = invPage.total ?? invoices.length
     } else {
         total = unallocatedReceipts.length + unallocatedInvoices.length
     }

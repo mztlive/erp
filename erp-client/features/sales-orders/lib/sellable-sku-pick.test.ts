@@ -42,7 +42,7 @@ function row(overrides: Partial<MasterDataListItem> = {}): MasterDataListItem {
     }
 }
 
-describe("sellableItemToPick", () => {
+describe("sales-order sellableItemToPick", () => {
     it("maps the stable SKU identity and sales fields", () => {
         expect(sellableItemToPick(row())).toEqual({
             skuId: "sku-1",

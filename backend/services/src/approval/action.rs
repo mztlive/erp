@@ -4,6 +4,7 @@ use std::{future::Future, pin::Pin};
 
 use database::Executor;
 
+use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 use super::policy::ApprovalDomainAction;
@@ -47,6 +48,7 @@ pub trait ApprovalDomainActionPort: Send + Sync {
         &'a self,
         action: ApprovalDomainAction,
         context: &'a ApprovalActionContext,
+        actor: &'a AuditActor,
         executor: &'a mut dyn Executor,
     ) -> ApprovalActionFuture<'a>;
 }
@@ -60,6 +62,7 @@ impl ApprovalDomainActionPort for FailClosedApprovalActionPort {
         &'a self,
         action: ApprovalDomainAction,
         _context: &'a ApprovalActionContext,
+        _actor: &'a AuditActor,
         _executor: &'a mut dyn Executor,
     ) -> ApprovalActionFuture<'a> {
         Box::pin(async move {
@@ -74,6 +77,7 @@ impl ApprovalDomainActionPort for FailClosedApprovalActionPort {
 #[cfg(test)]
 mod tests {
     use database::NoTransaction;
+    use entities::AccountKind;
 
     use super::*;
 
@@ -94,6 +98,7 @@ mod tests {
             .execute(
                 ApprovalDomainAction::StockAdjustmentSubmit,
                 &context,
+                &AuditActor::new("user-1".to_string(), "tester".to_string(), AccountKind::Admin),
                 &mut NoTransaction,
             )
             .await

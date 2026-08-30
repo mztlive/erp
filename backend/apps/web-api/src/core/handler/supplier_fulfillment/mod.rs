@@ -2,9 +2,7 @@
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::supplier_fulfillment` 的 DTO，禁止重复定义同构类型、
-//! 禁止直连数据库。未注入受控生产 Connector 时固定失败关闭，不得伪造外部成功。
-
-use std::sync::Arc;
+//! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
 use axum::{
     extract::{Path, Query, State},
@@ -16,10 +14,9 @@ use services::{
         PageView, PlaceFulfillmentOrderRequest, RecordRefundResultRequest, RecordSupplierRejectRequest,
         SubmitActionResultView, SubmitAfterSalesActionRequest, SupplierFulfillmentOrderDetailParams,
         SupplierFulfillmentOrderDetailView, SupplierFulfillmentOrderListParams, SupplierFulfillmentOrderView,
-        SupplierFulfillmentService, SupplierOrderInvestigationResultView,
-        SupplierOrderObjectInvestigationCommand, SupplierOrderStatusHistoryView,
-        SupplierOrderTaskCompletionCommand, SupplierOrderTaskCompletionResultView,
-        SupplierOrderTaskInvestigationCommand, SupplierRefundFactView, UnavailableSupplierGateway,
+        SupplierOrderInvestigationResultView, SupplierOrderObjectInvestigationCommand,
+        SupplierOrderStatusHistoryView, SupplierOrderTaskCompletionCommand,
+        SupplierOrderTaskCompletionResultView, SupplierOrderTaskInvestigationCommand, SupplierRefundFactView,
     },
 };
 
@@ -47,7 +44,8 @@ pub async fn supplier_fulfillment_order_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierFulfillmentOrderListParams>,
 ) -> Result<PageView<SupplierFulfillmentOrderView>> {
-    let page = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let page = state
+        .supplier_fulfillment_service()
         .supplier_fulfillment_order_list(&params)
         .await?;
 
@@ -77,7 +75,8 @@ pub async fn supplier_fulfillment_order_detail(
     Path(id): Path<String>,
     Query(params): Query<SupplierFulfillmentOrderDetailParams>,
 ) -> Result<SupplierFulfillmentOrderDetailView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .supplier_fulfillment_order_detail(&id, &params, &actor, state.rbac())
         .await?;
 
@@ -97,7 +96,8 @@ pub async fn supplier_fulfillment_order_investigation(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<SupplierOrderObjectInvestigationCommand>,
 ) -> Result<SupplierOrderInvestigationResultView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .investigate_order(command, &actor)
         .await?;
 
@@ -117,7 +117,8 @@ pub async fn supplier_fulfillment_order_task_investigation(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<SupplierOrderTaskInvestigationCommand>,
 ) -> Result<SupplierOrderInvestigationResultView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .investigate_order_task(command, &actor)
         .await?;
 
@@ -137,7 +138,8 @@ pub async fn supplier_fulfillment_order_task_completion(
     Extension(actor): Extension<AuditActor>,
     Json(command): Json<SupplierOrderTaskCompletionCommand>,
 ) -> Result<SupplierOrderTaskCompletionResultView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .complete_order_task(command, &actor)
         .await?;
 
@@ -165,7 +167,8 @@ pub async fn supplier_fulfillment_order_submit(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<PlaceFulfillmentOrderRequest>,
 ) -> Result<SupplierFulfillmentOrderView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .submit_place(req, &actor)
         .await?;
 
@@ -195,7 +198,8 @@ pub async fn supplier_fulfillment_order_cancel(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .submit_cancel(&id, req, &actor)
         .await?;
 
@@ -225,7 +229,8 @@ pub async fn supplier_fulfillment_order_refund(
     Path(id): Path<String>,
     Json(req): Json<SubmitAfterSalesActionRequest>,
 ) -> Result<SubmitActionResultView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .submit_refund(&id, req, &actor)
         .await?;
 
@@ -255,7 +260,8 @@ pub async fn supplier_fulfillment_order_reject(
     Path(id): Path<String>,
     Json(req): Json<RecordSupplierRejectRequest>,
 ) -> Result<SupplierOrderStatusHistoryView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .record_reject(&id, req, &actor)
         .await?;
 
@@ -286,17 +292,10 @@ pub async fn supplier_refund_fact_post(
     Path(id): Path<String>,
     Json(req): Json<RecordRefundResultRequest>,
 ) -> Result<SupplierRefundFactView> {
-    let view = SupplierFulfillmentService::new(state.db(), default_gateway())
+    let view = state
+        .supplier_fulfillment_service()
         .record_refund_result(&id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
-}
-
-/// 构造默认供应商网关（模拟网关：按连接地址配置分类，不发起真实网络请求）。
-///
-/// # 返回
-/// 返回线程安全的网关实例。
-fn default_gateway() -> Arc<dyn services::supplier_fulfillment::SupplierGateway> {
-    Arc::new(UnavailableSupplierGateway)
 }

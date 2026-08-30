@@ -4,6 +4,7 @@ import * as React from "react"
 
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
+import { compactFixed, multiplyFixed, sumFixed } from "@/lib/fixed-decimal"
 
 export function responsibilityOf(
     workItem: SupplierOrderDetailView["workItem"],
@@ -21,22 +22,29 @@ export function responsibilityOf(
 
 export function deriveSupplierOrderTotals(
     items: SupplierOrderDetailView["items"],
-): { totalQuantity: number; totalCostGross: string | null } {
-    const totalQuantity = items.reduce(
-        (acc, item) => acc + Number(item.quantity || 0),
-        0,
+): { totalQuantity: string; totalCostGross: string | null } {
+    const totalQuantity = compactFixed(
+        sumFixed(
+            items.map((item) => item.quantity || "0"),
+            { maxScale: 6, outputScale: 6 },
+        ),
     )
     const totalCostGross = items.every((item) => item.unitCostGross == null)
         ? null
-        : items
-              .reduce(
-                  (acc, item) =>
-                      acc +
-                      Number(item.quantity || 0) *
-                          Number(item.unitCostGross ?? 0),
-                  0,
-              )
-              .toFixed(2)
+        : sumFixed(
+              items.map((item) =>
+                  multiplyFixed(
+                      item.quantity || "0",
+                      item.unitCostGross ?? "0",
+                      {
+                          leftMaxScale: 6,
+                          rightMaxScale: 4,
+                          outputScale: 2,
+                      },
+                  ),
+              ),
+              { maxScale: 2, outputScale: 2 },
+          )
     return { totalQuantity, totalCostGross }
 }
 
@@ -51,7 +59,7 @@ export type SupplierOrderCenterDerivation = {
     canReveal: boolean
     isResultUnknown: boolean
     noQueryCapability: boolean
-    totalQuantity: number
+    totalQuantity: string
     totalCostGross: string | null
 }
 
@@ -123,7 +131,7 @@ export function useSupplierOrderCenterDerivation(input: {
         () =>
             detail
                 ? deriveSupplierOrderTotals(detail.items)
-                : { totalQuantity: 0, totalCostGross: null },
+                : { totalQuantity: "0", totalCostGross: null },
         [detail],
     )
 

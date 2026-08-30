@@ -4,12 +4,9 @@ import {
     asContractStatus,
     baseActions,
     isExpiringWithin30Days,
-    loadCustomerBrief,
-    loadPartyName,
     tsToIso,
 } from "@/features/contracts/api/helpers"
 import type {
-    BackendContractDetail,
     BackendContractRevision,
     BackendContractView,
 } from "@/features/contracts/api/wire-types"
@@ -19,12 +16,9 @@ import {
     CONTRACT_STATUS_TONE,
 } from "@/features/contracts/types"
 
-function mapListRow(
-    row: BackendContractView,
-    revision: BackendContractRevision | null,
-    customer: Awaited<ReturnType<typeof loadCustomerBrief>>,
-    settlementName: string,
-): ContractListRow {
+function mapListRow(row: BackendContractView): ContractListRow {
+    const revision: BackendContractRevision | null =
+        row.current_revision ?? null
     const status = asContractStatus(String(row.status))
     const actions = baseActions(status)
     const validFrom =
@@ -36,18 +30,13 @@ function mapListRow(
         contractNo: row.contract_no,
         customer: {
             customerId: row.customer_id,
-            customerNo: customer?.customerNo ?? row.customer_id,
-            displayName:
-                revision?.customer_name ??
-                customer?.displayName ??
-                row.customer_id,
+            customerNo: row.customer_no ?? row.customer_id,
+            displayName: revision?.customer_name ?? row.customer_id,
         },
         settlementParty: {
             partyId: row.settlement_party_id,
             displayName:
-                revision?.settlement_party_name ??
-                settlementName ??
-                row.settlement_party_id,
+                revision?.settlement_party_name ?? row.settlement_party_id,
         },
         status,
         statusLabel: CONTRACT_STATUS_LABEL[status],
@@ -62,7 +51,8 @@ function mapListRow(
         ),
         salesOrderCount: 0,
         activeSalesOrderCount: 0,
-        ownerLabel: customer?.ownerLabel ?? "—",
+        ownerLabel:
+            row.owner_user_name?.trim() || row.owner_user_id?.trim() || "—",
         ownerKind: "current_customer_owner",
         allowedActions: actions.allowedActions,
         actionBlockers: actions.actionBlockers,
@@ -80,29 +70,5 @@ export async function fetchContracts(): Promise<ContractListRow[]> {
         sort_dir: "desc",
     })
 
-    const rows = await Promise.all(
-        page.items.map(async (row) => {
-            let revision: BackendContractRevision | null = null
-            try {
-                const detail = await apiGet<BackendContractDetail>(
-                    `/admin/contracts/${row.id}`,
-                )
-                revision =
-                    detail.revisions.find(
-                        (r) => r.id === detail.current_revision_id,
-                    ) ??
-                    detail.revisions[0] ??
-                    null
-            } catch {
-                revision = null
-            }
-            const customer = await loadCustomerBrief(row.customer_id)
-            const settlementName =
-                revision?.settlement_party_name ??
-                (await loadPartyName(row.settlement_party_id))
-            return mapListRow(row, revision, customer, settlementName)
-        }),
-    )
-
-    return rows
+    return page.items.map(mapListRow)
 }

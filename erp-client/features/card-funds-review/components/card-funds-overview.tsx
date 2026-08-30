@@ -9,7 +9,40 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { CardFundsReviewItemView } from "../types"
 import { formatMoney, shortHash } from "../lib/presentation"
+import {
+    compareDecimal,
+    parseDecimal,
+    subtractFixed,
+    sumFixed,
+} from "@/lib/fixed-decimal"
 import { versionText } from "@/lib/ui-text"
+
+function moneyChangeTotal(
+    changes: NonNullable<CardFundsReviewItemView["difference"]>["changes"],
+): string | null {
+    const deltas = changes.flatMap((change) => {
+        if (!/成交额|应收|已收|已开票/.test(change.field)) return []
+        try {
+            parseDecimal(change.before, { maxScale: 6, allowNegative: true })
+            parseDecimal(change.after, { maxScale: 6, allowNegative: true })
+            return [
+                subtractFixed(change.after, change.before, {
+                    maxScale: 6,
+                    outputScale: 2,
+                }),
+            ]
+        } catch {
+            return []
+        }
+    })
+    return deltas.length > 0
+        ? sumFixed(deltas, {
+              maxScale: 2,
+              outputScale: 2,
+              allowNegative: true,
+          })
+        : null
+}
 
 export function CardFundsOverview({ task }: { task: CardFundsReviewItemView }) {
     return (
@@ -103,32 +136,28 @@ export function CardFundsOverview({ task }: { task: CardFundsReviewItemView }) {
             {task.reviewType === "SYNC_DELTA" && task.difference ? (
                 <div className="space-y-2">
                     {(() => {
-                        const moneyChanges = task.difference!.changes.filter(
-                            (c) =>
-                                /成交额|应收|已收|已开票/.test(c.field) &&
-                                Number.isFinite(Number(c.before)) &&
-                                Number.isFinite(Number(c.after)),
+                        const totalDelta = moneyChangeTotal(
+                            task.difference!.changes,
                         )
-                        if (moneyChanges.length === 0) return null
-                        const totalDelta = moneyChanges.reduce(
-                            (s, c) => s + (Number(c.after) - Number(c.before)),
-                            0,
-                        )
+                        if (totalDelta == null) return null
+                        const increased =
+                            compareDecimal(totalDelta, "0", 2) >= 0
+                        const absoluteDelta = increased
+                            ? totalDelta
+                            : totalDelta.slice(1)
                         return (
                             <p className="text-sm text-muted-foreground">
                                 金额类字段合计差额：{" "}
                                 <span
                                     className={
-                                        totalDelta >= 0
+                                        increased
                                             ? "num text-foreground"
                                             : "num text-destructive"
                                     }
                                 >
-                                    {formatMoney(
-                                        Math.abs(totalDelta).toFixed(2),
-                                    )}
+                                    {formatMoney(absoluteDelta)}
                                 </span>
-                                {totalDelta >= 0 ? "（增加）" : "（减少）"}
+                                {increased ? "（增加）" : "（减少）"}
                             </p>
                         )
                     })()}

@@ -113,6 +113,19 @@ impl Pagination for CustomerAccountFilter {
 }
 
 impl<'a> Repository<'a, CustomerAccount> {
+    /// 按客户角色 ID 集合批量读取活跃客户。
+    pub async fn find_accounts_by_ids(
+        &self,
+        customer_ids: &[CustomerAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CustomerAccount>> {
+        if customer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = customer_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 按客户角色 ID 查找未删除客户。
     ///
     /// # 参数

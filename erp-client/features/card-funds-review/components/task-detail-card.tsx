@@ -20,7 +20,10 @@ import type {
     InvoiceDraft,
     ReceiptDraft,
 } from "@/features/card-funds-review/types"
-import { REVIEW_TYPE_LABEL, WORK_ITEM_TYPE_LABEL } from "@/features/card-funds-review/types"
+import {
+    REVIEW_TYPE_LABEL,
+    WORK_ITEM_TYPE_LABEL,
+} from "@/features/card-funds-review/types"
 import { CardFundsAllocationEditor } from "./card-funds-allocation-editor"
 import { CardFundsOverview } from "./card-funds-overview"
 import { CardFundsRecords } from "./card-funds-records"
@@ -57,8 +60,8 @@ export function TaskDetailCard({
     setInvoiceForm: React.Dispatch<React.SetStateAction<InvoiceDraft>>
     allocLines: AllocationDraftLine[]
     setAllocLines: React.Dispatch<React.SetStateAction<AllocationDraftLine[]>>
-    allocTarget: number
-    allocatedSum: number
+    allocTarget: string
+    allocatedSum: string
     receiptPending: boolean
     invoicePending: boolean
     setAllocationMode: React.Dispatch<

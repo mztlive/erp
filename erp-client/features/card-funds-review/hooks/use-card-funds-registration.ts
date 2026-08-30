@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { getErrorMessage } from "@/lib/api/errors"
+import { splitGrossByPercentRate } from "@/lib/fixed-decimal"
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import type {
     AllocationDraftLine,
@@ -11,7 +12,7 @@ import type {
     InvoiceDraft,
     ReceiptDraft,
 } from "@/features/card-funds-review/types"
-import { formatMoney, moneyStrSafe, shortHash } from "../lib/presentation"
+import { formatMoney, shortHash } from "../lib/presentation"
 import type {
     useRegisterInvoiceMutation,
     useRegisterReceiptMutation,
@@ -104,11 +105,9 @@ export function useCardFundsRegistration(args: {
         try {
             assertAllowed("REGISTER_INVOICE")
             const gross = invoiceForm.grossAmount
-            const net =
-                invoiceForm.netAmount || moneyStrSafe(Number(gross) / 1.13)
-            const tax =
-                invoiceForm.taxAmount ||
-                moneyStrSafe(Number(gross) - Number(net))
+            const derived = splitGrossByPercentRate(gross, "13")
+            const net = invoiceForm.netAmount || derived.net
+            const tax = invoiceForm.taxAmount || derived.tax
             const result = await registerInvoiceMutation.mutateAsync({
                 workItemId: task.workItem.workItemId,
                 expectedTaskVersion: task.workItem.taskVersion,

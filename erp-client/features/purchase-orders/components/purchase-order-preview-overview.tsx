@@ -16,7 +16,7 @@ import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
-import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
+import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 import { cn } from "@/lib/utils"
 
 export function SectionTitle({ children }: { children: React.ReactNode }) {

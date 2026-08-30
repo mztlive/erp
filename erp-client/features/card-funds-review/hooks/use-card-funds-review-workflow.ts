@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { compareDecimal, normalizeFixed, sumFixed } from "@/lib/fixed-decimal"
 
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import type {
@@ -24,6 +25,19 @@ import { useCardFundsRegistration } from "./use-card-funds-registration"
 type ResultState = SharedResultState<FormalOutcome>
 
 type ReplaceUrlFn = (patch: Record<string, string | null | undefined>) => void
+
+/** 将尚在编辑中的金额输入安全归一为两位草稿金额。 */
+const draftAmountOrZero = (value: string): string => {
+    try {
+        return normalizeFixed(value.trim() || "0", {
+            maxScale: 2,
+            outputScale: 2,
+            allowNegative: true,
+        })
+    } catch {
+        return "0.00"
+    }
+}
 
 /**
  * 复核页核心工作流：队列导航、快捷键、提交结论和登记回款/发票。
@@ -235,8 +249,8 @@ export function useCardFundsReviewWorkflow(args: {
             }
             const zeroOk =
                 task.reviewType === "OPENING" &&
-                Number(task.account.settledTotal) === 0 &&
-                Number(task.account.invoicedTotal) === 0
+                compareDecimal(task.account.settledTotal, "0", 2) === 0 &&
+                compareDecimal(task.account.invoicedTotal, "0", 2) === 0
             setConfirmMode(
                 zeroOk
                     ? { kind: "zero", advance: autoNext }
@@ -284,18 +298,18 @@ export function useCardFundsReviewWorkflow(args: {
     const canConfirmZero = Boolean(
         task?.workItem.allowedActions.includes("CONFIRM_ZERO") &&
         task?.reviewType === "OPENING" &&
-        Number(task.account.settledTotal) === 0 &&
-        Number(task.account.invoicedTotal) === 0,
+        compareDecimal(task.account.settledTotal, "0", 2) === 0 &&
+        compareDecimal(task.account.invoicedTotal, "0", 2) === 0,
     )
 
-    const allocatedSum = allocLines.reduce(
-        (s, l) => s + (Number(l.amount) || 0),
-        0,
+    const allocatedSum = sumFixed(
+        allocLines.map((line) => draftAmountOrZero(line.amount)),
+        { maxScale: 2, outputScale: 2, allowNegative: true },
     )
     const allocTarget =
         allocationMode === "receipt"
-            ? Number(receiptForm.grossAmount) || 0
-            : Number(invoiceForm.grossAmount) || 0
+            ? draftAmountOrZero(receiptForm.grossAmount)
+            : draftAmountOrZero(invoiceForm.grossAmount)
 
     return {
         confirmMode,

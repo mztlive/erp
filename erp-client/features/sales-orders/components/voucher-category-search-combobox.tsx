@@ -6,7 +6,7 @@ import {
 } from "@/components/business/entity-comboboxes"
 import type { SellableSkuComboboxItem } from "@/features/entity-selectors/api/index"
 import type { SmartProps } from "@/features/entity-selectors/components/types"
-import { useVoucherCategorySelectorQuery } from "@/features/entity-selectors/hooks/queries"
+import { useVoucherCategorySelectorQuery } from "@/features/sales-orders/hooks/use-voucher-category-selector-query"
 import { useRemoteSearchCombobox } from "@/features/entity-selectors/hooks/use-remote-search-combobox"
 
 export type VoucherCategorySearchComboboxProps = SmartProps<
@@ -25,14 +25,17 @@ export function VoucherCategorySearchCombobox({
     ...props
 }: VoucherCategorySearchComboboxProps) {
     const query = useVoucherCategorySelectorQuery(purpose)
-    const { rows, loading, emptyLabel: resolvedEmptyLabel } =
-        useRemoteSearchCombobox({
-            list: query,
-            selectedItem: selectedItem as never,
-            idOf: (item) => item.productId,
-            emptyLabel,
-            fallbackError: "卡券类目加载失败，请重试",
-        })
+    const {
+        rows,
+        loading,
+        emptyLabel: resolvedEmptyLabel,
+    } = useRemoteSearchCombobox({
+        list: query,
+        selectedItem: selectedItem as never,
+        idOf: (item) => item.productId,
+        emptyLabel,
+        fallbackError: "卡券类目加载失败，请重试",
+    })
     return (
         <ProductCombobox
             {...props}

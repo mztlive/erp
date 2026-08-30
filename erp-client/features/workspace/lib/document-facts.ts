@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import { compareDecimal, formatCurrencyFixed } from "@/lib/fixed-decimal"
 import type {
     BackendSalesOrderDetail,
     BackendSubmission,
@@ -253,7 +254,7 @@ function salesContentToFacts(
         value: formatYuan(content.net_amount),
         numeric: true,
     })
-    if (Number(content.tax_amount) > 0) {
+    if (compareDecimal(content.tax_amount, "0", 2) > 0) {
         sections.push({
             label: "税额",
             value: formatYuan(content.tax_amount),
@@ -327,11 +328,14 @@ function emptyToUndefined(value?: string | null): string | undefined {
 }
 
 function formatYuan(raw: string): string {
-    const value = Number(raw)
-    if (!Number.isFinite(value)) return raw
-    return `¥${value.toLocaleString("zh-CN", {
-        maximumFractionDigits: 2,
-    })}`
+    try {
+        return formatCurrencyFixed(raw, {
+            maxScale: 6,
+            maximumFractionDigits: 2,
+        })
+    } catch {
+        return raw
+    }
 }
 
 function formatDate(unixSecs: number): string {

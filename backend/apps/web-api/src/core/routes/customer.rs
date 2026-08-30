@@ -41,6 +41,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/customer-profiles/{id}/related-summary",
+            with_permission(
+                get(customer::customer_center_related),
+                rbac,
+                customer::customer_center_related_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-profiles/{id}/receivable-summary",
+            with_permission(
+                get(customer::customer_center_receivable),
+                rbac,
+                customer::customer_center_receivable_permission_key(),
+            ),
+        )
+        .route(
             "/customer-profiles/{id}",
             with_permission(
                 put(customer::customer_profile_update),

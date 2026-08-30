@@ -88,7 +88,6 @@ export function ActualProfitLossPage() {
                 basisConfig={page.basisConfig}
                 periodBasisValid={page.periodBasisValid}
                 patchUrl={page.patchUrl}
-                resetPage={page.resetPagination}
             />
 
             {/* 阻断：口径未配置且用户未显式选择 */}
@@ -96,7 +95,7 @@ export function ActualProfitLossPage() {
                 <AnalysisBlockedPanel
                     basisConfig={page.basisConfig}
                     onSelectBasis={(code) =>
-                        page.patchUrl({ periodBasis: code })
+                        page.patchUrl({ periodBasis: code, page: null })
                     }
                 />
             ) : null}
@@ -158,20 +157,14 @@ export function ActualProfitLossPage() {
                             onBenefitScenarioDraftChange={
                                 page.setBenefitScenarioDraft
                             }
-                            fulfillmentModesDraft={
-                                page.fulfillmentModesDraft
-                            }
+                            fulfillmentModesDraft={page.fulfillmentModesDraft}
                             onFulfillmentModesDraftChange={
                                 page.setFulfillmentModesDraft
                             }
                             costTypesDraft={page.costTypesDraft}
                             onCostTypesDraftChange={page.setCostTypesDraft}
-                            benefitScenarioOptions={
-                                page.benefitScenarioOptions
-                            }
-                            fulfillmentModeOptions={
-                                page.fulfillmentModeOptions
-                            }
+                            benefitScenarioOptions={page.benefitScenarioOptions}
+                            fulfillmentModeOptions={page.fulfillmentModeOptions}
                             costTypeOptions={page.costTypeOptions}
                             pageRows={page.pageRows}
                             columns={page.columns}

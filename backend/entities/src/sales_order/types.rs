@@ -10,6 +10,7 @@
 use std::collections::HashSet;
 
 use rust_decimal::Decimal;
+use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 
 use crate::common::time::Instant;
@@ -286,11 +287,29 @@ pub struct GoodsLineFields {
 
 /// 卡券行字段组创建入参（数据模型 §6.4：来源同时提供面额、单价与合计，逐项核对；
 /// `gift_rate` 缺省时按 `gift_amount / transaction_amount` 推导）。
+fn deserialize_u32_from_number_or_string<'de, D>(deserializer: D) -> std::result::Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum WireU32 {
+        Number(u32),
+        String(String),
+    }
+
+    match WireU32::deserialize(deserializer)? {
+        WireU32::Number(value) => Ok(value),
+        WireU32::String(value) => value.parse::<u32>().map_err(SerdeError::custom),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoucherLineDraft {
     /// 单卡面额。
     pub face_value: Amount,
     /// 卡张数（正整数）。
+    #[serde(deserialize_with = "deserialize_u32_from_number_or_string")]
     pub card_count: u32,
     /// 单卡含税成交单价。
     pub unit_price_gross: UnitPrice,
@@ -744,6 +763,16 @@ mod tests {
             gift_rate: None,
             card_form: CardForm::Electronic,
         }
+    }
+
+    #[test]
+    fn voucher_draft_accepts_decimal_string_card_count_at_wire_boundary() {
+        let mut payload = serde_json::to_value(voucher_draft()).unwrap();
+        payload["card_count"] = serde_json::Value::String("3".to_string());
+
+        let parsed: VoucherLineDraft = serde_json::from_value(payload).unwrap();
+
+        assert_eq!(parsed.card_count, 3);
     }
 
     #[test]

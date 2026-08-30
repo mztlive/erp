@@ -13,7 +13,7 @@ use super::authorization::is_personnel_blocker;
 use super::idempotency::{classify_receipt, reassign_digest, ReceiptBranch};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorCode, Result};
 
 /// 改派编排输入。
 #[derive(Debug, Clone)]
@@ -65,8 +65,8 @@ pub fn prepare_reassign(input: ReassignExecutionInput) -> Result<PreparedExecuti
         return Err(Error::ValidationError("结构性阻塞不得改派".to_string()));
     }
     if input.command.current_eligibility.blocked_code().is_none() {
-        return Err(Error::ConflictError(
-            "APPROVAL_CURRENT_APPROVER_RECOVERED".to_string(),
+        return Err(Error::from_approval_code(
+            ErrorCode::ApprovalCurrentApproverRecovered,
         ));
     }
     let digest = reassign_digest(

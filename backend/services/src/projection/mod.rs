@@ -34,6 +34,7 @@ pub use self::dto::{
     ProjectionBulkCommandRequest, ProjectionBulkCommandResultView, ProjectionBulkItemResultView,
     ProjectionDeliveryAction, ProjectionDeliveryActionResult, ProjectionDeliveryCommand,
     ProjectionDeliveryResultView, SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
-    SalesOrderProjectionListParams, SalesOrderProjectionRevisionView, SalesOrderProjectionView,
+    SalesOrderProjectionListItemView, SalesOrderProjectionListParams, SalesOrderProjectionRevisionView,
+    SalesOrderProjectionView,
 };
 pub use self::service::ProjectionService;

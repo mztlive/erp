@@ -1,8 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { useSelector } from "@tanstack/react-form"
+import { z } from "zod"
 
 import type { ResultState } from "@/components/business/feedback"
+import { useAppForm } from "@/components/form"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     useAppendEvidenceMutation,
@@ -26,6 +29,26 @@ type CommandIdentity = {
     operationId: string
     idempotencyKey: string
 }
+
+const resolveSchema = z.object({
+    resolution: z.enum([
+        "SUPPLIER_ACCEPTED",
+        "ERP_ACCEPTED",
+        "COMPENSATED",
+        "CLOSED_NO_ADJUSTMENT",
+    ]),
+    reasonCode: z.string().trim().min(1, "请选择原因码"),
+})
+const evidenceSchema = z.object({
+    referenceId: z.string().trim().min(1, "请填写正式证据引用"),
+    comment: z.string(),
+})
+const submitReviewSchema = z.object({
+    reviewerUserId: z.string().trim().min(1, "请选择复核人"),
+})
+const rejectSchema = z.object({
+    reasonCode: z.string().trim().min(1, "请选择驳回原因"),
+})
 
 /**
  * 结算中心的动作状态：详情查询、全部业务动作、动作结果与对话框开关。
@@ -58,13 +81,6 @@ function useSettlementCenterActions({
     const [submitOpen, setSubmitOpen] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [rejectOpen, setRejectOpen] = React.useState(false)
-    const [resolution, setResolution] =
-        React.useState<DifferenceResolution>("ERP_ACCEPTED")
-    const [reasonCode, setReasonCode] = React.useState("ACCEPT_BILL")
-    const [evidenceComment, setEvidenceComment] = React.useState("")
-    const [evidenceReferenceId, setEvidenceReferenceId] = React.useState("")
-    const [rejectReason, setRejectReason] = React.useState("")
-    const [reviewerUserId, setReviewerUserId] = React.useState("")
     const resultRef = React.useRef<HTMLDivElement | null>(null)
     const commandIdentities = React.useRef(new Map<string, CommandIdentity>())
 
@@ -81,6 +97,46 @@ function useSettlementCenterActions({
           null)
         : null
     const submitBlocker = blockerOf(blockers, "SUBMIT_REVIEW")
+
+    const resolveForm = useAppForm({
+        defaultValues: {
+            resolution: "ERP_ACCEPTED" as DifferenceResolution,
+            reasonCode: "ACCEPT_BILL",
+        },
+        validators: { onChange: resolveSchema },
+        onSubmit: ({ value }) => executeResolve(value),
+    })
+    const evidenceForm = useAppForm({
+        defaultValues: { referenceId: "", comment: "" },
+        validators: { onChange: evidenceSchema },
+        onSubmit: ({ value }) => executeEvidence(value),
+    })
+    const submitReviewForm = useAppForm({
+        defaultValues: { reviewerUserId: "" },
+        validators: { onChange: submitReviewSchema },
+        onSubmit: ({ value }) => executeSubmitReview(value),
+    })
+    const rejectForm = useAppForm({
+        defaultValues: { reasonCode: "" },
+        validators: { onChange: rejectSchema },
+        onSubmit: ({ value }) => executeReject(value),
+    })
+    const resolveValues = useSelector(
+        resolveForm.store,
+        (state) => state.values,
+    )
+    const evidenceValues = useSelector(
+        evidenceForm.store,
+        (state) => state.values,
+    )
+    const reviewerUserId = useSelector(
+        submitReviewForm.store,
+        (state) => state.values.reviewerUserId,
+    )
+    const rejectReason = useSelector(
+        rejectForm.store,
+        (state) => state.values.reasonCode,
+    )
 
     function idempotencyIdentity(kind: string, objectId: string) {
         const key = `${kind}:${objectId}`
@@ -123,7 +179,10 @@ function useSettlementCenterActions({
         }
     }
 
-    async function onResolve() {
+    async function executeResolve(value: {
+        resolution: DifferenceResolution
+        reasonCode: string
+    }) {
         if (!data || !activeDiff) return
         const identity = idempotencyIdentity(
             "resolve-difference",
@@ -135,8 +194,8 @@ function useSettlementCenterActions({
                 differenceId: activeDiff.differenceId,
                 expectedLockVersion: data.statement.lockVersion,
                 expectedDifferenceVersion: activeDiff.version,
-                resolution,
-                reasonCode,
+                resolution: value.resolution,
+                reasonCode: value.reasonCode,
                 evidenceReferenceIds: activeDiff.evidence
                     .map((item) => item.referenceIds)
                     .flat(),
@@ -157,9 +216,13 @@ function useSettlementCenterActions({
         }
     }
 
-    async function onEvidence() {
+    async function executeEvidence(value: {
+        referenceId: string
+        comment: string
+    }) {
         if (!data || !activeDiff) return
-        if (!evidenceReferenceId.trim()) {
+        const referenceId = value.referenceId.trim()
+        if (!referenceId) {
             setResult({
                 status: "blocked",
                 title: "缺少正式证据引用",
@@ -172,17 +235,16 @@ function useSettlementCenterActions({
                 statementId: data.statement.id,
                 differenceId: activeDiff.differenceId,
                 expectedDifferenceVersion: activeDiff.version,
-                evidenceReferenceIds: [evidenceReferenceId.trim()],
+                evidenceReferenceIds: [referenceId],
                 opinionCode: "PROCUREMENT_NOTE",
-                comment: evidenceComment,
+                comment: value.comment,
                 requestId: newKey("req"),
                 idempotencyKey: newKey("ev"),
             })
             setResult(outcomeToResult(outcome))
             if (outcome.status === "succeeded") {
                 setEvidenceOpen(false)
-                setEvidenceComment("")
-                setEvidenceReferenceId("")
+                evidenceForm.reset()
             }
         } catch (error) {
             setResult({
@@ -193,7 +255,7 @@ function useSettlementCenterActions({
         }
     }
 
-    async function onSubmitReview() {
+    async function executeSubmitReview(value: { reviewerUserId: string }) {
         if (!data) return
         const st = data.statement
         if (!st.subjectHash || !data.reviewSubmissionPolicy) {
@@ -205,7 +267,7 @@ function useSettlementCenterActions({
             })
             return
         }
-        const normalizedReviewerUserId = reviewerUserId.trim()
+        const normalizedReviewerUserId = value.reviewerUserId.trim()
         if (!normalizedReviewerUserId) {
             setResult({
                 status: "blocked",
@@ -233,6 +295,7 @@ function useSettlementCenterActions({
         setResult(outcomeToResult(outcome))
         if (outcome.status === "succeeded") {
             setSubmitOpen(false)
+            submitReviewForm.reset()
             patchUrl({ section: "review" })
         }
     }
@@ -274,7 +337,7 @@ function useSettlementCenterActions({
         }
     }
 
-    async function onReject() {
+    async function executeReject(value: { reasonCode: string }) {
         if (!data) return
         const workItem = data.workItem
         if (!workItem || responsibilityStatus !== "assigned_to_me") return
@@ -291,7 +354,7 @@ function useSettlementCenterActions({
             action: "REJECT",
             operationId: identity.operationId,
             idempotencyKey: identity.idempotencyKey,
-            reasonCode: rejectReason || "NEEDS_MORE_EVIDENCE",
+            reasonCode: value.reasonCode,
         })
         if (outcome.status !== "unknown") {
             commandIdentities.current.delete(identity.key)
@@ -299,8 +362,25 @@ function useSettlementCenterActions({
         setResult(outcomeToResult(outcome))
         if (outcome.status === "rejected" || outcome.status === "succeeded") {
             setRejectOpen(false)
+            rejectForm.reset()
             onTaskCompleted?.(workItem.workItemId)
         }
+    }
+
+    function onResolve() {
+        return resolveForm.handleSubmit()
+    }
+
+    function onEvidence() {
+        return evidenceForm.handleSubmit()
+    }
+
+    function onSubmitReview() {
+        return submitReviewForm.handleSubmit()
+    }
+
+    function onReject() {
+        return rejectForm.handleSubmit()
     }
 
     return {
@@ -328,18 +408,24 @@ function useSettlementCenterActions({
         setConfirmOpen,
         rejectOpen,
         setRejectOpen,
-        resolution,
-        setResolution,
-        reasonCode,
-        setReasonCode,
-        evidenceComment,
-        setEvidenceComment,
-        evidenceReferenceId,
-        setEvidenceReferenceId,
+        resolution: resolveValues.resolution,
+        setResolution: (resolution: DifferenceResolution) =>
+            resolveForm.setFieldValue("resolution", resolution),
+        reasonCode: resolveValues.reasonCode,
+        setReasonCode: (reasonCode: string) =>
+            resolveForm.setFieldValue("reasonCode", reasonCode),
+        evidenceComment: evidenceValues.comment,
+        setEvidenceComment: (comment: string) =>
+            evidenceForm.setFieldValue("comment", comment),
+        evidenceReferenceId: evidenceValues.referenceId,
+        setEvidenceReferenceId: (referenceId: string) =>
+            evidenceForm.setFieldValue("referenceId", referenceId),
         rejectReason,
-        setRejectReason,
+        setRejectReason: (reasonCode: string) =>
+            rejectForm.setFieldValue("reasonCode", reasonCode),
         reviewerUserId,
-        setReviewerUserId,
+        setReviewerUserId: (userId: string) =>
+            submitReviewForm.setFieldValue("reviewerUserId", userId),
         onRefresh,
         onResolve,
         onEvidence,

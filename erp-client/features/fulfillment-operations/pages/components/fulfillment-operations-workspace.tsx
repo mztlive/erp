@@ -123,6 +123,8 @@ export function FulfillmentOperationsWorkspace({
                                 controller.context?.total ??
                                 controller.operations.length
                             }
+                            page={controller.context?.page ?? 1}
+                            totalPages={controller.context?.totalPages ?? 1}
                             onSelect={(operationId) => {
                                 if (
                                     controller.dirty &&
@@ -136,6 +138,7 @@ export function FulfillmentOperationsWorkspace({
                                 }
                                 controller.goToOperation(operationId)
                             }}
+                            onPageChange={controller.setPage}
                         />
                     ) : null}
 
@@ -183,7 +186,7 @@ export function FulfillmentOperationsWorkspace({
                         onSkip={controller.handleSkip}
                         onDiscard={controller.handleDiscard}
                         onSave={() => void controller.handleSave()}
-                        onConfirm={() => controller.setConfirmOpen(true)}
+                        onConfirm={() => void controller.handleSubmit()}
                         onBack={onBack}
                         onToggleShortcuts={() =>
                             controller.setShortcutsOpen((value) => !value)

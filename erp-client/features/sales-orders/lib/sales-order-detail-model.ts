@@ -5,7 +5,7 @@ import {
     isPendingReviewStage,
     stageOwnerDisplay,
 } from "@/features/sales-orders/lib/labels"
-import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
+import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 
 /** 详情页动作（作废/低毛利/发起改单等）的统一结果状态。 */
 export type SalesOrderDetailActionResult = {

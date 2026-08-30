@@ -33,7 +33,9 @@ export function makeRow(overrides: Partial<ProfitLossRow> = {}): ProfitLossRow {
     return { ...fakeRow, ...overrides }
 }
 
-export function makeView(overrides: Partial<ProfitLossView> = {}): ProfitLossView {
+export function makeView(
+    overrides: Partial<ProfitLossView> = {},
+): ProfitLossView {
     return {
         scope: {
             id: "org-hq-finance",
@@ -178,6 +180,7 @@ export function makeQuery(
         coverage: "covered",
         dimension: "sales_order",
         sort: "actualProfitLossNet:asc",
+        page: 1,
         pageSize: 20,
         ...overrides,
     }

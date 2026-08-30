@@ -332,6 +332,29 @@ impl Pagination for SupplierSettlementDifferenceFilter {
 }
 
 impl<'a> Repository<'a, SupplierSettlementStatement> {
+    /// 按结算单 ID 集合批量读取结算单。
+    ///
+    /// # 参数
+    /// * `statement_ids` - 结算单 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的结算单；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_statements_by_ids(
+        &self,
+        statement_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierSettlementStatement>> {
+        if statement_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": statement_ids } }, executor)
+            .await
+    }
+
     /// 分页检索供应商结算单列表（投影查询）。
     ///
     /// 只返回 [`SupplierSettlementStatementRow`] 所需的列表字段，不加载整文档；

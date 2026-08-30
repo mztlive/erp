@@ -85,10 +85,8 @@ fn supplier_payment_ids(views: &[SupplierPaymentView]) -> Vec<SupplierPaymentId>
     let mut seen = HashSet::new();
     views
         .iter()
-        .filter_map(|view| {
-            seen.insert(view.id.clone())
-                .then(|| SupplierPaymentId::new(view.id.clone()))
-        })
+        .filter(|view| seen.insert(view.id.clone()))
+        .map(|view| SupplierPaymentId::new(view.id.clone()))
         .collect()
 }
 

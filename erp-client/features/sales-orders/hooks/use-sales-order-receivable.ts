@@ -46,6 +46,8 @@ export function useSalesOrderReceivable(
     const listQueryInput = React.useMemo(
         () => ({
             view: "receivable" as const,
+            page: 1,
+            pageSize: 100,
             salesOrderId: order.id,
             customerId: order.customerId,
         }),

@@ -47,7 +47,7 @@ export type FulfillmentActionsOptions = {
         preferredNext?: string,
         keepResult?: boolean,
     ) => void
-    setDirty: React.Dispatch<React.SetStateAction<boolean>>
+    markDraftPristine: () => void
     setActionError: React.Dispatch<React.SetStateAction<string | null>>
     setSaveMessage: React.Dispatch<React.SetStateAction<string | null>>
     setConfirmOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -73,7 +73,7 @@ export function useFulfillmentActions({
     neighborId,
     goToOperation,
     advanceIfNeeded,
-    setDirty,
+    markDraftPristine,
     setActionError,
     setSaveMessage,
     setConfirmOpen,
@@ -108,12 +108,14 @@ export function useFulfillmentActions({
                 ),
                 draft,
             })
-            setDirty(false)
+            markDraftPristine()
             setSaveMessage("草稿已保存")
             setActionError(null)
             return true
         } catch (error) {
-            setActionError(getErrorMessage(error, "保存失败，请检查必填项后重试"))
+            setActionError(
+                getErrorMessage(error, "保存失败，请检查必填项后重试"),
+            )
             return false
         }
     }, [
@@ -122,7 +124,7 @@ export function useFulfillmentActions({
         saveMutation,
         supportsSave,
         operation,
-        setDirty,
+        markDraftPristine,
         setActionError,
         setSaveMessage,
     ])

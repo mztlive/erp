@@ -227,6 +227,38 @@ impl PurchaseOrderService {
             .await
     }
 
+    /// 在审批运行时持有的事务内生效采购变更。
+    ///
+    /// # 错误
+    /// 状态、基准版本、应付/成本差额或持久化不变量失败时返回错误。
+    pub(crate) async fn apply_effective_change_in_transaction(
+        &self,
+        change_id: &str,
+        actor: &AuditActor,
+        session: &mut ClientSession,
+    ) -> Result<()> {
+        let change = self
+            .db
+            .purchase_change_orders()
+            .find_by_id(change_id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
+        execute_purchase_change_domain_action(
+            &mut change.clone(),
+            ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
+            actor.id(),
+        )?;
+        let submission_id = change
+            .submission_id_for_effect(None)
+            .map_err(|error| Error::ConflictError(error.to_string()))?;
+        let prepared = self
+            .prepare_effective_change_write(&change, submission_id.as_ref())
+            .await?;
+        write_effective_change_in_transaction(&self.db, prepared.write, actor, session)
+            .await
+            .map(|_| ())
+    }
+
     /// 客户端直接生效失败关闭。最终动作只能由审批运行时调用。
     ///
     /// # 返回
@@ -1198,8 +1230,28 @@ struct EffectiveChangeWrite {
 /// 位于同一事务。
 async fn write_effective_change(
     db: &mongodb::Database,
+    write: EffectiveChangeWrite,
+    actor: &AuditActor,
+) -> Result<u64> {
+    let db = db.clone();
+    let client = db.client().clone();
+    let actor = actor.clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move { write_effective_change_in_transaction(&db, write, &actor, session).await })
+        })
+        .await
+}
+
+/// 在调用方事务内写入采购变更正式版本、差额、状态和成功审计。
+///
+/// # 错误
+/// 状态迁移或任一仓储写入失败时返回错误。
+async fn write_effective_change_in_transaction(
+    db: &mongodb::Database,
     mut write: EffectiveChangeWrite,
     actor: &AuditActor,
+    session: &mut ClientSession,
 ) -> Result<u64> {
     let audit = actor.clone().resource_log(
         "purchase_change_order.effect",
@@ -1210,13 +1262,7 @@ async fn write_effective_change(
     write
         .change
         .apply_effective(write.revision.base.id.clone().into(), &actor_id)?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move { persist_effective_writes(&db, write, audit, &actor_id, session).await })
-        })
-        .await
+    persist_effective_writes(db, write, audit, &actor_id, session).await
 }
 
 /// 事务内写入生效修订、指针、差额与变更单。

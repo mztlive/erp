@@ -1,4 +1,4 @@
-use database::{AccessControlExt, CatalogExt, NoTransaction};
+use database::{CatalogExt, NoTransaction};
 use entities::catalog::{ProductBrandId, ProductCategoryId, UnitOfMeasureId, VoucherCatalogDefaults};
 use id_generator::next_id;
 
@@ -38,16 +38,16 @@ impl CatalogService {
             "product_category",
             category_id.to_string(),
         )?;
-        match self
-            .db
-            .product_categories()
-            .create(&category, &mut NoTransaction)
-            .await
+        let category_for_tx = category.clone();
+        match crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.product_categories().create(&category_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await
         {
-            Ok(()) => {
-                self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
-                Ok(category_id)
-            }
+            Ok(()) => Ok(category_id),
             Err(error) => self.voucher_root_after_create_error(error).await,
         }
     }
@@ -62,8 +62,8 @@ impl CatalogService {
     ///
     /// # 错误
     /// 非唯一键错误、冲突后实体仍不可见或默认类型漂移时返回错误。
-    async fn voucher_root_after_create_error(&self, error: database::Error) -> Result<ProductCategoryId> {
-        match Error::from(error) {
+    async fn voucher_root_after_create_error(&self, error: Error) -> Result<ProductCategoryId> {
+        match error {
             Error::ConflictError(_) => {
                 let category = self
                     .db
@@ -107,11 +107,16 @@ impl CatalogService {
             actor
                 .clone()
                 .resource_log("product_brand.create", "product_brand", brand_id.to_string())?;
-        match self.db.product_brands().create(&brand, &mut NoTransaction).await {
-            Ok(()) => {
-                self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
-                Ok(brand_id)
-            }
+        let brand_for_tx = brand.clone();
+        match crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.product_brands().create(&brand_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await
+        {
+            Ok(()) => Ok(brand_id),
             Err(error) => self.voucher_brand_after_create_error(error).await,
         }
     }
@@ -126,8 +131,8 @@ impl CatalogService {
     ///
     /// # 错误
     /// 非唯一键错误或冲突后实体仍不可见时返回错误。
-    async fn voucher_brand_after_create_error(&self, error: database::Error) -> Result<ProductBrandId> {
-        match Error::from(error) {
+    async fn voucher_brand_after_create_error(&self, error: Error) -> Result<ProductBrandId> {
+        match error {
             Error::ConflictError(_) => self
                 .db
                 .catalog()
@@ -163,11 +168,16 @@ impl CatalogService {
             actor
                 .clone()
                 .resource_log("unit_of_measure.create", "unit_of_measure", unit_id.to_string())?;
-        match self.db.unit_of_measures().create(&unit, &mut NoTransaction).await {
-            Ok(()) => {
-                self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
-                Ok(unit_id)
-            }
+        let unit_for_tx = unit.clone();
+        match crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.unit_of_measures().create(&unit_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await
+        {
+            Ok(()) => Ok(unit_id),
             Err(error) => self.voucher_unit_after_create_error(error).await,
         }
     }
@@ -182,8 +192,8 @@ impl CatalogService {
     ///
     /// # 错误
     /// 非唯一键错误、冲突后实体仍不可见或默认单位停用时返回错误。
-    async fn voucher_unit_after_create_error(&self, error: database::Error) -> Result<UnitOfMeasureId> {
-        match Error::from(error) {
+    async fn voucher_unit_after_create_error(&self, error: Error) -> Result<UnitOfMeasureId> {
+        match error {
             Error::ConflictError(_) => {
                 let unit = self
                     .db

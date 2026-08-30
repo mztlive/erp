@@ -20,7 +20,7 @@ use entities::receivable::{
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 use crate::work_item::WorkItemView;
 
@@ -39,13 +39,7 @@ pub(crate) const CUSTOMER_RECEIPT_SORT_FIELDS: &[&str] = &["received_at", "amoun
 pub(crate) const INVOICE_SORT_FIELDS: &[&str] = &["invoice_date", "gross_amount", "net_amount", "created_at"];
 
 /// 排序方向。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortDir {
-    /// 升序。
-    Asc,
-    /// 降序。
-    Desc,
-}
+pub use crate::query::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,56 +66,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) fn normalize_sort(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    allowed_fields: &'static [&'static str],
-) -> Result<(&'static str, SortDir)> {
-    let sort_by = match sort_by
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(field) => allowed_fields
-            .iter()
-            .find(|allowed| **allowed == field)
-            .copied()
-            .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}")))?,
-        None => "created_at",
-    };
-    let sort_dir = match sort_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some("asc") => SortDir::Asc,
-        Some("desc") => SortDir::Desc,
-        Some(other) => return Err(Error::ValidationError(format!("非法排序方向: {other}"))),
-        None => SortDir::Desc,
-    };
-    Ok((sort_by, sort_dir))
-}
+pub(crate) use crate::query::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-#[derive(Debug, Clone, Serialize)]
-pub struct PageView<T> {
-    /// 当前页数据。
-    pub items: Vec<T>,
-    /// 满足筛选条件的总数（非当前页条数）。
-    pub total: i64,
-    /// 当前页码（1 起）。
-    pub page: u64,
-    /// 请求的分页大小。
-    pub page_size: u32,
-}
+pub use crate::query::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串不生效）。
-fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value.trim().is_empty() {
-        return Err(validator::ValidationError::new("不能为空白"));
-    }
-    Ok(())
-}
+use crate::query::non_blank;
 
 // ---------------------------------------------------------------------------
 // 应收往来子账（receivable_account）
@@ -177,6 +128,52 @@ pub struct ReceivableEntryView {
     pub posted_at: Instant,
     /// 累计被冲减金额（抵销合计）。
     pub offset_total: Amount,
+}
+
+/// 应收往来子账列表摘要。
+///
+/// 列表只返回本页展示与建立核销目标所需字段；复核链、票款事实版本和当前任务
+/// 等操作上下文由详情接口按单据读取。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReceivableAccountSummaryView {
+    /// 实体主键。
+    pub id: String,
+    /// 来源销售单。
+    pub sales_order_id: String,
+    /// 销售单业务单号。
+    pub sales_order_no: String,
+    /// 往来子账序号。
+    pub account_seq: u32,
+    /// 企业客户经营归属。
+    pub customer_id: String,
+    /// 当前销售版本冻结的客户名称。
+    pub customer_name: String,
+    /// 收款和开票往来主体。
+    pub counterparty_party_id: String,
+    /// 当前销售版本冻结的往来主体名称。
+    pub counterparty_party_name: Option<String>,
+    /// 卡券票款复核状态缓存。
+    pub review_status: AccountReviewStatus,
+    /// 含税应收总额。
+    pub gross_total: Amount,
+    /// 已核销含税总额。
+    pub settled_total: Amount,
+    /// 剩余开放含税余额。
+    pub open_total: Amount,
+    /// 可开票含税总额。
+    pub invoiceable_total: Amount,
+    /// 净已开含税总额。
+    pub invoiced_total: Amount,
+    /// 剩余可开票含税额度。
+    pub open_invoiceable_total: Amount,
+    /// 子账状态。
+    pub status: ReceivableAccountStatus,
+    /// 乐观锁版本。
+    pub version: u64,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+    /// 建立回款/发票核销目标所需的应收分录。
+    pub entries: Vec<ReceivableEntryView>,
 }
 
 /// 卡券票款复核记录视图。
@@ -468,6 +465,10 @@ pub struct CardFundsRegistrationResult {
 /// 应收往来子账列表查询参数（分页参数与筛选字段扁平传递）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReceivableAccountListParams {
+    /// 子账、销售单、客户或往来主体关键字。
+    pub q: Option<String>,
+    /// 子账主键筛选。
+    pub account_id: Option<ReceivableAccountId>,
     /// 企业客户经营归属筛选。
     pub customer_id: Option<CustomerAccountId>,
     /// 收款和开票往来主体筛选。
@@ -493,6 +494,10 @@ pub struct ReceivableAccountListParams {
 /// 归一化后的应收往来子账列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReceivableAccountListQuery {
+    /// 子账、销售单、客户或往来主体关键字。
+    pub q: Option<String>,
+    /// 子账主键筛选。
+    pub account_id: Option<ReceivableAccountId>,
     /// 企业客户经营归属筛选。
     pub customer_id: Option<CustomerAccountId>,
     /// 收款和开票往来主体筛选。
@@ -521,6 +526,8 @@ impl ReceivableAccountListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, RECEIVABLE_ACCOUNT_SORT_FIELDS)?;
         Ok(ReceivableAccountListQuery {
+            q: normalized_text(self.q.as_deref()),
+            account_id: self.account_id.clone(),
             customer_id: self.customer_id.clone(),
             counterparty_party_id: self.counterparty_party_id.clone(),
             status: self.status,
@@ -765,6 +772,10 @@ pub struct CustomerReceiptListParams {
     pub counterparty_party_id: Option<PartyId>,
     /// 回款单状态筛选。
     pub status: Option<CustomerReceiptStatus>,
+    /// 来源销售单筛选；由 Service 解析核销分配关系。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选；由 Service 解析核销分配关系。
+    pub receivable_account_id: Option<ReceivableAccountId>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -786,6 +797,10 @@ pub(crate) struct CustomerReceiptListQuery {
     pub counterparty_party_id: Option<PartyId>,
     /// 回款单状态筛选。
     pub status: Option<CustomerReceiptStatus>,
+    /// 来源销售单筛选。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选。
+    pub receivable_account_id: Option<ReceivableAccountId>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -805,6 +820,8 @@ impl CustomerReceiptListParams {
             receipt_no: normalized_text(self.receipt_no.as_deref()),
             counterparty_party_id: self.counterparty_party_id.clone(),
             status: self.status,
+            sales_order_id: normalized_text(self.sales_order_id.as_deref()),
+            receivable_account_id: self.receivable_account_id.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -1003,6 +1020,10 @@ pub struct InvoiceListParams {
     pub invoice_no: Option<String>,
     /// 发票状态筛选。
     pub status: Option<InvoiceStatus>,
+    /// 来源销售单筛选；由 Service 解析发票分配关系。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选；由 Service 解析发票分配关系。
+    pub receivable_account_id: Option<ReceivableAccountId>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -1028,6 +1049,10 @@ pub(crate) struct InvoiceListQuery {
     pub invoice_no: Option<String>,
     /// 发票状态筛选。
     pub status: Option<InvoiceStatus>,
+    /// 来源销售单筛选。
+    pub sales_order_id: Option<String>,
+    /// 应收子账筛选。
+    pub receivable_account_id: Option<ReceivableAccountId>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -1048,6 +1073,8 @@ impl InvoiceListParams {
             party_id: self.party_id.clone(),
             invoice_no: normalized_text(self.invoice_no.as_deref()),
             status: self.status,
+            sales_order_id: normalized_text(self.sales_order_id.as_deref()),
+            receivable_account_id: self.receivable_account_id.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -1278,6 +1305,8 @@ mod tests {
     #[test]
     fn receivable_account_list_params_normalize_filters_and_paging() {
         let params = ReceivableAccountListParams {
+            q: Some(" SO ".to_string()),
+            account_id: None,
             customer_id: None,
             counterparty_party_id: None,
             status: Some(ReceivableAccountStatus::Open),
@@ -1290,6 +1319,7 @@ mod tests {
         };
         let query = params.normalized().unwrap();
         assert_eq!(query.status, Some(ReceivableAccountStatus::Open));
+        assert_eq!(query.q.as_deref(), Some("SO"));
         assert_eq!(query.sales_order_id.as_deref(), Some("SO-1"));
         assert_eq!(query.paging.page, 2);
         assert_eq!(query.paging.page_size, 50);
@@ -1300,6 +1330,8 @@ mod tests {
     #[test]
     fn list_params_reject_unbounded_page_size() {
         let params = ReceivableAccountListParams {
+            q: None,
+            account_id: None,
             customer_id: None,
             counterparty_party_id: None,
             status: None,
@@ -1319,6 +1351,8 @@ mod tests {
             receipt_no: Some(" RC-1 ".to_string()),
             counterparty_party_id: None,
             status: Some(CustomerReceiptStatus::Posted),
+            sales_order_id: None,
+            receivable_account_id: None,
             page: None,
             page_size: None,
             sort_by: None,
@@ -1334,6 +1368,8 @@ mod tests {
             party_id: None,
             invoice_no: None,
             status: None,
+            sales_order_id: None,
+            receivable_account_id: None,
             page: None,
             page_size: Some(99),
             sort_by: None,

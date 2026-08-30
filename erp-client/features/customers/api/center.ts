@@ -1,10 +1,14 @@
 import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api"
 import {
     fetchCustomerQuality,
     fetchCustomerQualityPeriodPolicy,
 } from "@/features/customer-quality/api"
 import type { CustomerCenterView } from "@/features/customers/types"
+import { compareDecimal } from "@/lib/fixed-decimal"
+import {
+    decodeCustomerCenterReceivable,
+    decodeCustomerCenterRelated,
+} from "./center-read-model"
 import { isApiError } from "./errors"
 import {
     mapAddress,
@@ -14,43 +18,10 @@ import {
     mapContractSummary,
     mapCustomerStatus,
     mapSalesOrderSummary,
-    receivableProjection,
     sensitiveIndex,
     tsToIso,
 } from "./mappers"
-import type {
-    BackendContractListRow,
-    BackendCustomerProfile,
-    BackendReceivableAccount,
-    BackendSalesOrderListRow,
-} from "./wire-types"
-
-/** 按服务端 total 读取完整小型关联集合，避免只汇总第一页。 */
-async function loadAllPages<T>(
-    path: string,
-    query: Record<string, unknown>,
-): Promise<Page<T>> {
-    const first = await apiGet<Page<T>>(path, {
-        ...query,
-        page: 1,
-        page_size: 100,
-    })
-    const pages = Math.ceil(first.total / 100)
-    if (pages <= 1) return first
-    const rest = await Promise.all(
-        Array.from({ length: pages - 1 }, (_, index) =>
-            apiGet<Page<T>>(path, {
-                ...query,
-                page: index + 2,
-                page_size: 100,
-            }),
-        ),
-    )
-    return {
-        ...first,
-        items: [...first.items, ...rest.flatMap((page) => page.items)],
-    }
-}
+import type { BackendCustomerProfile } from "./wire-types"
 
 /** 查询指定客户的当前经营质量投影摘要。 */
 async function loadCustomerQualitySummary(customerId: string) {
@@ -113,42 +84,52 @@ export async function fetchCustomerCenter(
         throw error
     }
 
-    const [
-        contractsResult,
-        salesOrdersResult,
-        receivablesResult,
-        qualityResult,
-    ] = await Promise.allSettled([
-        loadAllPages<BackendContractListRow>("/admin/contracts", {
-            customer_id: customerId,
-        }),
-        loadAllPages<BackendSalesOrderListRow>("/admin/sales-orders", {
-            customer_id: customerId,
-            sort_by: "created_at",
-            sort_dir: "desc",
-        }),
-        loadAllPages<BackendReceivableAccount>("/admin/receivable-accounts", {
-            customer_id: customerId,
-            sort_by: "created_at",
-            sort_dir: "desc",
-        }),
-        loadCustomerQualitySummary(customerId),
-    ])
+    const [relatedResult, receivableResult, qualityResult] =
+        await Promise.allSettled([
+            apiGet<unknown>(
+                `/admin/customer-profiles/${encodeURIComponent(customerId)}/related-summary`,
+            ).then(decodeCustomerCenterRelated),
+            apiGet<unknown>(
+                `/admin/customer-profiles/${encodeURIComponent(customerId)}/receivable-summary`,
+            ).then(decodeCustomerCenterReceivable),
+            loadCustomerQualitySummary(customerId),
+        ])
 
     const fields = sensitiveIndex(profile.sensitive_fields)
     const contractRows =
-        contractsResult.status === "fulfilled"
-            ? contractsResult.value.items
+        relatedResult.status === "fulfilled"
+            ? relatedResult.value.contracts
             : []
     const salesOrderRows =
-        salesOrdersResult.status === "fulfilled"
-            ? salesOrdersResult.value.items
+        relatedResult.status === "fulfilled"
+            ? relatedResult.value.sales_orders
             : []
     const contracts = contractRows.map(mapContractSummary)
     const salesOrders = salesOrderRows.map(mapSalesOrderSummary)
     const receivableSummary =
-        receivablesResult.status === "fulfilled"
-            ? receivableProjection(receivablesResult.value.items)
+        receivableResult.status === "fulfilled"
+            ? {
+                  receivableBalance: receivableResult.value.receivable_balance,
+                  overdueAmount: receivableResult.value.overdue_amount,
+                  earliestOverdueDate:
+                      receivableResult.value.earliest_overdue_date ?? undefined,
+                  collectionProgressLabel:
+                      compareDecimal(
+                          receivableResult.value.receivable_balance,
+                          "0",
+                          2,
+                      ) === 0
+                          ? "已结清"
+                          : "存在未结清余额",
+                  invoicingProgressLabel:
+                      compareDecimal(
+                          receivableResult.value.open_invoiceable_total,
+                          "0",
+                          2,
+                      ) === 0
+                          ? "已完成"
+                          : "存在可开票余额",
+              }
             : undefined
     const qualitySummary =
         qualityResult.status === "fulfilled" ? qualityResult.value : undefined
@@ -182,18 +163,12 @@ export async function fetchCustomerCenter(
         ),
         metrics: {
             activeContractCount:
-                contractsResult.status === "fulfilled"
-                    ? contractRows.filter(
-                          (contract) => contract.status === "EFFECTIVE",
-                      ).length
+                relatedResult.status === "fulfilled"
+                    ? relatedResult.value.active_contract_count
                     : null,
             inProgressSalesOrderCount:
-                salesOrdersResult.status === "fulfilled"
-                    ? salesOrderRows.filter(
-                          (order) =>
-                              order.commercial_status !== "VOIDED" &&
-                              order.close_status !== "CLOSED",
-                      ).length
+                relatedResult.status === "fulfilled"
+                    ? relatedResult.value.in_progress_sales_order_count
                     : null,
             receivableBalance: receivableSummary?.receivableBalance ?? null,
             overdueAmount: receivableSummary?.overdueAmount ?? null,
@@ -219,13 +194,9 @@ export async function fetchCustomerCenter(
         partitions: {
             identity: "ok",
             contacts: "ok",
-            related:
-                contractsResult.status === "fulfilled" &&
-                salesOrdersResult.status === "fulfilled"
-                    ? "ok"
-                    : "error",
+            related: relatedResult.status === "fulfilled" ? "ok" : "error",
             settlement:
-                receivablesResult.status === "fulfilled" ? "ok" : "error",
+                receivableResult.status === "fulfilled" ? "ok" : "error",
             quality: qualityResult.status === "fulfilled" ? "ok" : "error",
             audit: "ok",
         },

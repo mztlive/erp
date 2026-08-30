@@ -79,6 +79,9 @@ pub enum Error {
 
     #[error(transparent)]
     Validation(#[from] validator::ValidationErrors),
+
+    #[error("{0}")]
+    Coded(services::ErrorCode),
 }
 
 impl From<database::Error> for Error {
@@ -87,42 +90,7 @@ impl From<database::Error> for Error {
     /// 唯一键与乐观锁冲突使用 409，其余仓储错误保持内部错误语义。
     /// 唯一键冲突优先按已知索引名给出字段级提示。
     fn from(error: database::Error) -> Self {
-        match error {
-            error @ database::Error::DuplicateKey(_) => {
-                Self::Conflict(duplicate_key_conflict_message(&error))
-            }
-            database::Error::OptimisticLockingError => {
-                Self::Conflict("数据已被其他请求修改，请刷新后重试".to_string())
-            }
-            error @ database::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
-            other => Self::Repository(other),
-        }
-    }
-}
-
-/// 将唯一键冲突映射为面向用户的冲突提示。
-///
-/// # 参数
-/// * `error` - 已归类为 `DuplicateKey` 的仓储错误
-///
-/// # 返回
-/// 已知索引返回字段级中文提示；无法识别时返回通用冲突提示。
-fn duplicate_key_conflict_message(error: &database::Error) -> String {
-    match error.duplicate_index_name() {
-        Some("uk_parties_party_no") => "主体编号已存在".to_string(),
-        Some("uk_parties_credit_code") => "统一社会信用代码已存在".to_string(),
-        Some("uk_party_bank_accounts_bank_account_no") => "银行账户编号已存在".to_string(),
-        Some("uk_party_bank_accounts_party_hmac") => "该主体下银行账号已存在".to_string(),
-        Some("uk_supplier_accounts_party") => "该主体已绑定供应商角色".to_string(),
-        Some("uk_supplier_accounts_supplier_no") => "供应商编号已存在".to_string(),
-        Some("uk_contracts_contract_no") => "合同编号已存在".to_string(),
-        Some("uk_customer_accounts_party") => "该主体已绑定客户角色".to_string(),
-        Some("uk_customer_accounts_customer_no") => "客户编号已存在".to_string(),
-        Some("uk_procurement_confirmation_lines_confirmation_line")
-        | Some("uk_procurement_confirmation_lines_active_confirmation_line") => {
-            "该采购确认已有相同分行序号，请刷新后重试".to_string()
-        }
-        _ => "数据已存在，请勿重复提交".to_string(),
+        services::Error::from(error).into()
     }
 }
 
@@ -184,6 +152,7 @@ impl From<services::Error> for Error {
             services::Error::Logic(err) => Error::Logic(err),
             services::Error::Internal(msg) => Error::Internal(msg),
             services::Error::OutcomeUnknown(error) => Error::OutcomeUnknown(error),
+            services::Error::Coded(code) => Error::Coded(code),
             other => Error::Internal(other.to_string()),
         }
     }
@@ -245,6 +214,12 @@ impl Error {
             Error::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             Error::RateLimited(error) if error.retry_after_secs().is_some() => StatusCode::TOO_MANY_REQUESTS,
             Error::RateLimited(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Coded(code) => match code.class() {
+                services::ErrorClass::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+                services::ErrorClass::Conflict => StatusCode::CONFLICT,
+                services::ErrorClass::BusinessRule => StatusCode::UNPROCESSABLE_ENTITY,
+                services::ErrorClass::Forbidden => StatusCode::FORBIDDEN,
+            },
         }
     }
 
@@ -260,6 +235,7 @@ impl Error {
             Error::Unauthorized(_) => "UNAUTHENTICATED",
             Error::OutcomeUnknown(_) => "OUTCOME_UNKNOWN",
             Error::RateLimited(_) => "RATE_LIMITED",
+            Error::Coded(code) => code.as_str(),
         }
     }
 
@@ -310,6 +286,18 @@ impl Error {
                 "请求过于频繁，请稍后重试".to_string()
             }
             Error::RateLimited(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
+            Error::Coded(code) => match code.class() {
+                services::ErrorClass::Internal => {
+                    "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string()
+                }
+                services::ErrorClass::Conflict => "当前资料状态不允许继续操作，请刷新后核对".to_string(),
+                services::ErrorClass::BusinessRule => {
+                    "当前业务条件不允许继续操作，请核对相关资料后重试".to_string()
+                }
+                services::ErrorClass::Forbidden => {
+                    "当前账号没有执行此操作的权限，请联系管理员或有权限的同事".to_string()
+                }
+            },
         }
     }
 
@@ -347,7 +335,7 @@ impl Error {
         matches!(
             self,
             Error::Internal(_) | Error::Repository(_) | Error::RateLimited(_)
-        )
+        ) || matches!(self, Error::Coded(code) if code.retryable())
     }
 }
 

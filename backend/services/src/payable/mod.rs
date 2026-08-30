@@ -34,7 +34,7 @@ use entities::money::Amount;
 use entities::party::PartyBankAccount;
 use entities::payable::{
     AllocationAction, EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData,
-    PayableEntryType, PaymentAllocation, PaymentAllocationData, PendingPaymentAllocation,
+    PayableEntryType, PayableSourceType, PaymentAllocation, PaymentAllocationData, PendingPaymentAllocation,
     PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData, SupplierPayment, SupplierPaymentData,
     SupplierPaymentStatus,
 };
@@ -60,11 +60,11 @@ pub(crate) mod payment_task;
 use self::dto::SortDir;
 pub use self::dto::{
     CommitSupplierPaymentRequest, CreatePayableAccountRequest, CreateSupplierPaymentRequest, PageView,
-    PayableAccountListParams, PayableAccountView, PaymentAllocationLineRequest, PaymentAllocationView,
-    PaymentRecipientRevealView, PaymentRecipientView, PurchaseInvoiceAllocationListParams,
-    PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest,
-    RevealPaymentRecipientRequest, SupplierPaymentBankReceiptView, SupplierPaymentListParams,
-    SupplierPaymentReversalView, SupplierPaymentView,
+    PayableAccountListParams, PayableAccountSummaryView, PayableAccountView, PaymentAllocationLineRequest,
+    PaymentAllocationView, PaymentRecipientRevealView, PaymentRecipientView,
+    PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
+    RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentBankReceiptView,
+    SupplierPaymentListParams, SupplierPaymentReversalView, SupplierPaymentView,
 };
 use crate::party::SensitiveDataCodec;
 
@@ -119,7 +119,7 @@ impl PayableService {
     pub async fn payable_account_list(
         &self,
         params: &PayableAccountListParams,
-    ) -> Result<PageView<PayableAccountView>> {
+    ) -> Result<PageView<PayableAccountSummaryView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = PayableAccountFilter {
@@ -136,9 +136,159 @@ impl PayableService {
             .payable_accounts()
             .search_payable_accounts(&filter, &mut NoTransaction)
             .await?;
+        let account_ids = page
+            .items
+            .iter()
+            .map(|row| PayableAccountId::new(row.id.clone()))
+            .collect::<Vec<_>>();
+        let mut entries_by_account = HashMap::<String, Vec<PayableEntry>>::new();
+        for entry in self
+            .db
+            .payable_entries()
+            .find_entries_by_accounts(&account_ids, &mut NoTransaction)
+            .await?
+        {
+            entries_by_account
+                .entry(entry.payable_account_id.to_string())
+                .or_default()
+                .push(entry);
+        }
+        for entries in entries_by_account.values_mut() {
+            entries.sort_unstable_by_key(|entry| entry.source_sequence);
+        }
+
+        let supplier_ids = page
+            .items
+            .iter()
+            .map(|row| SupplierAccountId::new(row.supplier_id.clone()))
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let suppliers = self
+            .db
+            .supplier_accounts()
+            .find_accounts_by_ids(&supplier_ids, &mut NoTransaction)
+            .await?;
+        let party_ids = suppliers
+            .iter()
+            .map(|supplier| supplier.party_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let parties = self
+            .db
+            .parties()
+            .find_parties_by_ids(&party_ids, &mut NoTransaction)
+            .await?;
+        let revision_ids = parties
+            .iter()
+            .filter_map(|party| party.stable.current_revision_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let revisions = self
+            .db
+            .party_revisions()
+            .find_revisions_by_ids(&revision_ids, &mut NoTransaction)
+            .await?;
+        let supplier_by_id = suppliers
+            .into_iter()
+            .map(|supplier| (supplier.base.id.clone(), supplier))
+            .collect::<HashMap<_, _>>();
+        let party_by_id = parties
+            .into_iter()
+            .map(|party| (party.base.id.clone(), party))
+            .collect::<HashMap<_, _>>();
+        let revision_by_id = revisions
+            .into_iter()
+            .map(|revision| (revision.base.id.clone(), revision))
+            .collect::<HashMap<_, _>>();
+
+        let purchase_order_ids = page
+            .items
+            .iter()
+            .filter(|row| row.source_type == PayableSourceType::PurchaseOrder)
+            .map(|row| row.source_document_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let settlement_ids = page
+            .items
+            .iter()
+            .filter(|row| row.source_type == PayableSourceType::SupplierSettlement)
+            .map(|row| row.source_document_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let purchase_order_nos = self
+            .db
+            .purchase_order()
+            .find_orders_by_ids(&purchase_order_ids, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|order| (order.base.id.clone(), order.purchase_no))
+            .collect::<HashMap<_, _>>();
+        let settlement_nos = self
+            .db
+            .supplier_settlement_statements()
+            .find_statements_by_ids(&settlement_ids, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|statement| (statement.base.id.clone(), statement.statement_no))
+            .collect::<HashMap<_, _>>();
+
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
-            views.push(self.payable_account_view(row.id, false).await?);
+            let source_document_no = match row.source_type {
+                PayableSourceType::PurchaseOrder => purchase_order_nos.get(&row.source_document_id),
+                PayableSourceType::SupplierSettlement => settlement_nos.get(&row.source_document_id),
+            }
+            .filter(|value| !value.trim().is_empty())
+            .cloned();
+            let supplier = supplier_by_id.get(&row.supplier_id);
+            let supplier_no = supplier.map(|value| value.supplier_no.clone());
+            let supplier_name = supplier
+                .and_then(|value| party_by_id.get(value.party_id.as_ref()))
+                .and_then(|party| party.stable.current_revision_id.as_ref())
+                .and_then(|revision_id| revision_by_id.get(revision_id))
+                .map(|revision| revision.legal_name.clone());
+            let entries = entries_by_account
+                .remove(&row.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|entry| crate::payable::dto::PayableEntryView {
+                    id: entry.base.id,
+                    entry_type: entry.entry_type,
+                    direction: entry.direction,
+                    amount: entry.amount,
+                    due_date: entry.due_date,
+                    source_document_no: (entry.source_document_id == row.source_document_id)
+                        .then(|| source_document_no.clone())
+                        .flatten(),
+                    source_document_id: entry.source_document_id,
+                    source_sequence: entry.source_sequence,
+                    posted_at: entry.posted_at,
+                })
+                .collect();
+            views.push(PayableAccountSummaryView {
+                id: row.id,
+                source_document_id: row.source_document_id,
+                source_document_no,
+                supplier_id: row.supplier_id,
+                supplier_no,
+                supplier_name,
+                source_type: row.source_type,
+                gross_total: row.gross_total,
+                settled_total: row.settled_total,
+                open_total: row.open_total,
+                invoiceable_total: row.invoiceable_total,
+                invoiced_total: row.invoiced_total,
+                open_invoiceable_total: row.open_invoiceable_total,
+                status: row.stable.status(),
+                version: row.version,
+                created_at: row.created_at,
+                entries,
+            });
         }
         Ok(PageView {
             items: views,
@@ -607,7 +757,7 @@ impl PayableService {
     /// 规范化号码去重；校验发票往来主体（供应商 `party_id`）与应付子账
     /// 供应商一致；分配合计等于发票金额；写进项发票分配；按条件原子更新
     /// 应付子账净已收票进度（`apply_invoicing` 不超额收票）；发票迁移为已登记。
-    /// 规范化发票号码唯一构成重复提交去重。
+    /// 业务命令收据负责同键同载荷回放；规范化发票号码唯一键负责业务去重。
     ///
     /// # 参数
     /// * `req` - 进项发票登记请求
@@ -626,6 +776,17 @@ impl PayableService {
         actor: &AuditActor,
     ) -> Result<PurchaseInvoiceRegisteredView> {
         req.validate()?;
+        let command_receipt = CommandReceipt::new(
+            "purchase-invoice-register-",
+            actor,
+            "purchase_invoice_allocation.post",
+            "purchase_invoice_allocation",
+            &req.idempotency_key,
+            &req,
+        )?;
+        if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
+            return self.purchase_invoice_registered_view(&invoice_id).await;
+        }
         let supplier = self
             .db
             .supplier_accounts()
@@ -659,7 +820,8 @@ impl PayableService {
         let actor_owned = actor.clone();
         let actor_id = actor.id().to_string();
         let invoice_for_tx = invoice.clone();
-        client
+        let command_receipt_for_tx = command_receipt.clone();
+        let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     if db
@@ -741,11 +903,43 @@ impl PayableService {
                         invoice_mut.base.id.clone(),
                     )?;
                     db.audit_logs().create(&audit, session).await?;
+                    let receipt_audit =
+                        command_receipt_for_tx.audit(actor_owned.clone(), invoice_mut.base.id.clone())?;
+                    db.audit_logs().create(&receipt_audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
             })
-            .await?;
+            .await;
+        if let Err(error) = transaction_result {
+            if let Some(invoice_id) = command_receipt.committed_resource_id(&self.db).await? {
+                return self.purchase_invoice_registered_view(&invoice_id).await;
+            }
+            return Err(error);
+        }
+        self.purchase_invoice_registered_view(invoice_id.as_ref()).await
+    }
 
+    /// 按已提交发票主键回读稳定登记结果。
+    ///
+    /// # 参数
+    /// * `invoice_id` - 首次命令收据记录的进项发票主键
+    ///
+    /// # 返回
+    /// 返回发票号码、金额和正式分配行。
+    ///
+    /// # 错误
+    /// 收据引用损坏、发票或分配查询失败时返回错误。
+    async fn purchase_invoice_registered_view(
+        &self,
+        invoice_id: &str,
+    ) -> Result<PurchaseInvoiceRegisteredView> {
+        let invoice_id = InvoiceId::new(invoice_id);
+        let invoice = self
+            .db
+            .invoices()
+            .find_by_id(&invoice_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::Internal("进项发票命令收据引用不存在".to_string()))?;
         let allocations = self
             .db
             .purchase_invoice_allocations()
@@ -1618,7 +1812,16 @@ mod supplier_payment_execution_tests {
             .split("#[cfg(test)]")
             .next()
             .expect("生产代码");
-        assert!(production.contains("payable_account_view(row.id, false)"));
+        let account_list = production
+            .split("pub async fn payable_account_list")
+            .nth(1)
+            .expect("应付列表")
+            .split("pub async fn payable_account_detail")
+            .next()
+            .expect("应付列表函数体");
+        assert!(account_list.contains("PayableAccountSummaryView"));
+        assert!(!account_list.contains("payable_account_view("));
+        assert!(!account_list.contains("resolve_optional_payment_recipient_for_read"));
         assert!(production.contains("supplier_payment_view(row.id, false)"));
         assert!(production.contains("payable_account_view(id.to_string(), true)"));
         assert!(production.contains("supplier_payment_view(id.to_string(), true)"));

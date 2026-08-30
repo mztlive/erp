@@ -29,7 +29,7 @@ import {
     secsToIso,
     SEGREGATION_NOTE,
 } from "@/features/inventory/api/display"
-import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
+import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 import type {
     BackendStockAdjustment,
     BackendStockAdjustmentDetail,

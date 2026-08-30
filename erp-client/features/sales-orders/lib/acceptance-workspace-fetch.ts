@@ -15,7 +15,8 @@ import {
     mapSalesLine,
     type BackendEligibilityView,
 } from "@/features/sales-orders/lib/acceptance-mappers"
-import { parseQty } from "@/features/sales-orders/lib/acceptance-model"
+import { isPositiveQty } from "@/features/sales-orders/lib/acceptance-model"
+import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
 import { fetchSalesOrderDetail } from "@/features/sales-orders/api/sales-orders"
 
 export type AcceptanceTaskIdentity = Readonly<{
@@ -174,13 +175,12 @@ export async function fetchCustomerAcceptanceWorkspace(
     const salesLines = (eligibility.sales_lines ?? []).map(mapSalesLine)
     const eligibleFacts = salesLines
         .flatMap((line) => line.fulfillmentFacts)
-        .filter((fact) => parseQty(fact.eligibleQuantity) > 0)
-    const qtyByUnit = new Map<string, number>()
+        .filter((fact) => isPositiveQty(fact.eligibleQuantity))
+    const qtyByUnit = new Map<string, string[]>()
     for (const fact of eligibleFacts) {
-        qtyByUnit.set(
-            fact.unitCode,
-            (qtyByUnit.get(fact.unitCode) ?? 0) + Number(fact.eligibleQuantity),
-        )
+        const quantities = qtyByUnit.get(fact.unitCode) ?? []
+        quantities.push(fact.eligibleQuantity)
+        qtyByUnit.set(fact.unitCode, quantities)
     }
 
     const history = (eligibility.history ?? [])
@@ -216,9 +216,14 @@ export async function fetchCustomerAcceptanceWorkspace(
         metrics: {
             eligibleFulfillmentCount: eligibleFacts.length,
             eligibleQuantityByUnit: [...qtyByUnit.entries()].map(
-                ([unitCode, quantity]) => ({
+                ([unitCode, quantities]) => ({
                     unitCode,
-                    quantity: String(quantity),
+                    quantity: compactFixed(
+                        sumFixed(quantities, {
+                            maxScale: 6,
+                            outputScale: 6,
+                        }),
+                    ),
                 }),
             ),
             overdueLineCount: 0,

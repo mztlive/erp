@@ -133,11 +133,16 @@ impl CardInstanceService {
             cutover.base.id.clone(),
         )?;
 
-        self.db
-            .mall_consumption_cutovers()
-            .create(&cutover, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let cutover_for_tx = cutover.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.mall_consumption_cutovers()
+                    .create(&cutover_for_tx, session)
+                    .await?;
+                Ok(())
+            })
+        })
+        .await?;
 
         Ok(cutover_view(&mut cutover))
     }
@@ -519,11 +524,14 @@ impl CardInstanceService {
             snapshot.base.id.clone(),
         )?;
 
-        self.db
-            .balance_snapshots()
-            .create(&snapshot, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let snapshot_for_tx = snapshot.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.balance_snapshots().create(&snapshot_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
 
         Ok(BalanceSnapshotView {
             id: snapshot.base.id,

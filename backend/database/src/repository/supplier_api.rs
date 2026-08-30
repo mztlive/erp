@@ -230,6 +230,36 @@ impl Pagination for SupplierApiCapabilityFilter {
 }
 
 impl<'a> Repository<'a, SupplierApiCapability> {
+    /// 按连接 ID 集合批量读取能力声明。
+    ///
+    /// 列表读模型使用一次查询补齐当前页能力摘要，禁止逐连接读取。
+    ///
+    /// # 参数
+    /// * `connection_ids` - 当前页连接 ID；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按连接 ID、能力代码稳定排序的完整能力实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_capabilities_by_connections(
+        &self,
+        connection_ids: &[SupplierApiConnectionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierApiCapability>> {
+        if connection_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = connection_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many_sorted(
+            doc! { "connection_id": { "$in": ids } },
+            doc! { "connection_id": 1, "capability_code": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 分页检索连接能力声明列表（投影查询）。
     ///
     /// 只返回 [`SupplierApiCapabilityRow`] 所需的列表字段，不加载整文档

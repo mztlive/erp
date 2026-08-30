@@ -2,10 +2,7 @@
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::publication` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
-//! 商城连接器（`MallConnector`）在 handler 内构造默认失败关闭实现，
-//! 保持 Service 可注入 mock 连接器。
-
-use std::sync::Arc;
+//! 商城连接器由启动组合根注入；Handler 不选择真实、模拟或失败关闭实现。
 
 use axum::{
     extract::{Path, Query, State},
@@ -21,9 +18,13 @@ use services::{
         ProductPublicationRevisionView, ProductPublicationView, PublicationDeliveryActionResultView,
         PublicationDeliveryCommand, PublicationDeliveryResultView, PublicationService,
         RetryPublicationDeliveryRequest, RetryPublicationDeliveryResultView, SystemSafetyPauseOperationView,
-        UnavailableMallConnector, UpdateProductPublicationRequest,
+        UpdateProductPublicationRequest,
     },
 };
+
+fn service(state: &AppState) -> PublicationService {
+    state.publication_service()
+}
 
 use crate::{
     app_state::AppState,
@@ -49,9 +50,7 @@ pub async fn product_publication_list(
     State(state): State<AppState>,
     Query(params): Query<ProductPublicationListParams>,
 ) -> Result<PageView<ProductPublicationView>> {
-    let page = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .publication_list(&params)
-        .await?;
+    let page = service(&state).publication_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -75,9 +74,7 @@ pub async fn product_publication_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<ProductPublicationView> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .publication_detail(&id)
-        .await?;
+    let view = service(&state).publication_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -105,9 +102,7 @@ pub async fn product_publication_update(
     Path(id): Path<String>,
     Json(req): Json<UpdateProductPublicationRequest>,
 ) -> Result<ProductPublicationView> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .update_publication(&id, req, &actor)
-        .await?;
+    let view = service(&state).update_publication(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -135,9 +130,7 @@ pub async fn product_publication_revision_create(
     Path(id): Path<String>,
     Json(req): Json<CreateProductPublicationRevisionRequest>,
 ) -> Result<ProductPublicationRevisionCommitView> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .create_revision(&id, req, &actor)
-        .await?;
+    let view = service(&state).create_revision(&id, req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -161,9 +154,7 @@ pub async fn product_publication_revision_list(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Vec<ProductPublicationRevisionView>> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .revision_list(&id)
-        .await?;
+    let view = service(&state).revision_list(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -187,9 +178,7 @@ pub async fn product_publication_revision_media_list(
     State(state): State<AppState>,
     Path(revision_id): Path<String>,
 ) -> Result<Vec<ProductPublicationRevisionMediaView>> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .revision_media_list(&revision_id)
-        .await?;
+    let view = service(&state).revision_media_list(&revision_id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -219,7 +208,7 @@ pub async fn product_publication_delivery_submit(
     Path((id, revision_no)): Path<(String, u32)>,
     Json(req): Json<DeliverPublicationRevisionRequest>,
 ) -> Result<PublicationDeliveryResultView> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let view = service(&state)
         .deliver_revision(&id, revision_no, req, &actor)
         .await?;
 
@@ -245,9 +234,7 @@ pub async fn product_publication_delivery_list(
     State(state): State<AppState>,
     Query(params): Query<ProductPublicationDeliveryListParams>,
 ) -> Result<PageView<ProductPublicationDeliveryView>> {
-    let page = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .delivery_list(&params)
-        .await?;
+    let page = service(&state).delivery_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -266,7 +253,7 @@ pub async fn product_publication_delivery_action(
     Path(delivery_id): Path<String>,
     Json(command): Json<PublicationDeliveryCommand>,
 ) -> Result<PublicationDeliveryActionResultView> {
-    let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let result = service(&state)
         .apply_publication_delivery_command(&delivery_id, command, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -295,7 +282,7 @@ pub async fn product_publication_delivery_retry(
     Path(delivery_id): Path<String>,
     Json(req): Json<RetryPublicationDeliveryRequest>,
 ) -> Result<RetryPublicationDeliveryResultView> {
-    let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let result = service(&state)
         .retry_delivery_by_id(&delivery_id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -314,7 +301,7 @@ pub async fn product_publication_delivery_process_pending(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<ProcessPublicationDeliveriesRequest>,
 ) -> Result<ProcessPublicationDeliveriesResult> {
-    let result = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let result = service(&state)
         .process_pending_publication_deliveries(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(result))
@@ -335,9 +322,7 @@ pub async fn product_publication_safety_pause_detail(
     State(state): State<AppState>,
     Path(idempotency_key): Path<String>,
 ) -> Result<SystemSafetyPauseOperationView> {
-    let view = PublicationService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .safety_pause_operation(&idempotency_key)
-        .await?;
+    let view = service(&state).safety_pause_operation(&idempotency_key).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

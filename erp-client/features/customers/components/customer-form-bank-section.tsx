@@ -4,6 +4,7 @@ import { PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import type { CustomerFormApi } from "@/features/customers/components/customer-form-values"
 import { FormSection } from "@/features/customers/components/customer-form-sections"
 
@@ -117,31 +118,37 @@ export function BankAccountRowsSection({
                                     <form.AppField
                                         name={`bankAccounts[${index}].isDefault`}
                                     >
-                                        {(nested) => (
-                                            <label className="flex items-center gap-2 text-sm">
-                                                <Checkbox
-                                                    checked={
-                                                        nested.state.value
-                                                    }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        nested.handleChange(
-                                                            checked === true,
-                                                        )
-                                                    }
-                                                />
-                                                默认账户
-                                            </label>
-                                        )}
+                                        {(nested) => {
+                                            const checkboxId = `customer-bank-${index}-default`
+                                            return (
+                                                <Label
+                                                    htmlFor={checkboxId}
+                                                    className="flex items-center gap-2 text-sm"
+                                                >
+                                                    <Checkbox
+                                                        id={checkboxId}
+                                                        checked={
+                                                            nested.state.value
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            nested.handleChange(
+                                                                checked ===
+                                                                    true,
+                                                            )
+                                                        }
+                                                    />
+                                                    默认账户
+                                                </Label>
+                                            )
+                                        }}
                                     </form.AppField>
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        onClick={() =>
-                                            field.removeValue(index)
-                                        }
+                                        onClick={() => field.removeValue(index)}
                                     >
                                         {_row.existingId ? "结束账户" : "移除"}
                                     </Button>

@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { useSelector } from "@tanstack/react-form"
 
 import { OwnerCombobox } from "@/components/business"
+import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -12,29 +14,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { Textarea } from "@/components/ui/textarea"
 import { useApplyCustomerAssignmentMutation } from "@/features/customers/hooks/queries"
+import {
+    customerAssignmentDefaults,
+    customerAssignmentSchema,
+} from "@/features/customers/lib/customer-assignment-form"
 import type { CustomerAssignmentView } from "@/features/customers/types"
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import { getErrorMessage } from "@/lib/api/errors"
-
-/** 返回本地业务日期。 */
-function todayBusinessDate(): string {
-    const date = new Date()
-    const pad = (value: number) => String(value).padStart(2, "0")
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
-/** 返回给定业务日的下一天。 */
-function nextBusinessDate(value: string): string {
-    const date = new Date(`${value}T00:00:00`)
-    date.setDate(date.getDate() + 1)
-    const pad = (part: number) => String(part).padStart(2, "0")
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
 
 /** 从统一 API 错误中提取服务端业务消息。 */
 const mutationMessage = (error: unknown): string =>
@@ -53,84 +44,54 @@ export function CustomerAssignmentDialog({
     onOpenChange: (open: boolean) => void
 }) {
     const mutation = useApplyCustomerAssignmentMutation()
+    const resetMutation = mutation.reset
     const owners = useOwnerOptionsQuery()
-    const [userId, setUserId] = React.useState("")
-    const [role, setRole] = React.useState<"OWNER" | "COLLABORATOR">(
-        "COLLABORATOR",
-    )
-    const [effectiveFrom, setEffectiveFrom] = React.useState("")
-    const [effectiveTo, setEffectiveTo] = React.useState("")
-    const [reason, setReason] = React.useState("")
-    const [validation, setValidation] = React.useState<string>()
+    const ending = target != null
+
+    const form = useAppForm({
+        defaultValues: customerAssignmentDefaults(target),
+        validators: { onChange: customerAssignmentSchema(target) },
+        onSubmit: async ({ value }) => {
+            if (target) {
+                await mutation.mutateAsync({
+                    customerId,
+                    action: "end",
+                    effectiveTo: value.effectiveTo,
+                    assignmentId: target.id,
+                    version: target.version,
+                    changeReason: value.reason,
+                })
+            } else {
+                await mutation.mutateAsync({
+                    customerId,
+                    action: "assign",
+                    userId: value.userId,
+                    role: value.role,
+                    effectiveFrom: value.effectiveFrom,
+                    effectiveTo: value.effectiveTo || undefined,
+                    changeReason: value.reason,
+                })
+            }
+            onOpenChange(false)
+        },
+    })
+    const dirty = useSelector(form.store, (state) => state.isDirty)
 
     React.useEffect(() => {
         if (!open) return
-        const today = todayBusinessDate()
-        setUserId("")
-        setRole("COLLABORATOR")
-        setEffectiveFrom(today)
-        setEffectiveTo(
-            target
-                ? target.effectiveFrom >= today
-                    ? nextBusinessDate(today)
-                    : today
-                : "",
-        )
-        setReason("")
-        setValidation(undefined)
-        mutation.reset()
-    }, [open, target]) // eslint-disable-line react-hooks/exhaustive-deps -- mutation identity is not reset state
+        form.reset(customerAssignmentDefaults(target))
+        resetMutation()
+    }, [form, open, resetMutation, target])
 
-    const ending = target != null
-
-    const submit = (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault()
-        if (!reason.trim()) {
-            setValidation("请填写调整原因")
-            return
+    React.useEffect(() => {
+        if (!open || !dirty) return
+        const onBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault()
+            event.returnValue = "当前归属调整尚未提交，刷新后将丢失。"
         }
-        if (ending) {
-            if (!effectiveTo || effectiveTo <= target.effectiveFrom) {
-                setValidation(`结束日期必须晚于 ${target.effectiveFrom}`)
-                return
-            }
-            mutation.mutate(
-                {
-                    customerId,
-                    action: "end",
-                    effectiveTo,
-                    assignmentId: target.id,
-                    version: target.version,
-                    changeReason: reason,
-                },
-                { onSuccess: () => onOpenChange(false) },
-            )
-        } else {
-            if (!userId) {
-                setValidation("请选择销售人员")
-                return
-            }
-            if (
-                !effectiveFrom ||
-                (effectiveTo && effectiveTo <= effectiveFrom)
-            ) {
-                setValidation("结束日期必须晚于生效日期")
-                return
-            }
-            mutation.mutate(
-                {
-                    customerId,
-                    action: "assign",
-                    userId,
-                    role,
-                    effectiveFrom,
-                    effectiveTo: effectiveTo || undefined,
-                    changeReason: reason,
-                },
-                { onSuccess: () => onOpenChange(false) },
-            )
-        }
-    }
+        window.addEventListener("beforeunload", onBeforeUnload)
+        return () => window.removeEventListener("beforeunload", onBeforeUnload)
+    }, [dirty, open])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,7 +106,13 @@ export function CustomerAssignmentDialog({
                             : "换任负责人会结束重叠的旧负责人归属；新增协作不会改变负责人。"}
                     </DialogDescription>
                 </DialogHeader>
-                <form className="space-y-4" onSubmit={submit}>
+                <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
                     {ending ? (
                         <div className="rounded-lg bg-muted px-3 py-2 text-sm">
                             {target.userName} · 协作销售 ·{" "}
@@ -153,99 +120,181 @@ export function CustomerAssignmentDialog({
                         </div>
                     ) : (
                         <>
-                            <div className="space-y-2">
-                                <Label htmlFor="customer-assignment-role">
-                                    责任角色
-                                </Label>
-                                <NativeSelect
-                                    id="customer-assignment-role"
-                                    className="w-full"
-                                    value={role}
-                                    onChange={(event) =>
-                                        setRole(
-                                            event.target.value as
-                                                | "OWNER"
-                                                | "COLLABORATOR",
-                                        )
-                                    }
-                                >
-                                    <NativeSelectOption value="OWNER">
-                                        负责销售
-                                    </NativeSelectOption>
-                                    <NativeSelectOption value="COLLABORATOR">
-                                        协作销售
-                                    </NativeSelectOption>
-                                </NativeSelect>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>销售人员</Label>
-                                <OwnerCombobox
-                                    owners={owners.data ?? []}
-                                    value={userId || undefined}
-                                    onValueChange={(value) =>
-                                        setUserId(value ?? "")
-                                    }
-                                />
-                            </div>
+                            <form.AppField
+                                name="role"
+                                children={(field) => (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="customer-assignment-role">
+                                            责任角色
+                                        </Label>
+                                        <NativeSelect
+                                            id="customer-assignment-role"
+                                            className="w-full"
+                                            value={field.state.value}
+                                            onBlur={field.handleBlur}
+                                            onChange={(event) =>
+                                                field.handleChange(
+                                                    event.target
+                                                        .value as typeof field.state.value,
+                                                )
+                                            }
+                                        >
+                                            <NativeSelectOption value="OWNER">
+                                                负责销售
+                                            </NativeSelectOption>
+                                            <NativeSelectOption value="COLLABORATOR">
+                                                协作销售
+                                            </NativeSelectOption>
+                                        </NativeSelect>
+                                    </div>
+                                )}
+                            />
+                            <form.AppField
+                                name="userId"
+                                children={(field) => {
+                                    const invalid =
+                                        field.state.meta.isTouched &&
+                                        !field.state.meta.isValid
+                                    return (
+                                        <Field
+                                            data-invalid={invalid || undefined}
+                                        >
+                                            <FieldLabel>销售人员</FieldLabel>
+                                            <OwnerCombobox
+                                                owners={owners.data ?? []}
+                                                value={
+                                                    field.state.value ||
+                                                    undefined
+                                                }
+                                                onValueChange={(value) =>
+                                                    field.handleChange(
+                                                        value ?? "",
+                                                    )
+                                                }
+                                            />
+                                            {invalid ? (
+                                                <FieldError
+                                                    errors={toFieldErrors(
+                                                        field.state.meta.errors,
+                                                    )}
+                                                />
+                                            ) : null}
+                                        </Field>
+                                    )
+                                }}
+                            />
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer-assignment-from">
-                                        生效日期
-                                    </Label>
-                                    <Input
-                                        id="customer-assignment-from"
-                                        type="date"
-                                        value={effectiveFrom}
-                                        onChange={(event) =>
-                                            setEffectiveFrom(event.target.value)
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer-assignment-to">
-                                        结束日期（可选）
-                                    </Label>
-                                    <Input
-                                        id="customer-assignment-to"
-                                        type="date"
-                                        value={effectiveTo}
-                                        onChange={(event) =>
-                                            setEffectiveTo(event.target.value)
-                                        }
-                                    />
-                                </div>
+                                <form.AppField
+                                    name="effectiveFrom"
+                                    children={(field) => (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="customer-assignment-from">
+                                                生效日期
+                                            </Label>
+                                            <Input
+                                                id="customer-assignment-from"
+                                                type="date"
+                                                value={field.state.value}
+                                                onBlur={field.handleBlur}
+                                                onChange={(event) =>
+                                                    field.handleChange(
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                    )}
+                                />
+                                <form.AppField
+                                    name="effectiveTo"
+                                    children={(field) => {
+                                        const invalid =
+                                            field.state.meta.isTouched &&
+                                            !field.state.meta.isValid
+                                        return (
+                                            <Field
+                                                data-invalid={
+                                                    invalid || undefined
+                                                }
+                                            >
+                                                <FieldLabel htmlFor="customer-assignment-to">
+                                                    结束日期（可选）
+                                                </FieldLabel>
+                                                <Input
+                                                    id="customer-assignment-to"
+                                                    type="date"
+                                                    value={field.state.value}
+                                                    onBlur={field.handleBlur}
+                                                    onChange={(event) =>
+                                                        field.handleChange(
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {invalid ? (
+                                                    <FieldError
+                                                        errors={toFieldErrors(
+                                                            field.state.meta
+                                                                .errors,
+                                                        )}
+                                                    />
+                                                ) : null}
+                                            </Field>
+                                        )
+                                    }}
+                                />
                             </div>
                         </>
                     )}
                     {ending ? (
-                        <div className="space-y-2">
-                            <Label htmlFor="customer-assignment-end-date">
-                                结束日期
-                            </Label>
-                            <Input
-                                id="customer-assignment-end-date"
-                                type="date"
-                                value={effectiveTo}
-                                onChange={(event) =>
-                                    setEffectiveTo(event.target.value)
-                                }
-                            />
-                        </div>
-                    ) : null}
-                    <div className="space-y-2">
-                        <Label htmlFor="customer-assignment-reason">
-                            调整原因
-                        </Label>
-                        <Textarea
-                            id="customer-assignment-reason"
-                            value={reason}
-                            onChange={(event) => setReason(event.target.value)}
-                            placeholder="说明换任、协作或结束原因"
+                        <form.AppField
+                            name="effectiveTo"
+                            children={(field) => {
+                                const invalid =
+                                    field.state.meta.isTouched &&
+                                    !field.state.meta.isValid
+                                return (
+                                    <Field data-invalid={invalid || undefined}>
+                                        <FieldLabel htmlFor="customer-assignment-end-date">
+                                            结束日期
+                                        </FieldLabel>
+                                        <Input
+                                            id="customer-assignment-end-date"
+                                            type="date"
+                                            value={field.state.value}
+                                            onBlur={field.handleBlur}
+                                            onChange={(event) =>
+                                                field.handleChange(
+                                                    event.target.value,
+                                                )
+                                            }
+                                        />
+                                        {invalid ? (
+                                            <FieldError
+                                                errors={toFieldErrors(
+                                                    field.state.meta.errors,
+                                                )}
+                                            />
+                                        ) : null}
+                                    </Field>
+                                )
+                            }}
                         />
-                    </div>
-                    {validation || mutation.isError ? (
+                    ) : null}
+                    <form.AppField
+                        name="reason"
+                        children={(field) => (
+                            <field.TextareaField
+                                label="调整原因"
+                                required
+                                disabled={mutation.isPending}
+                                placeholder="说明换任、协作或结束原因"
+                            />
+                        )}
+                    />
+                    {mutation.isError ? (
                         <p className="text-sm text-destructive" role="alert">
-                            {validation || mutationMessage(mutation.error)}
+                            {mutationMessage(mutation.error)}
                         </p>
                     ) : null}
                     <DialogFooter>
@@ -257,13 +306,12 @@ export function CustomerAssignmentDialog({
                         >
                             取消
                         </Button>
-                        <Button type="submit" disabled={mutation.isPending}>
-                            {mutation.isPending
-                                ? "提交中…"
-                                : ending
-                                  ? "确认结束"
-                                  : "确认调整"}
-                        </Button>
+                        <form.AppForm>
+                            <form.SubmitButton
+                                label={ending ? "确认结束" : "确认调整"}
+                                disabled={mutation.isPending}
+                            />
+                        </form.AppForm>
                     </DialogFooter>
                 </form>
             </DialogContent>

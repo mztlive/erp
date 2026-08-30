@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentation"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 export function MoneyCell({
     value,
@@ -16,8 +17,14 @@ export function MoneyCell({
     ariaLabel?: string
 }) {
     const display = formatMoneyDisplay(value)
-    const isNeg =
-        negativeAsText && value != null && value !== "—" && Number(value) < 0
+    let isNeg = false
+    if (negativeAsText && value != null && value !== "—") {
+        try {
+            isNeg = compareDecimal(value, "0", 6) < 0
+        } catch {
+            isNeg = false
+        }
+    }
     const content = (
         <span
             className={`num text-sm ${isNeg ? "text-destructive" : ""}`}

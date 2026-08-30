@@ -20,6 +20,7 @@ import type {
     BackendReviewWorkItem,
     BackendStatement,
 } from "@/features/supplier-settlements/api/settlements-wire"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 function tsToIso(secs: number | null | undefined): string {
     if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
@@ -45,10 +46,13 @@ export function asStatus(raw: string): SettlementStatus {
 
 function directionLabel(diff?: string): string | undefined {
     if (diff == null) return undefined
-    const n = Number(diff)
-    if (!Number.isFinite(n) || n === 0) return "无差异"
-    if (n > 0) return "供应商账单高于 ERP"
-    return "ERP 高于供应商账单"
+    try {
+        const direction = compareDecimal(diff, "0", 6)
+        if (direction === 0) return "无差异"
+        return direction > 0 ? "供应商账单高于 ERP" : "ERP 高于供应商账单"
+    } catch {
+        return "无差异"
+    }
 }
 
 export function toListRow(s: BackendStatement): SettlementListRow {

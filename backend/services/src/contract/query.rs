@@ -1,11 +1,16 @@
 //! 合同列表查询编排。
 
-use database::{ContractExt, NoTransaction};
+use std::collections::HashMap;
+
+use database::{AccessControlExt, ContractExt, CustomerExt, NoTransaction};
+use entities::common::time::BusinessDate;
+use entities::customer::AssignmentRole;
+use entities::ids::CustomerAccountId;
 use validator::Validate;
 
 use crate::errors::Result;
 
-use super::dto::{ContractListParams, ContractView, PageView};
+use super::dto::{ContractListParams, ContractRevisionView, ContractView, PageView};
 use super::ContractService;
 
 /// 合同列表筛选条件类型（经 `ContractExt` 关联类型跨 crate 可达）。
@@ -46,20 +51,78 @@ impl ContractService {
             .contracts()
             .search_contracts(&filter, &mut NoTransaction)
             .await?;
+        let rows = page.items;
+        let revision_ids = rows
+            .iter()
+            .filter_map(|row| row.current_revision_id.clone())
+            .collect::<Vec<_>>();
+        let revisions = self
+            .db
+            .contract_revisions()
+            .find_by_ids(&revision_ids, &mut NoTransaction)
+            .await?;
+        let mut revisions_by_id = revisions
+            .into_iter()
+            .map(|revision| (revision.base.id.clone(), ContractRevisionView::from(revision)))
+            .collect::<HashMap<_, _>>();
+        let customer_ids = rows
+            .iter()
+            .map(|row| CustomerAccountId::new(row.customer_id.clone()))
+            .collect::<Vec<_>>();
+        let customers = self
+            .db
+            .customer_accounts()
+            .find_accounts_by_ids(&customer_ids, &mut NoTransaction)
+            .await?;
+        let customers_by_id = customers
+            .into_iter()
+            .map(|customer| (customer.base.id.clone(), customer))
+            .collect::<HashMap<_, _>>();
+        let customer_id_strings = customer_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let assignments = self
+            .db
+            .customer_assignments()
+            .list_active_for_customers(&customer_id_strings, BusinessDate::today(), &mut NoTransaction)
+            .await?;
+        let owners_by_customer = assignments
+            .into_iter()
+            .filter(|assignment| assignment.assignment_role == AssignmentRole::Owner)
+            .map(|assignment| (assignment.customer_id.to_string(), assignment.user_id))
+            .collect::<HashMap<_, _>>();
+        let owner_ids = owners_by_customer.values().cloned().collect::<Vec<_>>();
+        let owner_names = self
+            .db
+            .accounts()
+            .names_by_ids(&owner_ids, &mut NoTransaction)
+            .await?;
 
         Ok(PageView {
-            items: page
-                .items
+            items: rows
                 .into_iter()
-                .map(|row| ContractView {
-                    id: row.id,
-                    contract_no: row.contract_no,
-                    customer_id: row.customer_id,
-                    settlement_party_id: row.settlement_party_id,
-                    status: row.status,
-                    current_revision_id: row.current_revision_id,
-                    created_at: row.created_at,
-                    version: row.version,
+                .map(|row| {
+                    let current_revision = row
+                        .current_revision_id
+                        .as_ref()
+                        .and_then(|id| revisions_by_id.remove(id));
+                    let customer_no = customers_by_id
+                        .get(&row.customer_id)
+                        .map(|customer| customer.customer_no.clone());
+                    let owner_user_id = owners_by_customer.get(&row.customer_id).cloned();
+                    let owner_user_name = owner_user_id.as_ref().and_then(|id| owner_names.get(id)).cloned();
+                    ContractView {
+                        id: row.id,
+                        contract_no: row.contract_no,
+                        customer_id: row.customer_id,
+                        settlement_party_id: row.settlement_party_id,
+                        status: row.status,
+                        current_revision_id: row.current_revision_id,
+                        current_revision,
+                        customer_no,
+                        owner_user_id,
+                        owner_user_name,
+                        created_at: row.created_at,
+                        version: row.version,
+                    }
                 })
                 .collect(),
             total: page.total,

@@ -1,7 +1,7 @@
 "use client"
 
 import { OptionCombobox, surfaceInsetClassName } from "@/components/business"
-import { SettlementPartySearchCombobox } from "@/features/entity-selectors"
+import { SettlementPartySearchCombobox } from "@/features/party-selector/settlement-party-search-combobox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {

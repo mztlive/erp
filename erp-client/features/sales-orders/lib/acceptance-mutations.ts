@@ -13,6 +13,7 @@ import type {
     SaveAcceptanceDraftInput,
 } from "@/features/sales-orders/lib/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
+import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import {
     mapOverallResult,
     mapOverallResultToBackend,
@@ -129,14 +130,14 @@ export async function postCustomerAcceptanceWorkspace(
                     unitCode: group.unit_code ?? "",
                 })),
             )
-            .filter((fact) => Number(fact.eligible_quantity) > 0)
-        const quantitiesByUnit = new Map<string, number>()
-        for (const fact of remainingFacts) {
-            quantitiesByUnit.set(
-                fact.unitCode,
-                (quantitiesByUnit.get(fact.unitCode) ?? 0) +
-                    Number(fact.eligible_quantity),
+            .filter(
+                (fact) => compareDecimal(fact.eligible_quantity, "0", 6) > 0,
             )
+        const quantitiesByUnit = new Map<string, string[]>()
+        for (const fact of remainingFacts) {
+            const quantities = quantitiesByUnit.get(fact.unitCode) ?? []
+            quantities.push(fact.eligible_quantity)
+            quantitiesByUnit.set(fact.unitCode, quantities)
         }
 
         return {
@@ -145,7 +146,15 @@ export async function postCustomerAcceptanceWorkspace(
             acceptanceId: header.id,
             remainingEligibleCount: remainingFacts.length,
             remainingEligibleQuantityLabel: Array.from(quantitiesByUnit)
-                .map(([unit, quantity]) => `${quantity}${unit}`)
+                .map(
+                    ([unit, quantities]) =>
+                        `${compactFixed(
+                            sumFixed(quantities, {
+                                maxScale: 6,
+                                outputScale: 6,
+                            }),
+                        )}${unit}`,
+                )
                 .join("、"),
             overallResult: overall,
             factOnlyNotice: FACT_ONLY_NOTICE,

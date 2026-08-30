@@ -8,7 +8,7 @@ import { Field, FieldError } from "@/components/ui/field"
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
-import { VoucherCategorySearchCombobox } from "@/features/entity-selectors"
+import { VoucherCategorySearchCombobox } from "@/features/sales-orders/components/voucher-category-search-combobox"
 
 export type SalesOrderCreateLineSkuEditorProps = {
     form: SalesOrderCreateFormApi

@@ -4,7 +4,7 @@ import { toSellablePickerListQuery } from "./sellable-sku-picker-query"
 
 const pagination = { pageIndex: 1, pageSize: 20 }
 
-describe("toSellablePickerListQuery", () => {
+describe("sales-order toSellablePickerListQuery", () => {
     it("maps nationwide preset to the nationwide supply region", () => {
         const query = toSellablePickerListQuery(
             { q: " 礼盒 ", supplyPreset: "nationwide" },

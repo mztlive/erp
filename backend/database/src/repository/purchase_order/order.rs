@@ -18,7 +18,7 @@ use super::common::{in_filter, sort_doc, PURCHASE_ORDER_SORT_FIELDS};
 use super::PurchaseOrderRepository;
 use crate::executor::Executor;
 use crate::repository::extensions::{
-    PayableExt, SalesOrderExt, SupplierOfferingExt, WarehouseExt, WorkItemExt,
+    PayableExt, PurchaseOrderExt, SalesOrderExt, SupplierOfferingExt, WarehouseExt, WorkItemExt,
 };
 use crate::repository::regex_filter::insert_literal_regex_filter;
 use crate::repository::{PageResult, Pagination, QueryFilter};
@@ -117,6 +117,31 @@ impl Pagination for PurchaseOrderFilter {
 }
 
 impl<'a> PurchaseOrderRepository<'a> {
+    /// 按采购单 ID 集合批量读取采购单。
+    ///
+    /// # 参数
+    /// * `purchase_order_ids` - 采购单 ID 字符串集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的采购单；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_orders_by_ids(
+        &self,
+        purchase_order_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchaseOrder>> {
+        if purchase_order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.db
+            .purchase_orders()
+            .find_many(in_filter("id", purchase_order_ids.iter().cloned()), executor)
+            .await
+    }
+
     /// 批量读取采购单关联的销售单。
     ///
     /// # 参数

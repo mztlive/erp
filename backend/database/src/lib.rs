@@ -14,6 +14,9 @@ pub use executor::{Executor, NoTransaction};
 pub use indexes::ensure_indexes;
 pub use repository::extensions::*;
 pub use repository::{
-    ProcurementResponsibilityRuleFilter, Repository, SkuRow, SupplierOfferingRow, WorkItemRow,
+    CustomerCenterContractRow, CustomerCenterReceivableRow, CustomerCenterRelatedRow,
+    CustomerCenterSalesOrderRow, FulfillmentQueueFilter, FulfillmentQueueItemRow, FulfillmentQueueMetricRow,
+    FulfillmentQueueRepositoryPage, FulfillmentQueueWarehouseRow, ProcurementResponsibilityRuleFilter,
+    Repository, SkuRow, SupplierOfferingRow, WorkItemRow,
 };
 pub use transaction::Transactional;

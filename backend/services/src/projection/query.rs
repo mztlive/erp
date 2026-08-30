@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use database::{NoTransaction, ProjectionExt};
 use entities::ids::SalesOrderProjectionId;
 use mongodb::Database;
@@ -8,8 +10,8 @@ use crate::projection::dto::SortDir;
 use crate::projection::service::ProjectionService;
 use crate::projection::{
     PageView, ProjectionActionBlockerView, SalesOrderProjectionDeliveryListParams,
-    SalesOrderProjectionDeliveryView, SalesOrderProjectionListParams, SalesOrderProjectionRevisionView,
-    SalesOrderProjectionView,
+    SalesOrderProjectionDeliveryView, SalesOrderProjectionListItemView, SalesOrderProjectionListParams,
+    SalesOrderProjectionRevisionView, SalesOrderProjectionView,
 };
 
 /// 投影列表筛选条件类型（经 `ProjectionExt` 关联类型跨 crate 可达）。
@@ -33,7 +35,7 @@ impl ProjectionService {
     pub async fn projection_list(
         &self,
         params: &SalesOrderProjectionListParams,
-    ) -> Result<PageView<SalesOrderProjectionView>> {
+    ) -> Result<PageView<SalesOrderProjectionListItemView>> {
         params.validate()?;
         let query = params.normalized()?;
         let filter = SalesOrderProjectionFilter {
@@ -49,16 +51,86 @@ impl ProjectionService {
             .sales_order_projections()
             .search_sales_order_projections(&filter, &mut NoTransaction)
             .await?;
+        let projection_ids = page.items.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        let revision_rows = self
+            .db
+            .sales_order_projection_revisions()
+            .list_revisions_by_projections(&projection_ids, &mut NoTransaction)
+            .await?;
+        let mut latest_revisions = HashMap::new();
+        for row in revision_rows {
+            latest_revisions
+                .entry(row.projection_id.clone())
+                .or_insert_with(|| SalesOrderProjectionRevisionView {
+                    id: row.id,
+                    projection_id: row.projection_id,
+                    revision_no: row.revision_no,
+                    projection_source: row.projection_source,
+                    sales_order_revision_id: row.sales_order_revision_id,
+                    customer_external_identity: row.customer_external_identity,
+                    face_value: row.face_value,
+                    card_count: row.card_count,
+                    card_form: row.card_form,
+                    effective_at: row.effective_at,
+                    version: row.version,
+                    created_at: row.created_at,
+                });
+        }
+        let revision_ids = latest_revisions
+            .values()
+            .map(|revision| revision.id.clone())
+            .collect::<Vec<_>>();
+        let delivery_rows = self
+            .db
+            .sales_order_projection_deliveries()
+            .list_deliveries_by_revisions(&revision_ids, &mut NoTransaction)
+            .await?;
+        let mut deliveries = HashMap::new();
+        for row in delivery_rows {
+            let (allowed_actions, action_blockers) = delivery_action_projection(row.status, row.error_class);
+            deliveries
+                .entry(row.projection_revision_id.clone())
+                .or_insert_with(|| SalesOrderProjectionDeliveryView {
+                    id: row.id,
+                    projection_revision_id: row.projection_revision_id,
+                    target_mall_id: row.target_mall_id,
+                    status: row.status,
+                    attempt_count: row.attempt_count,
+                    last_attempt_at: row.last_attempt_at,
+                    next_attempt_at: row.next_attempt_at,
+                    mall_ack_at: row.mall_ack_at,
+                    mall_execution_baseline: row.mall_execution_baseline,
+                    error_class: row.error_class,
+                    error_code: row.error_code,
+                    error_summary: row.error_summary,
+                    error_task_id: row.error_task_id,
+                    work_item_id: row.work_item_id,
+                    allowed_actions,
+                    action_blockers,
+                    version: row.version,
+                    created_at: row.created_at,
+                });
+        }
         let items = page
             .items
             .into_iter()
-            .map(|row| SalesOrderProjectionView {
-                id: row.id,
-                sales_order_id: row.sales_order_id,
-                target_mall_id: row.target_mall_id,
-                current_acked_revision_id: row.current_acked_revision_id,
-                version: row.version,
-                created_at: row.created_at,
+            .map(|row| {
+                let latest_revision = latest_revisions.remove(&row.id);
+                let latest_delivery = latest_revision
+                    .as_ref()
+                    .and_then(|revision| deliveries.remove(&revision.id));
+                SalesOrderProjectionListItemView {
+                    projection: SalesOrderProjectionView {
+                        id: row.id,
+                        sales_order_id: row.sales_order_id,
+                        target_mall_id: row.target_mall_id,
+                        current_acked_revision_id: row.current_acked_revision_id,
+                        version: row.version,
+                        created_at: row.created_at,
+                    },
+                    latest_revision,
+                    latest_delivery,
+                }
             })
             .collect();
 

@@ -56,6 +56,11 @@ export type BackendConnection = {
     created_at: number
 }
 
+export type BackendConnectionListItem = BackendConnection & {
+    supplier_name?: string | null
+    capabilities: Array<Pick<BackendCapability, "capability_code" | "status">>
+}
+
 export type BackendCapability = {
     id: string
     connection_id: string
@@ -234,7 +239,7 @@ function mapCapability(capability: BackendCapability) {
 
 export function toListItem(
     connection: BackendConnection,
-    capabilities: BackendCapability[],
+    capabilities: Array<Pick<BackendCapability, "capability_code" | "status">>,
     supplierName?: string,
 ): ConnectionListItem {
     const status = mapStatus(connection.status)

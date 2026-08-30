@@ -51,14 +51,6 @@ pub struct ResumeExecutionInput {
 /// # 错误
 /// 非人员失效、异载荷冲突或引擎失败时返回错误。
 pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> {
-    let Some(code) = input.current.blocker_code else {
-        return Err(Error::ValidationError(
-            "恢复要求当前执行为人员失效阻塞".to_string(),
-        ));
-    };
-    if !is_personnel_blocker(code) {
-        return Err(Error::ValidationError("结构性阻塞不得恢复原审批人".to_string()));
-    }
     let digest = resume_digest(
         input.expected_instance_version,
         input.expected_execution_version,
@@ -75,6 +67,15 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
         }
         ReceiptBranch::Fresh => {}
     }
+    let Some(code) = input.current.blocker_code else {
+        return Err(Error::ValidationError(
+            "恢复要求当前执行为人员失效阻塞".to_string(),
+        ));
+    };
+    if !is_personnel_blocker(code) {
+        return Err(Error::ValidationError("结构性阻塞不得恢复原审批人".to_string()));
+    }
+    let receipt_scope = input.instance.base.id.clone();
     let plan = resume(
         input.instance,
         input.current,
@@ -91,10 +92,7 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
     let receipt = ApprovalCommandReceipt::new(
         input.receipt_id,
         ApprovalCommandKind::ResumeApprover,
-        plan.created_executions
-            .first()
-            .map(|item| item.base.id.clone())
-            .unwrap_or_else(|| plan.instance.base.id.clone()),
+        receipt_scope,
         input.command.idempotency_key,
         digest,
         plan.instance.base.id.clone(),

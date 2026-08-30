@@ -24,7 +24,7 @@ use mongodb::Database;
 use sha2::{Digest, Sha256};
 
 use crate::audit::AuditActor;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::{subject, SharedRbacService};
 
 use super::definition_dto::{
@@ -1597,7 +1597,7 @@ fn applied_definition(
         CasWriteOutcome::Applied(definition) => Ok(definition),
         CasWriteOutcome::VersionConflict(_) => Err(stale_lock_error()),
         CasWriteOutcome::StatusChanged(_) => {
-            Err(Error::ConflictError("已发布或已退役的定义结构不可改".to_string()))
+            Err(Error::from_approval_code(ErrorCode::ApprovalDefinitionNotDraft))
         }
         CasWriteOutcome::NotFound => Err(definition_not_found()),
     }
@@ -1620,7 +1620,7 @@ fn applied_definition(
 fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected: u64) -> Result<()> {
     definition
         .ensure_mutable()
-        .map_err(|_| Error::ConflictError("已发布或已退役的定义结构不可改".to_string()))?;
+        .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalDefinitionNotDraft))?;
     ensure_lock(definition, expected)
 }
 
@@ -1828,9 +1828,11 @@ fn participant(actor: &AuditActor) -> Result<ParticipantId> {
 /// 映射 BPM 模型错误。
 fn map_model_error(error: ModelError) -> Error {
     match error {
-        ModelError::CommandReceiptConflict => Error::ConflictError("幂等键载荷冲突".to_string()),
-        ModelError::InvalidField(message) | ModelError::InvalidTransition(message) => {
-            Error::ValidationError(message.to_string())
+        ModelError::CommandReceiptConflict => {
+            Error::from_approval_code(ErrorCode::ApprovalIdempotencyPayloadConflict)
+        }
+        ModelError::InvalidField(_) | ModelError::InvalidTransition(_) => {
+            Error::from_approval_code(ErrorCode::ApprovalDefinitionInvalid)
         }
         ModelError::InvalidStatus(message) => Error::ConflictError(message.to_string()),
         ModelError::Overflow(message) => Error::BusinessLogicError(format!("计数溢出: {message}")),
@@ -1840,7 +1842,8 @@ fn map_model_error(error: ModelError) -> Error {
 
 /// 映射 BPM 边界错误。
 fn map_bpm_error(error: bpm::Error) -> Error {
-    Error::ValidationError(error.to_string())
+    let _ = error;
+    Error::from_approval_code(ErrorCode::ApprovalDefinitionInvalid)
 }
 
 /// 是否为唯一键冲突。
@@ -1939,7 +1942,7 @@ enum RetireWriteStep {
 /// # 错误
 /// 当前没有已发布定义时返回校验错误。
 fn require_current_published<T>(published: Option<T>) -> Result<T> {
-    published.ok_or_else(|| Error::ValidationError("当前没有可复制的已发布定义".to_string()))
+    published.ok_or_else(|| Error::from_approval_code(ErrorCode::ApprovalDraftSourceNotAvailable))
 }
 
 /// 只能退役当前已发布定义。
@@ -2041,7 +2044,7 @@ fn second_draft_error() -> Error {
 
 /// 陈旧锁错误。
 fn stale_lock_error() -> Error {
-    Error::ConflictError("定义锁版本已过期，未写入任何节点".to_string())
+    Error::from_approval_code(ErrorCode::ApprovalDefinitionVersionConflict)
 }
 
 /// 不泄露存在性的未找到错误。
@@ -2136,7 +2139,7 @@ mod tests {
     fn stale_lock_has_no_partial_write() {
         let definition = draft_definition(ProcessKind::StockAdjustment, "n1");
         let stale = allow_prepare_replacement(&definition, 99).unwrap_err();
-        assert!(matches!(stale, Error::ConflictError(message) if message.contains("未写入任何节点")));
+        assert_eq!(stale.code(), Some(ErrorCode::ApprovalDefinitionVersionConflict));
         let current = definition.definition_lock_version();
         assert!(matches!(
             allow_prepare_replacement(&definition, current),
@@ -2144,7 +2147,7 @@ mod tests {
         ));
         assert!(matches!(
             allow_apply_replaced_definition(CasWriteOutcome::VersionConflict(definition.clone())),
-            Err(Error::ConflictError(message)) if message.contains("未写入任何节点")
+            Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
         let replace_tx = source_fn(
             production_source(),
@@ -2169,7 +2172,7 @@ mod tests {
             )
             .unwrap();
         let error = ensure_draft_lock(&definition, definition.definition_lock_version()).unwrap_err();
-        assert!(matches!(error, Error::ConflictError(message) if message.contains("不可改")));
+        assert_eq!(error.code(), Some(ErrorCode::ApprovalDefinitionNotDraft));
         definition
             .retire(
                 ParticipantId::new("admin").unwrap(),
@@ -2404,7 +2407,7 @@ mod tests {
 
         assert!(matches!(
             map_model_error(ModelError::CommandReceiptConflict),
-            Error::ConflictError(message) if message == "幂等键载荷冲突"
+            Error::Coded(ErrorCode::ApprovalIdempotencyPayloadConflict)
         ));
         let same = ApprovalCommandReceipt::new(
             ApprovalCommandReceiptId::new("r1"),
@@ -2419,7 +2422,7 @@ mod tests {
         same.reconcile("digest-a").expect("同载荷必须回读");
         assert!(matches!(
             map_model_error(same.reconcile("digest-b").unwrap_err()),
-            Error::ConflictError(message) if message.contains("幂等键载荷冲突")
+            Error::Coded(ErrorCode::ApprovalIdempotencyPayloadConflict)
         ));
         assert!(is_duplicate_conflict(&Error::ConflictError("数据已存在".into())));
         assert!(is_duplicate_conflict(&Error::ConflictError(
@@ -2525,7 +2528,7 @@ mod tests {
         ));
         assert!(matches!(
             decide_retire_write(Some(&published), &published.base.id, lock + 1),
-            Err(Error::ConflictError(message)) if message.contains("未写入任何节点")
+            Err(Error::Coded(ErrorCode::ApprovalDefinitionVersionConflict))
         ));
         assert!(matches!(
             decide_retire_write(Some(&published), &published.base.id, lock),
@@ -2548,7 +2551,7 @@ mod tests {
     fn current_published_requires_existing_definition() {
         assert!(matches!(
             require_current_published::<&str>(None),
-            Err(Error::ValidationError(message)) if message.contains("没有可复制的已发布定义")
+            Err(Error::Coded(ErrorCode::ApprovalDraftSourceNotAvailable))
         ));
         assert_eq!(require_current_published(Some("def-pub")).unwrap(), "def-pub");
         let copy_src = source_fn(

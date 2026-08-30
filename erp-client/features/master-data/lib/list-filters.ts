@@ -5,13 +5,11 @@ import {
     type ProductListSkuSummary,
     type SupplierQualificationHealth,
 } from "@/features/master-data/types"
-
-const CNY_FORMATTER = new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-})
+import {
+    compareDecimal,
+    formatCurrencyFixed,
+    parseDecimal,
+} from "@/lib/fixed-decimal"
 
 const PRODUCT_KIND_FILTER_OPTIONS = PRODUCT_KIND_VALUES.map((value) => ({
     value,
@@ -169,14 +167,26 @@ function productSkuPriceRange(skus: readonly ProductListSkuSummary[]): string {
         .flatMap((sku) => {
             const raw = sku.salesVisiblePriceGross?.trim()
             if (!raw) return []
-            const price = Number(raw)
-            return Number.isFinite(price) ? [price] : []
+            try {
+                parseDecimal(raw, { maxScale: 4 })
+                return [raw]
+            } catch {
+                return []
+            }
         })
-        .sort((left, right) => left - right)
+        .sort((left, right) => compareDecimal(left, right, 4))
     if (prices.length === 0) return "未填写"
-    const minimum = CNY_FORMATTER.format(prices[0])
-    const maximum = CNY_FORMATTER.format(prices[prices.length - 1])
-    return prices[0] === prices[prices.length - 1]
+    const first = prices[0]
+    const last = prices[prices.length - 1]
+    const display = (value: string) =>
+        formatCurrencyFixed(value, {
+            maxScale: 4,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 4,
+        })
+    const minimum = display(first)
+    const maximum = display(last)
+    return compareDecimal(first, last, 4) === 0
         ? minimum
         : `${minimum}–${maximum}`
 }

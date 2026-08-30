@@ -2,8 +2,10 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useSelector } from "@tanstack/react-form"
 
 import type { ResultState as SharedResultState } from "@/components/business/feedback"
+import { useAppForm } from "@/components/form"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
 import { FIRST_INPUT_ID } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
@@ -32,6 +34,14 @@ import {
 import { useFulfillmentActions } from "./use-fulfillment-actions"
 
 type ResultState = SharedResultState<FulfillmentFormalOutcome>
+
+const EMPTY_FULFILLMENT_DRAFT: FulfillmentDraft = {
+    type: "RECEIPT",
+    warehouseId: "",
+    warehouseLabel: "",
+    occurredAt: "",
+    lines: [],
+}
 
 export type FulfillmentOperationsControllerContext = {
     roleValue: FulfillmentQueueFilters["role"]
@@ -167,8 +177,6 @@ export function useFulfillmentOperationsController({
               ? true
               : sessionAutoNext
 
-    const [draft, setDraft] = React.useState<FulfillmentDraft | null>(null)
-    const [dirty, setDirty] = React.useState(false)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
     const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
@@ -176,18 +184,42 @@ export function useFulfillmentOperationsController({
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
     const headingRef = React.useRef<HTMLHeadingElement>(null)
     const resultRef = React.useRef<HTMLDivElement>(null)
+    const operationRef = React.useRef(operation)
+    operationRef.current = operation
+    const draftForm = useAppForm({
+        defaultValues: { draft: EMPTY_FULFILLMENT_DRAFT },
+        validators: {
+            onChange: ({ value }) => {
+                const current = operationRef.current
+                if (!current) return undefined
+                const issues = clientValidation(current, value.draft)
+                return issues.length === 0
+                    ? undefined
+                    : issues.map((issue) => issue.message).join("；")
+            },
+        },
+        onSubmit: () => setConfirmOpen(true),
+    })
+    const draftValue = useSelector(
+        draftForm.store,
+        (state) => state.values.draft,
+    )
+    const dirty = useSelector(draftForm.store, (state) => state.isDirty)
+    const formCanSubmit = useSelector(
+        draftForm.store,
+        (state) => state.canSubmit,
+    )
+    const draft = operation ? draftValue : null
 
     React.useEffect(() => {
         if (!operation) {
-            setDraft(null)
-            setDirty(false)
+            draftForm.reset({ draft: EMPTY_FULFILLMENT_DRAFT })
             return
         }
-        setDraft(cloneDraft(operation.draft))
-        setDirty(false)
+        draftForm.reset({ draft: cloneDraft(operation.draft) })
         setActionError(null)
         setSaveMessage(null)
-    }, [operation])
+    }, [draftForm, operation])
 
     React.useEffect(() => {
         if (localState || queueQuery.isPending || !view) return
@@ -196,12 +228,18 @@ export function useFulfillmentOperationsController({
         // 没有确定岗位（只读角色 / 未声明岗位的深链）就不写 lane，
         // 否则侧栏会高亮到用户没有选择的岗位入口。
         const laneSettled = hasLane || lane === null
-        if (laneSettled && (hasItem || operations.length === 0)) {
+        const itemSettled =
+            !operation ||
+            (hasItem && currentOperationId === operation.operationId)
+        if (laneSettled && (itemSettled || operations.length === 0)) {
             return
         }
         const params = new URLSearchParams(searchParams.toString())
         if (!hasLane && lane) params.set("lane", lane)
-        if (!hasItem && operation) {
+        if (
+            operation &&
+            (!hasItem || currentOperationId !== operation.operationId)
+        ) {
             params.set("currentOperationId", operation.operationId)
         }
         const qs = params.toString()
@@ -212,6 +250,7 @@ export function useFulfillmentOperationsController({
         view,
         searchParams,
         lane,
+        currentOperationId,
         operation,
         operations.length,
         pathname,
@@ -277,6 +316,11 @@ export function useFulfillmentOperationsController({
                                 ? patch.gate
                                 : undefined
                     }
+                    if (Object.hasOwn(patch, "page")) {
+                        const page = Number(patch.page)
+                        next.page =
+                            Number.isInteger(page) && page > 0 ? page : 1
+                    }
                     return {
                         ...next,
                         role: filters.role,
@@ -320,6 +364,20 @@ export function useFulfillmentOperationsController({
         [replaceUrl],
     )
 
+    React.useEffect(() => {
+        if (
+            queueQuery.isPending ||
+            !context ||
+            context.page <= context.totalPages
+        ) {
+            return
+        }
+        replaceUrl({
+            page: String(context.totalPages),
+            currentOperationId: null,
+        })
+    }, [context, queueQuery.isPending, replaceUrl])
+
     const neighborId = React.useCallback(
         (delta: number) => {
             const idx = currentIndex + delta
@@ -352,6 +410,11 @@ export function useFulfillmentOperationsController({
         ],
     )
 
+    const markDraftPristine = React.useCallback(() => {
+        if (!draft) return
+        draftForm.reset({ draft: cloneDraft(draft) })
+    }, [draft, draftForm])
+
     const actions = useFulfillmentActions({
         operation,
         draft,
@@ -365,7 +428,7 @@ export function useFulfillmentOperationsController({
         neighborId,
         goToOperation,
         advanceIfNeeded,
-        setDirty,
+        markDraftPristine,
         setActionError,
         setSaveMessage,
         setConfirmOpen,
@@ -379,6 +442,7 @@ export function useFulfillmentOperationsController({
     const canPost =
         canExecute &&
         Boolean(operation && draft) &&
+        formCanSubmit &&
         validationIssues.length === 0 &&
         !(
             operation?.gate.state === "BLOCKED" &&
@@ -391,19 +455,24 @@ export function useFulfillmentOperationsController({
         saveMutation.isPending ||
         resolveUnknownMutation.isPending
 
-    const updateDraft = React.useCallback((next: FulfillmentDraft) => {
-        setDraft(next)
-        setDirty(true)
-    }, [])
+    const updateDraft = React.useCallback(
+        (next: FulfillmentDraft) => {
+            draftForm.setFieldValue("draft", next)
+        },
+        [draftForm],
+    )
+    const handleSubmit = React.useCallback(
+        () => draftForm.handleSubmit(),
+        [draftForm],
+    )
 
     /** 回到最近一次保存的草稿；多处「请先保存或放弃」提示都指向这里 */
     const handleDiscard = React.useCallback(() => {
         if (!operation) return
-        setDraft(cloneDraft(operation.draft))
-        setDirty(false)
+        draftForm.reset({ draft: cloneDraft(operation.draft) })
         setActionError(null)
         setSaveMessage(null)
-    }, [operation])
+    }, [draftForm, operation])
 
     const handleNavigate = React.useCallback(
         (delta: 1 | -1) => {
@@ -427,6 +496,7 @@ export function useFulfillmentOperationsController({
             replaceUrl({
                 type: next === "all" ? null : TYPE_SLUG[next],
                 currentOperationId: null,
+                page: null,
             })
         },
         [dirty, replaceUrl],
@@ -448,6 +518,7 @@ export function useFulfillmentOperationsController({
             salesOrderId: null,
             purchaseOrderId: null,
             currentOperationId: null,
+            page: null,
         })
     }, [dirty, replaceUrl])
 
@@ -458,7 +529,7 @@ export function useFulfillmentOperationsController({
                 return
             }
             setLastResult(null)
-            replaceUrl(patch)
+            replaceUrl({ ...patch, page: null })
         },
         [dirty, replaceUrl],
     )
@@ -473,16 +544,36 @@ export function useFulfillmentOperationsController({
 
     const goToWarehouseShip = React.useCallback(
         (salesOrderId: string) => {
-            setDirty(false)
+            markDraftPristine()
             replaceUrl({
                 purchaseOrderId: null,
                 salesOrderId,
                 currentOperationId: null,
                 type: "warehouse_ship",
                 autoNext: "0",
+                page: null,
             })
         },
-        [replaceUrl],
+        [markDraftPristine, replaceUrl],
+    )
+
+    const setPage = React.useCallback(
+        (page: number) => {
+            if (dirty) {
+                setActionError("有未保存修改，请先保存或放弃后再翻页")
+                return
+            }
+            const normalized = Math.min(
+                context?.totalPages ?? 1,
+                Math.max(1, Math.trunc(page)),
+            )
+            setLastResult(null)
+            replaceUrl({
+                page: normalized === 1 ? null : String(normalized),
+                currentOperationId: null,
+            })
+        },
+        [context?.totalPages, dirty, replaceUrl],
     )
 
     const currentUrl = `${pathname}?${searchParams.toString()}`
@@ -517,6 +608,7 @@ export function useFulfillmentOperationsController({
         autoNext,
         currentUrl,
         updateDraft,
+        handleSubmit,
         handleDiscard,
         handleSave: actions.handleSave,
         handlePost: actions.handlePost,
@@ -530,6 +622,7 @@ export function useFulfillmentOperationsController({
         handlePatch,
         setAutoNext,
         goToWarehouseShip,
+        setPage,
     }
 }
 

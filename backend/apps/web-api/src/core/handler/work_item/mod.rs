@@ -13,9 +13,9 @@ use serde::Serialize;
 use services::{
     audit::AuditActor,
     work_item::{
-        CloseWorkItemRequest, ReassignWorkItemRequest, WorkItemConflict, WorkItemListParams,
-        WorkItemMutationOutcome, WorkItemPageView, WorkItemReassignCandidateView, WorkItemService,
-        WorkItemStatsParams, WorkItemStatsView, WorkItemView,
+        CloseWorkItemRequest, FulfillmentQueueListParams, FulfillmentQueuePageView, ReassignWorkItemRequest,
+        WorkItemConflict, WorkItemListParams, WorkItemMutationOutcome, WorkItemPageView,
+        WorkItemReassignCandidateView, WorkItemService, WorkItemStatsParams, WorkItemStatsView, WorkItemView,
     },
 };
 
@@ -85,10 +85,9 @@ impl From<services::Error> for WorkItemActionError {
     /// # 返回
     /// 审批任务保护使用稳定码，其余沿用统一映射。
     fn from(error: services::Error) -> Self {
-        let message = error.to_string();
-        if message.contains("APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN") {
+        if error.code() == Some(services::ErrorCode::ApprovalGenericWorkItemMutationForbidden) {
             return Self::ApprovalProtected(ApprovalHttpError::coded(
-                "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN",
+                services::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
                 uuid::Uuid::new_v4().to_string(),
                 None,
             ));
@@ -185,7 +184,7 @@ fn reject_approval_task(
         return Ok(());
     }
     Err(WorkItemActionError::ApprovalProtected(ApprovalHttpError::coded(
-        "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN",
+        services::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
         crate::core::handler::approval_instance::error::correlation_id(headers),
         None,
     )))
@@ -221,6 +220,28 @@ pub async fn work_item_list(
         .work_item_list(&params, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(wrap_page(page)))
+}
+
+#[permission_macros::permission(
+    group = "统一待办",
+    group_desc = "待办队列与责任处理",
+    desc = "查询本人授权范围内的履约责任队列",
+    resource = "work_item",
+    action = "list"
+)]
+/// 查询 W09 服务端分页履约责任读模型。
+///
+/// # 返回
+/// 返回当前账号开放履约责任的分页、指标和仓库筛选项。
+pub async fn fulfillment_queue_list(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<FulfillmentQueueListParams>,
+) -> Result<FulfillmentQueuePageView> {
+    let page = WorkItemService::new(state.db(), state.rbac())
+        .fulfillment_queue_list(&params, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(page))
 }
 
 #[permission_macros::permission(
@@ -394,8 +415,8 @@ mod tests {
 
     #[tokio::test]
     async fn approval_generic_mutation_maps_to_stable_409() {
-        let response = WorkItemActionError::from(services::Error::ConflictError(
-            "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN".to_string(),
+        let response = WorkItemActionError::from(services::Error::from_approval_code(
+            services::ErrorCode::ApprovalGenericWorkItemMutationForbidden,
         ))
         .into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);

@@ -654,7 +654,7 @@ async fn persist_bound_supplier_refund_document(
 ///
 /// # 错误
 /// 非审批中、原付款不存在或仓储失败时返回错误。
-async fn apply_supplier_refund_final_post(
+pub(super) async fn apply_supplier_refund_final_post(
     db: &Database,
     refund_id: &str,
     actor_id: &str,

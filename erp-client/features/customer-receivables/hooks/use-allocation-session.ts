@@ -15,9 +15,14 @@ import {
     factFromValues,
 } from "@/features/customer-receivables/lib/fact-form"
 import {
+    amountOrZero,
+    compareAmounts,
+    minAmount,
     money,
-    parseAmt,
+    subtractAmounts,
+    sumAmounts,
 } from "@/features/customer-receivables/lib/allocation-math"
+import { splitGrossByPercentRate } from "@/lib/fixed-decimal"
 import {
     usePostAllocationMutation,
     useResolvePostUnknownMutation,
@@ -29,6 +34,7 @@ import type {
     AllocationDraftLine,
     AllocationSessionView,
     AllocationTarget,
+    PostAllocationInput,
     PostAllocationResult,
 } from "@/features/customer-receivables/types"
 
@@ -76,6 +82,7 @@ export function useAllocationSession({
         null,
     )
     const idempotencyRef = React.useRef<string | null>(null)
+    const lastPostInputRef = React.useRef<PostAllocationInput | null>(null)
     const baselineRef = React.useRef("")
     const [receiptApproval, setReceiptApproval] = React.useState<
         DocumentApprovalView | undefined
@@ -142,23 +149,25 @@ export function useAllocationSession({
         const net = String(form.state.values.netAmount ?? "").trim()
         const tax = String(form.state.values.taxAmount ?? "").trim()
         if (net || tax) return
-        const gross = Number(invoiceGross)
-        if (!Number.isFinite(gross) || gross <= 0) return
-        form.setFieldValue("netAmount", (gross / 1.13).toFixed(2))
-        form.setFieldValue("taxAmount", (gross - gross / 1.13).toFixed(2))
+        try {
+            if (compareAmounts(invoiceGross, "0") <= 0) return
+            const amounts = splitGrossByPercentRate(invoiceGross, "13")
+            form.setFieldValue("netAmount", amounts.net)
+            form.setFieldValue("taxAmount", amounts.tax)
+        } catch {
+            return
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [invoiceGross, isReceipt])
 
     const factAmountStr = isReceipt
         ? String(formValues.amount ?? "")
         : String(formValues.grossAmount ?? "")
-    const proposedAllocated = allocations.reduce(
-        (s, a) => s + parseAmt(a.amount),
-        0,
-    )
-    const proposedUnallocated = Math.max(
-        0,
-        parseAmt(factAmountStr) - proposedAllocated,
+    const proposedAllocated = sumAmounts(allocations.map((line) => line.amount))
+    const proposedUnallocated = subtractAmounts(
+        factAmountStr,
+        proposedAllocated,
+        true,
     )
 
     const issues: ValidationIssue[] = []
@@ -187,14 +196,14 @@ export function useAllocationSession({
         })
     }
     for (const line of allocations) {
-        if (parseAmt(line.amount) < 0) {
+        if (compareAmounts(line.amount, "0") < 0) {
             issues.push({
                 id: `neg-${line.lineKey}`,
                 label: line.label,
                 message: "分配金额不能为负",
             })
         }
-        if (parseAmt(line.amount) - parseAmt(line.openAmount) > 1e-9) {
+        if (compareAmounts(line.amount, line.openAmount) > 0) {
             issues.push({
                 id: `over-${line.lineKey}`,
                 label: line.label,
@@ -209,7 +218,7 @@ export function useAllocationSession({
             })
         }
     }
-    if (proposedAllocated - parseAmt(factAmountStr) > 1e-9) {
+    if (compareAmounts(proposedAllocated, factAmountStr) > 0) {
         issues.push({
             id: "over-fact",
             label: "拟分配合计",
@@ -218,7 +227,8 @@ export function useAllocationSession({
     }
     if (
         isReceipt &&
-        allocations.filter((line) => parseAmt(line.amount) > 0).length === 0
+        allocations.filter((line) => compareAmounts(line.amount, "0") > 0)
+            .length === 0
     ) {
         issues.push({
             id: "need-alloc",
@@ -231,7 +241,7 @@ export function useAllocationSession({
         canOperate &&
         session.leaseValid &&
         issues.length === 0 &&
-        parseAmt(factAmountStr) > 0 &&
+        compareAmounts(factAmountStr, "0") > 0 &&
         session.status === "draft"
 
     function addFromPool(target: AllocationTarget) {
@@ -244,17 +254,13 @@ export function useAllocationSession({
             setActionError("一次销项开票只能选择当前任务绑定的应收子账。")
             return
         }
-        const alreadyAllocated = allocations.reduce(
-            (sum, line) => sum + parseAmt(line.amount),
-            0,
+        const alreadyAllocated = sumAmounts(
+            allocations.map((line) => line.amount),
         )
-        const remaining = Math.max(
-            0,
-            parseAmt(factAmountStr) - alreadyAllocated,
-        )
+        const remaining = subtractAmounts(factAmountStr, alreadyAllocated, true)
         const fill =
-            remaining > 0
-                ? money(Math.min(parseAmt(target.openAmount), remaining))
+            compareAmounts(remaining, "0") > 0
+                ? money(minAmount(target.openAmount, remaining))
                 : ""
         setAllocations((prev) => [
             ...prev,
@@ -282,15 +288,17 @@ export function useAllocationSession({
     }
 
     function fillLineAmount(target: AllocationDraftLine) {
-        const others = allocations
-            .filter((a) => a.lineKey !== target.lineKey)
-            .reduce((s, a) => s + parseAmt(a.amount), 0)
-        const remaining = Math.max(0, parseAmt(factAmountStr) - others)
-        const fill = Math.min(parseAmt(target.openAmount), remaining)
+        const others = sumAmounts(
+            allocations
+                .filter((line) => line.lineKey !== target.lineKey)
+                .map((line) => line.amount),
+        )
+        const remaining = subtractAmounts(factAmountStr, others, true)
+        const fill = minAmount(target.openAmount, remaining)
         setAllocations((prev) =>
             prev.map((a) =>
                 a.lineKey === target.lineKey
-                    ? { ...a, amount: money(fill) }
+                    ? { ...a, amount: amountOrZero(fill) }
                     : a,
             ),
         )
@@ -339,7 +347,7 @@ export function useAllocationSession({
         }
         try {
             const fact = factFromValues(form.state.values, isReceipt)
-            const res = await postMutation.mutateAsync({
+            const command: PostAllocationInput = {
                 workItemId: isReceipt ? undefined : workItemId,
                 expectedTaskVersion: isReceipt
                     ? undefined
@@ -347,9 +355,11 @@ export function useAllocationSession({
                 draftSessionId: session.draftSessionId,
                 editVersion,
                 idempotencyKey: idempotencyRef.current,
-                fact,
-                allocations,
-            })
+                fact: { ...fact },
+                allocations: allocations.map((line) => ({ ...line })),
+            }
+            lastPostInputRef.current = command
+            const res = await postMutation.mutateAsync(command)
             applyPostResult(res)
         } catch (err) {
             setActionError(getErrorMessage(err, "提交失败"))
@@ -445,8 +455,8 @@ export function useAllocationSession({
     }
 
     async function resolveUnknown() {
-        if (!result?.pendingKey) return
-        const res = await resolveMutation.mutateAsync(result.pendingKey)
+        if (!result?.pendingKey || !lastPostInputRef.current) return
+        const res = await resolveMutation.mutateAsync(lastPostInputRef.current)
         if (res) applyPostResult(res)
     }
 

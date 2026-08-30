@@ -12,7 +12,7 @@
 //! 筛选/行类型定义在本文件，经 `ReceivableExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::common::stable::StableBase;
+use entities::common::{stable::StableBase, time::BusinessDate, time::Instant};
 use entities::ids::{
     CustomerAccountId, CustomerReceiptId, InvoiceId, PartyId, ReceivableAccountId, ReceivableEntryId,
 };
@@ -77,6 +77,10 @@ pub struct ReceivableAccountRow {
 /// 应收往来子账列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ReceivableAccountFilter {
+    /// 主键、销售单、客户或往来主体关键字；`None` 表示不筛选。
+    pub keyword: Option<String>,
+    /// 子账主键；`None` 表示不筛选。
+    pub account_id: Option<ReceivableAccountId>,
     /// 企业客户经营归属；`None` 表示不筛选。
     pub customer_id: Option<CustomerAccountId>,
     /// 收款和开票往来主体；`None` 表示不筛选。
@@ -84,7 +88,7 @@ pub struct ReceivableAccountFilter {
     /// 子账状态；`None` 表示不筛选。
     pub status: Option<ReceivableAccountStatus>,
     /// 来源销售单；`None` 表示不筛选。
-    pub sales_order_id: Option<ReceivableAccountId>,
+    pub sales_order_id: Option<String>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -102,6 +106,20 @@ impl QueryFilter for ReceivableAccountFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(keyword) = self.keyword.as_deref() {
+            let alternatives = ["id", "sales_order_id", "customer_id", "counterparty_party_id"]
+                .into_iter()
+                .map(|field| {
+                    let mut alternative = Document::new();
+                    insert_literal_regex_filter(&mut alternative, field, Some(keyword));
+                    alternative
+                })
+                .collect::<Vec<_>>();
+            filter.insert("$or", alternatives);
+        }
+        if let Some(account_id) = &self.account_id {
+            filter.insert("id", account_id.to_string());
+        }
         if let Some(customer_id) = &self.customer_id {
             filter.insert("customer_id", customer_id.to_string());
         }
@@ -142,7 +160,7 @@ pub struct CustomerReceiptRow {
     /// 可选经营归属提示。
     pub customer_id: Option<String>,
     /// 实际到账时间（秒级时间戳）。
-    pub received_at: u64,
+    pub received_at: Instant,
     /// 含税到账金额。
     pub amount: Amount,
     /// 银行流水或凭证引用。
@@ -156,6 +174,8 @@ pub struct CustomerReceiptRow {
 /// 客户回款单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct CustomerReceiptFilter {
+    /// 服务端关联投影解析出的回款单主键集合；`None` 表示不筛选。
+    pub receipt_ids: Option<Vec<String>>,
     /// 回款单号模糊匹配；`None` 表示不筛选。
     pub receipt_no: Option<String>,
     /// 实际付款往来主体；`None` 表示不筛选。
@@ -179,6 +199,9 @@ impl QueryFilter for CustomerReceiptFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(receipt_ids) = &self.receipt_ids {
+            filter.insert("id", doc! { "$in": receipt_ids });
+        }
         insert_literal_regex_filter(&mut filter, "receipt_no", self.receipt_no.as_deref());
         if let Some(counterparty_party_id) = &self.counterparty_party_id {
             filter.insert("counterparty_party_id", counterparty_party_id.to_string());
@@ -219,13 +242,19 @@ pub struct InvoiceRow {
     /// 发票号码。
     pub invoice_no: String,
     /// 开票日期（YYYY-MM-DD）。
-    pub invoice_date: String,
+    pub invoice_date: BusinessDate,
     /// 含税金额。
     pub gross_amount: Amount,
     /// 不含税金额。
     pub net_amount: Amount,
     /// 税额。
     pub tax_amount: Amount,
+    /// 发票尾差。
+    pub rounding_adjustment_amount: Amount,
+    /// 尾差原因。
+    pub rounding_reason: Option<String>,
+    /// 红票原蓝票。
+    pub original_invoice_id: Option<String>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -235,6 +264,8 @@ pub struct InvoiceRow {
 /// 发票列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct InvoiceFilter {
+    /// 服务端关联投影解析出的发票主键集合；`None` 表示不筛选。
+    pub invoice_ids: Option<Vec<String>>,
     /// 发票方向；`None` 表示不筛选。
     pub invoice_direction: Option<InvoiceDirection>,
     /// 蓝红类型；`None` 表示不筛选。
@@ -262,6 +293,9 @@ impl QueryFilter for InvoiceFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(invoice_ids) = &self.invoice_ids {
+            filter.insert("id", doc! { "$in": invoice_ids });
+        }
         if let Some(invoice_direction) = self.invoice_direction {
             filter.insert("invoice_direction", invoice_direction.as_str());
         }
@@ -551,6 +585,16 @@ impl<'a> Repository<'a, ReceivableAccount> {
 }
 
 impl<'a> Repository<'a, ReceivableAccount> {
+    /// 按销售单读取全部活跃应收子账，供服务端关联列表投影使用。
+    pub async fn find_accounts_by_sales_order_id(
+        &self,
+        sales_order_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableAccount>> {
+        self.find_many(doc! { "sales_order_id": sales_order_id }, executor)
+            .await
+    }
+
     /// 批量按应收子账 ID 读取活跃账户。
     ///
     /// # 参数
@@ -629,6 +673,33 @@ impl<'a> Repository<'a, ReceivableEntry> {
 }
 
 impl<'a> Repository<'a, ReceivableEntryOffset> {
+    /// 按减少分录集合批量取回抵销记录。
+    ///
+    /// # 参数
+    /// * `decrease_entry_ids` - 减少分录 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配抵销记录；调用方按分录分组后按抵销序号排序。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_offsets_by_decreases(
+        &self,
+        decrease_entry_ids: &[ReceivableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableEntryOffset>> {
+        if decrease_entry_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = decrease_entry_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        self.find_many(doc! { "decrease_entry_id": { "$in": ids } }, executor)
+            .await
+    }
+
     /// 按减少分录取回全部抵销（按抵销序号升序）。
     ///
     /// 用于校验「减少分录分配合计等于其金额」（数据模型 §6.8）。
@@ -682,6 +753,30 @@ impl<'a> Repository<'a, ReceivableEntryOffset> {
 }
 
 impl<'a> Repository<'a, ReceivableFundsReview> {
+    /// 按应收子账集合批量取回复核记录。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应收子账 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配复核记录；调用方按子账分组后按复核号排序。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_reviews_by_accounts(
+        &self,
+        account_ids: &[ReceivableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ReceivableFundsReview>> {
+        if account_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "receivable_account_id": { "$in": ids } }, executor)
+            .await
+    }
+
     /// 按子账取回复核链全部记录（按复核号升序）。
     ///
     /// # 参数
@@ -1265,6 +1360,9 @@ fn invoice_projection() -> Document {
         "gross_amount": 1,
         "net_amount": 1,
         "tax_amount": 1,
+        "rounding_adjustment_amount": 1,
+        "rounding_reason": 1,
+        "original_invoice_id": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -1283,6 +1381,8 @@ mod tests {
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {
         let filter = ReceivableAccountFilter {
+            keyword: None,
+            account_id: None,
             customer_id: Some(CustomerAccountId::new("cust-1")),
             counterparty_party_id: Some(PartyId::new("party-1")),
             status: Some(ReceivableAccountStatus::Open),
@@ -1303,6 +1403,7 @@ mod tests {
     #[test]
     fn receipt_filter_escapes_regex_literals() {
         let filter = CustomerReceiptFilter {
+            receipt_ids: None,
             receipt_no: Some("RC-1.2".to_string()),
             counterparty_party_id: None,
             status: None,

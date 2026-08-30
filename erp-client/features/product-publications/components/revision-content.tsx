@@ -12,12 +12,21 @@ import {
     MEDIA_SCAN_STATUS_LABEL,
 } from "@/features/product-publications/types"
 import { formatDateTime } from "@/lib/datetime"
+import { compactFixed, multiplyFixed } from "@/lib/fixed-decimal"
 
 /** 税率小数 → 百分比展示（0.13 → 13%） */
 function percentLabel(rate: string): string {
-    const value = Number(rate)
-    if (Number.isFinite(value)) return `${Math.round(value * 100)}%`
-    return rate
+    try {
+        return `${compactFixed(
+            multiplyFixed(rate, "100", {
+                leftMaxScale: 6,
+                rightMaxScale: 0,
+                outputScale: 0,
+            }),
+        )}%`
+    } catch {
+        return rate
+    }
 }
 
 export function RevisionContent({

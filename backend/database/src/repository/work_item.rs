@@ -398,6 +398,39 @@ impl<'a> Repository<'a, WorkItem> {
         .await
     }
 
+    /// 读取指定节点执行关联的全部审批任务。
+    ///
+    /// 本查询不限制任务状态，供人员恢复命令核对旧任务已经关闭且版本未漂移；
+    /// 调用方不得用本接口重新打开或修改历史任务。
+    ///
+    /// # 参数
+    /// * `execution_id` - 原受阻节点执行
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的全部单据审批任务。
+    ///
+    /// # 错误
+    /// MongoDB 查询、游标读取或反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 人员恢复必须创建绑定新执行的新任务，不得把本查询返回的旧任务改回开放状态。
+    pub async fn approval_tasks_for_execution(
+        &self,
+        execution_id: &ApprovalNodeExecutionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "approval_node_execution_id": execution_id.as_ref(),
+                "work_item_type": WorkItemType::DocumentApproval.as_str(),
+            },
+            doc! { "created_at": 1, "id": 1 },
+            executor,
+        )
+        .await
+    }
+
     /// 持久化已由实体规则形成的审批取消关闭任务。
     ///
     /// 每条任务继续使用加载时版本和节点执行引用执行 `OPEN` CAS；调用方必须传入

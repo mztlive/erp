@@ -97,6 +97,7 @@ fn work_item_indexes() -> Vec<IndexModel> {
         unique_open_payment_execution_object_index(),
         unique_open_sales_invoice_execution_object_index(),
         unique_approval_execution_index(),
+        fulfillment_queue_index(),
         named_index(
             "idx_work_items_mine",
             doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 },
@@ -137,6 +138,28 @@ fn work_item_indexes() -> Vec<IndexModel> {
             doc! { "status": 1, "closed_by": 1, "closed_at": -1 },
         ),
     ]
+}
+
+/// W09 从当前个人开放履约责任进入批量投影的候选索引。
+fn fulfillment_queue_index() -> IndexModel {
+    IndexModel::builder()
+        .keys(doc! {
+            "owner_user_id": 1,
+            "business_object_type": 1,
+            "reason_code": 1,
+            "business_object_id": 1,
+        })
+        .options(
+            IndexOptions::builder()
+                .name("idx_work_items_fulfillment_queue".to_string())
+                .partial_filter_expression(doc! {
+                    "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                    "status": "OPEN",
+                    "work_item_type": "FULFILLMENT_OPERATION",
+                })
+                .build(),
+        )
+        .build()
 }
 
 /// 同一应收子账只允许一条开放销项开票执行任务。
@@ -401,6 +424,24 @@ mod tests {
     #[test]
     fn queue_indexes_follow_unified_workbench_and_drop_pool_filter() {
         let indexes = work_item_indexes();
+        let fulfillment = index_named(&indexes, "idx_work_items_fulfillment_queue");
+        assert_eq!(
+            fulfillment.keys,
+            doc! {
+                "owner_user_id": 1,
+                "business_object_type": 1,
+                "reason_code": 1,
+                "business_object_id": 1,
+            }
+        );
+        assert_eq!(
+            fulfillment.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! {
+                "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
+                "status": "OPEN",
+                "work_item_type": "FULFILLMENT_OPERATION",
+            })
+        );
         assert_eq!(
             index_named(&indexes, "idx_work_items_mine").keys,
             doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 }

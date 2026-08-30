@@ -28,6 +28,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/work-items/fulfillment-queue",
+            with_permission(
+                get(work_item::fulfillment_queue_list),
+                rbac,
+                work_item::fulfillment_queue_list_permission_key(),
+            ),
+        )
+        .route(
             "/work-items/stats",
             with_permission(
                 get(work_item::work_item_stats),

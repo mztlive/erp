@@ -51,6 +51,7 @@ export type ProfitLossQuery = Readonly<{
     dimension: ProfitLossDimension
     q?: string
     sort: string
+    page: number
     pageSize: number
 }>
 

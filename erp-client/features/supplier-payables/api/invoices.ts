@@ -1,6 +1,6 @@
 /**
  * W12 供应商往来 · 进项发票相关请求（登记+分配提交、红票）。
- * 幂等结果缓存见 api/shared。
+ * 正式幂等只由服务端命令收据保证。
  */
 
 import { apiPost } from "@/lib/api"
@@ -8,11 +8,8 @@ import type {
     BackendInvoice,
     BackendPurchaseInvoiceAllocation,
 } from "@/features/supplier-payables/api/mappers"
-import {
-    errorMessage,
-    sessions,
-    submitIdempotency,
-} from "@/features/supplier-payables/api/shared"
+import { errorMessage } from "@/features/supplier-payables/api/shared"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import type {
     FormalSubmitResult,
     PostInvoiceInput,
@@ -22,13 +19,17 @@ import type {
 export async function submitInvoice(
     input: PostInvoiceInput,
 ): Promise<FormalSubmitResult> {
-    const cached = submitIdempotency.get(input.idempotencyKey)
-    if (cached) return cached
-
     try {
-        const targets = input.targets.filter(
-            (t) => t.amount && Number(t.amount) > 0,
-        )
+        const targets = input.targets.filter((target) => {
+            try {
+                return (
+                    Boolean(target.amount) &&
+                    compareDecimal(target.amount, "0", 2) > 0
+                )
+            } catch {
+                return false
+            }
+        })
         if (input.existingInvoiceId) {
             // Continue allocate: purchase-invoice-allocations is create+post only;
             // additional allocation on existing invoice is a backend gap if no partial post.
@@ -64,6 +65,7 @@ export async function submitInvoice(
             net_amount: input.netAmount,
             tax_amount: input.taxAmount,
             supplier_id: input.supplierId,
+            idempotency_key: input.idempotencyKey,
             allocations: targets.map((t) => ({
                 payable_account_id: t.payableAccountId,
                 allocated_gross_amount: t.amount,
@@ -81,9 +83,7 @@ export async function submitInvoice(
             documentNo: registered.invoice_no,
             allocatedTotal: registered.gross_amount,
             unallocatedAmount: "0.00",
-            returnTo: sessions.get(input.draftSessionId)?.returnTo,
         }
-        submitIdempotency.set(input.idempotencyKey, result)
         return result
     } catch (err) {
         return {
@@ -98,8 +98,6 @@ export async function submitInvoice(
 export async function reverseInvoice(
     input: ReverseInvoiceInput,
 ): Promise<FormalSubmitResult> {
-    const cached = submitIdempotency.get(input.idempotencyKey)
-    if (cached) return cached
     try {
         const red = await apiPost<BackendInvoice>(
             `/admin/invoices/${encodeURIComponent(input.invoiceId)}/red-issue`,
@@ -117,7 +115,6 @@ export async function reverseInvoice(
             operationId: input.idempotencyKey,
             documentNo: red.invoice_no,
         }
-        submitIdempotency.set(input.idempotencyKey, result)
         return result
     } catch (err) {
         return {

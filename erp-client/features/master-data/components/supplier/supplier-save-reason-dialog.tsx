@@ -63,7 +63,6 @@ export function SupplierSaveReasonDialog({
                                 ? "新建原因"
                                 : "说明本次修改内容，保存后形成新版本"
                         }
-                        autoFocus
                     />
                     {reasonError ? (
                         <p className="text-xs text-destructive" role="alert">

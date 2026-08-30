@@ -12,7 +12,6 @@ export {
     fetchSupplierAccounts,
     fetchSupplierPayment,
     fetchSupplierRefund,
-    resolveUnknownResult,
     reverseInvoice,
     reversePayment,
     saveAllocationDraft,

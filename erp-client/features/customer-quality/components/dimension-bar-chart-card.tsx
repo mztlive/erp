@@ -62,8 +62,7 @@ export function DimensionBarChartCard({
     const items = dimension?.items ?? []
 
     function selectItem(code: string) {
-        const nextActive =
-            chartDimension === dimensionKey && chartCode === code
+        const nextActive = chartDimension === dimensionKey && chartCode === code
         patchUrl({
             chartDimension: nextActive ? null : dimensionKey,
             chartCode: nextActive ? null : code,
@@ -94,6 +93,7 @@ export function DimensionBarChartCard({
                                     label: i.label,
                                     code: i.code,
                                     value:
+                                        // fixed-decimal-display-boundary: Recharts coordinates require number.
                                         Number(
                                             String(i.value).replace(
                                                 /[^\d.-]/g,

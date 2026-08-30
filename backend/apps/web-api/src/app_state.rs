@@ -1,10 +1,25 @@
 use config::{Config, SafeConfig};
 use mongodb::Database;
+use serde::Serialize;
 use services::approval::definition::ApprovalDefinitionService;
 use services::approval::execution::ApprovalRuntimeService;
 use services::iam::SharedRbacService;
 use services::party::SensitiveDataCodec;
-use services::ApprovalNotificationOutboxPort;
+use services::projection::{
+    MallConnector as ProjectionMallConnector, ProjectionService, UnavailableMallConnector,
+};
+use services::publication::{
+    MallConnector as PublicationMallConnector, PublicationService,
+    UnavailableMallConnector as UnavailablePublicationMallConnector,
+};
+use services::supplier_api::{
+    SupplierApiGateway, SupplierApiService, SupplierReferenceRegistry, UnavailableSupplierApiGateway,
+    UnavailableSupplierReferenceRegistry,
+};
+use services::supplier_fulfillment::{
+    SupplierFulfillmentService, SupplierGateway, UnavailableSupplierGateway,
+};
+use services::{ApprovalActionRegistry, ApprovalNotificationOutboxPort};
 use std::sync::Arc;
 use std::time::Duration;
 use storage::S3Storage;
@@ -14,6 +29,92 @@ use tracing::{error, info};
 
 /// worker 轮询间隔。
 const OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
+/// 外部连接器装配模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ConnectorMode {
+    /// 组合根已注入可用实现。
+    Configured,
+    /// 组合根注入失败关闭实现，任何外部写均不得伪造成功。
+    FailClosed,
+}
+
+/// 外部连接器 readiness 视图。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ExternalConnectorReadiness {
+    pub projection: ConnectorMode,
+    pub publication: ConnectorMode,
+    pub supplier_api: ConnectorMode,
+    pub supplier_reference_registry: ConnectorMode,
+    pub supplier_fulfillment: ConnectorMode,
+}
+
+impl ExternalConnectorReadiness {
+    /// 全部强依赖连接器是否已配置。
+    pub const fn is_ready(self) -> bool {
+        matches!(self.projection, ConnectorMode::Configured)
+            && matches!(self.publication, ConnectorMode::Configured)
+            && matches!(self.supplier_api, ConnectorMode::Configured)
+            && matches!(self.supplier_reference_registry, ConnectorMode::Configured)
+            && matches!(self.supplier_fulfillment, ConnectorMode::Configured)
+    }
+}
+
+/// 启动组合根注入的外部连接器集合。
+#[derive(Clone)]
+pub struct ExternalConnectorPorts {
+    projection: Arc<dyn ProjectionMallConnector>,
+    publication: Arc<dyn PublicationMallConnector>,
+    supplier_api: Arc<dyn SupplierApiGateway>,
+    supplier_reference_registry: Arc<dyn SupplierReferenceRegistry>,
+    supplier_fulfillment: Arc<dyn SupplierGateway>,
+    readiness: ExternalConnectorReadiness,
+}
+
+impl ExternalConnectorPorts {
+    /// 构造显式配置的连接器集合；生产实现与测试替身均通过此入口注入。
+    pub fn configured(
+        projection: Arc<dyn ProjectionMallConnector>,
+        publication: Arc<dyn PublicationMallConnector>,
+        supplier_api: Arc<dyn SupplierApiGateway>,
+        supplier_reference_registry: Arc<dyn SupplierReferenceRegistry>,
+        supplier_fulfillment: Arc<dyn SupplierGateway>,
+    ) -> Self {
+        Self {
+            projection,
+            publication,
+            supplier_api,
+            supplier_reference_registry,
+            supplier_fulfillment,
+            readiness: ExternalConnectorReadiness {
+                projection: ConnectorMode::Configured,
+                publication: ConnectorMode::Configured,
+                supplier_api: ConnectorMode::Configured,
+                supplier_reference_registry: ConnectorMode::Configured,
+                supplier_fulfillment: ConnectorMode::Configured,
+            },
+        }
+    }
+
+    /// 构造失败关闭集合；仅用于尚未接入真实连接器的部署。
+    pub fn fail_closed() -> Self {
+        Self {
+            projection: Arc::new(UnavailableMallConnector),
+            publication: Arc::new(UnavailablePublicationMallConnector),
+            supplier_api: Arc::new(UnavailableSupplierApiGateway),
+            supplier_reference_registry: Arc::new(UnavailableSupplierReferenceRegistry),
+            supplier_fulfillment: Arc::new(UnavailableSupplierGateway),
+            readiness: ExternalConnectorReadiness {
+                projection: ConnectorMode::FailClosed,
+                publication: ConnectorMode::FailClosed,
+                supplier_api: ConnectorMode::FailClosed,
+                supplier_reference_registry: ConnectorMode::FailClosed,
+                supplier_fulfillment: ConnectorMode::FailClosed,
+            },
+        }
+    }
+}
 
 /// 审批通知 outbox worker 句柄。停止时不再领取新租约。
 pub struct ApprovalOutboxWorker {
@@ -48,6 +149,7 @@ pub struct AppState {
     approval_definition: Arc<ApprovalDefinitionService>,
     approval_runtime_service: Arc<ApprovalRuntimeService>,
     approval_outbox: Arc<ApprovalNotificationOutboxPort>,
+    external_connectors: ExternalConnectorPorts,
 }
 
 impl AppState {
@@ -61,12 +163,27 @@ impl AppState {
     /// # 返回
     /// 返回创建的实例。
     pub fn new(db: Database, config: SafeConfig, storage: S3Storage) -> Self {
+        Self::new_with_connectors(db, config, storage, ExternalConnectorPorts::fail_closed())
+    }
+
+    /// 使用组合根选定的外部连接器创建应用状态。
+    pub fn new_with_connectors(
+        db: Database,
+        config: SafeConfig,
+        storage: S3Storage,
+        external_connectors: ExternalConnectorPorts,
+    ) -> Self {
         let sensitive_data = Arc::new(SensitiveDataCodec::from_secret(
             config.snapshot().app.secret.as_bytes(),
         ));
         let rbac = services::iam::shared_rbac_service(db.clone());
         let approval_definition = Arc::new(ApprovalDefinitionService::new(db.clone(), Arc::clone(&rbac)));
-        let approval_runtime_service = Arc::new(ApprovalRuntimeService::new(db.clone(), Arc::clone(&rbac)));
+        let approval_action_port = Arc::new(ApprovalActionRegistry::new(db.clone(), Arc::clone(&rbac)));
+        let approval_runtime_service = Arc::new(ApprovalRuntimeService::with_action_port(
+            db.clone(),
+            Arc::clone(&rbac),
+            approval_action_port,
+        ));
         let approval_outbox = Arc::new(ApprovalNotificationOutboxPort::new(db.clone()));
         Self {
             db,
@@ -78,6 +195,7 @@ impl AppState {
             approval_definition,
             approval_runtime_service,
             approval_outbox,
+            external_connectors,
         }
     }
 
@@ -129,6 +247,36 @@ impl AppState {
     /// 返回 services 层端口；HTTP 不得直连审批仓储。
     pub fn approval_outbox_port(&self) -> Arc<ApprovalNotificationOutboxPort> {
         Arc::clone(&self.approval_outbox)
+    }
+
+    /// 返回已注入连接器的执行投影应用服务。
+    pub fn projection_service(&self) -> ProjectionService {
+        ProjectionService::new(self.db(), Arc::clone(&self.external_connectors.projection))
+    }
+
+    /// 返回已注入商城连接器的商品发布应用服务。
+    pub fn publication_service(&self) -> PublicationService {
+        PublicationService::new(self.db(), Arc::clone(&self.external_connectors.publication))
+    }
+
+    /// 返回已注入网关、引用注册表与 RBAC 的供应商 API 应用服务。
+    pub fn supplier_api_service(&self) -> SupplierApiService {
+        SupplierApiService::new(self.db(), Arc::clone(&self.external_connectors.supplier_api))
+            .with_reference_registry(Arc::clone(&self.external_connectors.supplier_reference_registry))
+            .with_rbac(self.rbac())
+    }
+
+    /// 返回已注入网关的供应商履约应用服务。
+    pub fn supplier_fulfillment_service(&self) -> SupplierFulfillmentService {
+        SupplierFulfillmentService::new(
+            self.db(),
+            Arc::clone(&self.external_connectors.supplier_fulfillment),
+        )
+    }
+
+    /// 返回连接器配置状态，供 readiness 暴露。
+    pub const fn external_connector_readiness(&self) -> ExternalConnectorReadiness {
+        self.external_connectors.readiness
     }
 
     /// 启动审批通知 outbox worker。
@@ -222,5 +370,33 @@ async fn run_approval_outbox_worker(
             }
             () = tokio::time::sleep(OUTBOX_POLL_INTERVAL) => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ConnectorMode, ExternalConnectorReadiness};
+
+    #[test]
+    fn readiness_requires_every_external_port() {
+        let configured = ExternalConnectorReadiness {
+            projection: ConnectorMode::Configured,
+            publication: ConnectorMode::Configured,
+            supplier_api: ConnectorMode::Configured,
+            supplier_reference_registry: ConnectorMode::Configured,
+            supplier_fulfillment: ConnectorMode::Configured,
+        };
+        assert!(configured.is_ready());
+
+        assert!(!ExternalConnectorReadiness {
+            supplier_api: ConnectorMode::FailClosed,
+            ..configured
+        }
+        .is_ready());
+        assert!(!ExternalConnectorReadiness {
+            supplier_reference_registry: ConnectorMode::FailClosed,
+            ..configured
+        }
+        .is_ready());
     }
 }

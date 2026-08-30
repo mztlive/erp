@@ -8,25 +8,34 @@ import {
     Card,
     CardContent,
     CardDescription,
+    CardFooter,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
 import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
+import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
 
 export function FulfillmentQueueList({
     operations,
     currentIndex,
     position,
     total,
+    page,
+    totalPages,
     onSelect,
+    onPageChange,
 }: {
     operations: readonly FulfillmentOperation[]
     currentIndex: number
     position: number
     total: number
+    page: number
+    totalPages: number
     onSelect: (operationId: string) => void
+    onPageChange: (page: number) => void
 }) {
     const containerRef = React.useRef<HTMLDivElement | null>(null)
     const itemRefs = React.useRef(new Map<string, HTMLButtonElement>())
@@ -97,11 +106,17 @@ export function FulfillmentQueueList({
                                 className="font-normal num"
                             >
                                 待处理{" "}
-                                {item.lines.reduce(
-                                    (sum, line) =>
-                                        sum +
-                                        Number(line.remainingQuantity || 0),
-                                    0,
+                                {compactFixed(
+                                    sumFixed(
+                                        item.lines.map(
+                                            (line) =>
+                                                line.remainingQuantity || "0",
+                                        ),
+                                        {
+                                            maxScale: 6,
+                                            outputScale: 6,
+                                        },
+                                    ),
                                 )}
                                 {item.lines[0]?.unitCode ?? ""}
                             </Badge>
@@ -117,6 +132,34 @@ export function FulfillmentQueueList({
                     </button>
                 ))}
             </CardContent>
+            {totalPages > 1 ? (
+                <CardFooter className="justify-between gap-2 border-t">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => onPageChange(page - 1)}
+                    >
+                        上一页
+                    </Button>
+                    <span
+                        className="text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >
+                        第 {page} / {totalPages} 页
+                    </span>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={page >= totalPages}
+                        onClick={() => onPageChange(page + 1)}
+                    >
+                        下一页
+                    </Button>
+                </CardFooter>
+            ) : null}
         </Card>
     )
 }

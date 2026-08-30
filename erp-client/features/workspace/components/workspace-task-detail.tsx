@@ -454,6 +454,27 @@ function WorkspaceDocumentTaskDetail({
                         {documentActions}
                     </header>
 
+                    {documentFacts.isError ? (
+                        <Alert variant="destructive" className="mt-4">
+                            <AlertTitle>单据补充信息读取失败</AlertTitle>
+                            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                <span>
+                                    {facts
+                                        ? "已保留当前可见内容；部分最新信息可能暂未显示。"
+                                        : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void documentFacts.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+
                     {primaryAmount ? (
                         <DetailBlock title="金额">
                             <div

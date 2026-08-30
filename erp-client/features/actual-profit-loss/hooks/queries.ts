@@ -49,6 +49,7 @@ export function useProfitLossViewQuery(
                 coverage: "covered",
                 dimension: "sales_order",
                 sort: "actualProfitLossNet:asc",
+                page: 1,
                 pageSize: 20,
             },
         ),

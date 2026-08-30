@@ -16,6 +16,47 @@ import {
     RESULT_LABEL,
     SERVICE_RESULT_LABEL,
 } from "@/features/fulfillment-operations/types"
+import {
+    clampZeroFixed,
+    compactFixed,
+    compareDecimal,
+    subtractFixed,
+    sumFixed,
+} from "@/lib/fixed-decimal"
+
+const QUANTITY_SCALE = 6
+
+function compareQuantity(left: string, right: string): -1 | 0 | 1 | null {
+    try {
+        return compareDecimal(left, right, QUANTITY_SCALE)
+    } catch {
+        return null
+    }
+}
+
+function isPositiveQuantity(value: string): boolean {
+    return compareQuantity(value, "0") === 1
+}
+
+function quantityExceeds(left: string, right: string): boolean {
+    return compareQuantity(left, right) === 1
+}
+
+function quantityTotal(values: readonly string[]): string {
+    try {
+        return compactFixed(
+            sumFixed(
+                values.map((value) => value || "0"),
+                {
+                    maxScale: QUANTITY_SCALE,
+                    outputScale: QUANTITY_SCALE,
+                },
+            ),
+        )
+    } catch {
+        return "—"
+    }
+}
 
 export function cloneDraft(draft: FulfillmentDraft): FulfillmentDraft {
     return structuredClone(draft)
@@ -27,10 +68,24 @@ export function cloneDraft(draft: FulfillmentDraft): FulfillmentDraft {
  * 用户直接改合格数量时不再回算，避免和手工修正打架。
  */
 export function withDerivedQualified(line: ReceiptDraftLine): ReceiptDraftLine {
-    const recv = Number(line.receivedQuantity)
-    const rej = Number(line.rejectedQuantity)
-    if (!Number.isFinite(recv) || !Number.isFinite(rej)) return line
-    return { ...line, qualifiedQuantity: String(Math.max(0, recv - rej)) }
+    try {
+        const difference = subtractFixed(
+            line.receivedQuantity,
+            line.rejectedQuantity,
+            { maxScale: QUANTITY_SCALE, outputScale: QUANTITY_SCALE },
+        )
+        return {
+            ...line,
+            qualifiedQuantity: compactFixed(
+                clampZeroFixed(difference, {
+                    maxScale: QUANTITY_SCALE,
+                    outputScale: QUANTITY_SCALE,
+                }),
+            ),
+        }
+    } catch {
+        return line
+    }
 }
 
 export function clientValidation(
@@ -57,10 +112,7 @@ export function clientValidation(
 
     if (draft.type === "RECEIPT") {
         draft.lines.forEach((line, i) => {
-            const recv = Number(line.receivedQuantity)
-            const qual = Number(line.qualifiedQuantity)
-            const rej = Number(line.rejectedQuantity)
-            if (!(recv > 0)) {
+            if (!isPositiveQuantity(line.receivedQuantity)) {
                 issues.push({
                     id: `recv-${i}`,
                     label: "到货数量",
@@ -68,7 +120,14 @@ export function clientValidation(
                     targetId: `receipt-recv-${i}`,
                 })
             }
-            if (qual + rej > recv + 1e-9) {
+            const qualityTotal = quantityTotal([
+                line.qualifiedQuantity,
+                line.rejectedQuantity,
+            ])
+            if (
+                qualityTotal !== "—" &&
+                quantityExceeds(qualityTotal, line.receivedQuantity)
+            ) {
                 issues.push({
                     id: `qty-sum-${i}`,
                     label: "质量数量",
@@ -104,21 +163,18 @@ export function clientValidation(
             })
         }
         draft.lines.forEach((line, i) => {
-            const qty = Number(line.quantity)
             const src = operation.lines.find(
                 (l) => l.salesOrderLineId === line.salesOrderLineId,
             )
-            const cap = Number(
-                src?.reservedQuantity ?? src?.remainingQuantity ?? 0,
-            )
-            if (!(qty > 0)) {
+            const cap = src?.reservedQuantity ?? src?.remainingQuantity ?? "0"
+            if (!isPositiveQuantity(line.quantity)) {
                 issues.push({
                     id: `ship-qty-${i}`,
                     label: "发货数量",
                     message: "必须大于 0",
                     targetId: `ship-qty-${i}`,
                 })
-            } else if (qty > cap + 1e-9) {
+            } else if (quantityExceeds(line.quantity, cap)) {
                 issues.push({
                     id: `ship-cap-${i}`,
                     label: "发货数量",
@@ -170,19 +226,21 @@ export function clientValidation(
             })
         }
         draft.lines.forEach((line, i) => {
-            const qty = Number(line.quantity)
             const src = operation.lines.find(
                 (l) => l.salesOrderLineId === line.salesOrderLineId,
             )
-            const cap = Number(src?.remainingQuantity ?? 0)
-            if (!(qty > 0)) {
+            const cap = src?.remainingQuantity ?? "0"
+            if (!isPositiveQuantity(line.quantity)) {
                 issues.push({
                     id: `el-qty-${i}`,
                     label: "交付数量",
                     message: "必须大于 0",
                     targetId: `el-qty-${i}`,
                 })
-            } else if (cap > 0 && qty > cap + 1e-9) {
+            } else if (
+                isPositiveQuantity(cap) &&
+                quantityExceeds(line.quantity, cap)
+            ) {
                 issues.push({
                     id: `el-cap-${i}`,
                     label: "交付数量",
@@ -271,8 +329,7 @@ export function clientValidation(
             }
         }
         draft.lines.forEach((line, i) => {
-            const qty = Number(line.quantity)
-            if (!(qty > 0)) {
+            if (!isPositiveQuantity(line.quantity)) {
                 issues.push({
                     id: `svc-qty-${i}`,
                     label: "服务数量",
@@ -342,20 +399,18 @@ export function buildPostedFacts(outcome: FulfillmentFormalOutcome) {
 export function confirmDescription(draft: FulfillmentDraft): string {
     const suffix = "确认后不能改。"
     if (draft.type === "RECEIPT") {
-        const qual = draft.lines.reduce(
-            (s, l) => s + Number(l.qualifiedQuantity || 0),
-            0,
+        const qual = quantityTotal(
+            draft.lines.map((line) => line.qualifiedQuantity),
         )
-        const rej = draft.lines.reduce(
-            (s, l) => s + Number(l.rejectedQuantity || 0),
-            0,
+        const rej = quantityTotal(
+            draft.lines.map((line) => line.rejectedQuantity),
         )
-        return rej > 0
+        return isPositiveQuantity(rej)
             ? `合格 ${qual} 入库存并留货，不合格 ${rej} 不入库。${suffix}`
             : `合格 ${qual} 入库存并留货。${suffix}`
     }
     if (draft.type === "WAREHOUSE_SHIP") {
-        const qty = draft.lines.reduce((s, l) => s + Number(l.quantity || 0), 0)
+        const qty = quantityTotal(draft.lines.map((line) => line.quantity))
         return `发出 ${qty}，扣库存并核销留货。${suffix}`
     }
     if (draft.type === "SUPPLIER_DIRECT") {

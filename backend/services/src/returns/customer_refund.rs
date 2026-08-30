@@ -519,29 +519,7 @@ impl ReturnsService {
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let mut refund = db
-                        .customer_refunds()
-                        .find_by_id(&refund_id, session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
-                    if refund.status == CustomerRefundStatus::Reversed {
-                        return Err(Error::BusinessLogicError("已冲正退款不能再过账".to_string()));
-                    }
-                    ensure_final_approve_posting(&refund)?;
-                    execute_customer_refund_domain_action(
-                        &mut refund,
-                        crate::approval::policy::ApprovalDomainAction::CustomerRefundPost,
-                    )?;
-                    apply_customer_refund_posting(&db, &refund, &actor_id, session).await?;
-                    refund.mark_posted()?;
-                    db.customer_refunds().update(&mut refund, session).await?;
-                    let audit = actor_owned.clone().resource_log(
-                        "customer_refund.post",
-                        "customer_refund",
-                        refund.base.id.clone(),
-                    )?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
+                    apply_customer_refund_final_post(&db, &refund_id, &actor_id, &actor_owned, session).await
                 })
             })
             .await?;
@@ -594,6 +572,41 @@ impl ReturnsService {
             approval: document_approval_view(binding.as_ref(), None, refund.status),
         })
     }
+}
+
+/// 在最终通过事务内执行客户退款过账副作用并写回退款单。
+///
+/// # 错误
+/// 非审批中、原回款不存在、累计超额或仓储写入失败时返回错误。
+pub(super) async fn apply_customer_refund_final_post(
+    db: &Database,
+    refund_id: &str,
+    actor_id: &str,
+    actor: &AuditActor,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let mut refund = db
+        .customer_refunds()
+        .find_by_id(refund_id, session)
+        .await?
+        .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
+    if refund.status == CustomerRefundStatus::Reversed {
+        return Err(Error::BusinessLogicError("已冲正退款不能再过账".to_string()));
+    }
+    ensure_final_approve_posting(&refund)?;
+    execute_customer_refund_domain_action(
+        &mut refund,
+        crate::approval::policy::ApprovalDomainAction::CustomerRefundPost,
+    )?;
+    apply_customer_refund_posting(db, &refund, actor_id, session).await?;
+    refund.mark_posted()?;
+    db.customer_refunds().update(&mut refund, session).await?;
+    let audit =
+        actor
+            .clone()
+            .resource_log("customer_refund.post", "customer_refund", refund.base.id.clone())?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(())
 }
 
 /// 校验乐观锁版本。

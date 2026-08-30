@@ -164,6 +164,21 @@ const createSalesOrderSchema = z
         }
         value.lineItems.forEach((line, index) => {
             if (value.nature === "card_voucher") {
+                if (!/^[1-9]\d*$/.test(line.quantity.trim())) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lineItems", index, "quantity"],
+                        message: "卡券张数必须是大于 0 的整数",
+                    })
+                } else if (
+                    BigInt(line.quantity.trim()) > BigInt(4_294_967_295)
+                ) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lineItems", index, "quantity"],
+                        message: "卡券张数超出系统支持范围",
+                    })
+                }
                 if (!line.sku.trim()) {
                     context.addIssue({
                         code: "custom",

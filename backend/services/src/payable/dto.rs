@@ -15,7 +15,7 @@ use entities::returns::PaymentReversalStatus;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 /// 应付往来子账列表允许的排序字段白名单。
@@ -32,13 +32,7 @@ pub(crate) const SUPPLIER_PAYMENT_SORT_FIELDS: &[&str] = &["paid_at", "amount", 
 pub(crate) const PURCHASE_INVOICE_ALLOCATION_SORT_FIELDS: &[&str] = &["created_at"];
 
 /// 排序方向。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortDir {
-    /// 升序。
-    Asc,
-    /// 降序。
-    Desc,
-}
+pub use crate::query::SortDir;
 
 /// 归一化后的分页查询 DTO。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,56 +59,13 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) fn normalize_sort(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    allowed_fields: &'static [&'static str],
-) -> Result<(&'static str, SortDir)> {
-    let sort_by = match sort_by
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(field) => allowed_fields
-            .iter()
-            .find(|allowed| **allowed == field)
-            .copied()
-            .ok_or_else(|| Error::ValidationError(format!("不支持的排序字段: {field}")))?,
-        None => "created_at",
-    };
-    let sort_dir = match sort_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some("asc") => SortDir::Asc,
-        Some("desc") => SortDir::Desc,
-        Some(other) => return Err(Error::ValidationError(format!("非法排序方向: {other}"))),
-        None => SortDir::Desc,
-    };
-    Ok((sort_by, sort_dir))
-}
+pub(crate) use crate::query::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-#[derive(Debug, Clone, Serialize)]
-pub struct PageView<T> {
-    /// 当前页数据。
-    pub items: Vec<T>,
-    /// 满足筛选条件的总数（非当前页条数）。
-    pub total: i64,
-    /// 当前页码（1 起）。
-    pub page: u64,
-    /// 请求的分页大小。
-    pub page_size: u32,
-}
+pub use crate::query::PageView;
 
 /// 校验文本去除首尾空白后非空。
-fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value.trim().is_empty() {
-        return Err(validator::ValidationError::new("不能为空白"));
-    }
-    Ok(())
-}
+use crate::query::non_blank;
 
 // ---------------------------------------------------------------------------
 // 应付往来子账（payable_account）
@@ -165,6 +116,48 @@ pub struct PayableEntryView {
     pub source_sequence: u32,
     /// 入账时间（秒级时间戳）。
     pub posted_at: Instant,
+}
+
+/// 应付往来子账列表摘要。
+///
+/// 列表契约只包含本页展示和建立分配目标所需字段；收款账户等敏感详情必须通过
+/// 详情或受控揭示接口读取。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PayableAccountSummaryView {
+    /// 实体主键。
+    pub id: String,
+    /// 来源单据 ID。
+    pub source_document_id: String,
+    /// 来源单据业务单号。
+    pub source_document_no: Option<String>,
+    /// 往来供应商。
+    pub supplier_id: String,
+    /// 供应商编号（主数据缺失时为空）。
+    pub supplier_no: Option<String>,
+    /// 供应商名称（主数据缺失时为空）。
+    pub supplier_name: Option<String>,
+    /// 来源类型。
+    pub source_type: PayableSourceType,
+    /// 含税应付总额。
+    pub gross_total: Amount,
+    /// 已核销含税总额。
+    pub settled_total: Amount,
+    /// 剩余开放含税余额。
+    pub open_total: Amount,
+    /// 可收票含税总额。
+    pub invoiceable_total: Amount,
+    /// 净已收票含税总额。
+    pub invoiced_total: Amount,
+    /// 剩余可收票含税额度。
+    pub open_invoiceable_total: Amount,
+    /// 子账状态。
+    pub status: PayableAccountStatus,
+    /// 乐观锁版本。
+    pub version: u64,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+    /// 建立付款/发票分配目标所需的应付分录。
+    pub entries: Vec<PayableEntryView>,
 }
 
 /// 应付往来子账响应视图（W12 应付台账行 + 详情）。
@@ -535,6 +528,9 @@ impl SupplierPaymentListParams {
 /// 进项发票登记过账请求（§8.3-2；发票实体经 D18 `invoices()` 仓储复用）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct RegisterPurchaseInvoiceRequest {
+    /// 业务命令幂等键；同键同载荷回放首次登记结果。
+    #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
+    pub idempotency_key: String,
     /// 发票代码（无代码数电票为空）。
     pub invoice_code: Option<String>,
     /// 发票号码。

@@ -114,11 +114,14 @@ impl CatalogService {
             actor
                 .clone()
                 .resource_log("product_category.create", "product_category", id.to_string())?;
-        self.db
-            .product_categories()
-            .create(&category, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let category_for_tx = category.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.product_categories().create(&category_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(category.into())
     }
 

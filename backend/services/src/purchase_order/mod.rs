@@ -19,6 +19,7 @@
 //! - D20 `cost`：`CONFIRMED` 成本事实（审核通过、变更差额）；
 //! - D03 `work_item`：采购审核待办（提交创建、审核完成）。
 
+use database::{AccessControlExt, Executor, PurchaseOrderExt};
 use mongodb::Database;
 
 mod adapter;
@@ -65,6 +66,8 @@ pub use self::dto::{
 };
 pub(crate) use self::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 
+use crate::approval::policy::ApprovalDomainAction;
+use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
@@ -109,4 +112,61 @@ impl PurchaseOrderService {
             .as_ref()
             .ok_or_else(|| Error::Internal("采购单写命令需要授权源".to_string()))
     }
+}
+
+/// 在审批运行时持有的事务内撤回采购单审批。
+///
+/// # 错误
+/// 采购单不存在、提交快照缺失、状态迁移或 CAS 写入失败时返回错误。
+pub(crate) async fn cancel_order_approval_in_transaction(
+    db: &Database,
+    id: &str,
+    action: ApprovalDomainAction,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut order = db
+        .purchase_orders()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+    let submission_id = order
+        .current_submission_id
+        .clone()
+        .ok_or_else(|| Error::ConflictError("采购单缺少当前审批提交".to_string()))?;
+    adapter::execute_purchase_order_domain_action(&mut order, action, submission_id.as_ref(), actor.id())?;
+    db.purchase_orders().update(&mut order, executor).await?;
+    let audit =
+        actor
+            .clone()
+            .resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok(())
+}
+
+/// 在审批运行时持有的事务内撤回采购变更审批。
+///
+/// # 错误
+/// 采购变更单不存在、状态迁移或 CAS 写入失败时返回错误。
+pub(crate) async fn cancel_change_approval_in_transaction(
+    db: &Database,
+    id: &str,
+    action: ApprovalDomainAction,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut change = db
+        .purchase_change_orders()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
+    change_adapter::execute_purchase_change_domain_action(&mut change, action, actor.id())?;
+    db.purchase_change_orders().update(&mut change, executor).await?;
+    let audit = actor.clone().resource_log(
+        "purchase_change_order.cancel_approval",
+        "purchase_change_order",
+        id.to_string(),
+    )?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok(())
 }

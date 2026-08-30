@@ -278,11 +278,16 @@ export type FulfillmentQueueView = Readonly<{
     context: {
         position: number
         total: number
+        /** 服务端页码（1 起）。 */
+        page: number
+        pageSize: number
+        totalPages: number
+        queueContextId?: string
         currentOperationId?: string
         previousOperationId?: string
         nextOperationId?: string
         filterSummary: string
-        /** 仓筛选可选值，按权限范围全量投影去重（不随当前队列收缩） */
+        /** 服务端在当前授权筛选内形成的仓库选项。 */
         warehouseOptions: ReadonlyArray<{ value: string; label: string }>
         /** 当前角色能看到的作业类型；类型分段与指标只渲染这些 */
         visibleTypes: readonly FulfillmentOperationType[]

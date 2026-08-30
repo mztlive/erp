@@ -35,6 +35,10 @@ export type AllocationMode = "receipt" | "invoice"
 
 export type CustomerAccountsQuery = {
     view: CustomerAccountsView
+    /** 服务端分页页码（1 起）。 */
+    page: number
+    /** 服务端分页大小。 */
+    pageSize: number
     counterpartyPartyId?: string
     customerId?: string
     q?: string

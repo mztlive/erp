@@ -5,9 +5,7 @@
 import { apiGet, type Page } from "@/lib/api"
 import type { ConnectionListView } from "@/features/supplier-api-connections/types"
 import {
-    type BackendCapability,
-    type BackendConnection,
-    resolveSupplierName,
+    type BackendConnectionListItem,
     secsToIso,
     toListItem,
 } from "@/features/supplier-api-connections/api/mapping"
@@ -48,36 +46,15 @@ export async function fetchConnectionList(
         if (status === "FAULTED") query.status = "fault"
     }
 
-    const pageResult = await apiGet<Page<BackendConnection>>(
+    const pageResult = await apiGet<Page<BackendConnectionListItem>>(
         "/admin/supplier-api-connections",
         query,
-    )
-    const capPage = await apiGet<Page<BackendCapability>>(
-        "/admin/supplier-api-capabilities",
-        { page: 1, page_size: 100 },
-    )
-    const capsByConnection = new Map<string, BackendCapability[]>()
-    for (const capability of capPage.items) {
-        const items = capsByConnection.get(capability.connection_id) ?? []
-        items.push(capability)
-        capsByConnection.set(capability.connection_id, items)
-    }
-    const supplierNames = new Map<string, string>()
-    await Promise.all(
-        pageResult.items.map(async (connection) => {
-            if (!supplierNames.has(connection.supplier_id)) {
-                supplierNames.set(
-                    connection.supplier_id,
-                    await resolveSupplierName(connection.supplier_id),
-                )
-            }
-        }),
     )
     const items = pageResult.items.map((connection) =>
         toListItem(
             connection,
-            capsByConnection.get(connection.id) ?? [],
-            supplierNames.get(connection.supplier_id),
+            connection.capabilities,
+            connection.supplier_name ?? undefined,
         ),
     )
     return {

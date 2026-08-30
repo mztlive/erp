@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, NoTransaction, ProjectionExt, ReceivableExt, SalesOrderExt,
-    Transactional, WorkItemExt,
+    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, ProjectionExt, ReceivableExt,
+    SalesOrderExt, Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
@@ -121,7 +121,7 @@ impl SalesOrderService {
             return self.sales_order_detail(id, None).await;
         }
         ensure_final_approve_formalize(&order)?;
-        let (submission, lines) = load_latest_submission(&self.db, id).await?;
+        let (submission, lines) = load_latest_submission(&self.db, id, &mut NoTransaction).await?;
         let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
         persist_formalized_submission(
             &self.db,
@@ -134,6 +134,48 @@ impl SalesOrderService {
         )
         .await?;
         self.sales_order_detail(id, None).await
+    }
+
+    /// 在审批运行时持有的事务内形式化最终通过的销售单。
+    ///
+    /// # 参数
+    /// * `id` - 销售单主键
+    /// * `actor` - 已认证操作人
+    /// * `session` - 审批运行时持有的唯一事务会话
+    ///
+    /// # 返回
+    /// 正式版本、应收、供给任务、投影和成功审计全部写入时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 单据状态、提交、采购责任或持久化不变量失败时返回错误。
+    pub(crate) async fn formalize_approved_submission_in_transaction(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        session: &mut mongodb::ClientSession,
+    ) -> Result<()> {
+        let mut order = self
+            .db
+            .sales_orders()
+            .find_by_id(id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+        if order.is_fully_formalized() {
+            return Ok(());
+        }
+        ensure_final_approve_formalize(&order)?;
+        let (submission, lines) = load_latest_submission(&self.db, id, session).await?;
+        let procurement = self.build_procurement_formalization_plan(&order, &lines).await?;
+        let write = prepare_formalized_submission_write(
+            &self.db,
+            self.require_rbac()?.clone(),
+            &mut order,
+            submission,
+            lines,
+            procurement,
+            actor,
+        )?;
+        persist_formalized_submission_write(write, session).await
     }
 
     /// 为实物及服务销售单构造事务外授权的采购责任计划。
@@ -170,17 +212,18 @@ impl SalesOrderService {
 async fn load_latest_submission(
     db: &Database,
     sales_order_id: &str,
+    executor: &mut dyn Executor,
 ) -> Result<(SalesOrderSubmission, Vec<SalesOrderSubmissionLine>)> {
     let order_id = SalesOrderId::new(sales_order_id);
     let submission = db
         .sales_order_submissions()
-        .find_latest_by_order(&order_id, &mut NoTransaction)
+        .find_latest_by_order(&order_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("销售单没有可形式化的提交".to_string()))?;
     let submission_id = SalesOrderSubmissionId::new(submission.base.id.clone());
     let lines = db
         .sales_order_submission_lines()
-        .list_lines_by_submissions(&[submission_id], &mut NoTransaction)
+        .list_lines_by_submissions(&[submission_id], executor)
         .await?;
     Ok((submission, lines))
 }
@@ -205,11 +248,42 @@ async fn persist_formalized_submission(
     db: &Database,
     rbac: crate::iam::SharedRbacService,
     order: &mut SalesOrder,
-    mut submission: SalesOrderSubmission,
+    submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,
     procurement: Option<ProcurementFormalizationPlan>,
     actor: &AuditActor,
 ) -> Result<()> {
+    let policy_revision = procurement.as_ref().map(|plan| plan.resolution.policy_revision);
+    let write =
+        prepare_formalized_submission_write(db, rbac.clone(), order, submission, lines, procurement, actor)?;
+    let client = db.client().clone();
+    if let Some(policy_revision) = policy_revision {
+        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
+            Box::pin(persist_formalized_submission_write(write, session))
+        })
+        .await?;
+    } else {
+        client
+            .with_transaction(move |session| Box::pin(persist_formalized_submission_write(write, session)))
+            .await?;
+    }
+    let _ = SalesOrderId::new(order.base.id.clone());
+    Ok(())
+}
+
+/// 完成销售形式化的纯领域计算并生成待写上下文。
+///
+/// # 错误
+/// 状态、版本、投影或任务字段不合法时返回错误。
+fn prepare_formalized_submission_write(
+    db: &Database,
+    rbac: crate::iam::SharedRbacService,
+    order: &mut SalesOrder,
+    mut submission: SalesOrderSubmission,
+    lines: Vec<SalesOrderSubmissionLine>,
+    procurement: Option<ProcurementFormalizationPlan>,
+    actor: &AuditActor,
+) -> Result<FormalizedSubmissionWrite> {
     let now = Instant::now();
     let aggregate = build_revision_for_order(order, &submission, &lines, now)?;
     let projection = if is_voucher_sales_order(order.business_type) {
@@ -233,9 +307,7 @@ async fn persist_formalized_submission(
     let audit = actor
         .clone()
         .resource_log("sales_order.formalize", "sales_order", order.base.id.clone())?;
-    let policy_revision = procurement.as_ref().map(|plan| plan.resolution.policy_revision);
-    let client = db.client().clone();
-    let write = FormalizedSubmissionWrite {
+    Ok(FormalizedSubmissionWrite {
         db: db.clone(),
         rbac: rbac.clone(),
         order_id: order.base.id.clone(),
@@ -247,19 +319,7 @@ async fn persist_formalized_submission(
         projection,
         audit,
         now,
-    };
-    if let Some(policy_revision) = policy_revision {
-        rbac.run_authorized_policy_transaction(policy_revision, move |session| {
-            Box::pin(persist_formalized_submission_write(write, session))
-        })
-        .await?;
-    } else {
-        client
-            .with_transaction(move |session| Box::pin(persist_formalized_submission_write(write, session)))
-            .await?;
-    }
-    let _ = SalesOrderId::new(order.base.id.clone());
-    Ok(())
+    })
 }
 
 /// 在调用方选定的事务边界内写入销售形式化的全部业务事实。

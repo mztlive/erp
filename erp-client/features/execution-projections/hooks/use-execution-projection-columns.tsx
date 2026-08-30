@@ -188,6 +188,9 @@ export function useExecutionProjectionColumns(options: {
                     const canEscalate = r.allowedActions.includes("ESCALATE")
                     return (
                         <div
+                            role="toolbar"
+                            tabIndex={-1}
+                            aria-label={`${r.projectionNo} 行操作`}
                             className="flex min-w-[11rem] flex-wrap justify-end gap-1"
                             onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => e.stopPropagation()}

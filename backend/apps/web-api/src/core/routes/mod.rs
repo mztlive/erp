@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use axum::{
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, State},
     http::{header::HeaderName, StatusCode},
     middleware,
     routing::{get, post},
@@ -14,7 +14,7 @@ use tower_http::{
 };
 
 use crate::{
-    app_state::AppState,
+    app_state::{AppState, ExternalConnectorReadiness},
     core::{
         errors::Result,
         handler::upload as upload_handler,
@@ -87,6 +87,7 @@ pub fn create(app_state: AppState) -> Router {
         .with_state(app_state.clone());
     let api_routes = Router::new()
         .route("/health", get(health))
+        .route("/ready", get(readiness))
         .merge(public::routes(app_state.clone()))
         .nest("/account", account::routes(app_state.clone()))
         .nest("/admin", admin::routes(app_state.clone()))
@@ -118,4 +119,26 @@ pub fn create(app_state: AppState) -> Router {
 /// 当内部逻辑或依赖操作失败时返回错误。
 pub async fn health() -> Result<()> {
     Ok(ApiResponse::<()>::ok())
+}
+
+/// 就绪检查；外部连接器未配置时返回 503，并公开各能力的失败关闭状态。
+pub async fn readiness(State(state): State<AppState>) -> ApiResponse<ExternalConnectorReadiness> {
+    readiness_response(state.external_connector_readiness())
+}
+
+fn readiness_response(readiness: ExternalConnectorReadiness) -> ApiResponse<ExternalConnectorReadiness> {
+    let ready = readiness.is_ready();
+    ApiResponse {
+        status: if ready { 200 } else { 503 },
+        message: if ready {
+            "OK".to_string()
+        } else {
+            "外部连接器尚未全部配置，相关能力保持失败关闭".to_string()
+        },
+        code: (!ready).then(|| "EXTERNAL_CONNECTOR_NOT_READY".to_string()),
+        field_errors: None,
+        retryable: Some(false),
+        data: Some(readiness),
+        success: ready,
+    }
 }

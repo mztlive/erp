@@ -6,7 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
-import { SkuThumbnail } from "@/features/entity-selectors/components/sku-thumbnail"
+import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 function SupplyRegions({ regions }: { regions: readonly string[] }) {

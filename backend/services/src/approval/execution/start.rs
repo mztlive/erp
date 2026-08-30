@@ -8,7 +8,7 @@ use bpm::model::{ApprovalCommandReceipt, ParticipantId, ProcessKind, SubjectRef,
 use super::apply_plan::{apply_plan, DomainActionKind};
 use super::idempotency::{classify_receipt, start_digest, start_scope, ReceiptBranch};
 use super::{ExecutionCommandInput, PreparedExecution};
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorCode, Result};
 
 /// 启动编排输入。
 #[derive(Debug, Clone)]
@@ -133,7 +133,7 @@ pub(crate) fn map_engine_error(error: bpm::engine::EngineError) -> Error {
         bpm::engine::EngineError::Uncommittable(message) => Error::Internal(message.to_string()),
         bpm::engine::EngineError::InvalidCommand(message) => Error::ValidationError(message.to_string()),
         bpm::engine::EngineError::GraphCorrupted => {
-            Error::ConflictError("APPROVAL_INSTANCE_BLOCKED".to_string())
+            Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked)
         }
         bpm::engine::EngineError::Model(error) => Error::BusinessLogicError(error.to_string()),
     }

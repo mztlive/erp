@@ -25,7 +25,8 @@ import type {
     InvoiceDraft,
     ReceiptDraft,
 } from "@/features/card-funds-review/types"
-import { formatMoney, moneyStrSafe } from "../lib/presentation"
+import { subtractFixed } from "@/lib/fixed-decimal"
+import { formatMoney } from "../lib/presentation"
 
 export function CardFundsAllocationEditor({
     allocationMode,
@@ -52,8 +53,8 @@ export function CardFundsAllocationEditor({
     setInvoiceForm: React.Dispatch<React.SetStateAction<InvoiceDraft>>
     allocLines: AllocationDraftLine[]
     setAllocLines: React.Dispatch<React.SetStateAction<AllocationDraftLine[]>>
-    allocTarget: number
-    allocatedSum: number
+    allocTarget: string
+    allocatedSum: string
     receiptPending: boolean
     invoicePending: boolean
     setAllocationMode: React.Dispatch<
@@ -215,12 +216,13 @@ export function CardFundsAllocationEditor({
                         title="多对多分配"
                         description="分配合计须等于本次单据含税金额；登记不覆盖已有金额，差额以提交后系统结果为准。"
                         summary={{
-                            totalToAllocate: formatMoney(
-                                moneyStrSafe(allocTarget),
-                            ),
-                            allocated: formatMoney(moneyStrSafe(allocatedSum)),
+                            totalToAllocate: formatMoney(allocTarget),
+                            allocated: formatMoney(allocatedSum),
                             difference: formatMoney(
-                                moneyStrSafe(allocTarget - allocatedSum),
+                                subtractFixed(allocTarget, allocatedSum, {
+                                    maxScale: 2,
+                                    outputScale: 2,
+                                }),
                             ),
                         }}
                         allocations={allocLines}
@@ -304,7 +306,7 @@ export function CardFundsAllocationEditor({
                                         }
                                     }}
                                 >
-                                    {(receiptPending || invoicePending) ? (
+                                    {receiptPending || invoicePending ? (
                                         <LoaderCircleIcon
                                             data-icon="inline-start"
                                             className="animate-spin"

@@ -4,7 +4,6 @@ export {
     useAllocationSessionQuery,
     useCommitSupplierRefundMutation,
     usePayableDetailQuery,
-    useResolveUnknownMutation,
     useReverseInvoiceMutation,
     useReversePaymentMutation,
     useSaveAllocationDraftMutation,

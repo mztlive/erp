@@ -1,6 +1,7 @@
 import { MetricItem, MetricStrip } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { ProfitLossView } from "@/features/actual-profit-loss/types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     formatMoneyDisplay,
     PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL,
@@ -55,7 +56,11 @@ export function ProfitLossMetrics({ data }: { data: ProfitLossView }) {
                     }
                     status={
                         data.totals.actualProfitLossNet != null &&
-                        Number(data.totals.actualProfitLossNet) < 0
+                        compareDecimal(
+                            data.totals.actualProfitLossNet,
+                            "0",
+                            2,
+                        ) < 0
                             ? {
                                   label: "亏损",
                                   tone: "destructive",

@@ -351,11 +351,13 @@ impl PartyService {
         let audit = actor
             .clone()
             .resource_log("party.delete", "party", party.base.id.clone())?;
-        self.db
-            .parties()
-            .soft_delete(&mut party, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.parties().soft_delete(&mut party, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(())
     }
 

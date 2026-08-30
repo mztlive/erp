@@ -17,13 +17,6 @@ import type {
     BackendReceiptReversal,
 } from "./dto"
 
-export const reverseIdempotency = new Map<string, ReverseFactResult>()
-const pendingReverseInputs = new Map<string, ReverseFactInput>()
-
-function freezeReverseInput(input: ReverseFactInput): ReverseFactInput {
-    return { ...input }
-}
-
 function correctionError(
     error: unknown,
     idempotencyKey: string,
@@ -103,13 +96,7 @@ export async function submitReceiptReversal(input: {
 export async function reverseFact(
     input: ReverseFactInput,
 ): Promise<ReverseFactResult> {
-    const cached = reverseIdempotency.get(input.idempotencyKey)
-    if (cached && cached.status !== "unknown") return cached
-    reverseIdempotency.delete(input.idempotencyKey)
-    const commandInput =
-        pendingReverseInputs.get(input.idempotencyKey) ??
-        freezeReverseInput(input)
-    pendingReverseInputs.set(commandInput.idempotencyKey, commandInput)
+    const commandInput = { ...input }
 
     try {
         if (commandInput.kind === "receipt_reverse") {
@@ -133,8 +120,6 @@ export async function reverseFact(
                 approval: submitted.approval,
                 subjectStatus: submitted.status,
             }
-            reverseIdempotency.set(commandInput.idempotencyKey, result)
-            pendingReverseInputs.delete(commandInput.idempotencyKey)
             return result
         }
 
@@ -159,8 +144,6 @@ export async function reverseFact(
                 approval: submitted.approval,
                 subjectStatus: submitted.status,
             }
-            reverseIdempotency.set(commandInput.idempotencyKey, result)
-            pendingReverseInputs.delete(commandInput.idempotencyKey)
             return result
         }
 
@@ -180,16 +163,8 @@ export async function reverseFact(
             operationId: commandInput.idempotencyKey,
             message: "已登记独立红票并追加反向分配，原蓝票保留。",
         }
-        reverseIdempotency.set(commandInput.idempotencyKey, result)
-        pendingReverseInputs.delete(commandInput.idempotencyKey)
         return result
     } catch (err) {
-        const result = correctionError(err, commandInput.idempotencyKey)
-        if (result.status === "unknown") {
-            reverseIdempotency.set(commandInput.idempotencyKey, result)
-            return result
-        }
-        pendingReverseInputs.delete(commandInput.idempotencyKey)
-        return result
+        return correctionError(err, commandInput.idempotencyKey)
     }
 }

@@ -4,15 +4,13 @@ import * as React from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/toast"
-import {
-    SellableSkuSelectDialog,
-    type SellableSkuPick,
-} from "@/features/entity-selectors"
+import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import { SalesOrderCreateDueDateBatchBar } from "@/features/sales-orders/components/sales-order-create-due-date-batch-bar"
 import { SalesOrderCreateLineItemTable } from "@/features/sales-orders/components/sales-order-create-line-item-table"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import { applyDueDateToLines } from "@/features/sales-orders/lib/sales-order-create-model"
 import { applySellablePicksToLines } from "@/features/sales-orders/lib/sales-order-create-sku-picks"
+import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import type { SalesLineProcurementResponsibility } from "@/features/sales-orders/types"
 
 export type SalesOrderCreateLineItemsSectionProps = {

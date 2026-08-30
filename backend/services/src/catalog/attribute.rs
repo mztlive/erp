@@ -109,11 +109,14 @@ impl CatalogService {
         let audit = actor
             .clone()
             .resource_log("sku_attribute.create", "sku_attribute", id.to_string())?;
-        self.db
-            .sku_attributes()
-            .create(&attribute, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let attribute_for_tx = attribute.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.sku_attributes().create(&attribute_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(attribute.into())
     }
 
@@ -288,11 +291,14 @@ impl CatalogService {
             "sku_attribute_value",
             id.to_string(),
         )?;
-        self.db
-            .sku_attribute_values()
-            .create(&value, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let value_for_tx = value.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.sku_attribute_values().create(&value_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(value.into())
     }
 

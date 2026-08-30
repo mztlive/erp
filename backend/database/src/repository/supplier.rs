@@ -186,6 +186,29 @@ impl Pagination for SupplierAccountFilter {
 }
 
 impl<'a> Repository<'a, SupplierAccount> {
+    /// 按供应商角色 ID 集合批量读取活跃账户。
+    ///
+    /// # 参数
+    /// * `supplier_ids` - 供应商角色 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的供应商角色；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_accounts_by_ids(
+        &self,
+        supplier_ids: &[SupplierAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierAccount>> {
+        if supplier_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 分页检索供应商角色列表（投影查询）。
     ///
     /// 只返回 [`SupplierAccountRow`] 所需的列表字段，不加载整文档；排序字段

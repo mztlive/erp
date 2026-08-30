@@ -64,7 +64,6 @@ export function MultiOptionCombobox({
         [items, value],
     )
     const anchorRef = useComboboxAnchor()
-    const inputRef = React.useRef<HTMLInputElement | null>(null)
 
     return (
         <Combobox
@@ -89,7 +88,6 @@ export function MultiOptionCombobox({
                 data-slot="multi-option-combobox"
                 data-size={size}
                 className={cn("min-w-0", className)}
-                onClick={() => inputRef.current?.focus()}
             >
                 <ComboboxChips
                     className={cn(
@@ -110,7 +108,6 @@ export function MultiOptionCombobox({
                         }
                     </ComboboxValue>
                     <ComboboxChipsInput
-                        ref={inputRef}
                         id={id}
                         aria-label={ariaLabel}
                         placeholder={selected.length > 0 ? "" : placeholder}

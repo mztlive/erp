@@ -15,7 +15,7 @@ export {
 } from "./list-view"
 export {
     createAllocationSession,
-    fetchAllocationSession,
+    refreshAllocationSession,
     saveAllocationDraft,
 } from "./session"
 export { postAllocation, resolvePostUnknown } from "./post-allocation"

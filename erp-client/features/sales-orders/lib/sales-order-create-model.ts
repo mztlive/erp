@@ -1,5 +1,6 @@
 import {
     compareDecimal,
+    divideFixed,
     multiplyFixed,
     splitGrossByPercentRate,
     sumFixed,
@@ -53,15 +54,19 @@ export function deriveVoucherGiftPreview(
             outputScale: 2,
             allowNegative: true,
         })
-        // 预览用百分数，正式配赠率由服务端按成交金额分母落库
-        const gift = Number(giftAmount)
-        const txn = Number(transaction)
-        if (!Number.isFinite(gift) || !Number.isFinite(txn) || txn === 0) {
-            return null
-        }
+        const giftRatio = divideFixed(giftAmount, transaction, {
+            numeratorMaxScale: 2,
+            denominatorMaxScale: 2,
+            outputScale: 6,
+            allowNegative: true,
+        })
         return {
             giftAmount,
-            giftRatePercent: ((gift / txn) * 100).toFixed(2),
+            giftRatePercent: multiplyFixed(giftRatio, "100", {
+                leftMaxScale: 6,
+                rightMaxScale: 0,
+                outputScale: 2,
+            }),
         }
     } catch {
         return null

@@ -36,9 +36,11 @@ export interface CostBasisChartProps {
 
 /** 成本口径构成：实际/标准/无可用成本消费金额占比 + 等价数据表。 */
 export function CostBasisChart({ coverage }: CostBasisChartProps) {
+    // fixed-decimal-display-boundary: Recharts coordinates require number.
     const basisChartData = coverage.byBasis.map((slice) => ({
         basis: slice.basis,
         label: COST_BASIS_LABEL[slice.basis],
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         amount: Number(slice.consumptionGross) / 10000,
         amountLabel: formatMoneyDisplay(slice.consumptionGross),
         share: slice.shareLabel,
@@ -66,14 +68,14 @@ export function CostBasisChart({ coverage }: CostBasisChartProps) {
                 >
                     <BarChart data={basisChartData} accessibilityLayer>
                         <CartesianGrid vertical={false} />
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                        <XAxis
+                            dataKey="label"
+                            tickLine={false}
+                            axisLine={false}
+                        />
                         <YAxis tickLine={false} axisLine={false} width={40} />
                         <ChartTooltip content={<ChartTooltipContent />} />
-                        <Bar
-                            dataKey="amount"
-                            radius={4}
-                            name="消费额(万元)"
-                        >
+                        <Bar dataKey="amount" radius={4} name="消费额(万元)">
                             {basisChartData.map((entry) => (
                                 <Cell
                                     key={entry.basis}
@@ -123,12 +125,8 @@ export function CostBasisChart({ coverage }: CostBasisChartProps) {
                                     <td className="num py-1 pr-2">
                                         {r.amountLabel}
                                     </td>
-                                    <td className="num py-1 pr-2">
-                                        {r.share}
-                                    </td>
-                                    <td className="num py-1">
-                                        {r.costLabel}
-                                    </td>
+                                    <td className="num py-1 pr-2">{r.share}</td>
+                                    <td className="num py-1">{r.costLabel}</td>
                                 </tr>
                             ))}
                             <tr className="font-medium">

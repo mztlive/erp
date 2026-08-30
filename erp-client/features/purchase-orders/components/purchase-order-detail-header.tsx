@@ -26,7 +26,7 @@ import {
 } from "@/features/purchase-orders/types"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
-import { fulfillmentTasksHref } from "@/features/workspace/lib/fulfillment-destination"
+import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 
 export function PurchaseOrderDetailHeader({
     order,

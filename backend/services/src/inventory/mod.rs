@@ -876,33 +876,7 @@ impl InventoryService {
         let posted = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    let mut adjustment = db
-                        .inventory()
-                        .stock_adjustment(adjustment_id.as_ref(), session)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-                    ensure_final_approve_posting(&adjustment)?;
-                    let lines = db
-                        .inventory()
-                        .adjustment_lines_by_adjustment_ids(std::slice::from_ref(&adjustment_id), session)
-                        .await?;
-                    if lines.is_empty() {
-                        return Err(Error::ValidationError("库存调整单没有明细，无法过账".to_string()));
-                    }
-                    let occurred_at = Instant::now();
-                    for line in &lines {
-                        adjustment.reason_type.ensure_direction(line.direction)?;
-                        post_adjustment_line(&db, session, &adjustment, line, &occurred_at, &actor).await?;
-                    }
-                    adjustment.mark_posted()?;
-                    db.stock_adjustments().update(&mut adjustment, session).await?;
-                    let audit = actor.resource_log(
-                        "stock_adjustment.post",
-                        "stock_adjustment",
-                        adjustment_id.to_string(),
-                    )?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<StockAdjustment, crate::errors::Error>(adjustment)
+                    post_stock_adjustment_in_transaction(&db, &adjustment_id, &actor, session).await
                 })
             })
             .await?;
@@ -954,6 +928,81 @@ impl InventoryService {
             movements,
         })
     }
+}
+
+/// 在审批运行时持有的事务内过账库存调整单。
+///
+/// # 参数
+/// * `db` - 数据库实例
+/// * `adjustment_id` - 库存调整单 ID
+/// * `actor` - 已认证操作人
+/// * `session` - 审批运行时持有的唯一事务会话
+///
+/// # 返回
+/// 返回事务内已推进到过账状态的调整单。
+///
+/// # 错误
+/// 调整单/明细不存在、方向或库存不变量失败、任一写入失败时返回错误。
+pub(crate) async fn post_stock_adjustment_in_transaction(
+    db: &Database,
+    adjustment_id: &StockAdjustmentId,
+    actor: &AuditActor,
+    session: &mut mongodb::ClientSession,
+) -> Result<StockAdjustment> {
+    let mut adjustment = db
+        .inventory()
+        .stock_adjustment(adjustment_id.as_ref(), session)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+    ensure_final_approve_posting(&adjustment)?;
+    let lines = db
+        .inventory()
+        .adjustment_lines_by_adjustment_ids(std::slice::from_ref(adjustment_id), session)
+        .await?;
+    if lines.is_empty() {
+        return Err(Error::ValidationError("库存调整单没有明细，无法过账".to_string()));
+    }
+    let occurred_at = Instant::now();
+    for line in &lines {
+        adjustment.reason_type.ensure_direction(line.direction)?;
+        post_adjustment_line(db, session, &adjustment, line, &occurred_at, actor).await?;
+    }
+    adjustment.mark_posted()?;
+    db.stock_adjustments().update(&mut adjustment, session).await?;
+    let audit = actor.clone().resource_log(
+        "stock_adjustment.post",
+        "stock_adjustment",
+        adjustment_id.to_string(),
+    )?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(adjustment)
+}
+
+/// 在审批运行时持有的事务内撤回库存调整审批。
+///
+/// # 错误
+/// 调整单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
+pub(crate) async fn cancel_stock_adjustment_approval_in_transaction(
+    db: &Database,
+    adjustment_id: &StockAdjustmentId,
+    action: crate::approval::policy::ApprovalDomainAction,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut adjustment = db
+        .inventory()
+        .stock_adjustment(adjustment_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+    execute_stock_adjustment_domain_action(&mut adjustment, action)?;
+    db.stock_adjustments().update(&mut adjustment, executor).await?;
+    let audit = actor.clone().resource_log(
+        "stock_adjustment.cancel_approval",
+        "stock_adjustment",
+        adjustment_id.to_string(),
+    )?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok(())
 }
 
 /// 库存调整单创建事务的单据、绑定与审计载荷。

@@ -6,7 +6,7 @@ use bpm::ProcessKind;
 use entities::document_registry::DocumentType;
 use entities::Permission;
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorCode, Result};
 
 use super::process_kind::process_kind_of;
 
@@ -507,7 +507,7 @@ pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Resu
         || policy.start_action == policy.cancel_action
         || policy.final_approve_action == policy.cancel_action
     {
-        return Err(Error::Internal("审批政策动作注册不变量损坏".to_string()));
+        return Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered));
     }
     Ok(())
 }
@@ -544,7 +544,7 @@ pub fn validate_required_purposes(
                 policy.document_type.label()
             )))
         }
-        _ => Err(Error::Internal("审批政策用途注册不变量损坏".to_string())),
+        _ => Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered)),
     }
 }
 
@@ -616,7 +616,7 @@ fn no_approval(document_type: DocumentType) -> DocumentApprovalPolicy {
 /// 权限字符串不符合 `resource:action` 时返回部署不变量错误。
 fn type_permission(document_type: DocumentType, action: &str) -> Result<Permission> {
     Permission::parse(format!("{}:{action}", document_type.as_str()))
-        .map_err(|error| Error::Internal(format!("审批政策权限不变量损坏: {error}")))
+        .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered))
 }
 
 /// 返回该必须审批类型的稳定责任角色。

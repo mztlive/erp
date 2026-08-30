@@ -1,4 +1,4 @@
-import type { SellableSkuPick } from "@/features/entity-selectors/lib/sellable-sku-pick"
+import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import { createEmptyLine } from "@/features/sales-orders/lib/sales-order-create-model"
 import type {
     SalesOrderDraftLineInput,

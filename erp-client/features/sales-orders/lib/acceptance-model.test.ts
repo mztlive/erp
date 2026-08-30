@@ -98,7 +98,7 @@ describe("buildDraftLines", () => {
                 }),
             ],
         ])
-        expect(passQuantity(selected.get("f-1")!)).toBe(8)
+        expect(passQuantity(selected.get("f-1")!)).toBe("8")
         const lines = buildDraftLines(selected)
         expect(lines).toEqual([
             {
@@ -131,7 +131,7 @@ describe("applyResultChange", () => {
         const next = applyResultChange(defaultBatchDraft(source), "SHORT")
         expect(next.result).toBe("SHORT")
         expect(next.exceptionQty).toBe("1")
-        expect(passQuantity(next)).toBe(0)
+        expect(passQuantity(next)).toBe("0")
     })
 
     it("clears exception when switching back to pass", () => {

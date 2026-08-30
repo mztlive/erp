@@ -13,6 +13,7 @@ import type {
     SaveAcceptanceDraftInput,
 } from "@/features/sales-orders/lib/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 // ─── 后端形状 ────────────────────────────────────────────────────────────────
 
@@ -148,8 +149,14 @@ export function mapOverallResultToBackend(
     lines: SaveAcceptanceDraftInput["lines"],
 ): string {
     if (lines.some((l) => l.serviceFail)) return "SERVICE_FAILED"
-    if (lines.some((l) => Number(l.rejectedQuantity) > 0)) return "REJECTED"
-    if (lines.some((l) => Number(l.shortQuantity) > 0)) return "SHORTAGE"
+    if (
+        lines.some((line) => compareDecimal(line.rejectedQuantity, "0", 6) > 0)
+    ) {
+        return "REJECTED"
+    }
+    if (lines.some((line) => compareDecimal(line.shortQuantity, "0", 6) > 0)) {
+        return "SHORTAGE"
+    }
     return "PASSED"
 }
 
@@ -182,7 +189,7 @@ export function hasRemainingEligibleAcceptance(
 ): boolean {
     return (eligibility.sales_lines ?? []).some((line) =>
         (line.fulfillment_facts ?? []).some(
-            (fact) => Number(fact.eligible_quantity) > 0,
+            (fact) => compareDecimal(fact.eligible_quantity, "0", 6) > 0,
         ),
     )
 }

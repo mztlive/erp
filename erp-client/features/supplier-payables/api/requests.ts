@@ -23,10 +23,7 @@ export {
     submitInvoice,
 } from "@/features/supplier-payables/api/invoices"
 
-export {
-    resolveUnknownResult,
-    saveAllocationDraft,
-} from "@/features/supplier-payables/api/drafts"
+export { saveAllocationDraft } from "@/features/supplier-payables/api/drafts"
 
 export {
     commitSupplierRefund,

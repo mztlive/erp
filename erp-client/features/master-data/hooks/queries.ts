@@ -23,7 +23,6 @@ import {
     updateWarehouseFulfillmentHandlers,
     type UpdateWarehouseFulfillmentHandlersInput,
 } from "@/features/master-data/api/warehouse-fulfillment"
-import { entitySelectorKeys } from "@/features/entity-selectors/hooks/queries"
 import type {
     CreateMasterDataInput,
     CreateRevisionInput,
@@ -33,6 +32,7 @@ import type {
     ProductListingStatus,
 } from "@/features/master-data/types"
 import { optionKeys } from "@/hooks/use-options"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 export const masterDataKeys = {
     all: ["master-data"] as const,
@@ -68,7 +68,7 @@ export function useUpdateWarehouseFulfillmentHandlersMutation() {
                     queryKey: masterDataKeys.all,
                 }),
                 queryClient.invalidateQueries({
-                    queryKey: [...entitySelectorKeys.all, "warehouse"],
+                    queryKey: [...queryKeyRoots.entitySelectors, "warehouse"],
                 }),
             ])
         },

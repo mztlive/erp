@@ -1,9 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import {
-    DescriptionList,
-} from "@/components/ui/description-list"
+import { DescriptionList } from "@/components/ui/description-list"
 import {
     Table,
     TableBody,
@@ -52,9 +50,7 @@ export function OverviewSection({
                 />
                 <Item
                     label="支付凭证号"
-                    value={
-                        <span className="num">{order.paymentFactKey}</span>
-                    }
+                    value={<span className="num">{order.paymentFactKey}</span>}
                 />
             </DescriptionList>
             <p className="mt-3 text-xs text-muted-foreground">
@@ -70,7 +66,7 @@ export function ItemsSection({
     totalCostGross,
 }: {
     items: SupplierOrderDetailView["items"]
-    totalQuantity: number
+    totalQuantity: string
     totalCostGross: string | null
 }) {
     return (

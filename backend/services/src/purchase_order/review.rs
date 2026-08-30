@@ -52,8 +52,38 @@ impl PurchaseOrderService {
         id: &str,
         actor: &AuditActor,
     ) -> Result<PurchaseReviewResult> {
-        use super::adapter::{execute_purchase_order_domain_action, purchase_order_adapter};
         use crate::approval::policy::ApprovalDomainAction;
+
+        let PreparedFormalizedOrder { persist, result } = self.prepare_formalized_order(id, actor).await?;
+        persist_formalized_order(&self.db, persist, actor).await?;
+        let _ = ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder;
+        Ok(result)
+    }
+
+    /// 在审批运行时持有的事务内形式化最终通过的采购单。
+    ///
+    /// # 错误
+    /// 提交、来源复验、应付/成本或履约草稿写入失败时返回错误。
+    pub(crate) async fn formalize_approved_order_in_transaction(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        session: &mut mongodb::ClientSession,
+    ) -> Result<()> {
+        let prepared = self.prepare_formalized_order(id, actor).await?;
+        persist_formalized_order_write(&self.db, prepared.persist, actor, session).await
+    }
+
+    /// 读取并完成采购形式化的事务外领域计算。
+    ///
+    /// # 错误
+    /// 单据、提交或来源事实不完整时返回错误。
+    async fn prepare_formalized_order(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+    ) -> Result<PreparedFormalizedOrder> {
+        use super::adapter::{execute_purchase_order_domain_action, purchase_order_adapter};
 
         let adapter = purchase_order_adapter()?;
         let order = self
@@ -95,13 +125,20 @@ impl PurchaseOrderService {
         let cost_entries = self
             .build_confirmed_cost_entries(&submission, &submission_lines, revision_no)
             .await?;
-        let subject_version = order.approval_subject_version.to_string();
-        let lock_version = order.base.version;
-        let revision_id = revision.base.id.clone();
-        let payable_entry_id = payable.1.base.id.clone();
-        persist_formalized_order(
-            &self.db,
-            FormalizedOrderPersist {
+        let result = PurchaseReviewResult {
+            work_item_id: String::new(),
+            work_item_status: WorkItemStatus::Completed.as_str().to_string(),
+            task_version: "0".to_string(),
+            subject_version: order.approval_subject_version.to_string(),
+            review_result: "APPROVED".to_string(),
+            revision_id: Some(revision.base.id.clone()),
+            revision_no: Some(revision_no),
+            payable_entry_id: Some(payable.1.base.id.clone()),
+            lock_version: order.base.version,
+            reference: format!("PO-V{revision_no}"),
+        };
+        Ok(PreparedFormalizedOrder {
+            persist: FormalizedOrderPersist {
                 order,
                 submission,
                 submission_lines,
@@ -110,21 +147,7 @@ impl PurchaseOrderService {
                 payable,
                 cost_entries,
             },
-            actor,
-        )
-        .await?;
-        let _ = ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder;
-        Ok(PurchaseReviewResult {
-            work_item_id: String::new(),
-            work_item_status: WorkItemStatus::Completed.as_str().to_string(),
-            task_version: "0".to_string(),
-            subject_version,
-            review_result: "APPROVED".to_string(),
-            revision_id: Some(revision_id),
-            revision_no: Some(revision_no),
-            payable_entry_id: Some(payable_entry_id),
-            lock_version,
-            reference: format!("PO-V{revision_no}"),
+            result,
         })
     }
 
@@ -236,6 +259,13 @@ impl PurchaseOrderService {
 ///
 /// # 关键业务约束
 /// 提交必须仍为待审核；来源复验失败必须回滚。
+struct PreparedFormalizedOrder {
+    /// 事务内待写事实。
+    persist: FormalizedOrderPersist,
+    /// 兼容现有服务调用方的结果视图。
+    result: PurchaseReviewResult,
+}
+
 struct FormalizedOrderPersist {
     /// 待正式化的采购单。
     order: PurchaseOrder,
@@ -276,6 +306,26 @@ async fn persist_formalized_order(
     persist: FormalizedOrderPersist,
     actor: &AuditActor,
 ) -> Result<()> {
+    let db = db.clone();
+    let client = db.client().clone();
+    let actor = actor.clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move { persist_formalized_order_write(&db, persist, &actor, session).await })
+        })
+        .await
+}
+
+/// 在调用方选定的事务边界内写入采购形式化全部事实。
+///
+/// # 错误
+/// 来源复验、应付/成本/履约写入或成功审计失败时返回错误。
+async fn persist_formalized_order_write(
+    db: &mongodb::Database,
+    persist: FormalizedOrderPersist,
+    actor: &AuditActor,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
     let FormalizedOrderPersist {
         order,
         submission,
@@ -292,72 +342,57 @@ async fn persist_formalized_order(
         "purchase_order",
         order.base.id.clone(),
     )?;
-    let db = db.clone();
-    let client = db.client().clone();
-    client
-        .with_transaction(move |session| {
-            Box::pin(async move {
-                ensure_purchase_review_sources(&db, &order, &submission, &submission_lines, session).await?;
-                let allocations =
-                    prepare_current_sales_allocations(&db, &order, &mut revision_lines, session).await?;
-                db.purchase_order()
-                    .create_effective_revision(&revision, &revision_lines, session)
-                    .await?;
-                persist_current_sales_allocations(&db, &allocations, session).await?;
-                let mut order_mut = order;
-                order_mut.formalize_with_revision(revision.base.id.clone().into(), &actor_id)?;
-                let mut submission_mut = submission;
-                submission_mut.record_review(
-                    PurchaseOrderReviewDecision::Approved { comment: None },
-                    Instant::now(),
-                    &actor_id,
-                )?;
-                db.purchase_order_submissions()
-                    .update(&mut submission_mut, session)
-                    .await?;
-                db.purchase_orders().update(&mut order_mut, session).await?;
-                db.payable()
-                    .create_payable_with_entry(&payable.0, &payable.1, session)
-                    .await?;
-                crate::payable::payment_task::ensure_purchase_payment_task(
-                    &db, &payable.0, &payable.1, session,
-                )
-                .await?;
-                for entry in &cost_entries {
-                    db.cost()
-                        .create_cost_entry_with_allocations(entry, Vec::new(), session)
-                        .await?;
-                }
-                // 入仓采购单生效后自动生成采购入库草稿与 W01 指定到人的入库任务。
-                if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
-                    create_receipt_draft_for_order(&db, &order_mut, &revision_lines, session).await?;
-                } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
-                    // 供应商直发草稿继续由采购单当前责任人处理。
-                    create_delivery_draft_for_order(
-                        &db,
-                        &order_mut,
-                        &revision_lines,
-                        &allocations.by_purchase_line,
-                        session,
-                    )
-                    .await?;
-                } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
-                    // 线下服务草稿继续由采购单当前责任人处理。
-                    create_service_fulfillment_draft_for_order(
-                        &db,
-                        &order_mut,
-                        &revision_lines,
-                        &allocations.by_purchase_line,
-                        &actor_id,
-                        session,
-                    )
-                    .await?;
-                }
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<(), crate::errors::Error>(())
-            })
-        })
-        .await
+    ensure_purchase_review_sources(db, &order, &submission, &submission_lines, session).await?;
+    let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
+    db.purchase_order()
+        .create_effective_revision(&revision, &revision_lines, session)
+        .await?;
+    persist_current_sales_allocations(db, &allocations, session).await?;
+    let mut order_mut = order;
+    order_mut.formalize_with_revision(revision.base.id.clone().into(), &actor_id)?;
+    let mut submission_mut = submission;
+    submission_mut.record_review(
+        PurchaseOrderReviewDecision::Approved { comment: None },
+        Instant::now(),
+        &actor_id,
+    )?;
+    db.purchase_order_submissions()
+        .update(&mut submission_mut, session)
+        .await?;
+    db.purchase_orders().update(&mut order_mut, session).await?;
+    db.payable()
+        .create_payable_with_entry(&payable.0, &payable.1, session)
+        .await?;
+    crate::payable::payment_task::ensure_purchase_payment_task(db, &payable.0, &payable.1, session).await?;
+    for entry in &cost_entries {
+        db.cost()
+            .create_cost_entry_with_allocations(entry, Vec::new(), session)
+            .await?;
+    }
+    if fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
+        create_receipt_draft_for_order(db, &order_mut, &revision_lines, session).await?;
+    } else if fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect {
+        create_delivery_draft_for_order(
+            db,
+            &order_mut,
+            &revision_lines,
+            &allocations.by_purchase_line,
+            session,
+        )
+        .await?;
+    } else if fulfillment_responsibility == FulfillmentResponsibility::Service {
+        create_service_fulfillment_draft_for_order(
+            db,
+            &order_mut,
+            &revision_lines,
+            &allocations.by_purchase_line,
+            &actor_id,
+            session,
+        )
+        .await?;
+    }
+    db.audit_logs().create(&audit, session).await?;
+    Ok(())
 }
 
 /// 为生效采购单按创建时冻结的目标仓库创建采购入库草稿。

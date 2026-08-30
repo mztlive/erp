@@ -1,10 +1,14 @@
+import { formatCurrencyFixed } from "@/lib/fixed-decimal"
+
 export function formatMoneyDisplay(value: string | undefined | null): string {
     if (value == null || value === "" || value === "—") return "—"
-    const amount = Number(value)
-    if (!Number.isFinite(amount)) return value
-    return new Intl.NumberFormat("zh-CN", {
-        style: "currency",
-        currency: "CNY",
-        minimumFractionDigits: 2,
-    }).format(amount)
+    try {
+        return formatCurrencyFixed(value, {
+            maxScale: 6,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        })
+    } catch {
+        return value
+    }
 }

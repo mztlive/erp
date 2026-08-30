@@ -166,9 +166,22 @@ export function useCustomerReceivablesUrlState(
     // 有结构化条件的初始深链展开面板；后续 URL 回填不得抢夺展开态。
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
 
+    // 分页从 URL 派生；筛选变更写 URL 并回第 1 页。
+    const pageFromUrl = React.useMemo(
+        () =>
+            Math.max(
+                1,
+                Number.parseInt(searchParams.get("page") ?? "1", 10) || 1,
+            ),
+        [searchParams],
+    )
+    const pageSize = 20
+
     const query: CustomerAccountsQuery = React.useMemo(
         () => ({
             view,
+            page: pageFromUrl,
+            pageSize,
             q: qParam || undefined,
             counterpartyPartyId,
             customerId,
@@ -182,6 +195,7 @@ export function useCustomerReceivablesUrlState(
         }),
         [
             view,
+            pageFromUrl,
             qParam,
             counterpartyPartyId,
             customerId,
@@ -195,17 +209,8 @@ export function useCustomerReceivablesUrlState(
         ],
     )
 
-    // 分页从 URL 派生（P6）；筛选变更写 URL 并回第 1 页。
-    const pageFromUrl = React.useMemo(
-        () =>
-            Math.max(
-                1,
-                Number.parseInt(searchParams.get("page") ?? "1", 10) || 1,
-            ),
-        [searchParams],
-    )
     const pagination = React.useMemo<PaginationState>(
-        () => ({ pageIndex: Math.max(0, pageFromUrl - 1), pageSize: 20 }),
+        () => ({ pageIndex: Math.max(0, pageFromUrl - 1), pageSize }),
         [pageFromUrl],
     )
 

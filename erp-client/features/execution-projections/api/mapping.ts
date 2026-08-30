@@ -29,6 +29,8 @@ export type BackendProjection = {
     current_acked_revision_id?: string | null
     version: number
     created_at: number
+    latest_revision?: BackendRevision | null
+    latest_delivery?: BackendDelivery | null
 }
 
 export type BackendRevision = {
@@ -224,16 +226,12 @@ export function whitelistFromRevision(
 export async function loadMalls(): Promise<
     Array<{ id: string; name: string }>
 > {
-    try {
-        const page = await apiGet<Page<SourceSystem>>("/admin/source-systems", {
-            page: 1,
-            page_size: 100,
-            system_type: "MALL",
-        })
-        return page.items.map((s) => ({ id: s.id, name: s.name }))
-    } catch {
-        return []
-    }
+    const page = await apiGet<Page<SourceSystem>>("/admin/source-systems", {
+        page: 1,
+        page_size: 100,
+        system_type: "MALL",
+    })
+    return page.items.map((s) => ({ id: s.id, name: s.name }))
 }
 
 export function mallName(

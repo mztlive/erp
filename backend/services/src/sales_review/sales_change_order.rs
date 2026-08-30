@@ -532,6 +532,31 @@ impl SalesReviewService {
         self.sales_change_order_detail(id).await
     }
 
+    /// 在审批运行时持有的事务内生效销售变更。
+    ///
+    /// # 错误
+    /// 状态、基准版本、应收差额或持久化不变量失败时返回错误。
+    pub(crate) async fn apply_effective_change_in_transaction(
+        &self,
+        id: &str,
+        actor: &AuditActor,
+        session: &mut ClientSession,
+    ) -> Result<()> {
+        let change_order = self
+            .db
+            .sales_change_orders()
+            .find_by_id(id, session)
+            .await?
+            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
+        execute_sales_change_domain_action(
+            &mut change_order.clone(),
+            ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange,
+            actor.id(),
+        )?;
+        let write = prepare_effective_change_write(&self.db, change_order, actor).await?;
+        persist_effective_writes_in_transaction(&self.db, write, session).await
+    }
+
     /// 冻结提交并启动统一审批。
     ///
     /// # 错误
@@ -935,6 +960,19 @@ async fn persist_effective_change(
     change_order: SalesChangeOrder,
     actor: &AuditActor,
 ) -> Result<()> {
+    let write = prepare_effective_change_write(db, change_order, actor).await?;
+    persist_effective_writes(db, write).await
+}
+
+/// 读取销售变更来源并完成生效写入计划的领域计算。
+///
+/// # 错误
+/// 基准版本漂移、提交缺失或版本构造失败时返回错误。
+async fn prepare_effective_change_write(
+    db: &mongodb::Database,
+    change_order: SalesChangeOrder,
+    actor: &AuditActor,
+) -> Result<EffectiveChangeWrite> {
     let submission_id = change_order.required_current_submission_id()?.clone();
     let submission = db
         .sales_change_submissions()
@@ -958,21 +996,21 @@ async fn persist_effective_change(
             "基准版本已不是销售单当前版本，请刷新后重新发起变更".to_string(),
         ));
     }
-    write_effective_revision(db, change_order, order, submission, submission_lines, actor).await
+    prepare_effective_revision_write(db, change_order, order, submission, submission_lines, actor).await
 }
 
 /// 构造生效修订并提交事务。
 ///
 /// # 错误
 /// 版本构造或写入失败时返回错误。
-async fn write_effective_revision(
+async fn prepare_effective_revision_write(
     db: &mongodb::Database,
     change_order: SalesChangeOrder,
     order: entities::sales_order::SalesOrder,
     submission: SalesChangeSubmission,
     submission_lines: Vec<SalesChangeSubmissionLine>,
     actor: &AuditActor,
-) -> Result<()> {
+) -> Result<EffectiveChangeWrite> {
     let now = Instant::now();
     let existing_revisions = db
         .sales_order_revisions()
@@ -1015,50 +1053,68 @@ async fn write_effective_revision(
         "sales_change_order",
         change_order.base.id.clone(),
     )?;
-    persist_effective_writes(db, order_for_tx, change_for_tx, revision, delta, audit).await
+    Ok(EffectiveChangeWrite {
+        order: order_for_tx,
+        change: change_for_tx,
+        revision,
+        delta,
+        audit,
+    })
 }
 
-/// 持久化生效修订、应收差额与变更单状态。
-///
-/// # 错误
-/// 仓储失败时返回错误。
-async fn persist_effective_writes(
-    db: &mongodb::Database,
-    mut order_for_tx: entities::sales_order::SalesOrder,
-    mut change_for_tx: SalesChangeOrder,
+/// 销售变更最终生效的完整事务写入上下文。
+struct EffectiveChangeWrite {
+    order: entities::sales_order::SalesOrder,
+    change: SalesChangeOrder,
     revision: super::formalization::RevisionAggregate,
     delta: Option<(
         entities::receivable::ReceivableAccount,
         entities::receivable::ReceivableEntry,
     )>,
     audit: entities::AuditLog,
-) -> Result<()> {
+}
+
+/// 持久化生效修订、应收差额与变更单状态。
+///
+/// # 错误
+/// 仓储失败时返回错误。
+async fn persist_effective_writes(db: &mongodb::Database, write: EffectiveChangeWrite) -> Result<()> {
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
-            Box::pin(async move {
-                db.sales_order()
-                    .formalize_submission(
-                        &mut order_for_tx,
-                        &revision.revision,
-                        &revision.lines,
-                        &revision.goods_lines,
-                        &revision.voucher_lines,
-                        session,
-                    )
-                    .await?;
-                if let Some((account, entry)) = delta {
-                    write_receivable_delta(&db, account, entry, session).await?;
-                }
-                db.sales_change_orders()
-                    .update(&mut change_for_tx, session)
-                    .await?;
-                db.audit_logs().create(&audit, session).await?;
-                Ok::<(), crate::errors::Error>(())
-            })
+            Box::pin(async move { persist_effective_writes_in_transaction(&db, write, session).await })
         })
         .await
+}
+
+/// 在调用方事务内写入销售变更正式版本、应收差额、状态和成功审计。
+///
+/// # 错误
+/// 任一仓储写入失败时返回错误。
+async fn persist_effective_writes_in_transaction(
+    db: &mongodb::Database,
+    mut write: EffectiveChangeWrite,
+    session: &mut ClientSession,
+) -> Result<()> {
+    db.sales_order()
+        .formalize_submission(
+            &mut write.order,
+            &write.revision.revision,
+            &write.revision.lines,
+            &write.revision.goods_lines,
+            &write.revision.voucher_lines,
+            session,
+        )
+        .await?;
+    if let Some((account, entry)) = write.delta {
+        write_receivable_delta(db, account, entry, session).await?;
+    }
+    db.sales_change_orders()
+        .update(&mut write.change, session)
+        .await?;
+    db.audit_logs().create(&write.audit, session).await?;
+    Ok(())
 }
 
 /// 写入应收差额分录。

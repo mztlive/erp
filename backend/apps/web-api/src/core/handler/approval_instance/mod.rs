@@ -18,6 +18,7 @@ use services::approval::execution::{
     ApprovalRuntimeService, RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView,
     RuntimeInstanceStatusFilter, UpgradeBindingCommand,
 };
+use services::approval::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
 use services::audit::AuditActor;
 
 use crate::{
@@ -240,7 +241,7 @@ pub async fn resume_current_approver(
 ) -> ApprovalResult<serde_json::Value> {
     let command = resume_command(id, request, actor.id(), &headers)?;
     let view = runtime_service(&state)
-        .resume_current_approver(&actor, &command.approval_process_instance_id)
+        .resume_current_approver(&actor, command)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     ok_json(view)
@@ -268,7 +269,7 @@ pub async fn cancel_blocked(
 ) -> ApprovalResult<serde_json::Value> {
     let command = cancel_blocked_command(id, request, actor.id(), &headers)?;
     let view = runtime_service(&state)
-        .cancel_blocked(&actor, &command.approval_process_instance_id)
+        .cancel_blocked(&actor, command)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     ok_json(view)
@@ -316,8 +317,8 @@ pub async fn upgrade_binding(
 }
 
 /// 构造运行服务。
-fn runtime_service(state: &AppState) -> ApprovalRuntimeService {
-    ApprovalRuntimeService::new(state.db(), state.rbac())
+fn runtime_service(state: &AppState) -> std::sync::Arc<ApprovalRuntimeService> {
+    state.approval_runtime_service()
 }
 
 /// 将服务视图序列化为 JSON 响应。
@@ -358,30 +359,6 @@ struct ValidatedDecision {
     actor_id: String,
 }
 
-/// 协议层已注入 actor 的恢复命令。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ValidatedResume {
-    approval_process_instance_id: String,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_assignment_version: u64,
-    expected_closed_task_version: Option<u64>,
-    idempotency_key: String,
-    actor_id: String,
-}
-
-/// 协议层已注入 actor 的受阻取消命令。blocker 由服务端推导。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ValidatedCancelBlocked {
-    approval_process_instance_id: String,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_task_version: Option<u64>,
-    reason: String,
-    idempotency_key: String,
-    actor_id: String,
-}
-
 /// 把决定 HTTP 请求转为协议命令并注入 actor。
 ///
 /// # 错误
@@ -395,7 +372,7 @@ fn decision_command(
     if request.decision == DecisionValue::Reject && request.reason.as_deref().unwrap_or("").trim().is_empty()
     {
         return Err(ApprovalHttpError::coded(
-            "APPROVAL_REJECT_REASON_REQUIRED",
+            services::ErrorCode::ApprovalRejectReasonRequired,
             crate::core::handler::approval_instance::error::correlation_id(headers),
             None,
         ));
@@ -419,8 +396,8 @@ fn resume_command(
     request: ResumeApproverHttpRequest,
     actor_id: &str,
     headers: &HeaderMap,
-) -> Result<ValidatedResume, ApprovalHttpError> {
-    Ok(ValidatedResume {
+) -> Result<ApprovalResumeCommand, ApprovalHttpError> {
+    Ok(ApprovalResumeCommand {
         approval_process_instance_id: instance_id,
         expected_instance_version: parse_version(&request.expected_instance_version, "审批实例", headers)?,
         expected_execution_version: parse_version(&request.expected_execution_version, "节点执行", headers)?,
@@ -450,9 +427,9 @@ fn cancel_blocked_command(
     request: CancelBlockedHttpRequest,
     actor_id: &str,
     headers: &HeaderMap,
-) -> Result<ValidatedCancelBlocked, ApprovalHttpError> {
+) -> Result<ApprovalCancelBlockedCommand, ApprovalHttpError> {
     ensure_non_empty_reason(&request.reason, headers)?;
-    Ok(ValidatedCancelBlocked {
+    Ok(ApprovalCancelBlockedCommand {
         approval_process_instance_id: instance_id,
         expected_instance_version: parse_version(&request.expected_instance_version, "审批实例", headers)?,
         expected_execution_version: parse_version(&request.expected_execution_version, "节点执行", headers)?,

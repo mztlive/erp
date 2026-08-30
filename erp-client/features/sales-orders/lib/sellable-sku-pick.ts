@@ -1,6 +1,6 @@
 import type { MasterDataListItem } from "@/features/master-data/types"
 
-/** 选品 Dialog 确认后交给调用方的 SKU 身份与建单所需带出字段。 */
+/** 销售单选品确认后的 SKU 身份与建单所需带出字段。 */
 export type SellableSkuPick = Readonly<{
     skuId: string
     skuRevisionId: string

@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { ReverseRequest } from "@/features/customer-receivables/components/customer-account-detail-preview"
 import { ReceivableCounterpartySearchCombobox } from "@/features/customer-receivables/components/receivable-counterparty-search-combobox"
 import type { AllocationMode } from "@/features/customer-receivables/types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 type ReceivableActionDialogsProps = Readonly<{
     partyPickerOpen: boolean
@@ -56,8 +57,12 @@ export function ReceivableActionDialogs({
 }: ReceivableActionDialogsProps) {
     const redInvoiceAmountValid =
         reverseRequest?.kind !== "red_invoice" ||
-        (Number(reverseAmount) > 0 &&
-            Number(reverseAmount) <= Number(reverseRequest.amount ?? 0) + 1e-9)
+        (compareDecimal(reverseAmount || "0", "0", 2) > 0 &&
+            compareDecimal(
+                reverseAmount || "0",
+                reverseRequest.amount ?? "0",
+                2,
+            ) <= 0)
 
     return (
         <>
@@ -118,9 +123,7 @@ export function ReceivableActionDialogs({
                                     aria-hidden="true"
                                 />
                             )}
-                            {createPending
-                                ? "创建中…"
-                                : "打开核销工作区"}
+                            {createPending ? "创建中…" : "打开核销工作区"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -223,9 +226,7 @@ export function ReceivableActionDialogs({
                                     className="animate-spin"
                                 />
                             ) : null}
-                            {reversePending
-                                ? "提交中…"
-                                : "确认追加反向记录"}
+                            {reversePending ? "提交中…" : "确认追加反向记录"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

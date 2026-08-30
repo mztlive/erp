@@ -28,6 +28,7 @@ import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
+import { compactFixed, divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 
 export type LineEditDraft = {
@@ -66,14 +67,32 @@ function lineSubtitle(line: PurchaseOrderLineRow) {
 
 function taxRateInputValue(raw: string) {
     if (raw === "") return ""
-    const value = Number(raw)
-    return Number.isFinite(value) ? String(value * 100) : raw
+    try {
+        return compactFixed(
+            multiplyFixed(raw, "100", {
+                leftMaxScale: 6,
+                rightMaxScale: 0,
+                outputScale: 4,
+            }),
+        )
+    } catch {
+        return raw
+    }
 }
 
 function parseTaxRateInput(raw: string) {
-    const parsed = Number(raw)
-    if (raw === "" || !Number.isFinite(parsed)) return raw
-    return String(parsed / 100)
+    if (raw === "") return raw
+    try {
+        return compactFixed(
+            divideFixed(raw, "100", {
+                numeratorMaxScale: 4,
+                denominatorMaxScale: 0,
+                outputScale: 6,
+            }),
+        )
+    } catch {
+        return raw
+    }
 }
 
 function LineNumberInput({

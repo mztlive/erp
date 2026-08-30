@@ -1,15 +1,17 @@
 //! W20 供应商连接治理强命令、动作投影与后台任务执行。
 
+use std::collections::HashMap;
 use std::time::Instant as MonotonicInstant;
 
 use database::{
-    AccessControlExt, BulkJobExt, IntegrationOpsExt, NoTransaction, SupplierApiExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, BulkJobExt, IntegrationOpsExt, NoTransaction, PartyExt, SupplierApiExt, SupplierExt,
+    Transactional, WorkItemExt,
 };
 use entities::bulk_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType};
 use entities::common::time::Instant;
 use entities::ids::{
-    BackgroundJobId, IntegrationErrorTaskId, SupplierApiCapabilityId, SupplierApiConnectionId,
+    BackgroundJobId, IntegrationErrorTaskId, PartyId, SupplierAccountId, SupplierApiCapabilityId,
+    SupplierApiConnectionId,
 };
 use entities::integration_ops::{ErrorClass, IntegrationErrorTask, IntegrationErrorTaskData};
 use entities::supplier_api::{
@@ -28,10 +30,10 @@ use validator::Validate;
 use super::dto::{
     ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,
     RelatedImpactView, SafeReferenceView, SafeReferencesView, SupplierActionBlockerView,
-    SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListParams,
-    SupplierApiConnectionView, SupplierConnectionCommand, SupplierConnectionCommandResult,
-    SupplierConnectionJobView, SupplierHealthCheckRunView, UpdateSupplierCapabilitiesCommand,
-    UpdateSupplierCapabilitiesResult,
+    SupplierApiCapabilitySummaryView, SupplierApiCapabilityView, SupplierApiConnectionDetailView,
+    SupplierApiConnectionListItemView, SupplierApiConnectionListParams, SupplierApiConnectionView,
+    SupplierConnectionCommand, SupplierConnectionCommandResult, SupplierConnectionJobView,
+    SupplierHealthCheckRunView, UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
 };
 use super::{
     ClassifiedError, PageView, ResolvedSupplierReference, SupplierApiService, SupplierReferenceKind,
@@ -63,14 +65,94 @@ impl SupplierApiService {
     pub async fn connection_list_for_actor(
         &self,
         params: &SupplierApiConnectionListParams,
-        actor: &AuditActor,
-    ) -> Result<PageView<SupplierApiConnectionView>> {
-        let mut page = self.connection_list(params).await?;
-        for item in &mut page.items {
-            let detail = self.connection_detail_for_actor(&item.id, actor).await?;
-            *item = detail.connection;
-        }
-        Ok(page)
+        _actor: &AuditActor,
+    ) -> Result<PageView<SupplierApiConnectionListItemView>> {
+        let page = self.connection_list(params).await?;
+        let connection_ids = page
+            .items
+            .iter()
+            .map(|item| SupplierApiConnectionId::new(&item.id))
+            .collect::<Vec<_>>();
+        let capabilities = self
+            .db
+            .supplier_api_capabilities()
+            .find_capabilities_by_connections(&connection_ids, &mut NoTransaction)
+            .await?;
+        let capabilities_by_connection = capabilities.into_iter().fold(
+            HashMap::<String, Vec<SupplierApiCapabilitySummaryView>>::new(),
+            |mut grouped, capability| {
+                grouped
+                    .entry(capability.connection_id.to_string())
+                    .or_default()
+                    .push(SupplierApiCapabilitySummaryView {
+                        capability_code: capability.capability_code,
+                        status: capability.status,
+                    });
+                grouped
+            },
+        );
+        let supplier_names = self.supplier_names_for_connections(&page.items).await?;
+        let items = page
+            .items
+            .into_iter()
+            .map(|connection| SupplierApiConnectionListItemView {
+                supplier_name: supplier_names.get(&connection.supplier_id).cloned(),
+                capabilities: capabilities_by_connection
+                    .get(&connection.id)
+                    .cloned()
+                    .unwrap_or_default(),
+                connection,
+            })
+            .collect();
+        Ok(PageView {
+            items,
+            total: page.total,
+            page: page.page,
+            page_size: page.page_size,
+        })
+    }
+
+    async fn supplier_names_for_connections(
+        &self,
+        connections: &[SupplierApiConnectionView],
+    ) -> Result<HashMap<String, String>> {
+        let supplier_ids = connections
+            .iter()
+            .map(|item| SupplierAccountId::new(&item.supplier_id))
+            .collect::<Vec<_>>();
+        let accounts = self
+            .db
+            .supplier_accounts()
+            .find_accounts_by_ids(&supplier_ids, &mut NoTransaction)
+            .await?;
+        let party_ids = accounts
+            .iter()
+            .map(|account| PartyId::new(account.party_id.to_string()))
+            .collect::<Vec<_>>();
+        let (parties, revisions) = self
+            .db
+            .party()
+            .list_with_current_revisions(&party_ids, &mut NoTransaction)
+            .await?;
+        let revisions_by_id = revisions
+            .into_iter()
+            .map(|revision| (revision.base.id.clone(), revision.legal_name))
+            .collect::<HashMap<_, _>>();
+        let names_by_party = parties
+            .into_iter()
+            .filter_map(|party| {
+                let revision_id = party.stable.current_revision_id?;
+                let name = revisions_by_id.get(&revision_id)?.clone();
+                Some((party.base.id, name))
+            })
+            .collect::<HashMap<_, _>>();
+        Ok(accounts
+            .into_iter()
+            .filter_map(|account| {
+                let name = names_by_party.get(account.party_id.as_ref())?.clone();
+                Some((account.base.id, name))
+            })
+            .collect())
     }
 
     /// 返回服务端权威动作、阻塞原因和安全引用投影的连接详情。

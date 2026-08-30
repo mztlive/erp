@@ -2,7 +2,7 @@
 
 import { PackageIcon } from "lucide-react"
 
-import { useFileAssetQuery } from "@/features/entity-selectors/hooks/queries"
+import { useFileAssetQuery } from "@/features/sales-orders/hooks/use-sellable-sku-picker-query"
 import { cn } from "@/lib/utils"
 
 export function SkuThumbnail({

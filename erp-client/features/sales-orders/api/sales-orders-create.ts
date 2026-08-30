@@ -5,6 +5,7 @@
  */
 
 import { apiGet, apiPost, apiPut } from "@/lib/api"
+import { multiplyFixed, subtractFixed } from "@/lib/fixed-decimal"
 import {
     PAYMENT_TERM_OPTIONS,
     WELFARE_SCENARIO_OPTIONS,
@@ -50,6 +51,19 @@ type DraftContentInput = {
     lineItems: CreateSalesOrderInput["lineItems"]
 }
 
+/** 校验卡张数并保持十进制字符串 Wire 契约，避免业务数量进入 JS number。 */
+const normalizeCardCount = (rawQuantity: string): string => {
+    const normalized = rawQuantity.trim() || "1"
+    if (!/^[1-9]\d*$/.test(normalized)) {
+        throwValidation("卡券张数必须是大于 0 的整数")
+    }
+    const count = BigInt(normalized)
+    if (count > BigInt(4_294_967_295)) {
+        throwValidation("卡券张数超出系统支持范围")
+    }
+    return count.toString()
+}
+
 /**
  * 建单与草稿更新共用的表头+明细快照构造（分别对应 `POST /sales-orders` 与
  * `PUT /sales-orders/{id}/working-copy` 的 `draft` 请求体，字段形状完全一致）。
@@ -78,16 +92,24 @@ function buildDraftPayload(
         }
 
         if (input.nature === "card_voucher") {
-            const cardCount = Math.max(
-                1,
-                Math.floor(Number(line.quantity) || 1),
-            )
+            const cardCount = normalizeCardCount(line.quantity)
             const unitPrice = line.unitPriceGross || "0.0000"
             const face = line.faceValue || "0.00"
-            // 金额由后端按约定舍入；此处按字符串原样提交并给后端校验三元组
-            const faceTotal = (Number(face) * cardCount).toFixed(2)
-            const txn = (Number(unitPrice) * cardCount).toFixed(2)
-            const gift = (Number(faceTotal) - Number(txn)).toFixed(2)
+            // 后端重验金额三元组；前端请求组装也必须保持定点十进制。
+            const faceTotal = multiplyFixed(face, cardCount, {
+                leftMaxScale: 2,
+                rightMaxScale: 0,
+                outputScale: 2,
+            })
+            const txn = multiplyFixed(unitPrice, cardCount, {
+                leftMaxScale: 4,
+                rightMaxScale: 0,
+                outputScale: 2,
+            })
+            const gift = subtractFixed(faceTotal, txn, {
+                maxScale: 2,
+                outputScale: 2,
+            })
             base.voucher = {
                 face_value: face,
                 card_count: cardCount,

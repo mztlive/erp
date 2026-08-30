@@ -360,6 +360,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/work-items/fulfillment-queue",
+                description: "查询本人授权范围内的履约责任队列",
+                permission: {
+                    resource: "work_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/work-items/stats",
                 description: "查询本人授权范围内的待办统计",
                 permission: {
@@ -1150,6 +1160,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "GET",
                 path: "/admin/customer-profiles/{id}",
                 description: "查询完整客户资料",
+                permission: {
+                    resource: "customer",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-profiles/{id}/related-summary",
+                description: "查询客户中心合同与销售摘要",
+                permission: {
+                    resource: "customer",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-profiles/{id}/receivable-summary",
+                description: "查询客户中心应收汇总",
                 permission: {
                     resource: "customer",
                     action: "detail",

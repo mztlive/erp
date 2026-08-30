@@ -83,6 +83,29 @@ impl Pagination for BusinessDocumentFilter {
 }
 
 impl<'a> Repository<'a, BusinessDocument> {
+    /// 批量按业务单据 ID 读取注册行。
+    ///
+    /// # 参数
+    /// * `document_ids` - 业务单据 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部匹配且未删除的注册行；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_documents_by_ids(
+        &self,
+        document_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<BusinessDocument>> {
+        if document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": document_ids } }, executor)
+            .await
+    }
+
     /// 幂等注册业务单据。
     ///
     /// 跨域注册表入口（数据模型 §6.1）：空编号草稿可并存，但同一 `document_id`

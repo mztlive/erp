@@ -15,7 +15,7 @@ use services::{
         CompleteCardFundsReviewCommand, CompleteCardFundsReviewResult, CreateCustomerReceiptRequest,
         CreateInvoiceRequest, CreateReceivableAccountRequest, CustomerReceiptListParams, CustomerReceiptView,
         InvoiceListParams, InvoiceView, PageView, PostCustomerReceiptRequest, PostInvoiceRequest,
-        ReceivableAccountListParams, ReceivableAccountView, ReceivableService,
+        ReceivableAccountListParams, ReceivableAccountSummaryView, ReceivableAccountView, ReceivableService,
         RegisterCardFundsInvoiceRequest, RegisterCardFundsReceiptRequest, SubmitCustomerReceiptRequest,
     },
 };
@@ -43,7 +43,7 @@ use crate::{
 pub async fn receivable_account_list(
     State(state): State<AppState>,
     Query(params): Query<ReceivableAccountListParams>,
-) -> Result<PageView<ReceivableAccountView>> {
+) -> Result<PageView<ReceivableAccountSummaryView>> {
     let page = ReceivableService::new(state.db())
         .receivable_account_list(&params)
         .await?;

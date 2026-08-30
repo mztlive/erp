@@ -105,11 +105,14 @@ impl CatalogService {
             actor
                 .clone()
                 .resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
-        self.db
-            .unit_of_measures()
-            .create(&unit, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let unit_for_tx = unit.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.unit_of_measures().create(&unit_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(unit.into())
     }
 

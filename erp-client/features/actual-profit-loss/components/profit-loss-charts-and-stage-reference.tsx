@@ -31,6 +31,7 @@ import {
     DescriptionTerm,
 } from "@/components/ui/description-list"
 import type { ProfitLossView } from "../types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     formatMoneyDisplay,
     PROFIT_LOSS_SCOPE_LABEL,
@@ -53,15 +54,18 @@ export function ProfitLossChartsAndStageReference({
 }) {
     const trendChartData = data.trend.map((point) => ({
         period: point.period,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         revenue: Number(point.netSalesRevenue) / 10000,
         cost:
             point.actualCostNet === "—"
                 ? null
-                : Number(point.actualCostNet) / 10000,
+                : // fixed-decimal-display-boundary: Recharts coordinates require number.
+                  Number(point.actualCostNet) / 10000,
         profit:
             point.actualProfitLossNet == null
                 ? null
-                : Number(point.actualProfitLossNet) / 10000,
+                : // fixed-decimal-display-boundary: Recharts coordinates require number.
+                  Number(point.actualProfitLossNet) / 10000,
         reliability: point.reliability,
     }))
     const compositionChartData = data.fieldPermissions.canViewCost
@@ -69,10 +73,11 @@ export function ProfitLossChartsAndStageReference({
               .filter(
                   (composition) =>
                       composition.netAmount !== "—" &&
-                      Number(composition.netAmount) !== 0,
+                      compareDecimal(composition.netAmount, "0", 2) !== 0,
               )
               .map((composition) => ({
                   label: composition.label,
+                  // fixed-decimal-display-boundary: Recharts coordinates require number.
                   net: Number(composition.netAmount) / 10000,
                   share: composition.share,
               }))
@@ -268,7 +273,11 @@ export function ProfitLossChartsAndStageReference({
                                         .filter(
                                             (c) =>
                                                 c.netAmount !== "—" &&
-                                                Number(c.netAmount) !== 0,
+                                                compareDecimal(
+                                                    c.netAmount,
+                                                    "0",
+                                                    2,
+                                                ) !== 0,
                                         )
                                         .map((c) => (
                                             <li

@@ -589,11 +589,16 @@ impl WarehouseService {
             "warehouse_sku_policy",
             id.to_string(),
         )?;
-        self.db
-            .warehouse_sku_policies()
-            .create(&policy, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let policy_for_tx = policy.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.warehouse_sku_policies()
+                    .create(&policy_for_tx, session)
+                    .await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(policy.into())
     }
 

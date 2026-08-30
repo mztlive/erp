@@ -95,13 +95,13 @@ export function makeQueueView(
         context: {
             position: 1,
             total: overrides.total ?? operations.length,
+            page: 1,
+            pageSize: 20,
+            totalPages: 1,
             currentOperationId: overrides.currentOperationId,
             filterSummary: "入库 · 全部",
-            warehouseOptions: [
-                { value: "wh_1", label: "中心仓" },
-            ],
-            visibleTypes:
-                overrides.visibleTypes ?? (["RECEIPT"] as const),
+            warehouseOptions: [{ value: "wh_1", label: "中心仓" }],
+            visibleTypes: overrides.visibleTypes ?? (["RECEIPT"] as const),
             roleLabel: overrides.roleLabel ?? "仓储经办",
             viewerLabel: "周航",
             canExecute: overrides.canExecute ?? true,

@@ -27,8 +27,14 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 pub mod assignment;
+mod center;
 mod dto;
 pub mod profile;
+
+pub use center::{
+    CustomerCenterContractView, CustomerCenterReadService, CustomerCenterReceivableView,
+    CustomerCenterRelatedView, CustomerCenterSalesOrderView,
+};
 
 pub use self::dto::{
     AssignmentAction, CreateCustomerRequest, CustomerActionBlockerView, CustomerAssignmentListParams,
@@ -402,11 +408,13 @@ impl CustomerService {
         let audit = actor
             .clone()
             .resource_log("customer.delete", "customer", account.base.id.clone())?;
-        self.db
-            .customer_accounts()
-            .soft_delete(&mut account, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.customer_accounts().soft_delete(&mut account, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(())
     }
 

@@ -270,6 +270,34 @@ impl<'a> Repository<'a, SalesOrderProjectionRevision> {
         )
         .await
     }
+
+    /// 批量读取多个投影的全部修订，按投影 ID、修订号降序返回。
+    pub async fn list_revisions_by_projections(
+        &self,
+        projection_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderProjectionRevisionRow>> {
+        if projection_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let options = FindOptions::builder()
+            .sort(doc! { "projection_id": 1, "revision_no": -1 })
+            .projection(sales_order_projection_revision_projection())
+            .build();
+        let collection = self
+            .collection()
+            .clone_with_type::<SalesOrderProjectionRevisionRow>();
+        mongo_ops::find_many(
+            &collection,
+            doc! {
+                "projection_id": { "$in": projection_ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await
+    }
 }
 
 /// 投影下发列表投影行。
@@ -390,6 +418,34 @@ impl<'a> Repository<'a, SalesOrderProjectionDelivery> {
             items,
             total: total as i64,
         })
+    }
+
+    /// 批量读取指定投影修订的投递列表。
+    pub async fn list_deliveries_by_revisions(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderProjectionDeliveryRow>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let options = FindOptions::builder()
+            .sort(doc! { "created_at": -1 })
+            .projection(sales_order_projection_delivery_projection())
+            .build();
+        let collection = self
+            .collection()
+            .clone_with_type::<SalesOrderProjectionDeliveryRow>();
+        mongo_ops::find_many(
+            &collection,
+            doc! {
+                "projection_revision_id": { "$in": revision_ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await
     }
 
     /// 按「投影修订 + 目标商城」查找唯一下发记录。

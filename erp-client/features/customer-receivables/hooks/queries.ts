@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     createAllocationSession,
-    fetchAllocationSession,
     fetchCustomerAccountsDetail,
     fetchCustomerAccountsList,
     postAllocation,
@@ -17,15 +16,17 @@ import {
 } from "@/features/customer-receivables/api"
 import { CUSTOMER_RECEIPT_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { workItemKeys } from "@/features/work-items/queries"
-import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import { CUSTOMER_REFUND_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/customer-refund-approval"
 import { RECEIPT_REVERSAL_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
+    AllocationSessionView,
     CustomerAccountsDetailKind,
     CustomerAccountsQuery,
+    PostAllocationInput,
 } from "@/features/customer-receivables/types"
 
-const customerReceivableKeys = {
+export const customerReceivableKeys = {
     all: ["customer-receivables"] as const,
     list: (query: CustomerAccountsQuery) =>
         [...customerReceivableKeys.all, "list", query] as const,
@@ -56,8 +57,10 @@ export function useCustomerAccountsDetailQuery(
 export function useAllocationSessionQuery(draftSessionId: string | null) {
     return useQuery({
         queryKey: customerReceivableKeys.session(draftSessionId ?? ""),
-        queryFn: () => fetchAllocationSession(draftSessionId!),
-        enabled: Boolean(draftSessionId),
+        queryFn: async () => null,
+        enabled: false,
+        initialData: null as AllocationSessionView | null,
+        staleTime: Number.POSITIVE_INFINITY,
     })
 }
 
@@ -65,12 +68,11 @@ export function useCreateAllocationSessionMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: createAllocationSession,
-        onSuccess: async (session) => {
-            await queryClient.invalidateQueries({
-                queryKey: customerReceivableKeys.session(
-                    session.draftSessionId,
-                ),
-            })
+        onSuccess: (session) => {
+            queryClient.setQueryData(
+                customerReceivableKeys.session(session.draftSessionId),
+                session,
+            )
         },
     })
 }
@@ -78,13 +80,18 @@ export function useCreateAllocationSessionMutation() {
 export function useSaveAllocationDraftMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: saveAllocationDraft,
-        onSuccess: async (session) => {
-            await queryClient.invalidateQueries({
-                queryKey: customerReceivableKeys.session(
-                    session.draftSessionId,
-                ),
-            })
+        mutationFn: (input: Parameters<typeof saveAllocationDraft>[1]) =>
+            saveAllocationDraft(
+                queryClient.getQueryData<AllocationSessionView>(
+                    customerReceivableKeys.session(input.draftSessionId),
+                ) ?? null,
+                input,
+            ),
+        onSuccess: (session) => {
+            queryClient.setQueryData(
+                customerReceivableKeys.session(session.draftSessionId),
+                session,
+            )
         },
     })
 }
@@ -95,9 +102,28 @@ export function useSaveAllocationDraftMutation() {
 export function usePostAllocationMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: postAllocation,
-        onSuccess: async (result) => {
+        mutationFn: (input: PostAllocationInput) =>
+            postAllocation(
+                input,
+                queryClient.getQueryData<AllocationSessionView>(
+                    customerReceivableKeys.session(input.draftSessionId),
+                ) ?? null,
+            ),
+        onSuccess: async (result, input) => {
             if (result.status === "succeeded") {
+                queryClient.setQueryData<AllocationSessionView>(
+                    customerReceivableKeys.session(input.draftSessionId),
+                    (current) =>
+                        current
+                            ? {
+                                  ...current,
+                                  status: "posted",
+                                  existingFactId: result.factId,
+                                  existingFactNo: result.factNo,
+                                  approval: result.approval,
+                              }
+                            : current,
+                )
                 await queryClient.invalidateQueries({
                     queryKey: customerReceivableKeys.all,
                 })
@@ -105,7 +131,7 @@ export function usePostAllocationMutation() {
                     queryKey: workItemKeys.all,
                 })
                 await queryClient.invalidateQueries({
-                    queryKey: workspaceHomeKeys.all,
+                    queryKey: queryKeyRoots.workspaceHome,
                 })
                 if (result.mode === "receipt") {
                     await queryClient.invalidateQueries({
@@ -123,7 +149,13 @@ export function usePostAllocationMutation() {
 export function useResolvePostUnknownMutation() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: resolvePostUnknown,
+        mutationFn: (input: PostAllocationInput) =>
+            resolvePostUnknown(
+                input,
+                queryClient.getQueryData<AllocationSessionView>(
+                    customerReceivableKeys.session(input.draftSessionId),
+                ) ?? null,
+            ),
         onSuccess: async (result) => {
             if (result?.status === "succeeded") {
                 await queryClient.invalidateQueries({

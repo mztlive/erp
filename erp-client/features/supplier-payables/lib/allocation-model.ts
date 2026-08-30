@@ -1,6 +1,14 @@
 /** W12 供应商往来 · 核销表单 Zod 校验与金额/日期工具（纯函数，无 React）。 */
 
 import { z } from "zod"
+import {
+    compareDecimal,
+    formatScaled,
+    normalizeFixed,
+    parseDecimal,
+    subtractFixed,
+    sumFixed,
+} from "@/lib/fixed-decimal"
 
 export const BANK_RECEIPT_PENDING_REFERENCE = "pending-file:bank-receipt"
 
@@ -29,7 +37,7 @@ export const paymentSchema = z
             .string()
             .trim()
             .min(1, "请填写付款金额")
-            .refine((v) => Number(v) > 0, "付款金额必须为正数"),
+            .refine(isPositiveAmount, "付款金额必须为正数"),
         bankReference: z
             .string()
             .trim()
@@ -71,7 +79,7 @@ export const invoiceSchema = z
             .string()
             .trim()
             .min(1, "请填写含税金额")
-            .refine((v) => Number(v) > 0, "含税金额必须为正数"),
+            .refine(isPositiveAmount, "含税金额必须为正数"),
         netAmount: z.string().trim().min(1, "请填写不含税金额"),
         taxAmount: z.string().trim().min(1, "请填写税额"),
     })
@@ -83,10 +91,21 @@ export const invoiceSchema = z
         ) {
             return
         }
-        const diff = Math.abs(
-            Number(v.netAmount) + Number(v.taxAmount) - Number(v.grossAmount),
-        )
-        if (diff > 0.011) {
+        let difference: string
+        try {
+            const parts = sumFixed([v.netAmount, v.taxAmount], {
+                maxScale: 2,
+                outputScale: 2,
+            })
+            difference = subtractFixed(parts, v.grossAmount, {
+                maxScale: 2,
+                outputScale: 2,
+            })
+            if (difference.startsWith("-")) difference = difference.slice(1)
+        } catch {
+            difference = "999999999999.99"
+        }
+        if (compareDecimal(difference, "0.01", 2) > 0) {
             ctx.addIssue({
                 code: "custom",
                 path: ["netAmount"],
@@ -96,13 +115,33 @@ export const invoiceSchema = z
         }
     })
 
-export function cents(s: string): number {
-    const n = Number(s)
-    return Number.isFinite(n) ? Math.round(n * 100) : 0
+export function cents(value: string): bigint {
+    try {
+        const normalized = normalizeFixed(value.trim() || "0", {
+            maxScale: 2,
+            outputScale: 2,
+            allowNegative: true,
+        })
+        return parseDecimal(normalized, {
+            maxScale: 2,
+            allowNegative: true,
+        }).unscaled
+    } catch {
+        return BigInt(0)
+    }
 }
 
-export function fromCents(c: number): string {
-    return (c / 100).toFixed(2)
+export function fromCents(value: bigint): string {
+    return formatScaled(value, 2)
+}
+
+/** 校验业务金额为大于零的两位十进制字符串。 */
+function isPositiveAmount(value: string): boolean {
+    try {
+        return compareDecimal(value, "0", 2) > 0
+    } catch {
+        return false
+    }
 }
 
 export function todayInput(): string {

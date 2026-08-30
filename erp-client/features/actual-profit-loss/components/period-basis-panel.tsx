@@ -12,7 +12,10 @@ import { Label } from "@/components/ui/label"
 import { OptionCombobox } from "@/components/business"
 import type { ProfitLossPeriodBasisConfig } from "@/features/actual-profit-loss/types"
 import type { ProfitLossUrlPatch } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
-import { parsePreset, resolvePeriod } from "@/features/actual-profit-loss/lib/url-state"
+import {
+    parsePreset,
+    resolvePeriod,
+} from "@/features/actual-profit-loss/lib/url-state"
 
 export function PeriodBasisPanel({
     presetRaw,
@@ -22,7 +25,6 @@ export function PeriodBasisPanel({
     basisConfig,
     periodBasisValid,
     patchUrl,
-    resetPage,
 }: {
     presetRaw: string
     from: string
@@ -30,8 +32,10 @@ export function PeriodBasisPanel({
     periodBasis: string
     basisConfig: ProfitLossPeriodBasisConfig
     periodBasisValid: boolean
-    patchUrl: (patch: ProfitLossUrlPatch, options?: { replace?: boolean }) => void
-    resetPage: () => void
+    patchUrl: (
+        patch: ProfitLossUrlPatch,
+        options?: { replace?: boolean },
+    ) => void
 }) {
     return (
         <Card size="sm" className={surfacePanelClassName}>
@@ -55,8 +59,8 @@ export function PeriodBasisPanel({
                                 periodPreset: preset,
                                 from: range.from,
                                 to: range.to,
+                                page: null,
                             })
-                            resetPage()
                         }}
                         options={[
                             { value: "", label: "自定义" },
@@ -80,8 +84,8 @@ export function PeriodBasisPanel({
                             patchUrl({
                                 from: next || null,
                                 periodPreset: null,
+                                page: null,
                             })
-                            resetPage()
                         }}
                     />
                 </div>
@@ -94,8 +98,8 @@ export function PeriodBasisPanel({
                             patchUrl({
                                 to: next || null,
                                 periodPreset: null,
+                                page: null,
                             })
-                            resetPage()
                         }}
                     />
                 </div>
@@ -111,8 +115,7 @@ export function PeriodBasisPanel({
                         id="period-basis"
                         value={periodBasis || ""}
                         onValueChange={(v) => {
-                            patchUrl({ periodBasis: v || null })
-                            resetPage()
+                            patchUrl({ periodBasis: v || null, page: null })
                         }}
                         options={[
                             {

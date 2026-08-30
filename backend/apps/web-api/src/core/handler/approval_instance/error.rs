@@ -1,12 +1,13 @@
 //! 审批 HTTP 稳定错误码映射。
 //!
-//! Handler 不得把 BPM 或数据库错误直接暴露给客户端；只识别服务层稳定码与已知文案。
+//! Handler 不得把 BPM 或数据库错误直接暴露给客户端；只识别服务层结构化稳定码。
 
 use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde_json::Value;
+use services::{ErrorClass, ErrorCode};
 use uuid::Uuid;
 
 use crate::core::{errors::Error as HttpError, response::ApiResponse};
@@ -62,15 +63,15 @@ impl ApprovalHttpError {
     ///
     /// # 返回
     /// 返回带 HTTP 状态的审批错误。
-    pub fn coded(code: &'static str, correlation_id: String, data: Option<Value>) -> Self {
+    pub fn coded(code: ErrorCode, correlation_id: String, data: Option<Value>) -> Self {
         let status = status_of(code);
         let hide_details = matches!(status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND);
         Self::new(
             status,
-            code,
+            code.as_str(),
             message_of(code).to_string(),
             correlation_id,
-            retryable_of(code),
+            code.retryable(),
             if hide_details { None } else { data },
         )
     }
@@ -85,10 +86,7 @@ impl ApprovalHttpError {
     /// 返回稳定码、状态与关联 ID。
     pub fn from_service(error: services::Error, headers: &HeaderMap) -> Self {
         let correlation_id = correlation_id(headers);
-        if let Some(code) = extract_approval_code(&error.to_string()) {
-            return Self::coded(code, correlation_id, None);
-        }
-        if let Some(code) = map_known_message(&error.to_string()) {
+        if let Some(code) = error.code() {
             return Self::coded(code, correlation_id, None);
         }
         Self::from_http(HttpError::from(error), correlation_id)
@@ -143,7 +141,7 @@ impl ApprovalHttpError {
     /// # 返回
     /// 返回 `APPROVAL_INSTANCE_BLOCKED`。
     pub fn blocked(correlation_id: String, data: Option<Value>) -> Self {
-        Self::coded("APPROVAL_INSTANCE_BLOCKED", correlation_id, data)
+        Self::coded(ErrorCode::ApprovalInstanceBlocked, correlation_id, data)
     }
 
     /// 返回稳定错误码。
@@ -285,111 +283,52 @@ fn conflict_data(status: StatusCode, correlation_id: &str, data: Option<Value>) 
     Some(Value::Object(object))
 }
 
-fn status_of(code: &str) -> StatusCode {
+fn status_of(code: ErrorCode) -> StatusCode {
+    match code.class() {
+        ErrorClass::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        ErrorClass::Conflict => StatusCode::CONFLICT,
+        ErrorClass::BusinessRule => StatusCode::UNPROCESSABLE_ENTITY,
+        ErrorClass::Forbidden => StatusCode::FORBIDDEN,
+    }
+}
+
+fn message_of(code: ErrorCode) -> &'static str {
     match code {
-        "APPROVAL_POLICY_NOT_REGISTERED" => StatusCode::INTERNAL_SERVER_ERROR,
-        "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR" => StatusCode::FORBIDDEN,
-        "APPROVAL_DEFINITION_INVALID"
-        | "APPROVAL_REJECT_REASON_REQUIRED"
-        | "APPROVAL_REASSIGN_TARGET_INELIGIBLE" => StatusCode::UNPROCESSABLE_ENTITY,
-        _ if code.starts_with("APPROVAL_") => StatusCode::CONFLICT,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
+        ErrorCode::ApprovalPolicyNotRegistered => {
+            "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
+        }
+        ErrorCode::ApprovalProcessNotConfigured => {
+            "该单据类型尚未配置可用的审批流程，请联系管理员发布流程后重试"
+        }
+        ErrorCode::ApprovalDraftSourceNotAvailable => {
+            "当前没有可复制的已发布审批流程，请先发布流程后再创建草稿"
+        }
+        ErrorCode::ApprovalDefinitionNotDraft => "只能修改草稿流程，请复制为新草稿后再修改",
+        ErrorCode::ApprovalDefinitionVersionConflict => "审批流程已被他人更新，请刷新后重试",
+        ErrorCode::ApprovalDefinitionInvalid => "审批流程内容不符合要求，请修改后重试",
+        ErrorCode::ApprovalDefinitionBindingCorrupted => "单据审批关系异常，请联系支持人员处理",
+        ErrorCode::ApprovalAlreadyStarted => "该版本已有未完成的审批，请先查看当前审批进度",
+        ErrorCode::ApprovalTaskNotOpen => "审批任务已完成或关闭，请刷新后查看当前状态",
+        ErrorCode::ApprovalTaskNotAssignedToActor => {
+            "当前账号没有执行此操作的权限，请联系管理员或有权限的同事"
+        }
+        ErrorCode::ApprovalTaskVersionConflict => "审批任务状态已变化，请刷新后重试",
+        ErrorCode::ApprovalInstanceVersionConflict => "审批进度已变化，请刷新后重试",
+        ErrorCode::ApprovalExecutionVersionConflict => "当前审批步骤已变化，请刷新后重试",
+        ErrorCode::ApprovalSubjectVersionConflict => "单据内容已更新，请刷新后重试",
+        ErrorCode::ApprovalRejectReasonRequired => "请填写驳回原因后再提交",
+        ErrorCode::ApprovalInstanceBlocked => "当前审批已暂停，请先处理暂停原因",
+        ErrorCode::ApprovalResumeNotAllowedForBlocker => {
+            "当前暂停原因不允许恢复原审批人，请改用其他可用处理方式"
+        }
+        ErrorCode::ApprovalCurrentApproverNotRecovered => "原审批人仍不具备审批资格，请先恢复资格或改派",
+        ErrorCode::ApprovalCurrentApproverRecovered => "原审批人已恢复资格，无需改派，请刷新后继续审批",
+        ErrorCode::ApprovalReassignTargetIneligible => "改派目标不具备审批资格，请重新选择审批人",
+        ErrorCode::ApprovalReassignNotAllowedForBlocker => "当前暂停原因不允许改派，请改用恢复或取消",
+        ErrorCode::ApprovalBlockedCancelNotAllowed => "当前暂停原因不允许取消审批，请改用恢复或改派",
+        ErrorCode::ApprovalGenericWorkItemMutationForbidden => "请在审批任务页面处理该任务",
+        ErrorCode::ApprovalIdempotencyPayloadConflict => "该任务号已用于其他请求，请关闭弹窗后重新发起操作",
     }
-}
-
-fn message_of(code: &str) -> &'static str {
-    match code {
-        "APPROVAL_POLICY_NOT_REGISTERED" => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员",
-        "APPROVAL_PROCESS_NOT_CONFIGURED" => "该单据类型尚未配置可用的审批流程，请联系管理员发布流程后重试",
-        "APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE" => "当前没有可复制的已发布审批流程，请先发布流程后再创建草稿",
-        "APPROVAL_DEFINITION_NOT_DRAFT" => "只能修改草稿流程，请复制为新草稿后再修改",
-        "APPROVAL_DEFINITION_VERSION_CONFLICT" => "审批流程已被他人更新，请刷新后重试",
-        "APPROVAL_DEFINITION_INVALID" => "审批流程内容不符合要求，请修改后重试",
-        "APPROVAL_DEFINITION_BINDING_CORRUPTED" => "单据审批关系异常，请联系支持人员处理",
-        "APPROVAL_ALREADY_STARTED" => "该版本已有未完成的审批，请先查看当前审批进度",
-        "APPROVAL_TASK_NOT_OPEN" => "审批任务已完成或关闭，请刷新后查看当前状态",
-        "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR" => "当前账号没有执行此操作的权限，请联系管理员或有权限的同事",
-        "APPROVAL_TASK_VERSION_CONFLICT" => "审批任务状态已变化，请刷新后重试",
-        "APPROVAL_INSTANCE_VERSION_CONFLICT" => "审批进度已变化，请刷新后重试",
-        "APPROVAL_EXECUTION_VERSION_CONFLICT" => "当前审批步骤已变化，请刷新后重试",
-        "APPROVAL_SUBJECT_VERSION_CONFLICT" => "单据内容已更新，请刷新后重试",
-        "APPROVAL_REJECT_REASON_REQUIRED" => "请填写驳回原因后再提交",
-        "APPROVAL_INSTANCE_BLOCKED" => "当前审批已暂停，请先处理暂停原因",
-        "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER" => "当前暂停原因不允许恢复原审批人，请改用其他可用处理方式",
-        "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED" => "原审批人仍不具备审批资格，请先恢复资格或改派",
-        "APPROVAL_CURRENT_APPROVER_RECOVERED" => "原审批人已恢复资格，无需改派，请刷新后继续审批",
-        "APPROVAL_REASSIGN_TARGET_INELIGIBLE" => "改派目标不具备审批资格，请重新选择审批人",
-        "APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER" => "当前暂停原因不允许改派，请改用恢复或取消",
-        "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED" => "当前暂停原因不允许取消审批，请改用恢复或改派",
-        "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN" => "请在审批任务页面处理该任务",
-        "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT" => "该任务号已用于其他请求，请关闭弹窗后重新发起操作",
-        _ => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员",
-    }
-}
-
-fn retryable_of(code: &str) -> bool {
-    matches!(
-        code,
-        "APPROVAL_DEFINITION_VERSION_CONFLICT"
-            | "APPROVAL_TASK_VERSION_CONFLICT"
-            | "APPROVAL_INSTANCE_VERSION_CONFLICT"
-            | "APPROVAL_EXECUTION_VERSION_CONFLICT"
-            | "APPROVAL_SUBJECT_VERSION_CONFLICT"
-    )
-}
-
-const STABLE_CODES: &[&str] = &[
-    "APPROVAL_POLICY_NOT_REGISTERED",
-    "APPROVAL_PROCESS_NOT_CONFIGURED",
-    "APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE",
-    "APPROVAL_DEFINITION_NOT_DRAFT",
-    "APPROVAL_DEFINITION_VERSION_CONFLICT",
-    "APPROVAL_DEFINITION_INVALID",
-    "APPROVAL_DEFINITION_BINDING_CORRUPTED",
-    "APPROVAL_ALREADY_STARTED",
-    "APPROVAL_TASK_NOT_OPEN",
-    "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR",
-    "APPROVAL_TASK_VERSION_CONFLICT",
-    "APPROVAL_INSTANCE_VERSION_CONFLICT",
-    "APPROVAL_EXECUTION_VERSION_CONFLICT",
-    "APPROVAL_SUBJECT_VERSION_CONFLICT",
-    "APPROVAL_REJECT_REASON_REQUIRED",
-    "APPROVAL_INSTANCE_BLOCKED",
-    "APPROVAL_RESUME_NOT_ALLOWED_FOR_BLOCKER",
-    "APPROVAL_CURRENT_APPROVER_NOT_RECOVERED",
-    "APPROVAL_CURRENT_APPROVER_RECOVERED",
-    "APPROVAL_REASSIGN_TARGET_INELIGIBLE",
-    "APPROVAL_REASSIGN_NOT_ALLOWED_FOR_BLOCKER",
-    "APPROVAL_BLOCKED_CANCEL_NOT_ALLOWED",
-    "APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN",
-    "APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT",
-];
-
-fn extract_approval_code(message: &str) -> Option<&'static str> {
-    STABLE_CODES.iter().copied().find(|code| message.contains(code))
-}
-
-fn map_known_message(message: &str) -> Option<&'static str> {
-    if message.contains("当前没有可复制的已发布定义") {
-        return Some("APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE");
-    }
-    if message.contains("已发布或已退役的定义结构不可改") {
-        return Some("APPROVAL_DEFINITION_NOT_DRAFT");
-    }
-    if message.contains("定义锁版本已过期") {
-        return Some("APPROVAL_DEFINITION_VERSION_CONFLICT");
-    }
-    if message.contains("审批政策") && message.contains("不变量") {
-        return Some("APPROVAL_POLICY_NOT_REGISTERED");
-    }
-    if message.contains("指定审批人")
-        || message.contains("审批节点数量必须")
-        || message.contains("节点顺序必须")
-        || message.contains("不得包含节点用途")
-    {
-        return Some("APPROVAL_DEFINITION_INVALID");
-    }
-    None
 }
 
 #[cfg(test)]
@@ -397,38 +336,17 @@ mod tests {
     use axum::{body::to_bytes, http::HeaderValue, response::IntoResponse};
     use serde_json::Value;
 
-    use super::{
-        extract_approval_code, map_known_message, status_of, ApprovalHttpError, STABLE_CODES, TRACE_ID_HEADER,
-    };
+    use services::ErrorCode;
+
+    use super::{status_of, ApprovalHttpError, TRACE_ID_HEADER};
 
     #[test]
     fn policy_not_registered_is_internal_error() {
         assert_eq!(
-            status_of("APPROVAL_POLICY_NOT_REGISTERED"),
+            status_of(ErrorCode::ApprovalPolicyNotRegistered),
             axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
-        assert!(!STABLE_CODES.is_empty());
-        assert_eq!(STABLE_CODES, services::approval_codes::ALL);
-    }
-
-    #[test]
-    fn extracts_embedded_stable_code() {
-        assert_eq!(
-            extract_approval_code("数据冲突: APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"),
-            Some("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT")
-        );
-    }
-
-    #[test]
-    fn maps_definition_lock_and_draft_messages() {
-        assert_eq!(
-            map_known_message("定义锁版本已过期，未写入任何节点"),
-            Some("APPROVAL_DEFINITION_VERSION_CONFLICT")
-        );
-        assert_eq!(
-            map_known_message("当前没有可复制的已发布定义"),
-            Some("APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE")
-        );
+        assert_eq!(ErrorCode::ALL.len(), 24);
     }
 
     #[tokio::test]
@@ -436,7 +354,7 @@ mod tests {
         let mut headers = axum::http::HeaderMap::new();
         headers.insert(TRACE_ID_HEADER, HeaderValue::from_static("corr-1"));
         let response = ApprovalHttpError::from_service(
-            services::Error::ConflictError("APPROVAL_INSTANCE_BLOCKED".to_string()),
+            services::Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked),
             &headers,
         )
         .into_response();
@@ -451,7 +369,7 @@ mod tests {
     #[tokio::test]
     async fn forbidden_code_does_not_leak_versions() {
         let response = ApprovalHttpError::coded(
-            "APPROVAL_TASK_NOT_ASSIGNED_TO_ACTOR",
+            ErrorCode::ApprovalTaskNotAssignedToActor,
             "corr-2".to_string(),
             Some(serde_json::json!({ "latest_instance_version": "9" })),
         )
@@ -465,8 +383,8 @@ mod tests {
 
     #[tokio::test]
     async fn policy_not_registered_response_is_500() {
-        let response = ApprovalHttpError::from(services::Error::Internal(
-            "APPROVAL_POLICY_NOT_REGISTERED".to_string(),
+        let response = ApprovalHttpError::from(services::Error::from_approval_code(
+            ErrorCode::ApprovalPolicyNotRegistered,
         ))
         .into_response();
         assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);

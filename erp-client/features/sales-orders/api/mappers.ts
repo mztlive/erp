@@ -1,4 +1,5 @@
 import type { SalesOrdersListQuery } from "@/features/sales-orders/api/contracts"
+import { divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 
 export {
     formatEpochDate,
@@ -153,15 +154,28 @@ export function mapWelfareScenarioCode(raw: string): string | null {
 }
 
 export function percentToRate(percent: string): string {
-    const n = Number(percent)
-    if (!Number.isFinite(n)) return "0.000000"
-    return (n / 100).toFixed(6)
+    try {
+        return divideFixed(percent, "100", {
+            numeratorMaxScale: 6,
+            denominatorMaxScale: 0,
+            outputScale: 6,
+        })
+    } catch {
+        return "0.000000"
+    }
 }
 
 export function rateToPercent(rate: string | undefined): string {
-    const n = Number(rate)
-    if (!Number.isFinite(n)) return "13.00"
-    return (n * 100).toFixed(2)
+    if (!rate) return "13.00"
+    try {
+        return multiplyFixed(rate, "100", {
+            leftMaxScale: 6,
+            rightMaxScale: 0,
+            outputScale: 2,
+        })
+    } catch {
+        return "13.00"
+    }
 }
 
 export function mapCardFormFromBackend(

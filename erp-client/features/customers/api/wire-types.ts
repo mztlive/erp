@@ -1,4 +1,4 @@
-import type { ContractStatus } from "@/features/contracts/types"
+import type { ContractStatus } from "@/lib/contract-status"
 
 /**
  * 客户资料 HTTP 适配层的 Wire DTO 类型。
@@ -140,19 +140,4 @@ export type BackendSalesOrderListRow = {
     commercial_status: string
     close_status: string
     created_at: number
-}
-
-export type BackendReceivableEntry = {
-    direction: "increase" | "decrease"
-    amount: string
-    offset_total: string
-    due_date: string
-}
-
-export type BackendReceivableAccount = {
-    open_total: string
-    gross_total: string
-    settled_total: string
-    open_invoiceable_total: string
-    entries: BackendReceivableEntry[]
 }

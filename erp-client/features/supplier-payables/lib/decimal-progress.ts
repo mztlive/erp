@@ -31,6 +31,7 @@ export function decimalProgressPercent(
             whole.unscaled * BigInt(10) ** BigInt(scale - whole.scale)
         if (wholeUnscaled <= BigInt(0) || partUnscaled <= BigInt(0)) return 0
         if (partUnscaled >= wholeUnscaled) return 100
+        // fixed-decimal-display-boundary: progress coordinates require number.
         return Number((partUnscaled * BigInt(100)) / wholeUnscaled)
     } catch {
         return 0

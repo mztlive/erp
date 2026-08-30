@@ -30,7 +30,7 @@ export type SellableSkuPickerListQuery = Readonly<{
 }>
 
 /**
- * 把公司商品池筛选（含供应快捷视图）映射为分页查询。
+ * 把销售单选品筛选（含供应快捷视图）映射为分页查询。
  * 「全国可供」在未另选区域时落到可供区域=全国；「单一供应商」落到供应商数量上限 1。
  */
 export function toSellablePickerListQuery(

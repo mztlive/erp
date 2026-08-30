@@ -22,19 +22,19 @@ import { SellableListToolbar } from "@/features/master-data/components/list/sell
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import { SELLABLE_SUPPLY_PRESET_LABELS } from "@/features/master-data/lib/sellable-supply-preset"
-import { useSellableSkuPickerColumns } from "@/features/entity-selectors/components/sellable-sku-picker-columns"
-import { useSellableSkuPickerQuery } from "@/features/entity-selectors/hooks/queries"
+import { useSellableSkuPickerColumns } from "@/features/sales-orders/components/sellable-sku-picker-columns"
+import { useSellableSkuPickerQuery } from "@/features/sales-orders/hooks/use-sellable-sku-picker-query"
 import {
     PRODUCT_KIND_LABELS,
     type MasterDataListItem,
     type ProductKind,
 } from "@/features/master-data/types"
-import { useSellableSkuPickerFilters } from "@/features/entity-selectors/hooks/use-sellable-sku-picker-filters"
+import { useSellableSkuPickerFilters } from "@/features/sales-orders/hooks/use-sellable-sku-picker-filters"
 import {
     sellableItemToPick,
     type SellableSkuPick,
-} from "@/features/entity-selectors/lib/sellable-sku-pick"
-import { toSellablePickerListQuery } from "@/features/entity-selectors/lib/sellable-sku-picker-query"
+} from "@/features/sales-orders/lib/sellable-sku-pick"
+import { toSellablePickerListQuery } from "@/features/sales-orders/lib/sellable-sku-picker-query"
 
 export type SellableSkuSelectDialogProps = {
     open: boolean

@@ -16,6 +16,7 @@ import {
 } from "@/features/sales-orders/lib/sales-change-order-approval"
 import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
 import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
+import { multiplyFixed } from "@/lib/fixed-decimal"
 import {
     formatEpochDate,
     mapListItemFromBackend,
@@ -50,9 +51,15 @@ function resolveFulfillmentDeadline(
 /** 将后端小数税率转换为建单页使用的百分数展示；缺失或非法值保持为空。 */
 function taxRatePercent(rate: string | null | undefined): string {
     if (!rate?.trim()) return ""
-    const value = Number(rate)
-    if (!Number.isFinite(value)) return ""
-    return (value * 100).toFixed(2)
+    try {
+        return multiplyFixed(rate, "100", {
+            leftMaxScale: 6,
+            rightMaxScale: 0,
+            outputScale: 2,
+        })
+    } catch {
+        return ""
+    }
 }
 
 function latestSubmission(

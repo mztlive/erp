@@ -666,7 +666,7 @@ async fn persist_bound_payment_reversal_document(
 ///
 /// # 错误
 /// 非审批中、原付款不存在或仓储失败时返回错误。
-async fn apply_payment_reversal_final_post(
+pub(super) async fn apply_payment_reversal_final_post(
     db: &Database,
     reversal_id: &str,
     actor_id: &str,

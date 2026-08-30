@@ -8,7 +8,7 @@ import {
     deriveOverall,
     formatQty,
     hasFilledException,
-    parseQty,
+    compareQty,
     type AcceptanceBatchSelection,
 } from "@/features/sales-orders/lib/acceptance-model"
 import type {
@@ -63,7 +63,7 @@ export function useAcceptanceSelection() {
                 if (
                     patch.qty !== undefined &&
                     updated.result !== "PASS" &&
-                    parseQty(updated.exceptionQty) > parseQty(updated.qty)
+                    compareQty(updated.exceptionQty, updated.qty) > 0
                 ) {
                     updated.exceptionQty = formatQty(updated.qty)
                 }

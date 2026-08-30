@@ -13,11 +13,12 @@ import {
     FACT_TYPE_LABEL,
     SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 export function paymentCompositionLabel(row: MallConsumptionOrderRow) {
     const { cardAmount, wechatAmount, sourceCount } = row.paymentComposition
-    const card = Number(cardAmount) > 0
-    const wx = Number(wechatAmount) > 0
+    const card = compareDecimal(cardAmount, "0", 2) > 0
+    const wx = compareDecimal(wechatAmount, "0", 2) > 0
     if (card && wx) {
         return `组合 · 卡券 ¥${cardAmount} / 微信 ¥${wechatAmount}`
     }

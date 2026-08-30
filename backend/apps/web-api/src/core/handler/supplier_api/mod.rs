@@ -3,8 +3,6 @@
 //! Handler 只做协议适配；连接治理动作全部进入固定强命令，列表/详情只返回
 //! Service 按当前操作人投影的权威动作与阻塞原因。
 
-use std::sync::Arc;
-
 use axum::{
     extract::{Path, Query, State},
     Extension, Json,
@@ -14,9 +12,9 @@ use services::{
     supplier_api::{
         ConfirmBusinessCapabilityRequirementCommand, ConfirmBusinessCapabilityRequirementResult,
         CreateSupplierApiConnectionRequest, PageView, SupplierApiCapabilityListParams,
-        SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListParams,
-        SupplierApiConnectionView, SupplierApiService, SupplierConnectionCommand,
-        SupplierConnectionCommandResult, SupplierConnectionJobView, UnavailableSupplierApiGateway,
+        SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListItemView,
+        SupplierApiConnectionListParams, SupplierApiConnectionView, SupplierApiService,
+        SupplierConnectionCommand, SupplierConnectionCommandResult, SupplierConnectionJobView,
         UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
     },
 };
@@ -27,7 +25,7 @@ use crate::{
 };
 
 fn service(state: &AppState) -> SupplierApiService {
-    SupplierApiService::new(state.db(), Arc::new(UnavailableSupplierApiGateway)).with_rbac(state.rbac())
+    state.supplier_api_service()
 }
 
 #[permission_macros::permission(
@@ -42,7 +40,7 @@ pub async fn supplier_api_connection_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierApiConnectionListParams>,
-) -> Result<PageView<SupplierApiConnectionView>> {
+) -> Result<PageView<SupplierApiConnectionListItemView>> {
     let page = service(&state).connection_list_for_actor(&params, &actor).await?;
     Ok(ApiResponse::ok_with_data(page))
 }

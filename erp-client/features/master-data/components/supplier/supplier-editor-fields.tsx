@@ -139,7 +139,6 @@ export function SensitiveEditableField({
             <Input
                 id={id}
                 value={revealedValue ?? value}
-                autoFocus
                 onChange={(event) => {
                     setRevealedValue(event.target.value)
                     onChange(event.target.value)

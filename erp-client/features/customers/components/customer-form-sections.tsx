@@ -6,6 +6,7 @@ import { PlusIcon } from "lucide-react"
 import { DocumentSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import type { CustomerFormApi } from "@/features/customers/components/customer-form-values"
 
 export const ADDRESS_TYPE_OPTIONS = [
@@ -117,7 +118,10 @@ export function ContactRowsSection({
                                         name={`contacts[${index}].name`}
                                     >
                                         {(nested) => (
-                                            <nested.TextField label="姓名" required />
+                                            <nested.TextField
+                                                label="姓名"
+                                                required
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField
@@ -163,31 +167,37 @@ export function ContactRowsSection({
                                     <form.AppField
                                         name={`contacts[${index}].isDefault`}
                                     >
-                                        {(nested) => (
-                                            <label className="flex items-center gap-2 text-sm">
-                                                <Checkbox
-                                                    checked={
-                                                        nested.state.value
-                                                    }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        nested.handleChange(
-                                                            checked === true,
-                                                        )
-                                                    }
-                                                />
-                                                默认联系人
-                                            </label>
-                                        )}
+                                        {(nested) => {
+                                            const checkboxId = `customer-contact-${index}-default`
+                                            return (
+                                                <Label
+                                                    htmlFor={checkboxId}
+                                                    className="flex items-center gap-2 text-sm"
+                                                >
+                                                    <Checkbox
+                                                        id={checkboxId}
+                                                        checked={
+                                                            nested.state.value
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            nested.handleChange(
+                                                                checked ===
+                                                                    true,
+                                                            )
+                                                        }
+                                                    />
+                                                    默认联系人
+                                                </Label>
+                                            )
+                                        }}
                                     </form.AppField>
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        onClick={() =>
-                                            field.removeValue(index)
-                                        }
+                                        onClick={() => field.removeValue(index)}
                                     >
                                         移除
                                     </Button>
@@ -291,31 +301,37 @@ export function AddressRowsSection({
                                     <form.AppField
                                         name={`addresses[${index}].isDefault`}
                                     >
-                                        {(nested) => (
-                                            <label className="flex items-center gap-2 text-sm">
-                                                <Checkbox
-                                                    checked={
-                                                        nested.state.value
-                                                    }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        nested.handleChange(
-                                                            checked === true,
-                                                        )
-                                                    }
-                                                />
-                                                默认地址
-                                            </label>
-                                        )}
+                                        {(nested) => {
+                                            const checkboxId = `customer-address-${index}-default`
+                                            return (
+                                                <Label
+                                                    htmlFor={checkboxId}
+                                                    className="flex items-center gap-2 text-sm"
+                                                >
+                                                    <Checkbox
+                                                        id={checkboxId}
+                                                        checked={
+                                                            nested.state.value
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            nested.handleChange(
+                                                                checked ===
+                                                                    true,
+                                                            )
+                                                        }
+                                                    />
+                                                    默认地址
+                                                </Label>
+                                            )
+                                        }}
                                     </form.AppField>
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        onClick={() =>
-                                            field.removeValue(index)
-                                        }
+                                        onClick={() => field.removeValue(index)}
                                     >
                                         移除
                                     </Button>

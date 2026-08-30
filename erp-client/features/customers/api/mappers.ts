@@ -20,12 +20,7 @@ import {
     CONTRACT_STATUS_LABEL,
     CONTRACT_STATUS_TONE,
     type ContractStatus,
-} from "@/features/contracts/types"
-import {
-    compareDecimal,
-    formatScaled,
-    normalizeFixed,
-} from "@/lib/fixed-decimal"
+} from "@/lib/contract-status"
 import type {
     BackendAddress,
     BackendAssignment,
@@ -35,7 +30,6 @@ import type {
     BackendCustomerStatus,
     BackendCustomerView,
     BackendProfileMutation,
-    BackendReceivableAccount,
     BackendSalesOrderListRow,
     BackendSensitiveField,
 } from "./wire-types"
@@ -207,7 +201,7 @@ export function mapAssignment(
 
 /** 映射合同摘要。 */
 export function mapContractSummary(
-    contract: BackendContractListRow,
+    contract: Pick<BackendContractListRow, "id" | "contract_no" | "status">,
 ): RelatedObjectSummary {
     const status = contract.status as ContractStatus
     return {
@@ -224,7 +218,10 @@ export function mapContractSummary(
 
 /** 映射销售单摘要。 */
 export function mapSalesOrderSummary(
-    order: BackendSalesOrderListRow,
+    order: Pick<
+        BackendSalesOrderListRow,
+        "id" | "order_no" | "commercial_status"
+    >,
 ): RelatedObjectSummary {
     const status = order.commercial_status
     const meta =
@@ -241,56 +238,6 @@ export function mapSalesOrderSummary(
         title: order.order_no,
         status: meta,
         href: `/sales/orders/${order.id}`,
-    }
-}
-
-/** 把金额字符串转换为分，禁止经过 JavaScript number。 */
-export function moneyCents(value: string): bigint {
-    return BigInt(
-        normalizeFixed(value, {
-            maxScale: 2,
-            outputScale: 2,
-            allowNegative: true,
-        }).replace(".", ""),
-    )
-}
-
-/** 汇总客户应收当前余额与已逾期未核销分录。 */
-export function receivableProjection(accounts: BackendReceivableAccount[]) {
-    const today = todayBusinessDate()
-    const receivableCents = accounts.reduce(
-        (total, account) => total + moneyCents(account.open_total),
-        BigInt(0),
-    )
-    let overdueCents = BigInt(0)
-    const overdueDates: string[] = []
-    for (const account of accounts) {
-        for (const entry of account.entries ?? []) {
-            if (
-                entry.direction !== "increase" ||
-                !entry.due_date ||
-                entry.due_date >= today ||
-                compareDecimal(entry.amount, entry.offset_total, 2) <= 0
-            ) {
-                continue
-            }
-            overdueCents +=
-                moneyCents(entry.amount) - moneyCents(entry.offset_total)
-            overdueDates.push(entry.due_date)
-        }
-    }
-    const openInvoiceCents = accounts.reduce(
-        (total, account) => total + moneyCents(account.open_invoiceable_total),
-        BigInt(0),
-    )
-    return {
-        receivableBalance: formatScaled(receivableCents, 2),
-        overdueAmount: formatScaled(overdueCents, 2),
-        earliestOverdueDate: overdueDates.sort()[0],
-        collectionProgressLabel:
-            receivableCents === BigInt(0) ? "已结清" : "存在未结清余额",
-        invoicingProgressLabel:
-            openInvoiceCents === BigInt(0) ? "已完成" : "存在可开票余额",
     }
 }
 

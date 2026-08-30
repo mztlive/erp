@@ -4,7 +4,7 @@ use bpm::model::types::{DIGEST_MAX_LEN, SCOPE_MAX_LEN};
 use bpm::model::ApprovalCommandReceipt;
 use sha2::{Digest, Sha256};
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorCode, Result};
 
 /// 幂等键规范化后的最大长度。
 const IDEMPOTENCY_KEY_MAX_LEN: usize = SCOPE_MAX_LEN;
@@ -304,11 +304,13 @@ pub fn classify_receipt<'a>(
 /// # 返回
 /// 返回 `APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT`。
 pub fn payload_conflict_error() -> Error {
-    Error::ConflictError("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT".to_string())
+    Error::from_approval_code(ErrorCode::ApprovalIdempotencyPayloadConflict)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::ErrorCode;
+
     use super::{
         cancel_digest, canonical_payload, classify_receipt, decision_digest, normalize_idempotency_key,
         payload_conflict_error, payload_digest, resume_digest, start_digest, start_scope, ReceiptBranch,
@@ -363,7 +365,7 @@ mod tests {
         assert_eq!(classify_receipt(None, &digest), ReceiptBranch::Fresh);
         assert_eq!(
             payload_conflict_error().to_string(),
-            "数据冲突: APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"
+            ErrorCode::ApprovalIdempotencyPayloadConflict.as_str()
         );
     }
 

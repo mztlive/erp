@@ -45,7 +45,7 @@ export function buildAllocationIssues(
         })
     }
     const capAmount = existingUnallocated || existingAmount || factAmount || "0"
-    if (cents(factAmount || "0") <= 0 && !existingInvoiceId) {
+    if (cents(factAmount || "0") <= BigInt(0) && !existingInvoiceId) {
         issues.push({
             id: "amount",
             label: track === "payment" ? "付款金额" : "发票金额",
@@ -71,7 +71,7 @@ export function buildAllocationIssues(
                 message: `拟分配超过开放余额 ${open}`,
             })
         }
-        if (cents(amounts[id] ?? "0") <= 0) {
+        if (cents(amounts[id] ?? "0") <= BigInt(0)) {
             issues.push({
                 id: `zero-${id}`,
                 label: item.sourceDocumentNo,

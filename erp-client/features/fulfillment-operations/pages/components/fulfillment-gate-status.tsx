@@ -9,6 +9,7 @@ import {
     prepaymentGateCopy,
 } from "@/features/fulfillment-operations/pages/lib/gate-copy"
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
+import { clampZeroFixed, subtractFixed } from "@/lib/fixed-decimal"
 
 export type FulfillmentGateStatusProps = {
     operation: FulfillmentOperation
@@ -55,12 +56,13 @@ export function FulfillmentGateStatus({
                 blocked &&
                 operation.gate.requiredAmount &&
                 operation.gate.effectivePaidAmount
-                    ? String(
-                          Math.max(
-                              0,
-                              Number(operation.gate.requiredAmount) -
-                                  Number(operation.gate.effectivePaidAmount),
+                    ? clampZeroFixed(
+                          subtractFixed(
+                              operation.gate.requiredAmount,
+                              operation.gate.effectivePaidAmount,
+                              { maxScale: 2, outputScale: 2 },
                           ),
+                          { maxScale: 2, outputScale: 2 },
                       )
                     : "0"
             }

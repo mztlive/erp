@@ -9,9 +9,10 @@ import {
     fetchWorkspaceInboxCount,
 } from "@/features/workspace/api/dashboard"
 import type { TodayWorkspaceQuery } from "@/features/workspace/types"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 const workspaceHomeKeys = {
-    all: ["workspace-home"] as const,
+    all: queryKeyRoots.workspaceHome,
     dashboard: (query: TodayWorkspaceQuery, profile?: AccountProfile) =>
         [
             ...workspaceHomeKeys.all,

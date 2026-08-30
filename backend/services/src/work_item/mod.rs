@@ -36,7 +36,7 @@ use validator::Validate;
 
 use crate::{
     audit::AuditActor,
-    errors::{Error, Result},
+    errors::{Error, ErrorCode, Result},
     iam::SharedRbacService,
 };
 
@@ -45,6 +45,7 @@ mod change_order_brief;
 mod dto;
 mod finance_responsibility;
 mod fulfillment_operation_brief;
+mod fulfillment_queue;
 mod funds_document_brief;
 mod inventory_settlement_brief;
 mod party_names;
@@ -64,6 +65,11 @@ pub(crate) use finance_responsibility::ResolvedFinanceResponsibility;
 pub use finance_responsibility::{
     CreateFinanceResponsibilityRuleRequest, FinanceResponsibilityOwnerOptionView,
     FinanceResponsibilityRuleView, UpdateFinanceResponsibilityRuleRequest,
+};
+pub use fulfillment_queue::{
+    FulfillmentQueueGateFilter, FulfillmentQueueGateState, FulfillmentQueueItemView,
+    FulfillmentQueueListParams, FulfillmentQueueMetricView, FulfillmentQueueOperationType,
+    FulfillmentQueuePageView, FulfillmentQueueWarehouseView,
 };
 type WorkItemFilter = <mongodb::Database as WorkItemExt>::WorkItemFilter;
 
@@ -892,7 +898,7 @@ impl WorkItemService {
         let managed_access = self.managed_access(actor).await?;
         let item = self.load(id).await?;
         item.ensure_generic_responsibility_mutation()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+            .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))?;
         ensure_item_in_managed_scope(&item, &managed_access)?;
 
         let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
@@ -981,7 +987,7 @@ impl WorkItemService {
         }
         let item = self.load(id).await?;
         item.ensure_generic_responsibility_mutation()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+            .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)
@@ -1046,7 +1052,7 @@ impl WorkItemService {
         }
         let item = self.load(id).await?;
         item.ensure_generic_responsibility_mutation()
-            .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+            .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))?;
         if item.base.version != expected_task_version {
             return self
                 .conflict_outcome(id, WorkItemConflictKind::Version, actor)

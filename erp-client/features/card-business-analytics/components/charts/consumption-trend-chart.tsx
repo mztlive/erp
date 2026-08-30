@@ -37,14 +37,17 @@ export interface ConsumptionTrendChartProps {
 }
 
 /** 消费与余额趋势（含税，万元展示）+ 键盘/读屏等价数据表。 */
-export function ConsumptionTrendChart({
-    points,
-}: ConsumptionTrendChartProps) {
+export function ConsumptionTrendChart({ points }: ConsumptionTrendChartProps) {
+    // fixed-decimal-display-boundary: Recharts coordinates require number.
     const consumptionChartData = points.map((point) => ({
         period: point.period,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         sales: Number(point.salesGross) / 10000,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         consumption: Number(point.consumptionGross) / 10000,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         refund: Number(point.refundGross) / 10000,
+        // fixed-decimal-display-boundary: Recharts coordinates require number.
         balance: Number(point.balanceGross) / 10000,
         salesLabel: formatMoneyDisplay(point.salesGross),
         consumptionLabel: formatMoneyDisplay(point.consumptionGross),
@@ -57,7 +60,8 @@ export function ConsumptionTrendChart({
             <CardHeader className="border-b border-grid">
                 <CardTitle>消费与余额趋势</CardTitle>
                 <CardDescription>
-                    销售 / 消费 / 退款 / 余额（含税，万元展示）。全量口径，不随明细筛选变化。
+                    销售 / 消费 / 退款 /
+                    余额（含税，万元展示）。全量口径，不随明细筛选变化。
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
@@ -67,7 +71,11 @@ export function ConsumptionTrendChart({
                 >
                     <BarChart data={consumptionChartData} accessibilityLayer>
                         <CartesianGrid vertical={false} />
-                        <XAxis dataKey="period" tickLine={false} axisLine={false} />
+                        <XAxis
+                            dataKey="period"
+                            tickLine={false}
+                            axisLine={false}
+                        />
                         <YAxis tickLine={false} axisLine={false} width={40} />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <Legend />

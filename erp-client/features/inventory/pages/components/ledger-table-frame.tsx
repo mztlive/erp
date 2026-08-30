@@ -110,7 +110,7 @@ export function LedgerTableFrame({
                 </span>
             }
             headerActions={
-                <label className="flex items-center gap-1.5 text-sm">
+                <div className="flex items-center gap-1.5 text-sm">
                     <span className="sr-only">排序</span>
                     <OptionCombobox
                         className="w-40"
@@ -123,7 +123,7 @@ export function LedgerTableFrame({
                         aria-label="排序方式"
                         placeholder="排序"
                     />
-                </label>
+                </div>
             }
             toolbar={
                 <LedgerToolbar

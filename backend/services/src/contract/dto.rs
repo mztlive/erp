@@ -20,13 +20,7 @@ use crate::query::{normalized_text, page_or_default, page_size_or_default};
 pub(crate) const CONTRACT_SORT_FIELDS: &[&str] = &["created_at", "contract_no"];
 
 /// 排序方向。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortDir {
-    /// 升序。
-    Asc,
-    /// 降序。
-    Desc,
-}
+pub use crate::query::SortDir;
 
 /// 归一化后的分页查询 DTO（Service → Repository 共用）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,61 +47,14 @@ pub struct PageParams {
 ///
 /// # 错误
 /// 字段不在白名单或方向不是 `asc`/`desc` 时返回 `ValidationError`。
-pub(crate) fn normalize_sort(
-    sort_by: &Option<String>,
-    sort_dir: &Option<String>,
-    allowed_fields: &'static [&'static str],
-) -> Result<(&'static str, SortDir)> {
-    let sort_by = match sort_by
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some(field) => allowed_fields
-            .iter()
-            .find(|allowed| **allowed == field)
-            .copied()
-            .ok_or_else(|| crate::errors::Error::ValidationError(format!("不支持的排序字段: {field}")))?,
-        None => "created_at",
-    };
-    let sort_dir = match sort_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some("asc") => SortDir::Asc,
-        Some("desc") => SortDir::Desc,
-        Some(other) => {
-            return Err(crate::errors::Error::ValidationError(format!(
-                "非法排序方向: {other}"
-            )))
-        }
-        None => SortDir::Desc,
-    };
-    Ok((sort_by, sort_dir))
-}
+pub(crate) use crate::query::normalize_sort;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。
-#[derive(Debug, Clone, Serialize)]
-pub struct PageView<T> {
-    /// 当前页数据。
-    pub items: Vec<T>,
-    /// 满足筛选条件的总数（非当前页条数）。
-    pub total: i64,
-    /// 当前页码（1 起）。
-    pub page: u64,
-    /// 请求的分页大小。
-    pub page_size: u32,
-}
+pub use crate::query::PageView;
 
 /// 校验文本去除首尾空白后非空（validator 的 `length(min=1)` 对纯空白字符串
 /// 不生效，空 contract_no 需要按「空白视为空」拒绝，落入 HTTP 400）。
-fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value.trim().is_empty() {
-        return Err(validator::ValidationError::new("不能为空白"));
-    }
-    Ok(())
-}
+use crate::query::non_blank;
 
 /// 合同首次归档请求（W04 上传 PDF：合同身份 + 首个不可变版本 + PDF 关联原子形成）。
 ///
@@ -348,6 +295,14 @@ pub struct ContractView {
     pub status: ContractStatus,
     /// 当前生效版本。
     pub current_revision_id: Option<String>,
+    /// 当前合同版本摘要；列表不得要求客户端逐行读取详情。
+    pub current_revision: Option<ContractRevisionView>,
+    /// 客户编号。
+    pub customer_no: Option<String>,
+    /// 当前客户负责人账号。
+    pub owner_user_id: Option<String>,
+    /// 当前客户负责人显示名。
+    pub owner_user_name: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
@@ -426,6 +381,10 @@ impl From<entities::contract::Contract> for ContractView {
             settlement_party_id: contract.settlement_party_id.to_string(),
             status: contract.stable.status,
             current_revision_id: contract.stable.current_revision_id,
+            current_revision: None,
+            customer_no: None,
+            owner_user_id: None,
+            owner_user_name: None,
             created_at: contract.base.created_at,
             version: contract.base.version,
         }

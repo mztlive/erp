@@ -1,6 +1,7 @@
 pub mod access_control;
 mod account_support;
 pub mod approval;
+pub mod approval_action_registry;
 pub mod audit;
 pub mod auth;
 pub mod bulk_job;
@@ -41,10 +42,12 @@ pub mod supplier_api;
 pub mod supplier_fulfillment;
 pub mod supplier_offering;
 pub mod supplier_settlement;
+mod transaction;
 pub mod warehouse;
 pub mod work_item;
 
 pub use approval::definition::ApprovalDefinitionService;
 pub use approval::execution::{ApprovalNotificationOutboxPort, ApprovalRuntimeService};
-pub use errors::{approval_codes, Error};
+pub use approval_action_registry::ApprovalActionRegistry;
+pub use errors::{Error, ErrorClass, ErrorCode};
 pub use page::Page;

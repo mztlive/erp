@@ -138,6 +138,19 @@ impl<'a> Repository<'a, Contract> {
 }
 
 impl<'a> Repository<'a, ContractRevision> {
+    /// 按修订 ID 集合批量读取不可变合同版本。
+    pub async fn find_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ContractRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
+            .await
+    }
+
     /// 列出合同的全部版本（新版本在前）。
     ///
     /// # 参数

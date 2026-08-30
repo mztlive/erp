@@ -4,6 +4,7 @@
  */
 
 import { apiPost } from "@/lib/api"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import type { RegisterFundsResult } from "@/features/card-funds-review/types"
 import type { BackendCardFundsRegistrationResult } from "./dto"
 
@@ -60,7 +61,7 @@ export async function registerHistoricalReceipt(input: {
     evidenceReference: string
     idempotencyKey: string
 }): Promise<RegisterFundsResult> {
-    if (!input.grossAmount || Number(input.grossAmount) <= 0) {
+    if (!input.grossAmount || compareDecimal(input.grossAmount, "0", 2) <= 0) {
         return Promise.reject({
             kind: "Validation",
             message: "禁止创建 0 元或负金额回款；无历史票款请使用「从 0 起」",
@@ -110,7 +111,7 @@ export async function registerHistoricalInvoice(input: {
     evidenceReference: string
     idempotencyKey: string
 }): Promise<RegisterFundsResult> {
-    if (!input.grossAmount || Number(input.grossAmount) <= 0) {
+    if (!input.grossAmount || compareDecimal(input.grossAmount, "0", 2) <= 0) {
         return Promise.reject({
             kind: "Validation",
             message: "禁止创建 0 元或负金额发票；无历史票款请使用「从 0 起」",

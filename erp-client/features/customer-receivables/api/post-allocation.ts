@@ -3,6 +3,7 @@
 import { apiPost } from "@/lib/api"
 import { getErrorMessage } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 import type {
     AllocationSessionView,
@@ -12,15 +13,6 @@ import type {
 import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 import type { BackendCustomerReceipt, BackendInvoice } from "./dto"
-import { sessions } from "./session"
-
-export const postIdempotency = new Map<string, PostAllocationResult>()
-type PendingPostCommand = {
-    input: PostAllocationInput
-    session: AllocationSessionView
-}
-
-const pendingPostCommands = new Map<string, PendingPostCommand>()
 
 function freezePostInput(input: PostAllocationInput): PostAllocationInput {
     return {
@@ -39,40 +31,27 @@ function failedResult(
 
 export async function postAllocation(
     input: PostAllocationInput,
+    session: AllocationSessionView | null,
 ): Promise<PostAllocationResult> {
-    const cached = postIdempotency.get(input.idempotencyKey)
-    if (cached && cached.status !== "unknown") return cached
-    postIdempotency.delete(input.idempotencyKey)
-
-    const pending = pendingPostCommands.get(input.idempotencyKey)
-    const commandInput = pending?.input ?? freezePostInput(input)
-    let s: AllocationSessionView
-
-    if (pending) {
-        s = pending.session
-    } else {
-        const stored = sessions.get(commandInput.draftSessionId)
-        if (!stored || stored.status !== "draft") {
-            const failed: PostAllocationResult = {
-                status: "failed",
-                code: "SESSION_INVALID",
-                message: "本次核销已不存在或已提交。",
-            }
-            postIdempotency.set(commandInput.idempotencyKey, failed)
-            return failed
+    const commandInput = freezePostInput(input)
+    if (!session || session.status !== "draft") {
+        return {
+            status: "failed",
+            code: "SESSION_INVALID",
+            message: "本次核销草稿已不存在或已提交。请重新进入核销页面。",
         }
-        if (commandInput.editVersion !== stored.editVersion) {
-            return {
-                status: "failed",
-                code: "VERSION_CONFLICT",
-                message: "草稿数据已更新，请保存或刷新后重试。",
-            }
+    }
+    if (commandInput.editVersion !== session.editVersion) {
+        return {
+            status: "failed",
+            code: "VERSION_CONFLICT",
+            message: "草稿数据已更新，请保存或刷新后重试。",
         }
-        s = {
-            ...stored,
-            fact: { ...commandInput.fact },
-            allocations: commandInput.allocations.map((line) => ({ ...line })),
-        }
+    }
+    let s: AllocationSessionView = {
+        ...session,
+        fact: { ...commandInput.fact },
+        allocations: commandInput.allocations.map((line) => ({ ...line })),
     }
 
     const poolTargets = new Set(
@@ -89,9 +68,15 @@ export async function postAllocation(
         )
     }
 
-    const positiveLines = s.allocations.filter(
-        (a) => a.amount && Number(a.amount) > 0,
-    )
+    const positiveLines = s.allocations.filter((line) => {
+        try {
+            return (
+                Boolean(line.amount) && compareDecimal(line.amount, "0", 2) > 0
+            )
+        } catch {
+            return false
+        }
+    })
 
     try {
         if (s.mode === "receipt") {
@@ -111,11 +96,6 @@ export async function postAllocation(
                     },
                 }
             }
-            pendingPostCommands.set(commandInput.idempotencyKey, {
-                input: commandInput,
-                session: s,
-            })
-
             const amount = s.fact.amount ?? "0"
             const receivedAt = new Date(commandInput.fact.receivedAt)
             const receivedAtSecs = Math.floor(receivedAt.getTime() / 1000)
@@ -150,14 +130,6 @@ export async function postAllocation(
                 },
             )
             const approval = mapCustomerReceiptApproval(submitted.approval)
-            sessions.set(commandInput.draftSessionId, {
-                ...s,
-                status: "posted",
-                existingFactId: submitted.id,
-                existingFactNo: submitted.receipt_no,
-                existingFactVersion: submitted.version,
-                approval,
-            })
             const result: PostAllocationResult = {
                 status: "succeeded",
                 mode: "receipt",
@@ -171,8 +143,6 @@ export async function postAllocation(
                 approval,
                 subjectStatus: submitted.status,
             }
-            postIdempotency.set(commandInput.idempotencyKey, result)
-            pendingPostCommands.delete(commandInput.idempotencyKey)
             return result
         }
 
@@ -188,11 +158,6 @@ export async function postAllocation(
                 "销项开票必须由当前负责人从工作台开票任务进入。",
             )
         }
-        pendingPostCommands.set(commandInput.idempotencyKey, {
-            input: commandInput,
-            session: s,
-        })
-
         const gross = s.fact.grossAmount ?? "0"
         const net = s.fact.netAmount || gross
         const tax = s.fact.taxAmount || "0"
@@ -226,7 +191,6 @@ export async function postAllocation(
                 idempotency_key: commandInput.idempotencyKey,
             }),
         )
-        sessions.set(commandInput.draftSessionId, { ...s, status: "posted" })
         const result: PostAllocationResult = {
             status: "succeeded",
             mode: "invoice",
@@ -238,8 +202,6 @@ export async function postAllocation(
             watermark: new Date().toISOString(),
             returnTo: s.returnContext?.returnTo,
         }
-        postIdempotency.set(commandInput.idempotencyKey, result)
-        pendingPostCommands.delete(commandInput.idempotencyKey)
         return result
     } catch (err) {
         const message = getErrorMessage(err, "提交失败，请稍后重试。")
@@ -261,7 +223,6 @@ export async function postAllocation(
                 idempotencyKey: commandInput.idempotencyKey,
                 operationId: commandInput.idempotencyKey,
             }
-            postIdempotency.set(commandInput.idempotencyKey, unknown)
             return unknown
         }
         const failed: PostAllocationResult = {
@@ -269,22 +230,13 @@ export async function postAllocation(
             code,
             message,
         }
-        // Do not cache non-idempotent validation failures under success key
-        if (code === "409" || errorCode === "CONFLICT") {
-            postIdempotency.set(commandInput.idempotencyKey, failed)
-        }
-        pendingPostCommands.delete(commandInput.idempotencyKey)
         return failed
     }
 }
 
 export async function resolvePostUnknown(
-    idempotencyKey: string,
+    input: PostAllocationInput,
+    session: AllocationSessionView | null,
 ): Promise<PostAllocationResult | null> {
-    const cached = postIdempotency.get(idempotencyKey)
-    if (cached?.status !== "unknown") return cached ?? null
-    const pending = pendingPostCommands.get(idempotencyKey)
-    if (!pending) return cached
-    postIdempotency.delete(idempotencyKey)
-    return postAllocation(pending.input)
+    return postAllocation(input, session)
 }

@@ -51,12 +51,6 @@ export function buildPurchaseOrdersListColumns({
                             rowRefs.current.delete(row.original.purchaseOrderId)
                         }
                     }}
-                    tabIndex={
-                        pageRows[focusedIndex]?.purchaseOrderId ===
-                        row.original.purchaseOrderId
-                            ? 0
-                            : -1
-                    }
                     data-focused={
                         pageRows[focusedIndex]?.purchaseOrderId ===
                         row.original.purchaseOrderId

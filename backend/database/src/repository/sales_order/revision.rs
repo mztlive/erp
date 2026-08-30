@@ -19,6 +19,29 @@ use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
 impl<'a> Repository<'a, SalesOrderRevision> {
+    /// 按销售版本 ID 集合批量读取正式版本。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 销售版本 ID 集合；空集合直接返回空结果
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配正式版本；返回顺序不承诺与输入一致。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_revisions_by_ids(
+        &self,
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderRevision>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(doc! { "id": { "$in": revision_ids } }, executor)
+            .await
+    }
+
     /// 按销售单与版本号查找正式版本。
     ///
     /// 唯一性由 `uk_sales_order_revisions_order_revision_no` 唯一索引保证。

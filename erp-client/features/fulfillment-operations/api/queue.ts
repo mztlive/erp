@@ -1,9 +1,9 @@
 /**
- * W01 履约任务作业面 · 队列查询：普通聚合视图按角色拉取 DRAFT 单据；
+ * W01/W09 履约任务作业面 · 队列查询：普通队列读取服务端 WorkItem 分页投影；
  * 工作项入口按冻结的业务对象类型和主键精确读取。权限不匹配时返回明确空态。
  */
 
-import { apiGet, type Page } from "@/lib/api"
+import { apiGet } from "@/lib/api"
 import type {
     FulfillmentOperation,
     FulfillmentOperationType,
@@ -17,51 +17,27 @@ import {
 import {
     isApiError,
     nowIso,
+    secsToIso,
 } from "@/features/fulfillment-operations/lib/projection"
 import {
-    deliveryToOperation,
     electronicToOperation,
-    receiptToOperation,
     serviceToOperation,
-    type BackendDelivery,
     type BackendDeliveryDetail,
     type BackendElectronicDelivery,
-    type BackendPurchaseReceipt,
     type BackendPurchaseReceiptDetail,
     type BackendServiceFulfillment,
-    type BackendWarehouse,
 } from "./documents"
 import {
     deliveryDetailToOperation,
     hydrateOperationDetail,
     receiptDetailToOperation,
 } from "./hydrate"
+import {
+    decodeFulfillmentQueuePage,
+    fulfillmentQueueItemToOperation,
+} from "./work-queue"
 
-const QUEUE_PAGE_SIZE = 100
-const MAX_QUEUE_PAGES = 50
-
-async function loadAllPages<T>(
-    path: string,
-    query: Record<string, unknown> = {},
-): Promise<T[]> {
-    const items: T[] = []
-    let page = 1
-    let total = Number.POSITIVE_INFINITY
-
-    while (items.length < total && page <= MAX_QUEUE_PAGES) {
-        const result = await apiGet<Page<T>>(path, {
-            ...query,
-            page,
-            page_size: QUEUE_PAGE_SIZE,
-        })
-        items.push(...(result.items ?? []))
-        total = result.total ?? items.length
-        if (!result.items?.length) break
-        page += 1
-    }
-
-    return items
-}
+const DEFAULT_QUEUE_PAGE_SIZE = 20
 
 export type FulfillmentQueueFilters = {
     role: FulfillmentRole
@@ -75,13 +51,11 @@ export type FulfillmentQueueFilters = {
     /** W01 任务只允许加载该任务绑定的履约对象。 */
     operationId?: string
     currentOperationId?: string
-    /**
-     * 按采购单筛选时，反查到的来源销售单。
-     * 仓发草稿不挂采购单，要用这个身份才能和入库出现在同一队列。
-     */
-    linkedSalesOrderId?: string
-    /** 销售单详情聚合履约时，用来源采购单补齐未直接携带销售单 ID 的单据。 */
-    linkedPurchaseOrderIds?: readonly string[]
+    /** 服务端页码（1 起），同时进入 URL、queryKey 与请求参数。 */
+    page?: number
+    pageSize?: number
+    /** 可选稳定快照身份；不匹配时服务端要求刷新。 */
+    queueContextId?: string
 }
 
 function filterSummary(
@@ -137,25 +111,10 @@ function matchOperation(
         }
     }
     if (filters.salesOrderId) {
-        const sameSalesOrder =
-            operation.source.salesOrderId === filters.salesOrderId
-        const linkedByPurchaseOrder = Boolean(
-            operation.source.purchaseOrderId &&
-            filters.linkedPurchaseOrderIds?.includes(
-                operation.source.purchaseOrderId,
-            ),
-        )
-        if (!sameSalesOrder && !linkedByPurchaseOrder) return false
+        if (operation.source.salesOrderId !== filters.salesOrderId) return false
     }
     if (filters.purchaseOrderId) {
-        const samePurchaseOrder =
-            operation.source.purchaseOrderId === filters.purchaseOrderId
-        const warehouseShipForLinkedSales =
-            operation.operationType === "WAREHOUSE_SHIP" &&
-            Boolean(operation.source.salesOrderId) &&
-            Boolean(filters.linkedSalesOrderId) &&
-            operation.source.salesOrderId === filters.linkedSalesOrderId
-        if (!samePurchaseOrder && !warehouseShipForLinkedSales) {
+        if (operation.source.purchaseOrderId !== filters.purchaseOrderId) {
             return false
         }
     }
@@ -181,45 +140,6 @@ function matchOperation(
     if (filters.gate === "satisfied" && operation.gate.state !== "SATISFIED")
         return false
     return true
-}
-
-/**
- * 按采购单反查来源销售单。仓发草稿只挂销售单，入库按采购单筛时要用这个身份衔接。
- *
- * @param filters 当前队列筛选。
- * @returns 已有销售单筛选、采购单上的销售单，或无法解析时的 undefined。
- */
-async function resolveLinkedSalesOrderId(
-    filters: FulfillmentQueueFilters,
-): Promise<string | undefined> {
-    if (filters.salesOrderId) return filters.salesOrderId
-    if (!filters.purchaseOrderId) return undefined
-    try {
-        const purchaseOrder = await apiGet<{ sales_order_id?: string }>(
-            `/admin/purchase-orders/${encodeURIComponent(filters.purchaseOrderId)}`,
-        )
-        const salesOrderId = purchaseOrder.sales_order_id?.trim()
-        return salesOrderId || undefined
-    } catch {
-        return undefined
-    }
-}
-
-async function resolveLinkedPurchaseOrderIds(
-    salesOrderId: string | undefined,
-): Promise<readonly string[]> {
-    if (!salesOrderId) return []
-    try {
-        const orders = await loadAllPages<{ id: string }>(
-            "/admin/purchase-orders",
-            {
-                sales_order_id: salesOrderId,
-            },
-        )
-        return orders.map((order) => order.id)
-    } catch {
-        return []
-    }
 }
 
 type ResolvedFulfillmentRole = ReturnType<typeof resolveRole>
@@ -287,6 +207,9 @@ function exactOperationQueueView(
         context: {
             position: operation ? 1 : 0,
             total: operation ? 1 : 0,
+            page: 1,
+            pageSize: 1,
+            totalPages: 1,
             currentOperationId: operation?.operationId,
             filterSummary: filterSummary(filters, warehouseOptions),
             warehouseOptions,
@@ -371,6 +294,9 @@ export async function fetchFulfillmentQueue(
             context: {
                 position: 0,
                 total: 0,
+                page: filters.page ?? 1,
+                pageSize: filters.pageSize ?? DEFAULT_QUEUE_PAGE_SIZE,
+                totalPages: 1,
                 filterSummary: filterSummary(filters, []),
                 warehouseOptions: [],
                 visibleTypes: role.types,
@@ -408,247 +334,114 @@ export async function fetchFulfillmentQueue(
         )
     }
 
-    // Load draft documents for types visible to role
-    const want = new Set(role.types)
-    const operations: FulfillmentOperation[] = []
-    const deniedTypes = new Set<FulfillmentOperationType>()
-    const linkedSalesOrderId = await resolveLinkedSalesOrderId(filters)
-    const linkedPurchaseOrderIds =
-        await resolveLinkedPurchaseOrderIds(linkedSalesOrderId)
-    const queueFilters: FulfillmentQueueFilters = {
-        ...filters,
-        linkedSalesOrderId,
-        linkedPurchaseOrderIds,
-    }
-
-    const loaders: Promise<void>[] = []
-
-    if (want.has("RECEIPT")) {
-        loaders.push(
-            loadAllPages<BackendPurchaseReceipt>("/admin/purchase-receipts", {
-                status: "DRAFT",
-                purchase_order_id: filters.purchaseOrderId,
-                sort_by: "created_at",
-                sort_dir: "desc",
-            })
-                .then((items) => {
-                    for (const receipt of items) {
-                        operations.push(receiptToOperation(receipt))
-                    }
-                })
-                .catch((error) => {
-                    if (isApiError(error) && error.status === 403) {
-                        deniedTypes.add("RECEIPT")
-                        return
-                    }
-                    throw error
-                }),
-        )
-    }
-
-    if (want.has("WAREHOUSE_SHIP") || want.has("SUPPLIER_DIRECT")) {
-        loaders.push(
-            loadAllPages<BackendDelivery>("/admin/deliveries", {
-                status: "DRAFT",
-                sales_order_id: linkedSalesOrderId ?? filters.salesOrderId,
-                sort_by: "created_at",
-                sort_dir: "desc",
-            })
-                .then((items) => {
-                    for (const delivery of items) {
-                        const operation = deliveryToOperation(delivery)
-                        if (want.has(operation.operationType)) {
-                            operations.push(operation)
-                        }
-                    }
-                })
-                .catch((error) => {
-                    if (isApiError(error) && error.status === 403) {
-                        if (want.has("WAREHOUSE_SHIP")) {
-                            deniedTypes.add("WAREHOUSE_SHIP")
-                        }
-                        if (want.has("SUPPLIER_DIRECT")) {
-                            deniedTypes.add("SUPPLIER_DIRECT")
-                        }
-                        return
-                    }
-                    throw error
-                }),
-        )
-    }
-
-    if (want.has("ELECTRONIC")) {
-        loaders.push(
-            loadAllPages<BackendElectronicDelivery>(
-                "/admin/electronic-deliveries",
-                {
-                    status: "DRAFT",
-                    sort_by: "created_at",
-                    sort_dir: "desc",
-                },
-            )
-                .then((items) => {
-                    for (const delivery of items) {
-                        operations.push(electronicToOperation(delivery))
-                    }
-                })
-                .catch((error) => {
-                    if (isApiError(error) && error.status === 403) {
-                        deniedTypes.add("ELECTRONIC")
-                        return
-                    }
-                    throw error
-                }),
-        )
-    }
-
-    if (want.has("SERVICE")) {
-        loaders.push(
-            loadAllPages<BackendServiceFulfillment>(
-                "/admin/service-fulfillments",
-                {
-                    status: "DRAFT",
-                    sort_by: "created_at",
-                    sort_dir: "desc",
-                },
-            )
-                .then((items) => {
-                    for (const service of items) {
-                        operations.push(serviceToOperation(service))
-                    }
-                })
-                .catch((error) => {
-                    if (isApiError(error) && error.status === 403) {
-                        deniedTypes.add("SERVICE")
-                        return
-                    }
-                    throw error
-                }),
-        )
-    }
-
-    await Promise.all(loaders)
-
-    if (linkedSalesOrderId) {
-        for (let index = 0; index < operations.length; index += 1) {
-            const operation = operations[index]
-            const purchaseOrderId = operation.source.purchaseOrderId
-            const belongsToLinkedSalesOrder = Boolean(
-                purchaseOrderId &&
-                (purchaseOrderId === filters.purchaseOrderId ||
-                    linkedPurchaseOrderIds.includes(purchaseOrderId)),
-            )
-            if (
-                operation.operationType === "RECEIPT" &&
-                !operation.source.salesOrderId &&
-                belongsToLinkedSalesOrder
-            ) {
-                operations[index] = {
-                    ...operation,
-                    source: {
-                        ...operation.source,
-                        salesOrderId: linkedSalesOrderId,
-                        salesOrderNo: operation.source.salesOrderNo,
-                    },
-                }
-            }
-        }
-    }
-
-    // warehouse options from warehouses API
-    let warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"] =
-        []
-    try {
-        const warehouses =
-            await loadAllPages<BackendWarehouse>("/admin/warehouses")
-        warehouseOptions = warehouses.map((w) => ({
-            value: w.id,
-            label: w.warehouse_code,
-        }))
-    } catch {
-        // fall back to operation-derived
-        const seen = new Map<string, string>()
-        for (const t of operations) {
-            const id = t.source.warehouseId
-            if (id && !seen.has(id)) seen.set(id, t.source.warehouseLabel ?? id)
-        }
-        warehouseOptions = [...seen].map(([value, label]) => ({ value, label }))
-    }
-
-    const accessibleTypes = role.types.filter(
-        (operationType) => !deniedTypes.has(operationType),
+    const requestedTypes =
+        filters.operationTypes && filters.operationTypes.length > 0
+            ? filters.operationTypes
+            : role.types
+    const page = Math.max(1, Math.trunc(filters.page ?? 1))
+    const pageSize = Math.min(
+        100,
+        Math.max(1, Math.trunc(filters.pageSize ?? DEFAULT_QUEUE_PAGE_SIZE)),
     )
-    const inScope = operations.filter((operation) =>
-        accessibleTypes.includes(operation.operationType),
+    const response = decodeFulfillmentQueuePage(
+        await apiGet<unknown>("/admin/work-items/fulfillment-queue", {
+            operation_types: requestedTypes.join(","),
+            warehouse_id: filters.warehouseId,
+            q: filters.q,
+            due: filters.due,
+            gate: filters.gate,
+            sales_order_id: filters.salesOrderId,
+            purchase_order_id: filters.purchaseOrderId,
+            queue_context_id: filters.queueContextId,
+            timezone: "Asia/Shanghai",
+            page,
+            page_size: pageSize,
+        }),
     )
-    const metrics = accessibleTypes.map((operationType) => ({
-        operationType,
-        label: `待${OPERATION_TYPE_SHORT[operationType]}`,
-        count: inScope.filter((t) => t.operationType === operationType).length,
-        visible: true,
-    }))
-
-    let filtered = inScope.filter((operation) =>
-        matchOperation(operation, queueFilters, accessibleTypes),
-    )
-    filtered = [...filtered].sort((a, b) => {
-        if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
-        if (a.priority !== b.priority) return b.priority - a.priority
-        return a.dueAt.localeCompare(b.dueAt)
-    })
-
-    let position = 0
-    let current = filtered[0]
+    let operations = response.items.map(fulfillmentQueueItemToOperation)
+    let positionInPage = 0
+    let current = operations[0]
     if (filters.currentOperationId) {
-        const idx = filtered.findIndex(
+        const idx = operations.findIndex(
             (t) => t.operationId === filters.currentOperationId,
         )
         if (idx >= 0) {
-            position = idx
-            current = filtered[idx]
+            positionInPage = idx
+            current = operations[idx]
         }
     }
 
     if (current) {
         current = await hydrateOperationDetail(current)
-        filtered = filtered.map((t) =>
+        operations = operations.map((t) =>
             t.operationId === current!.operationId ? current! : t,
         )
     }
 
-    const requestedTypes =
-        filters.operationTypes && filters.operationTypes.length > 0
-            ? filters.operationTypes
-            : role.types
-    const noPermission = requestedTypes.every((operationType) =>
-        deniedTypes.has(operationType),
+    const accessibleTypes = response.visible_types
+    const hasAppliedFilters = Boolean(
+        filters.operationTypes?.length ||
+        filters.warehouseId ||
+        filters.q ||
+        filters.due ||
+        filters.gate ||
+        filters.salesOrderId ||
+        filters.purchaseOrderId,
     )
-    const emptyReason = noPermission
+    const noPermission = accessibleTypes.length === 0
+    const emptyReason: FulfillmentQueueView["emptyReason"] = noPermission
         ? "NO_PERMISSION"
-        : inScope.length === 0
-          ? "NO_OPERATIONS"
-          : filtered.length === 0
-            ? "FILTER_NO_RESULT"
-            : undefined
+        : response.total === 0 && hasAppliedFilters
+          ? "FILTER_NO_RESULT"
+          : response.total === 0
+            ? "NO_OPERATIONS"
+            : operations.length === 0
+              ? "FILTER_NO_RESULT"
+              : undefined
+    const warehouseOptions = response.warehouse_options.map((warehouse) => ({
+        value: warehouse.id,
+        label: warehouse.label,
+    }))
+    const metrics = accessibleTypes.map((operationType) => ({
+        operationType,
+        label: `待${OPERATION_TYPE_SHORT[operationType]}`,
+        count:
+            response.metrics.find(
+                (metric) => metric.operation_type === operationType,
+            )?.count ?? 0,
+        visible: true,
+    }))
+    const totalPages = Math.max(
+        1,
+        Math.ceil(response.total / response.page_size),
+    )
+    const globalPosition =
+        operations.length === 0
+            ? 0
+            : (response.page - 1) * response.page_size + positionInPage + 1
 
     return {
         preferences: { autoNextDefault: filters.role !== "warehouse" },
         context: {
-            position: filtered.length === 0 ? 0 : position + 1,
-            total: filtered.length,
+            position: globalPosition,
+            total: response.total,
+            page: response.page,
+            pageSize: response.page_size,
+            totalPages,
+            queueContextId: response.queue_context_id,
             currentOperationId: current?.operationId,
-            previousOperationId: filtered[position - 1]?.operationId,
-            nextOperationId: filtered[position + 1]?.operationId,
+            previousOperationId: operations[positionInPage - 1]?.operationId,
+            nextOperationId: operations[positionInPage + 1]?.operationId,
             filterSummary: filterSummary(filters, warehouseOptions),
             warehouseOptions,
             visibleTypes: accessibleTypes,
             roleLabel: role.label,
             viewerLabel: role.userLabel,
-            canExecute: role.canExecute,
-            snapshotUpdatedAt: nowIso(),
+            canExecute: role.canExecute && accessibleTypes.length > 0,
+            snapshotUpdatedAt: secsToIso(response.as_of) || nowIso(),
         },
         metrics,
-        operations: filtered,
+        operations,
         current,
         emptyReason,
     }

@@ -23,9 +23,8 @@ import type {
     CreationBasesQuery,
     PurchaseOrderListQuery,
 } from "@/features/purchase-orders/api/purchase-orders"
-import { salesOrderKeys } from "@/features/sales-orders/hooks/queries"
 import { workItemKeys } from "@/features/work-items/queries"
-import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 export const purchaseOrderKeys = {
     all: ["purchase-orders"] as const,
@@ -54,8 +53,10 @@ const invalidatePurchaseOrderApprovalCaches = async (
         queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all }),
         queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
         queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
-        queryClient.invalidateQueries({ queryKey: workspaceHomeKeys.all }),
-        queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
+        queryClient.invalidateQueries({
+            queryKey: queryKeyRoots.workspaceHome,
+        }),
+        queryClient.invalidateQueries({ queryKey: queryKeyRoots.salesOrders }),
     ])
 }
 
@@ -236,9 +237,11 @@ export function useCreateFromSourcingMutation() {
                 queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
                 queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
                 queryClient.invalidateQueries({
-                    queryKey: workspaceHomeKeys.all,
+                    queryKey: queryKeyRoots.workspaceHome,
                 }),
-                queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.salesOrders,
+                }),
             ])
         },
     })
@@ -264,9 +267,11 @@ export function useCreateFromBasisMutation() {
                 queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
                 queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
                 queryClient.invalidateQueries({
-                    queryKey: workspaceHomeKeys.all,
+                    queryKey: queryKeyRoots.workspaceHome,
                 }),
-                queryClient.invalidateQueries({ queryKey: salesOrderKeys.all }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.salesOrders,
+                }),
             ])
         },
     })

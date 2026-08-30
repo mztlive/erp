@@ -18,9 +18,10 @@ use services::{
     audit::AuditActor,
     payable::{
         CommitSupplierPaymentRequest, CreatePayableAccountRequest, PageView, PayableAccountListParams,
-        PayableAccountView, PayableService, PaymentRecipientRevealView, PurchaseInvoiceAllocationListParams,
-        PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView, RegisterPurchaseInvoiceRequest,
-        RevealPaymentRecipientRequest, SupplierPaymentListParams, SupplierPaymentView,
+        PayableAccountSummaryView, PayableAccountView, PayableService, PaymentRecipientRevealView,
+        PurchaseInvoiceAllocationListParams, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,
+        RegisterPurchaseInvoiceRequest, RevealPaymentRecipientRequest, SupplierPaymentListParams,
+        SupplierPaymentView,
     },
 };
 use tracing::error;
@@ -55,7 +56,7 @@ use crate::{
 pub async fn payable_account_list(
     State(state): State<AppState>,
     Query(params): Query<PayableAccountListParams>,
-) -> Result<PageView<PayableAccountView>> {
+) -> Result<PageView<PayableAccountSummaryView>> {
     let page = PayableService::new(state.db())
         .payable_account_list(&params)
         .await?;

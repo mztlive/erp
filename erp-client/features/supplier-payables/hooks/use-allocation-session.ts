@@ -7,7 +7,6 @@ import { useStore } from "@tanstack/react-form"
 import { useAppForm } from "@/components/form"
 import {
     useAllocationSessionQuery,
-    useResolveUnknownMutation,
     useSaveAllocationDraftMutation,
     useSubmitInvoiceMutation,
     useSubmitPaymentMutation,
@@ -26,7 +25,13 @@ import {
 import type {
     AllocationTrack,
     FormalSubmitResult,
+    PostInvoiceInput,
+    PostPaymentInput,
 } from "@/features/supplier-payables/types"
+
+type PendingFormalCommand =
+    | { track: "payment"; input: PostPaymentInput }
+    | { track: "invoice"; input: PostInvoiceInput }
 
 export type AllocationSessionParams = {
     track: AllocationTrack
@@ -93,7 +98,6 @@ export function useAllocationSession(
     const submitPayment = useSubmitPaymentMutation()
     const submitInvoice = useSubmitInvoiceMutation()
     const saveDraft = useSaveAllocationDraftMutation()
-    const resolveUnknown = useResolveUnknownMutation()
 
     const session = sessionQuery.data
     const policy = session?.payablePriorityPolicy
@@ -114,6 +118,7 @@ export function useAllocationSession(
     const [result, setResult] = React.useState<FormalSubmitResult | null>(null)
     const [draftHint, setDraftHint] = React.useState<string | null>(null)
     const idempotencyRef = React.useRef<string | null>(null)
+    const pendingCommandRef = React.useRef<PendingFormalCommand | null>(null)
 
     const paymentForm = useAppForm({
         defaultValues: {
@@ -175,7 +180,7 @@ export function useAllocationSession(
         )
         setSelected(next)
         const am: Record<string, string> = {}
-        let prefillSum = 0
+        let prefillSum = BigInt(0)
         for (const id of next) {
             const item = pool.find((p) => p.payableAccountId === id)
             if (!item) continue
@@ -250,7 +255,7 @@ export function useAllocationSession(
     }, [amounts, paymentPayableAccountId, paymentValues.amount, track])
 
     const allocatedHint = React.useMemo(() => {
-        let c = 0
+        let c = BigInt(0)
         for (const id of selected) {
             c += cents(effectiveAmounts[id] ?? "0")
         }
@@ -258,9 +263,8 @@ export function useAllocationSession(
     }, [effectiveAmounts, selected])
 
     const unallocatedHint = React.useMemo(() => {
-        return fromCents(
-            Math.max(0, cents(factAmount || "0") - cents(allocatedHint)),
-        )
+        const difference = cents(factAmount || "0") - cents(allocatedHint)
+        return fromCents(difference > BigInt(0) ? difference : BigInt(0))
     }, [factAmount, allocatedHint])
 
     const mixedSources = React.useMemo(() => {
@@ -432,7 +436,7 @@ export function useAllocationSession(
         let res: FormalSubmitResult
         if (track === "payment") {
             const v = paymentForm.state.values
-            res = await submitPayment.mutateAsync({
+            const input: PostPaymentInput = {
                 workItemId: paymentWorkItemId!,
                 expectedTaskVersion: expectedPaymentTaskVersion!,
                 expectedPayeeBankAccountId: paymentRecipientBankAccountId!,
@@ -454,7 +458,9 @@ export function useAllocationSession(
                     policy?.payablePriorityPolicyVersion,
                 explicitSelection,
                 idempotencyKey: idempotencyRef.current,
-            })
+            }
+            pendingCommandRef.current = { track: "payment", input }
+            res = await submitPayment.mutateAsync(input)
             if (res.status === "succeeded") {
                 res = {
                     ...res,
@@ -479,7 +485,7 @@ export function useAllocationSession(
             }
         } else {
             const v = invoiceForm.state.values
-            res = await submitInvoice.mutateAsync({
+            const input: PostInvoiceInput = {
                 draftSessionId: session.draftSessionId,
                 supplierId,
                 invoiceCode: v.invoiceCode,
@@ -498,7 +504,9 @@ export function useAllocationSession(
                 explicitSelection,
                 existingInvoiceId: session.existingInvoiceId,
                 idempotencyKey: idempotencyRef.current,
-            })
+            }
+            pendingCommandRef.current = { track: "invoice", input }
+            res = await submitInvoice.mutateAsync(input)
         }
 
         setConfirmOpen(false)
@@ -513,8 +521,12 @@ export function useAllocationSession(
     }
 
     async function handleResolveUnknown(): Promise<boolean> {
-        if (!idempotencyRef.current) return false
-        const r = await resolveUnknown.mutateAsync(idempotencyRef.current)
+        const pending = pendingCommandRef.current
+        if (!idempotencyRef.current || !pending) return false
+        const r =
+            pending.track === "payment"
+                ? await submitPayment.mutateAsync(pending.input)
+                : await submitInvoice.mutateAsync(pending.input)
         if (r) {
             if (r.status === "succeeded" && consumeSucceededResult) {
                 onCompleted?.(r)
@@ -539,7 +551,7 @@ export function useAllocationSession(
         submitPayment.reset()
         submitInvoice.reset()
         saveDraft.reset()
-        resolveUnknown.reset()
+        pendingCommandRef.current = null
         setAmounts({})
         setSelected(new Set())
         setConfirmOpen(false)

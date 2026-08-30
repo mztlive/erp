@@ -9,7 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use database::{AccessControlExt, NoTransaction, PartyExt, SupplierExt};
+use database::{NoTransaction, PartyExt, SupplierExt};
 use entities::supplier::{
     SupplierAccount, SupplierAccountId, SupplierCommercialProfileRevision, SupplierQualification,
 };
@@ -437,11 +437,13 @@ impl SupplierService {
         let audit = actor
             .clone()
             .resource_log("supplier.delete", "supplier", supplier.base.id.clone())?;
-        self.db
-            .supplier_accounts()
-            .soft_delete(&mut supplier, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.supplier_accounts().soft_delete(&mut supplier, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
         Ok(())
     }
 

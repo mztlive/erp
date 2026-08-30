@@ -1,6 +1,6 @@
 /**
  * W12 供应商往来 · 付款相关请求（任务内登记并过账、冲正）。
- * 幂等结果缓存见 api/shared；普通付款不启动独立审批。
+ * 正式幂等只由服务端命令收据保证；普通付款不启动独立审批。
  */
 
 import { apiGetBlob, apiPostForm } from "@/lib/api"
@@ -8,10 +8,8 @@ import type { BackendSupplierPayment } from "@/features/supplier-payables/api/ma
 import {
     errorMessage,
     isOutcomeUnknown,
-    sessions,
-    submitIdempotency,
-    submitUnknownResolvers,
 } from "@/features/supplier-payables/api/shared"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { commitPaymentReversal } from "@/features/supplier-payables/api/reversals"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
 import type {
@@ -37,19 +35,22 @@ function failedPayment(code: string, message: string): FormalSubmitResult {
 export async function submitPayment(
     input: PostPaymentInput,
 ): Promise<FormalSubmitResult> {
-    const cached = submitIdempotency.get(input.idempotencyKey)
-    if (cached && cached.status !== "unknown") return cached
-    submitIdempotency.delete(input.idempotencyKey)
-
     const commandInput: PostPaymentInput = {
         ...input,
         paidAt: input.paidAt || new Date().toISOString(),
         targets: input.targets.map((target) => ({ ...target })),
     }
 
-    const targets = commandInput.targets.filter(
-        (t) => t.amount && Number(t.amount) > 0,
-    )
+    const targets = commandInput.targets.filter((target) => {
+        try {
+            return (
+                Boolean(target.amount) &&
+                compareDecimal(target.amount, "0", 2) > 0
+            )
+        } catch {
+            return false
+        }
+    })
     if (targets.length === 0) {
         return failedPayment(
             "NEED_ALLOCATION",
@@ -102,7 +103,6 @@ export async function submitPayment(
             "/admin/supplier-payments/commit",
             form,
         )
-        const draft = sessions.get(commandInput.draftSessionId)
         const result: FormalSubmitResult = {
             status: "succeeded",
             title: "付款已登记并过账",
@@ -113,11 +113,8 @@ export async function submitPayment(
             existingDocumentId: submitted.id,
             unallocatedAmount: submitted.unallocated_amount,
             allocatedTotal: submitted.allocated_total,
-            returnTo: draft?.returnTo,
             subjectStatus: submitted.status,
         }
-        submitIdempotency.set(commandInput.idempotencyKey, result)
-        submitUnknownResolvers.delete(commandInput.idempotencyKey)
         return result
     } catch (err) {
         if (isOutcomeUnknown(err)) {
@@ -131,14 +128,6 @@ export async function submitPayment(
                 reference: commandInput.idempotencyKey,
                 operationId: commandInput.idempotencyKey,
             }
-            submitIdempotency.set(commandInput.idempotencyKey, result)
-            submitUnknownResolvers.set(
-                commandInput.idempotencyKey,
-                async () => {
-                    submitIdempotency.delete(commandInput.idempotencyKey)
-                    return submitPayment(commandInput)
-                },
-            )
             return result
         }
         return {
@@ -168,9 +157,6 @@ export function fetchSupplierPaymentBankReceiptBlob(
 export async function reversePayment(
     input: ReversePaymentInput,
 ): Promise<FormalSubmitResult> {
-    const cached = submitIdempotency.get(input.idempotencyKey)
-    if (cached && cached.status !== "unknown") return cached
-    submitIdempotency.delete(input.idempotencyKey)
     try {
         const committed = await commitPaymentReversal({
             sourcePaymentId: input.paymentId,
@@ -186,11 +172,6 @@ export async function reversePayment(
                     reference: input.idempotencyKey,
                     operationId: input.idempotencyKey,
                 }
-                submitIdempotency.set(input.idempotencyKey, result)
-                submitUnknownResolvers.set(input.idempotencyKey, async () => {
-                    submitIdempotency.delete(input.idempotencyKey)
-                    return reversePayment(input)
-                })
                 return result
             }
             return failedPayment(committed.code, committed.message)
@@ -205,8 +186,6 @@ export async function reversePayment(
             approval: committed.reversal.approval,
             subjectStatus: committed.reversal.status,
         }
-        submitIdempotency.set(input.idempotencyKey, result)
-        submitUnknownResolvers.delete(input.idempotencyKey)
         return result
     } catch (err) {
         if (isOutcomeUnknown(err)) {
@@ -220,11 +199,6 @@ export async function reversePayment(
                 reference: input.idempotencyKey,
                 operationId: input.idempotencyKey,
             }
-            submitIdempotency.set(input.idempotencyKey, result)
-            submitUnknownResolvers.set(input.idempotencyKey, async () => {
-                submitIdempotency.delete(input.idempotencyKey)
-                return reversePayment(input)
-            })
             return result
         }
         return {

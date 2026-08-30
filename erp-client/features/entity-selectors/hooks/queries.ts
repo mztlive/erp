@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 
 import type { SalesOrderComboboxItem } from "@/components/business/entity-comboboxes"
+import { apiGet, type Page } from "@/lib/api"
 import {
     fetchContractOption,
     fetchMallOptions,
@@ -23,21 +24,12 @@ import {
     type EntitySearch,
     type SellableSkuSearch,
 } from "@/features/entity-selectors/api/index"
-import {
-    fetchSalesOrderDetail,
-    fetchSalesOrders,
-} from "@/features/sales-orders/api"
-import {
-    fetchMasterDataList,
-    listSellableItemsPage,
-} from "@/features/master-data/api"
-import { fetchFileAsset } from "@/features/master-data/api/media-assets"
-import type { SellableSkuPickerListQuery } from "@/features/entity-selectors/lib/sellable-sku-picker-query"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 const STALE_TIME = 5 * 60 * 1000
 
 export const entitySelectorKeys = {
-    all: ["entity-selectors"] as const,
+    all: queryKeyRoots.entitySelectors,
     supplier: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "supplier", input] as const,
     supplierDetail: (id: string) =>
@@ -70,16 +62,10 @@ export const entitySelectorKeys = {
         [...entitySelectorKeys.all, "sales-order", "detail", id] as const,
     sellableSku: (input: SellableSkuSearch) =>
         [...entitySelectorKeys.all, "sellable-sku", input] as const,
-    sellableSkuPicker: (input: SellableSkuPickerListQuery) =>
-        [...entitySelectorKeys.all, "sellable-sku-picker", input] as const,
-    fileAsset: (assetId: string) =>
-        [...entitySelectorKeys.all, "file-asset", assetId] as const,
     companySku: (input: EntitySearch) =>
         [...entitySelectorKeys.all, "company-sku", input] as const,
     malls: (purpose: string) =>
         [...entitySelectorKeys.all, "mall", { purpose }] as const,
-    voucherCategories: (purpose: string) =>
-        [...entitySelectorKeys.all, "voucher-category", { purpose }] as const,
 }
 
 /** 输入防抖只更新查询条件；HTTP 始终由 TanStack Query 的 queryFn 发起。 */
@@ -199,17 +185,45 @@ export function useContractSelectorQuery(
     return { list, selected }
 }
 
-function salesOrderItem(
-    row: NonNullable<Awaited<ReturnType<typeof fetchSalesOrderDetail>>>,
-): SalesOrderComboboxItem {
+type SalesOrderSelectorDto = Readonly<{
+    id: string
+    order_no: string
+    business_type: string
+    customer_id: string
+    commercial_status: string
+    stage: { label: string; tone: string }
+    current_revision_id?: string | null
+    revisions?: ReadonlyArray<{
+        id: string
+        customer_name?: string
+        gross_amount: string
+    }>
+}>
+
+function salesOrderTone(tone: string): SalesOrderComboboxItem["statusTone"] {
+    if (
+        tone === "success" ||
+        tone === "warning" ||
+        tone === "destructive" ||
+        tone === "info"
+    ) {
+        return tone
+    }
+    return "neutral"
+}
+
+function salesOrderItem(row: SalesOrderSelectorDto): SalesOrderComboboxItem {
+    const revision = row.current_revision_id
+        ? row.revisions?.find((item) => item.id === row.current_revision_id)
+        : undefined
     return {
         id: row.id,
-        documentNumber: row.documentNumber,
-        customerName: row.customerName,
-        statusLabel: row.primaryStatus.label,
-        statusTone: row.primaryStatus.tone,
-        amountGross: row.amountGross,
-        natureLabel: row.nature === "card_voucher" ? "卡券" : "实物与服务",
+        documentNumber: row.order_no,
+        customerName: revision?.customer_name?.trim() || row.customer_id,
+        statusLabel: row.stage.label || row.commercial_status,
+        statusTone: salesOrderTone(row.stage.tone),
+        amountGross: revision?.gross_amount,
+        natureLabel: row.business_type === "VOUCHER" ? "卡券" : "实物与服务",
     }
 }
 
@@ -220,29 +234,28 @@ export function useSalesOrderSelectorQuery(
     const list = useQuery({
         queryKey: entitySelectorKeys.salesOrder(input),
         queryFn: async () => {
-            const result = await fetchSalesOrders({
-                page: 1,
-                pageSize: 30,
-                search: input.query || undefined,
-            })
-            return result.items.map((row) => ({
-                id: row.id,
-                documentNumber: row.documentNumber,
-                customerName: row.customerName,
-                statusLabel: row.primaryStatus.label,
-                statusTone: row.primaryStatus.tone,
-                amountGross: row.amountGross,
-                natureLabel:
-                    row.nature === "card_voucher" ? "卡券" : "实物与服务",
-            })) satisfies SalesOrderComboboxItem[]
+            const result = await apiGet<Page<SalesOrderSelectorDto>>(
+                "/admin/sales-orders",
+                {
+                    page: 1,
+                    page_size: 30,
+                    order_no: input.query.trim() || undefined,
+                    sort_by: "created_at",
+                    sort_dir: "desc",
+                },
+            )
+            return result.items.map(salesOrderItem)
         },
         ...commonQueryOptions(),
     })
     const selected = useQuery({
         queryKey: entitySelectorKeys.salesOrderDetail(selectedId ?? ""),
         queryFn: async () => {
-            const row = await fetchSalesOrderDetail(selectedId ?? "")
-            return row ? salesOrderItem(row) : null
+            if (!selectedId) return null
+            const row = await apiGet<SalesOrderSelectorDto>(
+                `/admin/sales-orders/${encodeURIComponent(selectedId)}`,
+            )
+            return salesOrderItem(row)
         },
         enabled: Boolean(selectedId),
         staleTime: STALE_TIME,
@@ -258,42 +271,6 @@ export function useSellableSkuSelectorQuery(input: SellableSkuSearch) {
     })
 }
 
-export function useSellableSkuPickerQuery(
-    input: SellableSkuPickerListQuery,
-    enabled: boolean,
-) {
-    return useQuery({
-        queryKey: entitySelectorKeys.sellableSkuPicker(input),
-        queryFn: () =>
-            listSellableItemsPage({
-                resource: "sellable-items",
-                q: input.q,
-                productKind: input.productKind,
-                productCategoryId: input.productCategoryId,
-                productBrandId: input.productBrandId,
-                productSupplierId: input.productSupplierId,
-                supplyRegion: input.supplyRegion,
-                productSalesPriceMin: input.productSalesPriceMin,
-                productSalesPriceMax: input.productSalesPriceMax,
-                maxSupplierCount: input.maxSupplierCount,
-                page: input.page,
-                pageSize: input.pageSize,
-            }),
-        enabled,
-        placeholderData: keepPreviousData,
-        staleTime: STALE_TIME,
-    })
-}
-
-export function useFileAssetQuery(assetId: string | undefined) {
-    return useQuery({
-        queryKey: entitySelectorKeys.fileAsset(assetId ?? ""),
-        queryFn: () => fetchFileAsset(assetId ?? ""),
-        enabled: Boolean(assetId?.trim()),
-        staleTime: STALE_TIME,
-    })
-}
-
 export function useCompanySkuSelectorQuery(input: EntitySearch) {
     return useQuery({
         queryKey: entitySelectorKeys.companySku(input),
@@ -306,43 +283,6 @@ export function useMallSelectorQuery(purpose: string) {
     return useQuery({
         queryKey: entitySelectorKeys.malls(purpose),
         queryFn: fetchMallOptions,
-        staleTime: STALE_TIME,
-    })
-}
-
-export function useVoucherCategorySelectorQuery(purpose: string) {
-    return useQuery({
-        queryKey: entitySelectorKeys.voucherCategories(purpose),
-        queryFn: async () => {
-            const profiles = await fetchMasterDataList({
-                resource: "voucher-categories",
-                lifecycleStatus: "enabled",
-            })
-            const source =
-                profiles.rows.length > 0
-                    ? profiles.rows
-                    : (
-                          await fetchMasterDataList({
-                              resource: "sellable-items",
-                              lifecycleStatus: "enabled",
-                              productKind: "VOUCHER",
-                          })
-                      ).rows
-            return source.map((item) => ({
-                productId: item.stableId,
-                revisionId: item.currentRevisionId,
-                sku: item.stableNo,
-                name: item.name,
-                statusLabel: item.lifecycleStatusLabel,
-                statusTone: item.lifecycleTone,
-                baseUnit: "张",
-                description:
-                    item.keyFacts.find((fact) => fact.label === "说明")
-                        ?.value ??
-                    item.keyFacts.find((fact) => fact.label === "商品类型")
-                        ?.value,
-            }))
-        },
         staleTime: STALE_TIME,
     })
 }

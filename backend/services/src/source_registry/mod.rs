@@ -80,13 +80,14 @@ impl SourceRegistryService {
                 .clone()
                 .resource_log("source_system.create", "source_system", system.base.id.clone())?;
 
-        // 单集合操作无跨集合原子性要求（conventions §6.1），不开启事务；
-        // 审计日志按既有写法独立写入（audit::AuditLogService 同款 NoTransaction 形态）。
-        self.db
-            .source_systems()
-            .create(&system, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let system_for_tx = system.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.source_systems().create(&system_for_tx, session).await?;
+                Ok(())
+            })
+        })
+        .await?;
 
         Ok(system.into())
     }

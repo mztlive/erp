@@ -123,8 +123,6 @@ pub struct ApprovalReassignCommand {
 pub struct ApprovalCancelBlockedCommand {
     /// 实例 ID。
     pub approval_process_instance_id: String,
-    /// 当前 blocker。
-    pub blocker_code: String,
     /// 期望实例版本。
     pub expected_instance_version: u64,
     /// 期望执行版本。

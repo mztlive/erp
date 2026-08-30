@@ -19,8 +19,11 @@
 //! 幂等：提交入口先按服务端摘要后的业务幂等键读取事务收据，同键同载荷在
 //! 工作副本版本校验之前返回原提交，同键异载荷冲突；建单按 `order_no` 唯一索引兜底（409）。
 
+use crate::approval::policy::ApprovalDomainAction;
+use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
+use database::{AccessControlExt, Executor, SalesOrderExt};
 use mongodb::Database;
 
 mod adapter;
@@ -86,4 +89,29 @@ impl SalesOrderService {
             .as_ref()
             .ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".to_string()))
     }
+}
+
+/// 在审批运行时持有的事务内撤回销售单审批提交。
+///
+/// # 错误
+/// 单据不存在、动作与销售类型不匹配、状态迁移或 CAS 写入失败时返回错误。
+pub(crate) async fn cancel_approval_in_transaction(
+    db: &Database,
+    id: &str,
+    action: ApprovalDomainAction,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut order = db
+        .sales_orders()
+        .find_by_id(id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+    adapter::execute_sales_order_domain_action(&mut order, action, actor.id())?;
+    db.sales_orders().update(&mut order, executor).await?;
+    let audit = actor
+        .clone()
+        .resource_log("sales_order.cancel_approval", "sales_order", id.to_string())?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok(())
 }

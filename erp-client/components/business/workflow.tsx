@@ -179,10 +179,7 @@ function BatchImpactPreview({
                         <AlertTitle>包含敏感字段</AlertTitle>
                         <AlertDescription>
                             <p>结果将继续执行当前用户的字段权限和遮罩规则。</p>
-                            <ul
-                                className="mt-2 flex flex-wrap gap-2"
-                                role="list"
-                            >
+                            <ul className="mt-2 flex flex-wrap gap-2">
                                 {sensitiveFields.map((field) => (
                                     <li key={field}>
                                         <StatusBadge

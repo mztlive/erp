@@ -48,5 +48,8 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
     return {
         facts,
         isPending: enabled && query.isPending,
+        isError: enabled && query.isError,
+        error: query.error,
+        refetch: query.refetch,
     }
 }

@@ -14,7 +14,6 @@ import {
     fetchSupplierPaymentBankReceiptBlob,
     fetchSupplierRefund,
     revealPaymentRecipient,
-    resolveUnknownResult,
     reverseInvoice,
     reversePayment,
     saveAllocationDraft,
@@ -32,7 +31,7 @@ import type {
 import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 import { workItemKeys } from "@/features/work-items/queries"
-import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 export const supplierPayablesKeys = {
     all: ["supplier-payables"] as const,
@@ -167,7 +166,9 @@ async function invalidateFinanceAndSources(
     await queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all })
     await queryClient.invalidateQueries({ queryKey: fulfillmentKeys.all })
     await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
-    await queryClient.invalidateQueries({ queryKey: workspaceHomeKeys.all })
+    await queryClient.invalidateQueries({
+        queryKey: queryKeyRoots.workspaceHome,
+    })
     await queryClient.invalidateQueries({ queryKey: approvalKeys.all })
 }
 
@@ -203,7 +204,7 @@ export function useSubmitPaymentMutation() {
                     refetchType: "none",
                 }),
                 queryClient.invalidateQueries({
-                    queryKey: workspaceHomeKeys.all,
+                    queryKey: queryKeyRoots.workspaceHome,
                     refetchType: "none",
                 }),
             ])
@@ -309,7 +310,7 @@ export function useCommitPaymentReversalMutation() {
                         queryKey: supplierPayablesKeys.all,
                     }),
                     queryClient.invalidateQueries({
-                        queryKey: workspaceHomeKeys.all,
+                        queryKey: queryKeyRoots.workspaceHome,
                     }),
                     queryClient.invalidateQueries({
                         queryKey: approvalKeys.document(
@@ -354,17 +355,5 @@ export function useSubmitPaymentReversalMutation() {
 export function useSaveAllocationDraftMutation() {
     return useMutation({
         mutationFn: saveAllocationDraft,
-    })
-}
-
-export function useResolveUnknownMutation() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: resolveUnknownResult,
-        onSuccess: async (result) => {
-            if (result?.status === "succeeded") {
-                await invalidateFinanceAndSources(queryClient)
-            }
-        },
     })
 }

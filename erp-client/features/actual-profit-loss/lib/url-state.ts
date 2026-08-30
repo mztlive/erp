@@ -35,6 +35,18 @@ export function parseDimension(raw: string | null): ProfitLossDimension {
     return "sales_order"
 }
 
+/** 将 URL 页码规范化为从 1 开始的服务端页码。 */
+export function parsePage(raw: string | null): number {
+    const value = Number(raw ?? "1")
+    return Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1
+}
+
+/** 只接受表格支持的服务端页大小，非法值回退到默认值。 */
+export function parsePageSize(raw: string | null): number {
+    const value = Number(raw ?? "20")
+    return value === 50 || value === 100 ? value : 20
+}
+
 /**
  * 逗号分隔多选参数（docs/ui-filter-design.md §6.1）：
  * 解析为去重、排序后的值列表，空值与空白项丢弃。
@@ -129,6 +141,7 @@ export function mapFreshnessState(
 }
 
 export function coveragePercentNumber(rate: string): number {
+    // fixed-decimal-display-boundary: progress coordinates require number.
     const n = Number(rate.replace("%", ""))
     return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0
 }

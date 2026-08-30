@@ -36,6 +36,11 @@ type FulfillmentOperationsPageProps = {
     onOpenAcceptance?: () => void
 }
 
+function parsePage(value: string | null): number {
+    const page = Number(value)
+    return Number.isInteger(page) && page > 0 ? page : 1
+}
+
 /**
  * 履约处理工作台。独立页面保留岗位筛选与队列连续处理。
  * 销售单详情的履约分区不再嵌入本页，只复用本单范围的队列与处理面。
@@ -75,6 +80,7 @@ export function FulfillmentOperationsPage({
     const purchaseOrderId = embedded
         ? undefined
         : (searchParams.get("purchaseOrderId") ?? undefined)
+    const page = embedded ? 1 : parsePage(searchParams.get("page"))
     const returnTo = embedded
         ? undefined
         : (searchParams.get("returnTo") ?? undefined)
@@ -92,6 +98,8 @@ export function FulfillmentOperationsPage({
             gate,
             salesOrderId,
             purchaseOrderId,
+            page,
+            pageSize: 20,
             currentOperationId: embedded
                 ? undefined
                 : (searchParams.get("currentOperationId") ?? undefined),
@@ -105,6 +113,7 @@ export function FulfillmentOperationsPage({
             gate,
             salesOrderId,
             purchaseOrderId,
+            page,
             embedded,
             searchParams,
         ],
@@ -128,7 +137,7 @@ export function FulfillmentOperationsPage({
         canExecute: controller.canExecute,
         supportsSave: controller.supportsSave,
         onSave: () => void controller.handleSave(),
-        onConfirm: () => controller.setConfirmOpen(true),
+        onConfirm: () => void controller.handleSubmit(),
         onNavigate: controller.handleNavigate,
         onToggleShortcuts: () => controller.setShortcutsOpen((value) => !value),
     })

@@ -187,11 +187,16 @@ impl MallBackfillService {
             "mall_consumption_backfill_job",
             job.base.id.clone(),
         )?;
-        self.db
-            .mall_consumption_backfill_jobs()
-            .create(&job, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let job_for_tx = job.clone();
+        crate::transaction::run_audited(&self.db, audit, move |db, session| {
+            Box::pin(async move {
+                db.mall_consumption_backfill_jobs()
+                    .create(&job_for_tx, session)
+                    .await?;
+                Ok(())
+            })
+        })
+        .await?;
 
         Ok(backfill_job_view(&job))
     }

@@ -1,5 +1,24 @@
 import { z } from "zod"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    compactFixed,
+    compareDecimal,
+    divideFixed,
+    multiplyFixed,
+} from "@/lib/fixed-decimal"
+
+function compareSafely(
+    left: string,
+    right: string,
+    maxScale: number,
+    predicate: (comparison: -1 | 0 | 1) => boolean,
+): boolean {
+    try {
+        return predicate(compareDecimal(left, right, maxScale))
+    } catch {
+        return false
+    }
+}
 
 const decimal = z
     .string()
@@ -15,13 +34,17 @@ const taxPercentage = z
     .string()
     .trim()
     .regex(/^\d+(?:\.\d{1,4})?$/, "请输入 0–100 的税率")
-    .refine((value) => Number(value) <= 100, "税率不能超过 100%")
+    .refine(
+        (value) =>
+            compareSafely(value, "100", 4, (comparison) => comparison <= 0),
+        "税率不能超过 100%",
+    )
 
 const termsSchema = {
     dropshipPrice: decimal,
     bulkPrice: decimal,
     minimumQuantity: quantity.refine(
-        (value) => Number(value) > 0,
+        (value) => compareSafely(value, "0", 6, (comparison) => comparison > 0),
         "起订量必须大于 0",
     ),
     inputTaxPercentage: taxPercentage,
@@ -78,12 +101,22 @@ export function splitValues(value: string): readonly string[] {
 }
 
 export function rateFromPercentage(value: string): string {
-    return (Number(value) / 100).toFixed(6)
+    return divideFixed(value, "100", {
+        numeratorMaxScale: 4,
+        denominatorMaxScale: 0,
+        outputScale: 6,
+    })
 }
 
 export function percentageFromRate(value?: string | null): string {
     if (!value) return ""
-    return String(Number(value) * 100)
+    return compactFixed(
+        multiplyFixed(value, "100", {
+            leftMaxScale: 6,
+            rightMaxScale: 0,
+            outputScale: 4,
+        }),
+    )
 }
 
 export const errorMessage = (error: unknown, fallback: string): string =>

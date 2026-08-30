@@ -37,20 +37,23 @@ pub fn cancel(
     if reason.is_empty() {
         return Err(EngineError::InvalidCommand("取消原因不能为空"));
     }
+    let blocker = instance.blocker_code.or(current.blocker_code);
     current.cancel(command.now)?;
     instance.cancel(command.now)?;
     let execution_id = crate::ids::ApprovalNodeExecutionId::new(current.base.id.clone());
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Cancelled);
-    plan.events.push(
-        BpmEvent::new(
-            BpmEventKind::InstanceCancelled,
-            crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
-            current.round_no,
-        )
-        .with_execution(execution_id.clone())
-        .with_actor(command.actor)
-        .with_reason(reason),
-    );
+    let mut event = BpmEvent::new(
+        BpmEventKind::InstanceCancelled,
+        crate::ids::ApprovalProcessInstanceId::new(plan.instance.base.id.clone()),
+        current.round_no,
+    )
+    .with_execution(execution_id.clone())
+    .with_actor(command.actor)
+    .with_reason(reason);
+    if let Some(code) = blocker {
+        event = event.with_blocker(code);
+    }
+    plan.events.push(event);
     if command.close_open_task {
         plan.task_intents.push(TaskIntent::CloseTask {
             execution_id,

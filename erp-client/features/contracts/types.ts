@@ -1,7 +1,11 @@
 import type { StatusTone } from "@/components/ui/status-badge"
+import type { ContractStatus } from "@/lib/contract-status"
 
-/** 合同主状态：由服务端返回，前端不推导。 */
-export type ContractStatus = "EFFECTIVE" | "TERMINATED" | "EXPIRED"
+export {
+    CONTRACT_STATUS_LABEL,
+    CONTRACT_STATUS_TONE,
+    type ContractStatus,
+} from "@/lib/contract-status"
 
 export type ContractAction =
     | "UPLOAD_CONTRACT_PDF"
@@ -175,18 +179,6 @@ export type ContractExportJob = {
     filterSnapshotLabel: string
     createdAt: string
     downloadLabel: string
-}
-
-export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
-    EFFECTIVE: "生效",
-    TERMINATED: "终止",
-    EXPIRED: "到期",
-}
-
-export const CONTRACT_STATUS_TONE: Record<ContractStatus, StatusTone> = {
-    EFFECTIVE: "success",
-    TERMINATED: "neutral",
-    EXPIRED: "warning",
 }
 
 /** 负责人只显示姓名；归属语义（当前/历史参与人）不进入用户可见文案。 */

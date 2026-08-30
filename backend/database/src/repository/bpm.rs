@@ -885,6 +885,36 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
+    /// 以 `id + expected_execution_version + BLOCKED` 结束受阻执行。
+    ///
+    /// # 参数
+    /// * `execution` - 已由恢复引擎置为 `SUPERSEDED` 的旧执行
+    /// * `expected_execution_version` - 调用方持有的受阻执行版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
+    ///
+    /// # 错误
+    /// 元数据越界或 MongoDB 写入失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 仅人员恢复可使用本端口；不得接受活动执行或任意当前状态。
+    pub async fn end_blocked_execution(
+        &self,
+        execution: &ApprovalNodeExecution,
+        expected_execution_version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<CasWriteOutcome<ApprovalNodeExecution>> {
+        self.cas_end_execution(
+            execution,
+            expected_execution_version,
+            ApprovalNodeExecutionStatus::Blocked,
+            executor,
+        )
+        .await
+    }
+
     /// 以 `id + expected_execution_version + ACTIVE|BLOCKED` 结束可取消执行。
     ///
     /// # 参数

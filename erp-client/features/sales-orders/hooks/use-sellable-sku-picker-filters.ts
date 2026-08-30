@@ -16,7 +16,7 @@ import {
 
 const EMPTY_PAGINATION: PaginationState = { pageIndex: 0, pageSize: 20 }
 
-/** Dialog 内的公司商品池筛选：与列表页条件一致，但不写入 URL。 */
+/** 销售单选品 Dialog 内筛选：与商品列表条件一致，但不写入 URL。 */
 export function useSellableSkuPickerFilters() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
     const [searchDraft, setSearchDraft] = React.useState("")

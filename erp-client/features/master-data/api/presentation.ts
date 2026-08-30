@@ -12,6 +12,12 @@ import type {
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import type { ApiError } from "@/lib/api/errors"
 import { paymentTermCode } from "@/lib/business-options"
+import {
+    compactFixed,
+    compareDecimal,
+    divideFixed,
+    multiplyFixed,
+} from "@/lib/fixed-decimal"
 
 export const LIST_PAGE_SIZE = 100
 
@@ -218,16 +224,33 @@ export const normalizeTaxRate = (raw: string | undefined): string => {
     const text = (raw ?? "").trim().replace(/%$/, "")
     if (!text) return "0.13"
     if (!/^(0|[1-9]\d?)$/.test(text)) return "0.13"
-    const value = Number(text)
-    return String(value / 100)
+    return compactFixed(
+        divideFixed(text, "100", {
+            numeratorMaxScale: 0,
+            denominatorMaxScale: 0,
+            outputScale: 2,
+        }),
+    )
 }
 
 /** 将后端 [0, 1) 税率转换为页面百分数输入值。 */
 export const taxRatePercent = (raw: string | null | undefined): string => {
     if (!raw?.trim()) return ""
-    const value = Number(raw)
-    if (!Number.isFinite(value) || value < 0 || value >= 1) return ""
-    return String(Math.round(value * 100))
+    try {
+        if (
+            compareDecimal(raw, "0", 6) < 0 ||
+            compareDecimal(raw, "1", 6) >= 0
+        ) {
+            return ""
+        }
+        return multiplyFixed(raw, "100", {
+            leftMaxScale: 6,
+            rightMaxScale: 0,
+            outputScale: 0,
+        })
+    } catch {
+        return ""
+    }
 }
 
 export const pickDefaultOrFirst = <T extends { is_default?: boolean }>(

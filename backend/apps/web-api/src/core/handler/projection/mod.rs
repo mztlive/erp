@@ -2,10 +2,7 @@
 //!
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::projection` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
-//! 商城连接器（`MallConnector`）在 handler 内构造默认失败关闭实现，
-//! 保持 Service 可注入 mock 连接器。
-
-use std::sync::Arc;
+//! 商城连接器由启动组合根注入，Handler 不选择实现。
 
 use axum::{
     extract::{Path, Query, State},
@@ -17,10 +14,9 @@ use services::{
         CreateSalesOrderProjectionRequest, CreateSalesOrderProjectionRevisionRequest,
         DeliverProjectionRevisionRequest, PageView, ProcessProjectionDeliveriesRequest,
         ProcessProjectionDeliveriesResult, ProjectionBulkCommandRequest, ProjectionBulkCommandResultView,
-        ProjectionDeliveryCommand, ProjectionDeliveryResultView, ProjectionService,
-        SalesOrderProjectionDeliveryListParams, SalesOrderProjectionDeliveryView,
-        SalesOrderProjectionListParams, SalesOrderProjectionRevisionView, SalesOrderProjectionView,
-        UnavailableMallConnector,
+        ProjectionDeliveryCommand, ProjectionDeliveryResultView, SalesOrderProjectionDeliveryListParams,
+        SalesOrderProjectionDeliveryView, SalesOrderProjectionListItemView, SalesOrderProjectionListParams,
+        SalesOrderProjectionRevisionView, SalesOrderProjectionView,
     },
 };
 
@@ -47,10 +43,8 @@ use crate::{
 pub async fn sales_order_projection_list(
     State(state): State<AppState>,
     Query(params): Query<SalesOrderProjectionListParams>,
-) -> Result<PageView<SalesOrderProjectionView>> {
-    let page = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .projection_list(&params)
-        .await?;
+) -> Result<PageView<SalesOrderProjectionListItemView>> {
+    let page = state.projection_service().projection_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -74,9 +68,7 @@ pub async fn sales_order_projection_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SalesOrderProjectionView> {
-    let view = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .projection_detail(&id)
-        .await?;
+    let view = state.projection_service().projection_detail(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -102,9 +94,7 @@ pub async fn sales_order_projection_create(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSalesOrderProjectionRequest>,
 ) -> Result<SalesOrderProjectionView> {
-    let view = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .create_projection(req, &actor)
-        .await?;
+    let view = state.projection_service().create_projection(req, &actor).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -132,7 +122,8 @@ pub async fn sales_order_projection_revision_create(
     Path(id): Path<String>,
     Json(req): Json<CreateSalesOrderProjectionRevisionRequest>,
 ) -> Result<SalesOrderProjectionRevisionView> {
-    let view = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let view = state
+        .projection_service()
         .create_revision(&id, req, &actor)
         .await?;
 
@@ -158,9 +149,7 @@ pub async fn sales_order_projection_revision_list(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Vec<SalesOrderProjectionRevisionView>> {
-    let view = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .revision_list(&id)
-        .await?;
+    let view = state.projection_service().revision_list(&id).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -190,7 +179,8 @@ pub async fn sales_order_projection_delivery_submit(
     Path((id, revision_no)): Path<(String, u32)>,
     Json(req): Json<DeliverProjectionRevisionRequest>,
 ) -> Result<ProjectionDeliveryResultView> {
-    let view = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let view = state
+        .projection_service()
         .deliver_revision(&id, revision_no, req, &actor)
         .await?;
 
@@ -216,9 +206,7 @@ pub async fn sales_order_projection_delivery_list(
     State(state): State<AppState>,
     Query(params): Query<SalesOrderProjectionDeliveryListParams>,
 ) -> Result<PageView<SalesOrderProjectionDeliveryView>> {
-    let page = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
-        .delivery_list(&params)
-        .await?;
+    let page = state.projection_service().delivery_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -237,7 +225,8 @@ pub async fn sales_order_projection_delivery_action(
     Path(delivery_id): Path<String>,
     Json(command): Json<ProjectionDeliveryCommand>,
 ) -> Result<ProjectionDeliveryResultView> {
-    let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let result = state
+        .projection_service()
         .apply_delivery_command(&delivery_id, command, &actor)
         .await?;
 
@@ -265,7 +254,8 @@ pub async fn sales_order_projection_delivery_bulk_action(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<ProjectionBulkCommandRequest>,
 ) -> Result<ProjectionBulkCommandResultView> {
-    let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let result = state
+        .projection_service()
         .apply_bulk_delivery_command(req, &actor)
         .await?;
 
@@ -288,7 +278,8 @@ pub async fn sales_order_projection_delivery_process_pending(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<ProcessProjectionDeliveriesRequest>,
 ) -> Result<ProcessProjectionDeliveriesResult> {
-    let result = ProjectionService::new(state.db(), Arc::new(UnavailableMallConnector))
+    let result = state
+        .projection_service()
         .process_pending_deliveries(req, &actor)
         .await?;
 

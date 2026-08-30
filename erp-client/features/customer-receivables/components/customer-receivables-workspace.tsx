@@ -3,12 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import {
-    BusinessEmptyState,
-    BusinessFailureState,
-    FormalActionResult,
-    PageScaffold,
-} from "@/components/business"
+import { FormalActionResult, PageScaffold } from "@/components/business"
 import { type ResultState } from "@/components/business/feedback"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -36,14 +31,6 @@ import {
     downloadCsv,
 } from "@/features/customer-receivables/lib/export-csv"
 import {
-    businessLabelOrPlaceholder,
-    MISSING_COUNTERPARTY_NAME,
-    MISSING_CUSTOMER_NAME,
-} from "@/features/customer-receivables/lib/display-labels"
-import {
-    DUE_LABEL,
-    RECEIVABLE_STATUS_LABEL,
-    REVIEW_STATUS_LABEL,
     VIEW_LABEL,
     type AllocationMode,
 } from "@/features/customer-receivables/types"
@@ -56,14 +43,10 @@ import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
 import { CustomerReceivablesHeader } from "@/features/customer-receivables/pages/components/customer-receivables-header"
-import { CustomerReceivablesMetrics } from "@/features/customer-receivables/pages/components/customer-receivables-metrics"
-import { CustomerReceivablesTable } from "@/features/customer-receivables/pages/components/customer-receivables-table"
-import {
-    CustomerReceivablesToolbar,
-    type ReceivableAppliedChip,
-} from "@/features/customer-receivables/pages/components/customer-receivables-toolbar"
+import { CustomerReceivablesListPane } from "@/features/customer-receivables/pages/components/customer-receivables-list-pane"
 import { SalesOrderReturnAlert } from "@/features/customer-receivables/pages/components/sales-order-return-alert"
 import { useAutoAllocationSession } from "@/features/customer-receivables/pages/hooks/use-auto-allocation-session"
+import { useCustomerReceivablesAppliedChips } from "@/features/customer-receivables/pages/hooks/use-customer-receivables-applied-chips"
 import { useCustomerReceivablesPreview } from "@/features/customer-receivables/pages/hooks/use-customer-receivables-preview"
 import { useCustomerReceivablesUrlState } from "@/features/customer-receivables/pages/hooks/use-customer-receivables-url-state"
 import { useReverseFlow } from "@/features/customer-receivables/pages/hooks/use-reverse-flow"
@@ -197,107 +180,13 @@ export function CustomerReceivablesWorkspace({
 
     const data = listQuery.data
 
-    /** 客户锁定（customerId）显性化为可移除 chip。 */
-    const lockedCustomerName = React.useMemo(
-        () =>
-            (data?.counterparties ?? []).find(
-                (c) => c.customerId === urlState.customerId,
-            )?.customerName,
-        [data?.counterparties, urlState.customerId],
-    )
-
-    /** 已生效条件全部显性化为可单独移除的 chip（含深链来源锁定）。 */
-    const appliedChips = React.useMemo<readonly ReceivableAppliedChip[]>(() => {
-        const chips: ReceivableAppliedChip[] = []
-        const trimmedQ = urlState.qParam.trim()
-        if (trimmedQ) {
-            chips.push({ key: "q", label: `搜索：${trimmedQ}` })
-        }
-        if (urlState.counterpartyPartyId) {
-            const party = data?.counterparties.find(
-                (c) => c.counterpartyPartyId === urlState.counterpartyPartyId,
-            )
-            const embeddedPartyName =
-                embedded && counterpartyPartyId === urlState.counterpartyPartyId
-                    ? counterpartyPartyName
-                    : undefined
-            chips.push({
-                key: "counterpartyId",
-                label: `往来主体：${businessLabelOrPlaceholder(
-                    party?.counterpartyPartyName ?? embeddedPartyName,
-                    urlState.counterpartyPartyId,
-                    MISSING_COUNTERPARTY_NAME,
-                )}`,
-            })
-        }
-        if (urlState.customerId) {
-            chips.push({
-                key: "customerId",
-                label: `经营客户：${businessLabelOrPlaceholder(
-                    lockedCustomerName,
-                    urlState.customerId,
-                    MISSING_CUSTOMER_NAME,
-                )}`,
-            })
-        }
-        if (urlState.due && urlState.due !== "all") {
-            chips.push({
-                key: "due",
-                label: `到期：${DUE_LABEL[urlState.due]}`,
-            })
-        }
-        if (urlState.status) {
-            chips.push({
-                key: "status",
-                label: `状态：${RECEIVABLE_STATUS_LABEL[urlState.status]}`,
-            })
-        }
-        if (urlState.reviewStatus) {
-            chips.push({
-                key: "reviewStatus",
-                label: `复核状态：${REVIEW_STATUS_LABEL[urlState.reviewStatus]}`,
-            })
-        }
-        if (urlState.salesOrderId && !embedded) {
-            const row = data?.receivables.find(
-                (r) => r.salesOrderId === urlState.salesOrderId,
-            )
-            chips.push({
-                key: "salesOrderId",
-                label: row?.salesOrderNo
-                    ? `销售单：${row.salesOrderNo}`
-                    : "已限定销售单",
-            })
-        }
-        if (urlState.receivableAccountId) {
-            const row = data?.receivables.find(
-                (r) => r.accountId === urlState.receivableAccountId,
-            )
-            chips.push({
-                key: "receivableAccountId",
-                label:
-                    row?.accountSeq != null
-                        ? `往来子账：${row.accountSeq}`
-                        : "已限定往来子账",
-            })
-        }
-        return chips
-    }, [
-        counterpartyPartyId,
-        counterpartyPartyName,
-        data?.counterparties,
-        data?.receivables,
+    const appliedChips = useCustomerReceivablesAppliedChips({
+        data,
+        urlState,
         embedded,
-        lockedCustomerName,
-        urlState.counterpartyPartyId,
-        urlState.customerId,
-        urlState.due,
-        urlState.qParam,
-        urlState.receivableAccountId,
-        urlState.reviewStatus,
-        urlState.salesOrderId,
-        urlState.status,
-    ])
+        embeddedCounterpartyId: counterpartyPartyId,
+        embeddedCounterpartyName: counterpartyPartyName,
+    })
 
     useAutoAllocationSession({
         data,
@@ -503,7 +392,6 @@ export function CustomerReceivablesWorkspace({
         )
     }
 
-    const metrics = data?.metrics
     const content = (
         <>
             <CustomerReceivablesHeader
@@ -565,80 +453,18 @@ export function CustomerReceivablesWorkspace({
                 </Alert>
             ) : null}
 
-            {data && !data.moduleAllowed ? (
-                <BusinessFailureState
-                    kind="permission"
-                    description="无客户往来模块权限或权限已收回。"
-                />
-            ) : data && !data.hasDataScope ? (
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="当前角色未配置客户往来范围"
-                    description="不得用 0 元假装无应收。请申请财务数据范围。"
-                />
-            ) : (
-                <>
-                    {!listQuery.isError ? (
-                        <CustomerReceivablesMetrics
-                            view={urlState.view}
-                            due={urlState.due}
-                            metrics={metrics}
-                            queriedAt={data?.queriedAt}
-                            patchUrl={urlState.patchUrl}
-                        />
-                    ) : null}
-
-                    <CustomerReceivablesTable
-                        view={urlState.view}
-                        data={data}
-                        isPending={listQuery.isPending}
-                        isError={listQuery.isError}
-                        error={listQuery.error}
-                        onRetry={() => void listQuery.refetch()}
-                        metrics={metrics}
-                        pagination={urlState.pagination}
-                        receivableColumns={receivableColumns}
-                        receiptColumns={receiptColumns}
-                        invoiceColumns={invoiceColumns}
-                        toolbar={
-                            <CustomerReceivablesToolbar
-                                view={urlState.view}
-                                searchDraft={urlState.searchDraft}
-                                setSearchDraft={urlState.setSearchDraft}
-                                searchInputRef={urlState.searchInputRef}
-                                counterpartyPartyIdDraft={
-                                    urlState.counterpartyPartyIdDraft
-                                }
-                                setCounterpartyPartyIdDraft={
-                                    urlState.setCounterpartyPartyIdDraft
-                                }
-                                dueDraft={urlState.dueDraft}
-                                setDueDraft={urlState.setDueDraft}
-                                statusDraft={urlState.statusDraft}
-                                setStatusDraft={urlState.setStatusDraft}
-                                reviewStatusDraft={urlState.reviewStatusDraft}
-                                setReviewStatusDraft={
-                                    urlState.setReviewStatusDraft
-                                }
-                                panelOpen={urlState.panelOpen}
-                                setPanelOpen={urlState.setPanelOpen}
-                                hasStructuredFilters={
-                                    urlState.hasStructuredFilters
-                                }
-                                hasActiveFilters={urlState.hasActiveFilters}
-                                appliedChips={appliedChips}
-                                removeFilter={urlState.removeFilter}
-                                applyFilters={urlState.applyFilters}
-                                resetMoreFilters={urlState.resetMoreFilters}
-                                clearFilters={urlState.clearFilters}
-                            />
-                        }
-                        patchUrl={urlState.patchUrl}
-                        onPaginationChange={urlState.handlePaginationChange}
-                        clearFilters={urlState.clearFilters}
-                    />
-                </>
-            )}
+            <CustomerReceivablesListPane
+                data={data}
+                urlState={urlState}
+                appliedChips={appliedChips}
+                isPending={listQuery.isPending}
+                isError={listQuery.isError}
+                error={listQuery.error}
+                onRetry={() => void listQuery.refetch()}
+                receivableColumns={receivableColumns}
+                receiptColumns={receiptColumns}
+                invoiceColumns={invoiceColumns}
+            />
 
             <CustomerAccountDetailPreview
                 open={

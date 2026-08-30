@@ -26,7 +26,6 @@ import type {
 import {
     LIST_PAGE_SIZE,
     nextSessionId,
-    sessions,
 } from "@/features/supplier-payables/api/shared"
 import type {
     AllocationSessionView,
@@ -43,7 +42,6 @@ import {
     PAYABLE_STATUS_LABEL,
     SOURCE_TYPE_LABEL,
 } from "@/features/supplier-payables/types"
-import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { fetchPartyOption } from "@/features/entity-selectors/api/parties"
 import { fetchSupplierOption } from "@/features/entity-selectors/api/suppliers"
 import {
@@ -225,8 +223,7 @@ export async function fetchSupplierAccounts(
         payablePriorityPolicy: {
             state: "MISSING",
             mixedAutoAllocationAllowed: false,
-            blockerMessage:
-                "应付优先级策略尚未配置，请显式逐项选择分配目标。",
+            blockerMessage: "应付优先级策略尚未配置，请显式逐项选择分配目标。",
         },
         allowFullBankReveal: false,
     }
@@ -353,18 +350,6 @@ export async function fetchAllocationSession(input: {
     existingInvoiceId?: string
     preselectPayableAccountId?: string
 }): Promise<AllocationSessionView> {
-    if (input.draftSessionId) {
-        const existingSession = sessions.get(input.draftSessionId)
-        if (existingSession) {
-            if (!allocationSessionMatchesIdentity(existingSession, input)) {
-                throw new Error(
-                    "核销草稿会话与当前业务对象不一致，请重新打开任务",
-                )
-            }
-            return existingSession
-        }
-    }
-
     const payPage = await apiGet<Page<BackendPayableAccount>>(
         "/admin/payable-accounts",
         {
@@ -431,8 +416,7 @@ export async function fetchAllocationSession(input: {
         payablePriorityPolicy: {
             state: "MISSING",
             mixedAutoAllocationAllowed: false,
-            blockerMessage:
-                "应付优先级策略尚未配置，请显式逐项选择分配目标。",
+            blockerMessage: "应付优先级策略尚未配置，请显式逐项选择分配目标。",
         },
         preselectedPayableAccountIds: input.preselectPayableAccountId
             ? [input.preselectPayableAccountId]
@@ -447,7 +431,6 @@ export async function fetchAllocationSession(input: {
         existingUnallocated,
         existingDocumentNo,
     }
-    sessions.set(draftSessionId, view)
     return view
 }
 

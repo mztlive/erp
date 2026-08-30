@@ -39,10 +39,11 @@ pub use self::dto::{
     ConfirmBusinessCapabilityRequirementResult, CreateSupplierApiConnectionRequest, HealthCheckRequest,
     HealthCheckView, PageView, RateLimitPolicyRequest, RelatedImpactView, ReplaceCapabilitiesRequest,
     SafeReferenceView, SafeReferencesView, SupplierActionBlockerView, SupplierApiCapabilityListParams,
-    SupplierApiCapabilityView, SupplierApiConnectionDetailView, SupplierApiConnectionListParams,
-    SupplierApiConnectionView, SupplierCapabilityChange, SupplierConnectionCommand,
-    SupplierConnectionCommandResult, SupplierConnectionJobView, SupplierHealthCheckRunView,
-    UpdateSupplierApiConnectionRequest, UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
+    SupplierApiCapabilitySummaryView, SupplierApiCapabilityView, SupplierApiConnectionDetailView,
+    SupplierApiConnectionListItemView, SupplierApiConnectionListParams, SupplierApiConnectionView,
+    SupplierCapabilityChange, SupplierConnectionCommand, SupplierConnectionCommandResult,
+    SupplierConnectionJobView, SupplierHealthCheckRunView, UpdateSupplierApiConnectionRequest,
+    UpdateSupplierCapabilitiesCommand, UpdateSupplierCapabilitiesResult,
 };
 
 /// 连接列表筛选条件类型（经 `SupplierApiExt` 关联类型跨 crate 可达）。
@@ -225,6 +226,12 @@ impl SupplierApiService {
     /// 注入当前应用的权威 RBAC，用于动作投影与命令内二次鉴权。
     pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
         self.rbac = Some(rbac);
+        self
+    }
+
+    /// 注入启动组合根持有的权威引用注册表。
+    pub fn with_reference_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
+        self.reference_registry = registry;
         self
     }
 

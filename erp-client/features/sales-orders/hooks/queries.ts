@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptance"
 import {
     cancelSalesOrderApproval,
@@ -21,7 +22,7 @@ import {
 } from "@/features/sales-orders/api/sales-orders"
 
 export const salesOrderKeys = {
-    all: ["sales-orders"] as const,
+    all: queryKeyRoots.salesOrders,
     list: (query: SalesOrdersListQuery) =>
         [...salesOrderKeys.all, "list", query] as const,
     detail: (id: string) => [...salesOrderKeys.all, "detail", id] as const,

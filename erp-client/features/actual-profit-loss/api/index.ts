@@ -136,6 +136,7 @@ function queryToParams(query: ProfitLossQuery): Record<string, unknown> {
         dimension: query.dimension,
         q: query.q,
         sort: query.sort,
+        page: query.page,
         page_size: query.pageSize,
     }
 }
@@ -188,37 +189,19 @@ export async function fetchProfitLossView(
 
 async function fetchCostEntryDetail(
     costEntryId: string,
-): Promise<CostEntryDetail | null> {
-    try {
-        const dto = await apiGet<CostEntryDto>(
-            `/admin/cost-entries/${encodeURIComponent(costEntryId)}`,
-        )
-        return mapCostEntry(dto)
-    } catch (err) {
-        const status =
-            typeof err === "object" && err !== null && "status" in err
-                ? (err as { status?: number }).status
-                : undefined
-        if (status === 404) return null
-        throw err
-    }
+): Promise<CostEntryDetail> {
+    const dto = await apiGet<CostEntryDto>(
+        `/admin/cost-entries/${encodeURIComponent(costEntryId)}`,
+    )
+    return mapCostEntry(dto)
 }
 
 export async function fetchCostEntriesForRow(
     costEntryIds: readonly string[],
 ): Promise<CostEntryDetail[]> {
     if (costEntryIds.length === 0) return []
-    // 无批量接口时并行详情；失败单项跳过
-    const results = await Promise.all(
-        costEntryIds.map(async (id) => {
-            try {
-                return await fetchCostEntryDetail(id)
-            } catch {
-                return null
-            }
-        }),
-    )
-    return results.filter((r): r is CostEntryDetail => r != null)
+    // 无批量端点时仍并发读取；任一正式成本事实缺失即整体失败，禁止展示残缺明细。
+    return Promise.all(costEntryIds.map(fetchCostEntryDetail))
 }
 
 export async function startProfitLossExport(input: {

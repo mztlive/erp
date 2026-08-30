@@ -31,12 +31,7 @@ const ITEM_SORT_FIELDS: &[&str] = &["created_at", "erp_calculated_amount", "supp
 const DIFFERENCE_SORT_FIELDS: &[&str] = &["created_at", "difference_amount", "resolved_at"];
 
 /// 校验文本去除首尾空白后非空。
-fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
-    if value.trim().is_empty() {
-        return Err(validator::ValidationError::new("不能为空白"));
-    }
-    Ok(())
-}
+use crate::query::non_blank;
 
 /// 校验需写入幂等收据的操作 ID 不含协议分隔符。
 fn safe_command_id(value: &str) -> std::result::Result<(), validator::ValidationError> {

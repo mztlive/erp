@@ -182,17 +182,24 @@ impl DocumentRegistryService {
             doc.base.id.clone(),
         )?;
 
-        // 幂等注册按「先插后查」返回已存在行（repository 注释：不需要事务执行器），
-        // 审计日志独立写入；已存在行命中时不再追加审计。
-        let existing = self
-            .db
-            .business_documents()
-            .register(&doc, &mut NoTransaction)
+        // 幂等命中不追加审计；首次注册与成功审计必须在同一事务提交。
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let doc_for_tx = doc.clone();
+        let existing = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let existing = db.business_documents().register(&doc_for_tx, session).await?;
+                    if existing.is_none() {
+                        db.audit_logs().create(&audit, session).await?;
+                    }
+                    Ok::<Option<BusinessDocument>, crate::errors::Error>(existing)
+                })
+            })
             .await?;
         if let Some(existing) = existing {
             return Ok(existing.into());
         }
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
 
         Ok(doc.into())
     }

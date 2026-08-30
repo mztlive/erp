@@ -15,7 +15,7 @@ use entities::{AccountCore, RoleIdSet};
 use mongodb::Database;
 
 use crate::audit::AuditActor;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorCode, Result};
 use crate::iam::{subject, SharedRbacService};
 
 use super::business_adapter::{
@@ -28,8 +28,6 @@ use super::policy::{
 };
 use super::process_kind::process_kind_of;
 
-/// 必须审批但无可绑定发布定义。
-pub const APPROVAL_PROCESS_NOT_CONFIGURED: &str = "APPROVAL_PROCESS_NOT_CONFIGURED";
 /// 绑定审计动作。
 pub const DEFINITION_BOUND_AUDIT_ACTION: &str = "approval.definition.bound";
 /// 无审批政策事实审计动作。
@@ -98,7 +96,7 @@ pub fn published_definition_or_not_configured<T>(published: Option<T>) -> Result
 /// # 返回
 /// 返回 `APPROVAL_PROCESS_NOT_CONFIGURED`。
 pub fn process_not_configured() -> Error {
-    Error::ConflictError(APPROVAL_PROCESS_NOT_CONFIGURED.to_string())
+    Error::from_approval_code(ErrorCode::ApprovalProcessNotConfigured)
 }
 
 /// 创建单据时绑定当前发布定义。
@@ -696,7 +694,7 @@ mod tests {
         let error = published_definition_or_not_configured::<()>(None).unwrap_err();
         assert_eq!(
             error.to_string(),
-            format!("数据冲突: {APPROVAL_PROCESS_NOT_CONFIGURED}")
+            ErrorCode::ApprovalProcessNotConfigured.as_str()
         );
         assert!(published_definition_or_not_configured(Some(1)).is_ok());
     }

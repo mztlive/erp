@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { useSelector } from "@tanstack/react-form"
+import { z } from "zod"
 
+import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -16,6 +19,37 @@ import type {
     CapabilityCode,
     ConnectionCenterView,
 } from "@/features/supplier-api-connections/types"
+
+const capabilityFormSchema = z.object({
+    capabilities: z.array(
+        z.object({
+            code: z.enum([
+                "CATALOG",
+                "PRICE",
+                "STOCK",
+                "ORDER",
+                "QUERY",
+                "CANCEL",
+                "REFUND",
+                "LOGISTICS",
+                "CALLBACK",
+                "SETTLEMENT",
+            ]),
+            enabled: z.boolean(),
+        }),
+    ),
+})
+
+function capabilityDefaults(
+    capabilities: ConnectionCenterView["capabilities"],
+) {
+    return {
+        capabilities: capabilities.map((capability) => ({
+            code: capability.capabilityCode,
+            enabled: capability.status === "ENABLED",
+        })),
+    }
+}
 
 export function CapConfigDialog({
     open,
@@ -32,17 +66,41 @@ export function CapConfigDialog({
         changes: Array<{ code: CapabilityCode; enabled: boolean }>,
     ) => Promise<void>
 }) {
-    const [draft, setDraft] = React.useState<Record<string, boolean>>({})
+    const resetValues = React.useMemo(
+        () => capabilityDefaults(conn.capabilities),
+        [conn.capabilities],
+    )
+    const form = useAppForm({
+        defaultValues: resetValues,
+        validators: { onChange: capabilityFormSchema },
+        onSubmit: async ({ value }) => {
+            const currentByCode = new Map(
+                conn.capabilities.map((capability) => [
+                    capability.capabilityCode,
+                    capability.status === "ENABLED",
+                ]),
+            )
+            const changes = value.capabilities.flatMap((capability) => {
+                const code = capability.code
+                return currentByCode.get(code) === capability.enabled
+                    ? []
+                    : [{ code, enabled: capability.enabled }]
+            })
+            if (changes.length === 0) {
+                onOpenChange(false)
+                return
+            }
+            await onSubmit(changes)
+        },
+    })
+    const dirty = useSelector(form.store, (state) => state.isDirty)
+    const canSubmit = useSelector(form.store, (state) => state.canSubmit)
+    const isSubmitting = useSelector(form.store, (state) => state.isSubmitting)
 
     React.useEffect(() => {
-        if (open) {
-            const next: Record<string, boolean> = {}
-            for (const c of conn.capabilities) {
-                next[c.capabilityCode] = c.status === "ENABLED"
-            }
-            setDraft(next)
-        }
-    }, [open, conn.capabilities])
+        if (!open) return
+        form.reset(resetValues)
+    }, [form, open, resetValues])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -53,67 +111,71 @@ export function CapConfigDialog({
                         由系统管理员统一配置，配置后能力需重新验证；不复用采购确认写入口。
                     </DialogDescription>
                 </DialogHeader>
-                <div className="max-h-72 space-y-2 overflow-y-auto">
-                    {conn.capabilities.map((c) => (
-                        <label
-                            key={c.capabilityCode}
-                            className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
-                        >
-                            <span>{c.capabilityLabel}</span>
-                            <input
-                                type="checkbox"
-                                checked={draft[c.capabilityCode] ?? false}
-                                onChange={(e) =>
-                                    setDraft((d) => ({
-                                        ...d,
-                                        [c.capabilityCode]: e.target.checked,
-                                    }))
-                                }
-                                aria-label={`${
-                                    (draft[c.capabilityCode] ?? false)
-                                        ? "停用"
-                                        : "启用"
-                                } ${c.capabilityLabel}`}
+                <form
+                    className="contents"
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void form.handleSubmit()
+                    }}
+                >
+                    <div className="max-h-72 space-y-2 overflow-y-auto">
+                        {conn.capabilities.map((capability, index) => (
+                            <form.AppField
+                                key={capability.capabilityCode}
+                                name={`capabilities[${index}].enabled`}
+                                children={(field) => (
+                                    <label className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
+                                        <span>
+                                            {capability.capabilityLabel}
+                                        </span>
+                                        <input
+                                            type="checkbox"
+                                            checked={field.state.value}
+                                            disabled={pending || isSubmitting}
+                                            onBlur={field.handleBlur}
+                                            onChange={(event) =>
+                                                field.handleChange(
+                                                    event.target.checked,
+                                                )
+                                            }
+                                            aria-label={`${
+                                                field.state.value
+                                                    ? "停用"
+                                                    : "启用"
+                                            } ${capability.capabilityLabel}`}
+                                        />
+                                    </label>
+                                )}
                             />
-                        </label>
-                    ))}
-                </div>
-                <DialogFooter>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() => onOpenChange(false)}
-                    >
-                        取消
-                    </Button>
-                    <Button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                            const changes = conn.capabilities
-                                .filter(
-                                    (c) =>
-                                        (draft[c.capabilityCode] ?? false) !==
-                                        (c.status === "ENABLED"),
-                                )
-                                .map((c) => ({
-                                    code: c.capabilityCode,
-                                    enabled: draft[c.capabilityCode] ?? false,
-                                }))
-                            if (changes.length === 0) {
-                                onOpenChange(false)
-                                return
+                        ))}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={pending || isSubmitting}
+                            onClick={() => onOpenChange(false)}
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={
+                                pending || isSubmitting || !dirty || !canSubmit
                             }
-                            void onSubmit(changes)
-                        }}
-                    >
-                        {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
-                        ) : null}
-                        {pending ? "提交中…" : "提交能力配置"}
-                    </Button>
-                </DialogFooter>
+                        >
+                            {pending || isSubmitting ? (
+                                <Spinner
+                                    className="size-4 animate-spin"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            {pending || isSubmitting
+                                ? "提交中…"
+                                : "提交能力配置"}
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     )
