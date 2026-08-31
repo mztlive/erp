@@ -6,6 +6,7 @@
 import type { ValidationIssue } from "@/components/business"
 import {
     FULFILLMENT_TYPE_LABEL,
+    type AcceptanceBatchDecision,
     type AcceptanceDraftLine,
     type AcceptanceEligibleFact,
     type AcceptanceOverallResult,
@@ -480,6 +481,78 @@ export function pendingFactsOf(
             isPositiveQty(fact.eligibleQuantity),
         ),
     )
+}
+
+/** 服务明细只能通过或不通过；商品明细可短少或拒收。 */
+export function resultDecisionsForFact(
+    fact: AcceptanceEligibleFact,
+): AcceptanceOverallResult[] {
+    if (fact.fulfillmentFactType === "SERVICE") {
+        return ["PASS", "SERVICE_FAIL"]
+    }
+    return ["PASS", "SHORT", "REJECT"]
+}
+
+/** 每批可选结果，含本次不验。 */
+export function batchDecisionsForFact(
+    fact: AcceptanceEligibleFact,
+): AcceptanceBatchDecision[] {
+    return ["SKIP", ...resultDecisionsForFact(fact)]
+}
+
+export function registerableSalesLines(
+    salesLines: readonly AcceptanceSalesLineGroup[],
+): AcceptanceSalesLineGroup[] {
+    return salesLines.filter((line) => pendingFactsOf([line]).length > 0)
+}
+
+export function lineAcceptanceHint(
+    facts: readonly AcceptanceEligibleFact[],
+): string {
+    const pending = facts.filter((fact) => isPositiveQty(fact.eligibleQuantity))
+    if (pending.length === 0) return ""
+    const allService = pending.every(
+        (fact) => fact.fulfillmentFactType === "SERVICE",
+    )
+    const allGoods = pending.every(
+        (fact) => fact.fulfillmentFactType !== "SERVICE",
+    )
+    if (allService) return "服务明细只能记通过或不通过。"
+    if (allGoods) return "商品明细可记通过、短少或拒收。"
+    return "本行含商品与服务，按每批选择结果。"
+}
+
+export function summarizeLineDecisions(
+    facts: readonly AcceptanceEligibleFact[],
+    selected: AcceptanceBatchSelection,
+): string {
+    const pending = facts.filter((fact) => isPositiveQty(fact.eligibleQuantity))
+    if (pending.length === 0) return "无待验"
+    let skip = 0
+    let pass = 0
+    let exception = 0
+    for (const fact of pending) {
+        const draft = selected.get(fact.fulfillmentLineId)
+        if (!draft) skip += 1
+        else if (draft.result === "PASS") pass += 1
+        else exception += 1
+    }
+    if (skip === pending.length) return "本次不验"
+    if (pass === pending.length) return "全部通过"
+    if (exception === pending.length) return "含异常"
+    const parts: string[] = []
+    if (pass > 0) parts.push(`通过 ${pass}`)
+    if (exception > 0) parts.push(`异常 ${exception}`)
+    if (skip > 0) parts.push(`不验 ${skip}`)
+    return parts.join(" · ")
+}
+
+export function exceptionQuantityLabel(
+    result: AcceptanceOverallResult,
+): string {
+    if (result === "SHORT") return "短少数量"
+    if (result === "SERVICE_FAIL") return "不通过数量"
+    return "拒收数量"
 }
 
 export function buildFactIndex(

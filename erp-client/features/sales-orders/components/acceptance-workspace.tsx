@@ -7,6 +7,8 @@ import {
     BusinessEmptyState,
     BusinessFailureState,
     WorkspaceTaskFooter,
+    useWorkspaceTaskPane,
+    workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -30,6 +32,7 @@ import { useAcceptanceMutations } from "@/features/sales-orders/hooks/use-accept
 import type { AcceptanceTaskIdentity } from "@/features/sales-orders/lib/acceptance-workspace-fetch"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
+import { cn } from "@/lib/utils"
 import {
     AcceptanceBlockedState,
     AcceptanceNoFactsState,
@@ -154,6 +157,14 @@ export function AcceptanceWorkspace({
         if (formalResult) resultRef.current?.focus()
     }, [formalResult])
 
+    const inWorkspaceTaskPane = useWorkspaceTaskPane()
+    const insetClassName = inWorkspaceTaskPane
+        ? cn(workspaceTaskSurfacePadClassName, "py-5")
+        : undefined
+    const sectionClassName = inWorkspaceTaskPane
+        ? workspaceTaskSurfacePadClassName
+        : "py-0"
+
     const prefilledOpenRef = React.useRef(false)
     const replaceSelection = selection.replace
     const registerOpen = Boolean(
@@ -184,39 +195,45 @@ export function AcceptanceWorkspace({
 
     if (waitingForTask || workspaceQuery.isPending) {
         return (
-            <div
-                className="min-h-48 animate-pulse rounded-md bg-muted/40"
-                aria-busy="true"
-                aria-label="正在加载客户验收"
-            />
+            <div className={insetClassName}>
+                <div
+                    className="min-h-48 animate-pulse rounded-md bg-muted/40"
+                    aria-busy="true"
+                    aria-label="正在加载客户验收"
+                />
+            </div>
         )
     }
 
     if (workspaceQuery.isError) {
         return (
-            <BusinessFailureState
-                title="验收内容加载失败"
-                error={workspaceQuery.error}
-                action={
-                    <Button
-                        id="sales-orders-acceptance-retry"
-                        type="button"
-                        onClick={() => void workspaceQuery.refetch()}
-                    >
-                        重试
-                    </Button>
-                }
-            />
+            <div className={insetClassName}>
+                <BusinessFailureState
+                    title="验收内容加载失败"
+                    error={workspaceQuery.error}
+                    action={
+                        <Button
+                            id="sales-orders-acceptance-retry"
+                            type="button"
+                            onClick={() => void workspaceQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    }
+                />
+            </div>
         )
     }
 
     if (!view) {
         return (
-            <BusinessEmptyState
-                kind="no-data"
-                title="暂无可验收内容"
-                description="请返回销售单检查当前状态。"
-            />
+            <div className={insetClassName}>
+                <BusinessEmptyState
+                    kind="no-data"
+                    title="暂无可验收内容"
+                    description="请返回销售单检查当前状态。"
+                />
+            </div>
         )
     }
 
@@ -259,94 +276,102 @@ export function AcceptanceWorkspace({
     }
 
     const baseId = idPrefix ?? id
+    const progressHint = canRegister
+        ? `还有 ${progress.pendingFactCount} 批待客户验收。`
+        : !isOwner && pendingCount > 0
+          ? `还有待验批次，由${ownerLabel || "负责销售"}登记。`
+          : undefined
+    const pageFormalResult =
+        registerOpen && formalResult && formalResult.status !== "succeeded"
+            ? null
+            : formalResult
+    const openRegister = () => {
+        prefilledOpenRef.current = true
+        selection.replace(pendingAsPassSelection(view.salesLines))
+        setRegisterMode(true)
+    }
+    const registerButton = (
+        <Button
+            id="sales-orders-acceptance-register-open"
+            type="button"
+            size="sm"
+            disabled={!canPost}
+            onClick={openRegister}
+        >
+            登记客户验收
+        </Button>
+    )
     return (
-        <div id={baseId} className="flex min-w-0 flex-col gap-4">
+        <div
+            id={baseId}
+            className={cn(
+                "flex min-w-0 flex-col",
+                !inWorkspaceTaskPane && "gap-4",
+            )}
+        >
             {view.workItemConfigBlocker ? (
-                <Alert variant="warning" role="alert">
-                    <AlertTitle>暂时不能从这条待办登记</AlertTitle>
-                    <AlertDescription>
-                        {view.workItemConfigBlocker}
-                    </AlertDescription>
-                </Alert>
+                <div className={insetClassName}>
+                    <Alert variant="warning" role="alert">
+                        <AlertTitle>暂时不能从这条待办登记</AlertTitle>
+                        <AlertDescription>
+                            {view.workItemConfigBlocker}
+                        </AlertDescription>
+                    </Alert>
+                </div>
             ) : null}
 
-            <AcceptanceFormalResult
-                formalResult={
-                    registerOpen &&
-                    formalResult &&
-                    formalResult.status !== "succeeded"
-                        ? null
-                        : formalResult
-                }
-                resultRef={resultRef}
-                onDismiss={() => setFormalResult(null)}
-                onRetry={() => {
-                    setFormalResult(null)
-                    if (!registerOpen) setRegisterMode(true)
-                    setConfirmOpen(true)
-                }}
-            />
+            {pageFormalResult ? (
+                <div className={insetClassName}>
+                    <AcceptanceFormalResult
+                        formalResult={pageFormalResult}
+                        resultRef={resultRef}
+                        onDismiss={() => setFormalResult(null)}
+                        onRetry={() => {
+                            setFormalResult(null)
+                            if (!registerOpen) setRegisterMode(true)
+                            setConfirmOpen(true)
+                        }}
+                    />
+                </div>
+            ) : null}
 
             {isCard ? (
-                <AcceptanceBlockedState
-                    isCard
-                    blockerMessage={postBlocker?.message}
-                />
+                <div className={insetClassName}>
+                    <AcceptanceBlockedState
+                        isCard
+                        blockerMessage={postBlocker?.message}
+                    />
+                </div>
             ) : view.salesLines.length === 0 && view.history.length === 0 ? (
-                <AcceptanceNoFactsState />
+                <div className={insetClassName}>
+                    <AcceptanceNoFactsState />
+                </div>
             ) : (
                 <>
-                    <AcceptanceProgressTable progress={progress} />
+                    <AcceptanceProgressTable
+                        progress={progress}
+                        pendingHint={
+                            inWorkspaceTaskPane ? progressHint : undefined
+                        }
+                        className={sectionClassName}
+                    />
 
                     {canRegister ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm text-muted-foreground">
-                                还有 {progress.pendingFactCount} 批待客户验收。
-                            </p>
-                            <WorkspaceTaskFooter
-                                fallback={
-                                    <Button
-                                        id="sales-orders-acceptance-register-open"
-                                        type="button"
-                                        size="sm"
-                                        disabled={!canPost}
-                                        onClick={() => {
-                                            prefilledOpenRef.current = true
-                                            selection.replace(
-                                                pendingAsPassSelection(
-                                                    view.salesLines,
-                                                ),
-                                            )
-                                            setRegisterMode(true)
-                                        }}
-                                    >
-                                        登记客户验收
-                                    </Button>
-                                }
-                            >
-                                <Button
-                                    id="sales-orders-acceptance-register-open"
-                                    type="button"
-                                    size="sm"
-                                    disabled={!canPost}
-                                    onClick={() => {
-                                        prefilledOpenRef.current = true
-                                        selection.replace(
-                                            pendingAsPassSelection(
-                                                view.salesLines,
-                                            ),
-                                        )
-                                        setRegisterMode(true)
-                                    }}
-                                >
-                                    登记客户验收
-                                </Button>
-                            </WorkspaceTaskFooter>
-                        </div>
-                    ) : !isOwner && pendingCount > 0 ? (
+                        <WorkspaceTaskFooter
+                            fallback={
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm text-muted-foreground">
+                                        {progressHint}
+                                    </p>
+                                    {registerButton}
+                                </div>
+                            }
+                        >
+                            {registerButton}
+                        </WorkspaceTaskFooter>
+                    ) : !isOwner && pendingCount > 0 && !inWorkspaceTaskPane ? (
                         <p className="text-sm text-muted-foreground">
-                            还有待验批次，由{ownerLabel || "负责销售"}
-                            登记。
+                            {progressHint}
                         </p>
                     ) : null}
 
@@ -359,6 +384,7 @@ export function AcceptanceWorkspace({
                             setReverseTarget(item)
                             setReverseReason("")
                         }}
+                        className={sectionClassName}
                     />
                 </>
             )}

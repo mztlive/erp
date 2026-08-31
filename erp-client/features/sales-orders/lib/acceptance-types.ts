@@ -224,5 +224,19 @@ export const OVERALL_RESULT_LABEL: Record<AcceptanceOverallResult, string> = {
     SERVICE_FAIL: "服务不通过",
 }
 
+export const SKIP_DECISION = "SKIP" as const
+
+export type AcceptanceBatchDecision =
+    | typeof SKIP_DECISION
+    | AcceptanceOverallResult
+
+export const BATCH_DECISION_LABEL: Record<AcceptanceBatchDecision, string> = {
+    SKIP: "本次不验",
+    PASS: "通过",
+    SHORT: "短少",
+    REJECT: "拒收",
+    SERVICE_FAIL: "服务不通过",
+}
+
 export const FACT_ONLY_NOTICE =
     "短少、拒收或服务不通过只记客户结果，不会自动退货、退款或改应收。请另开退货或拒收处理单。"

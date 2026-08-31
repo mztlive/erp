@@ -111,6 +111,7 @@ function WorkspaceTaskSurface({
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
+    // 待供给分配：销售单生成采购 → WorkspaceProcurementTask
     if (
         item.workItemType === "PROCUREMENT_ORDER_CREATION" &&
         item.businessObjectType === "sales_order"
@@ -123,6 +124,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 供应商结算复核 → WorkspaceSettlementTask
     if (
         item.workItemType === "SUPPLIER_SETTLEMENT_REVIEW" &&
         item.businessObjectType === "supplier_settlement_statement"
@@ -135,6 +137,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 导入业务确认（历史导入批次）→ WorkspaceImportTask
     if (
         item.workItemType === "IMPORT_BUSINESS_CONFIRMATION" &&
         item.businessObjectType === "LEGACY_IMPORT_BATCH"
@@ -147,6 +150,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 卡券票款复核 / 卡券票款差异复核 → WorkspaceCardFundsTask
     if (
         (item.workItemType === "CARD_FUNDS_REVIEW" ||
             item.workItemType === "CARD_FUNDS_DELTA_REVIEW") &&
@@ -160,6 +164,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 主数据映射异常 → WorkspaceMasterMappingTask
     if (
         item.workItemType === "BUSINESS_EXCEPTION" &&
         item.businessObjectType === "MASTER_MAPPING_TASK"
@@ -172,6 +177,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 集成结果未知或业务异常：接口差错 / 对账差异 → WorkspaceIntegrationTask
     if (
         (item.workItemType === "INTEGRATION_RESULT_UNKNOWN" ||
             item.workItemType === "BUSINESS_EXCEPTION") &&
@@ -186,6 +192,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 集成结果未知或业务异常：供应商履约单调查 → WorkspaceSupplierInvestigationTask
     if (
         (item.workItemType === "INTEGRATION_RESULT_UNKNOWN" ||
             item.workItemType === "BUSINESS_EXCEPTION") &&
@@ -199,6 +206,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 业务异常：供应商可供货 → WorkspaceSupplyExceptionTask
     if (
         item.workItemType === "BUSINESS_EXCEPTION" &&
         item.businessObjectType === "SUPPLIER_OFFERING"
@@ -211,6 +219,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 履约处理：采购收货 / 仓发或代发 / 电子交付 / 服务履约 → WorkspaceFulfillmentTask
     if (
         item.workItemType === "FULFILLMENT_OPERATION" &&
         [
@@ -229,6 +238,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 供应商付款处理 → WorkspacePaymentTask
     if (
         item.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
         item.businessObjectType === "payable_account"
@@ -241,6 +251,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 销项开票处理 → WorkspaceInvoiceTask
     if (
         item.workItemType === "SALES_INVOICE_EXECUTION" &&
         item.businessObjectType === "receivable_account"
@@ -253,6 +264,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 客户验收登记 → WorkspaceAcceptanceTask
     if (
         item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION" &&
         item.businessObjectType === "sales_order"
@@ -265,6 +277,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 非审批任务且没有登记专用作业面 → 停止处理并提示
     if (
         item.workItemType !== "DOCUMENT_APPROVAL" &&
         item.workItemType !== "APPROVAL_INSTANCE"
@@ -284,6 +297,7 @@ function WorkspaceTaskSurface({
         )
     }
 
+    // 单据审批 / 审批实例 → WorkspaceDocumentTaskDetail（通用审批作业面）
     return (
         <WorkspaceDocumentTaskDetail
             item={item}

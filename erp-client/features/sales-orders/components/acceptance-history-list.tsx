@@ -16,14 +16,16 @@ export function AcceptanceHistoryList({
     history,
     canReverse,
     onReverse,
+    className,
 }: {
     history: AcceptanceHistoryItem[]
     canReverse: boolean
     onReverse: (item: AcceptanceHistoryItem) => void
+    className?: string
 }) {
     return (
         <DocumentSection
-            className="py-0"
+            className={className ?? "py-0"}
             title="验收记录"
             description="已经确认的不能改；记错了用冲正新增一条反向记录。"
         >

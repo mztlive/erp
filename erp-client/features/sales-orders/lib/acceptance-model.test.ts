@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest"
 
 import {
     applyResultChange,
+    batchDecisionsForFact,
     buildDraftLines,
     buildOrderProgress,
     collectValidationIssues,
     defaultBatchDraft,
     deriveOverall,
+    lineAcceptanceHint,
     passQuantity,
+    resultDecisionsForFact,
+    summarizeLineDecisions,
     type AcceptanceBatchDraft,
 } from "@/features/sales-orders/lib/acceptance-model"
 import type { AcceptanceEligibleFact } from "@/features/sales-orders/lib/acceptance-types"
@@ -167,5 +171,74 @@ describe("collectValidationIssues", () => {
         expect(issues.some((issue) => issue.id.startsWith("line-pass-"))).toBe(
             true,
         )
+    })
+})
+
+describe("resultDecisionsForFact", () => {
+    it("lets service lines pass or fail, not shortage or reject", () => {
+        const service = fact({
+            fulfillmentLineId: "f-s",
+            salesOrderLineId: "sol-s",
+            fulfillmentFactType: "SERVICE",
+        })
+        expect(resultDecisionsForFact(service)).toEqual([
+            "PASS",
+            "SERVICE_FAIL",
+        ])
+        expect(batchDecisionsForFact(service)).toEqual([
+            "SKIP",
+            "PASS",
+            "SERVICE_FAIL",
+        ])
+        expect(lineAcceptanceHint([service])).toBe(
+            "服务明细只能记通过或不通过。",
+        )
+    })
+
+    it("lets goods lines pass, short or reject, not service fail", () => {
+        const goods = fact({
+            fulfillmentLineId: "f-g",
+            salesOrderLineId: "sol-g",
+            fulfillmentFactType: "SUPPLIER_DIRECT",
+        })
+        expect(resultDecisionsForFact(goods)).toEqual([
+            "PASS",
+            "SHORT",
+            "REJECT",
+        ])
+        expect(batchDecisionsForFact(goods)).toEqual([
+            "SKIP",
+            "PASS",
+            "SHORT",
+            "REJECT",
+        ])
+        expect(lineAcceptanceHint([goods])).toBe(
+            "商品明细可记通过、短少或拒收。",
+        )
+    })
+})
+
+describe("summarizeLineDecisions", () => {
+    it("reports skip when the batch is not in this acceptance", () => {
+        const source = fact({
+            fulfillmentLineId: "f-1",
+            salesOrderLineId: "sol-1",
+        })
+        expect(summarizeLineDecisions([source], new Map())).toBe("本次不验")
+    })
+
+    it("reports all pass when every pending batch is accepted", () => {
+        const source = fact({
+            fulfillmentLineId: "f-1",
+            salesOrderLineId: "sol-1",
+        })
+        expect(
+            summarizeLineDecisions(
+                [source],
+                new Map([
+                    [source.fulfillmentLineId, defaultBatchDraft(source)],
+                ]),
+            ),
+        ).toBe("全部通过")
     })
 })
