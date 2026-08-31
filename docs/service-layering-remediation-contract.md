@@ -49,7 +49,7 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **183 项 OPEN、4 项 BLOCKED、31 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **182 项 OPEN、4 项 BLOCKED、32 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
@@ -57,22 +57,22 @@
 | --- | ---: | ---: | ---: | ---: |
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
 | Approval | 3 | 6 | 1 | 10 |
-| Master | 4 | 10 | 0 | 14 |
+| Master | 4 | 9 | 0 | 13 |
 | Sales / Contract / Returns / Projection | 7 | 19 | 0 | 26 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 13 | 0 | 20 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **76** | **110** | **1** | **187** |
+| **合计** | **76** | **109** | **1** | **186** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **2 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 13 | 49 | 0 | 62 |
+| P0 | 13 | 48 | 0 | 61 |
 | P1 | 58 | 49 | 1 | 108 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **76** | **110** | **1** | **187** |
+| **合计** | **76** | **109** | **1** | **186** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -204,7 +204,7 @@ git diff --check
 
 ### 6.3 Master
 
-本节适用于 `catalog`、`customer`、`party`、`file_asset`、`source_registry`、`publication` 及其直接关联的 Repository 与 Entity。下列事项状态均为“待处理”；关闭时必须同时满足“强制调整”和“关闭验收与风险”。
+本节适用于 `catalog`、`customer`、`party`、`file_asset`、`source_registry`、`publication` 及其直接关联的 Repository 与 Entity。每项的实施资格、关闭结论与交付批次只以该行的 `状态` 和 `执行登记` 为准；进入 `DONE` 前必须同时满足“强制调整”“关闭验收与风险”及本节批次验收登记。
 
 #### Repository 待办
 
@@ -225,7 +225,7 @@ git diff --check
 | MASTER-E04 | P1 | OPEN | `backend/services/src/customer/assignment.rs:126` `apply_assignment`、`:152` `assign`、`:230` `end` 按动作从多个 `Option` 逐项提取必填字段，DTO 可处于与 `action` 不一致的非法状态。 | DTO 必须通过 `TryFrom`/`into_command` 一次生成强类型 `Assign` 或 `End` 命令，并完成动作字段组合校验和输入规范化；客户/账号存在性、重叠查询、事务和审计保留在 Service。 | 两种动作必须分别覆盖完整请求、每个必填字段缺失、错误字段组合、稳定 wire code 和乐观锁约束；Service 不得继续重复 `ok_or_else` 提取。外部 JSON 形状必须兼容，内部命令不得存在非法状态。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E05 | P1 | OPEN | `backend/services/src/customer/profile/facts.rs:384` `contact_matches`、`:396` `address_matches`、`:406` `bank_account_matches` 在 Service 实现稳定内容等价及敏感值 HMAC 匹配。 | Service/crypto port 必须持有密钥并计算强类型 fingerprint；对应 Entity 或比较 VO 只比较预计算 fingerprint 与非敏感规范值，并表达“敏感明文缺失/空白时沿用原事实”的纯领域合同；Service 继续负责解密替换值和差异编排。 | 必须覆盖敏感明文缺失、空白、相同、变化，可选文本规范化相等，非敏感字段单项变化及银行账户禁止原地修改。原始密钥、加密、解密、随机数和敏感明文不得进入 Entity。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E06 | P1 | OPEN | `backend/services/src/customer/profile/facts.rs:485` `close_contact`、`:497` `close_address`、`:509` `close_bank`、`:563` `close_date` 在 Service 拼装停用、结束日期和取消默认的实体生命周期；当前 `close_date` 把倒序日期静默转成 `Unchanged`。 | `PartyContact`、`PartyAddress`、`PartyBankAccount` 必须提供 `close_at`：`close_at < valid_from` 返回 `LogicError` 且零 mutation；同日关闭不写零长度 `valid_to`，只停用并取消默认；晚于开始日写 `valid_to=close_at` 后停用并取消默认。Service 保留集合差异、事务写入和操作人传递。 | 三类实体均覆盖 `<`、`==`、`>`、已经关闭及默认标记；倒序分支必须断言 status/valid_to/is_default/updated_by 均不变；Service 中四个 helper 删除。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| MASTER-E07 | P0 | OPEN | `backend/services/src/customer/profile/idempotency.rs:18` `TransactionResolutionContext`、`:85` `profile_command`、`:120` `request_fingerprint`、`:127` `replay_command` 分散实现幂等请求身份、指纹与同一命令核对；误判会重放其他请求结果。 | Entity 必须定义稳定重放上下文，并由 `CustomerProfileCommand` 校验 operation、customer、initiator、fingerprint；请求指纹进入 DTO 或专用请求身份 VO；Service 仅保留事务失败后的仓储重查和 View 映射。 | 必须覆盖完全匹配及操作、客户、发起人、指纹分别不匹配，并覆盖创建命令无既有 customer_id；指纹必须确定性且不得持久化敏感请求正文。序列化顺序或算法变更必须版本化或兼容既有幂等记录。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| MASTER-E07 | P0 | DONE | `backend/services/src/customer/profile/idempotency.rs:18` `TransactionResolutionContext`、`:85` `profile_command`、`:120` `request_fingerprint`、`:127` `replay_command` 分散实现幂等请求身份、指纹与同一命令核对；误判会重放其他请求结果。 | Entity 必须定义稳定重放上下文，并由 `CustomerProfileCommand` 校验 operation、customer、initiator、fingerprint；请求指纹进入 DTO 或专用请求身份 VO；Service 仅保留事务失败后的仓储重查和 View 映射。 | 必须覆盖完全匹配及操作、客户、发起人、指纹分别不匹配，并覆盖创建命令无既有 customer_id；指纹必须确定性且不得持久化敏感请求正文。序列化顺序或算法变更必须版本化或兼容既有幂等记录。 | 批次：`MASTER-6.3-E07-20260901`；责任人：Codex；依赖：无；关闭证据：`CustomerProfileReplayContext`、`CustomerProfileRequestFingerprint` 与 `CustomerProfileCommand` 统一拥有精确身份及重放核对；DTO 固化 v1 输入字节和 golden，生产 Service 的旧身份、指纹与重放 helper 已删除；真实 MongoDB 并发、自然执行计划及失败事务退出后重读均通过。 |
 | MASTER-E08 | P0 | OPEN | `backend/services/src/publication/dto.rs:762` `publication_content_hash` 与 `:789` `fnv1a64` 在 DTO 文件计算正式内容身份；`backend/services/src/publication/mod.rs:604-608` 先写 `placeholder` 再覆盖，安全暂停路径在同文件 `296-301` 二次覆盖。 | `ProductPublicationRevision` 或内容身份 VO 必须负责规范编码和指纹派生；构造修订时必须一次得到真实指纹，禁止任何占位值；算法、字段顺序和编码必须固定或显式版本化。 | 相同内容必须产生相同指纹，每个参与字段变化必须改变指纹；普通创建和安全暂停复制均不得出现占位值；必须覆盖可选字段、枚举、金额、税率、时间和能力列表。若改变现有 FNV 合同，必须提供兼容读取、迁移和回滚。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E09 | P0 | OPEN | `backend/services/src/publication/delivery.rs:1120` `publication_error_is_unknown` 与 `:1126` `publication_unknown_error` 以松散 helper 维护外部副作用的“结果未知”判定及重新分类。 | `ClassifiedError` 或 integration error VO 必须提供 `is_result_unknown` 和受控转换；错误类、稳定错误码及脱敏摘要保留规则必须内聚；Connector 调用、失败结算、重试和升级保留在 Service。 | 必须覆盖显式 `ResultUnknown`、`TIMEOUT`、`OUTCOME_UNKNOWN`、普通临时故障和业务拒绝；转换后必须保留错误码和摘要。未确认结果只能查询原结果或升级，禁止当作明确失败盲目重放；错误码大小写及子串规则必须固定。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E10 | P0 | OPEN | `backend/services/src/publication/mod.rs:1121` 与 `:1143` 直接执行 `row.revision_no + 1`；`backend/entities/src/common/revision.rs:15` `RevisionBase` 当前无受检后继方法，最大值可能 panic 或回绕。 | `RevisionBase` 或发布修订领域类型必须提供 checked successor；Repository 只返回最新 `Option<u32>`，Service 调用领域方法并映射稳定错误；Service 中裸 `+ 1` 必须删除。 | 无历史必须返回 1，普通序号必须单调加一，`u32::MAX` 必须返回错误且不 panic、不回绕；普通创建与事务内安全暂停必须复用同一方法。必须与最新修订号投影查询同批实施；唯一索引仍为并发最终防线。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -241,6 +241,17 @@ git diff --check
 | 发布外部编排 | MallConnector 调用、超时、结算、重试调度、W29 升级、安全暂停及跨聚合一致性。 |
 | 协议输出 | Repository/Entity 结果到响应 View 的映射、提示文案和分页编排。 |
 | 当前无待办域 | `file_asset`、`source_registry` 当前仅保留存在性校验、事务、协议转换与编排，不新增伪 Repository/Entity 事项。 |
+
+#### 6.3 批次验收登记
+
+1. 批次编号：`MASTER-6.3-E07-20260901`。交付范围：`MASTER-E07`。责任人：Codex。外部依赖：无。
+2. 分层结果：`CustomerProfileReplayContext` 以 operation、可选 customer、initiator 和 `CustomerProfileRequestFingerprint` 形成完整重放身份；`CustomerProfileCommand` 负责持久化身份、成功结果登记及精确重放核对；请求 DTO 负责生成字段顺序固定的 v1 JSON 字节，指纹 VO 只对该显式字节合同计算 SHA-256。Service 只编排事务、仓储重查和 View 映射，原 `TransactionResolutionContext`、`ProfileCommandInput`、`profile_command`、`request_fingerprint` 与 `replay_command` 生产路径已删除。创建命令强制 customer 为空，更新命令强制 customer 与结果身份一致；operation、customer、initiator 或 fingerprint 任一漂移均失败关闭。
+3. 指纹兼容合同：生产 DTO v1 golden 固定为 `sha256-json-v1:07525242bd0a4ce006b4ec1bd7b60c88d2fcf009ca693e43a0a403a82922f8b7`。任何参与字段顺序、编码或摘要算法变更必须启用新版本并提供既有记录兼容读取；禁止直接修改 v1 编码。内存身份使用 `sha256-json-v1:` 前缀，持久化 BSON 继续写入历史 64 位十六进制摘要；兼容读取接受历史裸摘要和受控前缀格式，拒绝首尾空白及非合同格式。请求正文、敏感资料和 Debug 输出不得持久化或泄露。
+4. 定向验收：`cargo test -p entities customer_profile_command --all-features --locked` 通过 7 项；`cargo test -p services customer::profile --all-features --locked` 通过 4 项并保留 1 项真实 MongoDB 测试为 ignored；覆盖完整匹配、四维分别漂移、创建无 customer、更新 customer、历史摘要兼容、序列化脱敏及全部身份空白拒绝。
+5. 真实 MongoDB 验收：`ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true' cargo test -p database --test customer_profile_idempotency --all-features --locked -- --include-ignored --nocapture --test-threads=1` 通过 1 项，验证并发同 key 单胜者、同载荷回放、异载荷冲突；代表查询未使用 hint，自然选择 `uk_customer_profile_commands_idempotency_key`，且无 `COLLSCAN`、检查文档数不超过 1。相同 URI 下执行 `cargo test -p services failed_transaction_replays_committed_winner_outside_failed_session --all-features --locked -- --include-ignored --nocapture --test-threads=1` 通过 1 项，验证唯一冲突导致事务失败后使用 `NoTransaction` 重读已提交胜者，失败 session 不被复用。
+6. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
+7. 迁移与回滚合同：本批不改变 HTTP DTO、响应、BSON 字段、唯一索引、业务状态或持久化摘要 wire shape，不执行数据迁移或索引迁移。旧应用可读取本批写入的历史裸摘要，允许直接回滚应用代码；回滚后会重新暴露分散身份核对及失败事务恢复风险，生产回滚必须按变更审批执行。
+8. 外部验收边界：浏览器和外部系统为 `N/A`；本批不改变用户界面或外部调用。发布前必须以生产代表数据复核唯一索引存在、自然执行计划和滚动部署期间新旧版本对同一 key 的兼容回放；本地隔离副本集结果不得替代生产发布审批。
 
 ### 6.4 Sales / Contract / Returns / Projection
 

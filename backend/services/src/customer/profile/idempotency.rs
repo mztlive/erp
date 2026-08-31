@@ -1,27 +1,12 @@
-//! 客户资料命令幂等记录、指纹、事务恢复与重放。
+//! 客户资料命令幂等记录、事务恢复与返回视图映射。
 
 use database::{CustomerExt, NoTransaction};
-use entities::{
-    customer::{CustomerAccount, CustomerProfileCommand, CustomerProfileCommandData},
-    party::{Party, PartyRevision},
-};
-use id_generator::next_id;
-use sha2::{Digest, Sha256};
+use entities::customer::{CustomerProfileCommand, CustomerProfileReplayContext};
 
 use crate::errors::{Error, Result};
 
-use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
+use super::super::CustomerProfileMutationView;
 use super::CustomerProfileService;
-
-/// 事务失败后核对幂等命令所需的请求上下文。
-#[derive(Clone, Copy)]
-pub(super) struct TransactionResolutionContext<'a> {
-    pub(super) idempotency_key: &'a str,
-    pub(super) operation: &'a str,
-    pub(super) customer_id: Option<&'a str>,
-    pub(super) initiated_by: &'a str,
-    pub(super) fingerprint: &'a str,
-}
 
 impl CustomerProfileService {
     /// 按幂等键查询已成功客户资料命令的稳定结果。
@@ -53,92 +38,26 @@ impl CustomerProfileService {
         &self,
         transaction: Result<()>,
         intended: CustomerProfileMutationView,
-        context: TransactionResolutionContext<'_>,
+        context: &CustomerProfileReplayContext,
     ) -> Result<CustomerProfileMutationView> {
         match transaction {
             Ok(()) => Ok(intended),
-            Err(error) => match self.command_record(context.idempotency_key).await? {
-                Some(command) => replay_command(
-                    command,
-                    context.operation,
-                    context.customer_id,
-                    context.initiated_by,
-                    context.fingerprint,
-                ),
+            Err(error) => match self.command_record(context.idempotency_key()).await? {
+                Some(command) => checked_command_view(command, context),
                 None => Err(error),
             },
         }
     }
 }
 
-/// 构造幂等命令所需的请求与结果版本上下文。
-pub(super) struct ProfileCommandInput<'a> {
-    pub(super) operation: &'a str,
-    pub(super) req: SaveCustomerProfileRequest,
-    pub(super) fingerprint: String,
-    pub(super) initiated_by: &'a str,
-    pub(super) customer_version: u64,
-    pub(super) party_version: u64,
-}
-
-/// 构造幂等命令实体。
-pub(super) fn profile_command(
-    party: &Party,
-    revision: &PartyRevision,
-    account: &CustomerAccount,
-    input: ProfileCommandInput<'_>,
-) -> Result<CustomerProfileCommand> {
-    let ProfileCommandInput {
-        operation,
-        req,
-        fingerprint,
-        initiated_by,
-        customer_version,
-        party_version,
-    } = input;
-    Ok(CustomerProfileCommand::new(
-        next_id(),
-        CustomerProfileCommandData {
-            idempotency_key: req.idempotency_key,
-            operation: operation.to_string(),
-            initiated_by: initiated_by.to_string(),
-            request_fingerprint: fingerprint,
-            customer_id: account.base.id.clone(),
-            customer_no: account.customer_no.clone(),
-            party_id: party.base.id.clone(),
-            revision_id: revision.base.id.clone(),
-            revision_no: revision.revision.revision_no,
-            customer_version,
-            party_version,
-            effective_from: req.effective_from,
-            change_reason: req.change_reason,
-        },
-    )?)
-}
-
-/// 计算请求指纹；只落摘要，不持久化敏感请求正文。
-pub(super) fn request_fingerprint(req: &SaveCustomerProfileRequest) -> Result<String> {
-    let payload =
-        serde_json::to_vec(req).map_err(|_| Error::Internal("客户资料请求指纹计算失败".to_string()))?;
-    Ok(hex::encode(Sha256::digest(payload)))
-}
-
-/// 重放已成功命令，并确保幂等键未被复用于其他请求。
-pub(super) fn replay_command(
+/// 将领域层已核对的命令映射为服务层稳定返回视图。
+pub(super) fn checked_command_view(
     command: CustomerProfileCommand,
-    operation: &str,
-    customer_id: Option<&str>,
-    initiated_by: &str,
-    fingerprint: &str,
+    context: &CustomerProfileReplayContext,
 ) -> Result<CustomerProfileMutationView> {
-    let same_customer = customer_id.is_none_or(|id| id == command.customer_id);
-    if command.operation != operation
-        || !same_customer
-        || command.initiated_by != initiated_by
-        || command.request_fingerprint != fingerprint
-    {
-        return Err(Error::ConflictError("幂等键已用于另一项客户资料请求".to_string()));
-    }
+    command
+        .ensure_replay_matches(context)
+        .map_err(|_| Error::ConflictError("幂等键已用于另一项客户资料请求".to_string()))?;
     Ok(command_view(command))
 }
 
@@ -156,5 +75,103 @@ pub(super) fn command_view(command: CustomerProfileCommand) -> CustomerProfileMu
         effective_from: command.effective_from.to_string(),
         recorded_at: command.base.created_at,
         change_reason: command.change_reason,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use database::{ensure_indexes, CustomerExt, NoTransaction, Transactional};
+    use entities::{
+        common::time::BusinessDate,
+        customer::{
+            CustomerProfileCommand, CustomerProfileCommandResultData, CustomerProfileOperation,
+            CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
+        },
+    };
+    use test_support::{require_mongo, TestDb};
+
+    use crate::{errors::Result, party::SensitiveDataCodec};
+
+    use super::{command_view, CustomerProfileService};
+
+    /// 真实唯一键竞争使事务失败后，Service 必须退出原 session 并从事务外重查胜者结果。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn failed_transaction_replays_committed_winner_outside_failed_session() {
+        require_mongo!(async {
+            let fixture = TestDb::new("customer_profile_service_replay")
+                .await
+                .expect("测试数据库创建失败");
+            ensure_indexes(fixture.db()).await.expect("索引创建失败");
+
+            let context = replay_context();
+            let winner = command("command-winner", &context);
+            fixture
+                .db()
+                .customer_profile_commands()
+                .create(&winner, &mut NoTransaction)
+                .await
+                .expect("并发胜者命令写入失败");
+            let expected = command_view(winner);
+
+            let loser = command("command-loser", &context);
+            let mut intended = command_view(loser.clone());
+            intended.customer_no = "MUST_NOT_RETURN".to_string();
+            let db = fixture.db().clone();
+            let client = db.client().clone();
+            let transaction: Result<()> = client
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        db.customer_profile_commands().create(&loser, session).await?;
+                        Ok(())
+                    })
+                })
+                .await;
+            assert!(transaction.is_err(), "同一幂等键的事务竞争者必须失败");
+
+            let service = CustomerProfileService::new(
+                fixture.db().clone(),
+                Arc::new(SensitiveDataCodec::from_secret(
+                    b"customer-profile-idempotency-test-secret",
+                )),
+            );
+            let resolved = service
+                .resolve_transaction(transaction, intended, &context)
+                .await
+                .expect("事务失败后必须从事务外重放已提交胜者");
+            assert_eq!(resolved, expected);
+        });
+    }
+
+    fn replay_context() -> CustomerProfileReplayContext {
+        CustomerProfileReplayContext::new(
+            "profile-key-service-replay",
+            CustomerProfileOperation::Update,
+            Some("customer-1".to_string()),
+            "admin-1",
+            CustomerProfileRequestFingerprint::parse_compatible("0".repeat(64)).expect("测试指纹必须合法"),
+        )
+        .expect("测试重放上下文必须合法")
+    }
+
+    fn command(id: &str, context: &CustomerProfileReplayContext) -> CustomerProfileCommand {
+        CustomerProfileCommand::record_success(
+            id,
+            context,
+            CustomerProfileCommandResultData {
+                customer_id: "customer-1".to_string(),
+                customer_no: "KH-1".to_string(),
+                party_id: "party-1".to_string(),
+                revision_id: "revision-2".to_string(),
+                revision_no: 2,
+                customer_version: 2,
+                party_version: 2,
+                effective_from: BusinessDate::from_ymd(2026, 8, 31).expect("测试日期必须合法"),
+                change_reason: "资料修订".to_string(),
+            },
+        )
+        .expect("测试命令必须合法")
     }
 }

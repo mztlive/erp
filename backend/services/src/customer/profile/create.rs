@@ -5,7 +5,7 @@ use entities::{
     customer::{
         AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
         CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId, CustomerProfileCommand,
-        CustomerProfileOperation,
+        CustomerProfileCommandResultData, CustomerProfileOperation, CustomerProfileReplayContext,
     },
     ids::{PartyId, PartyRevisionId},
     party::{Party, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus},
@@ -21,10 +21,7 @@ use crate::{
 use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 use super::{
     facts::PartyFacts,
-    idempotency::{
-        command_view, profile_command, replay_command, request_fingerprint, ProfileCommandInput,
-        TransactionResolutionContext,
-    },
+    idempotency::{checked_command_view, command_view},
     numbering::business_no,
     CustomerProfileService,
 };
@@ -50,32 +47,20 @@ impl CustomerProfileService {
     ) -> Result<CustomerProfileMutationView> {
         req.validate_protocol()?;
         req.validate_structure(CustomerProfileOperation::Create)?;
-        let fingerprint = request_fingerprint(&req)?;
-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "create", None, actor.id(), &fingerprint);
+        let replay = req.replay_context(CustomerProfileOperation::Create, None, actor.id())?;
+        if let Some(command) = self.command_record(replay.idempotency_key()).await? {
+            return checked_command_view(command, &replay);
         }
         let owner_user_id = actor.id().to_string();
         self.ensure_user_exists(&owner_user_id).await?;
-        let prepared = self.prepare_create(req, owner_user_id, fingerprint.clone(), actor)?;
+        let prepared = self.prepare_create(req, owner_user_id, replay.clone(), actor)?;
         let intended = prepared.result.clone();
-        let idempotency_key = prepared.command.idempotency_key.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction = client
             .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
             .await;
-        self.resolve_transaction(
-            transaction,
-            intended,
-            TransactionResolutionContext {
-                idempotency_key: &idempotency_key,
-                operation: "create",
-                customer_id: None,
-                initiated_by: actor.id(),
-                fingerprint: &fingerprint,
-            },
-        )
-        .await
+        self.resolve_transaction(transaction, intended, &replay).await
     }
 
     /// 构造完整创建事务载荷。
@@ -83,7 +68,7 @@ impl CustomerProfileService {
         &self,
         req: SaveCustomerProfileRequest,
         owner_user_id: String,
-        fingerprint: String,
+        replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<PreparedCreate> {
         let party_id = PartyId::new(next_id());
@@ -102,7 +87,7 @@ impl CustomerProfileService {
                 facts,
             },
             req,
-            fingerprint,
+            replay,
             actor,
         )
     }
@@ -147,7 +132,7 @@ impl PreparedCreate {
     fn new(
         parts: PreparedCreateParts,
         req: SaveCustomerProfileRequest,
-        fingerprint: String,
+        replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<Self> {
         let PreparedCreateParts {
@@ -157,17 +142,19 @@ impl PreparedCreate {
             assignment,
             facts,
         } = parts;
-        let command = profile_command(
-            &party,
-            &revision,
-            &account,
-            ProfileCommandInput {
-                operation: "create",
-                req,
-                fingerprint,
-                initiated_by: actor.id(),
+        let command = CustomerProfileCommand::record_success(
+            next_id(),
+            &replay,
+            CustomerProfileCommandResultData {
+                customer_id: account.base.id.clone(),
+                customer_no: account.customer_no.clone(),
+                party_id: party.base.id.clone(),
+                revision_id: revision.base.id.clone(),
+                revision_no: revision.revision.revision_no,
                 customer_version: account.base.version,
                 party_version: party.base.version,
+                effective_from: req.effective_from,
+                change_reason: req.change_reason,
             },
         )?;
         let result = command_view(command.clone());

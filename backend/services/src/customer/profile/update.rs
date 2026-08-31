@@ -2,7 +2,10 @@
 
 use database::{AccessControlExt, CustomerExt, NoTransaction, PartyExt, Transactional};
 use entities::{
-    customer::{CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand, CustomerProfileOperation},
+    customer::{
+        CustomerAccount, CustomerAccountUpdate, CustomerProfileCommand, CustomerProfileCommandResultData,
+        CustomerProfileOperation, CustomerProfileReplayContext,
+    },
     field_update::FieldUpdate,
     ids::{PartyId, PartyRevisionId},
     party::{Party, PartyRevision, PartyRevisionData, PartyUpdate},
@@ -18,10 +21,7 @@ use crate::{
 use super::super::{CustomerProfileMutationView, SaveCustomerProfileRequest};
 use super::{
     facts::PartyFactChanges,
-    idempotency::{
-        command_view, profile_command, replay_command, request_fingerprint, ProfileCommandInput,
-        TransactionResolutionContext,
-    },
+    idempotency::{checked_command_view, command_view},
     CustomerProfileService,
 };
 
@@ -38,39 +38,27 @@ impl CustomerProfileService {
     ) -> Result<CustomerProfileMutationView> {
         req.validate_protocol()?;
         req.validate_structure(CustomerProfileOperation::Update)?;
-        let fingerprint = request_fingerprint(&req)?;
-        if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "update", Some(customer_id), actor.id(), &fingerprint);
+        let replay = req.replay_context(CustomerProfileOperation::Update, Some(customer_id), actor.id())?;
+        if let Some(command) = self.command_record(replay.idempotency_key()).await? {
+            return checked_command_view(command, &replay);
         }
         let prepared = self
-            .prepare_update(customer_id, req, fingerprint.clone(), actor)
+            .prepare_update(customer_id, req, replay.clone(), actor)
             .await?;
         let intended = prepared.result.clone();
-        let idempotency_key = prepared.command.idempotency_key.clone();
         let db = self.db.clone();
         let client = db.client().clone();
         let transaction = client
             .with_transaction(move |session| Box::pin(async move { prepared.persist(&db, session).await }))
             .await;
-        self.resolve_transaction(
-            transaction,
-            intended,
-            TransactionResolutionContext {
-                idempotency_key: &idempotency_key,
-                operation: "update",
-                customer_id: Some(customer_id),
-                initiated_by: actor.id(),
-                fingerprint: &fingerprint,
-            },
-        )
-        .await
+        self.resolve_transaction(transaction, intended, &replay).await
     }
 
     async fn prepare_update(
         &self,
         customer_id: &str,
         req: SaveCustomerProfileRequest,
-        fingerprint: String,
+        replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<PreparedUpdate> {
         let mut account = self.load_customer(customer_id).await?;
@@ -90,7 +78,7 @@ impl CustomerProfileService {
         let facts = self
             .prepare_fact_changes(&account.party_id, &req, actor.id())
             .await?;
-        PreparedUpdate::new(party, revision, account, facts, req, fingerprint, actor)
+        PreparedUpdate::new(party, revision, account, facts, req, replay, actor)
     }
 }
 
@@ -113,20 +101,22 @@ impl PreparedUpdate {
         account: CustomerAccount,
         facts: PartyFactChanges,
         req: SaveCustomerProfileRequest,
-        fingerprint: String,
+        replay: CustomerProfileReplayContext,
         actor: &AuditActor,
     ) -> Result<Self> {
-        let command = profile_command(
-            &party,
-            &revision,
-            &account,
-            ProfileCommandInput {
-                operation: "update",
-                req,
-                fingerprint,
-                initiated_by: actor.id(),
+        let command = CustomerProfileCommand::record_success(
+            next_id(),
+            &replay,
+            CustomerProfileCommandResultData {
+                customer_id: account.base.id.clone(),
+                customer_no: account.customer_no.clone(),
+                party_id: party.base.id.clone(),
+                revision_id: revision.base.id.clone(),
+                revision_no: revision.revision.revision_no,
                 customer_version: account.base.version + 1,
                 party_version: party.base.version + 1,
+                effective_from: req.effective_from,
+                change_reason: req.change_reason,
             },
         )?;
         let result = command_view(command.clone());

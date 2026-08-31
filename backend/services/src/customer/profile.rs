@@ -41,7 +41,7 @@ impl CustomerProfileService {
 #[cfg(test)]
 use entities::customer::CustomerAccountStatus;
 #[cfg(test)]
-use idempotency::replay_command;
+use idempotency::checked_command_view;
 #[cfg(test)]
 use query::customer_status_blockers;
 
@@ -49,10 +49,15 @@ use query::customer_status_blockers;
 mod tests {
     use entities::{
         common::time::BusinessDate,
-        customer::{CustomerProfileCommand, CustomerProfileCommandData},
+        customer::{
+            CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileOperation,
+            CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
+        },
     };
 
-    use super::{customer_status_blockers, replay_command, CustomerAccountStatus};
+    use crate::errors::Error;
+
+    use super::{checked_command_view, customer_status_blockers, CustomerAccountStatus};
 
     #[test]
     fn disabled_customer_blocks_new_business_actions() {
@@ -63,14 +68,14 @@ mod tests {
     }
 
     #[test]
-    fn command_replay_requires_same_operation_customer_and_fingerprint() {
+    fn command_replay_mismatch_maps_to_stable_service_conflict() {
         let command = CustomerProfileCommand::new(
             "command-1",
             CustomerProfileCommandData {
                 idempotency_key: "key-1".to_string(),
                 operation: "update".to_string(),
                 initiated_by: "admin-1".to_string(),
-                request_fingerprint: "fingerprint-1".to_string(),
+                request_fingerprint: "0".repeat(64),
                 customer_id: "customer-1".to_string(),
                 customer_no: "KH-1".to_string(),
                 party_id: "party-1".to_string(),
@@ -83,14 +88,28 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(replay_command(
-            command.clone(),
-            "update",
-            Some("customer-1"),
+        let fingerprint = CustomerProfileRequestFingerprint::parse_compatible("0".repeat(64)).unwrap();
+        let matching = CustomerProfileReplayContext::new(
+            "key-1",
+            CustomerProfileOperation::Update,
+            Some("customer-1".to_string()),
             "admin-1",
-            "fingerprint-1"
+            fingerprint.clone(),
         )
-        .is_ok());
-        assert!(replay_command(command, "update", Some("customer-2"), "admin-1", "fingerprint-1").is_err());
+        .unwrap();
+        assert!(checked_command_view(command.clone(), &matching).is_ok());
+
+        let mismatching = CustomerProfileReplayContext::new(
+            "key-1",
+            CustomerProfileOperation::Update,
+            Some("customer-2".to_string()),
+            "admin-1",
+            fingerprint,
+        )
+        .unwrap();
+        assert!(matches!(
+            checked_command_view(command, &mismatching),
+            Err(Error::ConflictError(_))
+        ));
     }
 }

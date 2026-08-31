@@ -18,7 +18,10 @@ pub use customer_account::{
 pub use customer_assignment::{
     AssignmentRole, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentUpdate,
 };
-pub use customer_profile_command::{CustomerProfileCommand, CustomerProfileCommandData};
+pub use customer_profile_command::{
+    CustomerProfileCommand, CustomerProfileCommandData, CustomerProfileCommandResultData,
+    CustomerProfileReplayContext, CustomerProfileRequestFingerprint,
+};
 pub use profile_validation::{
     CustomerProfileFactInput, CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation,
     CustomerProfileRequestShape,

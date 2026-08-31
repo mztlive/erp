@@ -16,6 +16,19 @@ pub enum CustomerProfileOperation {
     Update,
 }
 
+impl CustomerProfileOperation {
+    /// 返回客户资料命令持久化使用的稳定操作代码。
+    ///
+    /// # 返回
+    /// 创建返回 `create`，修订返回 `update`。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+        }
+    }
+}
+
 /// 客户资料根命令的版本与负责人字段形状。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CustomerProfileRequestShape {
