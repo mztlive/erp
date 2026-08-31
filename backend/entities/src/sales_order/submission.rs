@@ -20,6 +20,7 @@ use crate::ids::{
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use super::amount_validation::sum_line_amounts;
 use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
 use super::types::{
@@ -776,6 +777,24 @@ impl SalesOrderSubmissionLine {
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
         })
     }
+
+    /// 汇总提交快照行已经舍入的金额三元组。
+    ///
+    /// # 参数
+    /// * `lines` - 同一提交快照的明细行
+    ///
+    /// # 返回
+    /// 返回 `(含税合计, 不含税合计, 税额合计)`；空集合返回 `0.00`。
+    ///
+    /// # 错误
+    /// 无；金额值对象负责保持精度和范围。
+    pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
+        sum_line_amounts(
+            lines
+                .iter()
+                .map(|line| (line.gross_amount, line.net_amount, line.tax_amount)),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1032,6 +1051,14 @@ mod tests {
         .unwrap();
         assert_eq!(voucher.voucher_fields().unwrap().card_count, 3);
         assert!(voucher.goods_fields().is_err());
+
+        let totals = SalesOrderSubmissionLine::amount_totals(&[goods, voucher]);
+        assert_eq!(totals.0, amt("299.97"));
+        assert_eq!(totals.1.checked_add(totals.2), totals.0);
+        let empty_totals = SalesOrderSubmissionLine::amount_totals(&[]);
+        assert_eq!(empty_totals.0.to_decimal().to_string(), "0.00");
+        assert_eq!(empty_totals.1.to_decimal().to_string(), "0.00");
+        assert_eq!(empty_totals.2.to_decimal().to_string(), "0.00");
     }
 
     #[test]

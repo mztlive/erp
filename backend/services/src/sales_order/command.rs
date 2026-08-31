@@ -45,7 +45,6 @@ use super::mapper::{
     build_stable_lines, build_submission, build_submission_lines, build_working_copy,
     build_working_copy_lines, draft_hash, header_snapshot, submission_view,
 };
-use super::pricing::line_totals;
 use super::start_approval::{
     build_sales_order_start_input, load_bound_definition_graph, load_bound_definition_graph_with_executor,
     load_start_receipt, persist_runtime_writes, persist_sales_order_start, SalesOrderRuntimeWriteInput,
@@ -701,7 +700,7 @@ impl SalesOrderService {
             &stable.all,
             &draft.lines,
         )?;
-        let (gross, net, tax) = line_totals(&lines);
+        let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&lines);
         let next_version = working_copy.draft_version + 1;
         working_copy.update(
             SalesOrderWorkingCopyUpdate {
@@ -852,7 +851,7 @@ impl SalesOrderService {
                     .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
                     .await?;
                 let copy_lines = build_working_copy_lines(&order_id, &copy_id, &stable.all, &draft.lines)?;
-                let (gross, net, tax) = line_totals(&copy_lines);
+                let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&copy_lines);
                 let next_version = working_copy.draft_version + 1;
                 working_copy.update(
                     SalesOrderWorkingCopyUpdate {

@@ -2,7 +2,7 @@
 
 use entities::common::time::Instant;
 use entities::fulfillment::{FulfillmentResult, ServiceFulfillment, ServiceFulfillmentState};
-use entities::ids::{PurchaseOrderId, SalesOrderLineId};
+use entities::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, SalesOrderLineId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -27,6 +27,8 @@ pub struct ServiceFulfillmentRow {
     pub sales_order_line_id: SalesOrderLineId,
     /// 采购单。
     pub purchase_order_id: PurchaseOrderId,
+    /// 采购行到销售行的明确分配。
+    pub purchase_line_sales_allocation_id: PurchaseLineSalesAllocationId,
     /// 服务数量。
     pub quantity: entities::money::Quantity,
     /// 履约结果。
@@ -147,6 +149,7 @@ fn service_fulfillment_projection() -> Document {
         "fulfillment_no": 1,
         "sales_order_line_id": 1,
         "purchase_order_id": 1,
+        "purchase_line_sales_allocation_id": 1,
         "quantity": 1,
         "result": 1,
         "status": 1,
@@ -162,7 +165,7 @@ mod tests {
     use mongodb::bson::doc;
 
     #[test]
-    fn projection_excludes_snapshot_location_and_allocation_fields() {
+    fn projection_includes_allocation_and_excludes_snapshot_location_fields() {
         let projection = service_fulfillment_projection();
         let keys: Vec<&str> = projection.keys().map(String::as_str).collect();
         assert_eq!(
@@ -172,6 +175,7 @@ mod tests {
                 "fulfillment_no",
                 "sales_order_line_id",
                 "purchase_order_id",
+                "purchase_line_sales_allocation_id",
                 "quantity",
                 "result",
                 "status",
@@ -197,9 +201,9 @@ mod tests {
             !projection.contains_key("service_location_fingerprint"),
             "服务地点指纹不得进入服务履约列表投影"
         );
-        assert!(
-            !projection.contains_key("purchase_line_sales_allocation_id"),
-            "采购分配指针不得进入服务履约列表投影"
+        assert_eq!(
+            projection.get_i32("purchase_line_sales_allocation_id").unwrap(),
+            1
         );
     }
 

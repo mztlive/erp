@@ -92,6 +92,25 @@ impl Pagination for ProductCategoryFilter {
 }
 
 impl<'a> Repository<'a, ProductCategory> {
+    /// 判断指定分类是否存在未删除的直接子分类。
+    ///
+    /// 查询使用存在性投影并在首条命中后停止；通用 Repository 会自动追加
+    /// 未删除条件，避免为删除前置校验加载完整子分类集合。
+    ///
+    /// # 参数
+    /// * `parent_category_id` - 待检查的父分类 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 存在至少一个未删除直接子分类时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn has_children(&self, parent_category_id: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.exists(doc! { "parent_category_id": parent_category_id }, executor)
+            .await
+    }
+
     /// 分页检索商品分类列表（投影查询）。
     ///
     /// 只返回 [`ProductCategoryRow`] 所需的列表字段，不加载整文档；

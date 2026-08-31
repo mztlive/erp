@@ -203,6 +203,28 @@ pub enum QualityResult {
 }
 
 impl QualityResult {
+    /// 按合格与不合格数量派生质量结果。
+    ///
+    /// # 参数
+    /// * `qualified_quantity` - 合格数量
+    /// * `rejected_quantity` - 不合格数量
+    ///
+    /// # 返回
+    /// 不合格数量非正时返回合格；否则合格数量非正时返回不合格；两者均为
+    /// 正数时返回部分合格。
+    ///
+    /// # 错误
+    /// 无；数量非负与到货数量守恒由入库行构造器统一校验。
+    pub fn from_quantities(qualified_quantity: Quantity, rejected_quantity: Quantity) -> Self {
+        if rejected_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+            Self::Passed
+        } else if qualified_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+            Self::Rejected
+        } else {
+            Self::Partial
+        }
+    }
+
     /// 返回结果的中文展示名。
     ///
     /// # 返回
@@ -519,7 +541,8 @@ impl PurchaseReceiptLine {
     /// 返回新建的入库行实体。
     ///
     /// # 错误
-    /// 行号小于 1、数量为负或合格/不合格合计超过到货数量时返回错误。
+    /// 行号小于 1、数量为负、合格/不合格合计超过到货数量，或质量结果与
+    /// 合格/不合格数量不一致时返回错误。
     pub fn new(id: PurchaseReceiptLineId, data: PurchaseReceiptLineData) -> Result<Self> {
         ensure_line_valid(&data)?;
         Ok(Self {
@@ -623,7 +646,8 @@ impl PurchaseReceiptLine {
 /// 通过返回 `Ok(())`。
 ///
 /// # 错误
-/// 行号小于 1、数量为负或合格/不合格合计超过到货数量时返回错误。
+/// 行号小于 1、数量为负、合格/不合格合计超过到货数量，或质量结果与
+/// 合格/不合格数量不一致时返回错误。
 fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
     if data.line_no < 1 {
         return Err(Error::from("行号必须从 1 开始"));
@@ -638,6 +662,10 @@ fn ensure_line_valid(data: &PurchaseReceiptLineData) -> Result<()> {
         > data.received_quantity.to_decimal()
     {
         return Err(Error::from("合格与不合格数量合计不得超过到货数量"));
+    }
+    let expected = QualityResult::from_quantities(data.qualified_quantity, data.rejected_quantity);
+    if data.quality_result != expected {
+        return Err(Error::from("质量结果与合格、不合格数量不一致"));
     }
     Ok(())
 }
@@ -790,6 +818,37 @@ mod tests {
         assert_eq!(line.qualified_quantity, Quantity::from_str("9").unwrap());
         assert_eq!(line.rejected_quantity, Quantity::from_str("1").unwrap());
         assert_eq!(line.quality_result, QualityResult::Partial);
+    }
+
+    #[test]
+    fn quality_result_is_derived_deterministically_and_mismatch_is_rejected() {
+        assert_eq!(
+            QualityResult::from_quantities(
+                Quantity::from_str("10").unwrap(),
+                Quantity::from_str("0").unwrap(),
+            ),
+            QualityResult::Passed
+        );
+        assert_eq!(
+            QualityResult::from_quantities(
+                Quantity::from_str("0").unwrap(),
+                Quantity::from_str("10").unwrap(),
+            ),
+            QualityResult::Rejected
+        );
+        assert_eq!(
+            QualityResult::from_quantities(
+                Quantity::from_str("9").unwrap(),
+                Quantity::from_str("1").unwrap(),
+            ),
+            QualityResult::Partial
+        );
+
+        let inconsistent = PurchaseReceiptLineData {
+            quality_result: QualityResult::Passed,
+            ..line_data()
+        };
+        assert!(PurchaseReceiptLine::new(PurchaseReceiptLineId::new("line-invalid"), inconsistent).is_err());
     }
 
     /// 失败路径：数量越界（合计超过到货）与负数量。

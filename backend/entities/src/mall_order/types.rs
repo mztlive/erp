@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::state::DocumentState;
+use crate::common::time::Instant;
 
 /// 商城关键事实类型（数据模型 §6.17：五类成功结果事实）。
 ///
@@ -172,6 +173,23 @@ pub enum FulfillmentChain {
 }
 
 impl FulfillmentChain {
+    /// 按支付事实发生时间与已启用切换时间派生履约链。
+    ///
+    /// # 参数
+    /// * `occurred_at` - 支付成功事实的业务发生时间
+    /// * `enabled_at` - 商城消费切换的启用时间；未启用时为 `None`
+    ///
+    /// # 返回
+    /// `occurred_at` 早于切换时间或切换未启用时返回
+    /// [`FulfillmentChain::LegacyManual`]；等于或晚于切换时间时返回
+    /// [`FulfillmentChain::ErpAutomated`]。
+    pub fn from_payment_occurred_at(occurred_at: Instant, enabled_at: Option<Instant>) -> Self {
+        match enabled_at {
+            Some(cutover_at) if occurred_at >= cutover_at => Self::ErpAutomated,
+            _ => Self::LegacyManual,
+        }
+    }
+
     /// 返回履约链的中文展示名。
     ///
     /// # 返回
@@ -350,7 +368,36 @@ impl CostBasis {
 
 #[cfg(test)]
 mod tests {
-    use super::FactType;
+    use super::{FactType, FulfillmentChain};
+    use crate::common::time::Instant;
+
+    #[test]
+    fn fulfillment_chain_uses_payment_time_at_cutover_boundary() {
+        let cutover_at = Instant::from_unix_secs(1_700_000_000);
+
+        assert_eq!(
+            FulfillmentChain::from_payment_occurred_at(
+                Instant::from_unix_secs(1_699_999_999),
+                Some(cutover_at),
+            ),
+            FulfillmentChain::LegacyManual,
+        );
+        assert_eq!(
+            FulfillmentChain::from_payment_occurred_at(cutover_at, Some(cutover_at)),
+            FulfillmentChain::ErpAutomated,
+        );
+        assert_eq!(
+            FulfillmentChain::from_payment_occurred_at(
+                Instant::from_unix_secs(1_700_000_001),
+                Some(cutover_at),
+            ),
+            FulfillmentChain::ErpAutomated,
+        );
+        assert_eq!(
+            FulfillmentChain::from_payment_occurred_at(Instant::from_unix_secs(1_700_000_001), None),
+            FulfillmentChain::LegacyManual,
+        );
+    }
 
     #[test]
     fn fact_type_routes_after_sales_and_payment_semantics() {

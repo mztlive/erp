@@ -655,6 +655,51 @@ pub struct SaveSupplierProfileRequest {
     pub change_reason: String,
 }
 
+impl SaveSupplierProfileRequest {
+    /// 校验根级供应商资料请求的完整输入合同。
+    ///
+    /// # 返回
+    /// 根字段、清空/替换意图及全部嵌套输入均合法时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 根字段格式非法、同一资料同时请求替换与清空，或嵌套输入非法时返回
+    /// `ValidationError`；校验顺序固定为根字段、互斥意图、联系人、地址、
+    /// 银行账户、资质。
+    pub(crate) fn validate_contract(&self) -> Result<()> {
+        self.validate()?;
+        if self.clear_contact && self.contact.is_some() {
+            return Err(Error::ValidationError("联系人不能同时替换和清空".to_string()));
+        }
+        if self.clear_address && self.address.is_some() {
+            return Err(Error::ValidationError("经营地址不能同时替换和清空".to_string()));
+        }
+        if self.clear_tax_profile
+            && self
+                .tax_no
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+        {
+            return Err(Error::ValidationError("税务档案不能同时替换和清空".to_string()));
+        }
+        if self.clear_bank_account && self.bank_account.is_some() {
+            return Err(Error::ValidationError("银行账户不能同时替换和清空".to_string()));
+        }
+        if let Some(contact) = &self.contact {
+            contact.validate()?;
+        }
+        if let Some(address) = &self.address {
+            address.validate()?;
+        }
+        if let Some(bank_account) = &self.bank_account {
+            bank_account.validate()?;
+        }
+        for qualification in &self.qualifications {
+            qualification.validate()?;
+        }
+        Ok(())
+    }
+}
+
 /// 根级供应商资料命令的稳定结果，也用于幂等查询。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SupplierProfileMutationView {
@@ -678,12 +723,75 @@ pub struct SupplierProfileMutationView {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use entities::common::time::BusinessDate;
+    use entities::ids::PartyId;
+    use entities::money::Rate;
+    use entities::supplier::{
+        CapabilityCode, InvoiceType, QualificationType, ReconciliationCycle, SettlementMode,
+    };
     use validator::Validate;
 
     use super::{
-        normalize_sort, SortDir, SupplierListParams, SupplierProfileBankAccountInput,
+        normalize_sort, SaveSupplierProfileRequest, SortDir, SupplierListParams, SupplierProfileAddressInput,
+        SupplierProfileBankAccountInput, SupplierProfileContactInput, SupplierProfileQualificationInput,
         SupplierQualificationHealth,
     };
+    use crate::errors::Error;
+
+    fn save_supplier_profile_request() -> SaveSupplierProfileRequest {
+        SaveSupplierProfileRequest {
+            idempotency_key: "supplier-profile-command-1".to_string(),
+            party_no: Some("PARTY-001".to_string()),
+            supplier_no: Some("SUP-001".to_string()),
+            expected_party_version: None,
+            expected_supplier_version: None,
+            legal_name: "上海示例供应链有限公司".to_string(),
+            short_name: Some("示例供应链".to_string()),
+            unified_credit_code: Some("91310000TEST000001".to_string()),
+            contact: Some(SupplierProfileContactInput {
+                contact_name: "张三".to_string(),
+                mobile: "13800000000".to_string(),
+                telephone: None,
+                email: None,
+            }),
+            clear_contact: false,
+            address: Some(SupplierProfileAddressInput {
+                address: "上海市浦东新区示例路 1 号".to_string(),
+                contact_name: Some("张三".to_string()),
+            }),
+            clear_address: false,
+            tax_no: Some("91310000TEST000001".to_string()),
+            clear_tax_profile: false,
+            bank_account: Some(SupplierProfileBankAccountInput {
+                bank_name: "中国银行".to_string(),
+                account_number: "6222000000000000".to_string(),
+            }),
+            clear_bank_account: false,
+            settlement_mode: SettlementMode::PayAfterUse,
+            reconciliation_cycle: ReconciliationCycle::Monthly,
+            payment_term_snapshot: "POSTPAY_NET30".to_string(),
+            business_category: Some("办公用品".to_string()),
+            invoice_type: InvoiceType::VatSpecial,
+            invoice_tax_rate: Rate::from_str("0.13").unwrap(),
+            signing_entity_party_id: PartyId::new("party-signing"),
+            payment_entity_party_id: PartyId::new("party-payment"),
+            capability_codes: vec![CapabilityCode::Physical],
+            qualifications: vec![SupplierProfileQualificationInput {
+                qualification_type: QualificationType::Contract,
+                certificate_no: "CONTRACT-001".to_string(),
+                issuer: None,
+                valid_from: BusinessDate::from_ymd(2026, 8, 31).unwrap(),
+                valid_to: None,
+                attachment_id: None,
+                capability_codes: vec![CapabilityCode::Physical],
+            }],
+            rating: None,
+            effective_from: BusinessDate::from_ymd(2026, 8, 31).unwrap(),
+            change_reason: "首次登记".to_string(),
+        }
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -717,6 +825,69 @@ mod tests {
             account_number: " ".to_string(),
         };
         assert!(missing_account_number.validate().is_err());
+    }
+
+    #[test]
+    fn supplier_profile_contract_accepts_complete_input_and_blank_cleared_tax_number() {
+        let request = save_supplier_profile_request();
+        assert!(request.validate_contract().is_ok());
+
+        let cleared_tax = SaveSupplierProfileRequest {
+            tax_no: Some("   ".to_string()),
+            clear_tax_profile: true,
+            ..request
+        };
+        assert!(cleared_tax.validate_contract().is_ok());
+    }
+
+    #[test]
+    fn supplier_profile_contract_runs_root_validator_before_intent_conflicts() {
+        let request = SaveSupplierProfileRequest {
+            idempotency_key: " ".to_string(),
+            clear_contact: true,
+            clear_address: true,
+            ..save_supplier_profile_request()
+        };
+
+        let error = request.validate_contract().unwrap_err();
+        match error {
+            Error::ValidationError(message) => {
+                assert!(message.contains("幂等键不能为空"));
+                assert!(!message.contains("联系人不能同时替换和清空"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn supplier_profile_contract_preserves_clear_intent_error_order_and_text() {
+        let request = SaveSupplierProfileRequest {
+            clear_contact: true,
+            clear_address: true,
+            clear_bank_account: true,
+            ..save_supplier_profile_request()
+        };
+
+        assert!(matches!(
+            request.validate_contract(),
+            Err(Error::ValidationError(message)) if message == "联系人不能同时替换和清空"
+        ));
+    }
+
+    #[test]
+    fn supplier_profile_contract_validates_nested_inputs_in_stable_order() {
+        let mut request = save_supplier_profile_request();
+        request.contact.as_mut().unwrap().contact_name = " ".to_string();
+        request.address.as_mut().unwrap().address = " ".to_string();
+
+        let error = request.validate_contract().unwrap_err();
+        match error {
+            Error::ValidationError(message) => {
+                assert!(message.contains("联系人姓名不能为空"));
+                assert!(!message.contains("地址不能为空"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     #[test]

@@ -12,6 +12,8 @@
 //! 集合名常量统一从 `SupplierExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `SupplierExt` 的关联类型对外暴露。
 
+use std::collections::{HashMap, HashSet};
+
 use entities::file_asset::FileAsset;
 use entities::ids::{FileAssetId, PartyId, SupplierAccountId, SupplierQualificationId};
 use entities::supplier::{
@@ -25,7 +27,7 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::extensions::{FileAssetExt, SupplierExt};
+use super::extensions::{FileAssetExt, PartyExt, SupplierExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -52,6 +54,10 @@ const SUPPLIER_QUALIFICATION_CAPABILITIES: &str =
 const SUPPLIER_RATING_REVISIONS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_RATING_REVISIONS;
 /// 供应商资料幂等命令集合名。
 const SUPPLIER_PROFILE_COMMANDS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_PROFILE_COMMANDS;
+/// 企业主体集合名。
+const PARTIES: &str = <mongodb::Database as PartyExt>::PARTIES;
+/// 企业主体修订集合名。
+const PARTY_REVISIONS: &str = <mongodb::Database as PartyExt>::PARTY_REVISIONS;
 
 /// 供应商角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -72,6 +78,35 @@ pub struct SupplierAccountRow {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 供应商账号到企业主体的最小关联行。
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct SupplierPartyRefRow {
+    /// 供应商账号稳定 ID。
+    id: String,
+    /// 供应商账号所属企业主体 ID。
+    party_id: String,
+}
+
+/// 企业主体到当前修订的最小关联行。
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct PartyCurrentRevisionRefRow {
+    /// 企业主体稳定 ID。
+    id: String,
+    /// 当前企业主体修订 ID；缺失时不生成名称投影。
+    current_revision_id: Option<String>,
+}
+
+/// 企业主体修订法定名称的最小投影行。
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct PartyRevisionLegalNameRow {
+    /// 企业主体修订稳定 ID。
+    id: String,
+    /// 修订所属企业主体 ID，用于校验当前修订归属。
+    party_id: String,
+    /// 当前主体修订中的法定名称；空白存量值不在仓储层改写。
+    legal_name: String,
 }
 
 /// 供应商角色列表筛选条件。
@@ -837,6 +872,132 @@ impl<'a> SupplierRepository<'a> {
             .await
     }
 
+    /// 按供应商账号 ID 批量读取当前主体修订的法定名称。
+    ///
+    /// 查询仅返回未删除供应商账号、未删除 Party 及其未删除当前修订形成的
+    /// `账号 ID -> 法定名称` 投影。缺失任一关联或缺少当前修订指针时不生成键；
+    /// 法定名称按持久化原值返回，不在仓储层执行空白回退等业务决策。
+    ///
+    /// # 参数
+    /// * `supplier_ids` - 供应商账号 ID；允许重复，空集合直接返回空映射
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回供应商账号 ID 到当前法定名称的映射。
+    ///
+    /// # 错误
+    /// 当任一批量查询或投影反序列化失败时返回错误。
+    pub async fn current_legal_names_by_account_ids(
+        &self,
+        supplier_ids: &[SupplierAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        let supplier_ids = unique_strings(supplier_ids.iter().map(ToString::to_string));
+        if supplier_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let suppliers = self.supplier_party_refs(&supplier_ids, executor).await?;
+        let party_ids = unique_strings(suppliers.iter().map(|row| row.party_id.clone()));
+        if party_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let parties = self.party_current_revision_refs(&party_ids, executor).await?;
+        let revision_ids = unique_strings(parties.iter().filter_map(|row| row.current_revision_id.clone()));
+        if revision_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let revisions = self
+            .party_revision_legal_names(&party_ids, &revision_ids, executor)
+            .await?;
+        Ok(current_legal_name_map(&suppliers, &parties, &revisions))
+    }
+
+    /// 批量读取未删除供应商账号到企业主体的关联。
+    ///
+    /// # 参数
+    /// * `supplier_ids` - 已去重的供应商账号 ID
+    /// * `executor` - 调用方提供的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部命中的账号与主体最小关联行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    async fn supplier_party_refs(
+        &self,
+        supplier_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierPartyRefRow>> {
+        mongo_ops::find_many(
+            &self.db.collection::<SupplierPartyRefRow>(SUPPLIER_ACCOUNTS),
+            active_ids_filter(supplier_ids),
+            FindOptions::builder()
+                .projection(supplier_party_ref_projection())
+                .build(),
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取未删除企业主体的当前修订指针。
+    ///
+    /// # 参数
+    /// * `party_ids` - 已去重的企业主体 ID
+    /// * `executor` - 调用方提供的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部命中的企业主体与当前修订最小关联行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    async fn party_current_revision_refs(
+        &self,
+        party_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyCurrentRevisionRefRow>> {
+        mongo_ops::find_many(
+            &self.db.collection::<PartyCurrentRevisionRefRow>(PARTIES),
+            active_ids_filter(party_ids),
+            FindOptions::builder()
+                .projection(party_current_revision_ref_projection())
+                .build(),
+            executor,
+        )
+        .await
+    }
+
+    /// 批量读取未删除当前企业主体修订的法定名称。
+    ///
+    /// 查询同时限定主体 ID 与修订 ID；主体 ID 条件复用现有
+    /// `uk_party_revisions_party_revision` 索引前缀，不新增索引或迁移。
+    ///
+    /// # 参数
+    /// * `party_ids` - 当前企业主体 ID 集合
+    /// * `revision_ids` - 当前修订 ID 集合
+    /// * `executor` - 调用方提供的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回全部命中的主体修订法定名称最小投影行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    async fn party_revision_legal_names(
+        &self,
+        party_ids: &[String],
+        revision_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyRevisionLegalNameRow>> {
+        mongo_ops::find_many(
+            &self.db.collection::<PartyRevisionLegalNameRow>(PARTY_REVISIONS),
+            active_party_revision_filter(party_ids, revision_ids),
+            FindOptions::builder()
+                .projection(party_revision_legal_name_projection())
+                .build(),
+            executor,
+        )
+        .await
+    }
+
     /// 按客户端幂等键读取供应商资料命令。
     ///
     /// # 参数
@@ -1340,10 +1501,125 @@ fn supplier_account_projection() -> Document {
     }
 }
 
+/// 按首次出现顺序去重字符串集合。
+///
+/// # 参数
+/// * `values` - 允许包含重复值的字符串迭代器
+///
+/// # 返回
+/// 返回保留首次出现顺序的唯一字符串集合。
+fn unique_strings(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::new();
+    for value in values {
+        if seen.insert(value.clone()) {
+            unique.push(value);
+        }
+    }
+    unique
+}
+
+/// 构建未删除稳定对象的批量 ID 查询条件。
+///
+/// # 参数
+/// * `ids` - 已去重的稳定对象 ID
+///
+/// # 返回
+/// 返回同时限定 ID 集合与软删除标记的查询文档。
+fn active_ids_filter(ids: &[String]) -> Document {
+    doc! {
+        "id": { "$in": ids },
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构建未删除当前企业主体修订的批量查询条件。
+///
+/// # 参数
+/// * `party_ids` - 当前企业主体 ID 集合
+/// * `revision_ids` - 当前修订 ID 集合
+///
+/// # 返回
+/// 返回同时限定主体、修订 ID 与软删除标记的查询文档。
+fn active_party_revision_filter(party_ids: &[String], revision_ids: &[String]) -> Document {
+    doc! {
+        "party_id": { "$in": party_ids },
+        "id": { "$in": revision_ids },
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 返回供应商账号到主体关联的最小字段投影。
+///
+/// # 返回
+/// 返回排除 MongoDB `_id` 且仅保留账号与主体 ID 的投影文档。
+fn supplier_party_ref_projection() -> Document {
+    doc! { "_id": 0, "id": 1, "party_id": 1 }
+}
+
+/// 返回企业主体到当前修订关联的最小字段投影。
+///
+/// # 返回
+/// 返回排除 MongoDB `_id` 且仅保留主体与当前修订 ID 的投影文档。
+fn party_current_revision_ref_projection() -> Document {
+    doc! { "_id": 0, "id": 1, "current_revision_id": 1 }
+}
+
+/// 返回企业主体修订法定名称的最小字段投影。
+///
+/// # 返回
+/// 返回排除 MongoDB `_id` 且仅保留修订 ID、归属主体与法定名称的投影文档。
+fn party_revision_legal_name_projection() -> Document {
+    doc! { "_id": 0, "id": 1, "party_id": 1, "legal_name": 1 }
+}
+
+/// 将三段批量查询结果拼接为供应商账号法定名称映射。
+///
+/// 仅当供应商、主体及主体当前修订三段关联完整，且修订归属当前主体时生成键；
+/// 法定名称按原值保留，包括空字符串。
+///
+/// # 参数
+/// * `suppliers` - 供应商账号到主体的关联行
+/// * `parties` - 主体到当前修订的关联行
+/// * `revisions` - 主体修订法定名称行
+///
+/// # 返回
+/// 返回关联完整的供应商账号 ID 到法定名称映射。
+fn current_legal_name_map(
+    suppliers: &[SupplierPartyRefRow],
+    parties: &[PartyCurrentRevisionRefRow],
+    revisions: &[PartyRevisionLegalNameRow],
+) -> HashMap<String, String> {
+    let revision_names = revisions
+        .iter()
+        .map(|row| ((row.party_id.as_str(), row.id.as_str()), row.legal_name.as_str()))
+        .collect::<HashMap<_, _>>();
+    let party_names = parties
+        .iter()
+        .filter_map(|row| {
+            let revision_id = row.current_revision_id.as_deref()?;
+            let legal_name = revision_names.get(&(row.id.as_str(), revision_id))?;
+            Some((row.id.as_str(), *legal_name))
+        })
+        .collect::<HashMap<_, _>>();
+    suppliers
+        .iter()
+        .filter_map(|row| {
+            party_names
+                .get(row.party_id.as_str())
+                .map(|legal_name| (row.id.clone(), (*legal_name).to_string()))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        sort_doc, QueryFilter, SupplierAccountFilter, SupplierCapabilityFilter, SupplierQualificationFilter,
+        active_ids_filter, active_party_revision_filter, current_legal_name_map,
+        party_current_revision_ref_projection, party_revision_legal_name_projection, sort_doc,
+        supplier_party_ref_projection, unique_strings, PartyCurrentRevisionRefRow, PartyRevisionLegalNameRow,
+        QueryFilter, SupplierAccountFilter, SupplierCapabilityFilter, SupplierPartyRefRow,
+        SupplierQualificationFilter,
     };
     use entities::supplier::{CapabilityStatus, QualificationStatus, SupplierAccountStatus};
     use mongodb::bson::doc;
@@ -1415,5 +1691,95 @@ mod tests {
             sort_doc(Some("supplier_no"), true, &["created_at", "supplier_no"]),
             doc! { "supplier_no": 1 }
         );
+    }
+
+    #[test]
+    fn current_legal_name_query_documents_are_batched_soft_delete_safe_and_minimal() {
+        let ids = unique_strings([
+            "supplier-2".to_string(),
+            "supplier-1".to_string(),
+            "supplier-2".to_string(),
+        ]);
+        assert_eq!(ids, vec!["supplier-2", "supplier-1"]);
+        assert_eq!(
+            active_ids_filter(&ids),
+            doc! {
+                "id": { "$in": ["supplier-2", "supplier-1"] },
+                "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
+            }
+        );
+        assert_eq!(
+            active_party_revision_filter(&["party-1".to_string()], &["revision-1".to_string()]),
+            doc! {
+                "party_id": { "$in": ["party-1"] },
+                "id": { "$in": ["revision-1"] },
+                "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
+            }
+        );
+        assert_eq!(
+            supplier_party_ref_projection(),
+            doc! { "_id": 0, "id": 1, "party_id": 1 }
+        );
+        assert_eq!(
+            party_current_revision_ref_projection(),
+            doc! { "_id": 0, "id": 1, "current_revision_id": 1 }
+        );
+        assert_eq!(
+            party_revision_legal_name_projection(),
+            doc! { "_id": 0, "id": 1, "party_id": 1, "legal_name": 1 }
+        );
+    }
+
+    #[test]
+    fn current_legal_name_mapping_preserves_missing_blank_and_revision_ownership() {
+        let suppliers = vec![
+            supplier_party_ref("supplier-1", "party-1"),
+            supplier_party_ref("supplier-2", "party-2"),
+            supplier_party_ref("supplier-3", "party-3"),
+            supplier_party_ref("supplier-4", "party-4"),
+            supplier_party_ref("supplier-5", "party-5"),
+        ];
+        let parties = vec![
+            party_current_revision_ref("party-1", Some("revision-1")),
+            party_current_revision_ref("party-2", Some("revision-2")),
+            party_current_revision_ref("party-3", None),
+            party_current_revision_ref("party-4", Some("revision-missing")),
+            party_current_revision_ref("party-5", Some("revision-other-party")),
+        ];
+        let revisions = vec![
+            party_revision_legal_name("revision-1", "party-1", "示例供应商"),
+            party_revision_legal_name("revision-2", "party-2", ""),
+            party_revision_legal_name("revision-other-party", "party-other", "不得串联"),
+        ];
+
+        let names = current_legal_name_map(&suppliers, &parties, &revisions);
+
+        assert_eq!(names.get("supplier-1").map(String::as_str), Some("示例供应商"));
+        assert_eq!(names.get("supplier-2").map(String::as_str), Some(""));
+        assert!(!names.contains_key("supplier-3"));
+        assert!(!names.contains_key("supplier-4"));
+        assert!(!names.contains_key("supplier-5"));
+    }
+
+    fn supplier_party_ref(id: &str, party_id: &str) -> SupplierPartyRefRow {
+        SupplierPartyRefRow {
+            id: id.to_string(),
+            party_id: party_id.to_string(),
+        }
+    }
+
+    fn party_current_revision_ref(id: &str, current_revision_id: Option<&str>) -> PartyCurrentRevisionRefRow {
+        PartyCurrentRevisionRefRow {
+            id: id.to_string(),
+            current_revision_id: current_revision_id.map(str::to_string),
+        }
+    }
+
+    fn party_revision_legal_name(id: &str, party_id: &str, legal_name: &str) -> PartyRevisionLegalNameRow {
+        PartyRevisionLegalNameRow {
+            id: id.to_string(),
+            party_id: party_id.to_string(),
+            legal_name: legal_name.to_string(),
+        }
     }
 }

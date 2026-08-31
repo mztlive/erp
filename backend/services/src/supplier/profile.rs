@@ -97,7 +97,7 @@ impl SupplierProfileService {
         asset_requests: Vec<PendingFileAssetRequest>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        self.validate_request(&req)?;
+        req.validate_contract()?;
         if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
             return Err(Error::ValidationError(
                 "创建供应商时不能提交清空既有资料的意图".to_string(),
@@ -174,7 +174,7 @@ impl SupplierProfileService {
         asset_requests: Vec<PendingFileAssetRequest>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
-        self.validate_request(&req)?;
+        req.validate_contract()?;
         let request_fingerprint = request_fingerprint(&req)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
             return Ok(SupplierProfileWithAssetsResult {
@@ -329,41 +329,6 @@ impl SupplierProfileService {
                 .resource_log("supplier_sensitive.reveal", "supplier_sensitive", scope.record_id)?;
         self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
         Ok(SupplierSensitiveRevealView { value })
-    }
-
-    /// 校验根级 DTO 及嵌套输入。
-    fn validate_request(&self, req: &SaveSupplierProfileRequest) -> Result<()> {
-        req.validate()?;
-        if req.clear_contact && req.contact.is_some() {
-            return Err(Error::ValidationError("联系人不能同时替换和清空".to_string()));
-        }
-        if req.clear_address && req.address.is_some() {
-            return Err(Error::ValidationError("经营地址不能同时替换和清空".to_string()));
-        }
-        if req.clear_tax_profile
-            && req
-                .tax_no
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty())
-        {
-            return Err(Error::ValidationError("税务档案不能同时替换和清空".to_string()));
-        }
-        if req.clear_bank_account && req.bank_account.is_some() {
-            return Err(Error::ValidationError("银行账户不能同时替换和清空".to_string()));
-        }
-        if let Some(contact) = &req.contact {
-            contact.validate()?;
-        }
-        if let Some(address) = &req.address {
-            address.validate()?;
-        }
-        if let Some(bank_account) = &req.bank_account {
-            bank_account.validate()?;
-        }
-        for qualification in &req.qualifications {
-            qualification.validate()?;
-        }
-        Ok(())
     }
 
     /// 校验签约或付款主体存在且启用。

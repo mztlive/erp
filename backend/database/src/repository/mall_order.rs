@@ -16,8 +16,8 @@
 
 use entities::common::time::Instant;
 use entities::ids::{
-    CustomerAccountId, MallAfterSalesRequestId, MallOrderId, MallOrderItemId, MallPaymentSourceId,
-    SalesOrderId,
+    CustomerAccountId, MallAfterSalesRequestId, MallOrderFactId, MallOrderId, MallOrderItemId,
+    MallPaymentSourceId, SalesOrderId,
 };
 use entities::mall_order::types::{
     AttributionStatus, DataSource, FactType, FulfillmentChain, ProcessingStatus,
@@ -65,6 +65,12 @@ pub struct MallOrderFactRow {
     pub business_fact_key: String,
     /// 商城订单号。
     pub external_order_no: String,
+    /// 对应结果版本。
+    pub external_order_version: String,
+    /// 商城售后请求 ID。
+    pub after_sales_request_id: Option<MallAfterSalesRequestId>,
+    /// 原支付成功事实。
+    pub original_payment_fact_id: Option<MallOrderFactId>,
     /// 事实发生时间。
     pub occurred_at: Instant,
     /// ERP 接收时间。
@@ -1133,6 +1139,9 @@ fn order_fact_projection() -> Document {
         "fact_type": 1,
         "business_fact_key": 1,
         "external_order_no": 1,
+        "external_order_version": 1,
+        "after_sales_request_id": 1,
+        "original_payment_fact_id": 1,
         "occurred_at": 1,
         "received_at": 1,
         "data_source": 1,
@@ -1168,7 +1177,8 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        sort_doc, MallConsumptionEntryFilter, MallOrderFactFilter, MallOrderFilter, Pagination, QueryFilter,
+        order_fact_projection, sort_doc, MallConsumptionEntryFilter, MallOrderFactFilter, MallOrderFilter,
+        Pagination, QueryFilter,
     };
 
     #[test]
@@ -1188,6 +1198,27 @@ mod tests {
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("fact_type").unwrap(), "PAYMENT_SUCCEEDED");
         assert_eq!(document.get_str("processing_status").unwrap(), "attributed");
+    }
+
+    #[test]
+    fn fact_projection_contains_complete_list_view_without_sensitive_payload() {
+        let projection = order_fact_projection();
+
+        for field in [
+            "id",
+            "fact_type",
+            "business_fact_key",
+            "external_order_version",
+            "after_sales_request_id",
+            "original_payment_fact_id",
+            "occurred_at",
+            "received_at",
+            "data_source",
+            "processing_status",
+        ] {
+            assert_eq!(projection.get_i32(field).unwrap(), 1, "列表字段 {field} 必须投影");
+        }
+        assert!(!projection.contains_key("raw_payload_reference"));
     }
 
     #[test]

@@ -14,6 +14,8 @@
 //! D02：批量冻结目标命中 `DocumentType` 目录（判定来自 entities）时，目标单据
 //! 必须已在 D02 注册。
 
+use std::collections::HashSet;
+
 use database::{AccessControlExt, BulkJobExt, DocumentRegistryExt, NoTransaction, Transactional};
 use entities::bulk_job::{
     BackgroundJob, BackgroundJobData, BackgroundJobId, BackgroundJobItem, BackgroundJobItemData,
@@ -24,7 +26,6 @@ use entities::document_registry::DocumentType;
 use entities::ids::FileAssetId;
 use id_generator::next_id;
 use mongodb::Database;
-use serde::Deserialize;
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -553,14 +554,27 @@ impl BulkJobService {
     /// # 错误
     /// 目标命中 `DocumentType` 目录但单据未注册时返回 `NotFound`。
     async fn ensure_items_registered(&self, items: &[CreateBulkSelectionItemRequest]) -> Result<()> {
-        for item in items {
-            if is_business_document_type(&item.object_type) {
-                self.db
-                    .business_documents()
-                    .find_by_id(&item.object_id, &mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
-            }
+        let document_ids = items
+            .iter()
+            .filter(|item| is_business_document_type(&item.object_type))
+            .map(|item| item.object_id.clone())
+            .collect::<Vec<_>>();
+        let mut seen = HashSet::new();
+        let unique_ids = document_ids
+            .iter()
+            .filter(|id| seen.insert((*id).clone()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let registered_ids = self
+            .db
+            .business_documents()
+            .find_documents_by_ids(&unique_ids, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|document| document.base.id)
+            .collect::<HashSet<_>>();
+        if first_unregistered_document_id(&document_ids, &registered_ids).is_some() {
+            return Err(Error::NotFound("业务单据未注册".to_string()));
         }
         Ok(())
     }
@@ -729,7 +743,7 @@ fn build_job_items(
     Ok(built)
 }
 
-/// 判断对象类型代码是否属于业务单据目录（判定来自 entities 的 serde 目录）。
+/// 判断对象类型代码是否属于业务单据目录。
 ///
 /// # 参数
 /// * `object_type` - 目标对象类型代码
@@ -737,10 +751,65 @@ fn build_job_items(
 /// # 返回
 /// 命中 `DocumentType` 任一变体时返回 `true`。
 fn is_business_document_type(object_type: &str) -> bool {
-    use serde::de::{
-        value::{Error as SerdeError, StrDeserializer},
-        IntoDeserializer,
-    };
-    let deserializer: StrDeserializer<SerdeError> = object_type.into_deserializer();
-    DocumentType::deserialize(deserializer).is_ok()
+    DocumentType::try_from_code(object_type).is_ok()
+}
+
+/// 按请求顺序定位首个尚未注册的业务单据 ID。
+///
+/// # 参数
+/// * `document_ids` - 从请求提取的业务单据 ID，保留原始顺序与重复项
+/// * `registered_ids` - 仓储批量查询返回的已注册 ID 集合
+///
+/// # 返回
+/// 全部已注册时返回 `None`；否则返回首个缺失 ID。
+///
+/// # 错误
+/// 无。
+fn first_unregistered_document_id<'a>(
+    document_ids: &'a [String],
+    registered_ids: &HashSet<String>,
+) -> Option<&'a str> {
+    document_ids
+        .iter()
+        .find(|id| !registered_ids.contains(id.as_str()))
+        .map(String::as_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::{first_unregistered_document_id, is_business_document_type};
+
+    #[test]
+    fn business_document_type_matching_is_exact_and_fail_closed() {
+        assert!(is_business_document_type("sales_order"));
+        assert!(is_business_document_type("payment_reversal"));
+        assert!(!is_business_document_type(" Sales_order "));
+        assert!(!is_business_document_type("SALES_ORDER"));
+        assert!(!is_business_document_type("unknown"));
+    }
+
+    #[test]
+    fn registration_membership_preserves_first_missing_request_order() {
+        let ids = vec![
+            "registered".to_string(),
+            "missing-first".to_string(),
+            "registered".to_string(),
+            "missing-later".to_string(),
+        ];
+        let registered = HashSet::from(["registered".to_string()]);
+        assert_eq!(
+            first_unregistered_document_id(&ids, &registered),
+            Some("missing-first")
+        );
+
+        let all_registered = HashSet::from([
+            "registered".to_string(),
+            "missing-first".to_string(),
+            "missing-later".to_string(),
+        ]);
+        assert_eq!(first_unregistered_document_id(&ids, &all_registered), None);
+        assert_eq!(first_unregistered_document_id(&[], &HashSet::new()), None);
+    }
 }

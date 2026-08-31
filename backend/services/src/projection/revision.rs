@@ -227,15 +227,15 @@ impl ProjectionService {
     /// # 返回
     /// 返回下一个修订序号。
     async fn next_revision_no(&self, projection_id: &str) -> Result<u32> {
-        let rows = self
+        let current_max = self
             .db
             .sales_order_projection_revisions()
-            .list_revisions_by_projection(
+            .latest_revision_no(
                 &SalesOrderProjectionId::new(projection_id.to_string()),
                 &mut NoTransaction,
             )
             .await?;
-        Ok(rows.first().map(|row| row.revision_no + 1).unwrap_or(1))
+        SalesOrderProjectionRevision::next_revision_no(current_max.unwrap_or(0)).map_err(Error::Logic)
     }
 
     /// 加载销售单当前版本与唯一卡券行（跨域读 D13 仓储）。

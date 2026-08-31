@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use database::{AccessControlExt, Executor, FulfillmentExt, NoTransaction, Transactional};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
@@ -7,7 +5,6 @@ use entities::fulfillment::{
     PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine, PurchaseReceiptLineData, QualityResult,
 };
 use entities::ids::{PurchaseReceiptId, PurchaseReceiptLineId};
-use entities::money::Quantity;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -277,7 +274,8 @@ fn build_receipt_lines(
     let mut lines = Vec::with_capacity(inputs.len());
     for (index, input) in inputs.iter().enumerate() {
         let line_no = index as u32 + 1;
-        let quality_result = derive_quality_result(input);
+        let quality_result =
+            QualityResult::from_quantities(input.qualified_quantity, input.rejected_quantity);
         lines.push(
             PurchaseReceiptLine::new(
                 PurchaseReceiptLineId::new(next_id()),
@@ -295,26 +293,6 @@ fn build_receipt_lines(
         );
     }
     Ok(lines)
-}
-
-/// 按合格/到货数量派生质量结果（§6.7：全部合格/全部不合格/部分合格）。
-///
-/// # 参数
-/// * `input` - 行输入
-///
-/// # 返回
-/// 返回质量结果。
-fn derive_quality_result(input: &PurchaseReceiptLineInput) -> QualityResult {
-    let zero = Quantity::from_str("0").unwrap();
-    let qualified = input.qualified_quantity.to_decimal();
-    let rejected = input.rejected_quantity.to_decimal();
-    if rejected <= zero.to_decimal() {
-        QualityResult::Passed
-    } else if qualified <= zero.to_decimal() {
-        QualityResult::Rejected
-    } else {
-        QualityResult::Partial
-    }
 }
 
 impl From<PurchaseReceipt> for PurchaseReceiptView {
@@ -550,7 +528,7 @@ async fn persist_created_purchase_receipt(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_receipt_lines, derive_quality_result};
+    use super::build_receipt_lines;
     use crate::fulfillment::PurchaseReceiptLineInput;
     use entities::fulfillment::{PurchaseReceiptLineData, QualityResult};
     use entities::ids::{PurchaseOrderRevisionLineId, PurchaseReceiptId};
@@ -568,19 +546,29 @@ mod tests {
 
     #[test]
     fn quality_result_is_derived_from_quantities() {
-        assert_eq!(derive_quality_result(&passed_line()), QualityResult::Passed);
+        let passed = passed_line();
+        assert_eq!(
+            QualityResult::from_quantities(passed.qualified_quantity, passed.rejected_quantity),
+            QualityResult::Passed
+        );
         let rejected = PurchaseReceiptLineInput {
             qualified_quantity: Quantity::from_str("0").unwrap(),
             rejected_quantity: Quantity::from_str("10").unwrap(),
             ..passed_line()
         };
-        assert_eq!(derive_quality_result(&rejected), QualityResult::Rejected);
+        assert_eq!(
+            QualityResult::from_quantities(rejected.qualified_quantity, rejected.rejected_quantity),
+            QualityResult::Rejected
+        );
         let partial = PurchaseReceiptLineInput {
             qualified_quantity: Quantity::from_str("9").unwrap(),
             rejected_quantity: Quantity::from_str("1").unwrap(),
             ..passed_line()
         };
-        assert_eq!(derive_quality_result(&partial), QualityResult::Partial);
+        assert_eq!(
+            QualityResult::from_quantities(partial.qualified_quantity, partial.rejected_quantity),
+            QualityResult::Partial
+        );
     }
 
     #[test]

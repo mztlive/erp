@@ -6,10 +6,10 @@ use entities::ids::{
     SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId,
 };
 use entities::sales_order::{
-    GoodsLineFields, LineType, SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision,
-    SalesOrderRevisionLine, SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine,
-    SalesOrderSubmissionLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyData,
-    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, VoucherLineDraft, WorkingPurpose,
+    SalesOrder, SalesOrderLine, SalesOrderLineData, SalesOrderRevision, SalesOrderRevisionLine,
+    SalesOrderSubmission, SalesOrderSubmissionData, SalesOrderSubmissionLine, SalesOrderSubmissionLineData,
+    SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine,
+    SalesOrderWorkingCopyLineData, WorkingPurpose,
 };
 use id_generator::next_id;
 
@@ -17,7 +17,6 @@ use super::dto::{
     RevisionLineView, RevisionView, SalesOrderDraftLineRequest, SalesOrderDraftRequest,
     SalesOrderWorkingCopyLineView, SubmissionView,
 };
-use super::pricing::line_totals;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
@@ -86,7 +85,7 @@ pub(super) fn build_working_copy(
     // 创建数据必须携带完整行摘要（即使行最终分集合存储）。
     let line_datas = build_working_copy_line_datas(stable_lines, &draft.lines)?;
     let lines = materialize_working_copy_lines(&working_copy_id, &line_datas)?;
-    let (gross, net, tax) = line_totals(&lines);
+    let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(&lines);
     let snapshot = header_snapshot(draft)?;
     let working_copy = SalesOrderWorkingCopy::new(
         working_copy_id,
@@ -264,7 +263,7 @@ pub(super) fn build_submission(
     customer_external_identity: Option<&str>,
     voucher_category_external_identity: Option<&str>,
 ) -> Result<SalesOrderSubmission> {
-    let (gross, net, tax) = line_totals(lines);
+    let (gross, net, tax) = SalesOrderWorkingCopyLine::amount_totals(lines);
     // 提交头 `validate_line_list` 需要行摘要；行实体另集存储，但创建数据必须非空。
     let mut line_datas = Vec::with_capacity(lines.len());
     for line in lines {
@@ -276,8 +275,12 @@ pub(super) fn build_submission(
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
-            goods: working_copy_goods(line)?,
-            voucher: working_copy_voucher(line)?,
+            goods: line
+                .goods_fields()
+                .map_err(|error| Error::ValidationError(error.to_string()))?,
+            voucher: line
+                .voucher_fields()
+                .map_err(|error| Error::ValidationError(error.to_string()))?,
         });
     }
     SalesOrderSubmission::new(
@@ -342,8 +345,12 @@ pub(super) fn build_submission_lines(
 ) -> Result<Vec<SalesOrderSubmissionLine>> {
     let mut built = Vec::with_capacity(lines.len());
     for line in lines {
-        let goods = working_copy_goods(line)?;
-        let voucher = working_copy_voucher(line)?;
+        let goods = line
+            .goods_fields()
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+        let voucher = line
+            .voucher_fields()
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
         built.push(SalesOrderSubmissionLine::new(
             SalesOrderSubmissionLineId::new(next_id()),
             submission.base.id.clone().into(),
@@ -361,99 +368,6 @@ pub(super) fn build_submission_lines(
         )?);
     }
     Ok(built)
-}
-
-/// 从工作副本行还原实物及服务字段组。
-///
-/// # 参数
-/// * `line` - 工作副本行
-///
-/// # 返回
-/// 返回字段组；卡券行返回 `None`。
-///
-/// # 错误
-/// 实物及服务行缺商品字段组时返回错误。
-fn working_copy_goods(line: &SalesOrderWorkingCopyLine) -> Result<Option<GoodsLineFields>> {
-    if line.line_type != LineType::GoodsService {
-        return Ok(None);
-    }
-    let sku_id = line
-        .sku_id
-        .clone()
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少商品字段组", line.line_no)))?;
-    let sku_revision_id = line
-        .sku_revision_id
-        .clone()
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU 修订", line.line_no)))?;
-    let fulfillment_due_at = line
-        .fulfillment_due_at
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少履约期限", line.line_no)))?;
-    let quantity = line
-        .quantity
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少数量", line.line_no)))?;
-    let base_unit_code = line
-        .base_unit_code
-        .clone()
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少单位", line.line_no)))?;
-    let unit_price_gross = line
-        .unit_price_gross
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少含税单价", line.line_no)))?;
-    Ok(Some(GoodsLineFields {
-        sku_id,
-        sku_revision_id,
-        welfare_scenario: line.welfare_scenario,
-        service_region: line.service_region.clone(),
-        fulfillment_due_at,
-        quantity,
-        base_unit_code,
-        unit_price_gross,
-    }))
-}
-
-/// 从工作副本行还原卡券字段组。
-///
-/// # 参数
-/// * `line` - 工作副本行
-///
-/// # 返回
-/// 返回字段组；实物及服务行返回 `None`。
-///
-/// # 错误
-/// 卡券行缺卡券字段组时返回错误。
-fn working_copy_voucher(line: &SalesOrderWorkingCopyLine) -> Result<Option<VoucherLineDraft>> {
-    if line.line_type != LineType::Voucher {
-        return Ok(None);
-    }
-    let face_value = line
-        .face_value
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡券字段组", line.line_no)))?;
-    let card_count = line
-        .card_count
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡张数", line.line_no)))?;
-    let unit_price_gross = line
-        .unit_price_gross
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡券成交单价", line.line_no)))?;
-    let face_value_total = line
-        .face_value_total
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少面额小计", line.line_no)))?;
-    let transaction_amount = line
-        .transaction_amount
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少成交金额", line.line_no)))?;
-    let gift_amount = line
-        .gift_amount
-        .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少配赠金额", line.line_no)))?;
-    Ok(Some(VoucherLineDraft {
-        face_value,
-        card_count,
-        unit_price_gross,
-        face_value_total,
-        transaction_amount,
-        gift_amount,
-        gift_rate: line.gift_rate,
-        card_form: line
-            .card_form
-            .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少卡形态", line.line_no)))?,
-    }))
 }
 
 /// 构造提交历史视图。

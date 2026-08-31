@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt};
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SupplierExt};
 use entities::purchase_order::PurchaseOrder;
 use validator::Validate;
 
@@ -56,9 +56,16 @@ impl PurchaseOrderService {
             .search_purchase_orders(&filter, &mut NoTransaction)
             .await?;
 
-        let supplier_ids: Vec<&entities::ids::SupplierAccountId> =
-            page.items.iter().map(|row| &row.supplier_id).collect();
-        let supplier_names = self.resolve_supplier_names(&supplier_ids).await?;
+        let supplier_ids = page
+            .items
+            .iter()
+            .map(|row| row.supplier_id.clone())
+            .collect::<Vec<_>>();
+        let supplier_names = self
+            .db
+            .supplier()
+            .current_legal_names_by_account_ids(&supplier_ids, &mut NoTransaction)
+            .await?;
         let sales_order_ids: Vec<String> = page
             .items
             .iter()
@@ -353,20 +360,6 @@ impl PurchaseOrderService {
             return Err(Error::Internal("采购单关联的销售单不存在".to_string()));
         }
         Ok(numbers)
-    }
-
-    /// 批量解析供应商名称（D07 主体修订快照）。
-    async fn resolve_supplier_names(
-        &self,
-        supplier_ids: &[&entities::ids::SupplierAccountId],
-    ) -> Result<HashMap<String, String>> {
-        let mut names = HashMap::new();
-        for supplier_id in supplier_ids {
-            if let Some(name) = self.resolve_supplier_name(supplier_id).await? {
-                names.insert(supplier_id.to_string(), name);
-            }
-        }
-        Ok(names)
     }
 
     /// 批量解析内容金额（提交/版本表头汇总，一次 `$in` 查询，禁止 N+1）。

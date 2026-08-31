@@ -15,6 +15,7 @@ use entities::ids::{CostAllocationId, CostEntryId};
 use entities::money::Amount;
 use id_generator::next_id;
 use mongodb::Database;
+use std::collections::HashMap;
 use std::str::FromStr;
 use validator::Validate;
 
@@ -31,6 +32,8 @@ pub use self::dto::{
 
 /// 成本事实列表筛选条件类型（经 `CostExt` 关联类型跨 crate 可达）。
 type CostEntryFilter = <mongodb::Database as CostExt>::CostEntryFilter;
+/// 成本事实列表持久化投影类型。
+type CostEntryRow = <mongodb::Database as CostExt>::CostEntryRow;
 /// 成本分配列表筛选条件类型。
 type CostAllocationFilter = <mongodb::Database as CostExt>::CostAllocationFilter;
 
@@ -67,30 +70,28 @@ impl CostService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     pub async fn cost_entry_list(&self, params: &CostEntryListParams) -> Result<PageView<CostEntryView>> {
-        params.validate()?;
-        let query = params.normalized()?;
-        let filter = CostEntryFilter {
-            cost_type: query.cost_type,
-            cost_stage: query.cost_stage,
-            cost_scope: query.cost_scope,
-            supplier_id: query.supplier_id,
-            source_document_id: query.source_document_id,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
+        let filter = cost_entry_filter(params)?;
         let page = self
             .db
             .cost_entries()
             .search_cost_entries(&filter, &mut NoTransaction)
             .await?;
-        let mut views = Vec::with_capacity(page.items.len());
-        for row in page.items {
-            views.push(self.cost_entry_view(row.id).await?);
-        }
+        let entry_ids = page
+            .items
+            .iter()
+            .map(|row| CostEntryId::new(row.id.clone()))
+            .collect::<Vec<_>>();
+        let mut allocations_by_entry = self.cost_allocations_by_entry(&entry_ids).await?;
+        let items = page
+            .items
+            .into_iter()
+            .map(|row| {
+                let allocations = allocations_by_entry.remove(&row.id).unwrap_or_default();
+                cost_entry_row_view(row, allocations)
+            })
+            .collect();
         Ok(PageView {
-            items: views,
+            items,
             total: page.total,
             page: filter.page,
             page_size: filter.page_size,
@@ -289,16 +290,7 @@ impl CostService {
             .find_allocations_by_entries(&[entry.base.id.clone().into()], &mut NoTransaction)
             .await?
             .into_iter()
-            .map(|allocation| CostAllocationView {
-                id: allocation.base.id.clone(),
-                cost_entry_id: allocation.cost_entry_id.to_string(),
-                sales_order_id: allocation.sales_order_id.map(|id| id.to_string()),
-                sales_order_line_id: allocation.sales_order_line_id.map(|id| id.to_string()),
-                mall_consumption_entry_id: allocation.mall_consumption_entry_id.map(|id| id.to_string()),
-                allocated_gross_amount: allocation.allocated_gross_amount,
-                allocated_net_amount: allocation.allocated_net_amount,
-                rounding_residual_flag: allocation.rounding_residual_flag,
-            })
+            .map(cost_allocation_entity_view)
             .collect();
         Ok(CostEntryView {
             id: entry.base.id.clone(),
@@ -321,6 +313,116 @@ impl CostService {
             allocations,
         })
     }
+
+    /// 批量读取本页成本事实的分配事实并按成本事实分组。
+    ///
+    /// # 参数
+    /// * `entry_ids` - 当前页成本事实 ID，空页直接得到空映射
+    ///
+    /// # 返回
+    /// 返回按成本事实 ID 分组且保持仓储返回相对顺序的分配事实。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回错误。
+    async fn cost_allocations_by_entry(
+        &self,
+        entry_ids: &[CostEntryId],
+    ) -> Result<HashMap<String, Vec<CostAllocation>>> {
+        let allocations = self
+            .db
+            .cost_allocations()
+            .find_allocations_by_entries(entry_ids, &mut NoTransaction)
+            .await?;
+        let mut by_entry = HashMap::<String, Vec<CostAllocation>>::new();
+        for allocation in allocations {
+            by_entry
+                .entry(allocation.cost_entry_id.to_string())
+                .or_default()
+                .push(allocation);
+        }
+        Ok(by_entry)
+    }
+}
+
+/// 校验并形成成本事实列表仓储筛选条件。
+///
+/// # 参数
+/// * `params` - HTTP 契约复用的列表查询参数
+///
+/// # 返回
+/// 返回白名单排序且分页已归一化的仓储筛选条件。
+///
+/// # 错误
+/// 分页参数或排序字段非法时返回验证错误。
+fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
+    params.validate()?;
+    let query = params.normalized()?;
+    Ok(CostEntryFilter {
+        cost_type: query.cost_type,
+        cost_stage: query.cost_stage,
+        cost_scope: query.cost_scope,
+        supplier_id: query.supplier_id,
+        source_document_id: query.source_document_id,
+        page: query.paging.page,
+        page_size: query.paging.page_size,
+        sort_by: Some(query.paging.sort_by.to_string()),
+        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+    })
+}
+
+/// 将成本事实投影与已批量加载的分配事实装配为列表视图。
+///
+/// 金额字段均直接复制持久化 [`Amount`]；分配缺失时保持既有空列表语义。
+///
+/// # 参数
+/// * `row` - 当前页成本事实持久化投影
+/// * `allocations` - 属于该成本事实的持久化分配事实
+///
+/// # 返回
+/// 返回完整成本事实列表视图。
+fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> CostEntryView {
+    CostEntryView {
+        id: row.id,
+        cost_type: row.cost_type,
+        cost_stage: row.cost_stage,
+        cost_scope: row.cost_scope,
+        cost_basis: row.cost_basis,
+        supplier_id: row.supplier_id,
+        gross_amount: row.gross_amount,
+        net_amount: row.net_amount,
+        tax_amount: row.tax_amount,
+        tax_inclusion: row.tax_inclusion,
+        input_tax_rate: row.input_tax_rate,
+        occurred_at: row.occurred_at,
+        source_fact_type: row.source_fact_type,
+        source_document_id: row.source_document_id,
+        source_line_id: row.source_line_id,
+        source_version: row.source_version,
+        created_at: row.created_at,
+        allocations: allocations.into_iter().map(cost_allocation_entity_view).collect(),
+    }
+}
+
+/// 将持久化成本分配事实无损映射为服务响应视图。
+///
+/// 金额字段直接复制原始 [`Amount`]，不得在读取路径归一化、重算或改变小数位。
+///
+/// # 参数
+/// * `allocation` - 仓储读取的成本分配事实
+///
+/// # 返回
+/// 返回字段一一对应的成本分配响应视图。
+fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView {
+    CostAllocationView {
+        id: allocation.base.id,
+        cost_entry_id: allocation.cost_entry_id.to_string(),
+        sales_order_id: allocation.sales_order_id.map(|id| id.to_string()),
+        sales_order_line_id: allocation.sales_order_line_id.map(|id| id.to_string()),
+        mall_consumption_entry_id: allocation.mall_consumption_entry_id.map(|id| id.to_string()),
+        allocated_gross_amount: allocation.allocated_gross_amount,
+        allocated_net_amount: allocation.allocated_net_amount,
+        rounding_residual_flag: allocation.rounding_residual_flag,
+    }
 }
 
 /// 返回固定零金额。
@@ -329,4 +431,70 @@ impl CostService {
 /// 返回金额 `0.00`。
 fn zero_amount() -> Amount {
     Amount::from_str("0.00").expect("固定零金额必须可解析")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        cost_allocation_entity_view, cost_entry_row_view, CostAllocation, CostAllocationData, CostEntryRow,
+    };
+    use entities::ids::{CostAllocationId, CostEntryId, SalesOrderId};
+    use entities::money::Amount;
+    use serde_json::json;
+    use std::str::FromStr;
+
+    #[test]
+    fn entry_view_copies_zero_amount_scale_and_keeps_missing_allocations_empty() {
+        let row: CostEntryRow = serde_json::from_value(json!({
+            "id": "entry-1",
+            "cost_type": "other",
+            "cost_stage": "actual",
+            "cost_scope": "non_voucher_fulfillment",
+            "cost_basis": null,
+            "supplier_id": null,
+            "gross_amount": "0.00",
+            "net_amount": "0.00",
+            "tax_amount": "0.00",
+            "tax_inclusion": true,
+            "input_tax_rate": "0.000000",
+            "occurred_at": 1_700_000_000,
+            "source_fact_type": "manual",
+            "source_document_id": "document-1",
+            "source_line_id": "line-1",
+            "source_version": "1",
+            "version": 1,
+            "created_at": 1_700_000_000,
+        }))
+        .unwrap();
+
+        let view = cost_entry_row_view(row, Vec::new());
+
+        assert_eq!(view.gross_amount.to_string(), "0.00");
+        assert_eq!(view.net_amount.to_string(), "0.00");
+        assert_eq!(view.tax_amount.to_string(), "0.00");
+        assert!(view.allocations.is_empty());
+    }
+
+    #[test]
+    fn allocation_view_copies_persisted_amount_scale_without_recalculation() {
+        let allocation = CostAllocation::new(
+            CostAllocationId::new("allocation-1"),
+            CostAllocationData {
+                cost_entry_id: CostEntryId::new("entry-1"),
+                sales_order_id: Some(SalesOrderId::new("sales-order-1")),
+                sales_order_line_id: None,
+                mall_consumption_entry_id: None,
+                mall_payment_source_id: None,
+                allocated_gross_amount: Amount::from_str("1.00").unwrap(),
+                allocated_net_amount: Amount::from_str("0.10").unwrap(),
+                rounding_residual_flag: true,
+            },
+        )
+        .unwrap();
+
+        let view = cost_allocation_entity_view(allocation);
+
+        assert_eq!(view.allocated_gross_amount.to_string(), "1.00");
+        assert_eq!(view.allocated_net_amount.to_string(), "0.10");
+    }
 }

@@ -231,18 +231,22 @@ impl MallOrderService {
             .mall_order_facts()
             .search_facts(&filter, &mut NoTransaction)
             .await?;
-        // 投影行不含扩展字段（售后请求/原支付），逐条加载完整事实后映射视图。
-        let mut items = Vec::with_capacity(page.items.len());
-        for row in page.items {
-            if let Some(fact) = self
-                .db
-                .mall_order_facts()
-                .find_by_id(&row.id, &mut NoTransaction)
-                .await?
-            {
-                items.push(fact_view(&fact));
-            }
-        }
+        let items = page
+            .items
+            .iter()
+            .map(|row| MallOrderFactView {
+                fact_id: row.id.clone(),
+                fact_type: row.fact_type,
+                business_fact_key: row.business_fact_key.clone(),
+                external_order_version: row.external_order_version.clone(),
+                after_sales_request_id: row.after_sales_request_id.as_ref().map(ToString::to_string),
+                original_payment_fact_id: row.original_payment_fact_id.as_ref().map(ToString::to_string),
+                occurred_at: row.occurred_at.unix_secs() as u64,
+                received_at: row.received_at.unix_secs() as u64,
+                data_source: row.data_source,
+                processing_status: row.processing_status,
+            })
+            .collect();
         Ok(PageView {
             items,
             total: page.total,
@@ -340,7 +344,7 @@ impl MallOrderService {
             match bucket {
                 Some(item) => {
                     item.line_count += 1;
-                    if let Some(cost) = assessment.cost_amount_string() {
+                    if let Some(cost) = assessment.effective_gross_amount() {
                         let current = item
                             .cost_amount
                             .as_deref()
@@ -355,7 +359,9 @@ impl MallOrderService {
                 None => breakdown.push(CostBasisBreakdownItemView {
                     basis: assessment.cost_basis,
                     line_count: 1,
-                    cost_amount: assessment.cost_amount_string().map(|amount| amount.to_string()),
+                    cost_amount: assessment
+                        .effective_gross_amount()
+                        .map(|amount| amount.to_string()),
                 }),
             }
         }
@@ -723,22 +729,6 @@ pub(super) fn attribution_for(
         PaymentSourceType::Card if card_instance.is_some() => AttributionStatus::Attributed,
         PaymentSourceType::Card => AttributionStatus::PendingAttribution,
         PaymentSourceType::Wechat => AttributionStatus::Attributed,
-    }
-}
-
-/// 从评估实体派生成本金额合计（`NONE` 为空）。
-trait AssessmentAmountString {
-    /// 返回成本金额展示串（`NONE` 为 `None`）。
-    fn cost_amount_string(&self) -> Option<Amount>;
-}
-
-impl AssessmentAmountString for MallConsumptionCostAssessment {
-    fn cost_amount_string(&self) -> Option<Amount> {
-        if self.cost_basis == CostBasis::None {
-            None
-        } else {
-            self.gross_amount
-        }
     }
 }
 

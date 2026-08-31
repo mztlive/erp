@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
 };
@@ -74,12 +72,6 @@ impl FulfillmentService {
             .service_fulfillments()
             .search_service_fulfillments(&filter, &mut NoTransaction)
             .await?;
-        let page_ids: Vec<ServiceFulfillmentId> = page
-            .items
-            .iter()
-            .map(|row| ServiceFulfillmentId::new(row.id.clone()))
-            .collect();
-        let allocation_ids = load_service_allocation_ids(&self.db, &page_ids).await?;
         let items = page
             .items
             .into_iter()
@@ -88,7 +80,7 @@ impl FulfillmentService {
                 fulfillment_no: row.fulfillment_no,
                 sales_order_line_id: row.sales_order_line_id.to_string(),
                 purchase_order_id: row.purchase_order_id.to_string(),
-                purchase_line_sales_allocation_id: allocation_ids.get(&row.id).cloned().unwrap_or_default(),
+                purchase_line_sales_allocation_id: row.purchase_line_sales_allocation_id.to_string(),
                 quantity: row.quantity,
                 result: row.result,
                 status: row.status,
@@ -174,36 +166,6 @@ impl FulfillmentService {
         persist_created_service_fulfillment(&self.db, &self.rbac, record.clone(), actor.clone()).await?;
         Ok(record.into())
     }
-}
-
-/// 批量取服务履约记录的采购销售分配（P2 投影行未含该字段）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `record_ids` - 记录主键集合
-///
-/// # 返回
-/// 返回「记录 → 采购销售分配」映射。
-///
-/// # 错误
-/// 批量查询失败时返回 `RepositoryError`。
-async fn load_service_allocation_ids(
-    db: &Database,
-    record_ids: &[ServiceFulfillmentId],
-) -> Result<HashMap<String, String>> {
-    let records = db
-        .fulfillment()
-        .list_service_fulfillments_by_ids(record_ids, &mut NoTransaction)
-        .await?;
-    Ok(records
-        .into_iter()
-        .map(|record| {
-            (
-                record.base.id,
-                record.purchase_line_sales_allocation_id.to_string(),
-            )
-        })
-        .collect())
 }
 
 impl From<ServiceFulfillment> for ServiceFulfillmentView {

@@ -318,15 +318,12 @@ impl ContractService {
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
-        let existing = self
+        let current_revision_no = self
             .db
             .contract_revisions()
-            .list_by_contract(&contract.base.id.clone().into(), &mut NoTransaction)
+            .latest_revision_no(&contract.base.id.clone().into(), &mut NoTransaction)
             .await?;
-        let next_no = existing
-            .first()
-            .map(|revision| revision.revision.revision_no + 1)
-            .unwrap_or(1);
+        let next_no = ContractRevision::next_revision_no(current_revision_no.unwrap_or(0))?;
         let revision = ContractRevision::new(
             ContractRevisionId::new(next_id()),
             contract.base.id.clone().into(),

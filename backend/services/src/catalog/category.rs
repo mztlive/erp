@@ -245,12 +245,12 @@ impl CatalogService {
     /// * `ConflictError` - 并发修改（CAS 冲突）
     pub async fn product_category_delete(&self, id: &str, actor: &AuditActor) -> Result<()> {
         let mut category = self.load_category(id).await?;
-        let children = self
+        let has_children = self
             .db
             .product_categories()
-            .find_children(Some(id), &mut NoTransaction)
+            .has_children(id, &mut NoTransaction)
             .await?;
-        if !children.is_empty() {
+        if has_children {
             return Err(Error::BusinessLogicError(
                 "分类下存在子分类，不能删除".to_string(),
             ));

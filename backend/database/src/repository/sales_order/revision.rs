@@ -8,7 +8,12 @@ use entities::sales_order::{
     SalesOrderGoodsServiceLineRevision, SalesOrderId, SalesOrderRevision, SalesOrderRevisionId,
     SalesOrderRevisionLine, SalesOrderRevisionLineId, SalesOrderVoucherLineRevision,
 };
-use mongodb::bson::doc;
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::{
+    bson::{doc, Document},
+    options::FindOptions,
+};
+use serde::Deserialize;
 
 use super::super::Repository;
 use super::{
@@ -17,6 +22,13 @@ use super::{
 };
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
+
+/// 销售版本号最小投影行。
+#[derive(Debug, Deserialize)]
+struct SalesOrderRevisionNoRow {
+    /// 同一销售单内版本号。
+    revision_no: u32,
+}
 
 impl<'a> Repository<'a, SalesOrderRevision> {
     /// 按销售版本 ID 集合批量读取正式版本。
@@ -106,6 +118,56 @@ impl<'a> Repository<'a, SalesOrderRevision> {
         )
         .await
     }
+
+    /// 读取指定销售单的历史最大正式版本号。
+    ///
+    /// 查询只读取 `revision_no` 并限制一条；版本号分配与溢出校验由实体负责。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 所属销售单
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回历史最大版本号；没有正式版本时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    pub async fn latest_revision_no(
+        &self,
+        sales_order_id: &SalesOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<SalesOrderRevisionNoRow>(),
+            latest_sales_order_revision_filter(sales_order_id),
+            latest_sales_order_revision_options(),
+            executor,
+        )
+        .await?;
+        Ok(sales_order_revision_no_from_rows(rows))
+    }
+}
+
+/// 构建销售单最大正式版本号查询条件。
+fn latest_sales_order_revision_filter(sales_order_id: &SalesOrderId) -> Document {
+    doc! {
+        "sales_order_id": sales_order_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构建销售单最大正式版本号的最小投影与有界排序。
+fn latest_sales_order_revision_options() -> FindOptions {
+    FindOptions::builder()
+        .sort(doc! { "revision_no": -1 })
+        .limit(1)
+        .projection(doc! { "revision_no": 1, "_id": 0 })
+        .build()
+}
+
+/// 从已按版本号倒序返回的零或一条投影中读取最大版本号。
+fn sales_order_revision_no_from_rows(rows: Vec<SalesOrderRevisionNoRow>) -> Option<u32> {
+    rows.into_iter().next().map(|row| row.revision_no)
 }
 
 impl<'a> Repository<'a, SalesOrderRevisionLine> {
@@ -304,5 +366,32 @@ impl<'a> SalesOrderRepository<'a> {
         Repository::new(self.db, SALES_ORDERS)
             .update(order, executor)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        latest_sales_order_revision_filter, latest_sales_order_revision_options,
+        sales_order_revision_no_from_rows, SalesOrderRevisionNoRow,
+    };
+    use entities::ids::SalesOrderId;
+    use mongodb::bson::doc;
+
+    #[test]
+    fn latest_revision_query_is_minimal_bounded_and_reads_empty_history() {
+        assert_eq!(
+            latest_sales_order_revision_filter(&SalesOrderId::new("sales-order-1")),
+            doc! { "sales_order_id": "sales-order-1", "deleted_at": 0_i64 }
+        );
+        let options = latest_sales_order_revision_options();
+        assert_eq!(options.sort, Some(doc! { "revision_no": -1 }));
+        assert_eq!(options.limit, Some(1));
+        assert_eq!(options.projection, Some(doc! { "revision_no": 1, "_id": 0 }));
+        assert_eq!(sales_order_revision_no_from_rows(Vec::new()), None);
+        assert_eq!(
+            sales_order_revision_no_from_rows(vec![SalesOrderRevisionNoRow { revision_no: 9 }]),
+            Some(9)
+        );
     }
 }

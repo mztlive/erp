@@ -14,7 +14,7 @@ mod transition_plan;
 
 pub use crate::graph::DefinitionGraph;
 pub use cancel::{cancel, CancelCommand};
-pub use decision::{decide, DecideCommand};
+pub use decision::{block_current, decide, DecideCommand};
 pub use enter_node::{plan_enter_node, EnterNodeInput};
 pub use event::{BpmEvent, BpmEventKind};
 pub use reassign::{reassign, ReassignCommand};
@@ -142,9 +142,10 @@ pub fn refuse_unwired() -> Result<TransitionPlan> {
 #[cfg(test)]
 mod tests {
     use super::{
-        cancel, decide, plan_enter_node, reassign, refuse_unwired, resume, start, CancelCommand,
-        CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError, EnterNodeInput,
-        ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason, TaskIntent,
+        block_current, cancel, decide, plan_enter_node, reassign, refuse_unwired, resume, start,
+        CancelCommand, CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError,
+        EnterNodeInput, ReassignCommand, ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason,
+        TaskIntent,
     };
     use crate::error::Error;
     use crate::ids::{
@@ -346,6 +347,79 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// 标准阻塞入口生成完整事件与任务关闭计划。
+    #[test]
+    fn engine_block_current_emits_complete_standard_plan() {
+        let started = start_two_node(eligible("u1", "张三"));
+        let current = started.created_executions[0].clone();
+        let plan = block_current(
+            started.instance,
+            current,
+            ApprovalBlockerCode::OpenTaskConflict,
+            at(24),
+        )
+        .unwrap();
+
+        assert_eq!(plan.commit, CommitRequired::Blocked);
+        assert_eq!(
+            plan.updated_executions[0].blocker_code,
+            Some(ApprovalBlockerCode::OpenTaskConflict)
+        );
+        assert!(matches!(
+            plan.task_intents.as_slice(),
+            [TaskIntent::CloseTask {
+                reason: TaskCloseReason::ApprovalRuntimeBlocked,
+                ..
+            }]
+        ));
+        let event = plan
+            .events
+            .iter()
+            .find(|event| event.kind == super::BpmEventKind::InstanceBlocked)
+            .expect("阻塞计划必须包含标准事件");
+        assert_eq!(event.execution_id.as_ref().map(AsRef::as_ref), Some("e1"));
+        assert_eq!(event.node_key.as_deref(), Some("n1"));
+        assert_eq!(event.blocker_code, Some(ApprovalBlockerCode::OpenTaskConflict));
+    }
+
+    /// 公开阻塞入口必须拒绝非实例当前令牌的执行。
+    #[test]
+    fn engine_block_current_rejects_non_current_execution() {
+        let started = start_two_node(eligible("u1", "张三"));
+        let mut current = started.created_executions[0].clone();
+        current.base.id = "other-execution".to_string();
+
+        let error = block_current(
+            started.instance,
+            current,
+            ApprovalBlockerCode::OpenTaskConflict,
+            at(24),
+        )
+        .unwrap_err();
+
+        assert_eq!(error, EngineError::InvalidCommand("执行不是实例当前令牌"));
+    }
+
+    /// 公开阻塞入口仍必须拒绝非活动执行。
+    #[test]
+    fn engine_block_current_rejects_non_active_execution() {
+        let started = start_two_node(eligible("u1", "张三"));
+        let mut current = started.created_executions[0].clone();
+        current
+            .block(ApprovalBlockerCode::DefinitionGraphCorrupted, at(23))
+            .unwrap();
+
+        let error = block_current(
+            started.instance,
+            current,
+            ApprovalBlockerCode::OpenTaskConflict,
+            at(24),
+        )
+        .unwrap_err();
+
+        assert_eq!(error, EngineError::InvalidCommand("只有活动执行可以接受决定"));
     }
 
     /// 图损坏且能形成合法快照时提交结构阻塞。

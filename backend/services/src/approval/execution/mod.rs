@@ -97,7 +97,9 @@ mod tests {
     use crate::approval::execution::decision::decision_commits_blocked;
     use crate::approval::execution::idempotency::normalize_idempotency_key;
     use crate::errors::Error;
-    use bpm::engine::{CommitRequired, DefinitionGraph, Eligibility, StartAssigneeBinding};
+    use bpm::engine::{
+        BpmEventKind, CommitRequired, DefinitionGraph, Eligibility, StartAssigneeBinding, TaskCloseReason,
+    };
     use bpm::ids::{
         ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeDefinitionId,
         ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId,
@@ -111,6 +113,7 @@ mod tests {
         ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition,
         ApprovalTransitionDefinition, NewNodeDefinition, ParticipantId, ProcessKind, SubjectRef, Timestamp,
     };
+    use entities::approval_integration::ApprovalNotificationEventKind;
 
     /// 运行编排占位必须失败关闭，并钉死稳定文案。
     #[test]
@@ -405,6 +408,23 @@ mod tests {
             Some(ApprovalBlockerCode::OpenTaskConflict)
         );
         assert_eq!(blocked_writes.commit, CommitRequired::Blocked);
+        assert!(blocked_writes
+            .events
+            .iter()
+            .any(|event| event.kind == BpmEventKind::InstanceBlocked));
+        assert_eq!(
+            blocked_writes.close_tasks,
+            vec![(
+                ApprovalNodeExecutionId::new("e1"),
+                TaskCloseReason::ApprovalRuntimeBlocked
+            )]
+        );
+        assert_eq!(blocked_writes.notifications.len(), 1);
+        assert_eq!(
+            blocked_writes.notifications[0].event_kind,
+            ApprovalNotificationEventKind::Blocked
+        );
+        assert_eq!(blocked_writes.notifications[0].dedup_key, "blocked:e1");
     }
 
     /// 事务内应用计划；领域动作失败整单回滚；收据重复键按同/异载荷回读。

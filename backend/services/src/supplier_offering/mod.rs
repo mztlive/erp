@@ -969,6 +969,9 @@ fn supply_exception_completion_result(
 }
 
 /// 将供给域的可供中断原因映射为发布安全暂停原因。
+///
+/// 映射属于 D24 供给与 D26 发布之间的集成适配合同；`None` 表示当前可供事实
+/// 不要求触发发布安全暂停。新增中断原因时必须在此穷尽声明其发布影响。
 fn safety_pause_cause_for_availability(
     reason: Option<AvailabilityInterruptionReason>,
 ) -> Option<SafetyPauseCause> {
@@ -981,6 +984,9 @@ fn safety_pause_cause_for_availability(
 }
 
 /// 将供给商业条款影响映射为发布安全暂停原因。
+///
+/// 映射属于 D24 供给与 D26 发布之间的集成适配合同；无商业影响时不得生成
+/// 暂停原因。新增修订影响时必须在此穷尽声明其发布影响。
 fn safety_pause_cause_for_revision(impact: OfferingRevisionImpact) -> Option<SafetyPauseCause> {
     match impact {
         OfferingRevisionImpact::None => None,
@@ -1247,7 +1253,10 @@ fn replay_command<T: DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_supply_exception_operation, ensure_supply_exception_work_item, typed_id};
+    use super::{
+        ensure_supply_exception_operation, ensure_supply_exception_work_item,
+        safety_pause_cause_for_availability, safety_pause_cause_for_revision, typed_id,
+    };
     use entities::common::time::Instant;
     use entities::ids::{
         ProductPublicationDeliveryId, ProductPublicationId, ProductPublicationRevisionId, SkuId, WorkItemId,
@@ -1256,12 +1265,56 @@ mod tests {
         SafetyPauseAffectedPublication, SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType,
         SafetyPauseWorkItemRef, SystemSafetyPauseOperation, SystemSafetyPauseOperationData,
     };
+    use entities::supplier_offering::{AvailabilityInterruptionReason, OfferingRevisionImpact};
     use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 
     #[test]
     fn blank_filter_ids_are_omitted() {
         assert!(typed_id(Some("  "), SkuId::new).is_none());
         assert_eq!(typed_id(Some(" sku-1 "), SkuId::new).unwrap().as_ref(), "sku-1");
+    }
+
+    #[test]
+    fn availability_pause_adapter_maps_every_stable_interruption_reason() {
+        assert_eq!(safety_pause_cause_for_availability(None), None);
+        let cases = [
+            (
+                AvailabilityInterruptionReason::SupplierStopped,
+                SafetyPauseCause::SupplierStopped,
+            ),
+            (
+                AvailabilityInterruptionReason::SupplyUnavailable,
+                SafetyPauseCause::SupplyUnavailable,
+            ),
+            (
+                AvailabilityInterruptionReason::AvailabilityStale,
+                SafetyPauseCause::AvailabilityStale,
+            ),
+            (
+                AvailabilityInterruptionReason::ZeroInventory,
+                SafetyPauseCause::ZeroInventory,
+            ),
+        ];
+
+        for (reason, expected) in cases {
+            assert_eq!(safety_pause_cause_for_availability(Some(reason)), Some(expected));
+        }
+    }
+
+    #[test]
+    fn revision_pause_adapter_maps_every_stable_impact() {
+        assert_eq!(
+            safety_pause_cause_for_revision(OfferingRevisionImpact::None),
+            None
+        );
+        assert_eq!(
+            safety_pause_cause_for_revision(OfferingRevisionImpact::CostChanged),
+            Some(SafetyPauseCause::CostChangeUnconfirmed)
+        );
+        assert_eq!(
+            safety_pause_cause_for_revision(OfferingRevisionImpact::CriticalSupplyChanged),
+            Some(SafetyPauseCause::CriticalSupplyChangeUnconfirmed)
+        );
     }
 
     #[test]

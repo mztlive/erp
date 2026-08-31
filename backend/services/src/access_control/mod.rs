@@ -188,7 +188,7 @@ impl AccessControlService {
     ) -> Result<PermissionView> {
         req.validate()?;
         let mut permission = self.load_permission_with_version(id, req.version).await?;
-        let changed = changed_permission_fields(&permission, &req);
+        let changed = req.changed_field_names();
         permission.update(req.into_update())?;
         let event = self
             .build_audit_event(
@@ -692,25 +692,4 @@ impl AccessControlService {
         )
         .map_err(Into::into)
     }
-}
-
-/// 提取权限更新请求涉及的字段名（只记录「已变更」，不记录旧值/新值）。
-///
-/// # 参数
-/// * `req` - 更新请求
-///
-/// # 返回
-/// 返回请求携带的变更字段名列表。
-fn changed_permission_fields(_permission: &Permission, req: &UpdatePermissionRequest) -> Vec<String> {
-    let mut changed = Vec::new();
-    if req.name.is_some() {
-        changed.push("name".to_string());
-    }
-    if req.description.is_some() {
-        changed.push("description".to_string());
-    }
-    if req.disabled.is_some() {
-        changed.push("disabled".to_string());
-    }
-    changed
 }

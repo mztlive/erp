@@ -11,10 +11,10 @@ use entities::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
-use super::common::{non_blank, normalize_sort, PageParams};
+use super::common::{non_blank, normalize_sort, validate_sales_price_range, PageParams};
 
 /// 商品列表允许的排序字段白名单。
 pub(crate) const PRODUCT_SORT_FIELDS: &[&str] = &["created_at", "product_no"];
@@ -349,19 +349,6 @@ impl ProductListParams {
             },
         })
     }
-}
-
-/// 校验商品列表销售价区间。
-fn validate_sales_price_range(minimum: Option<Amount>, maximum: Option<Amount>) -> Result<()> {
-    if minimum.is_some_and(|value| value.to_decimal().is_sign_negative())
-        || maximum.is_some_and(|value| value.to_decimal().is_sign_negative())
-    {
-        return Err(Error::ValidationError("销售价不能小于 0".to_string()));
-    }
-    if matches!((minimum, maximum), (Some(minimum), Some(maximum)) if minimum > maximum) {
-        return Err(Error::ValidationError("最低销售价不能高于最高销售价".to_string()));
-    }
-    Ok(())
 }
 
 /// 商品修订媒体响应视图。

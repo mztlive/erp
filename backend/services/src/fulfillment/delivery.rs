@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use database::{
     AccessControlExt, DocumentRegistryExt, Executor, FulfillmentExt, NoTransaction, Transactional,
 };
@@ -65,13 +63,6 @@ impl FulfillmentService {
             .deliveries()
             .search_deliveries(&filter, &mut NoTransaction)
             .await?;
-        let direct_ids: Vec<DeliveryId> = page
-            .items
-            .iter()
-            .filter(|row| row.delivery_type == DeliveryType::SupplierDirect)
-            .map(|row| DeliveryId::new(row.id.clone()))
-            .collect();
-        let direct_po_ids = load_direct_po_ids(&self.db, &direct_ids).await?;
         let items = page
             .items
             .into_iter()
@@ -80,7 +71,7 @@ impl FulfillmentService {
                 delivery_no: row.delivery_no,
                 delivery_type: row.delivery_type,
                 sales_order_id: row.sales_order_id.to_string(),
-                purchase_order_id: direct_po_ids.get(&row.id).cloned().flatten(),
+                purchase_order_id: row.purchase_order_id.map(|id| id.to_string()),
                 warehouse_id: row.warehouse_id.map(|id| id.to_string()),
                 status: row.status,
                 carrier: row.carrier,
@@ -247,36 +238,6 @@ impl FulfillmentService {
 }
 
 // ------------------------------------------------------------------ private helpers
-
-/// 批量取供应商直发货单的采购来源（P2 投影行未含 `purchase_order_id`）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `delivery_ids` - 供应商直发的主键集合（仓发无需查询）
-///
-/// # 返回
-/// 返回「发货单 → 采购来源」映射。
-///
-/// # 错误
-/// 批量查询失败时返回 `RepositoryError`。
-async fn load_direct_po_ids(
-    db: &Database,
-    delivery_ids: &[DeliveryId],
-) -> Result<HashMap<String, Option<String>>> {
-    let deliveries = db
-        .fulfillment()
-        .list_deliveries_by_ids(delivery_ids, &mut NoTransaction)
-        .await?;
-    Ok(deliveries
-        .into_iter()
-        .map(|delivery| {
-            (
-                delivery.base.id,
-                delivery.purchase_order_id.map(|id| id.to_string()),
-            )
-        })
-        .collect())
-}
 
 /// 构建发货行实体集合（行号从 1 递增）。
 ///

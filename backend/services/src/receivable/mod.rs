@@ -24,7 +24,7 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionType,
 };
-use entities::file_asset::SecurityScanStatus;
+use entities::file_asset::{FileAsset, SecurityScanStatus};
 use entities::ids::{
     BusinessDocumentId, CustomerReceiptId, InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId,
     ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId,
@@ -42,7 +42,6 @@ use entities::receivable::{
     RedInvoiceAllocationPlanError, RedInvoiceAllocationReversal, ReviewResult, SalesInvoiceAllocation,
     SalesInvoiceAllocationData,
 };
-use entities::sales_order::BusinessType;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
 use entities::Permission;
 use id_generator::next_id;
@@ -541,7 +540,8 @@ impl ReceivableService {
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
         let review_status =
-            resolve_initial_receivable_review_status(req.review_status, sales_order.business_type)?;
+            AccountReviewStatus::resolve_initial(req.review_status, sales_order.business_type)
+                .map_err(|error| Error::ValidationError(error.to_string()))?;
         if review_status == AccountReviewStatus::OpeningPending
             && sales_order.stable.current_revision_id.as_deref()
                 != Some(req.source_sales_order_revision_id.as_str())
@@ -4142,12 +4142,40 @@ async fn validate_card_funds_evidence(
     decision: &CardFundsReviewDecision,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let now = Instant::now();
+    let assets = db
+        .file_assets()
+        .find_by_ids(&decision.evidence_document_ids, executor)
+        .await?;
+    validate_card_funds_evidence_facts(decision, &assets, Instant::now())
+}
+
+/// 按命令原始顺序校验批量读取的 W13 受控证据事实。
+///
+/// 批量仓储结果不承诺顺序；本方法按 `evidence_document_ids` 逐项解释缺失与
+/// 安全状态，保持既有首错、扫描状态、销毁与过期语义。
+///
+/// # 参数
+/// * `decision` - W13 正式决定及其有序证据 ID
+/// * `assets` - 仓储一次批量读取的活跃文件资产事实
+/// * `now` - 本次校验的统一时点
+///
+/// # 返回
+/// 所有文件均存在且可用时返回 `Ok(())`。
+///
+/// # 错误
+/// 首个缺失文件返回 `NotFound`；首个不可用文件返回 `BusinessLogicError`。
+fn validate_card_funds_evidence_facts(
+    decision: &CardFundsReviewDecision,
+    assets: &[FileAsset],
+    now: Instant,
+) -> Result<()> {
+    let assets_by_id = assets
+        .iter()
+        .map(|asset| (asset.base.id.as_str(), asset))
+        .collect::<HashMap<_, _>>();
     for id in &decision.evidence_document_ids {
-        let asset = db
-            .file_assets()
-            .find_by_id(id, executor)
-            .await?
+        let asset = assets_by_id
+            .get(id.as_ref())
             .ok_or_else(|| Error::NotFound(format!("复核证据文件不存在: {id}")))?;
         if asset.security_scan_status != SecurityScanStatus::Passed
             || asset.destroyed_at.is_some()
@@ -4305,23 +4333,6 @@ fn pending_review_status(review_type: CardFundsReviewType) -> AccountReviewStatu
         CardFundsReviewType::Opening => AccountReviewStatus::OpeningPending,
         CardFundsReviewType::SyncDelta => AccountReviewStatus::SyncDeltaPending,
     }
-}
-
-/// 派生并校验新建应收账户的票款复核初始状态。
-///
-/// 同步差额待复核只能由既有期初复核链上的销售变更事务形成，任何新建入口均
-/// 不得直接指定该状态。
-fn resolve_initial_receivable_review_status(
-    requested: Option<AccountReviewStatus>,
-    business_type: BusinessType,
-) -> Result<AccountReviewStatus> {
-    let expected = AccountReviewStatus::initial_for_sales_business_type(business_type);
-    if requested.is_some_and(|status| status != expected) {
-        return Err(Error::ValidationError(
-            "新建应收账户的票款复核状态必须由来源销售单业务性质决定".to_string(),
-        ));
-    }
-    Ok(expected)
 }
 
 /// 返回账户复核状态的稳定工作流代码。
@@ -5254,16 +5265,16 @@ fn net_sales_allocated(allocations: &[SalesInvoiceAllocation]) -> Amount {
 
 #[cfg(test)]
 mod card_funds_review_tests {
+    use entities::common::time::Instant;
+    use entities::file_asset::{ContentHmac, FileAsset, FileAssetData, RetentionClass, SensitivityClass};
     use entities::ids::{FileAssetId, ReceivableAccountId};
 
     use super::{
         canonical_review_evidence, card_funds_audit_id, card_funds_receipt_message, parse_card_funds_receipt,
-        parse_task_version, resolve_initial_receivable_review_status, validate_card_funds_decision,
+        parse_task_version, validate_card_funds_decision, validate_card_funds_evidence_facts,
         CardFundsReviewConclusion, CardFundsReviewDecision, CardFundsReviewReceipt, CardFundsReviewResult,
-        CardFundsReviewType, Error, COMMAND_FINGERPRINT_PREFIX,
+        CardFundsReviewType, Error, SecurityScanStatus, COMMAND_FINGERPRINT_PREFIX,
     };
-    use entities::receivable::AccountReviewStatus;
-    use entities::sales_order::BusinessType;
 
     fn opening_decision() -> CardFundsReviewDecision {
         CardFundsReviewDecision {
@@ -5283,6 +5294,28 @@ mod card_funds_review_tests {
             comment: Some("已核对".to_string()),
             reason_code: None,
         }
+    }
+
+    fn evidence_asset(id: &str, passed: bool) -> FileAsset {
+        let mut asset = FileAsset::new(
+            FileAssetId::new(id),
+            FileAssetData {
+                storage_object_key: format!("receivable-review/{id}"),
+                file_name: format!("{id}.pdf"),
+                content_type: "application/pdf".to_string(),
+                byte_size: 1,
+                content_hmac: ContentHmac::parse("a".repeat(64)).unwrap(),
+                sensitivity_class: SensitivityClass::Sensitive,
+                retention_class: RetentionClass::LongTerm,
+                expires_at: None,
+                created_by: "reviewer-1".to_string(),
+            },
+        )
+        .unwrap();
+        if passed {
+            asset.mark_scan_result(SecurityScanStatus::Passed).unwrap();
+        }
+        asset
     }
 
     #[test]
@@ -5313,26 +5346,42 @@ mod card_funds_review_tests {
     }
 
     #[test]
+    fn evidence_batch_restores_input_order_and_accepts_unordered_results() {
+        let mut decision = opening_decision();
+        decision.evidence_document_ids.push(FileAssetId::new("file-2"));
+        let assets = vec![evidence_asset("file-2", true), evidence_asset("file-1", true)];
+
+        assert!(validate_card_funds_evidence_facts(
+            &decision,
+            &assets,
+            Instant::from_unix_secs(1_700_000_000),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn evidence_batch_reports_first_requested_missing_file_before_later_scan_error() {
+        let mut decision = opening_decision();
+        decision.evidence_document_ids =
+            vec![FileAssetId::new("file-missing"), FileAssetId::new("file-pending")];
+        let assets = vec![evidence_asset("file-pending", false)];
+
+        let error =
+            validate_card_funds_evidence_facts(&decision, &assets, Instant::from_unix_secs(1_700_000_000))
+                .unwrap_err();
+
+        assert!(matches!(
+            error,
+            Error::NotFound(message) if message == "复核证据文件不存在: file-missing"
+        ));
+    }
+
+    #[test]
     fn task_version_requires_canonical_positive_integer_string() {
         assert_eq!(parse_task_version("12").unwrap(), 12);
         assert!(parse_task_version("0").is_err());
         assert!(parse_task_version("01").is_err());
         assert!(parse_task_version("1.0").is_err());
-    }
-
-    #[test]
-    fn initial_account_rejects_delta_review_and_derives_opening_review() {
-        assert_eq!(
-            resolve_initial_receivable_review_status(None, BusinessType::Voucher).unwrap(),
-            AccountReviewStatus::OpeningPending
-        );
-        assert!(matches!(
-            resolve_initial_receivable_review_status(
-                Some(AccountReviewStatus::SyncDeltaPending),
-                BusinessType::Voucher,
-            ),
-            Err(Error::ValidationError(_))
-        ));
     }
 
     #[test]

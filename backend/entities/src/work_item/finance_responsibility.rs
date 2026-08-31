@@ -11,6 +11,8 @@ use crate::catalog::EnableStatus;
 use crate::errors::{Error, Result};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use super::entity::WorkItemType;
+
 const ID_MAX_LEN: usize = 128;
 const COUNTERPARTY_ID_MAX_LEN: usize = 128;
 const OWNER_ID_MAX_LEN: usize = 128;
@@ -52,6 +54,30 @@ impl FinanceResponsibilityOperation {
         match self {
             Self::SupplierPayment => "供应商",
             Self::SalesInvoice | Self::CardFundsReview => "客户",
+        }
+    }
+
+    /// 返回本操作负责人必须完整持有的执行权限代码。
+    ///
+    /// # 返回
+    /// 返回对应正式工作项登记的完整、有序权限代码；领域登记缺失时返回
+    /// `None`，由应用层失败关闭并转换为内部配置错误。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 业务约束
+    /// 权限合同必须与付款、销项开票和卡券票款复核工作项保持同一规则源。
+    pub fn required_permission_codes(self) -> Option<&'static [&'static str]> {
+        match self {
+            Self::SupplierPayment => WorkItemType::SupplierPaymentExecution
+                .supplier_payment_execution_permissions("payable_account"),
+            Self::SalesInvoice => {
+                WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
+            }
+            Self::CardFundsReview => {
+                WorkItemType::CardFundsReview.card_funds_review_permissions("receivable_account")
+            }
         }
     }
 }
@@ -364,6 +390,49 @@ mod tests {
             "admin-1",
         )
         .is_err());
+    }
+
+    #[test]
+    fn operation_permission_contracts_are_complete_and_ordered() {
+        assert_eq!(
+            FinanceResponsibilityOperation::SupplierPayment.required_permission_codes(),
+            Some(
+                [
+                    "payable_account:list",
+                    "payable_account:detail",
+                    "party_bank_account:reveal",
+                    "supplier_payment:list",
+                    "supplier_payment:detail",
+                    "supplier_payment:commit",
+                ]
+                .as_slice()
+            )
+        );
+        assert_eq!(
+            FinanceResponsibilityOperation::SalesInvoice.required_permission_codes(),
+            Some(
+                [
+                    "receivable_account:list",
+                    "receivable_account:detail",
+                    "invoice:list",
+                    "invoice:detail",
+                    "invoice:create",
+                    "invoice:post",
+                ]
+                .as_slice()
+            )
+        );
+        assert_eq!(
+            FinanceResponsibilityOperation::CardFundsReview.required_permission_codes(),
+            Some(
+                [
+                    "receivable_account:list",
+                    "receivable_account:detail",
+                    "receivable_funds_review:complete",
+                ]
+                .as_slice()
+            )
+        );
     }
 
     #[test]

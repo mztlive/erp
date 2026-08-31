@@ -11,7 +11,7 @@
 use entities::file_asset::{
     DocumentAttachment, FileAsset, RetentionClass, SecurityScanStatus, SensitivityClass,
 };
-use entities::ids::BusinessDocumentId;
+use entities::ids::{BusinessDocumentId, FileAssetId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -102,6 +102,32 @@ impl Pagination for FileAssetFilter {
 }
 
 impl<'a> Repository<'a, FileAsset> {
+    /// 批量按文件资产 ID 读取活跃文件事实。
+    ///
+    /// 查询复用通用仓储的未软删除过滤；空 ID 集合直接返回空结果，不访问
+    /// MongoDB。返回顺序不承诺与输入一致，由 Service 按业务输入顺序解释缺失。
+    ///
+    /// # 参数
+    /// * `ids` - 文件资产 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未软删除的文件资产事实。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_by_ids(
+        &self,
+        ids: &[FileAssetId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<FileAsset>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
     /// 分页检索文件资产列表（投影查询）。
     ///
     /// 只返回 [`FileAssetRow`] 所需的展示与治理字段，不加载整文档；
@@ -205,7 +231,8 @@ fn file_asset_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, FileAssetFilter, QueryFilter};
+    use super::{sort_doc, FileAsset, FileAssetFilter, QueryFilter, Repository};
+    use crate::NoTransaction;
     use entities::file_asset::{RetentionClass, SecurityScanStatus, SensitivityClass};
     use mongodb::bson::doc;
 
@@ -240,5 +267,18 @@ mod tests {
             doc! { "created_at": -1 },
             "白名单外字段回落默认排序"
         );
+    }
+
+    #[tokio::test]
+    async fn find_by_ids_returns_empty_without_touching_database() {
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .unwrap();
+        let database = client.database("repository_file_asset_empty_ids");
+        let repository = Repository::<FileAsset>::new(&database, "file_assets");
+
+        let assets = repository.find_by_ids(&[], &mut NoTransaction).await.unwrap();
+
+        assert!(assets.is_empty());
     }
 }

@@ -9,9 +9,10 @@
 //! 筛选/行类型定义在本文件，经 `CostExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
+use entities::common::time::Instant;
 use entities::cost::{CostAllocation, CostBasis, CostEntry, CostScope, CostStage, CostType};
 use entities::ids::{CostEntryId, MallConsumptionEntryId, SalesOrderId, SupplierAccountId};
-use entities::money::Amount;
+use entities::money::{Amount, Rate};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -48,10 +49,20 @@ pub struct CostEntryRow {
     pub net_amount: Amount,
     /// 税额。
     pub tax_amount: Amount,
-    /// 成本发生时间（秒级时间戳）。
-    pub occurred_at: u64,
+    /// 含税标识。
+    pub tax_inclusion: bool,
+    /// 进项税率。
+    pub input_tax_rate: Rate,
+    /// 成本发生时间（秒级统一时基）。
+    pub occurred_at: Instant,
+    /// 来源事实类型。
+    pub source_fact_type: String,
     /// 来源单据 ID。
     pub source_document_id: String,
+    /// 来源行 ID。
+    pub source_line_id: String,
+    /// 来源版本。
+    pub source_version: String,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -393,8 +404,13 @@ fn cost_entry_projection() -> Document {
         "gross_amount": 1,
         "net_amount": 1,
         "tax_amount": 1,
+        "tax_inclusion": 1,
+        "input_tax_rate": 1,
         "occurred_at": 1,
+        "source_fact_type": 1,
         "source_document_id": 1,
+        "source_line_id": 1,
+        "source_version": 1,
         "version": 1,
         "created_at": 1,
     }
@@ -421,7 +437,7 @@ fn cost_allocation_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, CostAllocationFilter, CostEntryFilter, QueryFilter};
+    use super::{cost_entry_projection, sort_doc, CostAllocationFilter, CostEntryFilter, QueryFilter};
     use entities::cost::{CostScope, CostStage, CostType};
     use entities::ids::SupplierAccountId;
     use mongodb::bson::doc;
@@ -466,5 +482,31 @@ mod tests {
             sort_doc(filter.sort_by.as_deref(), true, &["allocated_gross_amount"]),
             doc! { "created_at": 1 }
         );
+    }
+
+    #[test]
+    fn entry_projection_contains_every_persisted_fact_needed_by_list_view() {
+        let projection = cost_entry_projection();
+        for field in [
+            "id",
+            "cost_type",
+            "cost_stage",
+            "cost_scope",
+            "cost_basis",
+            "supplier_id",
+            "gross_amount",
+            "net_amount",
+            "tax_amount",
+            "tax_inclusion",
+            "input_tax_rate",
+            "occurred_at",
+            "source_fact_type",
+            "source_document_id",
+            "source_line_id",
+            "source_version",
+            "created_at",
+        ] {
+            assert_eq!(projection.get_i32(field).unwrap(), 1, "列表缺少事实字段 {field}");
+        }
     }
 }

@@ -280,6 +280,36 @@ impl Pagination for CustomerAssignmentFilter {
 }
 
 impl<'a> Repository<'a, CustomerAssignment> {
+    /// 判断用户是否在指定日期拥有目标客户的有效归属。
+    ///
+    /// 查询同时约束客户、用户、OWNER/COLLABORATOR 角色与半开有效期；
+    /// 通用 Repository 自动追加未删除条件，并以存在性投影停止在首条命中。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `user_id` - 销售人员 ID
+    /// * `as_of` - 业务日期
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 命中当前有效 OWNER 或 COLLABORATOR 归属时返回 `true`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn has_active_assignment_for_customer_user(
+        &self,
+        customer_id: &str,
+        user_id: &str,
+        as_of: BusinessDate,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(
+            active_customer_user_assignment_filter(customer_id, user_id, as_of),
+            executor,
+        )
+        .await
+    }
+
     /// 按归属 ID 查找未删除客户归属。
     ///
     /// # 参数
@@ -496,6 +526,28 @@ impl<'a> Repository<'a, CustomerAssignment> {
     }
 }
 
+/// 构造用户对目标客户的当前有效归属查询条件。
+///
+/// 有效期采用半开区间 `[valid_from, valid_to)`；`valid_to = null` 表示长期有效。
+fn active_customer_user_assignment_filter(customer_id: &str, user_id: &str, as_of: BusinessDate) -> Document {
+    let as_of = as_of.to_string();
+    doc! {
+        "customer_id": customer_id,
+        "user_id": user_id,
+        "assignment_role": {
+            "$in": [
+                AssignmentRole::Owner.as_str(),
+                AssignmentRole::Collaborator.as_str(),
+            ],
+        },
+        "valid_from": { "$lte": &as_of },
+        "$or": [
+            { "valid_to": null },
+            { "valid_to": { "$gt": &as_of } },
+        ],
+    }
+}
+
 impl<'a> Repository<'a, CustomerProfileCommand> {
     /// 按客户端幂等键读取已成功命令结果。
     ///
@@ -575,7 +627,10 @@ fn customer_assignment_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, CustomerAccountFilter, QueryFilter};
+    use std::str::FromStr;
+
+    use super::{active_customer_user_assignment_filter, sort_doc, CustomerAccountFilter, QueryFilter};
+    use entities::common::time::BusinessDate;
     use entities::customer::CustomerAccountStatus;
     use mongodb::bson::doc;
 
@@ -618,6 +673,50 @@ mod tests {
         assert_eq!(
             sort_doc(Some("customer_no"), true, &["created_at", "customer_no"]),
             doc! { "customer_no": 1 }
+        );
+    }
+
+    #[test]
+    fn active_customer_user_assignment_filter_preserves_scope_and_half_open_window() {
+        let as_of = BusinessDate::from_str("2026-08-31").unwrap();
+
+        let filter = active_customer_user_assignment_filter("customer-1", "user-1", as_of);
+
+        assert_eq!(filter.get_str("customer_id").unwrap(), "customer-1");
+        assert_eq!(filter.get_str("user_id").unwrap(), "user-1");
+        assert_eq!(
+            filter
+                .get_document("assignment_role")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &vec!["OWNER".into(), "COLLABORATOR".into()]
+        );
+        assert_eq!(
+            filter
+                .get_document("valid_from")
+                .unwrap()
+                .get_str("$lte")
+                .unwrap(),
+            "2026-08-31"
+        );
+        let valid_to = filter.get_array("$or").unwrap();
+        assert!(valid_to[0]
+            .as_document()
+            .unwrap()
+            .get("valid_to")
+            .unwrap()
+            .as_null()
+            .is_some());
+        assert_eq!(
+            valid_to[1]
+                .as_document()
+                .unwrap()
+                .get_document("valid_to")
+                .unwrap()
+                .get_str("$gt")
+                .unwrap(),
+            "2026-08-31"
         );
     }
 }

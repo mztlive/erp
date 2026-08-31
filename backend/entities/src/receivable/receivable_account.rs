@@ -89,6 +89,30 @@ impl AccountReviewStatus {
         }
     }
 
+    /// 派生并校验新建应收账户的唯一合法票款复核初始状态。
+    ///
+    /// 同步差额待复核只能由既有期初复核链上的销售变更形成；新建入口未指定
+    /// 状态时直接派生，显式指定时必须与来源销售单业务性质一致。
+    ///
+    /// # 参数
+    /// * `requested` - 新建请求可选携带的复核状态
+    /// * `business_type` - 来源销售单创建后不可变的业务性质
+    ///
+    /// # 返回
+    /// 返回卡券销售的期初待复核，或实物及服务销售的不适用状态。
+    ///
+    /// # 错误
+    /// 显式请求状态与业务性质派生状态不一致时返回错误。
+    pub fn resolve_initial(requested: Option<Self>, business_type: BusinessType) -> Result<Self> {
+        let expected = Self::initial_for_sales_business_type(business_type);
+        if requested.is_some_and(|status| status != expected) {
+            return Err(Error::from(
+                "新建应收账户的票款复核状态必须由来源销售单业务性质决定",
+            ));
+        }
+        Ok(expected)
+    }
+
     /// 返回状态的中文展示名。
     ///
     /// # 返回
@@ -686,6 +710,36 @@ mod tests {
         assert_eq!(
             AccountReviewStatus::initial_for_sales_business_type(BusinessType::GoodsService),
             AccountReviewStatus::NotApplicable
+        );
+    }
+
+    #[test]
+    fn initial_review_status_accepts_derived_or_matching_request() {
+        assert_eq!(
+            AccountReviewStatus::resolve_initial(None, BusinessType::Voucher).unwrap(),
+            AccountReviewStatus::OpeningPending
+        );
+        assert_eq!(
+            AccountReviewStatus::resolve_initial(
+                Some(AccountReviewStatus::NotApplicable),
+                BusinessType::GoodsService,
+            )
+            .unwrap(),
+            AccountReviewStatus::NotApplicable
+        );
+    }
+
+    #[test]
+    fn initial_review_status_rejects_request_inconsistent_with_business_type() {
+        let error = AccountReviewStatus::resolve_initial(
+            Some(AccountReviewStatus::SyncDeltaPending),
+            BusinessType::Voucher,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "新建应收账户的票款复核状态必须由来源销售单业务性质决定"
         );
     }
 

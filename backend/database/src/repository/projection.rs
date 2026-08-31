@@ -201,6 +201,13 @@ pub struct SalesOrderProjectionRevisionRow {
     pub created_at: u64,
 }
 
+/// 投影修订号最小投影行。
+#[derive(Debug, Deserialize)]
+struct SalesOrderProjectionRevisionNoRow {
+    /// 同一投影内修订序号。
+    revision_no: u32,
+}
+
 impl<'a> Repository<'a, SalesOrderProjectionRevision> {
     /// 按「投影 + 修订序号」查找唯一投影修订。
     ///
@@ -269,6 +276,36 @@ impl<'a> Repository<'a, SalesOrderProjectionRevision> {
             executor,
         )
         .await
+    }
+
+    /// 读取指定执行投影的历史最大修订序号。
+    ///
+    /// 查询只读取 `revision_no` 并限制一条；修订号分配与溢出校验由实体负责。
+    ///
+    /// # 参数
+    /// * `projection_id` - 所属投影稳定身份
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回历史最大修订序号；没有历史修订时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    pub async fn latest_revision_no(
+        &self,
+        projection_id: &entities::ids::SalesOrderProjectionId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let rows = mongo_ops::find_many(
+            &self
+                .collection()
+                .clone_with_type::<SalesOrderProjectionRevisionNoRow>(),
+            latest_projection_revision_filter(projection_id),
+            latest_projection_revision_options(),
+            executor,
+        )
+        .await?;
+        Ok(projection_revision_no_from_rows(rows))
     }
 
     /// 批量读取多个投影的全部修订，按投影 ID、修订号降序返回。
@@ -934,6 +971,28 @@ fn sales_order_projection_revision_projection() -> Document {
     }
 }
 
+/// 构建执行投影最大修订号查询条件。
+fn latest_projection_revision_filter(projection_id: &entities::ids::SalesOrderProjectionId) -> Document {
+    doc! {
+        "projection_id": projection_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构建执行投影最大修订号的最小投影与有界排序。
+fn latest_projection_revision_options() -> FindOptions {
+    FindOptions::builder()
+        .sort(doc! { "revision_no": -1 })
+        .limit(1)
+        .projection(doc! { "revision_no": 1, "_id": 0 })
+        .build()
+}
+
+/// 从已按修订号倒序返回的零或一条投影中读取最大修订号。
+fn projection_revision_no_from_rows(rows: Vec<SalesOrderProjectionRevisionNoRow>) -> Option<u32> {
+    rows.into_iter().next().map(|row| row.revision_no)
+}
+
 /// 投影下发列表投影字段。
 ///
 /// # 返回
@@ -962,11 +1021,12 @@ fn sales_order_projection_delivery_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        claim_delivery_filter, retry_delivery_pipeline, sort_doc, QueryFilter,
-        SalesOrderProjectionDeliveryFilter, SalesOrderProjectionFilter,
+        claim_delivery_filter, latest_projection_revision_filter, latest_projection_revision_options,
+        projection_revision_no_from_rows, retry_delivery_pipeline, sort_doc, QueryFilter,
+        SalesOrderProjectionDeliveryFilter, SalesOrderProjectionFilter, SalesOrderProjectionRevisionNoRow,
     };
     use entities::common::time::Instant;
-    use entities::ids::{SalesOrderId, SourceSystemId};
+    use entities::ids::{SalesOrderId, SalesOrderProjectionId, SourceSystemId};
     use entities::projection::ProjectionDeliveryStatus;
     use mongodb::bson::doc;
 
@@ -1041,5 +1101,22 @@ mod tests {
         let set = pipeline[0].get_document("$set").unwrap();
         assert_eq!(set.get_i64("updated_at").unwrap(), 100);
         assert_eq!(set.get_i64("next_attempt_at").unwrap(), 160);
+    }
+
+    #[test]
+    fn latest_revision_query_is_minimal_bounded_and_reads_empty_history() {
+        assert_eq!(
+            latest_projection_revision_filter(&SalesOrderProjectionId::new("projection-1")),
+            doc! { "projection_id": "projection-1", "deleted_at": 0_i64 }
+        );
+        let options = latest_projection_revision_options();
+        assert_eq!(options.sort, Some(doc! { "revision_no": -1 }));
+        assert_eq!(options.limit, Some(1));
+        assert_eq!(options.projection, Some(doc! { "revision_no": 1, "_id": 0 }));
+        assert_eq!(projection_revision_no_from_rows(Vec::new()), None);
+        assert_eq!(
+            projection_revision_no_from_rows(vec![SalesOrderProjectionRevisionNoRow { revision_no: 5 }]),
+            Some(5)
+        );
     }
 }

@@ -8,7 +8,7 @@
 use entities::cost::{CostAllocation, CostEntry};
 use mongodb::Database;
 
-use super::super::cost::{CostAllocationFilter, CostEntryFilter, CostRepository};
+use super::super::cost::{CostAllocationFilter, CostEntryFilter, CostEntryRow, CostRepository};
 use crate::Repository;
 
 /// 域 D20 仓储访问器。
@@ -20,6 +20,9 @@ pub trait CostExt {
 
     /// 成本事实列表筛选条件类型（定义见 `repository::cost`）。
     type CostEntryFilter;
+
+    /// 成本事实列表持久化投影类型（定义见 `repository::cost`）。
+    type CostEntryRow;
 
     /// 成本分配列表筛选条件类型（定义见 `repository::cost`）。
     type CostAllocationFilter;
@@ -45,6 +48,7 @@ pub trait CostExt {
 
 impl CostExt for Database {
     type CostEntryFilter = CostEntryFilter;
+    type CostEntryRow = CostEntryRow;
     type CostAllocationFilter = CostAllocationFilter;
 
     fn cost_entries(&self) -> Repository<'_, CostEntry> {

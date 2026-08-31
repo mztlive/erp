@@ -41,6 +41,7 @@ pub use category::{
 pub(crate) use category::{ProductCategoryListQuery, PRODUCT_CATEGORY_SORT_FIELDS};
 #[allow(unused_imports)]
 pub(crate) use common::normalize_sort;
+pub(crate) use common::validate_sales_price_range;
 #[allow(unused_imports)]
 pub use common::{PageParams, PageView, SortDir};
 pub use product::{

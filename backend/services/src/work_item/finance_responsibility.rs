@@ -7,7 +7,7 @@ use entities::catalog::EnableStatus;
 use entities::ids::{CustomerAccountId, SupplierAccountId};
 use entities::work_item::{
     AvailableWorkItemAccount, FinanceResponsibilityOperation, FinanceResponsibilityRule,
-    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope, WorkItemType,
+    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
 };
 use entities::{AccountKind, Permission, PermissionSet};
 use id_generator::next_id;
@@ -550,18 +550,9 @@ impl WorkItemService {
 }
 
 fn required_finance_permissions(operation: FinanceResponsibilityOperation) -> Result<PermissionSet> {
-    let codes = match operation {
-        FinanceResponsibilityOperation::SupplierPayment => {
-            WorkItemType::SupplierPaymentExecution.supplier_payment_execution_permissions("payable_account")
-        }
-        FinanceResponsibilityOperation::SalesInvoice => {
-            WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
-        }
-        FinanceResponsibilityOperation::CardFundsReview => {
-            WorkItemType::CardFundsReview.card_funds_review_permissions("receivable_account")
-        }
-    }
-    .ok_or_else(|| Error::Internal("财务执行权限合同未注册".to_string()))?;
+    let codes = operation
+        .required_permission_codes()
+        .ok_or_else(|| Error::Internal("财务执行权限合同未注册".to_string()))?;
     let permissions = codes
         .iter()
         .map(|code| Permission::parse(code).map_err(|error| Error::Internal(error.to_string())))

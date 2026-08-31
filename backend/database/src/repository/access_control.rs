@@ -253,7 +253,7 @@ impl<'a> Repository<'a, DataScope> {
         })
     }
 
-    /// 按主体批量取回数据范围（`idx_data_scopes_scope_type` 前缀，无 N+1）。
+    /// 按单个主体取回数据范围。
     ///
     /// # 参数
     /// * `subject_type` - 范围主体类型
@@ -281,6 +281,59 @@ impl<'a> Repository<'a, DataScope> {
         )
         .await
     }
+
+    /// 按同类主体 ID 集合批量取回数据范围。
+    ///
+    /// 查询复用 `uk_data_scopes_subject_scope` 的
+    /// `(subject_type, subject_id)` 前缀；Repository 只返回未软删除的
+    /// 持久化事实，不计算用户与角色范围的授权交集。
+    ///
+    /// # 参数
+    /// * `subject_type` - 范围主体类型
+    /// * `subject_ids` - 同类主体 ID 集合；为空时不访问 MongoDB
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配且未软删除的数据范围；缺失主体不会补齐结果。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_subjects(
+        &self,
+        subject_type: DataScopeSubjectType,
+        subject_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DataScope>> {
+        let Some(filter) = data_scope_subjects_filter(subject_type, subject_ids) else {
+            return Ok(Vec::new());
+        };
+        self.find_many_sorted(filter, doc! { "subject_id": 1, "created_at": 1 }, executor)
+            .await
+    }
+}
+
+/// 构造同类主体批量查询条件。
+///
+/// # 参数
+/// * `subject_type` - 范围主体类型
+/// * `subject_ids` - 同类主体 ID 集合
+///
+/// # 返回
+/// 非空输入返回可使用现有主体复合索引的查询条件；空输入返回 `None`。
+///
+/// # 错误
+/// 无；未删除条件由 [`Repository::find_many_sorted`] 统一追加。
+fn data_scope_subjects_filter(
+    subject_type: DataScopeSubjectType,
+    subject_ids: &[String],
+) -> Option<Document> {
+    if subject_ids.is_empty() {
+        return None;
+    }
+    Some(doc! {
+        "subject_type": subject_type.as_str(),
+        "subject_id": { "$in": subject_ids },
+    })
 }
 
 /// 审计事件列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -530,9 +583,13 @@ fn audit_event_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, AuditEventFilter, DataScopeFilter, PermissionFilter, QueryFilter};
-    use entities::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
-    use mongodb::bson::doc;
+    use super::{
+        data_scope_subjects_filter, sort_doc, AuditEventFilter, DataScopeFilter, PermissionFilter,
+        QueryFilter, Repository,
+    };
+    use crate::NoTransaction;
+    use entities::access_control::{AuditEventResult, DataScope, DataScopeSubjectType, DataScopeType};
+    use mongodb::bson::{doc, Bson};
 
     #[test]
     fn permission_filter_applies_resource_regex_and_flags() {
@@ -568,6 +625,44 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_str("subject_type").unwrap(), "role");
         assert_eq!(document.get_str("scope_type").unwrap(), "team");
+    }
+
+    /// 批量主体查询保留正常与可能缺失的 ID，由 MongoDB 只返回实际事实。
+    #[test]
+    fn data_scope_subjects_filter_uses_subject_type_and_id_set() {
+        let ids = vec!["role-1".to_string(), "missing-role".to_string()];
+        let filter = data_scope_subjects_filter(DataScopeSubjectType::Role, &ids).unwrap();
+
+        assert_eq!(filter.get_str("subject_type").unwrap(), "role");
+        assert_eq!(
+            filter
+                .get_document("subject_id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &vec![
+                Bson::String("role-1".to_string()),
+                Bson::String("missing-role".to_string())
+            ]
+        );
+    }
+
+    /// 空主体集合必须短路，不得构造可扩大范围的查询。
+    #[tokio::test]
+    async fn data_scope_subjects_empty_input_does_not_touch_database() {
+        assert!(data_scope_subjects_filter(DataScopeSubjectType::Role, &[]).is_none());
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .unwrap();
+        let database = client.database("repository_data_scope_empty_subject_ids");
+        let repository = Repository::<DataScope>::new(&database, "data_scopes");
+
+        let scopes = repository
+            .list_by_subjects(DataScopeSubjectType::Role, &[], &mut NoTransaction)
+            .await
+            .unwrap();
+
+        assert!(scopes.is_empty());
     }
 
     #[test]

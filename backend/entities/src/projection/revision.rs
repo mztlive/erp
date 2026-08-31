@@ -207,6 +207,22 @@ impl SalesOrderProjectionRevision {
             content_hash,
         })
     }
+
+    /// 由当前最大修订序号计算下一执行投影修订序号。
+    ///
+    /// # 参数
+    /// * `current_max` - 当前执行投影历史最大修订序号；没有历史时为 `0`
+    ///
+    /// # 返回
+    /// 返回严格递增的下一修订序号。
+    ///
+    /// # 错误
+    /// 当前修订序号达到 `u32::MAX` 时返回错误。
+    pub fn next_revision_no(current_max: u32) -> Result<u32> {
+        current_max
+            .checked_add(1)
+            .ok_or_else(|| Error::from("执行投影版本号溢出"))
+    }
 }
 
 /// 校验唯一卡券明细执行字段。
@@ -273,6 +289,18 @@ mod tests {
         );
         assert_eq!(revision.projection_source, ProjectionSource::ErpRevision);
         assert_eq!(revision.voucher_expiry_at.unix_secs(), 1_800_000_000);
+    }
+
+    #[test]
+    fn next_revision_no_is_checked() {
+        assert_eq!(SalesOrderProjectionRevision::next_revision_no(0).unwrap(), 1);
+        assert_eq!(SalesOrderProjectionRevision::next_revision_no(5).unwrap(), 6);
+        assert_eq!(
+            SalesOrderProjectionRevision::next_revision_no(u32::MAX)
+                .unwrap_err()
+                .to_string(),
+            "执行投影版本号溢出"
+        );
     }
 
     #[test]

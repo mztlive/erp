@@ -46,6 +46,13 @@ pub struct ContractRow {
     pub updated_at: u64,
 }
 
+/// 合同修订号最小投影行。
+#[derive(Debug, Deserialize)]
+struct ContractRevisionNoRow {
+    /// 聚合内修订序号。
+    revision_no: u32,
+}
+
 /// 合同列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ContractFilter {
@@ -173,6 +180,34 @@ impl<'a> Repository<'a, ContractRevision> {
             executor,
         )
         .await
+    }
+
+    /// 读取指定合同的历史最大修订序号。
+    ///
+    /// 查询只读取 `revision_no` 并限制一条；修订号分配与溢出校验由实体负责。
+    ///
+    /// # 参数
+    /// * `contract_id` - 所属合同
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回历史最大修订序号；没有历史修订时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    pub async fn latest_revision_no(
+        &self,
+        contract_id: &ContractId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let rows = mongo_ops::find_many(
+            &self.collection().clone_with_type::<ContractRevisionNoRow>(),
+            latest_contract_revision_filter(contract_id),
+            latest_contract_revision_options(),
+            executor,
+        )
+        .await?;
+        Ok(contract_revision_no_from_rows(rows))
     }
 }
 
@@ -329,9 +364,35 @@ fn contract_projection() -> Document {
     }
 }
 
+/// 构建合同最大修订号查询条件。
+fn latest_contract_revision_filter(contract_id: &ContractId) -> Document {
+    doc! {
+        "contract_id": contract_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构建合同最大修订号的最小投影与有界排序。
+fn latest_contract_revision_options() -> FindOptions {
+    FindOptions::builder()
+        .sort(doc! { "revision_no": -1 })
+        .limit(1)
+        .projection(doc! { "revision_no": 1, "_id": 0 })
+        .build()
+}
+
+/// 从已按修订号倒序返回的零或一条投影中读取最大修订号。
+fn contract_revision_no_from_rows(rows: Vec<ContractRevisionNoRow>) -> Option<u32> {
+    rows.into_iter().next().map(|row| row.revision_no)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{sort_doc, ContractFilter, QueryFilter};
+    use super::{
+        contract_revision_no_from_rows, latest_contract_revision_filter, latest_contract_revision_options,
+        sort_doc, ContractFilter, ContractRevisionNoRow, QueryFilter,
+    };
+    use entities::ids::ContractId;
     use mongodb::bson::doc;
 
     #[test]
@@ -416,5 +477,22 @@ mod tests {
     fn sort_doc_defaults_to_created_at_descending() {
         assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
         assert_eq!(sort_doc(Some("contract_no"), true), doc! { "contract_no": 1 });
+    }
+
+    #[test]
+    fn latest_revision_query_is_minimal_bounded_and_reads_empty_history() {
+        assert_eq!(
+            latest_contract_revision_filter(&ContractId::new("contract-1")),
+            doc! { "contract_id": "contract-1", "deleted_at": 0_i64 }
+        );
+        let options = latest_contract_revision_options();
+        assert_eq!(options.sort, Some(doc! { "revision_no": -1 }));
+        assert_eq!(options.limit, Some(1));
+        assert_eq!(options.projection, Some(doc! { "revision_no": 1, "_id": 0 }));
+        assert_eq!(contract_revision_no_from_rows(Vec::new()), None);
+        assert_eq!(
+            contract_revision_no_from_rows(vec![ContractRevisionNoRow { revision_no: 7 }]),
+            Some(7)
+        );
     }
 }

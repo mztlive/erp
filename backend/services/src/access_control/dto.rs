@@ -152,6 +152,28 @@ pub struct UpdatePermissionRequest {
 }
 
 impl UpdatePermissionRequest {
+    /// 返回本次补丁显式携带的权限字段名。
+    ///
+    /// # 返回
+    /// 按 `name`、`description`、`disabled` 的稳定合同顺序返回字段名；
+    /// 未携带任何可更新字段时返回空集合。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn changed_field_names(&self) -> Vec<String> {
+        let mut changed = Vec::new();
+        if self.name.is_some() {
+            changed.push("name".to_string());
+        }
+        if self.description.is_some() {
+            changed.push("description".to_string());
+        }
+        if self.disabled.is_some() {
+            changed.push("disabled".to_string());
+        }
+        changed
+    }
+
     /// 转换为实体更新数据。
     ///
     /// # 返回
@@ -614,7 +636,7 @@ impl AuditEventListParams {
 mod tests {
     use super::{
         normalize_sort, AssignUserRoleRequest, AuditEventListParams, CreateDataScopeRequest,
-        CreatePermissionRequest, DataScopeListParams, PermissionListParams, SortDir,
+        CreatePermissionRequest, DataScopeListParams, PermissionListParams, SortDir, UpdatePermissionRequest,
     };
     use entities::access_control::{AuditEventResult, DataScopeSubjectType, DataScopeType};
     use serde_json::json;
@@ -699,6 +721,28 @@ mod tests {
         assert!(!request.system);
         let data = request.into_data();
         assert_eq!(data.resource, "sales_order");
+    }
+
+    #[test]
+    fn permission_update_reports_changed_fields_in_contract_order() {
+        let empty = UpdatePermissionRequest {
+            version: 1,
+            name: None,
+            description: None,
+            disabled: None,
+        };
+        assert!(empty.changed_field_names().is_empty());
+
+        let complete = UpdatePermissionRequest {
+            version: 1,
+            name: Some("销售单审批".to_string()),
+            description: Some(String::new()),
+            disabled: Some(false),
+        };
+        assert_eq!(
+            complete.changed_field_names(),
+            vec!["name", "description", "disabled"]
+        );
     }
 
     #[test]

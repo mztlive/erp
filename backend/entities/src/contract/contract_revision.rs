@@ -190,6 +190,22 @@ impl ContractRevision {
     pub fn update(&mut self, _data: ContractRevisionData) -> Result<()> {
         Err(Error::from("合同版本是不可变修订，不支持更新"))
     }
+
+    /// 由当前最大修订序号计算下一合同修订序号。
+    ///
+    /// # 参数
+    /// * `current_max` - 当前合同历史最大修订序号；没有历史时为 `0`
+    ///
+    /// # 返回
+    /// 返回严格递增的下一修订序号。
+    ///
+    /// # 错误
+    /// 当前修订序号达到 `u32::MAX` 时返回错误。
+    pub fn next_revision_no(current_max: u32) -> Result<u32> {
+        current_max
+            .checked_add(1)
+            .ok_or_else(|| Error::from("合同版本号溢出"))
+    }
 }
 
 #[cfg(test)]
@@ -284,6 +300,18 @@ mod tests {
         )
         .unwrap();
         assert!(revision.update(data()).is_err());
+    }
+
+    #[test]
+    fn next_revision_no_is_checked() {
+        assert_eq!(ContractRevision::next_revision_no(0).unwrap(), 1);
+        assert_eq!(ContractRevision::next_revision_no(7).unwrap(), 8);
+        assert_eq!(
+            ContractRevision::next_revision_no(u32::MAX)
+                .unwrap_err()
+                .to_string(),
+            "合同版本号溢出"
+        );
     }
 
     #[test]

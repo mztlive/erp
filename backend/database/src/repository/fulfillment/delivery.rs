@@ -2,7 +2,7 @@
 
 use entities::common::time::Instant;
 use entities::fulfillment::{Delivery, DeliveryState, DeliveryType};
-use entities::ids::{SalesOrderId, WarehouseId};
+use entities::ids::{PurchaseOrderId, SalesOrderId, WarehouseId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
@@ -27,6 +27,8 @@ pub struct DeliveryRow {
     pub delivery_type: DeliveryType,
     /// 销售单。
     pub sales_order_id: SalesOrderId,
+    /// 采购来源（供应商直发）。
+    pub purchase_order_id: Option<PurchaseOrderId>,
     /// 入库仓（仓发）。
     pub warehouse_id: Option<WarehouseId>,
     /// 当前状态。
@@ -148,6 +150,7 @@ fn delivery_projection() -> Document {
         "delivery_no": 1,
         "delivery_type": 1,
         "sales_order_id": 1,
+        "purchase_order_id": 1,
         "warehouse_id": 1,
         "status": 1,
         "carrier": 1,
@@ -164,7 +167,7 @@ mod tests {
     use mongodb::bson::doc;
 
     #[test]
-    fn projection_excludes_sensitive_and_purchase_fields() {
+    fn projection_includes_purchase_source_and_excludes_sensitive_fields() {
         let projection = delivery_projection();
         let keys: Vec<&str> = projection.keys().map(String::as_str).collect();
         assert_eq!(
@@ -174,6 +177,7 @@ mod tests {
                 "delivery_no",
                 "delivery_type",
                 "sales_order_id",
+                "purchase_order_id",
                 "warehouse_id",
                 "status",
                 "carrier",
@@ -184,10 +188,7 @@ mod tests {
             ],
             "列表投影必须精确等于 Row 字段集合"
         );
-        assert!(
-            !projection.contains_key("purchase_order_id"),
-            "采购来源字段不得进入发货列表投影"
-        );
+        assert_eq!(projection.get_i32("purchase_order_id").unwrap(), 1);
         assert!(
             !projection.contains_key("address_snapshot_encrypted"),
             "敏感履约地址不得进入发货列表投影"

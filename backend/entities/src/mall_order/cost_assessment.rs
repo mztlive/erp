@@ -157,6 +157,18 @@ pub struct MallConsumptionCostAssessment {
 }
 
 impl MallConsumptionCostAssessment {
+    /// 返回当前评估可计入订单成本的含税金额。
+    ///
+    /// # 返回
+    /// `ACTUAL`/`STANDARD` 评估返回累计含税成本；`NONE` 评估返回 `None`。
+    pub fn effective_gross_amount(&self) -> Option<Amount> {
+        if self.cost_basis == CostBasis::None {
+            None
+        } else {
+            self.gross_amount
+        }
+    }
+
     /// 创建成本评估。
     ///
     /// 强制链与内容不变式（§6.17）：
@@ -391,6 +403,10 @@ mod tests {
         assert_eq!(assessment.basis_source_id.as_deref(), Some("so-1"));
         assert_eq!(assessment.source_snapshot_hash.as_deref(), Some("9f86d081"));
         assert_eq!(assessment.gross_amount, Some(Amount::from_str("12.00").unwrap()));
+        assert_eq!(
+            assessment.effective_gross_amount(),
+            Some(Amount::from_str("12.00").unwrap())
+        );
         assert_eq!(assessment.net_amount, Some(Amount::from_str("11.32").unwrap()));
         assert_eq!(assessment.tax_amount, Some(Amount::from_str("0.68").unwrap()));
         assert_eq!(
@@ -497,6 +513,7 @@ mod tests {
                 .unwrap();
         assert_eq!(assessment.cost_basis, CostBasis::None);
         assert!(assessment.gross_amount.is_none());
+        assert!(assessment.effective_gross_amount().is_none());
         assert!(assessment.delta_cost_entry_id.is_none());
 
         let none_with_amount = MallConsumptionCostAssessmentData {

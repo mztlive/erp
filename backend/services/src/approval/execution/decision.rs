@@ -1,6 +1,6 @@
 //! 决定编排核心：通过、驳回与当前责任人失效阻塞。
 
-use bpm::engine::{decide, CommitRequired, DecideCommand, TaskCloseReason, TaskIntent, TransitionPlan};
+use bpm::engine::{block_current, decide, CommitRequired, DecideCommand, TransitionPlan};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
@@ -134,28 +134,33 @@ fn receipt_from_plan(
     .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// 同一执行存在多个 OPEN 任务时提交结构阻塞，关闭全部开放任务。
+/// 同一执行存在多个 OPEN 任务时规划标准结构阻塞。
+///
+/// # 参数
+/// * `input` - 已完成幂等与三重责任重验的决定输入
+///
+/// # 返回
+/// 返回包含收据、标准 `InstanceBlocked` 事件与任务关闭意图的可提交计划。
+///
+/// # 错误
+/// BPM 无法为当前令牌形成阻塞快照，或收据构造失败时返回错误。
+///
+/// # 关键业务约束
+/// 实例、执行、任务意图与中性事件必须全部来自 BPM 标准阻塞入口。
 fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedExecution> {
-    let mut current = input.current;
-    let mut instance = input.instance;
     let now = input.command.now;
-    current
-        .block(ApprovalBlockerCode::OpenTaskConflict, now)
-        .map_err(|error| map_engine_error(error.into()))?;
-    instance
-        .enter_blocked(ApprovalBlockerCode::OpenTaskConflict, now)
-        .map_err(|error| map_engine_error(error.into()))?;
-    let execution_id = ApprovalNodeExecutionId::new(current.base.id.clone());
-    let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);
-    plan.task_intents.push(TaskIntent::CloseTask {
-        execution_id,
-        reason: TaskCloseReason::ApprovalRuntimeBlocked,
-    });
-    plan.updated_executions.push(current);
+    let scope = input.current.base.id.clone();
+    let plan = block_current(
+        input.instance,
+        input.current,
+        ApprovalBlockerCode::OpenTaskConflict,
+        now,
+    )
+    .map_err(map_engine_error)?;
     let receipt = receipt_from_plan(
         input.receipt_id,
         ApprovalCommandKind::SubmitDecision,
-        plan.updated_executions[0].base.id.clone(),
+        scope,
         input.command.idempotency_key,
         decision_digest(
             &input.work_item_id,

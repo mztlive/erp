@@ -205,14 +205,16 @@ impl CustomerService {
     /// # 返回
     /// 命中当前有效归属返回 `true`，否则返回 `false`。
     pub async fn customer_is_assigned_to(&self, customer_id: &str, user_id: &str) -> Result<bool> {
-        let assignments = self
+        Ok(self
             .db
             .customer_assignments()
-            .find_active_assignments_for_user(user_id, BusinessDate::today(), &mut NoTransaction)
-            .await?;
-        Ok(assignments
-            .iter()
-            .any(|assignment| assignment.customer_id.as_ref() == customer_id))
+            .has_active_assignment_for_customer_user(
+                customer_id,
+                user_id,
+                BusinessDate::today(),
+                &mut NoTransaction,
+            )
+            .await?)
     }
 
     /// 按服务端数据范围解析允许返回的客户 ID。

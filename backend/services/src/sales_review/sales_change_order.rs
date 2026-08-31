@@ -1012,17 +1012,12 @@ async fn prepare_effective_revision_write(
     actor: &AuditActor,
 ) -> Result<EffectiveChangeWrite> {
     let now = Instant::now();
-    let existing_revisions = db
+    let current_revision_no = db
         .sales_order_revisions()
-        .list_by_order(&change_order.sales_order_id, &mut NoTransaction)
+        .latest_revision_no(&change_order.sales_order_id, &mut NoTransaction)
         .await?;
-    let revision_no = entities::sales_order::SalesOrderRevision::next_revision_no(
-        existing_revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0),
-    )?;
+    let revision_no =
+        entities::sales_order::SalesOrderRevision::next_revision_no(current_revision_no.unwrap_or(0))?;
     let revision = build_change_revision(&order, &submission, &submission_lines, revision_no, now)?;
     let current_revision_id = order
         .current_revision_id()

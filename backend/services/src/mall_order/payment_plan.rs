@@ -83,10 +83,10 @@ impl MallOrderService {
             .mall_consumption_cutovers()
             .find_enabled_cutover_by_mall_id(&req.mall_id, &mut NoTransaction)
             .await?;
-        let chain = match cutover.as_ref().and_then(|c| c.enabled_at) {
-            Some(t) if occurred >= t => FulfillmentChain::ErpAutomated,
-            _ => FulfillmentChain::LegacyManual,
-        };
+        let chain = FulfillmentChain::from_payment_occurred_at(
+            occurred,
+            cutover.as_ref().and_then(|cutover| cutover.enabled_at),
+        );
 
         let mut items: Vec<MallOrderItem> = Vec::with_capacity(payment.items.len());
         for line in &payment.items {

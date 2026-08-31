@@ -14,6 +14,8 @@ use validator::Validate;
 use super::{CatalogService, PageView};
 use crate::errors::{Error, Result};
 
+use super::dto::validate_sales_price_range;
+
 /// 公司商品池列表筛选条件类型。
 type SellableSkuFilter = <mongodb::Database as CatalogExt>::SellableSkuFilter;
 
@@ -140,29 +142,6 @@ fn normalized_text(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-}
-
-/// 校验公司商品池销售价区间。
-///
-/// # 参数
-/// * `minimum` - 可选下限
-/// * `maximum` - 可选上限
-///
-/// # 返回
-/// 区间合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 金额为负或下限高于上限时返回 `ValidationError`。
-fn validate_sales_price_range(minimum: Option<Amount>, maximum: Option<Amount>) -> Result<()> {
-    if minimum.is_some_and(|value| value.to_decimal().is_sign_negative())
-        || maximum.is_some_and(|value| value.to_decimal().is_sign_negative())
-    {
-        return Err(Error::ValidationError("销售价不能小于 0".to_string()));
-    }
-    if matches!((minimum, maximum), (Some(minimum), Some(maximum)) if minimum > maximum) {
-        return Err(Error::ValidationError("最低销售价不能高于最高销售价".to_string()));
-    }
-    Ok(())
 }
 
 impl CatalogService {

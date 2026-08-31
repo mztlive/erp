@@ -1,5 +1,7 @@
 //! 阻塞审批管理接口的数据范围解析，以及定义管理的类型级可见范围。
 
+use std::collections::HashMap;
+
 use database::{AccessControlExt, MongoCasbinAdapter, NoTransaction};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
@@ -258,6 +260,22 @@ async fn permission_scope(
         .map(|(scope, _)| scope)
 }
 
+/// 在当前 RBAC 与 DataScope 事实上计算权限的组织范围与授权角色。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `actor` - 已认证操作人
+/// * `permission` - 需要判定的稳定权限代码
+///
+/// # 返回
+/// 返回不扩大用户/角色交集的组织范围与实际生效角色 ID。
+///
+/// # 错误
+/// 角色、RBAC、权限解析或 DataScope 事实读取失败时返回错误。
+///
+/// # 关键业务约束
+/// Repository 批量返回事实；Service 必须逐角色完成权限与范围交集。
 async fn permission_scope_and_roles(
     db: &Database,
     rbac: &RbacService,
@@ -270,26 +288,87 @@ async fn permission_scope_and_roles(
         .list_by_subject(DataScopeSubjectType::User, actor.id(), &mut NoTransaction)
         .await?;
     let required = Permission::parse(permission)?;
-    let mut organizations = Vec::new();
-    let mut granting_role_ids = Vec::new();
+    let permitted_role_ids = permission_granting_role_ids(rbac, role_ids, &required).await?;
+    let role_scopes = db
+        .data_scopes()
+        .list_by_subjects(
+            DataScopeSubjectType::Role,
+            &permitted_role_ids,
+            &mut NoTransaction,
+        )
+        .await?;
+    Ok(scope_from_role_facts(
+        &user_scopes,
+        permitted_role_ids,
+        role_scopes,
+    ))
+}
+
+/// 从当前 Casbin 事实中收敛实际授予目标权限的角色 ID。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务
+/// * `role_ids` - 当前用户绑定的角色 ID
+/// * `required` - 本次组织范围需要的权限
+///
+/// # 返回
+/// 返回按输入顺序保留的授权角色 ID。
+///
+/// # 错误
+/// 任一角色的 RBAC 判定失败时返回错误。
+///
+/// # 关键业务约束
+/// 只有实际授予目标权限的角色才能进入 DataScope 授权交集。
+async fn permission_granting_role_ids(
+    rbac: &RbacService,
+    role_ids: Vec<String>,
+    required: &Permission,
+) -> Result<Vec<String>> {
+    let mut permitted = Vec::new();
     for role_id in role_ids {
-        if !rbac.enforce(&format!("role:{role_id}"), &required).await? {
+        if !rbac.enforce(&format!("role:{role_id}"), required).await? {
             continue;
         }
-        let role_scopes = db
-            .data_scopes()
-            .list_by_subject(DataScopeSubjectType::Role, &role_id, &mut NoTransaction)
-            .await?;
+        permitted.push(role_id);
+    }
+    Ok(permitted)
+}
+
+/// 用批量读取的角色范围事实计算最终组织授权。
+///
+/// # 参数
+/// * `user_scopes` - 当前用户自身范围事实
+/// * `permitted_role_ids` - 实际授予目标权限的角色 ID
+/// * `role_scopes` - Repository 批量返回的角色范围事实
+///
+/// # 返回
+/// 返回用户/角色逐角色求交后的组织范围与真正生效的角色 ID。
+///
+/// # 错误
+/// 无；缺失角色事实按无可证明范围失败关闭。
+///
+/// # 关键业务约束
+/// 必须先对每个角色与用户范围求交，再合并结果；禁止跨角色拼接权限与范围。
+fn scope_from_role_facts(
+    user_scopes: &[DataScope],
+    permitted_role_ids: Vec<String>,
+    role_scopes: Vec<DataScope>,
+) -> (ApprovalManagementScope, Vec<String>) {
+    let mut scopes_by_role = scopes_by_subject(role_scopes);
+    let mut organizations = Vec::new();
+    let mut granting_role_ids = Vec::new();
+    for role_id in permitted_role_ids {
+        let role_scopes = scopes_by_role.remove(&role_id).unwrap_or_default();
         let Some(role) = organization_coverage(&role_scopes, false) else {
             continue;
         };
-        let Some(user) = organization_coverage(&user_scopes, true) else {
+        let Some(user) = organization_coverage(user_scopes, true) else {
             continue;
         };
         match intersect_coverage(role, user) {
             OrganizationCoverage::All => {
                 granting_role_ids.push(role_id);
-                return Ok((ApprovalManagementScope::Company, granting_role_ids));
+                return (ApprovalManagementScope::Company, granting_role_ids);
             }
             OrganizationCoverage::Targets(targets) if !targets.is_empty() => {
                 organizations.extend(targets);
@@ -302,10 +381,31 @@ async fn permission_scope_and_roles(
     organizations.dedup();
     granting_role_ids.sort();
     granting_role_ids.dedup();
-    Ok((
+    (
         ApprovalManagementScope::Organizations(organizations),
         granting_role_ids,
-    ))
+    )
+}
+
+/// 将 Repository 批量返回的 DataScope 事实按主体 ID 分组。
+///
+/// # 参数
+/// * `scopes` - 同一主体类型的 DataScope 事实
+///
+/// # 返回
+/// 返回主体 ID 到该主体范围事实的映射。
+///
+/// # 错误
+/// 无；本方法只对 Repository 事实分组，不执行授权判断。
+fn scopes_by_subject(scopes: Vec<DataScope>) -> HashMap<String, Vec<DataScope>> {
+    let mut grouped = HashMap::new();
+    for scope in scopes {
+        grouped
+            .entry(scope.subject_id.clone())
+            .or_insert_with(Vec::new)
+            .push(scope);
+    }
+    grouped
 }
 
 /// 从恢复授权锚点恢复 Repository/管理服务使用的组织范围。
@@ -369,9 +469,26 @@ fn intersect_coverage(role: OrganizationCoverage, user: OrganizationCoverage) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        intersect_coverage, ApprovalManagementScope, DefinitionManagementVisibility, OrganizationCoverage,
+        intersect_coverage, scope_from_role_facts, ApprovalManagementScope, DefinitionManagementVisibility,
+        OrganizationCoverage,
     };
+    use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::document_registry::DocumentType;
+    use entities::ids::DataScopeId;
+
+    /// 构造角色组织范围事实。
+    fn role_scope(id: &str, role_id: &str, organization_id: &str) -> DataScope {
+        DataScope::new(
+            DataScopeId::new(id),
+            DataScopeData {
+                subject_type: DataScopeSubjectType::Role,
+                subject_id: role_id.to_string(),
+                scope_type: DataScopeType::Organization,
+                scope_targets: vec![organization_id.to_string()],
+            },
+        )
+        .unwrap()
+    }
 
     #[test]
     fn company_scope_has_no_repository_organization_filter() {
@@ -388,6 +505,34 @@ mod tests {
                 OrganizationCoverage::Targets(vec!["organization-1".to_string()]),
             ),
             OrganizationCoverage::Targets(vec!["organization-1".to_string()])
+        );
+    }
+
+    /// 批量角色事实仍逐角色授权：缺失角色失败关闭，未授权角色不得扩大范围。
+    #[test]
+    fn role_fact_batch_keeps_role_isolation_and_missing_semantics() {
+        let (scope, roles) = scope_from_role_facts(
+            &[],
+            vec!["role-a".to_string(), "missing-role".to_string()],
+            vec![
+                role_scope("scope-a", "role-a", "org-a"),
+                role_scope("scope-b", "role-b", "org-b"),
+            ],
+        );
+
+        assert_eq!(
+            scope,
+            ApprovalManagementScope::Organizations(vec!["org-a".to_string()])
+        );
+        assert_eq!(roles, vec!["role-a"]);
+    }
+
+    /// 空授权角色必须返回空组织范围，不得解读为公司级。
+    #[test]
+    fn empty_role_fact_batch_fails_closed() {
+        assert_eq!(
+            scope_from_role_facts(&[], Vec::new(), Vec::new()),
+            (ApprovalManagementScope::Organizations(Vec::new()), Vec::new())
         );
     }
 

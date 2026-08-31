@@ -14,6 +14,7 @@ use crate::ids::{SalesOrderLineId, SalesOrderWorkingCopyId, SalesOrderWorkingCop
 use crate::money::{Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
+use super::amount_validation::sum_line_amounts;
 use super::types::{build_line_groups, GoodsLineFields, LineType, VoucherLineDraft, WelfareScenario};
 
 /// 销售项名称快照最大长度。
@@ -208,6 +209,81 @@ impl SalesOrderWorkingCopyLine {
         Ok(Some((sku_id, revision_id)))
     }
 
+    /// 还原实物及服务字段组。
+    ///
+    /// # 返回
+    /// 实物及服务行返回完整字段组；卡券行返回 `None`。
+    ///
+    /// # 错误
+    /// 实物及服务行缺少任一必填字段时返回错误。
+    pub fn goods_fields(&self) -> Result<Option<GoodsLineFields>> {
+        if self.line_type != LineType::GoodsService {
+            return Ok(None);
+        }
+        Ok(Some(GoodsLineFields {
+            sku_id: self
+                .sku_id
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", self.line_no)))?,
+            sku_revision_id: self
+                .sku_revision_id
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
+            welfare_scenario: self.welfare_scenario,
+            service_region: self.service_region.clone(),
+            fulfillment_due_at: self
+                .fulfillment_due_at
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
+            quantity: self
+                .quantity
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
+            base_unit_code: self
+                .base_unit_code
+                .clone()
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", self.line_no)))?,
+            unit_price_gross: self
+                .unit_price_gross
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", self.line_no)))?,
+        }))
+    }
+
+    /// 还原卡券字段组。
+    ///
+    /// # 返回
+    /// 卡券行返回完整字段组；实物及服务行返回 `None`。
+    ///
+    /// # 错误
+    /// 卡券行缺少任一必填字段时返回错误。
+    pub fn voucher_fields(&self) -> Result<Option<VoucherLineDraft>> {
+        if self.line_type != LineType::Voucher {
+            return Ok(None);
+        }
+        Ok(Some(VoucherLineDraft {
+            face_value: self
+                .face_value
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", self.line_no)))?,
+            card_count: self
+                .card_count
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", self.line_no)))?,
+            unit_price_gross: self
+                .unit_price_gross
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", self.line_no)))?,
+            face_value_total: self
+                .face_value_total
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", self.line_no)))?,
+            transaction_amount: self
+                .transaction_amount
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", self.line_no)))?,
+            gift_amount: self
+                .gift_amount
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", self.line_no)))?,
+            gift_rate: self.gift_rate,
+            card_form: self
+                .card_form
+                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
+        }))
+    }
+
     /// 汇总工作副本行已经舍入的金额三元组。
     ///
     /// # 参数
@@ -219,14 +295,11 @@ impl SalesOrderWorkingCopyLine {
     /// # 错误
     /// 无；金额值对象负责保持精度和范围。
     pub fn amount_totals(lines: &[Self]) -> (Amount, Amount, Amount) {
-        let zero = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额必须合法");
-        lines.iter().fold((zero, zero, zero), |totals, line| {
-            (
-                totals.0.checked_add(line.gross_amount),
-                totals.1.checked_add(line.net_amount),
-                totals.2.checked_add(line.tax_amount),
-            )
-        })
+        sum_line_amounts(
+            lines
+                .iter()
+                .map(|line| (line.gross_amount, line.net_amount, line.tax_amount)),
+        )
     }
 }
 
@@ -272,14 +345,15 @@ mod tests {
         let (sku, revision) = goods.sellable_sku_ref().unwrap().unwrap();
         assert_eq!(sku.as_ref(), "sku-1");
         assert_eq!(revision.as_ref(), "skurev-1");
+        assert_eq!(goods.goods_fields().unwrap().unwrap().sku_id.as_ref(), "sku-1");
+        assert!(goods.voucher_fields().unwrap().is_none());
         assert_eq!(
             SalesOrderWorkingCopyLine::amount_totals(std::slice::from_ref(&goods)),
             (amt("29.97"), amt("26.07"), amt("3.90"))
         );
-        assert_eq!(
-            SalesOrderWorkingCopyLine::amount_totals(&[]),
-            (amt("0.00"), amt("0.00"), amt("0.00"))
-        );
+        let empty_totals = SalesOrderWorkingCopyLine::amount_totals(&[]);
+        assert_eq!(empty_totals, (amt("0.00"), amt("0.00"), amt("0.00")));
+        assert_eq!(empty_totals.0.to_decimal().to_string(), "0.00");
 
         let mut voucher = goods;
         voucher.line_type = LineType::Voucher;
@@ -325,6 +399,30 @@ mod tests {
     }
 
     #[test]
+    fn typed_field_reconstruction_rejects_corrupted_persisted_shape() {
+        let goods = SalesOrderWorkingCopyLine::new(
+            SalesOrderWorkingCopyLineId::new("wcl-1"),
+            SalesOrderWorkingCopyId::new("wc-1"),
+            line_data(1),
+        )
+        .unwrap();
+
+        let mut missing_goods = goods.clone();
+        missing_goods.sku_id = None;
+        assert_eq!(
+            missing_goods.goods_fields().unwrap_err().to_string(),
+            "第 1 行缺少商品字段组"
+        );
+
+        let mut missing_voucher = goods;
+        missing_voucher.line_type = LineType::Voucher;
+        assert_eq!(
+            missing_voucher.voucher_fields().unwrap_err().to_string(),
+            "第 1 行缺少卡券字段组"
+        );
+    }
+
+    #[test]
     fn voucher_line_builds_with_derived_gift_rate() {
         let voucher = VoucherLineDraft {
             face_value: amt("100.00"),
@@ -354,6 +452,8 @@ mod tests {
         )
         .unwrap();
 
+        assert!(line.goods_fields().unwrap().is_none());
+        assert_eq!(line.voucher_fields().unwrap().unwrap().card_count, 3);
         assert_eq!(line.transaction_amount, Some(amt("270.00")));
         assert_eq!(line.face_value_total, Some(amt("300.00")));
         assert_eq!(line.gift_amount, Some(amt("30.00")));

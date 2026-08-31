@@ -190,16 +190,30 @@ fn enter_after_decision(
     Ok(plan)
 }
 
-/// 当前责任人失效或图损坏时提交阻塞事实并关闭任务。
-fn block_current(
+/// 为当前活动执行规划标准阻塞迁移。
+///
+/// 计划同时包含实例与执行阻塞快照、任务关闭意图以及
+/// `InstanceBlocked` 中性领域事件，调用方不得只手工复制部分计划字段。
+///
+/// # 参数
+/// * `instance` - 当前流程实例快照
+/// * `current` - 必须与实例当前令牌一致的活动执行
+/// * `code` - 结构化阻塞码
+/// * `now` - 调用方提供的确定时间
+///
+/// # 返回
+/// 返回 `CommitRequired::Blocked` 的完整确定性迁移计划。
+///
+/// # 错误
+/// 实例已终态、执行不是当前令牌、执行非活动态，或模型拒绝
+/// 阻塞迁移时返回引擎错误。
+pub fn block_current(
     mut instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,
     code: ApprovalBlockerCode,
     now: Timestamp,
 ) -> EngineResult<TransitionPlan> {
-    if current.status != ApprovalNodeExecutionStatus::Active {
-        return Err(EngineError::Uncommittable("当前执行无法形成合法阻塞快照"));
-    }
+    ensure_current_token(&instance, &current)?;
     current.block(code, now)?;
     instance.enter_blocked(code, now)?;
     let execution_id = execution_id(&current);
