@@ -134,8 +134,14 @@ function SettlementCenterHeaderActions({
                     disabled={refreshPending}
                     onClick={() => void onRefresh()}
                 >
-                    <RefreshCwIcon className="size-3.5" />
-                    刷新试算
+                    <RefreshCwIcon
+                        className={
+                            refreshPending
+                                ? "size-3.5 animate-spin"
+                                : "size-3.5"
+                        }
+                    />
+                    {refreshPending ? "刷新中…" : "刷新试算"}
                 </Button>
             ) : null}
             {allowed.has("SUBMIT_REVIEW") ? (

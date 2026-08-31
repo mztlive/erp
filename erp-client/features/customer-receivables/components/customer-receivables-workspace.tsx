@@ -160,6 +160,7 @@ export function CustomerReceivablesWorkspace({
     const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
     const sessionQuery = useAllocationSessionQuery(urlState.sessionId ?? null)
     const createSession = useCreateAllocationSessionMutation()
+    const startSessionPending = createSession.isPending
     const invoiceSessionMatchesTask =
         sessionQuery.data?.mode !== "invoice" ||
         Boolean(
@@ -319,10 +320,12 @@ export function CustomerReceivablesWorkspace({
                 onPreview: openPreview,
                 onStartSession: startSession,
                 canStartSession: canStartAssignedSession,
+                startSessionPending,
                 permissionReason: permissions.reason,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [
+            startSessionPending,
             invoiceExecutionTask?.workItemId,
             permissions.canRegisterInvoice,
             permissions.canRegisterReceipt,
@@ -336,10 +339,12 @@ export function CustomerReceivablesWorkspace({
                 onPreview: openPreview,
                 onStartSession: startSession,
                 canStartSession: canStartAssignedSession,
+                startSessionPending,
                 permissionReason: permissions.reason,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [
+            startSessionPending,
             invoiceExecutionTask?.workItemId,
             permissions.canRegisterInvoice,
             permissions.canRegisterReceipt,
@@ -353,10 +358,12 @@ export function CustomerReceivablesWorkspace({
                 onPreview: openPreview,
                 onStartSession: startSession,
                 canStartSession: canStartAssignedSession,
+                startSessionPending,
                 permissionReason: permissions.reason,
             }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [
+            startSessionPending,
             invoiceExecutionTask?.workItemId,
             permissions.canRegisterInvoice,
             permissions.reason,
@@ -410,6 +417,7 @@ export function CustomerReceivablesWorkspace({
                 }}
                 onRegisterInvoice={() => openRegister("invoice")}
                 onRegisterReceipt={() => openRegister("receipt")}
+                startSessionPending={startSessionPending}
                 canRegisterInvoice={
                     permissions.canRegisterInvoice &&
                     Boolean(invoiceExecutionTask)
@@ -481,6 +489,7 @@ export function CustomerReceivablesWorkspace({
                 onClose={closePreview}
                 onStartSession={startSession}
                 canStartSession={permissions.canStartSession}
+                startSessionPending={startSessionPending}
                 canRequestReverse={permissions.canReverse}
                 canSubmitRefund={permissions.canSubmitRefund}
                 canSubmitReversal={permissions.canSubmitReversal}
@@ -544,7 +553,7 @@ export function CustomerReceivablesWorkspace({
                 partyPickerOpen={partyPickerOpen}
                 partyPickerMode={partyPickerMode}
                 selectedPartyId={selectedPartyId}
-                createPending={createSession.isPending}
+                createPending={startSessionPending}
                 onPartyPickerOpenChange={setPartyPickerOpen}
                 onSelectedPartyIdChange={setSelectedPartyId}
                 onStartSession={(mode, partyId) =>

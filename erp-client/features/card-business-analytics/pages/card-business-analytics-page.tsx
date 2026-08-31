@@ -11,6 +11,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
     CalendarRangeIcon,
     DownloadIcon,
@@ -207,9 +208,21 @@ export function CardBusinessAnalyticsPage() {
                             {
                                 actionKey: "export",
                                 id: "card-contracts-analytics-header-export",
-                                label: "导出",
-                                icon: DownloadIcon,
-                                disabled: !data?.fieldPermissions.canExport,
+                                label: isExporting ? (
+                                    <>
+                                        <Spinner
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        导出中…
+                                    </>
+                                ) : (
+                                    "导出"
+                                ),
+                                icon: isExporting ? undefined : DownloadIcon,
+                                disabled:
+                                    !data?.fieldPermissions.canExport ||
+                                    isExporting,
                                 onClick: () => setExportPreviewOpen(true),
                             },
                         ]}

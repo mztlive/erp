@@ -1,6 +1,11 @@
 "use client"
 
-import { DownloadIcon, FileTextIcon, WalletIcon } from "lucide-react"
+import {
+    DownloadIcon,
+    FileTextIcon,
+    LoaderCircleIcon,
+    WalletIcon,
+} from "lucide-react"
 
 import {
     DataFreshness,
@@ -19,6 +24,7 @@ type CustomerReceivablesHeaderProps = {
     onRegisterReceipt: () => void
     canRegisterInvoice?: boolean
     canRegisterReceipt?: boolean
+    startSessionPending?: boolean
     canExport?: boolean
     permissionReason?: string
     invoiceBlockedReason?: string
@@ -36,6 +42,7 @@ export function CustomerReceivablesHeader({
     onRegisterReceipt,
     canRegisterInvoice = Boolean(data?.canRegister),
     canRegisterReceipt = Boolean(data?.canRegister),
+    startSessionPending = false,
     canExport = Boolean(data?.canExport),
     permissionReason,
     invoiceBlockedReason,
@@ -63,11 +70,15 @@ export function CustomerReceivablesHeader({
                     id: embedded
                         ? "customer-receivables-header-embedded-register-invoice"
                         : "customer-receivables-header-register-invoice",
-                    label: "登记销项发票",
-                    icon: FileTextIcon,
+                    label: startSessionPending
+                        ? "创建中…"
+                        : "登记销项发票",
+                    icon: startSessionPending
+                        ? LoaderCircleIcon
+                        : FileTextIcon,
                     variant: "outline",
                     mobileVisibility: embedded ? "show" : "hide",
-                    disabled: !canRegisterInvoice,
+                    disabled: !canRegisterInvoice || startSessionPending,
                     title: canRegisterInvoice
                         ? undefined
                         : (invoiceBlockedReason ??
@@ -80,10 +91,10 @@ export function CustomerReceivablesHeader({
                     id: embedded
                         ? "customer-receivables-header-embedded-register-receipt"
                         : "customer-receivables-header-register-receipt",
-                    label: "登记回款",
-                    icon: WalletIcon,
+                    label: startSessionPending ? "创建中…" : "登记回款",
+                    icon: startSessionPending ? LoaderCircleIcon : WalletIcon,
                     mobileVisibility: embedded ? "show" : "hide",
-                    disabled: !canRegisterReceipt,
+                    disabled: !canRegisterReceipt || startSessionPending,
                     title: canRegisterReceipt
                         ? undefined
                         : (permissionReason ?? "当前无回款登记权限"),

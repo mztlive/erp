@@ -4,12 +4,14 @@ import Link from "next/link"
 
 import { FormalActionResult } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import type { FormalSubmitResult } from "@/features/supplier-payables/types"
 
 export type AllocationResultViewProps = {
     result: FormalSubmitResult
     returnTo?: string
     hasSubmitKey: boolean
+    pending: boolean
     closeLabel?: string
     onGoToInvoiceView?: () => void
     onClose: () => void
@@ -21,6 +23,7 @@ export function AllocationResultView({
     result,
     returnTo,
     hasSubmitKey,
+    pending,
     closeLabel = "回到列表",
     onGoToInvoiceView,
     onClose,
@@ -61,9 +64,16 @@ export function AllocationResultView({
                             type="button"
                             variant="outline"
                             size="sm"
+                            disabled={pending}
                             onClick={() => void onResolveUnknown()}
                         >
-                            按操作号查询最终结果
+                            {pending ? (
+                                <Spinner
+                                    className="size-4 animate-spin"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            {pending ? "查询中…" : "按操作号查询最终结果"}
                         </Button>
                     ) : null}
                     {result.status === "blocked" &&

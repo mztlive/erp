@@ -278,7 +278,8 @@ export function useMallSyncMappingActions(
         canConfirmMapping,
         confirmPending: confirmMutation.isPending,
         actionPending: confirmMutation.isPending,
-        reapplyPending: reapplyMutation.isPending,
+        reapplyPending:
+            reapplyMutation.isPending || resolveReapply.isPending,
         handleConfirm,
         handleRequestSourceFix,
         handleReapply,

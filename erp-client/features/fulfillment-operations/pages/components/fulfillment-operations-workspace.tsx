@@ -64,6 +64,7 @@ export function FulfillmentOperationsWorkspace({
                     <FulfillmentResultPanel
                         lastResult={controller.lastResult}
                         currentUrl={controller.currentUrl}
+                        resolvePending={controller.formalPending}
                         onResolveUnknown={() =>
                             void controller.handleResolveUnknown()
                         }

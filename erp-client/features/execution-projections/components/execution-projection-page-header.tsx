@@ -3,6 +3,7 @@
 import { RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, PageActions, PageHeader } from "@/components/business"
+import { Spinner } from "@/components/ui/spinner"
 import { formatDateTime } from "@/lib/datetime"
 
 export function ExecutionProjectionPageHeader({
@@ -57,7 +58,17 @@ export function ExecutionProjectionPageHeader({
                         {
                             actionKey: "bulk-query",
                             id: "execution-projections-page-header-bulk-query",
-                            label: "批量查询",
+                            label: bulkPending ? (
+                                <>
+                                    <Spinner
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    处理中…
+                                </>
+                            ) : (
+                                "批量查询"
+                            ),
                             variant: "outline",
                             mobileVisibility: "hide",
                             disabled:
@@ -69,7 +80,17 @@ export function ExecutionProjectionPageHeader({
                         {
                             actionKey: "bulk-retry",
                             id: "execution-projections-page-header-bulk-retry",
-                            label: "批量重试",
+                            label: bulkPending ? (
+                                <>
+                                    <Spinner
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                    />
+                                    处理中…
+                                </>
+                            ) : (
+                                "批量重试"
+                            ),
                             mobileVisibility: "hide",
                             disabled:
                                 selectedCount === 0 ||

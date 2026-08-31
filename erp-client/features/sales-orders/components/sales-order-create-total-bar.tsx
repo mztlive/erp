@@ -1,6 +1,6 @@
 "use client"
 
-import { PlusIcon } from "lucide-react"
+import { LoaderCircleIcon, PlusIcon } from "lucide-react"
 import { useSelector } from "@tanstack/react-form"
 
 import {
@@ -35,12 +35,14 @@ const HEADER_VALIDATION_FIELDS = [
 
 export type SalesOrderCreateTotalBarProps = {
     form: SalesOrderCreateFormApi
+    isSubmitting: boolean
     onSaveDraftClick: () => void
     onSubmitClick: () => void
 }
 
 export function SalesOrderCreateTotalBar({
     form,
+    isSubmitting,
     onSaveDraftClick,
     onSubmitClick,
 }: SalesOrderCreateTotalBarProps) {
@@ -114,8 +116,13 @@ export function SalesOrderCreateTotalBar({
                                     <form.SubmitButton
                                         id="sales-orders-create-save-draft"
                                         variant="outline"
-                                        label="保存草稿"
+                                        label={
+                                            isSubmitting
+                                                ? "处理中…"
+                                                : "保存草稿"
+                                        }
                                         pendingLabel="正在保存草稿…"
+                                        disabled={isSubmitting}
                                         onClick={onSaveDraftClick}
                                     />
                                     <form.SubmitButton
@@ -123,13 +130,22 @@ export function SalesOrderCreateTotalBar({
                                         data-testid="sales-order-submit"
                                         label="提交"
                                         pendingLabel="正在提交…"
+                                        disabled={isSubmitting}
                                         onClick={onSubmitClick}
                                     >
-                                        <PlusIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                        />
-                                        提交
+                                        {isSubmitting ? (
+                                            <LoaderCircleIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                                className="animate-spin"
+                                            />
+                                        ) : (
+                                            <PlusIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                            />
+                                        )}
+                                        {isSubmitting ? "处理中…" : "提交"}
                                     </form.SubmitButton>
                                 </form.AppForm>
                             }

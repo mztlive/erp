@@ -367,19 +367,25 @@ function RuleDialog({
                         >
                             取消
                         </DialogClose>
-                        <form.Subscribe selector={(state) => state.canSubmit}>
-                            {(canSubmit) => (
-                                <Button
-                                    id="procurement-responsibility-rules-dialog-save"
-                                    type="submit"
-                                    data-testid="procurement-responsibility-save"
-                                    disabled={!canSubmit || mutation.isPending}
-                                >
-                                    {mutation.isPending
-                                        ? "保存中…"
-                                        : "保存规则"}
-                                </Button>
-                            )}
+                        <form.Subscribe
+                            selector={(state) =>
+                                [state.canSubmit, state.isSubmitting] as const
+                            }
+                        >
+                            {([canSubmit, isSubmitting]) => {
+                                const pending =
+                                    isSubmitting || mutation.isPending
+                                return (
+                                    <Button
+                                        id="procurement-responsibility-rules-dialog-save"
+                                        type="submit"
+                                        data-testid="procurement-responsibility-save"
+                                        disabled={!canSubmit || pending}
+                                    >
+                                        {pending ? "保存中…" : "保存规则"}
+                                    </Button>
+                                )
+                            }}
                         </form.Subscribe>
                     </DialogFooter>
                 </form>

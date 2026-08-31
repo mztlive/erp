@@ -1,3 +1,4 @@
+import { LoaderCircleIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import {
@@ -21,6 +22,7 @@ export function createInvoiceColumns({
     onPreview,
     onStartSession,
     canStartSession = () => true,
+    startSessionPending = false,
     permissionReason,
 }: ColumnActions): ColumnDef<SalesInvoiceRow>[] {
     return [
@@ -135,7 +137,10 @@ export function createInvoiceColumns({
                             type="button"
                             size="sm"
                             variant="outline"
-                            disabled={!canStartSession("invoice")}
+                            disabled={
+                                startSessionPending ||
+                                !canStartSession("invoice")
+                            }
                             title={
                                 canStartSession("invoice")
                                     ? undefined
@@ -149,7 +154,14 @@ export function createInvoiceColumns({
                                 )
                             }
                         >
-                            继续分配
+                            {startSessionPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {startSessionPending ? "创建中…" : "继续分配"}
                         </Button>
                     ) : null}
                 </div>

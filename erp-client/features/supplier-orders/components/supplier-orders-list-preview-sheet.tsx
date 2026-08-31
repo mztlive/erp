@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { TriangleAlertIcon } from "lucide-react"
+import { Loader2Icon, TriangleAlertIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -107,7 +107,13 @@ export function SupplierOrdersListPreviewSheet({
                                     })
                                 }}
                             >
-                                查询原结果
+                                {queryPending ? (
+                                    <Loader2Icon
+                                        className="size-4 animate-spin"
+                                        aria-hidden="true"
+                                    />
+                                ) : null}
+                                {queryPending ? "查询中…" : "查询原结果"}
                             </Button>
                         ) : null}
                     </>

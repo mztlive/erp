@@ -1,6 +1,7 @@
 "use client"
 
 import { DownloadIcon, PlusIcon } from "lucide-react"
+import { useIsMutating } from "@tanstack/react-query"
 
 import { BusinessTableFrame } from "@/components/business"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -35,6 +36,19 @@ export function WarehousesListPage() {
         searchInputRef,
         enablePreview: true,
     })
+    const exportPending =
+        useIsMutating({
+            predicate: (mutation) => {
+                const variables = mutation.state.variables
+                return (
+                    typeof variables === "object" &&
+                    variables !== null &&
+                    "resource" in variables &&
+                    variables.resource === "warehouses" &&
+                    !("idempotencyKey" in variables)
+                )
+            },
+        }) > 0
     const columns = useWarehouseListColumns({
         lastFocusedRowId,
         rows: state.rows,
@@ -57,11 +71,13 @@ export function WarehousesListPage() {
                 {
                     id: "master-data-warehouses-list-export",
                     actionKey: "export",
-                    label: masterDataCopy.actionExport,
+                    label: exportPending
+                        ? "导出中…"
+                        : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
                     mobileVisibility: "hide",
-                    disabled: state.rows.length === 0,
+                    disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
                 {

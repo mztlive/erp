@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react"
+import { ArrowLeftIcon, ExternalLinkIcon, Loader2Icon } from "lucide-react"
 
 import {
     DocumentHeader,
@@ -117,7 +117,14 @@ export function SupplierOrderCenterHeader({
                             }
                             onClick={onQueryResult}
                         >
-                            查询原结果
+                            {queryPending ? (
+                                <Loader2Icon
+                                    data-icon="inline-start"
+                                    className="size-4 animate-spin"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                            {queryPending ? "查询中…" : "查询原结果"}
                         </GuardedBusinessAction>
                     ) : undefined
                 }

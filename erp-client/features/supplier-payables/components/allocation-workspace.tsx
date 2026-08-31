@@ -123,6 +123,7 @@ export function SupplierAllocationWorkspace({
                     result={result}
                     returnTo={embedded ? undefined : returnTo}
                     hasSubmitKey={hasSubmitKey}
+                    pending={isSubmitting}
                     closeLabel={embedded ? "继续处理" : "回到列表"}
                     onClose={onClose}
                     onGoToInvoiceView={embedded ? undefined : onGoToInvoiceView}

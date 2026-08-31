@@ -1,6 +1,7 @@
 "use client"
 
 import { DownloadIcon, PlusIcon } from "lucide-react"
+import { useIsMutating } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
@@ -33,6 +34,19 @@ export function BrandsListPage() {
         createPermission: "product_brand:create",
         searchInputRef,
     })
+    const exportPending =
+        useIsMutating({
+            predicate: (mutation) => {
+                const variables = mutation.state.variables
+                return (
+                    typeof variables === "object" &&
+                    variables !== null &&
+                    "resource" in variables &&
+                    variables.resource === "brands" &&
+                    !("idempotencyKey" in variables)
+                )
+            },
+        }) > 0
     const columns = useBrandListColumns({
         lastFocusedRowId,
         rows: state.rows,
@@ -54,11 +68,13 @@ export function BrandsListPage() {
                 {
                     id: "master-data-brands-list-export",
                     actionKey: "export",
-                    label: masterDataCopy.actionExport,
+                    label: exportPending
+                        ? "导出中…"
+                        : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
                     mobileVisibility: "hide",
-                    disabled: state.rows.length === 0,
+                    disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
                 {

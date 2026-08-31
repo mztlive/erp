@@ -1,5 +1,7 @@
 "use client"
 
+import { LoaderCircleIcon } from "lucide-react"
+
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -46,6 +48,7 @@ type CustomerAccountDetailPreviewProps = Readonly<{
         target?: AllocationTarget,
     ) => void | Promise<void>
     canStartSession?: (mode: AllocationMode) => boolean
+    startSessionPending?: boolean
     onRequestReverse: (request: ReverseRequest) => void
     canRequestReverse?: (kind: ReverseRequest["kind"]) => boolean
     onRequestRefundSubmit?: () => void
@@ -75,6 +78,7 @@ export function CustomerAccountDetailPreview({
     onClose,
     onStartSession,
     canStartSession = () => true,
+    startSessionPending = false,
     onRequestReverse,
     canRequestReverse = () => true,
     onRequestRefundSubmit,
@@ -173,7 +177,10 @@ export function CustomerAccountDetailPreview({
                             <Button
                                 id="customer-receivables-preview-receivable-register-receipt"
                                 type="button"
-                                disabled={!canStartSession("receipt")}
+                                disabled={
+                                    startSessionPending ||
+                                    !canStartSession("receipt")
+                                }
                                 title={
                                     canStartSession("receipt")
                                         ? undefined
@@ -193,7 +200,16 @@ export function CustomerAccountDetailPreview({
                                     )
                                 }
                             >
-                                登记回款并核销
+                                {startSessionPending ? (
+                                    <LoaderCircleIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                        className="animate-spin"
+                                    />
+                                ) : null}
+                                {startSessionPending
+                                    ? "创建中…"
+                                    : "登记回款并核销"}
                             </Button>
                         ) : null}
                         {data.receipt?.allowedActions.includes(
@@ -202,7 +218,10 @@ export function CustomerAccountDetailPreview({
                             <Button
                                 id="customer-receivables-preview-receipt-continue-allocate"
                                 type="button"
-                                disabled={!canStartSession("receipt")}
+                                disabled={
+                                    startSessionPending ||
+                                    !canStartSession("receipt")
+                                }
                                 title={
                                     canStartSession("receipt")
                                         ? undefined
@@ -216,7 +235,16 @@ export function CustomerAccountDetailPreview({
                                     )
                                 }
                             >
-                                继续核销
+                                {startSessionPending ? (
+                                    <LoaderCircleIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                        className="animate-spin"
+                                    />
+                                ) : null}
+                                {startSessionPending
+                                    ? "创建中…"
+                                    : "继续核销"}
                             </Button>
                         ) : null}
                         {showCorrectionActions &&
@@ -275,7 +303,10 @@ export function CustomerAccountDetailPreview({
                             <Button
                                 id="customer-receivables-preview-invoice-continue-allocate"
                                 type="button"
-                                disabled={!canStartSession("invoice")}
+                                disabled={
+                                    startSessionPending ||
+                                    !canStartSession("invoice")
+                                }
                                 title={
                                     canStartSession("invoice")
                                         ? undefined
@@ -289,7 +320,16 @@ export function CustomerAccountDetailPreview({
                                     )
                                 }
                             >
-                                继续分配
+                                {startSessionPending ? (
+                                    <LoaderCircleIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                        className="animate-spin"
+                                    />
+                                ) : null}
+                                {startSessionPending
+                                    ? "创建中…"
+                                    : "继续分配"}
                             </Button>
                         ) : null}
                         {showCorrectionActions &&

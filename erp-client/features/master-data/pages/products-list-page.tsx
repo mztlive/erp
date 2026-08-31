@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { DownloadIcon, PlusIcon } from "lucide-react"
+import { useIsMutating } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
@@ -26,6 +27,19 @@ export function ProductsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useProductListState(searchInputRef)
+    const exportPending =
+        useIsMutating({
+            predicate: (mutation) => {
+                const variables = mutation.state.variables
+                return (
+                    typeof variables === "object" &&
+                    variables !== null &&
+                    "resource" in variables &&
+                    variables.resource === "products" &&
+                    !("idempotencyKey" in variables)
+                )
+            },
+        }) > 0
     const { filters } = state
     const columns = useProductListColumns({
         canUpdateProductListing: state.canUpdateProductListing,
@@ -68,11 +82,13 @@ export function ProductsListPage() {
                 {
                     id: "master-data-products-list-export",
                     actionKey: "export",
-                    label: masterDataCopy.actionExport,
+                    label: exportPending
+                        ? "导出中…"
+                        : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
                     mobileVisibility: "hide",
-                    disabled: state.rows.length === 0,
+                    disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
                 {

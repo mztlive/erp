@@ -13,6 +13,7 @@ export type ColumnAllocationTarget = Readonly<{
 export type ColumnActions = Readonly<{
     onPreview: (target: CustomerAccountPreviewTarget) => void
     canStartSession?: (mode: AllocationMode) => boolean
+    startSessionPending?: boolean
     permissionReason?: string
     onStartSession: (
         mode: AllocationMode,

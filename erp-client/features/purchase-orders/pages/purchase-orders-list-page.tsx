@@ -15,12 +15,14 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { usePurchaseOrdersListController } from "@/features/purchase-orders/hooks/use-purchase-orders-list-controller"
 import { buildPurchaseOrdersListColumns } from "@/features/purchase-orders/pages/purchase-orders-list-columns"
 import { PurchaseOrdersListToolbar } from "@/features/purchase-orders/pages/purchase-orders-list-toolbar"
 
 export function PurchaseOrdersListPage() {
     const ctrl = usePurchaseOrdersListController()
+    const exportPending = ctrl.exportQuery.isFetching
 
     const columns = React.useMemo(
         () =>
@@ -73,11 +75,21 @@ export function PurchaseOrdersListPage() {
                         actions={[
                             {
                                 actionKey: "export",
-                                label: "导出",
-                                icon: DownloadIcon,
+                                label: exportPending ? (
+                                    <>
+                                        <Spinner
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        导出中…
+                                    </>
+                                ) : (
+                                    "导出"
+                                ),
+                                icon: exportPending ? undefined : DownloadIcon,
                                 variant: "outline",
                                 mobileVisibility: "hide",
-                                disabled: ctrl.total === 0,
+                                disabled: exportPending || ctrl.total === 0,
                                 onClick: () => void ctrl.exportCsv(),
                                 id: "procurement-orders-list-export",
                             },

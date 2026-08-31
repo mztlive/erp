@@ -1,3 +1,4 @@
+import { LoaderCircleIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
@@ -10,6 +11,7 @@ export function createReceivableColumns({
     onPreview,
     onStartSession,
     canStartSession = () => true,
+    startSessionPending = false,
     permissionReason,
 }: ColumnActions): ColumnDef<ReceivableAccountRow>[] {
     return [
@@ -152,9 +154,11 @@ export function createReceivableColumns({
                         size="xs"
                         variant="outline"
                         disabled={
+                            startSessionPending ||
                             !row.original.allowedActions.includes(
                                 "REGISTER_RECEIPT",
-                            ) || !canStartSession("receipt")
+                            ) ||
+                            !canStartSession("receipt")
                         }
                         title={
                             !canStartSession("receipt")
@@ -177,7 +181,14 @@ export function createReceivableColumns({
                             )
                         }
                     >
-                        核销
+                        {startSessionPending ? (
+                            <LoaderCircleIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                                className="animate-spin"
+                            />
+                        ) : null}
+                        {startSessionPending ? "创建中…" : "核销"}
                     </Button>
                 </div>
             ),

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { DownloadIcon, PlusIcon } from "lucide-react"
+import { useIsMutating } from "@tanstack/react-query"
 
 import {
     BusinessEmptyState,
@@ -24,6 +25,19 @@ export function SuppliersListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSupplierListState(searchInputRef)
+    const exportPending =
+        useIsMutating({
+            predicate: (mutation) => {
+                const variables = mutation.state.variables
+                return (
+                    typeof variables === "object" &&
+                    variables !== null &&
+                    "resource" in variables &&
+                    variables.resource === "suppliers" &&
+                    !("idempotencyKey" in variables)
+                )
+            },
+        }) > 0
     const { filters } = state
     const openDetail = (stableId: string) => {
         lastFocusedRowId.current = stableId
@@ -47,11 +61,13 @@ export function SuppliersListPage() {
                 {
                     id: "master-data-suppliers-list-export",
                     actionKey: "export",
-                    label: masterDataCopy.actionExport,
+                    label: exportPending
+                        ? "导出中…"
+                        : masterDataCopy.actionExport,
                     icon: DownloadIcon,
                     variant: "outline",
                     mobileVisibility: "hide",
-                    disabled: state.rows.length === 0,
+                    disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
                 {

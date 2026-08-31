@@ -224,19 +224,22 @@ export function AcceptanceRegisterDialog({
                         >
                             取消
                         </Button>
-                        <Button
-                            id="sales-orders-acceptance-register-submit"
-                            type="submit"
-                            form="acceptance-form"
-                            size="sm"
-                            disabled={
-                                !canPost ||
-                                postPending ||
-                                selection.selected.size === 0
-                            }
-                        >
-                            {postPending ? "提交中…" : primaryLabel}
-                        </Button>
+                        <form.AppForm>
+                            <form.SubmitButton
+                                id="sales-orders-acceptance-register-submit"
+                                form="acceptance-form"
+                                size="sm"
+                                label={
+                                    postPending ? "提交中…" : primaryLabel
+                                }
+                                pendingLabel="提交中…"
+                                disabled={
+                                    !canPost ||
+                                    postPending ||
+                                    selection.selected.size === 0
+                                }
+                            />
+                        </form.AppForm>
                     </div>
                 </DialogFooter>
             </DialogContent>

@@ -39,6 +39,13 @@ function useAccessChangeFlow({
     const previewMutation = usePreviewAccessChangeMutation()
     const submitMutation = useSubmitAccessChangeMutation()
 
+    const applyOutcome = React.useCallback(
+        (outcome: AccessChangeOutcome) => {
+            setLastResult(accessChangeResultState(outcome))
+        },
+        [setLastResult],
+    )
+
     const form = useAppForm({
         defaultValues: {
             reasonCode: "SECURITY_OPS",
@@ -47,8 +54,37 @@ function useAccessChangeFlow({
         validators: {
             onChange: changeReasonSchema,
         },
-        onSubmit: async () => {
-            // 确认在影响预览 Dialog 内提交
+        onSubmit: async ({ value }) => {
+            if (!pendingCommand || !impact) return
+            if (impact.submissionBlocker) {
+                applyOutcome({
+                    outcome: "REJECTED",
+                    code: impact.submissionBlocker.code,
+                    message: impact.submissionBlocker.message,
+                    actionBlockers: [impact.submissionBlocker],
+                })
+                setChangeOpen(false)
+                return
+            }
+
+            if (!idempotencyRef.current) {
+                idempotencyRef.current = `w19-${pendingCommand.action}-${Date.now()}`
+            }
+            const command: AccessChangeCommand = {
+                ...pendingCommand,
+                reasonCode: value.reasonCode,
+                comment: value.comment?.trim() || undefined,
+                idempotencyKey: idempotencyRef.current,
+            }
+            try {
+                const outcome = await submitMutation.mutateAsync(command)
+                applyOutcome(outcome)
+                setChangeOpen(false)
+                setPendingCommand(null)
+                setImpact(null)
+            } catch (err) {
+                setActionError(getErrorMessage(err, "提交失败，请稍后重试"))
+            }
         },
     })
 
@@ -71,54 +107,6 @@ function useAccessChangeFlow({
         [previewMutation, form, setActionError, setLastResult],
     )
 
-    const applyOutcome = React.useCallback(
-        (outcome: AccessChangeOutcome) => {
-            setLastResult(accessChangeResultState(outcome))
-        },
-        [setLastResult],
-    )
-
-    const confirmChange = React.useCallback(async () => {
-        if (!pendingCommand || !impact) return
-        if (impact.submissionBlocker) {
-            applyOutcome({
-                outcome: "REJECTED",
-                code: impact.submissionBlocker.code,
-                message: impact.submissionBlocker.message,
-                actionBlockers: [impact.submissionBlocker],
-            })
-            setChangeOpen(false)
-            return
-        }
-
-        if (!idempotencyRef.current) {
-            idempotencyRef.current = `w19-${pendingCommand.action}-${Date.now()}`
-        }
-        const values = form.state.values
-        const command: AccessChangeCommand = {
-            ...pendingCommand,
-            reasonCode: values.reasonCode,
-            comment: values.comment?.trim() || undefined,
-            idempotencyKey: idempotencyRef.current,
-        }
-        try {
-            const outcome = await submitMutation.mutateAsync(command)
-            applyOutcome(outcome)
-            setChangeOpen(false)
-            setPendingCommand(null)
-            setImpact(null)
-        } catch (err) {
-            setActionError(getErrorMessage(err, "提交失败，请稍后重试"))
-        }
-    }, [
-        pendingCommand,
-        impact,
-        form,
-        submitMutation,
-        applyOutcome,
-        setActionError,
-    ])
-
     return {
         form,
         changeOpen,
@@ -130,7 +118,6 @@ function useAccessChangeFlow({
         submitMutation,
         startChange,
         applyOutcome,
-        confirmChange,
     }
 }
 

@@ -37,7 +37,6 @@ type AccessChangeDialogProps = {
     pendingCommand: AccessChangeCommand | null
     isSubmitting: boolean
     form: ChangeReasonFormApi
-    onConfirm: () => Promise<void>
     onApplyOutcome: (outcome: AccessChangeOutcome) => void
 }
 
@@ -48,7 +47,6 @@ function AccessChangeDialog({
     pendingCommand,
     isSubmitting,
     form,
-    onConfirm,
     onApplyOutcome,
 }: AccessChangeDialogProps) {
     return (
@@ -144,13 +142,9 @@ function AccessChangeDialog({
                         {!impact.submissionBlocker ? (
                             <form
                                 className="space-y-3"
-                                onSubmit={async (e) => {
+                                onSubmit={(e) => {
                                     e.preventDefault()
-                                    // 校验通过后才执行提交：说明超长等校验失败时不再绕过
-                                    await form.handleSubmit()
-                                    if (form.state.isFieldsValid) {
-                                        await onConfirm()
-                                    }
+                                    void form.handleSubmit()
                                 }}
                             >
                                 <div className="space-y-1.5">
@@ -227,19 +221,20 @@ function AccessChangeDialog({
                                     >
                                         取消
                                     </Button>
-                                    <Button
-                                        id="operations-access-change-dialog-confirm"
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        variant={
-                                            pendingCommand?.action ===
-                                            "EMERGENCY_REVOKE_USER_ROLE"
-                                                ? "destructive"
-                                                : "default"
-                                        }
-                                    >
-                                        {isSubmitting ? "提交中…" : "确认提交"}
-                                    </Button>
+                                    <form.AppForm>
+                                        <form.SubmitButton
+                                            id="operations-access-change-dialog-confirm"
+                                            label="确认提交"
+                                            pendingLabel="提交中…"
+                                            disabled={isSubmitting}
+                                            variant={
+                                                pendingCommand?.action ===
+                                                "EMERGENCY_REVOKE_USER_ROLE"
+                                                    ? "destructive"
+                                                    : "default"
+                                            }
+                                        />
+                                    </form.AppForm>
                                 </DialogFooter>
                             </form>
                         ) : (

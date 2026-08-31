@@ -284,7 +284,7 @@ export function MappingTaskPanel({
                                             />
                                         ) : null}
                                         {reapplyPending
-                                            ? "重新归集中…"
+                                            ? "处理中…"
                                             : "重新归集"}
                                     </Button>
                                     {mappingTask.reapplyOperation?.status ===
@@ -294,11 +294,21 @@ export function MappingTaskPanel({
                                             type="button"
                                             size="sm"
                                             variant="secondary"
+                                            disabled={reapplyPending}
                                             onClick={() =>
                                                 void onResolveUnknownReapply()
                                             }
                                         >
-                                            查询处理结果
+                                            {reapplyPending ? (
+                                                <LoaderCircleIcon
+                                                    data-icon="inline-start"
+                                                    aria-hidden="true"
+                                                    className="animate-spin"
+                                                />
+                                            ) : null}
+                                            {reapplyPending
+                                                ? "查询中…"
+                                                : "查询处理结果"}
                                         </Button>
                                     ) : null}
                                 </div>

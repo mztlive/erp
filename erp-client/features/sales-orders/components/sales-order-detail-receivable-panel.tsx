@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { FileTextIcon, WalletIcon } from "lucide-react"
+import { FileTextIcon, LoaderCircleIcon, WalletIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -74,6 +74,7 @@ export function ReceivablePanel({
         preview,
         detailQuery,
         actionError,
+        createPending,
         canRegister,
         openPreview,
         closePreview,
@@ -144,28 +145,48 @@ export function ReceivablePanel({
                             size="sm"
                             variant="outline"
                             disabled={
-                                !permissions.canRegisterInvoice || !canRegister
+                                createPending ||
+                                !permissions.canRegisterInvoice ||
+                                !canRegister
                             }
                             title={invoiceDisabledReason}
                             data-testid="sales-order-register-invoice"
                             onClick={() => openRegister("invoice")}
                         >
-                            <FileTextIcon data-icon="inline-start" />
-                            登记销项发票
+                            {createPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : (
+                                <FileTextIcon data-icon="inline-start" />
+                            )}
+                            {createPending ? "创建中…" : "登记销项发票"}
                         </Button>
                         <Button
                             id="sales-orders-detail-receivable-register-receipt"
                             type="button"
                             size="sm"
                             disabled={
-                                !permissions.canRegisterReceipt || !canRegister
+                                createPending ||
+                                !permissions.canRegisterReceipt ||
+                                !canRegister
                             }
                             title={registerDisabledReason}
                             data-testid="sales-order-register-receipt"
                             onClick={() => openRegister("receipt")}
                         >
-                            <WalletIcon data-icon="inline-start" />
-                            登记回款
+                            {createPending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : (
+                                <WalletIcon data-icon="inline-start" />
+                            )}
+                            {createPending ? "创建中…" : "登记回款"}
                         </Button>
                     </div>
                 </div>
@@ -363,6 +384,7 @@ export function ReceivablePanel({
                 onClose={closePreview}
                 onStartSession={startSession}
                 canStartSession={permissions.canStartSession}
+                startSessionPending={createPending}
                 canRequestReverse={() => false}
                 canSubmitRefund={false}
                 canSubmitReversal={false}

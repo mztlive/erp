@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRightIcon } from "lucide-react"
+import { ArrowRightIcon, LoaderCircleIcon } from "lucide-react"
 
 import { FormalActionResult } from "@/components/business"
 import type { ResultState as SharedResultState } from "@/components/business/feedback"
@@ -16,6 +16,7 @@ type ResultState = SharedResultState<FulfillmentFormalOutcome>
 export type FulfillmentResultPanelProps = {
     lastResult: ResultState
     currentUrl: string
+    resolvePending: boolean
     onResolveUnknown: () => void
     onNext: () => void
     /** 入库完成后切到同一销售单的待仓发。 */
@@ -36,6 +37,7 @@ export type FulfillmentResultPanelProps = {
 export function FulfillmentResultPanel({
     lastResult,
     currentUrl,
+    resolvePending,
     onResolveUnknown,
     onNext,
     onContinueWarehouseShip,
@@ -76,9 +78,17 @@ export function FulfillmentResultPanel({
                             id="fulfillment-operations-result-resolve-unknown"
                             type="button"
                             size="sm"
+                            disabled={resolvePending}
                             onClick={() => void onResolveUnknown()}
                         >
-                            查询最终结果
+                            {resolvePending ? (
+                                <LoaderCircleIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                    className="animate-spin"
+                                />
+                            ) : null}
+                            {resolvePending ? "查询中…" : "查询最终结果"}
                         </Button>
                     ) : null}
                     {lastResult.outcome?.kind === "POSTED" &&

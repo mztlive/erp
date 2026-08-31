@@ -207,6 +207,9 @@ export function CustomerQualityPage() {
 
     // 视图查询失败且无缓存时保留筛选区与期间条，失败态只替换结果内容
     const viewError = viewQuery.isError && !data ? viewQuery.error : null
+    const refreshing =
+        refreshMutation.isPending ||
+        (viewQuery.isFetching && !viewQuery.isPending)
 
     // —— Loading shells ——
     if (
@@ -293,7 +296,7 @@ export function CustomerQualityPage() {
             hasActiveFilters={hasActiveFilters}
             onClearFilters={filters.clearAllFilters}
             refreshError={refreshError}
-            refreshing={viewQuery.isFetching && !viewQuery.isPending}
+            refreshing={refreshing}
             onRefresh={() => {
                 void handleRefresh()
             }}

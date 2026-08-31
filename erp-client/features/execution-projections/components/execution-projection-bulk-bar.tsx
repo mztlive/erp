@@ -2,6 +2,7 @@
 
 import { surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { BULK_SELECTION_LIMIT } from "@/features/execution-projections/api/projections"
 import { cn } from "@/lib/utils"
 
@@ -56,7 +57,13 @@ export function ExecutionProjectionBulkBar({
                     disabled={bulkOverLimit || bulkPending}
                     onClick={onBulkQuery}
                 >
-                    批量查询
+                    {bulkPending ? (
+                        <Spinner
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    ) : null}
+                    {bulkPending ? "处理中…" : "批量查询"}
                 </Button>
                 <Button
                     id="execution-projections-bulk-bar-bulk-retry"
@@ -65,7 +72,13 @@ export function ExecutionProjectionBulkBar({
                     disabled={bulkOverLimit || bulkPending}
                     onClick={onBulkRetry}
                 >
-                    批量重试
+                    {bulkPending ? (
+                        <Spinner
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    ) : null}
+                    {bulkPending ? "处理中…" : "批量重试"}
                 </Button>
             </div>
         </div>

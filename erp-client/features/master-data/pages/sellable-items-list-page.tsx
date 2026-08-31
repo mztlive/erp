@@ -7,6 +7,7 @@ import {
     EyeIcon,
     ShieldCheckIcon,
 } from "lucide-react"
+import { useIsMutating } from "@tanstack/react-query"
 import type { SortingState } from "@tanstack/react-table"
 
 import {
@@ -30,6 +31,19 @@ export function SellableItemsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSellableListState(searchInputRef)
+    const exportPending =
+        useIsMutating({
+            predicate: (mutation) => {
+                const variables = mutation.state.variables
+                return (
+                    typeof variables === "object" &&
+                    variables !== null &&
+                    "resource" in variables &&
+                    variables.resource === "sellable-items" &&
+                    !("idempotencyKey" in variables)
+                )
+            },
+        }) > 0
     const { filters } = state
     const columns = useSellableListColumns()
     // 排序是视图状态而非筛选：全量结果已在客户端，本地排序不重新请求，也不参与「清除筛选」
@@ -66,11 +80,11 @@ export function SellableItemsListPage() {
                 {
                     id: "master-data-sellable-items-list-export",
                     actionKey: "export",
-                    label: "导出当前结果",
+                    label: exportPending ? "导出中…" : "导出当前结果",
                     icon: DownloadIcon,
                     variant: "outline",
                     mobileVisibility: "hide",
-                    disabled: state.rows.length === 0,
+                    disabled: exportPending || state.rows.length === 0,
                     onClick: state.onExport,
                 },
             ]}

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { LoaderCircleIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
@@ -290,11 +291,21 @@ export function MallSyncPage({
                                         id="mall-sync-result-resolve-unknown"
                                         type="button"
                                         size="sm"
+                                        disabled={page.reapplyPending}
                                         onClick={() =>
                                             void page.handleResolveUnknownReapply()
                                         }
                                     >
-                                        查询重新归集处理结果
+                                        {page.reapplyPending ? (
+                                            <LoaderCircleIcon
+                                                data-icon="inline-start"
+                                                aria-hidden="true"
+                                                className="animate-spin"
+                                            />
+                                        ) : null}
+                                        {page.reapplyPending
+                                            ? "查询中…"
+                                            : "查询重新归集处理结果"}
                                     </Button>
                                 ) : undefined
                             }

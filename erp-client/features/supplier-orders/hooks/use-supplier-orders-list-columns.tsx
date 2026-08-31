@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
+import { Loader2Icon } from "lucide-react"
 
 import { StatusTrackSummary } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -221,7 +222,15 @@ export function useSupplierOrdersListColumns({
                                         disabled={!canQuery || queryPending}
                                         onClick={() => void onQueryResult(r)}
                                     >
-                                        查询原结果
+                                        {queryPending ? (
+                                            <Loader2Icon
+                                                className="size-3.5 animate-spin"
+                                                aria-hidden="true"
+                                            />
+                                        ) : null}
+                                        {queryPending
+                                            ? "查询中…"
+                                            : "查询原结果"}
                                     </Button>
                                     {!canQuery && queryBlocker ? (
                                         <span className="max-w-[14rem] text-tiny leading-tight text-muted-foreground">

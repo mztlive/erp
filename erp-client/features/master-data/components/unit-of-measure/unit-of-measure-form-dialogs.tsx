@@ -277,6 +277,13 @@ function UnitFormDialogFrame({
                 }>
             }) => React.ReactNode
         }>
+        AppForm: React.ComponentType<{ children: React.ReactNode }>
+        SubmitButton: React.ComponentType<{
+            id?: string
+            label?: string
+            pendingLabel?: string
+            disabled?: boolean
+        }>
         handleSubmit: () => unknown
         state: { isDirty: boolean }
         reset: () => void
@@ -399,13 +406,16 @@ function UnitFormDialogFrame({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button
-                                    id={`${baseId}-submit`}
-                                    type="submit"
-                                    disabled={pending}
-                                >
-                                    {pending ? "提交中…" : submitLabel}
-                                </Button>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id={`${baseId}-submit`}
+                                        label={
+                                            pending ? "提交中…" : submitLabel
+                                        }
+                                        pendingLabel="提交中…"
+                                        disabled={pending}
+                                    />
+                                </form.AppForm>
                             </DialogFooter>
                         </form>
                     ) : null}

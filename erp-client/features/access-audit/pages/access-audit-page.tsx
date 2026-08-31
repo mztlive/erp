@@ -279,7 +279,6 @@ export function AccessAuditPage() {
                 pendingCommand={page.pendingCommand}
                 isSubmitting={page.submitMutation.isPending}
                 form={page.form}
-                onConfirm={page.confirmChange}
                 onApplyOutcome={page.applyOutcome}
             />
 

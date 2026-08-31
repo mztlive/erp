@@ -351,6 +351,7 @@ export function SalesOrderCreateForm({
 
                         <SalesOrderCreateTotalBar
                             form={form}
+                            isSubmitting={submission.isSubmitting}
                             onSaveDraftClick={() => {
                                 submission.submitIntentRef.current =
                                     "SAVE_DRAFT"

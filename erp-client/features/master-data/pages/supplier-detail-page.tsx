@@ -73,9 +73,16 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     }
 
     return (
-        <SupplierEditorForm
-            idPrefix="master-data-supplier-detail-form"
-            editor={editor}
-        />
+        <editor.form.Subscribe selector={(state) => state.isSubmitting}>
+            {(isSubmitting) => (
+                <SupplierEditorForm
+                    idPrefix="master-data-supplier-detail-form"
+                    editor={{
+                        ...editor,
+                        pending: editor.pending || isSubmitting,
+                    }}
+                />
+            )}
+        </editor.form.Subscribe>
     )
 }

@@ -194,9 +194,10 @@ function WorkspaceInvoiceSession({
                         variant="outline"
                         size="sm"
                         className="self-start"
+                        disabled={createSession.isPending}
                         onClick={() => setResetNonce((value) => value + 1)}
                     >
-                        重试
+                        {createSession.isPending ? "重试中…" : "重试"}
                     </Button>
                 </AlertDescription>
             </Alert>

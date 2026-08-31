@@ -97,8 +97,12 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
             canCreate={canCreate}
             listHref={listHref}
         >
-            <form.Subscribe selector={(state) => state.values}>
-                {(values) => {
+            <form.Subscribe
+                selector={(state) =>
+                    [state.values, state.isSubmitting] as const
+                }
+            >
+                {([values, isSubmitting]) => {
                     const bindings = createProductFormBindings(
                         form,
                         values,
@@ -162,7 +166,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     disableBlocker={disableBlocker}
                                     setDisableOpen={setDisableOpen}
                                     canRevise={canRevise}
-                                    pending={pending}
+                                    pending={pending || isSubmitting}
                                     runLocalCheck={runLocalCheck}
                                     values={values}
                                 />

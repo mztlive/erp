@@ -322,13 +322,14 @@ export function VoucherCategoryFormDialog({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button
-                                    id={`${baseId}-submit`}
-                                    type="submit"
-                                    disabled={mutationPending}
-                                >
-                                    {mutationPending ? "提交中…" : submitLabel}
-                                </Button>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id={`${baseId}-submit`}
+                                        label={submitLabel}
+                                        pendingLabel="提交中…"
+                                        disabled={mutationPending}
+                                    />
+                                </form.AppForm>
                             </DialogFooter>
                         </form>
                     ) : null}

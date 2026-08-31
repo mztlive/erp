@@ -77,6 +77,13 @@ export function CategoryFormDialogFrame({
                 state: { value: string }
             }) => React.ReactNode
         }>
+        AppForm: React.ComponentType<{ children: React.ReactNode }>
+        SubmitButton: React.ComponentType<{
+            id?: string
+            label?: string
+            pendingLabel?: string
+            disabled?: boolean
+        }>
         handleSubmit: () => unknown
         state: { isDirty: boolean }
         reset: () => void
@@ -235,13 +242,16 @@ export function CategoryFormDialogFrame({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button
-                                    id={`${prefix}-submit`}
-                                    type="submit"
-                                    disabled={pending}
-                                >
-                                    {pending ? "提交中…" : submitLabel}
-                                </Button>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id={`${prefix}-submit`}
+                                        label={
+                                            pending ? "提交中…" : submitLabel
+                                        }
+                                        pendingLabel="提交中…"
+                                        disabled={pending}
+                                    />
+                                </form.AppForm>
                             </DialogFooter>
                         </form>
                     ) : null}
