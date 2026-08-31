@@ -49,30 +49,30 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **188 项 OPEN、4 项 BLOCKED、26 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **187 项 OPEN、4 项 BLOCKED、27 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
 | 业务域 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 开放问题合计 |
 | --- | ---: | ---: | ---: | ---: |
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
-| Approval | 5 | 8 | 2 | 15 |
+| Approval | 4 | 8 | 2 | 14 |
 | Master | 4 | 10 | 0 | 14 |
 | Sales / Contract / Returns / Projection | 7 | 19 | 0 | 26 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 13 | 0 | 20 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **78** | **112** | **2** | **192** |
+| **合计** | **77** | **112** | **2** | **191** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **2 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 15 | 49 | 1 | 65 |
+| P0 | 14 | 49 | 1 | 64 |
 | P1 | 58 | 50 | 1 | 109 |
 | P2 | 5 | 13 | 0 | 18 |
-| **合计** | **78** | **112** | **2** | **192** |
+| **合计** | **77** | **112** | **2** | **191** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -161,7 +161,7 @@ git diff --check
 
 | ID | P | 状态 | 当前证据与问题 | 强制调整 | 关闭验收与风险 | 执行登记 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `APP-R01` | P0 | OPEN | `approval/execution/decision.rs:150-177 prepare_open_task_conflict`、`apply_plan.rs:72-77 apply_plan` 与 `store.rs:397-425 close_open_tasks` 均按 execution 关闭全部 OPEN；`runtime_service.rs:2036-2108 complete_or_close_tasks` 却只按请求 `work_item_id` 关闭，生产 Mongo 语义不一致。 | Repository 按 execution 读取全部 `OPEN + DOCUMENT_APPROVAL` 并逐行以自身版本 CAS；Entity 提供确定性批量关闭/完成；Service 保留授权、事务、计划、动作、outbox、审计。 | 预置同 execution 两个 OPEN 后必须全部 CLOSED 且 OPEN 数为 0；任一 CAS 失败整笔回滚；receipt、outbox、audit 与任务关闭同事务提交；单任务路径不变；唯一索引不能替代遗留脏数据处理。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| `APP-R01` | P0 | DONE | `approval/execution/decision.rs:150-177 prepare_open_task_conflict`、`apply_plan.rs:72-77 apply_plan` 与 `store.rs:397-425 close_open_tasks` 均按 execution 关闭全部 OPEN；`runtime_service.rs:2036-2108 complete_or_close_tasks` 却只按请求 `work_item_id` 关闭，生产 Mongo 语义不一致。 | Repository 按 execution 读取全部 `OPEN + DOCUMENT_APPROVAL` 并逐行以自身版本 CAS；Entity 提供确定性批量关闭/完成；Service 保留授权、事务、计划、动作、outbox、审计。 | 预置同 execution 两个 OPEN 后必须全部 CLOSED 且 OPEN 数为 0；任一 CAS 失败整笔回滚；receipt、outbox、audit 与任务关闭同事务提交；单任务路径不变；唯一索引不能替代遗留脏数据处理。 | 批次：`APP-6.2-R01-20260831`；责任人：Codex；依赖：无；关闭证据：WorkItem 批量终结规则、execution 全量读取及逐行自身版本 CAS 已接入生产事务；真实 Mongo 遗留重复任务测试验证任一 CAS 失败整笔回滚及全部 CLOSED；统一门禁通过。 |
 | `APP-R02` | P0 | OPEN | `runtime_service.rs:1166-1187 list_mine` 用 limit 后行数伪造 total、固定无 cursor；`:1620-1640 item_from_mine_item` 把 execution ID 当 instance ID并硬编码 RUNNING/round 0。 | WorkItem Repository 提供 owner/type/open/document-type 稳定游标页、真实 filtered count，并用 `limit+1` 或等价 page projection 判断 has_more；Service 批量 execution→instance→summary/snapshot并保留 View mapping。 | 超 limit 翻页无重漏且 total/next cursor 正确；ID 可直查 instance；status/round/node/assignee/version/label 全来自权威事实；含 filter/cursor/index explain。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | `APP-R03` | P1 | OPEN | `approval/definition.rs:80-90 definition_catalog`、`:290-339 catalog_item / catalog_versions` 对 11 种流程逐类调用 `database/src/repository/bpm.rs:367-375 find_published_by_process_kind` 与 `:432-440 find_active_draft`，最多 22 次查询。 | BPM Repository 按 `ProcessKind[]` 一次或固定两次返回 status/version 目录投影。 | published-only、draft-only、并存、缺失、retired；查询数不随类型增长；历史重复状态确定性失败关闭。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | `APP-R04` | P2 | OPEN | `approval/binding.rs:247-268 load_published_graph`、`definition.rs:975-996 copy_published_draft` 先找 published，再由 `database/src/repository/bpm.rs:446-465 load_definition_graph` 重读 definition。 | 增加 `load_published_definition_graph(kind, executor)` 或允许 loader 接受已加载 definition；policy、账号/RBAC、BPM 图校验和错误映射仍归 Service。 | 无 published、draft/retired、完整图、同 session、重复 published 均覆盖；definition 只读一次。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
@@ -186,6 +186,15 @@ git diff --check
 | --- | --- | --- | --- | --- | --- | --- |
 | `APP-S01` | P0 | OPEN | `runtime_service.rs:234-264 instance_detail`、`:279-300 instance_history`、`:313-329 recovery_options` 丢弃 actor 后按 ID 无范围读取；`:1203-1233` 的 Started/Managed/Blocked 未使用 `scope.rs:187-202 approval_management_scope`。 | Service 在每条读取入口完成对象读取权、DataScope、管理范围和当前 actor 重验；只把已证明的过滤条件交给 Repository。 | 无权限、错误组织、错误 DataScope、管理员/发起人/当前审批人全矩阵；ID 可猜测时仍 fail-closed；禁止让 Repository 解释 RBAC。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | `APP-S02` | P1 | OPEN | `definition.rs:1707-1719 configuration_status` 丢弃 draft，导致 draft-only 被报 `MissingConfiguration`，而 DTO 已定义 Draft。 | Service 目录装配必须同时消费 published/draft 事实并返回正确状态。 | published-only、draft-only、并存、缺失、retired 全矩阵；与批量目录查询项共用测试。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+
+#### 6.2 批次验收登记
+
+1. 批次编号：`APP-6.2-R01-20260831`。交付范围：`APP-R01`。责任人：Codex。外部依赖：无。
+2. 分层结果：WorkItem Entity 统一形成同一 execution 全部开放审批任务的完成或关闭快照；Repository 使用调用方 executor 读取全部 `OPEN + DOCUMENT_APPROVAL` 并按每行加载版本执行 CAS；Service 在决定事务内校验请求任务身份与版本，并与 BPM、receipt、outbox、audit 共用同一 session。原仅按请求 `work_item_id` 结束单任务且忽略 CAS 分类的生产路径已删除。
+3. 真实 MongoDB 验收命令：`ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27018/?directConnection=true' cargo test -p database --test approval_workflow_repository duplicate_open_approval_tasks_end_atomically_by_own_versions --all-features --locked -- --include-ignored --nocapture`。验收结果：1 项通过；在测试库移除现行唯一索引以模拟历史脏数据，两个同 execution 开放任务在第二行 CAS 冲突时全部回滚，正常路径全部进入 `CLOSED` 且开放数为 0。
+4. 定向与统一门禁：Entity 批量完成、批量关闭、外来 execution 和责任人漂移测试通过；Service 冲突计划测试通过；`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
+5. 兼容与回滚合同：本批不改变 WorkItem BSON、索引、HTTP DTO、BPM 任务意图或状态码；现行唯一索引继续保留，只增加对索引建立前遗留重复开放任务的失败原子处理。回滚可恢复旧 Service 调用，但将重新暴露部分任务未关闭及 CAS 未命中仍提交的风险，禁止在生产回滚。
+6. 外部验收边界：浏览器、生产 MongoDB 脏数据扫描和生产事务执行计划登记为 `N/A`；发布前必须确认生产库不存在未处理的同 execution 多开放任务，并保留现行 `uk_work_items_approval_execution` 唯一索引。
 
 ### 6.3 Master
 

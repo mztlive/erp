@@ -18,7 +18,8 @@ use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::WorkItemId;
 use entities::work_item::{
-    ApprovalDecisionTaskError, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority, WorkItemStatus,
+    ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem,
+    WorkItemPriority, WorkItemStatus,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -2063,49 +2064,57 @@ async fn complete_or_close_tasks(
     input: CompleteOrCloseTasksInput<'_>,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    let mut endings: Vec<(String, Option<String>)> = input
-        .complete_tasks
+    let execution_id = ApprovalNodeExecutionId::new(input.ended_execution_id);
+    let Some(ending) = approval_task_ending(&input, &execution_id)? else {
+        return Ok(());
+    };
+    let tasks = db
+        .work_items()
+        .open_approval_tasks_for_execution(&execution_id, session)
+        .await?;
+    let requested = tasks
         .iter()
-        .map(|id| (id.as_ref().to_string(), None))
-        .collect();
-    endings.extend(
-        input
-            .close_tasks
-            .iter()
-            .map(|(id, reason)| (id.as_ref().to_string(), Some(reason.as_str().to_string()))),
-    );
-    for (execution_id, close_reason) in endings {
-        if execution_id != input.ended_execution_id {
-            continue;
-        }
-        let item = db
-            .work_items()
-            .find_document_approval_by_id(input.work_item_id, session)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let mut item = item;
-        match close_reason {
-            Some(reason) => item
-                .close_by_approval_runtime(
-                    input.actor_id,
-                    entities::work_item::WorkItemCloseData { close_reason: reason },
-                    input.now,
-                )
-                .map_err(|error| Error::ValidationError(error.to_string()))?,
-            None => item
-                .complete_by_approval_runtime(input.actor_id, input.now)
-                .map_err(|error| Error::ValidationError(error.to_string()))?,
-        }
-        db.work_items()
-            .close_approval_task(
-                &item,
-                input.expected_task_version,
-                &ApprovalNodeExecutionId::new(input.ended_execution_id),
-                session,
-            )
-            .await?;
-    }
+        .find(|item| item.base.id == input.work_item_id)
+        .ok_or_else(hidden_not_found)?;
+    ensure_expected_version("审批任务", input.expected_task_version, requested.base.version)?;
+    let tasks =
+        WorkItem::end_all_for_approval_execution(tasks, &execution_id, input.actor_id, &ending, input.now)
+            .map_err(|error| Error::ValidationError(error.to_string()))?;
+    db.work_items()
+        .persist_ended_approval_tasks(&tasks, session)
+        .await?;
     Ok(())
+}
+
+/// 解析当前结束执行唯一的任务终结方式。
+///
+/// # 错误
+/// 同一执行同时被计划为完成和关闭，或出现不同关闭原因时返回冲突。
+fn approval_task_ending(
+    input: &CompleteOrCloseTasksInput<'_>,
+    execution_id: &ApprovalNodeExecutionId,
+) -> Result<Option<ApprovalRuntimeTaskEnding>> {
+    let completes = input.complete_tasks.iter().any(|item| item == execution_id);
+    let close_reasons = input
+        .close_tasks
+        .iter()
+        .filter(|(item, _)| item == execution_id)
+        .map(|(_, reason)| reason.as_str())
+        .collect::<Vec<_>>();
+    if completes && !close_reasons.is_empty() {
+        return Err(Error::ConflictError("同一审批执行同时计划完成和关闭".to_string()));
+    }
+    let Some(first_reason) = close_reasons.first() else {
+        return Ok(completes.then_some(ApprovalRuntimeTaskEnding::Complete));
+    };
+    if close_reasons.iter().any(|reason| reason != first_reason) {
+        return Err(Error::ConflictError(
+            "同一审批执行存在不同任务关闭原因".to_string(),
+        ));
+    }
+    Ok(Some(ApprovalRuntimeTaskEnding::Close {
+        reason: (*first_reason).to_string(),
+    }))
 }
 
 /// 创建开放审批任务所需的决定输出与单据责任上下文。
@@ -2162,6 +2171,7 @@ async fn create_open_tasks(
 mod tests {
     use std::str::FromStr;
 
+    use bpm::engine::TaskCloseReason;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::ApprovalProcessInstanceStatus;
     use bpm::{ProcessKind, SubjectRef};
@@ -2172,7 +2182,9 @@ mod tests {
     use entities::ids::ApprovalSubjectSnapshotId;
     use entities::money::Quantity;
 
-    use super::{cursor_from_summary, item_from_summary};
+    use entities::work_item::ApprovalRuntimeTaskEnding;
+
+    use super::{approval_task_ending, cursor_from_summary, item_from_summary, CompleteOrCloseTasksInput};
 
     fn summary() -> ApprovalInstanceSummary {
         ApprovalInstanceSummary {
@@ -2239,5 +2251,32 @@ mod tests {
         let cursor = cursor_from_summary(ApprovalInstanceListView::Started, &summary());
         assert_eq!(cursor.sort_time, 10);
         assert_eq!(cursor.id, "inst-1");
+    }
+
+    #[test]
+    fn approval_task_ending_rejects_conflicting_plan() {
+        let execution_id = ApprovalNodeExecutionId::new("exec-1");
+        let complete_tasks = vec![execution_id.clone()];
+        let close_tasks = Vec::new();
+        let input = CompleteOrCloseTasksInput {
+            complete_tasks: &complete_tasks,
+            close_tasks: &close_tasks,
+            work_item_id: "wi-1",
+            expected_task_version: 1,
+            ended_execution_id: "exec-1",
+            actor_id: "u1",
+            now: Instant::from_unix_secs(20),
+        };
+        assert_eq!(
+            approval_task_ending(&input, &execution_id).unwrap(),
+            Some(ApprovalRuntimeTaskEnding::Complete)
+        );
+
+        let close_tasks = vec![(execution_id.clone(), TaskCloseReason::ApprovalRuntimeBlocked)];
+        let conflicting = CompleteOrCloseTasksInput {
+            close_tasks: &close_tasks,
+            ..input
+        };
+        assert!(approval_task_ending(&conflicting, &execution_id).is_err());
     }
 }

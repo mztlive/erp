@@ -392,7 +392,7 @@ impl<'a> Repository<'a, WorkItem> {
     ) -> Result<Vec<WorkItem>> {
         self.find_many_sorted(
             open_approval_execution_filter(execution_id),
-            doc! { "created_at": 1 },
+            doc! { "created_at": 1, "id": 1 },
             executor,
         )
         .await
@@ -446,6 +446,28 @@ impl<'a> Repository<'a, WorkItem> {
     /// # 错误
     /// 任务缺少节点执行引用、版本溢出、CAS 未命中或 MongoDB 写入失败时返回错误。
     pub async fn persist_cancelled_approval_tasks(
+        &self,
+        items: &[WorkItem],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        self.persist_ended_approval_tasks(items, executor).await
+    }
+
+    /// 持久化已由实体规则批量终结的审批任务。
+    ///
+    /// 每条任务使用自身加载版本及节点执行引用执行 `OPEN` CAS。调用方必须传入
+    /// 与 BPM 运行事实、命令收据、outbox 和审计相同的事务执行器。
+    ///
+    /// # 参数
+    /// * `items` - 已由 WorkItem 批量规则形成的终态任务快照
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 全部任务 CAS 写入成功时返回 `Ok(())`；空集合不执行写入。
+    ///
+    /// # 错误
+    /// 任务缺少节点执行引用、CAS 未命中或 MongoDB 写入失败时返回错误。
+    pub async fn persist_ended_approval_tasks(
         &self,
         items: &[WorkItem],
         executor: &mut dyn Executor,

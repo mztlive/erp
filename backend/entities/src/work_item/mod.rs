@@ -13,9 +13,10 @@ mod queue_context;
 pub use crate::ids::WorkItemId;
 pub use due::{WorkItemDueFilter, WorkItemDueWindow};
 pub use entity::{
-    ApprovalDecisionTaskError, AssignmentSource, AvailableWorkItemAccount, DocumentApprovalWorkItemData,
-    WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation,
-    WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+    ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, AvailableWorkItemAccount,
+    DocumentApprovalWorkItemData, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind,
+    WorkItemBriefRelation, WorkItemCloseData, WorkItemData, WorkItemPriority, WorkItemStatus,
+    WorkItemSubjectVersions, WorkItemType,
 };
 pub use finance_responsibility::{
     FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,

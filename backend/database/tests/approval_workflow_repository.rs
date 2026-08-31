@@ -29,7 +29,8 @@ use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView, CasWriteOutcome,
 };
 use database::{
-    ensure_indexes, ApprovalIntegrationExt, BpmExt, Error as DatabaseError, NoTransaction, WorkItemExt,
+    ensure_indexes, ApprovalIntegrationExt, BpmExt, Error as DatabaseError, NoTransaction, Transactional,
+    WorkItemExt,
 };
 use entities::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
@@ -40,7 +41,11 @@ use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
 use entities::money::Quantity;
 use entities::work_item::DocumentApprovalWorkItemData;
-use entities::work_item::{WorkItem, WorkItemPriority, WorkItemType};
+use entities::work_item::{
+    ApprovalRuntimeTaskEnding, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
+};
+use futures_util::TryStreamExt;
+use mongodb::bson::doc;
 use test_support::{assert_indexes, require_mongo, TestDb};
 use tokio::sync::Barrier;
 
@@ -1233,6 +1238,133 @@ async fn work_item_execution_id_is_unique_across_lifecycle() {
             .create(&duplicate, &mut NoTransaction)
             .await
             .is_err());
+    });
+}
+
+#[tokio::test]
+#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+async fn duplicate_open_approval_tasks_end_atomically_by_own_versions() {
+    require_mongo!(async {
+        let fixture = TestDb::new("awf_repo_duplicate_tasks")
+            .await
+            .expect("测试数据库创建失败");
+        ensure_indexes(fixture.db()).await.expect("索引创建失败");
+        let collection = fixture.db().collection::<WorkItem>("work_items");
+        collection
+            .drop_index("uk_work_items_approval_execution")
+            .await
+            .expect("测试需模拟唯一索引建立前的遗留重复任务");
+        collection
+            .drop_index("uk_work_items_open_object_type")
+            .await
+            .expect("测试需模拟责任唯一索引建立前的遗留重复任务");
+
+        let execution_id = ApprovalNodeExecutionId::new("exec-legacy-duplicate");
+        for id in ["wi-legacy-1", "wi-legacy-2"] {
+            let task = WorkItem::new_document_approval(
+                WorkItemId::new(id),
+                DocumentApprovalWorkItemData {
+                    approval_node_execution_id: execution_id.clone(),
+                    business_object_type: PILOT_SUBJECT_KIND.to_string(),
+                    business_object_id: "adj-legacy".to_string(),
+                    subject_version: "1".to_string(),
+                    owner_role: "stock_adjustment_approver".to_string(),
+                    owner_organization_id: "org-1".to_string(),
+                    owner_user_id: "u1".to_string(),
+                    priority: WorkItemPriority::Normal,
+                    due_at: None,
+                },
+                Instant::from_unix_secs(10),
+            )
+            .expect("遗留审批任务");
+            fixture
+                .db()
+                .work_items()
+                .create(&task, &mut NoTransaction)
+                .await
+                .expect("插入遗留重复任务");
+        }
+
+        let db = fixture.db().clone();
+        let client = db.client().clone();
+        let failed = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let tasks = db
+                        .work_items()
+                        .open_approval_tasks_for_execution(&execution_id, session)
+                        .await?;
+                    assert_eq!(
+                        tasks.iter().map(|item| item.base.id.as_str()).collect::<Vec<_>>(),
+                        vec!["wi-legacy-1", "wi-legacy-2"]
+                    );
+                    let mut ended = WorkItem::end_all_for_approval_execution(
+                        tasks,
+                        &execution_id,
+                        "u1",
+                        &ApprovalRuntimeTaskEnding::Close {
+                            reason: "APPROVAL_RUNTIME_BLOCKED".to_string(),
+                        },
+                        Instant::from_unix_secs(20),
+                    )
+                    .expect("实体批量终结");
+                    ended[1].base.version = 99;
+                    db.work_items()
+                        .persist_ended_approval_tasks(&ended, session)
+                        .await
+                })
+            })
+            .await;
+        assert!(failed.is_err(), "任一行 CAS 失败必须中止事务");
+
+        let still_open = fixture
+            .db()
+            .work_items()
+            .open_approval_tasks_for_execution(
+                &ApprovalNodeExecutionId::new("exec-legacy-duplicate"),
+                &mut NoTransaction,
+            )
+            .await
+            .expect("回滚后读取开放任务");
+        assert_eq!(still_open.len(), 2);
+
+        let db = fixture.db().clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let execution_id = ApprovalNodeExecutionId::new("exec-legacy-duplicate");
+                    let tasks = db
+                        .work_items()
+                        .open_approval_tasks_for_execution(&execution_id, session)
+                        .await?;
+                    let ended = WorkItem::end_all_for_approval_execution(
+                        tasks,
+                        &execution_id,
+                        "u1",
+                        &ApprovalRuntimeTaskEnding::Close {
+                            reason: "APPROVAL_RUNTIME_BLOCKED".to_string(),
+                        },
+                        Instant::from_unix_secs(21),
+                    )
+                    .expect("实体批量终结");
+                    db.work_items()
+                        .persist_ended_approval_tasks(&ended, session)
+                        .await
+                })
+            })
+            .await
+            .expect("全部任务按各自版本提交");
+
+        let rows = collection
+            .find(doc! { "approval_node_execution_id": "exec-legacy-duplicate" })
+            .await
+            .expect("读取全部任务")
+            .try_collect::<Vec<_>>()
+            .await
+            .expect("收集全部任务");
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|item| item.status == WorkItemStatus::Closed));
     });
 }
 

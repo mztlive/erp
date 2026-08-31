@@ -901,6 +901,18 @@ pub enum ApprovalDecisionTaskError {
     MissingExecution,
 }
 
+/// 审批运行时对同一节点执行关联开放任务的终结方式。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApprovalRuntimeTaskEnding {
+    /// 当前审批决定已经完成。
+    Complete,
+    /// 当前执行因受控原因关闭。
+    Close {
+        /// 审批运行时提供的稳定关闭原因。
+        reason: String,
+    },
+}
+
 /// 当前个人责任的已注册形成来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -1673,6 +1685,52 @@ impl WorkItem {
             .collect()
     }
 
+    /// 批量终结同一节点执行关联的全部开放审批任务。
+    ///
+    /// 本方法只形成确定性的实体快照，不执行 I/O。任一任务类型、执行引用、
+    /// 当前责任或关闭原因不满足时，整批返回错误，调用方不得持久化部分结果。
+    ///
+    /// # 参数
+    /// * `items` - Repository 按 execution 读取的全部开放审批任务
+    /// * `execution_id` - 本次审批运行时已经结束的节点执行
+    /// * `actor_id` - 当前决定人或关闭操作人
+    /// * `ending` - 完成或受控关闭方式
+    /// * `at` - 终结时间
+    ///
+    /// # 返回
+    /// 返回与输入顺序一致的终态任务快照。
+    ///
+    /// # 错误
+    /// 任务不属于指定执行、不是开放单据审批任务、完成责任人不一致或关闭原因非法时返回错误。
+    pub fn end_all_for_approval_execution(
+        mut items: Vec<Self>,
+        execution_id: &ApprovalNodeExecutionId,
+        actor_id: &str,
+        ending: &ApprovalRuntimeTaskEnding,
+        at: Instant,
+    ) -> Result<Vec<Self>> {
+        for item in &mut items {
+            if item.approval_node_execution_id.as_ref() != Some(execution_id) {
+                return Err(Error::from("审批任务不属于当前节点执行"));
+            }
+            match ending {
+                ApprovalRuntimeTaskEnding::Complete => {
+                    item.complete_by_approval_runtime(actor_id, at)?;
+                }
+                ApprovalRuntimeTaskEnding::Close { reason } => {
+                    item.close_by_approval_runtime(
+                        actor_id,
+                        WorkItemCloseData {
+                            close_reason: reason.clone(),
+                        },
+                        at,
+                    )?;
+                }
+            }
+        }
+        Ok(items)
+    }
+
     /// 应用开放任务的受控关闭字段。
     ///
     /// # 参数
@@ -1978,10 +2036,12 @@ impl TryFrom<WorkItemData> for NormalizedWorkItemData {
 
 #[cfg(test)]
 mod tests {
+    use bpm::ApprovalNodeExecutionId;
+
     use super::{
-        ApprovalDecisionTaskError, AssignmentSource, AvailableWorkItemAccount, WorkItem,
-        WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemData, WorkItemPriority,
-        WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+        ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, AvailableWorkItemAccount,
+        WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemData,
+        WorkItemPriority, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
     };
     use crate::common::state::ensure_transition;
     use crate::common::time::Instant;
@@ -2516,6 +2576,60 @@ mod tests {
             vec![approval_item("wi-valid"), approval_item("wi-invalid")],
             "",
             "撤回",
+            Instant::from_unix_secs(120),
+        )
+        .is_err());
+    }
+
+    /// 同一执行的遗留重复开放任务必须按确定性顺序全部完成或关闭。
+    #[test]
+    fn approval_runtime_ends_every_open_task_for_execution() {
+        let execution_id = ApprovalNodeExecutionId::new("exec-1");
+        let completed = WorkItem::end_all_for_approval_execution(
+            vec![approval_item("wi-1"), approval_item("wi-2")],
+            &execution_id,
+            "alice",
+            &ApprovalRuntimeTaskEnding::Complete,
+            Instant::from_unix_secs(120),
+        )
+        .unwrap();
+        assert_eq!(completed.len(), 2);
+        assert!(completed
+            .iter()
+            .all(|item| item.status == WorkItemStatus::Completed));
+
+        let closed = WorkItem::end_all_for_approval_execution(
+            vec![approval_item("wi-3"), approval_item("wi-4")],
+            &execution_id,
+            "runtime",
+            &ApprovalRuntimeTaskEnding::Close {
+                reason: "APPROVAL_RUNTIME_BLOCKED".to_string(),
+            },
+            Instant::from_unix_secs(121),
+        )
+        .unwrap();
+        assert!(closed.iter().all(|item| {
+            item.status == WorkItemStatus::Closed
+                && item.close_reason.as_deref() == Some("APPROVAL_RUNTIME_BLOCKED")
+        }));
+    }
+
+    /// 批量终结必须拒绝外来执行和完成责任人漂移。
+    #[test]
+    fn approval_runtime_batch_rejects_foreign_execution_or_owner() {
+        assert!(WorkItem::end_all_for_approval_execution(
+            vec![approval_item("wi-foreign")],
+            &ApprovalNodeExecutionId::new("exec-other"),
+            "alice",
+            &ApprovalRuntimeTaskEnding::Complete,
+            Instant::from_unix_secs(120),
+        )
+        .is_err());
+        assert!(WorkItem::end_all_for_approval_execution(
+            vec![approval_item("wi-owner")],
+            &ApprovalNodeExecutionId::new("exec-1"),
+            "bob",
+            &ApprovalRuntimeTaskEnding::Complete,
             Instant::from_unix_secs(120),
         )
         .is_err());
