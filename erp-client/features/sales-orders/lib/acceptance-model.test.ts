@@ -13,6 +13,7 @@ import {
     passQuantity,
     resultDecisionsForFact,
     summarizeLineDecisions,
+    visibleAcceptanceNo,
     type AcceptanceBatchDraft,
 } from "@/features/sales-orders/lib/acceptance-model"
 import type { AcceptanceEligibleFact } from "@/features/sales-orders/lib/acceptance-types"
@@ -332,5 +333,19 @@ describe("summarizeLineDecisions", () => {
                 ]),
             ),
         ).toBe("全部通过")
+    })
+})
+
+describe("visibleAcceptanceNo", () => {
+    it("keeps human document numbers", () => {
+        expect(visibleAcceptanceNo("YS-1")).toBe("YS-1")
+        expect(visibleAcceptanceNo("CA-2026-001")).toBe("CA-2026-001")
+    })
+
+    it("hides idempotency slices and stacked reverse prefixes", () => {
+        expect(visibleAcceptanceNo("YS-91b74dafa79333f7f1dda09f7")).toBe("")
+        expect(
+            visibleAcceptanceNo("REV-REV-YS-91b74dafa79333f7f1dda09f7"),
+        ).toBe("")
     })
 })

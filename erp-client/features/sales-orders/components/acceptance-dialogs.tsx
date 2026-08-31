@@ -1,16 +1,15 @@
 "use client"
 
-import { RotateCcwIcon } from "lucide-react"
-
 import {
     DiscardConfirmDialog,
     FormalActionConfirmDialog,
 } from "@/components/business"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Textarea } from "@/components/ui/textarea"
 import {
     acceptanceConfirmLines,
+    visibleAcceptanceNo,
     type AcceptanceBatchSelection,
     type AcceptanceConfirmLine,
 } from "@/features/sales-orders/lib/acceptance-model"
@@ -50,6 +49,7 @@ export function AcceptanceDialogs({
     onConfirmExit: () => void
 }) {
     const confirmLines = acceptanceConfirmLines(selected)
+    const reverseAcceptanceNo = visibleAcceptanceNo(reverseTarget?.acceptanceNo)
 
     return (
         <>
@@ -81,16 +81,17 @@ export function AcceptanceDialogs({
                 id="sales-orders-acceptance-reverse"
                 open={Boolean(reverseTarget)}
                 onOpenChange={onReverseOpenChange}
-                title="冲正错误验收记录？"
+                title={
+                    reverseAcceptanceNo
+                        ? `冲正 ${reverseAcceptanceNo}？`
+                        : "冲正这条验收记录？"
+                }
+                description="原记录会保留，并增加一条冲正记录；对应批次重新变为待验。"
                 actionLabel="冲正"
                 confirmLabel="确认冲正"
-                icon={RotateCcwIcon}
-                mediaClassName="bg-warning-soft text-warning-soft-foreground"
+                cancelLabel="取消"
                 fromStatus={{ label: "已确认", tone: "success" }}
                 toStatus={{ label: "已冲正", tone: "warning" }}
-                lockedFields={[
-                    `原验收单 ${reverseTarget?.acceptanceNo ?? "—"}`,
-                ]}
                 formContent={
                     <Field>
                         <FieldLabel htmlFor="sales-orders-acceptance-reverse-reason">
@@ -106,22 +107,8 @@ export function AcceptanceDialogs({
                             }
                             placeholder="说明误录原因"
                         />
-                        <FieldDescription>
-                            请说明误录原因；该说明将随冲正记录保留。
-                        </FieldDescription>
-                        {!reverseReason.trim() ? (
-                            <p className="text-xs text-destructive" role="alert">
-                                请填写冲正理由
-                            </p>
-                        ) : null}
                     </Field>
                 }
-                effects={[
-                    "新增反向验收记录",
-                    "恢复对应批次的待验数量",
-                    "不删除原验收记录",
-                ]}
-                nextDepartment="销售"
                 confirmDisabled={!reverseReason.trim()}
                 onConfirm={onConfirmReverse}
             />

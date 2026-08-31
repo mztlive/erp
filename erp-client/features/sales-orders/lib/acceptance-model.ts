@@ -570,6 +570,25 @@ const OPAQUE_ID =
 const PREFIXED_OPAQUE_ID =
     /^(?:DLV|FH|GRN|SF|DN|PR|ED|PO|SO|CG)-[0-9a-f]{24,}$/i
 
+const OPAQUE_ACCEPTANCE_NO =
+    /^(?:REV-)*(?:YS-|CA-)?(?:[0-9a-f]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+/**
+ * 可读验收单号才上屏。幂等键切片、对象 id、连续 REV- 前缀都不展示。
+ */
+export function visibleAcceptanceNo(value: string | null | undefined): string {
+    const trimmed = value?.trim() ?? ""
+    if (
+        !trimmed ||
+        OPAQUE_ID.test(trimmed) ||
+        PREFIXED_OPAQUE_ID.test(trimmed) ||
+        OPAQUE_ACCEPTANCE_NO.test(trimmed)
+    ) {
+        return ""
+    }
+    return trimmed
+}
+
 /**
  * 确认层回显：每个已勾选批次拆成品名、交付方式和结果。
  * 内部单号不上屏；不验批次不在 selected 里，不会出现。

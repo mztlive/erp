@@ -116,7 +116,7 @@ function historyItem(
     }
 }
 
-test("冲正确认层把理由表单放在标题区外", () => {
+test("冲正确认层只保留状态变化和理由", () => {
     render(
         <AcceptanceDialogs
             confirmOpen={false}
@@ -135,23 +135,52 @@ test("冲正确认层把理由表单放在标题区外", () => {
         />,
     )
 
-    const title = screen.getByText("冲正错误验收记录？")
+    const title = screen.getByText("冲正 YS-1？")
+    expect(title).toBeTruthy()
     const reason = screen.getByLabelText(/冲正理由/)
     const header = title.closest("[data-slot=alert-dialog-header]")
-    const effects = screen.getByText("本次动作产生的影响")
     expect(header?.contains(reason)).toBe(false)
     expect(
-        reason.compareDocumentPosition(effects) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-    ).not.toBe(0)
-    expect(screen.getByText("原验收单 YS-1")).toBeTruthy()
+        screen.getByText(
+            "原记录会保留，并增加一条冲正记录；对应批次重新变为待验。",
+        ),
+    ).toBeTruthy()
     expect(screen.getByText("已冲正")).toBeTruthy()
-    expect(screen.queryByText("已冲正（新增反向记录）")).toBeNull()
-    expect(screen.getByText("请填写冲正理由")).toBeTruthy()
     expect(screen.getByPlaceholderText("说明误录原因")).toBeTruthy()
+    expect(screen.queryByText("提交后锁定字段")).toBeNull()
+    expect(screen.queryByText("本次动作产生的影响")).toBeNull()
+    expect(screen.queryByText("下一责任部门")).toBeNull()
+    expect(screen.queryByText("请核对状态变化和业务影响后再继续。")).toBeNull()
+    expect(screen.queryByText("请填写冲正理由")).toBeNull()
     expect(
         screen
             .getByRole("button", { name: "确认冲正" })
             .hasAttribute("disabled"),
     ).toBe(true)
+    expect(screen.getByRole("button", { name: "取消" })).toBeTruthy()
+})
+
+test("冲正确认层不把内部单号写进标题", () => {
+    render(
+        <AcceptanceDialogs
+            confirmOpen={false}
+            onConfirmOpenChange={() => undefined}
+            selected={new Map()}
+            overallPreview="PASS"
+            onConfirmAcceptance={async () => undefined}
+            reverseTarget={historyItem({
+                acceptanceNo: "REV-REV-YS-91b74dafa79333f7f1dda09f7",
+            })}
+            onReverseOpenChange={() => undefined}
+            reverseReason=""
+            onReverseReasonChange={() => undefined}
+            onConfirmReverse={async () => undefined}
+            exitDiscardOpen={false}
+            onExitDiscardOpenChange={() => undefined}
+            onConfirmExit={() => undefined}
+        />,
+    )
+
+    expect(screen.getByText("冲正这条验收记录？")).toBeTruthy()
+    expect(screen.queryByText(/91b74dafa79333f7f1dda09f7/)).toBeNull()
 })
