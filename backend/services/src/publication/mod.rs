@@ -81,6 +81,37 @@ pub struct ClassifiedError {
     pub summary: String,
 }
 
+impl ClassifiedError {
+    /// 判断外部调用是否没有可确认的最终结果。
+    ///
+    /// # 返回
+    ///
+    /// 显式结果未知分类，或稳定错误码包含大写 `TIMEOUT`、
+    /// `OUTCOME_UNKNOWN` 时返回 `true`；匹配规则区分大小写。
+    pub fn is_result_unknown(&self) -> bool {
+        self.class == ErrorClass::ResultUnknown
+            || self.code.contains("TIMEOUT")
+            || self.code.contains("OUTCOME_UNKNOWN")
+    }
+
+    /// 将符合结果未知信号的错误归一化为正式结果未知分类。
+    ///
+    /// # 返回
+    ///
+    /// 符合 [`Self::is_result_unknown`] 合同时，仅将错误分类改为
+    /// [`ErrorClass::ResultUnknown`]；否则返回原错误。稳定错误码与脱敏摘要
+    /// 在两种情况下均保持原样。
+    pub fn into_result_unknown(self) -> Self {
+        if !self.is_result_unknown() {
+            return self;
+        }
+        Self {
+            class: ErrorClass::ResultUnknown,
+            ..self
+        }
+    }
+}
+
 /// 商城投递确认（成功响应）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublishAck {
@@ -1166,6 +1197,67 @@ mod tests {
     use entities::publication::{ProductPublication, ProductPublicationData, ProductPublicationStatus};
 
     use super::{ClassifiedError, MallConnector, PublishAck, UnavailableMallConnector};
+
+    fn classified_error(class: ErrorClass, code: &str, summary: &str) -> ClassifiedError {
+        ClassifiedError {
+            class,
+            code: code.to_string(),
+            summary: summary.to_string(),
+        }
+    }
+
+    #[test]
+    fn classified_error_recognizes_explicit_and_uppercase_unknown_signals() {
+        let cases = [
+            classified_error(ErrorClass::ResultUnknown, "MALL_PENDING", "尚未确认"),
+            classified_error(ErrorClass::TransientFailure, "MALL_TIMEOUT", "请求超时"),
+            classified_error(ErrorClass::TransientFailure, "MALL_OUTCOME_UNKNOWN", "响应丢失"),
+            classified_error(
+                ErrorClass::BusinessRejected,
+                "REMOTE_PRE_TIMEOUT_POST",
+                "远端状态不确定",
+            ),
+        ];
+
+        assert!(cases.iter().all(ClassifiedError::is_result_unknown));
+    }
+
+    #[test]
+    fn classified_error_keeps_other_and_lowercase_codes_definitive() {
+        let cases = [
+            classified_error(ErrorClass::TransientFailure, "NETWORK_FAILURE", "网络失败"),
+            classified_error(ErrorClass::BusinessRejected, "MALL_REJECTED", "商城拒绝"),
+            classified_error(ErrorClass::TransientFailure, "mall_timeout", "小写超时码"),
+            classified_error(
+                ErrorClass::TransientFailure,
+                "mall_outcome_unknown",
+                "小写结果未知码",
+            ),
+        ];
+
+        assert!(cases.iter().all(|error| !error.is_result_unknown()));
+    }
+
+    #[test]
+    fn result_unknown_conversion_preserves_stable_fields() {
+        let converted = classified_error(
+            ErrorClass::TransientFailure,
+            "MALL_TIMEOUT_AFTER_SEND",
+            "商城响应超时",
+        )
+        .into_result_unknown();
+
+        assert_eq!(converted.class, ErrorClass::ResultUnknown);
+        assert_eq!(converted.code, "MALL_TIMEOUT_AFTER_SEND");
+        assert_eq!(converted.summary, "商城响应超时");
+    }
+
+    #[test]
+    fn result_unknown_conversion_keeps_definitive_error_unchanged() {
+        let error = classified_error(ErrorClass::BusinessRejected, "MALL_REJECTED", "商城明确拒绝");
+
+        assert_eq!(error.clone().into_result_unknown(), error);
+    }
 
     fn sample_revision() -> entities::publication::ProductPublicationRevision {
         entities::publication::ProductPublicationRevision::new(

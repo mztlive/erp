@@ -294,17 +294,6 @@ impl PublicationService {
                 })
                 .await
             }
-            Err(error) if publication_error_is_unknown(&error) => {
-                self.settle_publication_failure(
-                    claimed,
-                    message,
-                    publication_unknown_error(error),
-                    operation_id,
-                    command_action,
-                    actor,
-                )
-                .await
-            }
             Err(error) => {
                 self.settle_publication_failure(claimed, message, error, operation_id, command_action, actor)
                     .await
@@ -448,6 +437,7 @@ impl PublicationService {
         command_action: &'static str,
         actor: &AuditActor,
     ) -> Result<PublicationDeliveryActionResultView> {
+        let error = error.into_result_unknown();
         let at = Instant::now();
         let unknown = error.class == ErrorClass::ResultUnknown;
         let status = if unknown {
@@ -1117,20 +1107,6 @@ fn ensure_publication_delivery_relation(
     Ok(())
 }
 
-fn publication_error_is_unknown(error: &ClassifiedError) -> bool {
-    error.class == ErrorClass::ResultUnknown
-        || error.code.contains("TIMEOUT")
-        || error.code.contains("OUTCOME_UNKNOWN")
-}
-
-fn publication_unknown_error(error: ClassifiedError) -> ClassifiedError {
-    ClassifiedError {
-        class: ErrorClass::ResultUnknown,
-        code: error.code,
-        summary: error.summary,
-    }
-}
-
 fn publication_action_from_fact(
     operation_id: String,
     delivery: ProductPublicationDelivery,
@@ -1255,7 +1231,7 @@ fn publication_stable_id(prefix: &str, identity: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{publication_delivery_actions, publication_operation_id, publication_unknown_error};
+    use super::{publication_delivery_actions, publication_operation_id};
     use crate::publication::ClassifiedError;
     use entities::integration_ops::ErrorClass;
     use entities::publication::PublicationDeliveryStatus;
@@ -1269,14 +1245,32 @@ mod tests {
     }
 
     #[test]
-    fn timeout_is_classified_as_result_unknown_without_losing_code() {
-        let error = publication_unknown_error(ClassifiedError {
+    fn result_unknown_exposes_only_query_and_escalate() {
+        assert_eq!(
+            publication_delivery_actions(
+                PublicationDeliveryStatus::ResultUnknown,
+                Some(ErrorClass::ResultUnknown),
+            ),
+            vec!["QUERY_RESULT", "ESCALATE"]
+        );
+    }
+
+    #[test]
+    fn timeout_returned_by_result_query_cannot_become_retryable() {
+        let error = ClassifiedError {
             class: ErrorClass::TransientFailure,
-            code: "MALL_TIMEOUT".to_string(),
-            summary: "请求超时".to_string(),
-        });
+            code: "MALL_OUTCOME_UNKNOWN_AFTER_QUERY".to_string(),
+            summary: "商城查询仍未返回确定结果".to_string(),
+        }
+        .into_result_unknown();
+
         assert_eq!(error.class, ErrorClass::ResultUnknown);
-        assert_eq!(error.code, "MALL_TIMEOUT");
+        assert_eq!(error.code, "MALL_OUTCOME_UNKNOWN_AFTER_QUERY");
+        assert_eq!(error.summary, "商城查询仍未返回确定结果");
+        assert_eq!(
+            publication_delivery_actions(PublicationDeliveryStatus::ResultUnknown, Some(error.class)),
+            vec!["QUERY_RESULT", "ESCALATE"]
+        );
     }
 
     #[test]

@@ -49,7 +49,7 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **182 项 OPEN、4 项 BLOCKED、32 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **181 项 OPEN、4 项 BLOCKED、33 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
@@ -57,22 +57,22 @@
 | --- | ---: | ---: | ---: | ---: |
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
 | Approval | 3 | 6 | 1 | 10 |
-| Master | 4 | 9 | 0 | 13 |
+| Master | 4 | 8 | 0 | 12 |
 | Sales / Contract / Returns / Projection | 7 | 19 | 0 | 26 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 13 | 0 | 20 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **76** | **109** | **1** | **186** |
+| **合计** | **76** | **108** | **1** | **185** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **2 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 13 | 48 | 0 | 61 |
+| P0 | 13 | 47 | 0 | 60 |
 | P1 | 58 | 49 | 1 | 108 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **76** | **109** | **1** | **186** |
+| **合计** | **76** | **108** | **1** | **185** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -227,7 +227,7 @@ git diff --check
 | MASTER-E06 | P1 | OPEN | `backend/services/src/customer/profile/facts.rs:485` `close_contact`、`:497` `close_address`、`:509` `close_bank`、`:563` `close_date` 在 Service 拼装停用、结束日期和取消默认的实体生命周期；当前 `close_date` 把倒序日期静默转成 `Unchanged`。 | `PartyContact`、`PartyAddress`、`PartyBankAccount` 必须提供 `close_at`：`close_at < valid_from` 返回 `LogicError` 且零 mutation；同日关闭不写零长度 `valid_to`，只停用并取消默认；晚于开始日写 `valid_to=close_at` 后停用并取消默认。Service 保留集合差异、事务写入和操作人传递。 | 三类实体均覆盖 `<`、`==`、`>`、已经关闭及默认标记；倒序分支必须断言 status/valid_to/is_default/updated_by 均不变；Service 中四个 helper 删除。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E07 | P0 | DONE | `backend/services/src/customer/profile/idempotency.rs:18` `TransactionResolutionContext`、`:85` `profile_command`、`:120` `request_fingerprint`、`:127` `replay_command` 分散实现幂等请求身份、指纹与同一命令核对；误判会重放其他请求结果。 | Entity 必须定义稳定重放上下文，并由 `CustomerProfileCommand` 校验 operation、customer、initiator、fingerprint；请求指纹进入 DTO 或专用请求身份 VO；Service 仅保留事务失败后的仓储重查和 View 映射。 | 必须覆盖完全匹配及操作、客户、发起人、指纹分别不匹配，并覆盖创建命令无既有 customer_id；指纹必须确定性且不得持久化敏感请求正文。序列化顺序或算法变更必须版本化或兼容既有幂等记录。 | 批次：`MASTER-6.3-E07-20260901`；责任人：Codex；依赖：无；关闭证据：`CustomerProfileReplayContext`、`CustomerProfileRequestFingerprint` 与 `CustomerProfileCommand` 统一拥有精确身份及重放核对；DTO 固化 v1 输入字节和 golden，生产 Service 的旧身份、指纹与重放 helper 已删除；真实 MongoDB 并发、自然执行计划及失败事务退出后重读均通过。 |
 | MASTER-E08 | P0 | OPEN | `backend/services/src/publication/dto.rs:762` `publication_content_hash` 与 `:789` `fnv1a64` 在 DTO 文件计算正式内容身份；`backend/services/src/publication/mod.rs:604-608` 先写 `placeholder` 再覆盖，安全暂停路径在同文件 `296-301` 二次覆盖。 | `ProductPublicationRevision` 或内容身份 VO 必须负责规范编码和指纹派生；构造修订时必须一次得到真实指纹，禁止任何占位值；算法、字段顺序和编码必须固定或显式版本化。 | 相同内容必须产生相同指纹，每个参与字段变化必须改变指纹；普通创建和安全暂停复制均不得出现占位值；必须覆盖可选字段、枚举、金额、税率、时间和能力列表。若改变现有 FNV 合同，必须提供兼容读取、迁移和回滚。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| MASTER-E09 | P0 | OPEN | `backend/services/src/publication/delivery.rs:1120` `publication_error_is_unknown` 与 `:1126` `publication_unknown_error` 以松散 helper 维护外部副作用的“结果未知”判定及重新分类。 | `ClassifiedError` 或 integration error VO 必须提供 `is_result_unknown` 和受控转换；错误类、稳定错误码及脱敏摘要保留规则必须内聚；Connector 调用、失败结算、重试和升级保留在 Service。 | 必须覆盖显式 `ResultUnknown`、`TIMEOUT`、`OUTCOME_UNKNOWN`、普通临时故障和业务拒绝；转换后必须保留错误码和摘要。未确认结果只能查询原结果或升级，禁止当作明确失败盲目重放；错误码大小写及子串规则必须固定。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| MASTER-E09 | P0 | DONE | `backend/services/src/publication/delivery.rs:1120` `publication_error_is_unknown` 与 `:1126` `publication_unknown_error` 以松散 helper 维护外部副作用的“结果未知”判定及重新分类。 | `ClassifiedError` 或 integration error VO 必须提供 `is_result_unknown` 和受控转换；错误类、稳定错误码及脱敏摘要保留规则必须内聚；Connector 调用、失败结算、重试和升级保留在 Service。 | 必须覆盖显式 `ResultUnknown`、`TIMEOUT`、`OUTCOME_UNKNOWN`、普通临时故障和业务拒绝；转换后必须保留错误码和摘要。未确认结果只能查询原结果或升级，禁止当作明确失败盲目重放；错误码大小写及子串规则必须固定。 | 批次：`MASTER-6.3-E09-20260901`；责任人：Codex；依赖：无；关闭证据：`ClassifiedError` 统一拥有结果未知判定与受控归一化，旧 Service helper 已删除；首次投递和查询原结果的全部失败均在唯一 settlement 入口归一化；15 项 publication 测试固定分类矩阵、字段保真及未知结果禁止重试。 |
 | MASTER-E10 | P0 | OPEN | `backend/services/src/publication/mod.rs:1121` 与 `:1143` 直接执行 `row.revision_no + 1`；`backend/entities/src/common/revision.rs:15` `RevisionBase` 当前无受检后继方法，最大值可能 panic 或回绕。 | `RevisionBase` 或发布修订领域类型必须提供 checked successor；Repository 只返回最新 `Option<u32>`，Service 调用领域方法并映射稳定错误；Service 中裸 `+ 1` 必须删除。 | 无历史必须返回 1，普通序号必须单调加一，`u32::MAX` 必须返回错误且不 panic、不回绕；普通创建与事务内安全暂停必须复用同一方法。必须与最新修订号投影查询同批实施；唯一索引仍为并发最终防线。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 
 #### 不得下沉的 Service 边界
@@ -252,6 +252,12 @@ git diff --check
 6. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
 7. 迁移与回滚合同：本批不改变 HTTP DTO、响应、BSON 字段、唯一索引、业务状态或持久化摘要 wire shape，不执行数据迁移或索引迁移。旧应用可读取本批写入的历史裸摘要，允许直接回滚应用代码；回滚后会重新暴露分散身份核对及失败事务恢复风险，生产回滚必须按变更审批执行。
 8. 外部验收边界：浏览器和外部系统为 `N/A`；本批不改变用户界面或外部调用。发布前必须以生产代表数据复核唯一索引存在、自然执行计划和滚动部署期间新旧版本对同一 key 的兼容回放；本地隔离副本集结果不得替代生产发布审批。
+9. 批次编号：`MASTER-6.3-E09-20260901`。交付范围：`MASTER-E09`。责任人：Codex。外部依赖：无。
+10. 分层结果：`ClassifiedError::is_result_unknown` 唯一规定结果未知判定，`ClassifiedError::into_result_unknown` 只对符合合同的错误执行受控归一化，普通临时故障与业务拒绝原样返回；稳定错误码和脱敏摘要始终保留。匹配合同固定为区分大小写的子串匹配：显式 `ResultUnknown`，或 code 包含大写 `TIMEOUT`、`OUTCOME_UNKNOWN`。Connector 调用、失败结算事务、查询原结果、重试调度和人工升级继续由 Service 编排，原 `publication_error_is_unknown` 与 `publication_unknown_error` helper 已删除。
+11. P0 失败关闭合同：首次投递失败和 `QueryPublicationResult::Failed` 必须进入唯一 `settle_publication_failure`，该入口必须在计算状态、Inbox 状态和允许动作前执行受控归一化。由查询原结果返回的 `TransientFailure + TIMEOUT/OUTCOME_UNKNOWN` 必须落为 `PublicationDeliveryStatus::ResultUnknown`，只允许 `QUERY_RESULT` 与 `ESCALATE`；禁止进入 `Failed/Retrying` 或暴露 `RETRY`。明确临时故障继续按既有策略提供受控重试，明确业务拒绝不得因原分类被无条件改写。
+12. 定向与统一门禁：`cargo test -p services publication:: --all-features --locked` 通过 15 项，覆盖显式 `ResultUnknown`、大写 token、大小写敏感子串、普通临时故障、业务拒绝、code/summary 保真、明确错误不改写及查询返回未知结果不得重试；`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
+13. 兼容、迁移与回滚合同：本批不改变 HTTP DTO、错误响应、BSON 字段、索引、数据库字段、依赖或锁文件；初次投递的大小写敏感 `contains` 语义及落库 class/code/summary wire shape 保持不变，仅关闭查询原结果路径遗漏归一化的缺陷。不执行数据或索引迁移。应用代码可按整个批次原子回滚，禁止只回滚两个调用文件之一；生产回滚前必须停止自动重试并完成第 14 项历史状态扫描，否则将重新暴露未知结果盲目重放风险。
+14. 发布前数据与外部边界：当前仓库生产组合只注册失败关闭的 publication connector，未注册真实商城实现；仓外注入及生产历史状态不在本地验收范围。发布前必须扫描 `Failed/Retrying + 可自动重试错误类 + code 含大写 TIMEOUT/OUTCOME_UNKNOWN` 的发布投递；命中项必须先查询原消息最终结果或升级人工处理，禁止直接重试。浏览器、真实商城和生产数据扫描登记为未在本批本地执行，不得以纯单元测试替代生产发布审批。
 
 ### 6.4 Sales / Contract / Returns / Projection
 
