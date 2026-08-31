@@ -43,9 +43,11 @@ function DialogContent({
     className,
     children,
     showCloseButton = true,
+    closeButtonId,
     ...props
 }: DialogPrimitive.Popup.Props & {
     showCloseButton?: boolean
+    closeButtonId?: string
 }) {
     return (
         <DialogPortal>
@@ -61,6 +63,7 @@ function DialogContent({
                 {children}
                 {showCloseButton && (
                     <DialogPrimitive.Close
+                        id={closeButtonId}
                         data-slot="dialog-close"
                         render={
                             <Button
@@ -92,10 +95,12 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 function DialogFooter({
     className,
     showCloseButton = false,
+    closeButtonId,
     children,
     ...props
 }: React.ComponentProps<"div"> & {
     showCloseButton?: boolean
+    closeButtonId?: string
 }) {
     return (
         <div
@@ -108,7 +113,10 @@ function DialogFooter({
         >
             {children}
             {showCloseButton && (
-                <DialogPrimitive.Close render={<Button variant="outline" />}>
+                <DialogPrimitive.Close
+                    id={closeButtonId}
+                    render={<Button variant="outline" />}
+                >
                     关闭
                 </DialogPrimitive.Close>
             )}

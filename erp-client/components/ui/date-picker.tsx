@@ -163,6 +163,7 @@ function DatePicker({
                 </PopoverTrigger>
                 {clearable && value ? (
                     <Button
+                        id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
                         size={DATE_PICKER_CLEAR_SIZE[size]}
@@ -176,6 +177,7 @@ function DatePicker({
             </div>
             <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
+                    idPrefix={id ? `${id}-calendar` : undefined}
                     mode="single"
                     selected={selected}
                     disabled={disabledDates}
@@ -358,6 +360,7 @@ function DateTimePicker({
                 </PopoverTrigger>
                 {clearable && value ? (
                     <Button
+                        id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
                         size="icon-lg"
@@ -371,6 +374,7 @@ function DateTimePicker({
             </div>
             <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
+                    idPrefix={id ? `${id}-calendar` : undefined}
                     mode="single"
                     selected={selected}
                     disabled={disabledDates}

@@ -42,12 +42,14 @@ function SheetContent({
     side = "right",
     size = "default",
     showCloseButton = true,
+    closeButtonId,
     ...props
 }: SheetPrimitive.Popup.Props & {
     side?: "top" | "right" | "bottom" | "left"
     /** preview=轻量 400px；detail=半屏读主记录 768px（最大 92vw） */
     size?: "default" | "preview" | "detail"
     showCloseButton?: boolean
+    closeButtonId?: string
 }) {
     return (
         <SheetPortal>
@@ -69,6 +71,7 @@ function SheetContent({
                 {children}
                 {showCloseButton && (
                     <SheetPrimitive.Close
+                        id={closeButtonId}
                         data-slot="sheet-close"
                         render={
                             <Button

@@ -4,6 +4,10 @@ import * as React from "react"
 import {
     DayPicker,
     getDefaultClassNames,
+    MonthsDropdown,
+    NextMonthButton,
+    PreviousMonthButton,
+    YearsDropdown,
     type DayButton,
     type Locale,
 } from "react-day-picker"
@@ -16,6 +20,13 @@ import {
     ChevronDownIcon,
 } from "lucide-react"
 
+function calendarDateSegment(date: Date) {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+}
+
 function Calendar({
     className,
     classNames,
@@ -25,9 +36,11 @@ function Calendar({
     locale,
     formatters,
     components,
+    idPrefix,
     ...props
 }: React.ComponentProps<typeof DayPicker> & {
     buttonVariant?: React.ComponentProps<typeof Button>["variant"]
+    idPrefix?: string
 }) {
     const defaultClassNames = getDefaultClassNames()
 
@@ -183,8 +196,55 @@ function Calendar({
                         />
                     )
                 },
-                DayButton: ({ ...props }) => (
-                    <CalendarDayButton locale={locale} {...props} />
+                PreviousMonthButton: (buttonProps) => (
+                    <PreviousMonthButton
+                        {...buttonProps}
+                        id={
+                            buttonProps.id ??
+                            (idPrefix
+                                ? `${idPrefix}-previous-month`
+                                : undefined)
+                        }
+                    />
+                ),
+                NextMonthButton: (buttonProps) => (
+                    <NextMonthButton
+                        {...buttonProps}
+                        id={
+                            buttonProps.id ??
+                            (idPrefix ? `${idPrefix}-next-month` : undefined)
+                        }
+                    />
+                ),
+                MonthsDropdown: (dropdownProps) => (
+                    <MonthsDropdown
+                        {...dropdownProps}
+                        id={
+                            dropdownProps.id ??
+                            (idPrefix ? `${idPrefix}-month` : undefined)
+                        }
+                    />
+                ),
+                YearsDropdown: (dropdownProps) => (
+                    <YearsDropdown
+                        {...dropdownProps}
+                        id={
+                            dropdownProps.id ??
+                            (idPrefix ? `${idPrefix}-year` : undefined)
+                        }
+                    />
+                ),
+                DayButton: (dayButtonProps) => (
+                    <CalendarDayButton
+                        locale={locale}
+                        {...dayButtonProps}
+                        id={
+                            dayButtonProps.id ??
+                            (idPrefix
+                                ? `${idPrefix}-month-${calendarDateSegment(dayButtonProps.day.displayMonth)}-day-${dayButtonProps.day.isoDate}`
+                                : undefined)
+                        }
+                    />
                 ),
                 WeekNumber: ({ children, ...props }) => {
                     return (

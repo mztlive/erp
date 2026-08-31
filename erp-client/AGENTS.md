@@ -228,3 +228,14 @@ export function CreateOrderForm() {
 - [ ] 新增枚举是否配了中文映射？内部 ID 是否漏进界面？
 - [ ] 是否为了单个页面改了共享组件的默认文案（应改为加 prop）？
 - [ ] 新增的 URL 查询参数是否有对应的界面控件和清除方式？
+
+## 7. 自动化 DOM id
+
+- 所有真实可点击、可聚焦、可输入、可选择、可拖放或可键盘触发的生产 DOM 目标必须使用稳定且唯一的原生 `id`；`data-testid` 只能保留或辅助，不能替代 `id`。
+- 静态 ID 使用小写 kebab-case，优先采用 `feature-surface-purpose`；重复项必须包含稳定业务键，禁止使用数组 index、随机数、时间戳或 `React.useId` 作为自动化 ID。
+- 不安全的动态片段统一通过 `@/lib/automation-id` 的 `toAutomationIdSegment(value)` 清洗，不得在组件内复制清洗逻辑。
+- ID 必须落在最终接收 click/focus/type 的 DOM 元素上；`render` / `asChild` 必须确认透传到最终按钮、链接或输入。
+- 复合组件使用调用方提供的 `id` / `idPrefix` 派生 `-trigger`、`-clear`、`-option-<key>`、`-close`、`-remove`、分页和表格内部控件等子 ID，确保同页多实例与 portal 内容不重复。
+- 修改输入 ID 时必须同步 `htmlFor`、`aria-describedby`、说明和错误节点 ID；未传新 ID 时保留原兼容行为。
+- 纯 UI primitive 已完整透传 `id` 时无需改动；primitive 自行生成额外交互控件时必须提供可派生 ID 的 API。
+- disabled 控件仍需 ID；路由互斥可复用概念，同一文档内同时挂载的列表、表格、对话框、抽屉和重复卡片不可重复。
