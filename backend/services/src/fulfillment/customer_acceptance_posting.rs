@@ -109,8 +109,15 @@ impl FulfillmentService {
                         {
                             return Err(Error::ConflictError("验收单号已被其他业务占用".to_string()));
                         }
-                        if existing.is_posted() {
-                            return Ok::<CustomerAcceptance, crate::errors::Error>(existing.clone());
+                        match existing_acceptance_commit_plan(
+                            existing,
+                            req.acceptance_id.as_deref(),
+                            req.expected_acceptance_version,
+                        )? {
+                            ExistingAcceptanceCommitPlan::ReturnPosted => {
+                                return Ok::<CustomerAcceptance, crate::errors::Error>(existing.clone());
+                            }
+                            ExistingAcceptanceCommitPlan::ReplaceDraft => {}
                         }
                     }
 
@@ -136,12 +143,6 @@ impl FulfillmentService {
 
                     let mut acceptance = match existing {
                         Some(mut acceptance) => {
-                            let expected_version = req
-                                .expected_acceptance_version
-                                .ok_or_else(|| Error::ValidationError("已有草稿缺少期望版本".to_string()))?;
-                            acceptance
-                                .ensure_draft_version(expected_version)
-                                .map_err(|error| Error::ConflictError(error.to_string()))?;
                             acceptance.update(CustomerAcceptanceUpdate {
                                 accepted_at: Some(Instant::from_unix_secs(req.accepted_at)),
                                 result: Some(req.result),
@@ -535,6 +536,53 @@ impl FulfillmentService {
     }
 }
 
+/// 已存在验收单在原子登记中的处理方式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExistingAcceptanceCommitPlan {
+    /// 已过账的同一业务请求直接返回既有结果。
+    ReturnPosted,
+    /// 已提供草稿主键和正确版本，可以完整替换草稿后过账。
+    ReplaceDraft,
+}
+
+/// 判断已存在验收单应作为幂等结果返回，还是作为草稿继续登记。
+///
+/// # 参数
+/// * `existing` - 按草稿主键或验收单号找到的既有验收单
+/// * `submitted_acceptance_id` - 客户端显式提交的草稿主键
+/// * `expected_version` - 客户端提交的草稿期望版本
+///
+/// # 返回
+/// 返回既有结果或替换草稿的处理方式。
+///
+/// # 错误
+/// 已冲正记录占用单号、隐式命中已有草稿、缺少版本或草稿版本冲突时返回错误。
+fn existing_acceptance_commit_plan(
+    existing: &CustomerAcceptance,
+    submitted_acceptance_id: Option<&str>,
+    expected_version: Option<u64>,
+) -> Result<ExistingAcceptanceCommitPlan> {
+    if existing.is_posted() {
+        return Ok(ExistingAcceptanceCommitPlan::ReturnPosted);
+    }
+    if !existing.is_editable() {
+        return Err(Error::ConflictError(
+            "验收单号已被已冲正记录占用，请使用新的验收单号重试".to_string(),
+        ));
+    }
+    if submitted_acceptance_id.is_none() {
+        return Err(Error::ConflictError(
+            "验收单号已对应已有草稿，请刷新后从该草稿继续登记".to_string(),
+        ));
+    }
+    let expected_version =
+        expected_version.ok_or_else(|| Error::ValidationError("已有草稿缺少期望版本".to_string()))?;
+    existing
+        .ensure_draft_version(expected_version)
+        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    Ok(ExistingAcceptanceCommitPlan::ReplaceDraft)
+}
+
 /// 校验统一工作台任务身份和乐观锁版本必须成对出现。
 fn ensure_task_context_pair(work_item_id: Option<&str>, expected_task_version: Option<u64>) -> Result<()> {
     if work_item_id.is_some() == expected_task_version.is_some() {
@@ -867,6 +915,74 @@ async fn update_sales_order_fulfillment_progress(
 
 #[cfg(test)]
 mod tests {
+    use entities::common::time::Instant;
+    use entities::fulfillment::{AcceptanceResult, CustomerAcceptance, CustomerAcceptanceData};
+    use entities::ids::{CustomerAcceptanceId, SalesOrderId};
+
+    use super::{existing_acceptance_commit_plan, ExistingAcceptanceCommitPlan};
+
+    /// 构造最小客户验收草稿用于提交状态分流测试。
+    fn draft_acceptance(id: &str, acceptance_no: &str) -> CustomerAcceptance {
+        CustomerAcceptance::new(
+            CustomerAcceptanceId::new(id),
+            CustomerAcceptanceData {
+                acceptance_no: acceptance_no.to_string(),
+                sales_order_id: SalesOrderId::new("sales-order-1"),
+                accepted_at: Instant::from_unix_secs(1_700_000_000),
+                result: AcceptanceResult::Passed,
+            },
+        )
+        .expect("测试验收草稿应合法")
+    }
+
+    /// 已过账记录支持相同提交重试，显式草稿必须携带正确版本。
+    #[test]
+    fn existing_acceptance_commit_plan_distinguishes_posted_and_draft() {
+        let mut posted = draft_acceptance("acceptance-posted", "YS-POSTED");
+        posted.mark_posted().expect("测试验收应可过账");
+        assert_eq!(
+            existing_acceptance_commit_plan(&posted, None, None).expect("已过账记录应作为幂等结果返回"),
+            ExistingAcceptanceCommitPlan::ReturnPosted
+        );
+
+        let draft = draft_acceptance("acceptance-draft", "YS-DRAFT");
+        assert_eq!(
+            existing_acceptance_commit_plan(&draft, Some(&draft.base.id), Some(draft.base.version),)
+                .expect("正确版本的显式草稿应可继续登记"),
+            ExistingAcceptanceCommitPlan::ReplaceDraft
+        );
+        assert!(existing_acceptance_commit_plan(&draft, None, None)
+            .expect_err("隐式命中草稿必须拒绝")
+            .to_string()
+            .contains("已对应已有草稿"));
+        assert!(
+            existing_acceptance_commit_plan(&draft, Some(&draft.base.id), None)
+                .expect_err("显式草稿缺少版本必须拒绝")
+                .to_string()
+                .contains("缺少期望版本")
+        );
+        assert!(
+            existing_acceptance_commit_plan(&draft, Some(&draft.base.id), Some(draft.base.version + 1),)
+                .expect_err("过期草稿版本必须拒绝")
+                .to_string()
+                .contains("草稿已变化")
+        );
+    }
+
+    /// 已冲正记录不得被当作草稿继续登记。
+    #[test]
+    fn existing_acceptance_commit_plan_rejects_reversed_record() {
+        let mut reversed = draft_acceptance("acceptance-reversed", "YS-REVERSED");
+        reversed.mark_posted().expect("测试验收应可过账");
+        reversed
+            .reverse(CustomerAcceptanceId::new("acceptance-reversal"))
+            .expect("测试验收应可冲正");
+
+        let error =
+            existing_acceptance_commit_plan(&reversed, None, None).expect_err("已冲正记录不得作为草稿登记");
+        assert!(error.to_string().contains("已冲正记录占用"));
+    }
+
     /// 过账与冲正可以同步 W06 责任，但不得启动审批或选择审批定义。
     #[test]
     fn post_does_not_start_approval() {

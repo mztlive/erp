@@ -426,8 +426,8 @@ export function AcceptanceWorkspace({
             <AcceptanceDialogs
                 confirmOpen={confirmOpen}
                 onConfirmOpenChange={setConfirmOpen}
+                selected={selection.selected}
                 overallPreview={selection.overallPreview}
-                hasExceptionResult={selection.hasExceptionResult}
                 onConfirmAcceptance={async () => {
                     submittedOverallRef.current = selection.overallPreview
                     const values = form.state.values

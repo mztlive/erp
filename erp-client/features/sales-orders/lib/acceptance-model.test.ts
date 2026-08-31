@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+    acceptanceConfirmLines,
     applyResultChange,
     batchDecisionsForFact,
     buildDraftLines,
@@ -215,6 +216,97 @@ describe("resultDecisionsForFact", () => {
         expect(lineAcceptanceHint([goods])).toBe(
             "商品明细可记通过、短少或拒收。",
         )
+    })
+})
+
+describe("acceptanceConfirmLines", () => {
+    it("splits item, fulfillment and result so the confirm dialog can align them", () => {
+        const passFact = fact({
+            fulfillmentLineId: "f-1",
+            salesOrderLineId: "sol-1",
+            fulfillmentNo: "FH-1",
+            lineNo: 1,
+            itemSnapshot: "礼盒 A",
+        })
+        const shortFact = fact({
+            fulfillmentLineId: "f-2",
+            salesOrderLineId: "sol-1",
+            fulfillmentNo: "FH-2",
+            lineNo: 1,
+            itemSnapshot: "礼盒 A",
+        })
+        const selected = new Map([
+            [passFact.fulfillmentLineId, defaultBatchDraft(passFact)],
+            [
+                shortFact.fulfillmentLineId,
+                draft(shortFact, {
+                    result: "SHORT",
+                    exceptionQty: "2",
+                    reason: "少两件",
+                }),
+            ],
+        ])
+        expect(acceptanceConfirmLines(selected)).toEqual([
+            {
+                fulfillmentLineId: "f-1",
+                itemLabel: "礼盒 A",
+                fulfillmentLabel: "代发 FH-1",
+                resultText: "通过 10 盒",
+                resultTone: "success",
+            },
+            {
+                fulfillmentLineId: "f-2",
+                itemLabel: "礼盒 A",
+                fulfillmentLabel: "代发 FH-2",
+                resultText: "短少 2 盒、通过 8 盒",
+                resultTone: "warning",
+                reason: "少两件",
+            },
+        ])
+    })
+
+    it("hides opaque fulfillment ids and keeps service fail wording", () => {
+        const skipped = fact({
+            fulfillmentLineId: "f-skip",
+            salesOrderLineId: "sol-1",
+            fulfillmentNo: "FH-0",
+        })
+        const service = fact({
+            fulfillmentLineId: "f-s",
+            salesOrderLineId: "sol-2",
+            fulfillmentFactType: "SERVICE",
+            fulfillmentNo: "SF-fcc911d964bc4dc89b9ac67815522ea2",
+            lineNo: 2,
+            itemSnapshot: "安装服务",
+            unitCode: "次",
+            eligibleQuantity: "1",
+        })
+        const selected = new Map([
+            [
+                service.fulfillmentLineId,
+                draft(service, {
+                    result: "SERVICE_FAIL",
+                    qty: "1",
+                    exceptionQty: "1",
+                    reason: "未完成安装",
+                }),
+            ],
+        ])
+        expect(acceptanceConfirmLines(selected)).toEqual([
+            {
+                fulfillmentLineId: "f-s",
+                itemLabel: "安装服务",
+                fulfillmentLabel: "服务履约",
+                resultText: "不通过 1 次",
+                resultTone: "destructive",
+                reason: "未完成安装",
+            },
+        ])
+        expect(
+            acceptanceConfirmLines(selected).some(
+                (line) => line.fulfillmentLineId === skipped.fulfillmentLineId,
+            ),
+        ).toBe(false)
     })
 })
 

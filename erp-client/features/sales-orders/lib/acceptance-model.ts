@@ -555,6 +555,91 @@ export function exceptionQuantityLabel(
     return "拒收数量"
 }
 
+export type AcceptanceConfirmLine = {
+    fulfillmentLineId: string
+    itemLabel: string
+    fulfillmentLabel: string
+    resultText: string
+    resultTone: "success" | "warning" | "destructive"
+    reason?: string
+}
+
+const OPAQUE_ID =
+    /^(?:[0-9a-f]{24,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+const PREFIXED_OPAQUE_ID =
+    /^(?:DLV|FH|GRN|SF|DN|PR|ED|PO|SO|CG)-[0-9a-f]{24,}$/i
+
+/**
+ * 确认层回显：每个已勾选批次拆成品名、交付方式和结果。
+ * 内部单号不上屏；不验批次不在 selected 里，不会出现。
+ */
+export function acceptanceConfirmLines(
+    selected: AcceptanceBatchSelection,
+): AcceptanceConfirmLine[] {
+    return [...selected.values()]
+        .sort((left, right) => {
+            if (left.fact.lineNo !== right.fact.lineNo) {
+                return left.fact.lineNo - right.fact.lineNo
+            }
+            return left.fact.itemSnapshot.localeCompare(
+                right.fact.itemSnapshot,
+                "zh",
+            )
+        })
+        .map((draft) => {
+            const reason = draft.reason.trim()
+            return {
+                fulfillmentLineId: draft.fact.fulfillmentLineId,
+                itemLabel: draft.fact.itemSnapshot,
+                fulfillmentLabel: visibleFulfillmentLabel(draft.fact),
+                resultText: acceptanceConfirmResultText(draft),
+                resultTone: acceptanceConfirmResultTone(draft.result),
+                reason: reason || undefined,
+            }
+        })
+}
+
+function visibleFulfillmentLabel(fact: AcceptanceEligibleFact): string {
+    const type = FULFILLMENT_TYPE_LABEL[fact.fulfillmentFactType]
+    const documentNo = fact.fulfillmentNo.trim()
+    if (
+        !documentNo ||
+        OPAQUE_ID.test(documentNo) ||
+        PREFIXED_OPAQUE_ID.test(documentNo)
+    ) {
+        return type
+    }
+    return `${type} ${documentNo}`
+}
+
+function acceptanceConfirmResultTone(
+    result: AcceptanceOverallResult,
+): AcceptanceConfirmLine["resultTone"] {
+    if (result === "PASS") return "success"
+    if (result === "SHORT") return "warning"
+    return "destructive"
+}
+
+function acceptanceConfirmResultText(draft: AcceptanceBatchDraft): string {
+    const unit = draft.fact.unitCode
+    if (draft.result === "PASS") {
+        return `通过 ${qtyWithUnit(passQuantity(draft), unit)}`
+    }
+    const exceptionWord =
+        draft.result === "SHORT"
+            ? "短少"
+            : draft.result === "SERVICE_FAIL"
+              ? "不通过"
+              : "拒收"
+    const exception = qtyWithUnit(exceptionQuantity(draft), unit)
+    const passed = passQuantity(draft)
+    if (!isPositiveQty(passed)) {
+        return `${exceptionWord} ${exception}`
+    }
+    return `${exceptionWord} ${exception}、通过 ${qtyWithUnit(passed, unit)}`
+}
+
 export function buildFactIndex(
     salesLines: AcceptanceSalesLineGroup[],
 ): Map<string, AcceptanceEligibleFact> {
