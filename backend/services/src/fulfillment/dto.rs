@@ -699,9 +699,6 @@ pub struct AcceptanceLineInput {
 /// 客户验收单创建请求（表头 + 行一次提交，初始状态为草稿）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateCustomerAcceptanceRequest {
-    /// 客户验收单号（全局唯一）。
-    #[validate(custom(function = "non_blank", message = "客户验收单号不能为空"))]
-    pub acceptance_no: String,
     /// 销售单。
     pub sales_order_id: SalesOrderId,
     /// 验收时间（秒级时间戳）。
@@ -739,8 +736,6 @@ pub struct CommitCustomerAcceptanceRequest {
     pub acceptance_id: Option<String>,
     /// 已保存草稿的期望乐观锁版本；提交已有草稿时必填。
     pub expected_acceptance_version: Option<u64>,
-    /// 客户验收单号（新建时必填且全局唯一；提交已有草稿时可省略）。
-    pub acceptance_no: Option<String>,
     /// 销售单。
     pub sales_order_id: SalesOrderId,
     /// 销售单期望乐观锁版本，防止基于过期履约事实提交。
@@ -786,6 +781,9 @@ pub struct ReverseCustomerAcceptanceRequest {
     /// 冲正原因说明。
     #[validate(custom(function = "non_blank", message = "冲正原因不能为空"))]
     pub reason_text: String,
+    /// 客户端提交标识；网络重试必须保持不变。
+    #[validate(custom(function = "non_blank", message = "提交标识不能为空"))]
+    pub idempotency_key: String,
 }
 
 /// 客户验收单列表视图。

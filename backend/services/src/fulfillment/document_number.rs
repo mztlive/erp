@@ -44,6 +44,23 @@ pub(crate) async fn next_purchase_receipt_no(db: &Database) -> Result<String> {
     next_kind_no(db, DocumentNumberKind::PurchaseReceipt).await
 }
 
+/// 为客户验收单取下一个可展示单号。
+///
+/// # 参数
+/// * `db` - 业务库；计数器集合与业务数据同库
+///
+/// # 返回
+/// 返回 `CAYYYYMMDD-000001` 形态的客户验收单号。
+///
+/// # 错误
+/// 时区无法形成或计数器写入失败时返回内部错误。
+///
+/// # 关键业务约束
+/// 单号由服务端在登记时取得；浏览器提交的操作号不得充当业务单号。
+pub(crate) async fn next_customer_acceptance_no(db: &Database) -> Result<String> {
+    next_kind_no(db, DocumentNumberKind::CustomerAcceptance).await
+}
+
 /// 按单据种类取当天下一个可展示编号。
 ///
 /// # 参数

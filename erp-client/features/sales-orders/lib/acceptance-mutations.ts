@@ -27,11 +27,7 @@ export async function saveCustomerAcceptanceDraft(
     input: SaveAcceptanceDraftInput,
 ) {
     // 后端无独立「保存草稿」接口：POST 创建 DRAFT 验收单。
-    // 已有 draft id 时无法局部更新（缺口），重新创建一笔草稿。
-    const acceptanceNo =
-        input.acceptanceDraftId && input.acceptanceDraftId.startsWith("YS")
-            ? input.acceptanceDraftId
-            : `YS${Date.now().toString(36).toUpperCase()}`
+    // 已有 draft id 时无法局部更新（缺口），重新创建一笔服务端编号的草稿。
 
     const acceptedAtSecs = input.acceptedAt
         ? Math.floor(Date.parse(input.acceptedAt) / 1000) ||
@@ -41,7 +37,6 @@ export async function saveCustomerAcceptanceDraft(
     const created = await apiPost<
         BackendAcceptanceDetail | BackendAcceptanceHeader
     >("/admin/customer-acceptances", {
-        acceptance_no: acceptanceNo,
         sales_order_id: input.salesOrderId,
         accepted_at: acceptedAtSecs,
         result: mapOverallResultToBackend(input.lines),
@@ -94,9 +89,6 @@ export async function postCustomerAcceptanceWorkspace(
             expected_acceptance_version: hasServerDraft
                 ? input.expectedDraftVersion
                 : null,
-            acceptance_no: hasServerDraft
-                ? null
-                : `YS-${input.idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`,
             sales_order_id: input.salesOrderId,
             expected_sales_order_version: input.expectedSalesOrderLockVersion,
             accepted_at: input.acceptedAt
@@ -182,21 +174,19 @@ export async function reverseCustomerAcceptanceWorkspace(
     input: ReverseAcceptanceInput,
 ): Promise<ReverseAcceptanceResult> {
     try {
-        const reversed = await apiPost<BackendAcceptanceDetail>(
-            `/admin/customer-acceptances/${input.acceptanceId}/reverse`,
-            {
-                expected_version: input.expectedAcceptanceVersion,
-                reason_text: input.reasonText,
-            },
-        )
-        const header =
-            reversed.acceptance ??
-            (reversed as unknown as BackendAcceptanceHeader)
+        const reversed = await apiPost<
+            BackendAcceptanceDetail | BackendAcceptanceHeader
+        >(`/admin/customer-acceptances/${input.acceptanceId}/reverse`, {
+            expected_version: input.expectedAcceptanceVersion,
+            reason_text: input.reasonText,
+            idempotency_key: input.idempotencyKey,
+        })
+        const header = "acceptance" in reversed ? reversed.acceptance : reversed
         return {
             status: "succeeded",
             reverseAcceptanceNo: header.acceptance_no,
             reverseAcceptanceId: header.id,
-            originalAcceptanceNo: input.acceptanceId,
+            originalAcceptanceNo: input.originalAcceptanceNo,
         }
     } catch (err) {
         return {

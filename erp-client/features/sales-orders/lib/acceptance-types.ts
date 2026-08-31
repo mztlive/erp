@@ -187,6 +187,7 @@ export type PostAcceptanceResult =
 export type ReverseAcceptanceInput = {
     salesOrderId: string
     acceptanceId: string
+    originalAcceptanceNo: string
     expectedAcceptanceVersion: number
     reasonText: string
     idempotencyKey: string

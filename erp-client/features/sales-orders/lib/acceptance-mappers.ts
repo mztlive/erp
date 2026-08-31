@@ -223,7 +223,31 @@ export function mapHistoryItem(
         lines: [],
         recordedBy: "",
         version: h.version,
-        reversalOfAcceptanceId: h.reversal_of_acceptance_id ?? undefined,
+        reversedByAcceptanceId: h.reversal_of_acceptance_id ?? undefined,
         factOnlyNotice: FACT_ONLY_NOTICE,
     }
+}
+
+/**
+ * 映射完整验收历史，并从原记录的反向引用推导“冲正记录 → 原记录”。
+ * 后端字段保存在被冲正的原记录上，前端必须二次关联后才能判定反向记录。
+ */
+export function mapAcceptanceHistory(
+    headers: BackendAcceptanceHeader[],
+): AcceptanceHistoryItem[] {
+    const items = headers
+        .map(mapHistoryItem)
+        .filter((item): item is AcceptanceHistoryItem => item != null)
+    const originalByReverseId = new Map<string, AcceptanceHistoryItem>()
+    for (const item of items) {
+        if (item.reversedByAcceptanceId) {
+            originalByReverseId.set(item.reversedByAcceptanceId, item)
+        }
+    }
+    return items.map((item) => {
+        const original = originalByReverseId.get(item.acceptanceId)
+        return original
+            ? { ...item, reversalOfAcceptanceId: original.acceptanceId }
+            : item
+    })
 }

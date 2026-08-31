@@ -96,6 +96,7 @@ export function AcceptanceWorkspace({
     const [reverseTarget, setReverseTarget] =
         React.useState<AcceptanceHistoryItem | null>(null)
     const [reverseReason, setReverseReason] = React.useState("")
+    const reverseIdempotencyKeyRef = React.useRef("")
     const [idempotencyKey, setIdempotencyKey] = React.useState(
         () => `acc-${salesOrderId}-${crypto.randomUUID()}`,
     )
@@ -150,6 +151,7 @@ export function AcceptanceWorkspace({
             onReverseSucceeded: () => {
                 setReverseTarget(null)
                 setReverseReason("")
+                reverseIdempotencyKeyRef.current = ""
             },
         })
 
@@ -383,6 +385,7 @@ export function AcceptanceWorkspace({
                         onReverse={(item) => {
                             setReverseTarget(item)
                             setReverseReason("")
+                            reverseIdempotencyKeyRef.current = `rev-${item.acceptanceId}-${crypto.randomUUID()}`
                         }}
                         className={sectionClassName}
                     />
@@ -453,6 +456,7 @@ export function AcceptanceWorkspace({
                     if (!open) {
                         setReverseTarget(null)
                         setReverseReason("")
+                        reverseIdempotencyKeyRef.current = ""
                     }
                 }}
                 reverseReason={reverseReason}
@@ -462,12 +466,16 @@ export function AcceptanceWorkspace({
                     if (!reverseReason.trim()) {
                         throw new Error("请填写冲正理由")
                     }
+                    if (!reverseIdempotencyKeyRef.current) {
+                        reverseIdempotencyKeyRef.current = `rev-${reverseTarget.acceptanceId}-${crypto.randomUUID()}`
+                    }
                     await reverseMutation.mutateAsync({
                         salesOrderId,
                         acceptanceId: reverseTarget.acceptanceId,
+                        originalAcceptanceNo: reverseTarget.acceptanceNo,
                         expectedAcceptanceVersion: reverseTarget.version,
                         reasonText: reverseReason.trim(),
-                        idempotencyKey: `rev-${reverseTarget.acceptanceId}-${crypto.randomUUID()}`,
+                        idempotencyKey: reverseIdempotencyKeyRef.current,
                     })
                 }}
                 exitDiscardOpen={exitDiscardOpen}

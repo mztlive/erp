@@ -180,7 +180,7 @@ impl FulfillmentService {
         let acceptance = CustomerAcceptance::new(
             id.clone(),
             CustomerAcceptanceData {
-                acceptance_no: req.acceptance_no,
+                acceptance_no: super::document_number::next_customer_acceptance_no(&self.db).await?,
                 sales_order_id: req.sales_order_id,
                 accepted_at: Instant::from_unix_secs(req.accepted_at),
                 result: req.result,

@@ -5,13 +5,10 @@
 
 import { apiGet } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
-import type {
-    AcceptanceHistoryItem,
-    CustomerAcceptanceWorkspaceView,
-} from "@/features/sales-orders/lib/acceptance-types"
+import type { CustomerAcceptanceWorkspaceView } from "@/features/sales-orders/lib/acceptance-types"
 import {
     hasRemainingEligibleAcceptance,
-    mapHistoryItem,
+    mapAcceptanceHistory,
     mapSalesLine,
     type BackendEligibilityView,
 } from "@/features/sales-orders/lib/acceptance-mappers"
@@ -183,16 +180,16 @@ export async function fetchCustomerAcceptanceWorkspace(
         qtyByUnit.set(fact.unitCode, quantities)
     }
 
-    const history = (eligibility.history ?? [])
-        .map(mapHistoryItem)
-        .filter((item): item is AcceptanceHistoryItem => item != null)
+    const history = mapAcceptanceHistory(eligibility.history ?? [])
 
     const allowedActions = workItemConfigBlocker
         ? []
         : ["CREATE_ACCEPTANCE", "POST_ACCEPTANCE"]
     if (
         !workItemConfigBlocker &&
-        history.some((item) => item.status === "POSTED")
+        history.some(
+            (item) => item.status === "POSTED" && !item.reversalOfAcceptanceId,
+        )
     ) {
         allowedActions.push("REVERSE_ACCEPTANCE")
     }

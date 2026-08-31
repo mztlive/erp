@@ -253,6 +253,32 @@ impl AcceptanceFulfillmentAllocation {
         }
         Ok(())
     }
+
+    /// 校验一组分配属于可冲正的原始验收事实。
+    ///
+    /// 原始验收只能包含至少一条 `APPLY`；由冲正生成的验收包含 `REVERSE`，
+    /// 不得再次作为冲正目标，否则会形成没有业务数量变化的反向记录。
+    ///
+    /// # 参数
+    /// * `allocations` - 待冲正验收单的全部履约分配
+    ///
+    /// # 返回
+    /// 全部为原始应用分配时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 分配为空、包含反向动作或带有反向引用时返回错误。
+    pub fn ensure_reversible_source(allocations: &[AcceptanceFulfillmentAllocation]) -> Result<()> {
+        if allocations.is_empty() {
+            return Err(Error::from("原验收单没有可冲正的分配，无法冲正"));
+        }
+        if allocations.iter().any(|allocation| {
+            allocation.allocation_action != AllocationAction::Apply
+                || allocation.reverses_allocation_id.is_some()
+        }) {
+            return Err(Error::from("冲正记录不能再次冲正"));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -299,6 +325,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(allocation.allocation_action, AllocationAction::Reverse);
+    }
+
+    /// 原始应用分配可冲正；空分配和反向分配均必须拒绝。
+    #[test]
+    fn reversible_source_rejects_empty_and_reverse_allocations() {
+        let apply = AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("allocation-1"),
+            apply_data(),
+        )
+        .unwrap();
+        assert!(
+            AcceptanceFulfillmentAllocation::ensure_reversible_source(std::slice::from_ref(&apply)).is_ok()
+        );
+        assert!(AcceptanceFulfillmentAllocation::ensure_reversible_source(&[]).is_err());
+
+        let reverse = AcceptanceFulfillmentAllocation::new(
+            AcceptanceFulfillmentAllocationId::new("allocation-2"),
+            AcceptanceFulfillmentAllocationData {
+                allocation_action: AllocationAction::Reverse,
+                reverses_allocation_id: Some(AcceptanceFulfillmentAllocationId::new("allocation-1")),
+                ..apply_data()
+            },
+        )
+        .unwrap();
+        let error = AcceptanceFulfillmentAllocation::ensure_reversible_source(&[reverse]).unwrap_err();
+        assert!(error.to_string().contains("不能再次冲正"));
     }
 
     /// 失败路径：数量越界、引用为空、动作与反向引用不一致。
