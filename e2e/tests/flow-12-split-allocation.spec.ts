@@ -16,6 +16,7 @@
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test"
 
 import { ACCOUNTS } from "../helpers/accounts"
@@ -221,7 +222,10 @@ async function apiGet<T>(token: string, pathName: string): Promise<T> {
 }
 
 function mongoSettings(): { uri: string; dbName: string } {
-    const configPath = path.join(process.cwd(), "backend", "config.toml")
+    const configPath = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../backend/config.toml",
+    )
     const raw = execFileSync(
         "python3",
         [

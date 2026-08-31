@@ -25,6 +25,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
     test,
@@ -449,7 +450,10 @@ async function listPurchaseOrders(token: string): Promise<unknown[]> {
 }
 
 function mongoSettings(): { uri: string; dbName: string } {
-    const configPath = path.join(process.cwd(), "backend", "config.toml");
+    const configPath = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../backend/config.toml",
+    );
     const raw = execFileSync(
         "python3",
         [

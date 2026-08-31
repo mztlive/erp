@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { expect, test, type Browser, type Locator, type Page } from "@playwright/test"
 
@@ -320,7 +321,10 @@ function parseTomlString(text: string, key: string): string {
 }
 
 function seedZeroBalanceViaMongosh(warehouseId: string, skuId: string): void {
-    const configPath = path.join(process.cwd(), "backend", "config.toml")
+    const configPath = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../backend/config.toml",
+    )
     const toml = readFileSync(configPath, "utf8")
     const uri = parseTomlString(toml, "uri")
     const dbName = parseTomlString(toml, "db_name") || "erp"
