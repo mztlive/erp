@@ -11,8 +11,11 @@ let meta = #{
     ],
 };
 
-let root = if args == () { () } else { args.root };
-if root == () { pause("verification", "Pass args.root for the frontend directory."); }
+let root = ();
+if args != () {
+    if args.type_of() == "string" { root = args; } else { root = args.root; }
+}
+if root == () { pause("verification", "Pass args.root for the frontend directory (e.g. args: {\"root\": \"erp-client\"} or \"erp-client\")."); }
 
 let base = "Work only under " + root + ". The workspace may contain pre-existing uncommitted changes. Preserve them exactly unless a wording edit is required for this task. Use grep and read_file to inspect actual source and tests. Focus on dialogs, alert dialogs, modals, confirmation sheets, and inline confirmation prompts that ask users to submit, approve, reject, cancel, delete, close, publish, archive, execute, or otherwise commit an action. Evaluate user-visible title, description, field labels, validation messages, confirm/cancel labels, consequences, and irreversible-action warnings. Ignore non-confirmation informational dialogs and purely technical test fixtures unless they assert production copy. ";
 

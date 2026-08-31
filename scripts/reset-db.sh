@@ -6,7 +6,7 @@
 #   2. 复用 backend/scripts/reset-dev-business-data.sh 完成 preview/execute/verify；
 #   3. 启动 web-api，必要时用 CLI init-admin 修复超级管理员；
 #   4. 按 §11 创建全部岗位账号，再写仓库、财务责任、客户与合同；
-#   5. 按文档发布 PROCESS_REQUIRED 审批定义（供应商付款不审批）；
+#   5. 按文档发布 PROCESS_REQUIRED 审批定义（供应商付款不审批；资金单出纳提交、总监只审批）；
 #   6. 填充供应商收款账户、商品与公司商品池；
 #   7. 保持 web-api 运行，执行结束后可直接使用。
 #

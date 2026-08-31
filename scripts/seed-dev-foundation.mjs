@@ -6,8 +6,9 @@
  * 不写入销售单/采购单/库存/票款。供应商、商品与公司商品池由 seed-dev-catalog.mjs 补齐。
  * 仓库在主数据重置后由本脚本重建。
  * 付款、销项开票与卡券票款复核任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
- * 财务三人分责：caiwu 为财务总监并审批采购单；fukuan 为出纳并执行付款任务；
- * kaipiao 为默认开票负责人。供应商付款不得发布或启动独立审批。
+ * 财务三人分责：caiwu 为财务总监，只审批采购单、资金单和库存调整，不得提交回款、退款或冲正；
+ * fukuan 为出纳，执行付款任务并提交客户回款/退款/冲正；kaipiao 为默认开票负责人。
+ * 供应商付款不得发布或启动独立审批。
  * PROCESS_REQUIRED 审批定义由 publish-approval-definitions.mjs 单独发布。
  *
  * 幂等：岗位账号、客户、合同、仓库、财务三人、默认财务责任规则均按固定标识查找；
@@ -456,9 +457,13 @@ async function main() {
     `仓库: ${warehouses.map((row) => `${row.warehouse_code} ${row.name ?? ""}`.trim()).join("、")}（收发经办人 cangchu）`,
   );
   console.log("销售负责人: xiaoshou");
+  console.log("库存调整经办: cangchu（caiwu 只审批）");
   console.log("采购单审批人（财务总监）: caiwu");
   console.log("默认付款任务负责人（出纳）: fukuan");
   console.log("默认开票负责人: kaipiao");
+  console.log(
+    "客户回款/退款/冲正经办: fukuan（出纳提交；caiwu 只审批，自己提交会因岗位分离失败）",
+  );
   printAccountDirectory();
   console.log("下一步: 用 xiaoshou 打开销售开单页，选择该合同");
 }
