@@ -25,8 +25,12 @@ use bpm::model::{
     ApprovalProcessInstance, ApprovalTransitionDefinition, NewNodeDefinition, NewNodeExecution,
     NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
+use database::repository::approval_integration::{
+    ApprovalRuntimeReadRepository, ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope,
+};
 use database::repository::bpm::{
-    ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView, CasWriteOutcome,
+    ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
+    ApprovalInstanceListView, ApprovalInstanceTextQuery, CasWriteOutcome,
 };
 use database::{
     ensure_indexes, ApprovalIntegrationExt, BpmExt, Error as DatabaseError, NoTransaction, Transactional,
@@ -39,13 +43,13 @@ use entities::approval_integration::{
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::{ApprovalNotificationOutboxId, ApprovalSubjectSnapshotId, WorkItemId};
-use entities::money::Quantity;
+use entities::money::{Amount, Quantity};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{
     ApprovalRuntimeTaskEnding, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use futures_util::TryStreamExt;
-use mongodb::bson::doc;
+use mongodb::bson::{doc, Document};
 use test_support::{assert_indexes, require_mongo, TestDb};
 use tokio::sync::Barrier;
 
@@ -333,12 +337,26 @@ fn twenty_node_graph() -> DefinitionGraph {
 /// # 错误
 /// 引擎拒绝时测试失败。
 fn start_stock(graph: &DefinitionGraph, instance_id: &str, object_id: &str) -> bpm::engine::TransitionPlan {
+    start_runtime_instance(graph, instance_id, PILOT_KIND, PILOT_SUBJECT_KIND, object_id)
+}
+
+/// 按指定流程种类启动运行实例并返回确定计划。
+///
+/// # 错误
+/// 引擎拒绝时测试失败。
+fn start_runtime_instance(
+    graph: &DefinitionGraph,
+    instance_id: &str,
+    process_kind: ProcessKind,
+    subject_kind: &str,
+    object_id: &str,
+) -> bpm::engine::TransitionPlan {
     let bindings = graph
         .nodes
         .iter()
         .enumerate()
         .map(|(index, item)| StartAssigneeBinding {
-            id: ApprovalInstanceAssigneeId::new(format!("asg-{index}")),
+            id: ApprovalInstanceAssigneeId::new(format!("asg-{instance_id}-{index}")),
             node_key: item.node_key.clone(),
             participant: item.assignee_participant_id.clone(),
             eligibility: eligible(
@@ -350,11 +368,11 @@ fn start_stock(graph: &DefinitionGraph, instance_id: &str, object_id: &str) -> b
     start(
         StartCommand {
             instance_id: ApprovalProcessInstanceId::new(instance_id),
-            process_kind: PILOT_KIND,
-            subject: stock_subject(object_id),
+            process_kind,
+            subject: SubjectRef::new(subject_kind, object_id).expect("测试 SubjectRef 必须合法"),
             subject_version: 1,
             started_by: participant("starter"),
-            entry_execution_id: ApprovalNodeExecutionId::new("exec-1"),
+            entry_execution_id: ApprovalNodeExecutionId::new(format!("exec-{instance_id}")),
             now: at(10),
         },
         graph,
@@ -409,6 +427,104 @@ fn stock_snapshot(id: &str, instance_id: &str, object_id: &str) -> ApprovalSubje
         },
     )
     .expect("快照必须可构造")
+}
+
+/// 构造销售单业务对象快照。
+///
+/// # 错误
+/// 模型校验失败时测试失败。
+fn sales_snapshot(
+    id: &str,
+    instance_id: &str,
+    object_id: &str,
+    responsible_org_id: &str,
+) -> ApprovalSubjectSnapshot {
+    ApprovalSubjectSnapshot::new(
+        ApprovalSubjectSnapshotId::new(id),
+        ApprovalProcessInstanceId::new(instance_id),
+        DocumentType::SalesOrder,
+        object_id,
+        1,
+        ApprovalSubjectSnapshotPayload {
+            document_no: format!("SO-{object_id}"),
+            responsible_org_id: responsible_org_id.to_string(),
+            submitted_by: "starter".to_string(),
+            submitted_at: Instant::from_unix_secs(10),
+            counterparty: None,
+            total_amount: Some(Amount::from_str("100.00").expect("金额")),
+            total_quantity: Some(Quantity::from_str("1").expect("数量")),
+            line_count: 1,
+        },
+    )
+    .expect("销售单快照必须可构造")
+}
+
+/// 构造与 Managed 生产查询同形的完整 explain 管道。
+///
+/// 管道保留实例前置过滤与稳定排序、快照关联、exact triple、逐类型组织范围、
+/// 字面量检索和 cursor-free total facet，禁止用截断的两阶段查询替代验收。
+fn runtime_managed_explain_pipeline() -> Vec<Document> {
+    vec![
+        doc! { "$match": {
+            "deleted_at": 0_i64,
+            "status": "RUNNING",
+            "process_kind": { "$in": ["stock_adjustment"] },
+            "$expr": { "$eq": ["$process_kind", "$subject.subject_kind"] },
+        }},
+        doc! { "$sort": { "updated_at": -1, "id": -1 } },
+        doc! { "$lookup": {
+            "from": "approval_subject_snapshots",
+            "localField": "id",
+            "foreignField": "approval_process_instance_id",
+            "as": "_runtime_snapshots",
+        }},
+        doc! { "$set": { "_runtime_live_snapshots": { "$filter": {
+            "input": "$_runtime_snapshots",
+            "as": "snapshot",
+            "cond": { "$eq": ["$$snapshot.deleted_at", 0_i64] },
+        }}}},
+        doc! { "$set": {
+            "_runtime_snapshot": { "$arrayElemAt": ["$_runtime_live_snapshots", 0] }
+        }},
+        doc! { "$set": { "_runtime_snapshot_exact": { "$and": [
+            { "$eq": [{ "$size": "$_runtime_live_snapshots" }, 1] },
+            { "$eq": ["$_runtime_snapshot.approval_process_instance_id", "$id"] },
+            { "$eq": ["$_runtime_snapshot.document_type", "$process_kind"] },
+            { "$eq": ["$_runtime_snapshot.document_type", "$subject.subject_kind"] },
+            { "$eq": ["$_runtime_snapshot.business_object_id", "$subject.subject_id"] },
+            { "$eq": ["$_runtime_snapshot.subject_version", "$subject_version"] },
+        ]}}},
+        doc! { "$match": { "$or": [{
+            "process_kind": "stock_adjustment",
+            "$expr": { "$and": [
+                "$_runtime_snapshot_exact",
+                { "$in": ["$_runtime_snapshot.payload.responsible_org_id", ["org-1"]] },
+            ]},
+        }]}},
+        doc! { "$match": { "$or": [
+            { "subject.subject_id": { "$regex": "adj-good", "$options": "i" } },
+            { "current_assignee_name": { "$regex": "adj-good", "$options": "i" } },
+            { "current_node_name": { "$regex": "adj-good", "$options": "i" } },
+            { "$and": [
+                { "_runtime_snapshot_exact": true },
+                { "_runtime_snapshot.payload.document_no": {
+                    "$regex": "adj-good",
+                    "$options": "i",
+                }},
+            ]},
+        ]}},
+        doc! { "$facet": {
+            "items": [
+                { "$match": { "$or": [
+                    { "updated_at": { "$lt": 10_i64 } },
+                    { "updated_at": 10_i64, "id": { "$lt": "inst-good-a" } },
+                ]}},
+                { "$limit": 2_i64 },
+                { "$project": { "_id": 0, "id": 1, "subject": 1, "snapshot": 1 } },
+            ],
+            "total": [{ "$count": "count" }],
+        }},
+    ]
 }
 
 /// 把启动计划落成仓储事实。
@@ -1184,6 +1300,405 @@ async fn snapshot_is_immutable_and_one_per_instance() {
             .expect("快照必须存在");
         assert_eq!(loaded.subject_version, 1);
         assert_eq!(loaded.document_type, DocumentType::StockAdjustment);
+    });
+}
+
+#[tokio::test]
+#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+async fn runtime_read_scope_filters_before_count_and_stable_pagination() {
+    require_mongo!(async {
+        let fixture = TestDb::new("awf_repo_runtime_read")
+            .await
+            .expect("测试数据库创建失败");
+        ensure_indexes(fixture.db()).await.expect("索引创建失败");
+        let graph = single_node_graph();
+        for (instance_id, object_id, receipt_id) in [
+            ("inst-good-a", "adj-good-a", "rcp-good-a"),
+            ("inst-good-b", "adj-good-b", "rcp-good-b"),
+            ("inst-wrong-org", "adj-wrong-org", "rcp-wrong-org"),
+            ("inst-id-drift", "adj-id-drift", "rcp-id-drift"),
+            ("inst-type-drift", "adj-type-drift", "rcp-type-drift"),
+            ("inst-version-drift", "adj-version-drift", "rcp-version-drift"),
+            ("inst-missing", "adj-missing", "rcp-missing"),
+        ] {
+            let plan = start_stock(&graph, instance_id, object_id);
+            persist_started(fixture.db(), &plan, receipt_id).await;
+        }
+
+        for (snapshot_id, instance_id, object_id) in [
+            ("snap-good-a", "inst-good-a", "adj-good-a"),
+            ("snap-good-b", "inst-good-b", "adj-good-b"),
+        ] {
+            fixture
+                .db()
+                .approval_subject_snapshots()
+                .create_immutable_snapshot(
+                    &stock_snapshot(snapshot_id, instance_id, object_id),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("写入授权快照");
+        }
+        let mut wrong_org = stock_snapshot("snap-wrong-org", "inst-wrong-org", "adj-wrong-org");
+        wrong_org.payload.responsible_org_id = "org-2".to_string();
+        wrong_org.payload.document_no = "SECRET-ONLY".to_string();
+        fixture
+            .db()
+            .approval_subject_snapshots()
+            .create_immutable_snapshot(&wrong_org, &mut NoTransaction)
+            .await
+            .expect("写入错误组织快照");
+        fixture
+            .db()
+            .approval_subject_snapshots()
+            .create_immutable_snapshot(
+                &stock_snapshot("snap-id-drift", "inst-id-drift", "other-object"),
+                &mut NoTransaction,
+            )
+            .await
+            .expect("写入漂移快照");
+        let mut type_drift = stock_snapshot("snap-type-drift", "inst-type-drift", "adj-type-drift");
+        type_drift.document_type = DocumentType::SalesOrder;
+        fixture
+            .db()
+            .approval_subject_snapshots()
+            .create_immutable_snapshot(&type_drift, &mut NoTransaction)
+            .await
+            .expect("写入类型漂移快照");
+        let mut version_drift =
+            stock_snapshot("snap-version-drift", "inst-version-drift", "adj-version-drift");
+        version_drift.subject_version = 2;
+        fixture
+            .db()
+            .approval_subject_snapshots()
+            .create_immutable_snapshot(&version_drift, &mut NoTransaction)
+            .await
+            .expect("写入版本漂移快照");
+
+        let started_filter = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Started,
+            process_kind: None,
+            status: Some(ApprovalProcessInstanceStatus::Running),
+            started_by: Some("starter".to_string()),
+            subject_kind: None,
+            subject_ids: None,
+            text_query: None,
+            cursor: None,
+            limit: 10,
+        };
+        let started_scope = ApprovalRuntimeReadScope::Started {
+            process_kinds: vec![ProcessKind::StockAdjustment],
+            submitted_by: "starter".to_string(),
+        };
+        let repository = ApprovalRuntimeReadRepository::new(fixture.db());
+        let started = repository
+            .search(&started_filter, &started_scope, &mut NoTransaction)
+            .await
+            .expect("本人发起授权聚合");
+        assert_eq!(started.total, 7, "本人发起不依赖展示快照证明组织");
+        assert_eq!(started.items.len(), 7);
+        assert_eq!(
+            started.items.iter().filter(|row| row.snapshot.is_some()).count(),
+            3,
+            "仅两个正确组织和一个错误组织的 exact snapshot 可提供标签"
+        );
+        for row in &started.items {
+            if let Some(snapshot) = &row.snapshot {
+                assert_eq!(snapshot.business_object_id, row.instance.subject.subject_id());
+                assert_eq!(snapshot.subject_version, row.instance.subject_version);
+            }
+        }
+
+        let numbered_filter = ApprovalInstanceListFilter {
+            text_query: Some(ApprovalInstanceTextQuery {
+                query: "ADJ-1".to_string(),
+            }),
+            ..started_filter.clone()
+        };
+        let numbered = repository
+            .search(&numbered_filter, &started_scope, &mut NoTransaction)
+            .await
+            .expect("快照编号检索");
+        assert_eq!(numbered.total, 2, "只有 exact snapshot 的相同编号可以命中");
+        assert!(numbered.items.iter().all(|row| row.snapshot.is_some()));
+
+        let drift_object_filter = ApprovalInstanceListFilter {
+            text_query: Some(ApprovalInstanceTextQuery {
+                query: "adj-version-drift".to_string(),
+            }),
+            cursor: None,
+            ..started_filter.clone()
+        };
+        let drift_object = repository
+            .search(&drift_object_filter, &started_scope, &mut NoTransaction)
+            .await
+            .expect("运行实例对象 ID 检索");
+        assert_eq!(drift_object.total, 1);
+        assert_eq!(drift_object.items[0].instance.id, "inst-version-drift");
+        assert!(drift_object.items[0].snapshot.is_none());
+
+        let managed_filter = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Managed,
+            started_by: None,
+            text_query: None,
+            limit: 1,
+            ..started_filter.clone()
+        };
+        let org_scope = ApprovalRuntimeReadScope::Managed {
+            type_scopes: vec![ApprovalRuntimeReadTypeScope {
+                process_kind: ProcessKind::StockAdjustment,
+                organization_ids: Some(vec!["org-1".to_string()]),
+            }],
+        };
+        let first = repository
+            .search(&managed_filter, &org_scope, &mut NoTransaction)
+            .await
+            .expect("管理视图首屏");
+        assert_eq!(first.total, 2, "管理组织范围必须在计数前过滤");
+        assert_eq!(first.items.len(), 1);
+        assert_eq!(
+            first.items[0]
+                .snapshot
+                .as_ref()
+                .expect("组织授权必须有 exact snapshot")
+                .payload
+                .responsible_org_id,
+            "org-1"
+        );
+        let next_filter = ApprovalInstanceListFilter {
+            cursor: Some(ApprovalInstanceListCursor {
+                sort_time: i64::try_from(first.items[0].instance.updated_at).expect("测试时间"),
+                id: first.items[0].instance.id.clone(),
+            }),
+            ..managed_filter.clone()
+        };
+        let second = repository
+            .search(&next_filter, &org_scope, &mut NoTransaction)
+            .await
+            .expect("管理视图下一屏");
+        assert_eq!(second.total, 2, "游标不得缩小总数口径");
+        assert_eq!(second.items.len(), 1);
+        assert_ne!(second.items[0].instance.id, first.items[0].instance.id);
+
+        let wrong_scope = ApprovalRuntimeReadScope::Managed {
+            type_scopes: vec![ApprovalRuntimeReadTypeScope {
+                process_kind: ProcessKind::StockAdjustment,
+                organization_ids: Some(vec!["org-9".to_string()]),
+            }],
+        };
+        let hidden = repository
+            .search(&managed_filter, &wrong_scope, &mut NoTransaction)
+            .await
+            .expect("错误 DataScope 返回空页");
+        assert_eq!(hidden.total, 0);
+
+        let company_scope = ApprovalRuntimeReadScope::Managed {
+            type_scopes: vec![ApprovalRuntimeReadTypeScope {
+                process_kind: ProcessKind::StockAdjustment,
+                organization_ids: None,
+            }],
+        };
+        let company = repository
+            .search(
+                &ApprovalInstanceListFilter {
+                    limit: 10,
+                    ..managed_filter.clone()
+                },
+                &company_scope,
+                &mut NoTransaction,
+            )
+            .await
+            .expect("公司级对象读取范围");
+        assert_eq!(company.total, 7);
+        assert_eq!(
+            company.items.iter().filter(|row| row.snapshot.is_none()).count(),
+            4
+        );
+
+        let wrong_type = ApprovalRuntimeReadScope::Managed {
+            type_scopes: vec![ApprovalRuntimeReadTypeScope {
+                process_kind: ProcessKind::SalesOrder,
+                organization_ids: Some(vec!["org-1".to_string()]),
+            }],
+        };
+        let type_hidden = repository
+            .search(&managed_filter, &wrong_type, &mut NoTransaction)
+            .await
+            .expect("未证明类型返回空页");
+        assert_eq!(type_hidden.total, 0);
+
+        let explain = fixture
+            .db()
+            .run_command(doc! {
+                "explain": {
+                    "aggregate": "approval_process_instances",
+                    "pipeline": runtime_managed_explain_pipeline(),
+                    "cursor": {},
+                },
+                "verbosity": "executionStats",
+            })
+            .await
+            .expect("完整授权聚合 explain 失败");
+        let explain = explain.to_string();
+        assert!(explain.contains("idx_approval_process_instances_status_updated"));
+        assert!(explain.contains("uk_approval_subject_snapshots_instance"));
+        assert!(explain.contains("totalKeysExamined"));
+        assert!(explain.contains("totalDocsExamined"));
+        assert!(!explain.contains("COLLSCAN"), "完整生产同形管道不得集合扫描");
+    });
+}
+
+#[tokio::test]
+#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+async fn runtime_read_scope_keeps_document_type_organization_scopes_isolated() {
+    require_mongo!(async {
+        let fixture = TestDb::new("awf_repo_runtime_type_scope")
+            .await
+            .expect("测试数据库创建失败");
+        ensure_indexes(fixture.db()).await.expect("索引创建失败");
+        let graph = single_node_graph();
+        for (instance_id, process_kind, subject_kind, object_id, receipt_id) in [
+            (
+                "inst-stock-org-1",
+                ProcessKind::StockAdjustment,
+                "stock_adjustment",
+                "stock-visible",
+                "rcp-stock-org-1",
+            ),
+            (
+                "inst-stock-org-2",
+                ProcessKind::StockAdjustment,
+                "stock_adjustment",
+                "stock-cross-hidden",
+                "rcp-stock-org-2",
+            ),
+            (
+                "inst-sales-org-2",
+                ProcessKind::SalesOrder,
+                "sales_order",
+                "sales-visible",
+                "rcp-sales-org-2",
+            ),
+            (
+                "inst-sales-org-1",
+                ProcessKind::SalesOrder,
+                "sales_order",
+                "sales-cross-hidden",
+                "rcp-sales-org-1",
+            ),
+        ] {
+            let plan = start_runtime_instance(&graph, instance_id, process_kind, subject_kind, object_id);
+            persist_started(fixture.db(), &plan, receipt_id).await;
+        }
+
+        let mut stock_visible = stock_snapshot("snap-stock-org-1", "inst-stock-org-1", "stock-visible");
+        stock_visible.payload.responsible_org_id = "org-1".to_string();
+        let mut stock_cross = stock_snapshot("snap-stock-org-2", "inst-stock-org-2", "stock-cross-hidden");
+        stock_cross.payload.responsible_org_id = "org-2".to_string();
+        let sales_visible = sales_snapshot("snap-sales-org-2", "inst-sales-org-2", "sales-visible", "org-2");
+        let sales_cross = sales_snapshot(
+            "snap-sales-org-1",
+            "inst-sales-org-1",
+            "sales-cross-hidden",
+            "org-1",
+        );
+        for snapshot in [stock_visible, stock_cross, sales_visible, sales_cross] {
+            fixture
+                .db()
+                .approval_subject_snapshots()
+                .create_immutable_snapshot(&snapshot, &mut NoTransaction)
+                .await
+                .expect("写入逐类型组织范围快照");
+        }
+
+        let filter = ApprovalInstanceListFilter {
+            view: ApprovalInstanceListView::Managed,
+            process_kind: None,
+            status: Some(ApprovalProcessInstanceStatus::Running),
+            started_by: None,
+            subject_kind: None,
+            subject_ids: None,
+            text_query: None,
+            cursor: None,
+            limit: 1,
+        };
+        let scope = ApprovalRuntimeReadScope::Managed {
+            type_scopes: vec![
+                ApprovalRuntimeReadTypeScope {
+                    process_kind: ProcessKind::StockAdjustment,
+                    organization_ids: Some(vec!["org-1".to_string()]),
+                },
+                ApprovalRuntimeReadTypeScope {
+                    process_kind: ProcessKind::SalesOrder,
+                    organization_ids: Some(vec!["org-2".to_string()]),
+                },
+            ],
+        };
+        let repository = ApprovalRuntimeReadRepository::new(fixture.db());
+        let first = repository
+            .search(&filter, &scope, &mut NoTransaction)
+            .await
+            .expect("逐类型组织范围首屏");
+        assert_eq!(first.total, 2, "逐类型组织范围必须在 facet 计数前过滤");
+        assert_eq!(first.items.len(), 1);
+
+        let second = repository
+            .search(
+                &ApprovalInstanceListFilter {
+                    cursor: Some(ApprovalInstanceListCursor {
+                        sort_time: i64::try_from(first.items[0].instance.updated_at).expect("测试时间"),
+                        id: first.items[0].instance.id.clone(),
+                    }),
+                    ..filter.clone()
+                },
+                &scope,
+                &mut NoTransaction,
+            )
+            .await
+            .expect("逐类型组织范围下一屏");
+        assert_eq!(second.total, 2, "游标不得改变授权后的总数口径");
+        assert_eq!(second.items.len(), 1);
+
+        let mut visible_ids = vec![
+            first.items[0].instance.id.as_str(),
+            second.items[0].instance.id.as_str(),
+        ];
+        visible_ids.sort_unstable();
+        assert_eq!(
+            visible_ids,
+            vec!["inst-sales-org-2", "inst-stock-org-1"],
+            "Stock/org-2 与 Sales/org-1 不得借用另一类型的组织范围"
+        );
+        for row in first.items.iter().chain(&second.items) {
+            let snapshot = row.snapshot.as_ref().expect("组织授权必须有精确快照");
+            match row.instance.process_kind {
+                ProcessKind::StockAdjustment => {
+                    assert_eq!(snapshot.payload.responsible_org_id, "org-1");
+                }
+                ProcessKind::SalesOrder => {
+                    assert_eq!(snapshot.payload.responsible_org_id, "org-2");
+                }
+                process_kind => panic!("返回未授权流程类型：{process_kind:?}"),
+            }
+        }
+
+        let cross_hidden = repository
+            .search(
+                &ApprovalInstanceListFilter {
+                    text_query: Some(ApprovalInstanceTextQuery {
+                        query: "cross-hidden".to_string(),
+                    }),
+                    cursor: None,
+                    limit: 10,
+                    ..filter
+                },
+                &scope,
+                &mut NoTransaction,
+            )
+            .await
+            .expect("交叉组织对象检索");
+        assert_eq!(cross_hidden.total, 0);
+        assert!(cross_hidden.items.is_empty());
     });
 }
 

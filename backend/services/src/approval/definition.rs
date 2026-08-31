@@ -82,7 +82,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         visibility: &DefinitionManagementVisibility,
     ) -> Result<Vec<DefinitionCatalogItem>> {
-        let visibility = enforce_visibility(&self.rbac, actor, visibility).await?;
+        let visibility = enforce_visibility(&self.db, &self.rbac, actor, visibility).await?;
         let mut items = Vec::with_capacity(ALL_DOCUMENT_TYPES.len());
         for document_type in ALL_DOCUMENT_TYPES {
             items.push(self.catalog_item(document_type, &visibility).await?);
@@ -223,7 +223,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         visibility: &DefinitionManagementVisibility,
     ) -> Result<Vec<DefinitionVersionItem>> {
-        let visibility = enforce_visibility(&self.rbac, actor, visibility).await?;
+        let visibility = enforce_visibility(&self.db, &self.rbac, actor, visibility).await?;
         require_process_required(document_type)?;
         ensure_can_read_detail(&visibility, document_type)?;
         let versions = self
@@ -249,7 +249,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         visibility: &DefinitionManagementVisibility,
     ) -> Result<DefinitionDetailView> {
-        let visibility = enforce_visibility(&self.rbac, actor, visibility).await?;
+        let visibility = enforce_visibility(&self.db, &self.rbac, actor, visibility).await?;
         let graph = self
             .db
             .bpm_workflow()
@@ -1647,11 +1647,12 @@ fn policy_for_definition(definition: &ApprovalProcessDefinition) -> Result<Proce
 
 /// 以当前 RBAC 重验类型级范围，禁止调用方扩大权限。
 async fn enforce_visibility(
+    db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
     visibility: &DefinitionManagementVisibility,
 ) -> Result<DefinitionManagementVisibility> {
-    Ok(definition_management_visibility(rbac, actor)
+    Ok(definition_management_visibility(db, rbac, actor)
         .await?
         .intersect(visibility))
 }

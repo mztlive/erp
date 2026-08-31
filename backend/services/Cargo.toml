@@ -27,4 +27,5 @@ chrono = { workspace = true }
 rust_decimal = { workspace = true }
 
 [dev-dependencies]
+test-support = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }

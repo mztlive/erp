@@ -98,6 +98,8 @@ fn work_item_indexes() -> Vec<IndexModel> {
         unique_open_sales_invoice_execution_object_index(),
         unique_approval_execution_index(),
         fulfillment_queue_index(),
+        document_approval_owner_page_index(),
+        document_approval_owner_type_page_index(),
         named_index(
             "idx_work_items_mine",
             doc! { "status": 1, "owner_user_id": 1, "due_at": 1, "id": 1 },
@@ -138,6 +140,46 @@ fn work_item_indexes() -> Vec<IndexModel> {
             doc! { "status": 1, "closed_by": 1, "closed_at": -1 },
         ),
     ]
+}
+
+/// 本人开放审批任务无业务类型筛选时的稳定倒序页索引。
+fn document_approval_owner_page_index() -> IndexModel {
+    IndexModel::builder()
+        .keys(doc! { "owner_user_id": 1, "assigned_at": -1, "id": -1 })
+        .options(
+            IndexOptions::builder()
+                .name("idx_work_items_document_approval_owner_page".to_string())
+                .partial_filter_expression(document_approval_page_partial_filter())
+                .build(),
+        )
+        .build()
+}
+
+/// 本人开放审批任务带业务类型筛选时的稳定倒序页索引。
+fn document_approval_owner_type_page_index() -> IndexModel {
+    IndexModel::builder()
+        .keys(doc! {
+            "owner_user_id": 1,
+            "business_object_type": 1,
+            "assigned_at": -1,
+            "id": -1,
+        })
+        .options(
+            IndexOptions::builder()
+                .name("idx_work_items_document_approval_owner_type_page".to_string())
+                .partial_filter_expression(document_approval_page_partial_filter())
+                .build(),
+        )
+        .build()
+}
+
+/// 返回两条审批页索引共用的开放生命周期部分条件。
+fn document_approval_page_partial_filter() -> Document {
+    doc! {
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "status": "OPEN",
+        "work_item_type": "DOCUMENT_APPROVAL",
+    }
 }
 
 /// W09 从当前个人开放履约责任进入批量投影的候选索引。
@@ -449,6 +491,37 @@ mod tests {
         assert_eq!(
             index_named(&indexes, "idx_work_items_pending_approval").keys,
             doc! { "status": 1, "owner_user_id": 1, "assigned_at": -1, "id": -1 }
+        );
+        let approval_owner = index_named(&indexes, "idx_work_items_document_approval_owner_page");
+        assert_eq!(
+            approval_owner.keys,
+            doc! { "owner_user_id": 1, "assigned_at": -1, "id": -1 }
+        );
+        assert_eq!(
+            approval_owner.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! {
+                "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON,
+                "status": "OPEN",
+                "work_item_type": "DOCUMENT_APPROVAL",
+            })
+        );
+        let approval_owner_type = index_named(&indexes, "idx_work_items_document_approval_owner_type_page");
+        assert_eq!(
+            approval_owner_type.keys,
+            doc! {
+                "owner_user_id": 1,
+                "business_object_type": 1,
+                "assigned_at": -1,
+                "id": -1,
+            }
+        );
+        assert_eq!(
+            approval_owner_type
+                .options
+                .as_ref()
+                .unwrap()
+                .partial_filter_expression,
+            approval_owner.options.as_ref().unwrap().partial_filter_expression
         );
         assert!(indexes.iter().all(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())

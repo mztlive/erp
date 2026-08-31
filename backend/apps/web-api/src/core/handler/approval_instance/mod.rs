@@ -14,10 +14,7 @@ use axum::{
     Extension, Json,
 };
 use entities::document_registry::DocumentType;
-use services::approval::execution::{
-    ApprovalRuntimeService, RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView,
-    RuntimeInstanceStatusFilter, UpgradeBindingCommand,
-};
+use services::approval::execution::{ApprovalRuntimeService, UpgradeBindingCommand};
 use services::approval::{ApprovalCancelBlockedCommand, ApprovalResumeCommand};
 use services::audit::AuditActor;
 
@@ -30,8 +27,9 @@ use crate::{
 };
 
 use self::http::{
-    CancelBlockedHttpRequest, DecisionValue, InstanceHistoryQuery, InstanceListCursor, InstanceListQuery,
-    ResumeApproverHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
+    CancelBlockedHttpRequest, DecisionValue, InstanceHistoryQuery, InstanceListCursor,
+    PreparedInstanceListQuery, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
+    UpgradeBindingHttpRequest,
 };
 
 /// 审批实例 Handler 结果。
@@ -86,48 +84,15 @@ pub async fn instance_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
-    Query(query): Query<InstanceListQuery>,
+    PreparedInstanceListQuery { view, query }: PreparedInstanceListQuery,
 ) -> ApprovalResult<serde_json::Value> {
-    let normalized = query
-        .normalize()
-        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
-    let view = normalized.view;
-    let cursor = normalized
-        .cursor
-        .map(|cursor| {
-            cursor
-                .sort_primary
-                .parse::<i64>()
-                .map(|sort_time| RuntimeInstanceListCursor {
-                    sort_time,
-                    id: cursor.sort_id,
-                })
-                .map_err(|_| "cursor 的排序时间必须是整数".to_string())
-        })
-        .transpose()
-        .map_err(|message| ApprovalHttpError::unprocessable(message, &headers))?;
     let page = runtime_service(&state)
-        .instance_list(
-            &actor,
-            RuntimeInstanceListQuery {
-                view: map_list_view(view),
-                document_type: normalized.document_type,
-                status: normalized.status.map(map_status_filter),
-                cursor,
-                limit: normalized.limit,
-                query: normalized.query,
-            },
-        )
+        .instance_list(&actor, query)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
-    let next_cursor = page.next_cursor.map(|cursor| {
-        InstanceListCursor {
-            view,
-            sort_primary: cursor.sort_time.to_string(),
-            sort_id: cursor.id,
-        }
-        .encode()
-    });
+    let next_cursor = page
+        .next_cursor
+        .map(|cursor| InstanceListCursor::from_runtime(view, cursor).encode());
     ok_json(serde_json::json!({
         "items": page.items,
         "total": page.total,
@@ -328,26 +293,6 @@ fn ok_json<T: serde::Serialize>(data: T) -> ApprovalResult<serde_json::Value> {
         .map_err(|error| ApprovalHttpError::from(services::Error::Internal(error.to_string())))
 }
 
-/// 映射 HTTP view。
-fn map_list_view(view: self::http::InstanceListView) -> RuntimeInstanceListView {
-    match view {
-        self::http::InstanceListView::Mine => RuntimeInstanceListView::Mine,
-        self::http::InstanceListView::Started => RuntimeInstanceListView::Started,
-        self::http::InstanceListView::Managed => RuntimeInstanceListView::Managed,
-        self::http::InstanceListView::Blocked => RuntimeInstanceListView::Blocked,
-    }
-}
-
-/// 映射 HTTP 状态过滤。
-fn map_status_filter(status: self::http::InstanceStatusFilter) -> RuntimeInstanceStatusFilter {
-    match status {
-        self::http::InstanceStatusFilter::Running => RuntimeInstanceStatusFilter::Running,
-        self::http::InstanceStatusFilter::Approved => RuntimeInstanceStatusFilter::Approved,
-        self::http::InstanceStatusFilter::Cancelled => RuntimeInstanceStatusFilter::Cancelled,
-        self::http::InstanceStatusFilter::Blocked => RuntimeInstanceStatusFilter::Blocked,
-    }
-}
-
 /// 协议层已注入 actor 的决定命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ValidatedDecision {
@@ -457,11 +402,100 @@ fn ensure_non_empty_reason(reason: &str, headers: &HeaderMap) -> Result<(), Appr
 
 #[cfg(test)]
 mod tests {
-    use axum::http::HeaderMap;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{HeaderMap, Request, StatusCode},
+        response::Response,
+        routing::get,
+        Router,
+    };
     use serde_json::json;
+    use tower::ServiceExt;
 
-    use super::{decision_command, resume_command, SubmitDecisionHttpRequest};
+    use super::{decision_command, resume_command, PreparedInstanceListQuery, SubmitDecisionHttpRequest};
     use crate::core::handler::approval_instance::http::{DecisionValue, ResumeApproverHttpRequest};
+
+    async fn instance_list_query_boundary(_: PreparedInstanceListQuery) -> StatusCode {
+        StatusCode::OK
+    }
+
+    async fn instance_list_query_response(uri: &str) -> Response {
+        Router::new()
+            .route("/", get(instance_list_query_boundary))
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("构造查询请求"),
+            )
+            .await
+            .expect("执行 Axum 查询提取")
+    }
+
+    async fn instance_list_query_status(uri: &str) -> StatusCode {
+        instance_list_query_response(uri).await.status()
+    }
+
+    /// 生产 Handler 使用的查询提取器必须把反序列化与查询合同错误统一为 422。
+    #[tokio::test]
+    async fn instance_list_query_extractor_returns_422_for_all_invalid_boundaries() {
+        let long_query = "a".repeat(129);
+        let cases = [
+            "/?view=mine&unexpected=true".to_string(),
+            "/?view=unknown".to_string(),
+            "/?view=managed&status=UNKNOWN".to_string(),
+            "/?view=mine&status=APPROVED".to_string(),
+            "/?view=mine&document_type=unknown".to_string(),
+            "/?view=mine&document_type=".to_string(),
+            "/?view=mine&document_type=%20%20".to_string(),
+            "/?view=mine&limit=not-a-number".to_string(),
+            "/?view=mine&limit=0".to_string(),
+            "/?view=mine&limit=101".to_string(),
+            "/?view=mine&cursor=".to_string(),
+            "/?view=mine&cursor=mine%7Cnot-a-time%7Cwi-1".to_string(),
+            "/?view=mine&cursor=mine%7C-1%7Cwi-1".to_string(),
+            "/?view=started&cursor=managed%7C1%7Cinst-1".to_string(),
+            format!("/?view=mine&q={long_query}"),
+        ];
+
+        for uri in cases {
+            assert_eq!(
+                instance_list_query_status(&uri).await,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "{uri} 必须由真实 Axum 提取边界映射为 422"
+            );
+        }
+    }
+
+    /// 查询提取失败必须沿用审批 API 的稳定 JSON 错误信封，而不是 Axum 文本拒绝。
+    #[tokio::test]
+    async fn instance_list_query_extractor_keeps_stable_error_envelope() {
+        let response = instance_list_query_response("/?view=unknown").await;
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("读取错误信封");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("解析错误信封");
+        assert_eq!(payload["status"], 422);
+        assert_eq!(payload["success"], false);
+        assert_eq!(payload["code"], "BUSINESS_RULE_BLOCKED");
+        assert_eq!(payload.get("retryable"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(payload.get("data"), Some(&serde_json::Value::Null));
+        assert!(payload["errorMessage"]
+            .as_str()
+            .is_some_and(|message| !message.is_empty()));
+    }
+
+    /// 合法查询必须通过同一生产提取器，且 Managed cursor 保留完整 i64 时间域。
+    #[tokio::test]
+    async fn instance_list_query_extractor_accepts_valid_values() {
+        for uri in [
+            "/?view=mine&status=RUNNING&cursor=mine%7C1%7Cwi-1&limit=1",
+            "/?view=managed&status=APPROVED&cursor=managed%7C-1%7Cinst-1&limit=100&q=%20SO-1%20",
+        ] {
+            assert_eq!(instance_list_query_status(uri).await, StatusCode::OK, "{uri}");
+        }
+    }
 
     #[test]
     fn decision_injects_actor_and_rejects_empty_reject_reason() {

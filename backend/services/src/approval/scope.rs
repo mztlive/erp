@@ -6,14 +6,15 @@ use database::{AccessControlExt, MongoCasbinAdapter, NoTransaction};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
     document_registry::DocumentType,
-    Permission,
+    work_item::WorkItemType,
+    AccountCore, Permission,
 };
 use mongodb::Database;
 
 use crate::{
     audit::AuditActor,
     errors::{Error, Result},
-    iam::{subject, RbacService},
+    iam::RbacService,
 };
 
 use super::dto::ApprovalRecoveryAuthorization;
@@ -133,32 +134,108 @@ impl ApprovalManagementScope {
             Self::Organizations(ids) => ids.iter().any(|id| id == organization_id),
         }
     }
+
+    /// 判断当前权限是否没有任何可证明的数据范围。
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Self::Organizations(ids) if ids.is_empty())
+    }
+}
+
+/// 重验当前审批读取主体仍是同类型的有效账号。
+///
+/// # 参数
+/// * `db` - 当前 MongoDB 数据库
+/// * `actor` - Handler 已认证但可能已经失效的身份快照
+///
+/// # 返回
+/// 账号仍存在、类型未漂移且允许登录时返回 `true`；不存在、停用或类型漂移时
+/// 返回 `false`。
+///
+/// # 错误
+/// 账号仓储读取失败时返回服务错误。
+///
+/// # 关键业务约束
+/// 调用方必须在读取具体审批资源前执行本重验，并把 `false` 映射为不泄露资源
+/// 存在性的拒绝结果。
+pub async fn approval_actor_is_active(db: &Database, actor: &AuditActor) -> Result<bool> {
+    Ok(db
+        .accounts()
+        .find_by_id(actor.id(), &mut NoTransaction)
+        .await?
+        .as_ref()
+        .is_some_and(|account| approval_account_matches_actor(account, actor)))
+}
+
+/// 判断当前账号事实是否仍与认证主体一致且可用。
+fn approval_account_matches_actor(account: &AccountCore, actor: &AuditActor) -> bool {
+    account.base.id == actor.id() && account.kind == actor.kind() && account.can_login()
 }
 
 /// 计算定义管理的类型级可见范围。
 ///
 /// 只按各 `DocumentType` 已注册的 `definition_admin_permission` 与
 /// `runtime_admin_permission` 判定，不得把系统管理员角色名当成全部类型管理权。
+/// 账号绑定的停用角色即使仍残留 Casbin `g/p` 事实也不参与授权；必须由
+/// 同一个仍启用的角色实际授予目标类型权限。
+///
+/// # 参数
+/// * `db` - 当前 MongoDB 数据库，用于重验角色实体仍启用
+/// * `rbac` - 共享 RBAC 服务
+/// * `actor` - 已认证操作人
+///
+/// # 返回
+/// 返回仅由启用且实际授权角色形成的类型级可见范围。
 ///
 /// # 错误
-/// 政策读取或 RBAC 判定失败时返回服务错误。
+/// 角色、政策读取或 RBAC 判定失败时返回服务错误。
 pub async fn definition_management_visibility(
+    db: &Database,
     rbac: &RbacService,
     actor: &AuditActor,
 ) -> Result<DefinitionManagementVisibility> {
-    let subject = subject(actor.kind(), actor.id());
+    let role_ids = enabled_actor_role_ids(db, rbac, actor).await?;
     let mut enforced = Vec::new();
     for document_type in ALL_DOCUMENT_TYPES {
         let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? else {
             continue;
         };
-        let can_define = rbac
-            .enforce(&subject, &policy.definition_admin_permission)
-            .await?;
-        let can_runtime = rbac.enforce(&subject, &policy.runtime_admin_permission).await?;
+        let can_define = any_role_grants(rbac, &role_ids, &policy.definition_admin_permission).await?;
+        let can_runtime = any_role_grants(rbac, &role_ids, &policy.runtime_admin_permission).await?;
         enforced.push((document_type, can_define, can_runtime));
     }
     Ok(visibility_from_enforced_permissions(enforced))
+}
+
+/// 读取 actor 直接绑定且当前仍启用的角色 ID。
+///
+/// Casbin 角色绑定与角色实体状态是两份事实；前者未清理不得让已停用
+/// 角色继续授权。
+async fn enabled_actor_role_ids(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+) -> Result<Vec<String>> {
+    let role_ids = rbac.role_ids(actor.kind(), actor.id()).await?;
+    Ok(db
+        .roles()
+        .enabled_roles(&role_ids, &mut NoTransaction)
+        .await?
+        .into_iter()
+        .map(|role| role.base.id)
+        .collect())
+}
+
+/// 判断是否存在同一个启用角色实际授予指定权限。
+///
+/// 本方法只接收已经 Repository 证明启用的角色，不对 actor 主体整体
+/// enforce，防止停用角色的权限与其他启用角色的对象读取权拼接。
+async fn any_role_grants(rbac: &RbacService, role_ids: &[String], permission: &Permission) -> Result<bool> {
+    for role_id in role_ids {
+        if rbac.enforce(&format!("role:{role_id}"), permission).await? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// 按各类型 enforce 结果构造可见范围，不把系统管理员角色当成全部类型管理权。
@@ -199,6 +276,38 @@ pub async fn approval_management_scope(
     actor: &AuditActor,
 ) -> Result<ApprovalManagementScope> {
     permission_scope(db, rbac, actor, "approval_instance:read").await
+}
+
+/// 计算指定审批单据类型的对象读取 DataScope。
+///
+/// # 参数
+/// * `db` - 当前 MongoDB 数据库
+/// * `rbac` - 当前 RBAC 服务
+/// * `actor` - 已认证且已重验的操作人
+/// * `document_type` - 审批运行时固定单据类型
+///
+/// # 返回
+/// 返回由真正授予该业务对象读取权限的角色与用户范围形成的组织范围；未获得
+/// 权限或没有可证明范围时返回空组织集合。
+///
+/// # 错误
+/// 单据类型未登记 DocumentApproval 简报关系、权限格式非法或事实读取失败时
+/// 返回服务错误。
+///
+/// # 关键业务约束
+/// 读取权限必须来自 Entity-owned `WorkItemBriefRelation`，不得在审批 Service
+/// 维护第二份 DocumentType 权限表；不同单据类型的范围必须分别计算，禁止先
+/// 合并组织再交给 Repository。
+pub async fn approval_document_read_scope(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    document_type: DocumentType,
+) -> Result<ApprovalManagementScope> {
+    let relation = WorkItemType::DocumentApproval
+        .brief_relation(document_type.as_str())
+        .ok_or_else(|| Error::from_approval_code(crate::errors::ErrorCode::ApprovalPolicyNotRegistered))?;
+    permission_scope(db, rbac, actor, relation.read_permission).await
 }
 
 /// 从实际授予恢复权限的角色与用户范围形成恢复授权边界。
@@ -282,13 +391,13 @@ async fn permission_scope_and_roles(
     actor: &AuditActor,
     permission: &str,
 ) -> Result<(ApprovalManagementScope, Vec<String>)> {
-    let role_ids = rbac.role_ids(actor.kind(), actor.id()).await?;
+    let enabled_role_ids = enabled_actor_role_ids(db, rbac, actor).await?;
     let user_scopes = db
         .data_scopes()
         .list_by_subject(DataScopeSubjectType::User, actor.id(), &mut NoTransaction)
         .await?;
     let required = Permission::parse(permission)?;
-    let permitted_role_ids = permission_granting_role_ids(rbac, role_ids, &required).await?;
+    let permitted_role_ids = permission_granting_role_ids(rbac, enabled_role_ids, &required).await?;
     let role_scopes = db
         .data_scopes()
         .list_by_subjects(
@@ -469,12 +578,31 @@ fn intersect_coverage(role: OrganizationCoverage, user: OrganizationCoverage) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        intersect_coverage, scope_from_role_facts, ApprovalManagementScope, DefinitionManagementVisibility,
-        OrganizationCoverage,
+        approval_account_matches_actor, intersect_coverage, scope_from_role_facts, ApprovalManagementScope,
+        DefinitionManagementVisibility, OrganizationCoverage,
     };
+    use crate::audit::AuditActor;
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::document_registry::DocumentType;
     use entities::ids::DataScopeId;
+    use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
+
+    fn account(id: &str, status: AccountStatus) -> AccountCore {
+        AccountCore::new(
+            id.to_string(),
+            AccountCoreData {
+                secret: Secret::new(LoginAccount::new(format!("login-{id}")).unwrap(), "password123")
+                    .unwrap(),
+                name: id.to_string(),
+                kind: AccountKind::Admin,
+                status,
+                email: None,
+                phone: None,
+                avatar: None,
+            },
+        )
+        .unwrap()
+    }
 
     /// 构造角色组织范围事实。
     fn role_scope(id: &str, role_id: &str, organization_id: &str) -> DataScope {
@@ -495,6 +623,23 @@ mod tests {
         assert!(ApprovalManagementScope::Company.organization_ids().is_none());
         let empty = ApprovalManagementScope::Organizations(Vec::new());
         assert_eq!(empty.organization_ids(), Some([].as_slice()));
+    }
+
+    #[test]
+    fn active_actor_revalidation_rejects_inactive_and_guessed_identity() {
+        let actor = AuditActor::new("user-1".to_string(), "user-1".to_string(), AccountKind::Admin);
+        assert!(approval_account_matches_actor(
+            &account("user-1", AccountStatus::Active),
+            &actor
+        ));
+        assert!(!approval_account_matches_actor(
+            &account("user-1", AccountStatus::Suspended),
+            &actor
+        ));
+        assert!(!approval_account_matches_actor(
+            &account("guessed-user", AccountStatus::Active),
+            &actor
+        ));
     }
 
     #[test]

@@ -37,8 +37,7 @@ pub use runtime_history::{
     RuntimeHistoryPage,
 };
 pub use runtime_query::{
-    ensure_list_view_status, recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
-    RuntimeRecoveryAction,
+    recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter, RuntimeRecoveryAction,
 };
 pub use runtime_service::{
     ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListCursor, RuntimeInstanceListItem,

@@ -2,12 +2,22 @@
 //!
 //! Handler 只转换协议；本文件编排仓储、prepare_* 与事务写入。
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use bpm::engine::{CommitRequired, Eligibility, TaskCloseReason, TaskIntent};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::types::{ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision, ModelError};
-use bpm::model::{ParticipantId, Timestamp};
+use bpm::model::types::{
+    ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision, ApprovalNodeExecutionStatus,
+    ApprovalProcessInstanceStatus, ModelError,
+};
+use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
+use database::repository::approval_integration::{
+    ApprovalRuntimeReadRepository, ApprovalRuntimeReadRow, ApprovalRuntimeReadScope,
+    ApprovalRuntimeReadTypeScope,
+};
 use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
     ApprovalInstanceSummary, ApprovalInstanceTextQuery,
@@ -18,8 +28,8 @@ use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
 use entities::ids::WorkItemId;
 use entities::work_item::{
-    ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, DocumentApprovalWorkItemData, WorkItem,
-    WorkItemPriority, WorkItemStatus,
+    ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData,
+    WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType,
 };
 use id_generator::next_id;
 use mongodb::Database;
@@ -34,8 +44,7 @@ use super::idempotency::{
 use super::resume::prepare_resume;
 use super::runtime_history::{history_item_from_execution, history_page_from, RuntimeHistoryPage};
 use super::runtime_query::{
-    ensure_list_view_status, recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
-    RuntimeRecoveryAction,
+    recovery_options_for, RuntimeInstanceListView, RuntimeInstanceStatusFilter, RuntimeRecoveryAction,
 };
 use super::view::{map_command_view, ApprovalCommandView, OpenTaskSummary};
 use super::{
@@ -47,8 +56,13 @@ use crate::approval::business_adapter::{
     adapter_object_read_decision, adapter_spec_of, document_type_from_subject_kind,
     BindingRevalidationContext,
 };
-use crate::approval::policy::STATIC_APPROVE_PERMISSION;
+use crate::approval::policy::{
+    policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES, STATIC_APPROVE_PERMISSION,
+};
 use crate::approval::process_kind::process_kind_of;
+use crate::approval::scope::{
+    approval_actor_is_active, approval_document_read_scope, definition_management_visibility,
+};
 use crate::approval::{
     approval_recovery_scope, ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort,
     ApprovalResumeCommand, FailClosedApprovalActionPort,
@@ -64,6 +78,13 @@ pub struct ApprovalRuntimeService {
     rbac: SharedRbacService,
     action_port: Arc<dyn ApprovalDomainActionPort>,
 }
+
+/// 实例列表默认页大小。
+const DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT: u32 = 20;
+/// 实例列表最大页大小。
+const MAX_RUNTIME_INSTANCE_LIST_LIMIT: u32 = 100;
+/// 实例列表检索串与游标 ID 最大字符数。
+const RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN: usize = 128;
 
 /// 实例列表查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +103,120 @@ pub struct RuntimeInstanceListQuery {
     pub query: Option<String>,
 }
 
+impl RuntimeInstanceListQuery {
+    /// 由协议输入形成规范化查询。
+    ///
+    /// # 参数
+    /// * `view` - 固定查询视图
+    /// * `document_type` - 可选单据类型稳定码
+    /// * `status` - 可选实例状态
+    /// * `cursor` - HTTP 层已解码的稳定游标
+    /// * `limit` - 可选页大小；省略时使用 20
+    /// * `query` - 可选字面量检索串
+    ///
+    /// # 返回
+    /// 返回已规范化并通过完整边界校验的查询。
+    ///
+    /// # 错误
+    /// view/status、document_type、limit、cursor 或检索串不符合合同时返回校验错误。
+    pub fn prepare(
+        view: RuntimeInstanceListView,
+        document_type: Option<String>,
+        status: Option<RuntimeInstanceStatusFilter>,
+        cursor: Option<RuntimeInstanceListCursor>,
+        limit: Option<u32>,
+        query: Option<String>,
+    ) -> Result<Self> {
+        let prepared = Self {
+            view,
+            document_type,
+            status,
+            cursor: cursor.map(Self::prepare_cursor),
+            limit: limit.unwrap_or(DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT),
+            query: query
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+        };
+        prepared.validate()?;
+        Ok(prepared)
+    }
+
+    /// 校验规范化查询的全部纯输入合同。
+    ///
+    /// # 返回
+    /// 所有合同成立时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// view/status、document_type、limit、cursor 或检索串不符合合同时返回校验错误。
+    pub fn validate(&self) -> Result<()> {
+        self.validate_view_status()?;
+        if let Some(document_type) = self.document_type.as_deref() {
+            parse_document_type(document_type)?;
+        }
+        if !(1..=MAX_RUNTIME_INSTANCE_LIST_LIMIT).contains(&self.limit) {
+            return Err(Error::ValidationError(format!(
+                "limit 必须在 1 到 {MAX_RUNTIME_INSTANCE_LIST_LIMIT} 之间"
+            )));
+        }
+        self.validate_cursor()?;
+        self.validate_query()
+    }
+
+    /// trim 游标 ID；排序时间的完整 `i64` 定义域保持不变。
+    fn prepare_cursor(mut cursor: RuntimeInstanceListCursor) -> RuntimeInstanceListCursor {
+        cursor.id = cursor.id.trim().to_string();
+        cursor
+    }
+
+    /// 校验固定视图允许的状态集合。
+    fn validate_view_status(&self) -> Result<()> {
+        match (self.view, self.status) {
+            (RuntimeInstanceListView::Mine, None | Some(RuntimeInstanceStatusFilter::Running))
+            | (RuntimeInstanceListView::Blocked, None | Some(RuntimeInstanceStatusFilter::Blocked))
+            | (RuntimeInstanceListView::Started | RuntimeInstanceListView::Managed, _) => Ok(()),
+            (RuntimeInstanceListView::Mine, _) => Err(Error::ValidationError(
+                "mine 只接受省略 status 或 status=RUNNING".to_string(),
+            )),
+            (RuntimeInstanceListView::Blocked, _) => Err(Error::ValidationError(
+                "blocked 只接受省略 status 或 status=BLOCKED".to_string(),
+            )),
+        }
+    }
+
+    /// 校验游标 ID 为已 trim 的有界稳定标识。
+    fn validate_cursor(&self) -> Result<()> {
+        let Some(cursor) = self.cursor.as_ref() else {
+            return Ok(());
+        };
+        let id = cursor.id.as_str();
+        if id.is_empty() || id != id.trim() {
+            return Err(Error::ValidationError("cursor id 不能为空".to_string()));
+        }
+        if id.chars().count() > RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN {
+            return Err(Error::ValidationError(format!(
+                "cursor id 不能超过 {RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN} 个字符"
+            )));
+        }
+        Ok(())
+    }
+
+    /// 校验字面量检索串已规范化且长度有界。
+    fn validate_query(&self) -> Result<()> {
+        let Some(query) = self.query.as_deref() else {
+            return Ok(());
+        };
+        if query.is_empty() || query != query.trim() {
+            return Err(Error::ValidationError("q 必须是非空规范化文本".to_string()));
+        }
+        if query.chars().count() > RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN {
+            return Err(Error::ValidationError(format!(
+                "q 不能超过 {RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN} 个字符"
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// 实例列表稳定游标。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeInstanceListCursor {
@@ -89,6 +224,216 @@ pub struct RuntimeInstanceListCursor {
     pub sort_time: i64,
     /// 并列时的实例主键。
     pub id: String,
+}
+
+#[cfg(test)]
+mod runtime_instance_list_query_tests {
+    use entities::document_registry::DocumentType;
+
+    use super::{
+        RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView,
+        RuntimeInstanceStatusFilter, DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT, MAX_RUNTIME_INSTANCE_LIST_LIMIT,
+        RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN,
+    };
+
+    fn prepare(
+        view: RuntimeInstanceListView,
+        status: Option<RuntimeInstanceStatusFilter>,
+    ) -> crate::errors::Result<RuntimeInstanceListQuery> {
+        RuntimeInstanceListQuery::prepare(view, None, status, None, None, None)
+    }
+
+    /// 四种视图逐一覆盖省略状态及全部固定状态。
+    #[test]
+    fn view_status_matrix_is_complete() {
+        let views = [
+            RuntimeInstanceListView::Mine,
+            RuntimeInstanceListView::Blocked,
+            RuntimeInstanceListView::Started,
+            RuntimeInstanceListView::Managed,
+        ];
+        let statuses = [
+            None,
+            Some(RuntimeInstanceStatusFilter::Running),
+            Some(RuntimeInstanceStatusFilter::Approved),
+            Some(RuntimeInstanceStatusFilter::Cancelled),
+            Some(RuntimeInstanceStatusFilter::Blocked),
+        ];
+        for view in views {
+            for status in statuses {
+                let expected = match view {
+                    RuntimeInstanceListView::Mine => {
+                        matches!(status, None | Some(RuntimeInstanceStatusFilter::Running))
+                    }
+                    RuntimeInstanceListView::Blocked => {
+                        matches!(status, None | Some(RuntimeInstanceStatusFilter::Blocked))
+                    }
+                    RuntimeInstanceListView::Started | RuntimeInstanceListView::Managed => true,
+                };
+                assert_eq!(prepare(view, status).is_ok(), expected, "{view:?} {status:?}");
+            }
+        }
+    }
+
+    /// limit 省略、两端点及越界值必须得到唯一结果。
+    #[test]
+    fn limit_defaults_and_rejects_outside_closed_range() {
+        let default = prepare(RuntimeInstanceListView::Managed, None).expect("默认 limit");
+        assert_eq!(default.limit, DEFAULT_RUNTIME_INSTANCE_LIST_LIMIT);
+        for limit in [1, MAX_RUNTIME_INSTANCE_LIST_LIMIT] {
+            let query = RuntimeInstanceListQuery::prepare(
+                RuntimeInstanceListView::Managed,
+                None,
+                None,
+                None,
+                Some(limit),
+                None,
+            )
+            .expect("闭区间端点");
+            assert_eq!(query.limit, limit);
+        }
+        for limit in [0, MAX_RUNTIME_INSTANCE_LIST_LIMIT + 1] {
+            assert!(RuntimeInstanceListQuery::prepare(
+                RuntimeInstanceListView::Managed,
+                None,
+                None,
+                None,
+                Some(limit),
+                None,
+            )
+            .is_err());
+        }
+    }
+
+    /// document_type 只接受注册表中的精确稳定码，prepare 与直接 validate 必须同样失败关闭。
+    #[test]
+    fn document_type_requires_an_exact_registered_code() {
+        let registered = DocumentType::SalesOrder.as_str();
+        let prepared = RuntimeInstanceListQuery::prepare(
+            RuntimeInstanceListView::Managed,
+            Some(registered.to_string()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("精确登记码");
+        assert_eq!(prepared.document_type.as_deref(), Some(registered));
+
+        for document_type in ["", "   ", "unknown", "SALES_ORDER", "sales_order "] {
+            assert!(
+                RuntimeInstanceListQuery::prepare(
+                    RuntimeInstanceListView::Managed,
+                    Some(document_type.to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .is_err(),
+                "prepare 必须拒绝 {document_type:?}"
+            );
+
+            let mut direct = prepared.clone();
+            direct.document_type = Some(document_type.to_string());
+            assert!(direct.validate().is_err(), "validate 必须拒绝 {document_type:?}");
+        }
+    }
+
+    /// cursor 保留完整 i64 时间域，ID 则 trim、非空且最多 128 字符。
+    #[test]
+    fn cursor_prepares_id_and_preserves_i64_time_domain() {
+        for sort_time in [i64::MIN, i64::MAX] {
+            let query = RuntimeInstanceListQuery::prepare(
+                RuntimeInstanceListView::Managed,
+                None,
+                None,
+                Some(RuntimeInstanceListCursor {
+                    sort_time,
+                    id: "  inst-1  ".to_string(),
+                }),
+                None,
+                None,
+            )
+            .expect("合法 i64 时间与可规范化 ID");
+            let cursor = query.cursor.expect("游标");
+            assert_eq!(cursor.sort_time, sort_time);
+            assert_eq!(cursor.id, "inst-1");
+        }
+        let max_id = "a".repeat(RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN);
+        assert!(RuntimeInstanceListQuery::prepare(
+            RuntimeInstanceListView::Managed,
+            None,
+            None,
+            Some(RuntimeInstanceListCursor {
+                sort_time: 0,
+                id: max_id,
+            }),
+            None,
+            None,
+        )
+        .is_ok());
+        for id in [
+            "   ".to_string(),
+            "a".repeat(RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN + 1),
+        ] {
+            assert!(RuntimeInstanceListQuery::prepare(
+                RuntimeInstanceListView::Managed,
+                None,
+                None,
+                Some(RuntimeInstanceListCursor { sort_time: 0, id }),
+                None,
+                None,
+            )
+            .is_err());
+        }
+    }
+
+    /// q 空白归 None，文本 trim，字符上限不得按字节数误判。
+    #[test]
+    fn query_text_is_trimmed_and_character_bounded() {
+        let blank = RuntimeInstanceListQuery::prepare(
+            RuntimeInstanceListView::Started,
+            None,
+            None,
+            None,
+            None,
+            Some("   ".to_string()),
+        )
+        .expect("空白 q");
+        assert_eq!(blank.query, None);
+
+        let trimmed = RuntimeInstanceListQuery::prepare(
+            RuntimeInstanceListView::Started,
+            None,
+            None,
+            None,
+            None,
+            Some("  SO-1  ".to_string()),
+        )
+        .expect("trim q");
+        assert_eq!(trimmed.query.as_deref(), Some("SO-1"));
+
+        let max = "界".repeat(RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN);
+        assert!(RuntimeInstanceListQuery::prepare(
+            RuntimeInstanceListView::Started,
+            None,
+            None,
+            None,
+            None,
+            Some(max),
+        )
+        .is_ok());
+        assert!(RuntimeInstanceListQuery::prepare(
+            RuntimeInstanceListView::Started,
+            None,
+            None,
+            None,
+            None,
+            Some("界".repeat(RUNTIME_INSTANCE_LIST_TEXT_MAX_LEN + 1)),
+        )
+        .is_err());
+    }
 }
 
 /// 实例列表行。
@@ -140,6 +485,25 @@ pub struct RuntimeRecoveryOptionsView {
     pub instance_id: String,
     /// 允许的恢复动作。
     pub actions: Vec<RuntimeRecoveryAction>,
+}
+
+/// 单实例读取授权所需的持久化事实。
+struct RuntimeReadSubject {
+    instance: ApprovalProcessInstance,
+    current_execution: Option<ApprovalNodeExecution>,
+    snapshot: ApprovalSubjectSnapshot,
+    document_type: DocumentType,
+}
+
+/// 纯授权矩阵输入；I/O 与政策解析由 Service 先完成。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeReadAuthorizationFacts {
+    actor_active: bool,
+    initiator: bool,
+    current_responsibility: bool,
+    object_readable: bool,
+    scope_covers: bool,
+    runtime_admin: bool,
 }
 
 /// 候选人。
@@ -214,7 +578,8 @@ impl ApprovalRuntimeService {
         actor: &AuditActor,
         query: RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        ensure_list_view_status(query.view, query.status)?;
+        query.validate()?;
+        self.ensure_active_instance_reader(actor).await?;
         match query.view {
             RuntimeInstanceListView::Mine => self.list_mine(actor, &query).await,
             _ => self.list_managed_or_started(actor, &query).await,
@@ -237,21 +602,11 @@ impl ApprovalRuntimeService {
         actor: &AuditActor,
         instance_id: &str,
     ) -> Result<RuntimeInstanceListItem> {
-        let _ = actor;
-        let instance = self
-            .db
-            .bpm_workflow()
-            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let execution = self
-            .db
-            .bpm_workflow()
-            .find_current_execution(
-                &bpm::ids::ApprovalProcessInstanceId::new(instance_id),
-                &mut NoTransaction,
-            )
-            .await?;
+        self.ensure_active_instance_reader(actor).await?;
+        let subject = self.load_runtime_read_subject(instance_id).await?;
+        self.ensure_ordinary_runtime_read(actor, &subject).await?;
+        let instance = subject.instance;
+        let execution = subject.current_execution;
         Ok(item_from_instance_id(
             instance_id,
             instance.status.as_str(),
@@ -284,7 +639,9 @@ impl ApprovalRuntimeService {
         after_execution_no: Option<u32>,
         limit: u32,
     ) -> Result<RuntimeHistoryPage> {
-        let _ = actor;
+        self.ensure_active_instance_reader(actor).await?;
+        let subject = self.load_runtime_read_subject(instance_id).await?;
+        self.ensure_ordinary_runtime_read(actor, &subject).await?;
         let fetch_limit = limit.saturating_add(1);
         let rows = self
             .db
@@ -316,13 +673,10 @@ impl ApprovalRuntimeService {
         actor: &AuditActor,
         instance_id: &str,
     ) -> Result<RuntimeRecoveryOptionsView> {
-        let _ = actor;
-        let instance = self
-            .db
-            .bpm_workflow()
-            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
+        self.ensure_active_instance_reader(actor).await?;
+        let subject = self.load_runtime_read_subject(instance_id).await?;
+        self.ensure_management_runtime_read(actor, &subject).await?;
+        let instance = subject.instance;
         let blocked = instance.status == bpm::model::types::ApprovalProcessInstanceStatus::Blocked;
         Ok(RuntimeRecoveryOptionsView {
             instance_id: instance_id.to_string(),
@@ -734,7 +1088,7 @@ impl ApprovalRuntimeService {
                 .await;
         }
 
-        self.require_recovery_action(actor, &instance_id, RuntimeRecoveryAction::ResumeCurrentApprover)
+        self.require_recovery_action(&instance_id, RuntimeRecoveryAction::ResumeCurrentApprover)
             .await?;
         let instance = self
             .db
@@ -952,7 +1306,7 @@ impl ApprovalRuntimeService {
                 .await;
         }
 
-        self.require_recovery_action(actor, &instance_id, RuntimeRecoveryAction::CancelBlocked)
+        self.require_recovery_action(&instance_id, RuntimeRecoveryAction::CancelBlocked)
             .await?;
         let instance = self
             .db
@@ -1150,14 +1504,172 @@ impl ApprovalRuntimeService {
         })
     }
 
-    /// 查询当前账号拥有的开放单据审批任务。
+    /// 重验当前读取主体仍为有效账号；失效时隐藏目标实例存在性。
+    ///
+    /// # 参数
+    /// * `actor` - Handler 已认证但状态可能已经变化的账号快照
+    ///
+    /// # 返回
+    /// 账号仍存在、类型一致且启用时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 账号失效时返回隐藏存在性的 NotFound；仓储失败时传播基础设施错误。
+    async fn ensure_active_instance_reader(&self, actor: &AuditActor) -> Result<()> {
+        if approval_actor_is_active(&self.db, actor).await? {
+            return Ok(());
+        }
+        Err(hidden_not_found())
+    }
+
+    /// 加载实例、当前执行与唯一冻结快照，并校验运行主体三元组。
+    async fn load_runtime_read_subject(&self, instance_id: &str) -> Result<RuntimeReadSubject> {
+        let instance_id = ApprovalProcessInstanceId::new(instance_id);
+        let instance = self
+            .db
+            .bpm_workflow()
+            .find_instance_by_id(&instance_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(hidden_not_found)?;
+        let snapshot = self
+            .db
+            .approval_subject_snapshots()
+            .find_by_process_instance_id(instance_id.as_ref(), &mut NoTransaction)
+            .await?
+            .ok_or_else(hidden_not_found)?;
+        let document_type = document_type_from_subject_kind(instance.subject.subject_kind())
+            .map_err(|_| hidden_not_found())?;
+        adapter_spec_of(document_type)?;
+        if instance.process_kind != process_kind_of(document_type)
+            || snapshot
+                .ensure_matches_runtime_subject(
+                    document_type,
+                    instance.subject.subject_id(),
+                    instance.subject_version,
+                )
+                .is_err()
+        {
+            return Err(hidden_not_found());
+        }
+        let current_execution = self
+            .db
+            .bpm_workflow()
+            .find_current_execution(&instance_id, &mut NoTransaction)
+            .await?;
+        if !current_execution_matches_instance(&instance, current_execution.as_ref()) {
+            return Err(hidden_not_found());
+        }
+        Ok(RuntimeReadSubject {
+            instance,
+            current_execution,
+            snapshot,
+            document_type,
+        })
+    }
+
+    /// 校验普通详情/历史读取的三条互斥授权来源。
+    async fn ensure_ordinary_runtime_read(
+        &self,
+        actor: &AuditActor,
+        subject: &RuntimeReadSubject,
+    ) -> Result<()> {
+        let initiator = subject.instance.started_by.as_str() == actor.id();
+        if ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            actor_active: true,
+            initiator,
+            current_responsibility: false,
+            object_readable: false,
+            scope_covers: false,
+            runtime_admin: false,
+        }) {
+            return Ok(());
+        }
+        if self.current_runtime_responsibility(actor, subject).await? {
+            return Ok(());
+        }
+        adapter_spec_of(subject.document_type)?;
+        let scope = approval_document_read_scope(&self.db, &self.rbac, actor, subject.document_type).await?;
+        let facts = RuntimeReadAuthorizationFacts {
+            actor_active: true,
+            initiator: false,
+            current_responsibility: false,
+            object_readable: !scope.is_empty(),
+            scope_covers: scope.covers(&subject.snapshot.payload.responsible_org_id),
+            runtime_admin: false,
+        };
+        if ordinary_runtime_read_allowed(facts) {
+            return Ok(());
+        }
+        Err(hidden_not_found())
+    }
+
+    /// 校验恢复选项等管理读取的类型、对象与组织三门。
+    async fn ensure_management_runtime_read(
+        &self,
+        actor: &AuditActor,
+        subject: &RuntimeReadSubject,
+    ) -> Result<()> {
+        let visibility = definition_management_visibility(&self.db, &self.rbac, actor).await?;
+        adapter_spec_of(subject.document_type)?;
+        let scope = approval_document_read_scope(&self.db, &self.rbac, actor, subject.document_type).await?;
+        let facts = RuntimeReadAuthorizationFacts {
+            actor_active: true,
+            initiator: subject.instance.started_by.as_str() == actor.id(),
+            current_responsibility: false,
+            object_readable: !scope.is_empty(),
+            scope_covers: scope.covers(&subject.snapshot.payload.responsible_org_id),
+            runtime_admin: visibility.runtime_admin_types().contains(&subject.document_type),
+        };
+        if management_runtime_read_allowed(facts) {
+            return Ok(());
+        }
+        Err(hidden_not_found())
+    }
+
+    /// 判断当前执行是否仍有由本人承担的开放审批任务。
+    async fn current_runtime_responsibility(
+        &self,
+        actor: &AuditActor,
+        subject: &RuntimeReadSubject,
+    ) -> Result<bool> {
+        if subject.instance.status != ApprovalProcessInstanceStatus::Running {
+            return Ok(false);
+        }
+        let Some(execution) = &subject.current_execution else {
+            return Ok(false);
+        };
+        if execution.status != ApprovalNodeExecutionStatus::Active
+            || execution.round_no != subject.instance.current_round_no
+            || execution.assignee_participant_id.as_str() != actor.id()
+        {
+            return Ok(false);
+        }
+        let execution_id = ApprovalNodeExecutionId::new(execution.base.id.clone());
+        let tasks = self
+            .db
+            .work_items()
+            .open_approval_tasks_for_execution(&execution_id, &mut NoTransaction)
+            .await?;
+        if tasks.len() != 1 {
+            return Ok(false);
+        }
+        let owner_role = adapter_spec_of(subject.document_type)?.owner_role;
+        Ok(task_proves_current_responsibility(
+            &tasks[0],
+            execution,
+            subject,
+            actor.id(),
+            owner_role.as_str(),
+        ))
+    }
+
+    /// 返回由开放审批任务映射的运行实例列表页。
     ///
     /// # 参数
     /// * `actor` - 当前已认证账号
     /// * `query` - 可选单据类型与页大小
     ///
     /// # 返回
-    /// 返回由开放审批任务映射的运行实例列表页。
+    /// 返回当前账号拥有的开放单据审批任务页。
     ///
     /// # 错误
     /// WorkItem Repository 查询失败时返回错误。
@@ -1169,22 +1681,102 @@ impl ApprovalRuntimeService {
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        let rows = self
+        let document_type = query
+            .document_type
+            .as_deref()
+            .map(parse_document_type)
+            .transpose()?;
+        let cursor = query
+            .cursor
+            .as_ref()
+            .map(|cursor| {
+                if cursor.sort_time < 0 {
+                    return Err(Error::ValidationError(
+                        "mine cursor sort_time 不能为负数".to_string(),
+                    ));
+                }
+                Ok((cursor.sort_time, cursor.id.as_str()))
+            })
+            .transpose()?;
+        let page = self
             .db
             .work_items()
-            .list_open_document_approval_owned_by(
+            .page_open_document_approval_owned_by(
                 actor.id(),
-                query.document_type.as_deref(),
+                document_type.map(|document_type| document_type.as_str()),
+                query.query.as_deref(),
+                cursor,
                 query.limit,
                 &mut NoTransaction,
             )
             .await?;
-        let total = rows.len() as u64;
+        ensure_mine_page_integrity(page.integrity_conflicts.len())?;
+        let items = self.hydrate_mine_items(actor, page.items).await?;
+        let next_cursor = if page.has_more {
+            page.next_cursor
+                .map(|(sort_time, id)| RuntimeInstanceListCursor { sort_time, id })
+        } else {
+            None
+        };
         Ok(RuntimeInstanceListPage {
-            items: rows.into_iter().map(item_from_mine_item).collect(),
-            total,
-            next_cursor: None,
+            items,
+            total: page.total,
+            next_cursor,
         })
+    }
+
+    /// 批量装载 Mine 页的 execution、instance、summary 与 snapshot，并按原任务
+    /// 顺序重建实例行。任一身份链漂移时整页失败关闭，禁止静默丢行后伪造 total。
+    async fn hydrate_mine_items(
+        &self,
+        actor: &AuditActor,
+        tasks: Vec<WorkItem>,
+    ) -> Result<Vec<RuntimeInstanceListItem>> {
+        let execution_ids = mine_execution_ids(&tasks)?;
+        let executions = self
+            .db
+            .bpm_workflow()
+            .list_executions_by_ids(&execution_ids, &mut NoTransaction)
+            .await?;
+        let execution_by_id = unique_by_id(executions, |execution| execution.base.id.clone())?;
+
+        let instance_ids = mine_instance_ids(&execution_ids, &execution_by_id)?;
+        let summaries = self
+            .db
+            .bpm_workflow()
+            .list_instance_summaries_by_ids(&instance_ids, &mut NoTransaction)
+            .await?;
+        let summary_by_id = unique_by_id(summaries, |summary| summary.id.clone())?;
+        let instance_id_strings = instance_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let snapshots = self
+            .db
+            .approval_subject_snapshots()
+            .find_by_process_instance_ids(&instance_id_strings, &mut NoTransaction)
+            .await?;
+        let snapshot_by_instance = unique_by_id(snapshots, |snapshot| {
+            snapshot.approval_process_instance_id.to_string()
+        })?;
+
+        tasks
+            .into_iter()
+            .map(|task| {
+                let execution_id = task
+                    .approval_node_execution_id
+                    .as_ref()
+                    .ok_or_else(hidden_not_found)?;
+                let execution = execution_by_id
+                    .get(execution_id.as_ref())
+                    .ok_or_else(hidden_not_found)?;
+                let summary = summary_by_id
+                    .get(execution.process_instance_id.as_ref())
+                    .ok_or_else(hidden_not_found)?;
+                let snapshot = snapshot_by_instance.get(summary.id.as_str());
+                if !mine_runtime_chain_matches(&task, execution, summary, snapshot, actor.id())? {
+                    return Err(hidden_not_found());
+                }
+                item_from_summary(summary.clone(), snapshot)
+            })
+            .collect()
     }
 
     /// 查询本人发起或管理范围内的审批实例。
@@ -1194,7 +1786,7 @@ impl ApprovalRuntimeService {
     /// * `query` - 已规范化查询，可含字面量检索
     ///
     /// # 返回
-    /// 返回仓储过滤后的实例页；检索命中单据编号时先查快照再回填实例 ID。
+    /// 返回 MongoDB 联合不可变快照完成授权过滤、检索、计数与分页后的实例页。
     ///
     /// # 错误
     /// 单据类型未登记或仓储失败时返回错误。
@@ -1206,103 +1798,110 @@ impl ApprovalRuntimeService {
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
-        let snapshot_instance_ids = self.snapshot_instance_ids_for_list_query(actor, query).await?;
-        let mut filter = instance_list_filter(actor, query, snapshot_instance_ids)?;
-        let total = self
-            .db
-            .bpm_workflow()
-            .count_instance_summaries(&filter, &mut NoTransaction)
-            .await?;
+        let type_scopes = self.runtime_read_type_scopes(actor, query).await?;
+        let mut filter = instance_list_filter(actor, query)?;
         filter.limit = query.limit.saturating_add(1);
-        let mut rows = self
-            .db
-            .bpm_workflow()
-            .list_instance_summaries(&filter, &mut NoTransaction)
+        let scope = if query.view == RuntimeInstanceListView::Started {
+            ApprovalRuntimeReadScope::Started {
+                process_kinds: type_scopes.iter().map(|scope| scope.process_kind).collect(),
+                submitted_by: actor.id().to_string(),
+            }
+        } else {
+            ApprovalRuntimeReadScope::Managed {
+                type_scopes: type_scopes.clone(),
+            }
+        };
+        let mut page = ApprovalRuntimeReadRepository::new(&self.db)
+            .search(&filter, &scope, &mut NoTransaction)
             .await?;
-        let has_more = rows.len() > query.limit as usize;
+        let has_more = page.items.len() > query.limit as usize;
         if has_more {
-            rows.truncate(query.limit as usize);
+            page.items.truncate(query.limit as usize);
         }
         let next_cursor = has_more
-            .then(|| rows.last().map(|row| cursor_from_summary(filter.view, row)))
+            .then(|| {
+                page.items
+                    .last()
+                    .map(|row| cursor_from_summary(filter.view, &row.instance))
+            })
             .flatten();
-        let items = self.hydrate_instance_items(rows).await?;
+        let items = page
+            .items
+            .into_iter()
+            .map(|row| item_from_runtime_read_row(row, actor, query.view, &type_scopes))
+            .collect::<Result<Vec<_>>>()?;
         Ok(RuntimeInstanceListPage {
             items,
-            total,
+            total: page.total,
             next_cursor,
         })
     }
 
-    /// 按单据编号检索快照，得到可并入实例列表 `$or` 的实例主键。
+    /// 计算 Started 或管理视图可进入 Repository 的固定流程种类。
     ///
     /// # 参数
-    /// * `actor` - 当前账号；`Started` 视图用其收窄快照扫描
-    /// * `query` - 已规范化列表查询
+    /// * `actor` - 当前有效账号
+    /// * `query` - 已规范化视图与可选固定单据类型
     ///
     /// # 返回
-    /// 无检索串时返回空列表；否则返回单据编号命中的实例 ID。
+    /// Started 返回全部必须审批类型或请求类型；Managed/Blocked 返回当前账号具备
+    /// `runtime_admin_permission` 的类型交集。
     ///
     /// # 错误
-    /// 快照仓储查询失败时返回错误。
+    /// 单据类型、政策或 RBAC 读取失败时返回错误。
     ///
     /// # 关键业务约束
-    /// 不得把检索串当正则执行。`Started` 必须带提交人，避免对全库快照做编号扫描。
-    async fn snapshot_instance_ids_for_list_query(
+    /// Service 只把已证明的类型集合交给 Repository；空集合固定形成空页。
+    async fn runtime_read_type_scopes(
         &self,
         actor: &AuditActor,
         query: &RuntimeInstanceListQuery,
-    ) -> Result<Vec<String>> {
-        let Some(text) = query.query.as_deref() else {
-            return Ok(Vec::new());
+    ) -> Result<Vec<ApprovalRuntimeReadTypeScope>> {
+        let requested = query
+            .document_type
+            .as_deref()
+            .map(parse_document_type)
+            .transpose()?;
+        let mut allowed = if query.view == RuntimeInstanceListView::Started {
+            process_required_document_types()?
+        } else {
+            definition_management_visibility(&self.db, &self.rbac, actor)
+                .await?
+                .runtime_admin_types()
+                .to_vec()
         };
-        Ok(self
-            .db
-            .approval_subject_snapshots()
-            .find_instance_ids_matching_document_query(
-                text,
-                (query.view == RuntimeInstanceListView::Started).then_some(actor.id()),
-                &mut NoTransaction,
-            )
-            .await?)
+        if let Some(requested) = requested {
+            allowed.retain(|document_type| *document_type == requested);
+        }
+        let mut scopes = Vec::new();
+        for document_type in allowed {
+            adapter_spec_of(document_type)?;
+            let organization_ids = if query.view == RuntimeInstanceListView::Started {
+                None
+            } else {
+                let scope = approval_document_read_scope(&self.db, &self.rbac, actor, document_type).await?;
+                if scope.is_empty() {
+                    continue;
+                }
+                scope.organization_ids().map(ToOwned::to_owned)
+            };
+            scopes.push(ApprovalRuntimeReadTypeScope {
+                process_kind: process_kind_of(document_type),
+                organization_ids,
+            });
+        }
+        Ok(scopes)
     }
 
-    /// 用不可变业务快照批量补齐列表单号，禁止逐实例查询。
-    async fn hydrate_instance_items(
-        &self,
-        rows: Vec<ApprovalInstanceSummary>,
-    ) -> Result<Vec<RuntimeInstanceListItem>> {
-        let instance_ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-        let snapshots = self
+    async fn require_recovery_action(&self, instance_id: &str, wanted: RuntimeRecoveryAction) -> Result<()> {
+        let instance = self
             .db
-            .approval_subject_snapshots()
-            .find_by_process_instance_ids(&instance_ids, &mut NoTransaction)
-            .await?;
-        let snapshots = snapshots
-            .into_iter()
-            .map(|snapshot| {
-                (
-                    snapshot.approval_process_instance_id.as_ref().to_string(),
-                    snapshot,
-                )
-            })
-            .collect::<HashMap<_, _>>();
-        rows.into_iter()
-            .map(|row| {
-                let snapshot = snapshots.get(&row.id);
-                item_from_summary(row, snapshot)
-            })
-            .collect()
-    }
-
-    async fn require_recovery_action(
-        &self,
-        actor: &AuditActor,
-        instance_id: &str,
-        wanted: RuntimeRecoveryAction,
-    ) -> Result<()> {
-        let options = self.recovery_options(actor, instance_id).await?;
-        if options.actions.contains(&wanted) {
+            .bpm_workflow()
+            .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), &mut NoTransaction)
+            .await?
+            .ok_or_else(hidden_not_found)?;
+        let blocked = instance.status == bpm::model::types::ApprovalProcessInstanceStatus::Blocked;
+        if recovery_options_for(blocked, instance.blocker_code).contains(&wanted) {
             return Ok(());
         }
         Err(Error::ConflictError("当前 blocker 不允许该恢复动作".to_string()))
@@ -1457,6 +2056,198 @@ fn map_runtime_graph_error(error: ModelError) -> Error {
     Error::ConflictError(error.to_string())
 }
 
+/// 校验当前执行与实例持有的运行令牌完全一致。
+fn current_execution_matches_instance(
+    instance: &ApprovalProcessInstance,
+    current: Option<&ApprovalNodeExecution>,
+) -> bool {
+    match (&instance.current_node_execution_id, current) {
+        (None, None) => true,
+        (Some(expected), Some(execution)) => {
+            expected.as_ref() == execution.base.id
+                && execution.process_instance_id.as_ref() == instance.base.id
+        }
+        _ => false,
+    }
+}
+
+/// 普通详情/历史读取允许发起人、当前责任人，或对象读取与 DataScope 同时成立。
+fn ordinary_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
+    facts.actor_active
+        && (facts.initiator || facts.current_responsibility || (facts.object_readable && facts.scope_covers))
+}
+
+/// 管理读取必须同时具备类型级运行管理、对象读取与 DataScope。
+fn management_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
+    facts.actor_active && facts.runtime_admin && facts.object_readable && facts.scope_covers
+}
+
+/// Started 视图由 BPM 启动人事实独立证明普通读取权。
+fn started_runtime_read_allowed(facts: RuntimeReadAuthorizationFacts) -> bool {
+    facts.actor_active && facts.initiator
+}
+
+/// 当前开放审批任务是否精确证明 actor 对运行实例的当前责任。
+fn task_proves_current_responsibility(
+    task: &WorkItem,
+    execution: &ApprovalNodeExecution,
+    subject: &RuntimeReadSubject,
+    actor_id: &str,
+    expected_owner_role: &str,
+) -> bool {
+    subject.instance.status == ApprovalProcessInstanceStatus::Running
+        && execution.status == ApprovalNodeExecutionStatus::Active
+        && execution.round_no == subject.instance.current_round_no
+        && execution.assignee_participant_id.as_str() == actor_id
+        && task.work_item_type == WorkItemType::DocumentApproval
+        && task.status == WorkItemStatus::Open
+        && task.assignment_source == AssignmentSource::ApprovalRuntime
+        && task.owner_user_id.as_deref() == Some(actor_id)
+        && task.owner_role == expected_owner_role
+        && task.owner_organization_id == subject.snapshot.payload.responsible_org_id
+        && task.approval_node_execution_id.as_ref().is_some_and(|id| {
+            id.as_ref() == execution.base.id
+                && subject.instance.current_node_execution_id.as_ref() == Some(id)
+        })
+        && task.business_object_type == subject.document_type.as_str()
+        && task.business_object_id == subject.instance.subject.subject_id()
+        && task.subject_version == subject.instance.subject_version.to_string()
+        && execution.process_instance_id.as_ref() == subject.instance.base.id
+        && execution.node_key.trim() == execution.node_key
+        && !execution.node_key.is_empty()
+}
+
+/// Mine 页的 WorkItem、当前 execution 与实例摘要是否构成同一当前责任链。
+fn mine_runtime_chain_matches(
+    task: &WorkItem,
+    execution: &ApprovalNodeExecution,
+    summary: &ApprovalInstanceSummary,
+    snapshot: Option<&ApprovalSubjectSnapshot>,
+    actor_id: &str,
+) -> Result<bool> {
+    let document_type =
+        document_type_from_subject_kind(summary.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+    let spec = adapter_spec_of(document_type)?;
+    let canonical_subject_version = summary.subject_version.to_string();
+    let runtime_chain_matches = task.work_item_type == WorkItemType::DocumentApproval
+        && task.status == WorkItemStatus::Open
+        && task.assignment_source == AssignmentSource::ApprovalRuntime
+        && task.owner_user_id.as_deref() == Some(actor_id)
+        && task.owner_role == spec.owner_role.as_str()
+        && task.approval_node_execution_id.as_ref().is_some_and(|id| {
+            id.as_ref() == execution.base.id && summary.current_node_execution_id.as_ref() == Some(id)
+        })
+        && task.business_object_type == document_type.as_str()
+        && task.business_object_id == summary.subject.subject_id()
+        && task.subject_version == canonical_subject_version
+        && summary.process_kind == process_kind_of(document_type)
+        && summary.status == ApprovalProcessInstanceStatus::Running
+        && execution.status == ApprovalNodeExecutionStatus::Active
+        && execution.process_instance_id.as_ref() == summary.id
+        && execution.round_no == summary.current_round_no
+        && execution.assignee_participant_id.as_str() == actor_id
+        && summary.current_node_key.as_deref() == Some(execution.node_key.as_str())
+        && summary.current_node_name.as_deref() == Some(execution.node_name.as_str())
+        && summary.current_assignee_participant_id.as_deref()
+            == Some(execution.assignee_participant_id.as_str())
+        && summary.current_assignee_name.as_deref() == Some(execution.assignee_name_snapshot.as_str());
+    if !runtime_chain_matches {
+        return Ok(false);
+    }
+    let snapshot_owner_matches = snapshot
+        .filter(|snapshot| snapshot.approval_process_instance_id.as_ref() == summary.id)
+        .filter(|snapshot| {
+            snapshot
+                .ensure_matches_runtime_subject(
+                    document_type,
+                    summary.subject.subject_id(),
+                    summary.subject_version,
+                )
+                .is_ok()
+        })
+        .is_none_or(|snapshot| snapshot.payload.responsible_org_id == task.owner_organization_id);
+    Ok(snapshot_owner_matches)
+}
+
+/// 提取 Mine 当前页的 execution ID，并在服务边界拒绝重复责任投影。
+///
+/// 不得依赖唯一索引或静默去重；重复 WorkItem 会同时污染当前页行与
+/// Repository 返回的 total，因此必须按隐藏实例存在性的稳定语义整页失败。
+fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeExecutionId>> {
+    let mut seen = HashSet::with_capacity(tasks.len());
+    let mut execution_ids = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        let execution_id = task
+            .approval_node_execution_id
+            .clone()
+            .ok_or_else(hidden_not_found)?;
+        if !seen.insert(execution_id.to_string()) {
+            return Err(hidden_not_found());
+        }
+        execution_ids.push(execution_id);
+    }
+    Ok(execution_ids)
+}
+
+/// 把 Repository 在完整过滤集合中发现的责任链冲突映射为隐藏式拒绝。
+fn ensure_mine_page_integrity(conflict_count: usize) -> Result<()> {
+    if conflict_count == 0 {
+        return Ok(());
+    }
+    Err(hidden_not_found())
+}
+
+/// 由 Mine 当前页 execution 解析实例 ID，并拒绝两个执行指向同一实例。
+///
+/// 执行结果缺失或实例重复均表示当前责任链不能形成唯一列表行，整页失败关闭。
+fn mine_instance_ids(
+    execution_ids: &[ApprovalNodeExecutionId],
+    execution_by_id: &HashMap<String, ApprovalNodeExecution>,
+) -> Result<Vec<ApprovalProcessInstanceId>> {
+    let mut seen = HashSet::with_capacity(execution_ids.len());
+    let mut instance_ids = Vec::with_capacity(execution_ids.len());
+    for execution_id in execution_ids {
+        let instance_id = execution_by_id
+            .get(execution_id.as_ref())
+            .map(|execution| execution.process_instance_id.clone())
+            .ok_or_else(hidden_not_found)?;
+        if !seen.insert(instance_id.to_string()) {
+            return Err(hidden_not_found());
+        }
+        instance_ids.push(instance_id);
+    }
+    Ok(instance_ids)
+}
+
+/// 将批量读取结果按稳定 ID 建表；重复 ID 按持久化身份损坏失败关闭。
+fn unique_by_id<T, F>(items: Vec<T>, key_of: F) -> Result<HashMap<String, T>>
+where
+    F: Fn(&T) -> String,
+{
+    let mut by_id = HashMap::with_capacity(items.len());
+    for item in items {
+        let key = key_of(&item);
+        if by_id.insert(key, item).is_some() {
+            return Err(hidden_not_found());
+        }
+    }
+    Ok(by_id)
+}
+
+/// 返回政策矩阵中必须接入审批运行时的固定单据类型。
+fn process_required_document_types() -> Result<Vec<DocumentType>> {
+    let mut document_types = Vec::new();
+    for document_type in ALL_DOCUMENT_TYPES {
+        if matches!(
+            policy_of(document_type)?,
+            DocumentApprovalPolicy::ProcessRequired(_)
+        ) {
+            document_types.push(document_type);
+        }
+    }
+    Ok(document_types)
+}
+
 /// 隐藏实例存在性。
 fn hidden_not_found() -> Error {
     Error::NotFound("审批实例不存在".to_string())
@@ -1513,7 +2304,6 @@ fn parse_document_type(code: &str) -> Result<DocumentType> {
 /// # 参数
 /// * `actor` - 当前账号
 /// * `query` - 已规范化列表查询
-/// * `snapshot_instance_ids` - 单据编号命中的实例主键
 ///
 /// # 返回
 /// 返回仓储过滤条件；无检索串时 `text_query` 为空。
@@ -1526,7 +2316,6 @@ fn parse_document_type(code: &str) -> Result<DocumentType> {
 fn instance_list_filter(
     actor: &AuditActor,
     query: &RuntimeInstanceListQuery,
-    snapshot_instance_ids: Vec<String>,
 ) -> Result<ApprovalInstanceListFilter> {
     let view = match query.view {
         RuntimeInstanceListView::Started => ApprovalInstanceListView::Started,
@@ -1546,10 +2335,10 @@ fn instance_list_filter(
         started_by: (query.view == RuntimeInstanceListView::Started).then(|| actor.id().to_string()),
         subject_kind: None,
         subject_ids: None,
-        text_query: query.query.as_ref().map(|text| ApprovalInstanceTextQuery {
-            query: text.clone(),
-            snapshot_instance_ids,
-        }),
+        text_query: query
+            .query
+            .as_ref()
+            .map(|text| ApprovalInstanceTextQuery { query: text.clone() }),
         cursor: query
             .cursor
             .as_ref()
@@ -1595,11 +2384,20 @@ fn item_from_summary(
     row: ApprovalInstanceSummary,
     snapshot: Option<&ApprovalSubjectSnapshot>,
 ) -> Result<RuntimeInstanceListItem> {
-    let document_type = document_type_from_subject_kind(row.subject.subject_kind())?;
+    let document_type =
+        document_type_from_subject_kind(row.subject.subject_kind()).map_err(|_| hidden_not_found())?;
     let document_id = row.subject.subject_id().to_string();
-    let snapshot = snapshot.filter(|snapshot| {
-        snapshot.document_type == document_type && snapshot.business_object_id == document_id
-    });
+    if row.process_kind != process_kind_of(document_type) {
+        return Err(hidden_not_found());
+    }
+    let document_label = snapshot
+        .filter(|snapshot| snapshot.approval_process_instance_id.as_ref() == row.id.as_str())
+        .filter(|snapshot| {
+            snapshot
+                .ensure_matches_runtime_subject(document_type, &document_id, row.subject_version)
+                .is_ok()
+        })
+        .map(|snapshot| snapshot.payload.document_no.clone());
     Ok(RuntimeInstanceListItem {
         instance_id: row.id,
         status: row.status.as_str().to_string(),
@@ -1610,35 +2408,47 @@ fn item_from_summary(
         current_assignee_name: row.current_assignee_name,
         document_type: Some(document_type.as_str().to_string()),
         document_id: Some(document_id),
-        document_label: snapshot.map(|item| item.payload.document_no.clone()),
+        document_label,
         process_version: Some(row.definition_version),
         started_at: Some(row.started_at),
         latest_rejection_summary: row.latest_rejection_summary,
     })
 }
 
-/// 由待我审批任务映射列表行。
-fn item_from_mine_item(item: entities::work_item::WorkItem) -> RuntimeInstanceListItem {
-    let document_type = item.business_object_type.clone();
-    RuntimeInstanceListItem {
-        instance_id: item
-            .approval_node_execution_id
-            .as_ref()
-            .map(|id| id.as_ref().to_string())
-            .unwrap_or_default(),
-        status: "RUNNING".to_string(),
-        current_round_no: 0,
-        current_node_key: None,
-        current_node_name: None,
-        current_assignee_participant_id: item.owner_user_id,
-        current_assignee_name: None,
-        document_type: Some(document_type),
-        document_id: Some(item.business_object_id),
-        document_label: None,
-        process_version: None,
-        started_at: Some(i64::try_from(item.base.created_at).unwrap_or(i64::MAX)),
-        latest_rejection_summary: None,
+/// 对聚合页行重新执行对象读取与授权矩阵，然后映射公开列表行。
+fn item_from_runtime_read_row(
+    row: ApprovalRuntimeReadRow,
+    actor: &AuditActor,
+    view: RuntimeInstanceListView,
+    type_scopes: &[ApprovalRuntimeReadTypeScope],
+) -> Result<RuntimeInstanceListItem> {
+    let document_type = document_type_from_subject_kind(row.instance.subject.subject_kind())
+        .map_err(|_| hidden_not_found())?;
+    let type_allowed = type_scopes
+        .iter()
+        .any(|scope| scope.process_kind == row.instance.process_kind);
+    let facts = RuntimeReadAuthorizationFacts {
+        actor_active: true,
+        initiator: row.instance.started_by == actor.id(),
+        current_responsibility: false,
+        object_readable: type_allowed,
+        scope_covers: type_allowed,
+        runtime_admin: type_allowed,
+    };
+    let allowed = match view {
+        RuntimeInstanceListView::Started => started_runtime_read_allowed(facts),
+        RuntimeInstanceListView::Managed | RuntimeInstanceListView::Blocked => {
+            management_runtime_read_allowed(facts)
+        }
+        RuntimeInstanceListView::Mine => false,
+    };
+    if !allowed {
+        return Err(hidden_not_found());
     }
+    if row.instance.process_kind != process_kind_of(document_type) {
+        return Err(hidden_not_found());
+    }
+    item_from_summary(row.instance, row.snapshot.as_ref())
 }
 
 /// 由实例字段构造列表行。
@@ -2173,18 +2983,36 @@ mod tests {
 
     use bpm::engine::TaskCloseReason;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
-    use bpm::model::types::ApprovalProcessInstanceStatus;
+    use bpm::model::types::{ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus};
+    use bpm::model::{
+        ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
+        Timestamp,
+    };
     use bpm::{ProcessKind, SubjectRef};
+    use database::repository::approval_integration::{ApprovalRuntimeReadRow, ApprovalRuntimeReadTypeScope};
     use database::repository::bpm::{ApprovalInstanceListView, ApprovalInstanceSummary};
     use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
     use entities::common::time::Instant;
     use entities::document_registry::DocumentType;
-    use entities::ids::ApprovalSubjectSnapshotId;
+    use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
     use entities::money::Quantity;
+    use entities::AccountKind;
 
-    use entities::work_item::ApprovalRuntimeTaskEnding;
+    use entities::work_item::{
+        ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData, WorkItem,
+        WorkItemPriority, WorkItemStatus,
+    };
 
-    use super::{approval_task_ending, cursor_from_summary, item_from_summary, CompleteOrCloseTasksInput};
+    use crate::audit::AuditActor;
+    use crate::errors::Error;
+
+    use super::{
+        approval_task_ending, cursor_from_summary, ensure_mine_page_integrity, item_from_runtime_read_row,
+        item_from_summary, management_runtime_read_allowed, mine_execution_ids, mine_instance_ids,
+        mine_runtime_chain_matches, ordinary_runtime_read_allowed, started_runtime_read_allowed,
+        task_proves_current_responsibility, unique_by_id, CompleteOrCloseTasksInput, RuntimeInstanceListView,
+        RuntimeReadAuthorizationFacts, RuntimeReadSubject,
+    };
 
     fn summary() -> ApprovalInstanceSummary {
         ApprovalInstanceSummary {
@@ -2233,6 +3061,80 @@ mod tests {
         .expect("快照")
     }
 
+    fn active_execution(execution_id: &str, instance_id: &str) -> ApprovalNodeExecution {
+        ApprovalNodeExecution::new_active(NewNodeExecution {
+            id: ApprovalNodeExecutionId::new(execution_id),
+            process_instance_id: ApprovalProcessInstanceId::new(instance_id),
+            node_key: "review".to_string(),
+            node_name: "仓储复核".to_string(),
+            round_no: 1,
+            execution_no: 1,
+            assignment_source: ApprovalExecutionAssignmentSource::Definition,
+            replaces_execution_id: None,
+            assignee_participant_id: ParticipantId::new("warehouse-1").expect("审批人"),
+            assignee_name_snapshot: "仓库1".to_string(),
+            at: Timestamp::from_unix_secs(10).expect("时间"),
+        })
+        .expect("执行")
+    }
+
+    fn approval_task(task_id: &str, execution_id: &str) -> WorkItem {
+        WorkItem::new_document_approval(
+            WorkItemId::new(task_id),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: ApprovalNodeExecutionId::new(execution_id),
+                business_object_type: "stock_adjustment".to_string(),
+                business_object_id: "adj-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "stock_adjustment_approver".to_string(),
+                owner_organization_id: "org-1".to_string(),
+                owner_user_id: "warehouse-1".to_string(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(10),
+        )
+        .expect("任务")
+    }
+
+    fn assert_hidden_not_found(error: Error) {
+        assert!(matches!(
+            error,
+            Error::NotFound(message) if message == "审批实例不存在"
+        ));
+    }
+
+    fn runtime_responsibility_fixture() -> (RuntimeReadSubject, WorkItem) {
+        let at = Timestamp::from_unix_secs(10).expect("时间");
+        let instance_id = ApprovalProcessInstanceId::new("inst-1");
+        let execution_id = ApprovalNodeExecutionId::new("exec-1");
+        let mut instance = ApprovalProcessInstance::start_running(NewProcessInstance {
+            id: instance_id.clone(),
+            process_definition_id: ApprovalProcessDefinitionId::new("def-1"),
+            definition_version: 2,
+            process_kind: ProcessKind::StockAdjustment,
+            subject: SubjectRef::new("stock_adjustment", "adj-1").expect("主体"),
+            subject_version: 1,
+            started_by: ParticipantId::new("starter").expect("启动人"),
+            at,
+        })
+        .expect("实例");
+        let execution = active_execution("exec-1", "inst-1");
+        instance
+            .set_current_execution(execution_id.clone(), at)
+            .expect("当前执行");
+        let task = approval_task("wi-1", execution_id.as_ref());
+        (
+            RuntimeReadSubject {
+                instance,
+                current_execution: Some(execution),
+                snapshot: snapshot(),
+                document_type: DocumentType::StockAdjustment,
+            },
+            task,
+        )
+    }
+
     #[test]
     fn started_item_uses_snapshot_document_number_and_runtime_projection() {
         let snapshot = snapshot();
@@ -2251,6 +3153,260 @@ mod tests {
         let cursor = cursor_from_summary(ApprovalInstanceListView::Started, &summary());
         assert_eq!(cursor.sort_time, 10);
         assert_eq!(cursor.id, "inst-1");
+    }
+
+    #[test]
+    fn ordinary_read_matrix_supports_only_signed_sources() {
+        let denied = RuntimeReadAuthorizationFacts {
+            actor_active: true,
+            initiator: false,
+            current_responsibility: false,
+            object_readable: false,
+            scope_covers: false,
+            runtime_admin: false,
+        };
+        assert!(!ordinary_runtime_read_allowed(denied));
+        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            initiator: true,
+            ..denied
+        }));
+        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            current_responsibility: true,
+            ..denied
+        }));
+        assert!(ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            object_readable: true,
+            scope_covers: true,
+            ..denied
+        }));
+        assert!(!ordinary_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            actor_active: false,
+            initiator: true,
+            current_responsibility: true,
+            object_readable: true,
+            scope_covers: true,
+            ..denied
+        }));
+    }
+
+    #[test]
+    fn current_responsibility_requires_exact_open_runtime_task_chain() {
+        let (subject, task) = runtime_responsibility_fixture();
+        let execution = subject.current_execution.as_ref().expect("当前执行");
+        assert!(task_proves_current_responsibility(
+            &task,
+            execution,
+            &subject,
+            "warehouse-1",
+            "stock_adjustment_approver",
+        ));
+
+        let mut wrong_source = task.clone();
+        wrong_source.assignment_source = AssignmentSource::SystemRule;
+        let mut wrong_role = task.clone();
+        wrong_role.owner_role = "other-role".to_string();
+        let mut wrong_org = task.clone();
+        wrong_org.owner_organization_id = "org-2".to_string();
+        let mut wrong_version = task.clone();
+        wrong_version.subject_version = "01".to_string();
+        let mut closed = task.clone();
+        closed.status = WorkItemStatus::Closed;
+        for candidate in [wrong_source, wrong_role, wrong_org, wrong_version, closed] {
+            assert!(!task_proves_current_responsibility(
+                &candidate,
+                execution,
+                &subject,
+                "warehouse-1",
+                "stock_adjustment_approver",
+            ));
+        }
+
+        let mut ended_subject = subject;
+        ended_subject.instance.status = ApprovalProcessInstanceStatus::Approved;
+        assert!(!task_proves_current_responsibility(
+            &task,
+            ended_subject.current_execution.as_ref().expect("当前执行"),
+            &ended_subject,
+            "warehouse-1",
+            "stock_adjustment_approver",
+        ));
+    }
+
+    #[test]
+    fn mine_chain_uses_runtime_identity_and_treats_snapshot_as_optional_label() {
+        let (subject, task) = runtime_responsibility_fixture();
+        let execution = subject.current_execution.as_ref().expect("当前执行");
+        let row = summary();
+        assert!(
+            mine_runtime_chain_matches(&task, execution, &row, Some(&subject.snapshot), "warehouse-1",)
+                .expect("责任链")
+        );
+
+        let mut drifted = subject.snapshot.clone();
+        drifted.subject_version = 2;
+        assert!(
+            mine_runtime_chain_matches(&task, execution, &row, Some(&drifted), "warehouse-1",)
+                .expect("漂移快照不撤销 WorkItem 责任")
+        );
+
+        let mut wrong_projection = row;
+        wrong_projection.current_node_name = Some("错误节点".to_string());
+        assert!(
+            !mine_runtime_chain_matches(&task, execution, &wrong_projection, None, "warehouse-1",)
+                .expect("实例投影漂移")
+        );
+    }
+
+    #[test]
+    fn mine_page_rejects_two_tasks_for_the_same_execution() {
+        let tasks = [approval_task("wi-1", "exec-1"), approval_task("wi-2", "exec-1")];
+
+        let error = mine_execution_ids(&tasks).expect_err("重复 execution 必须整页失败关闭");
+
+        assert_hidden_not_found(error);
+    }
+
+    #[test]
+    fn mine_page_hides_repository_wide_integrity_conflicts() {
+        ensure_mine_page_integrity(0).expect("无完整性冲突");
+        let error = ensure_mine_page_integrity(1).expect_err("跨页冲突必须隐藏式失败关闭");
+        assert_hidden_not_found(error);
+    }
+
+    #[test]
+    fn mine_page_rejects_two_executions_for_the_same_instance() {
+        let execution_ids = vec![
+            ApprovalNodeExecutionId::new("exec-1"),
+            ApprovalNodeExecutionId::new("exec-2"),
+        ];
+        let execution_by_id = unique_by_id(
+            vec![
+                active_execution("exec-1", "inst-1"),
+                active_execution("exec-2", "inst-1"),
+            ],
+            |execution| execution.base.id.clone(),
+        )
+        .expect("执行主键唯一");
+
+        let error = mine_instance_ids(&execution_ids, &execution_by_id)
+            .expect_err("不同 execution 指向同一 instance 必须整页失败关闭");
+
+        assert_hidden_not_found(error);
+    }
+
+    #[test]
+    fn mine_page_preserves_distinct_task_execution_instance_chains() {
+        let tasks = [approval_task("wi-1", "exec-1"), approval_task("wi-2", "exec-2")];
+        let execution_ids = mine_execution_ids(&tasks).expect("不同执行");
+        let execution_by_id = unique_by_id(
+            vec![
+                active_execution("exec-1", "inst-1"),
+                active_execution("exec-2", "inst-2"),
+            ],
+            |execution| execution.base.id.clone(),
+        )
+        .expect("执行主键唯一");
+
+        let instance_ids = mine_instance_ids(&execution_ids, &execution_by_id).expect("不同实例");
+
+        assert_eq!(
+            instance_ids.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+            vec!["inst-1", "inst-2"]
+        );
+    }
+
+    #[test]
+    fn management_requires_every_gate_while_started_uses_initiator_fact() {
+        let allowed = RuntimeReadAuthorizationFacts {
+            actor_active: true,
+            initiator: true,
+            current_responsibility: false,
+            object_readable: true,
+            scope_covers: true,
+            runtime_admin: true,
+        };
+        assert!(management_runtime_read_allowed(allowed));
+        assert!(started_runtime_read_allowed(allowed));
+        for denied in [
+            RuntimeReadAuthorizationFacts {
+                actor_active: false,
+                ..allowed
+            },
+            RuntimeReadAuthorizationFacts {
+                object_readable: false,
+                ..allowed
+            },
+            RuntimeReadAuthorizationFacts {
+                scope_covers: false,
+                ..allowed
+            },
+        ] {
+            assert!(!management_runtime_read_allowed(denied));
+        }
+        assert!(!started_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            actor_active: false,
+            ..allowed
+        }));
+        assert!(started_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            object_readable: false,
+            scope_covers: false,
+            runtime_admin: false,
+            ..allowed
+        }));
+        assert!(!management_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            runtime_admin: false,
+            ..allowed
+        }));
+        assert!(!started_runtime_read_allowed(RuntimeReadAuthorizationFacts {
+            initiator: false,
+            ..allowed
+        }));
+    }
+
+    #[test]
+    fn scoped_row_revalidates_snapshot_and_view_authorization() {
+        let actor = AuditActor::new("starter".to_string(), "starter".to_string(), AccountKind::Admin);
+        let type_scopes = [ApprovalRuntimeReadTypeScope {
+            process_kind: ProcessKind::StockAdjustment,
+            organization_ids: None,
+        }];
+        let item = item_from_runtime_read_row(
+            ApprovalRuntimeReadRow {
+                instance: summary(),
+                snapshot: Some(snapshot()),
+            },
+            &actor,
+            RuntimeInstanceListView::Started,
+            &type_scopes,
+        )
+        .expect("Started 发起人事实成立");
+        assert_eq!(item.instance_id, "inst-1");
+
+        assert!(item_from_runtime_read_row(
+            ApprovalRuntimeReadRow {
+                instance: summary(),
+                snapshot: Some(snapshot()),
+            },
+            &actor,
+            RuntimeInstanceListView::Managed,
+            &[],
+        )
+        .is_err());
+
+        let mut drifted = snapshot();
+        drifted.subject_version = 2;
+        assert_eq!(
+            item_from_summary(summary(), Some(&drifted))
+                .expect("漂移快照仅清空标签")
+                .document_label,
+            None
+        );
+        assert_eq!(
+            item_from_summary(summary(), None)
+                .expect("缺失快照保留运行实例")
+                .document_label,
+            None
+        );
     }
 
     #[test]

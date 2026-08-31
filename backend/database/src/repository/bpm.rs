@@ -112,8 +112,6 @@ pub struct ApprovalInstanceListFilter {
 pub struct ApprovalInstanceTextQuery {
     /// 调用方已规范化的检索串，仓储再转义为字面量正则。
     pub query: String,
-    /// 快照中单据编号命中的实例主键；空表示编号未命中，仍可匹配对象 ID 与审批人。
-    pub snapshot_instance_ids: Vec<String>,
 }
 
 /// 运行事务写入的有界列表投影。
@@ -720,7 +718,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         }
         let options = FindOptions::builder()
             .sort(instance_list_sort(filter))
-            .limit(clamp_limit(filter.limit, MAX_INSTANCE_PAGE))
+            .limit(instance_list_limit(filter.limit))
             .projection(instance_summary_projection())
             .build();
         mongo_ops::find_many(
@@ -1517,7 +1515,7 @@ fn instance_insert_document(
     Ok(document)
 }
 
-fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> bool {
+pub(crate) fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> bool {
     if filter.subject_ids.as_ref().is_some_and(Vec::is_empty) {
         return true;
     }
@@ -1551,7 +1549,7 @@ fn started_by_present(filter: &ApprovalInstanceListFilter) -> bool {
 ///
 /// # 关键业务约束
 /// 字面量检索与游标都使用 `$or` 时必须用 `$and` 组合，不得互相覆盖。
-fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> Document {
+pub(crate) fn instance_list_filter_doc(filter: &ApprovalInstanceListFilter) -> Document {
     let mut document = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     if let Some(process_kind) = filter.process_kind {
         document.insert("process_kind", process_kind.as_str());
@@ -1608,30 +1606,25 @@ fn insert_list_disjunctions(document: &mut Document, filter: &ApprovalInstanceLi
 /// 构造字面量检索的 `$or` 分支。
 ///
 /// # 参数
-/// * `text_query` - 检索串与快照命中的实例主键
+/// * `text_query` - 已规范化检索串
 ///
 /// # 返回
-/// 对象 ID、当前节点名、当前审批人和快照编号命中的实例 ID。
+/// 返回对象 ID、当前节点名和当前审批人的字面量匹配分支。
 ///
 /// # 错误
 /// 无。
 ///
 /// # 关键业务约束
-/// 检索串按字面量转义，调用方不得传入正则。快照编号不在实例文档上，必须经 `snapshot_instance_ids` 回查。
+/// 检索串按字面量转义，调用方不得传入正则。快照编号只允许由联合快照聚合
+/// 匹配，不得把未经三元组校验的实例 ID 注入本查询。
 fn instance_text_query_or(text_query: &ApprovalInstanceTextQuery) -> Vec<Document> {
     let literal = regex::escape(text_query.query.trim());
     let regex = doc! { "$regex": &literal, "$options": "i" };
-    let mut alternatives = vec![
+    vec![
         doc! { "subject.subject_id": regex.clone() },
         doc! { "current_assignee_name": regex.clone() },
         doc! { "current_node_name": regex },
-    ];
-    if !text_query.snapshot_instance_ids.is_empty() {
-        alternatives.push(doc! {
-            "id": { "$in": text_query.snapshot_instance_ids.clone() }
-        });
-    }
-    alternatives
+    ]
 }
 
 fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceListFilter) {
@@ -1644,7 +1637,7 @@ fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceList
     }
 }
 
-fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Document {
+pub(crate) fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Document {
     match filter.view {
         ApprovalInstanceListView::Started => doc! { "started_at": -1, "id": -1 },
         ApprovalInstanceListView::Blocked => doc! { "blocked_at": -1, "id": -1 },
@@ -1655,7 +1648,10 @@ fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Document {
     }
 }
 
-fn instance_cursor_or(view: ApprovalInstanceListView, cursor: &ApprovalInstanceListCursor) -> Vec<Document> {
+pub(crate) fn instance_cursor_or(
+    view: ApprovalInstanceListView,
+    cursor: &ApprovalInstanceListCursor,
+) -> Vec<Document> {
     let field = match view {
         ApprovalInstanceListView::Started => "started_at",
         ApprovalInstanceListView::Blocked => "blocked_at",
@@ -1667,7 +1663,7 @@ fn instance_cursor_or(view: ApprovalInstanceListView, cursor: &ApprovalInstanceL
     ]
 }
 
-fn instance_summary_projection() -> Document {
+pub(crate) fn instance_summary_projection() -> Document {
     doc! {
         "id": 1,
         "process_kind": 1,
@@ -1691,6 +1687,11 @@ fn instance_summary_projection() -> Document {
         "version": 1,
         "updated_at": 1,
     }
+}
+
+/// 返回实例列表统一页大小上限。
+pub(crate) fn instance_list_limit(limit: u32) -> i64 {
+    clamp_limit(limit, MAX_INSTANCE_PAGE)
 }
 
 fn merge_documents(target: &mut Document, extra: Document) {
@@ -2344,18 +2345,15 @@ mod tests {
     fn instance_list_text_query_is_literal_and_composes_with_cursor() {
         let text_query = ApprovalInstanceTextQuery {
             query: "SO.[1]".to_string(),
-            snapshot_instance_ids: vec!["inst-a".into()],
         };
         let alternatives = instance_text_query_or(&text_query);
-        assert_eq!(alternatives.len(), 4);
+        assert_eq!(alternatives.len(), 3);
         let regex = alternatives[0]
             .get_document("subject.subject_id")
             .unwrap()
             .get_str("$regex")
             .unwrap();
         assert_eq!(regex, r"SO\.\[1\]");
-        assert_eq!(alternatives[3], doc! { "id": { "$in": ["inst-a"] } });
-
         let with_cursor = ApprovalInstanceListFilter {
             view: ApprovalInstanceListView::Started,
             process_kind: None,
@@ -2385,7 +2383,7 @@ mod tests {
         let query_doc = instance_list_filter_doc(&query_only);
         assert!(query_doc.contains_key("$or"));
         assert!(!query_doc.contains_key("$and"));
-        assert_eq!(query_doc.get_array("$or").unwrap().len(), 4);
+        assert_eq!(query_doc.get_array("$or").unwrap().len(), 3);
     }
 
     #[test]

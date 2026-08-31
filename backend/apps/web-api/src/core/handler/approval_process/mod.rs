@@ -56,7 +56,7 @@ pub async fn definition_catalog(
     Extension(actor): Extension<AuditActor>,
     headers: HeaderMap,
 ) -> ApprovalResult<Vec<DefinitionCatalogItem>> {
-    let visibility = definition_management_visibility(state.rbac().as_ref(), &actor)
+    let visibility = definition_management_visibility(&state.db(), state.rbac().as_ref(), &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let items = definition_service(&state)
@@ -83,7 +83,7 @@ pub async fn definition_versions(
     headers: HeaderMap,
     Path(document_type): Path<DocumentType>,
 ) -> ApprovalResult<Vec<DefinitionVersionItem>> {
-    let visibility = definition_management_visibility(state.rbac().as_ref(), &actor)
+    let visibility = definition_management_visibility(&state.db(), state.rbac().as_ref(), &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let versions = definition_service(&state)
@@ -110,7 +110,7 @@ pub async fn definition_detail(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApprovalResult<DefinitionDetailView> {
-    let visibility = definition_management_visibility(state.rbac().as_ref(), &actor)
+    let visibility = definition_management_visibility(&state.db(), state.rbac().as_ref(), &actor)
         .await
         .map_err(|error| ApprovalHttpError::from_service(error, &headers))?;
     let view = definition_service(&state)

@@ -2,89 +2,34 @@
 //!
 //! 写请求使用 `deny_unknown_fields`，拒绝 instance/execution/definition/next 等禁用字段。
 
+use axum::{
+    extract::{FromRequestParts, Query},
+    http::request::Parts,
+};
 use serde::Deserialize;
+use services::approval::execution::{
+    RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
+};
 
-/// 实例列表默认页大小。
-pub const DEFAULT_INSTANCE_LIMIT: u32 = 20;
-/// 实例列表最大页大小。
-pub const MAX_INSTANCE_LIMIT: u32 = 100;
+use super::error::ApprovalHttpError;
+
 /// 历史默认页大小。
 pub const DEFAULT_HISTORY_LIMIT: u32 = 50;
 /// 历史最大页大小。
 pub const MAX_HISTORY_LIMIT: u32 = 100;
 /// 详情最近执行条数上限。
 pub const DETAIL_HISTORY_LIMIT: u32 = 20;
-/// 实例列表字面量检索上限。
-pub const INSTANCE_QUERY_MAX_LEN: usize = 128;
-
-/// 实例列表固定视图。
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum InstanceListView {
-    /// 本人当前开放审批任务。
-    Mine,
-    /// 本人发起且仍有单据读取权。
-    Started,
-    /// 具备管理权与 DataScope 的实例。
-    Managed,
-    /// 受阻管理子集。
-    Blocked,
-}
-
-impl InstanceListView {
-    /// 返回稳定 view 名。
-    ///
-    /// # 返回
-    /// 返回 `mine` / `started` / `managed` / `blocked`。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Mine => "mine",
-            Self::Started => "started",
-            Self::Managed => "managed",
-            Self::Blocked => "blocked",
-        }
-    }
-}
-
-/// 合同冻结的实例状态。
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum InstanceStatusFilter {
-    /// 运行中。
-    Running,
-    /// 已通过。
-    Approved,
-    /// 已取消。
-    Cancelled,
-    /// 受阻。
-    Blocked,
-}
-
-impl InstanceStatusFilter {
-    /// 返回稳定状态码。
-    ///
-    /// # 返回
-    /// 返回 `RUNNING` 等。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Running => "RUNNING",
-            Self::Approved => "APPROVED",
-            Self::Cancelled => "CANCELLED",
-            Self::Blocked => "BLOCKED",
-        }
-    }
-}
 
 /// `GET /approval-instances` 查询。
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceListQuery {
     /// 固定 view。
-    pub view: InstanceListView,
+    pub view: RuntimeInstanceListView,
     /// 可选单据类型。
     pub document_type: Option<String>,
     /// 可选实例状态。
-    pub status: Option<InstanceStatusFilter>,
+    pub status: Option<RuntimeInstanceStatusFilter>,
     /// 稳定游标。
     pub cursor: Option<String>,
     /// 页大小，默认 20，最大 100。
@@ -93,32 +38,68 @@ pub struct InstanceListQuery {
     pub q: Option<String>,
 }
 
-/// 规范化后的列表查询。
+/// 已完成 Axum 反序列化、opaque cursor 解码和 Service 查询校验的列表参数。
+///
+/// 本提取器把所有查询协议错误统一映射为 422，避免 Axum `Query` 的默认 400
+/// 绕过审批 API 的稳定错误合同。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NormalizedInstanceListQuery {
-    /// 固定 view。
-    pub view: InstanceListView,
-    /// 可选单据类型。
-    pub document_type: Option<String>,
-    /// 可选状态。
-    pub status: Option<InstanceStatusFilter>,
-    /// 解码后的游标。
-    pub cursor: Option<InstanceListCursor>,
-    /// 页大小。
-    pub limit: u32,
-    /// 规范化后的字面量检索。
-    pub query: Option<String>,
+pub struct PreparedInstanceListQuery {
+    /// 响应游标必须沿用的固定视图。
+    pub view: RuntimeInstanceListView,
+    /// 已由 Service DTO 完成规范化和完整输入校验的查询。
+    pub query: RuntimeInstanceListQuery,
+}
+
+impl<S> FromRequestParts<S> for PreparedInstanceListQuery
+where
+    S: Send + Sync,
+{
+    type Rejection = ApprovalHttpError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let headers = parts.headers.clone();
+        let Query(query) = Query::<InstanceListQuery>::from_request_parts(parts, state)
+            .await
+            .map_err(|_| ApprovalHttpError::unprocessable("查询参数不符合要求", &headers))?;
+        Self::prepare(query, &headers)
+    }
+}
+
+impl PreparedInstanceListQuery {
+    /// 解码 HTTP cursor，并把查询交给 Service DTO 规范化。
+    ///
+    /// # 错误
+    /// cursor wire 非法或 Service 查询合同不成立时返回 422。
+    fn prepare(query: InstanceListQuery, headers: &axum::http::HeaderMap) -> Result<Self, ApprovalHttpError> {
+        let cursor = query
+            .decode_cursor()
+            .map_err(|message| ApprovalHttpError::unprocessable(message, headers))?;
+        let view = query.view;
+        let query = RuntimeInstanceListQuery::prepare(
+            view,
+            query.document_type,
+            query.status,
+            cursor,
+            query.limit,
+            query.q,
+        )
+        .map_err(|error| match error {
+            services::Error::ValidationError(message) => ApprovalHttpError::unprocessable(message, headers),
+            error => ApprovalHttpError::from_service(error, headers),
+        })?;
+        Ok(Self { view, query })
+    }
 }
 
 /// 编码当前 view 与两个排序字段的游标。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstanceListCursor {
     /// 生成游标时的 view。
-    pub view: InstanceListView,
-    /// 第一排序字段。
-    pub sort_primary: String,
-    /// 第二排序字段（ID）。
-    pub sort_id: String,
+    pub view: RuntimeInstanceListView,
+    /// 第一排序字段（时间）。
+    pub sort_time: i64,
+    /// 第二排序字段（实例 ID）。
+    pub id: String,
 }
 
 impl InstanceListCursor {
@@ -127,81 +108,84 @@ impl InstanceListCursor {
     /// # 返回
     /// 返回 `view|primary|id`。
     pub fn encode(&self) -> String {
-        format!("{}|{}|{}", self.view.as_str(), self.sort_primary, self.sort_id)
+        format!("{}|{}|{}", self.view.as_str(), self.sort_time, self.id)
     }
 
     /// 解码并校验 view。
     ///
     /// # 错误
     /// 格式非法或跨 view 使用时返回说明。
-    pub fn decode(raw: &str, expected: InstanceListView) -> Result<Self, String> {
+    pub fn decode(raw: &str, expected: RuntimeInstanceListView) -> Result<Self, String> {
         let mut parts = raw.splitn(3, '|');
         let view = parse_cursor_view(parts.next().unwrap_or_default())?;
-        let sort_primary = parts.next().unwrap_or_default();
-        let sort_id = parts.next().unwrap_or_default();
-        if sort_primary.is_empty() || sort_id.is_empty() {
+        let sort_time = parts.next().unwrap_or_default();
+        let id = parts.next().unwrap_or_default();
+        if sort_time.is_empty() || id.is_empty() {
             return Err("cursor 必须包含当前 view 的两个排序字段".to_string());
         }
         if view != expected {
             return Err("cursor 不得跨 view 使用".to_string());
         }
+        let sort_time = sort_time
+            .parse::<i64>()
+            .map_err(|_| "cursor 的排序时间必须是整数".to_string())?;
         Ok(Self {
             view,
-            sort_primary: sort_primary.to_string(),
-            sort_id: sort_id.to_string(),
+            sort_time,
+            id: id.to_string(),
         })
+    }
+
+    /// 由 Service 游标形成 HTTP opaque cursor。
+    ///
+    /// # 参数
+    /// * `view` - 当前查询视图
+    /// * `cursor` - Service 返回的稳定游标
+    ///
+    /// # 返回
+    /// 返回只负责 wire 编码的 HTTP 游标。
+    pub fn from_runtime(view: RuntimeInstanceListView, cursor: RuntimeInstanceListCursor) -> Self {
+        Self {
+            view,
+            sort_time: cursor.sort_time,
+            id: cursor.id,
+        }
+    }
+
+    /// 转为 Service 稳定游标。
+    ///
+    /// # 返回
+    /// 返回已完成 wire 解码的 `sort_time/id`。
+    pub fn into_runtime(self) -> RuntimeInstanceListCursor {
+        RuntimeInstanceListCursor {
+            sort_time: self.sort_time,
+            id: self.id,
+        }
     }
 }
 
 impl InstanceListQuery {
-    /// 校验 view/status/limit/cursor/q 合同。
+    /// 解码可选 HTTP opaque cursor。
+    ///
+    /// # 返回
+    /// 未提交 cursor 时返回 `None`；否则返回 Service 稳定游标。
     ///
     /// # 错误
-    /// 非法组合返回说明，调用方映射为 422。
-    pub fn normalize(&self) -> Result<NormalizedInstanceListQuery, String> {
-        ensure_view_status(self.view, self.status)?;
-        let limit = self.limit.unwrap_or(DEFAULT_INSTANCE_LIMIT);
-        if !(1..=MAX_INSTANCE_LIMIT).contains(&limit) {
-            return Err(format!("limit 必须在 1 到 {MAX_INSTANCE_LIMIT} 之间"));
+    /// 显式空 cursor、格式非法、排序时间越出 `i64`、跨 view 使用，或 Mine
+    /// 使用负排序时间时返回说明。
+    pub fn decode_cursor(&self) -> Result<Option<RuntimeInstanceListCursor>, String> {
+        let Some(raw) = self.cursor.as_deref() else {
+            return Ok(None);
+        };
+        if raw.is_empty() {
+            return Err("cursor 不能为空".to_string());
         }
-        let cursor = self
-            .cursor
-            .as_deref()
-            .filter(|value| !value.is_empty())
-            .map(|raw| InstanceListCursor::decode(raw, self.view))
-            .transpose()?;
-        Ok(NormalizedInstanceListQuery {
-            view: self.view,
-            document_type: self.document_type.clone(),
-            status: self.status,
-            cursor,
-            limit,
-            query: normalize_list_query_text(self.q.as_deref())?,
-        })
+        let cursor = InstanceListCursor::decode(raw, self.view)?;
+        if self.view == RuntimeInstanceListView::Mine && cursor.sort_time < 0 {
+            return Err("mine cursor sort_time 不能为负数".to_string());
+        }
+        Ok(Some(cursor.into_runtime()))
     }
-}
-
-/// 规范化实例列表检索串。
-///
-/// # 参数
-/// * `raw` - 原始 `q`
-///
-/// # 返回
-/// 空白视为未检索；否则返回去掉首尾空白的检索串。
-///
-/// # 错误
-/// 超过字数上限时返回说明。
-///
-/// # 关键业务约束
-/// 空串不得变成伪过滤条件。超长必须 422，不得截断后静默检索。
-fn normalize_list_query_text(raw: Option<&str>) -> Result<Option<String>, String> {
-    let Some(value) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
-    };
-    if value.chars().count() > INSTANCE_QUERY_MAX_LEN {
-        return Err(format!("q 不能超过 {INSTANCE_QUERY_MAX_LEN} 个字符"));
-    }
-    Ok(Some(value.to_string()))
 }
 
 /// 历史查询。
@@ -337,22 +321,12 @@ pub struct UpgradeBindingHttpRequest {
     pub idempotency_key: String,
 }
 
-fn ensure_view_status(view: InstanceListView, status: Option<InstanceStatusFilter>) -> Result<(), String> {
-    match (view, status) {
-        (InstanceListView::Mine, None | Some(InstanceStatusFilter::Running)) => Ok(()),
-        (InstanceListView::Mine, _) => Err("mine 只接受省略 status 或 status=RUNNING".to_string()),
-        (InstanceListView::Blocked, None | Some(InstanceStatusFilter::Blocked)) => Ok(()),
-        (InstanceListView::Blocked, _) => Err("blocked 只接受省略 status 或 status=BLOCKED".to_string()),
-        (InstanceListView::Started | InstanceListView::Managed, _) => Ok(()),
-    }
-}
-
-fn parse_cursor_view(raw: &str) -> Result<InstanceListView, String> {
+fn parse_cursor_view(raw: &str) -> Result<RuntimeInstanceListView, String> {
     match raw {
-        "mine" => Ok(InstanceListView::Mine),
-        "started" => Ok(InstanceListView::Started),
-        "managed" => Ok(InstanceListView::Managed),
-        "blocked" => Ok(InstanceListView::Blocked),
+        "mine" => Ok(RuntimeInstanceListView::Mine),
+        "started" => Ok(RuntimeInstanceListView::Started),
+        "managed" => Ok(RuntimeInstanceListView::Managed),
+        "blocked" => Ok(RuntimeInstanceListView::Blocked),
         _ => Err("cursor 包含未知 view".to_string()),
     }
 }
@@ -360,11 +334,14 @@ fn parse_cursor_view(raw: &str) -> Result<InstanceListView, String> {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use services::approval::execution::{
+        RuntimeInstanceListCursor, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
+    };
 
     use super::{
         CancelBlockedHttpRequest, InstanceHistoryQuery, InstanceListCursor, InstanceListQuery,
-        InstanceListView, InstanceStatusFilter, ResumeApproverHttpRequest, SubmitDecisionHttpRequest,
-        UpgradeBindingHttpRequest, DETAIL_HISTORY_LIMIT,
+        ResumeApproverHttpRequest, SubmitDecisionHttpRequest, UpgradeBindingHttpRequest,
+        DETAIL_HISTORY_LIMIT,
     };
 
     #[test]
@@ -431,50 +408,88 @@ mod tests {
     }
 
     #[test]
-    fn list_view_status_and_cursor_contract() {
-        let mine = InstanceListQuery {
-            view: InstanceListView::Mine,
+    fn list_query_reuses_service_enums_and_denies_unknown_fields() {
+        let query = serde_json::from_value::<InstanceListQuery>(json!({
+            "view": "managed",
+            "status": "APPROVED",
+            "limit": 20,
+            "q": "SO-1"
+        }))
+        .expect("Service enum wire code 保持不变");
+        assert_eq!(query.view, RuntimeInstanceListView::Managed);
+        assert_eq!(query.status, Some(RuntimeInstanceStatusFilter::Approved));
+
+        assert!(serde_json::from_value::<InstanceListQuery>(json!({
+            "view": "mine",
+            "unexpected": true
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn list_cursor_only_encodes_and_decodes_protocol_shape() {
+        let cross = InstanceListCursor::decode("mine|1|wi-1", RuntimeInstanceListView::Started);
+        assert!(cross.unwrap_err().contains("跨 view"));
+        assert!(
+            InstanceListCursor::decode("mine|not-a-time|wi-1", RuntimeInstanceListView::Mine,)
+                .unwrap_err()
+                .contains("整数")
+        );
+        assert!(
+            InstanceListCursor::decode("mine|9223372036854775808|wi-1", RuntimeInstanceListView::Mine,)
+                .is_err()
+        );
+
+        for sort_time in [i64::MIN, i64::MAX] {
+            let encoded = InstanceListCursor::from_runtime(
+                RuntimeInstanceListView::Mine,
+                RuntimeInstanceListCursor {
+                    sort_time,
+                    id: "wi-1".to_string(),
+                },
+            )
+            .encode();
+            let decoded = InstanceListCursor::decode(&encoded, RuntimeInstanceListView::Mine)
+                .expect("同 view 的完整 i64 时间域");
+            assert_eq!(decoded.sort_time, sort_time);
+            assert_eq!(decoded.id, "wi-1");
+        }
+
+        let first_page = InstanceListQuery {
+            view: RuntimeInstanceListView::Mine,
             document_type: None,
-            status: Some(InstanceStatusFilter::Blocked),
+            status: None,
             cursor: None,
             limit: None,
             q: None,
         };
-        assert!(mine.normalize().is_err());
-        let blocked = InstanceListQuery {
-            view: InstanceListView::Blocked,
-            document_type: None,
-            status: Some(InstanceStatusFilter::Running),
-            cursor: None,
-            limit: Some(20),
-            q: None,
+        assert_eq!(first_page.decode_cursor().expect("未提交 cursor"), None);
+
+        let empty = InstanceListQuery {
+            cursor: Some(String::new()),
+            ..first_page.clone()
         };
-        assert!(blocked.normalize().is_err());
-        let managed = InstanceListQuery {
-            view: InstanceListView::Managed,
-            document_type: None,
-            status: Some(InstanceStatusFilter::Approved),
-            cursor: None,
-            limit: Some(20),
-            q: Some("  SO-1  ".to_string()),
+        assert!(empty.decode_cursor().unwrap_err().contains("不能为空"));
+
+        let negative_mine = InstanceListQuery {
+            cursor: Some("mine|-1|wi-1".to_string()),
+            ..first_page.clone()
         };
-        let normalized = managed.normalize().expect("合法组合");
-        assert_eq!(normalized.query.as_deref(), Some("SO-1"));
-        let too_long = InstanceListQuery {
-            q: Some("a".repeat(super::INSTANCE_QUERY_MAX_LEN + 1)),
-            ..managed
+        assert!(negative_mine.decode_cursor().unwrap_err().contains("不能为负数"));
+
+        let negative_managed = InstanceListQuery {
+            view: RuntimeInstanceListView::Managed,
+            cursor: Some("managed|-1|inst-1".to_string()),
+            ..first_page
         };
-        assert!(too_long.normalize().unwrap_err().contains("q 不能超过"));
-        let cross = InstanceListCursor::decode("mine|1|wi-1", InstanceListView::Started);
-        assert!(cross.unwrap_err().contains("跨 view"));
-        let encoded = InstanceListCursor {
-            view: InstanceListView::Mine,
-            sort_primary: "9".to_string(),
-            sort_id: "wi-1".to_string(),
-        }
-        .encode();
-        let decoded = InstanceListCursor::decode(&encoded, InstanceListView::Mine).expect("同 view");
-        assert_eq!(decoded.sort_id, "wi-1");
+        assert_eq!(
+            negative_managed
+                .decode_cursor()
+                .expect("Managed 使用完整 i64 时间域")
+                .expect("有 cursor")
+                .sort_time,
+            -1
+        );
         assert_eq!(DETAIL_HISTORY_LIMIT, 20);
     }
 
