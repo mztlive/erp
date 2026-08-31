@@ -94,6 +94,8 @@ pub struct StockBalanceView {
     pub last_movement_type: Option<MovementType>,
     /// 是否存在有效预占。
     pub has_active_reservation: bool,
+    /// 服务端按当前调用人签发的余额动作。
+    pub allowed_actions: Vec<String>,
 }
 
 /// 库存流水列表视图（正式事实）。
@@ -927,9 +929,11 @@ mod tests {
             last_movement_at: None,
             last_movement_type: None,
             has_active_reservation: false,
+            allowed_actions: vec!["CREATE_ADJUSTMENT".to_string()],
         })
         .unwrap();
         assert_eq!(value["version"], serde_json::json!("9007199254740993"));
+        assert_eq!(value["allowed_actions"], serde_json::json!(["CREATE_ADJUSTMENT"]));
     }
 
     /// 库存调整列表、详情及 PUT 响应的版本不得经过 JSON number。

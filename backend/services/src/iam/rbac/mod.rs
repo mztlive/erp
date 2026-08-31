@@ -89,6 +89,24 @@ impl RolePermissionSnapshot {
             .collect()
     }
 
+    /// 返回同时授予全部指定权限的角色，保持冻结角色顺序。
+    ///
+    /// 权限交集必须在同一角色内完成；调用方不得分别汇总不同角色的授权结果。
+    pub(crate) fn granting_role_ids_for_all(&self, permissions: &[Permission]) -> Vec<String> {
+        if permissions.is_empty() {
+            return Vec::new();
+        }
+        self.role_ids
+            .iter()
+            .filter(|role_id| {
+                self.grants
+                    .get(*role_id)
+                    .is_some_and(|grants| permissions.iter().all(|permission| grants.contains(permission)))
+            })
+            .cloned()
+            .collect()
+    }
+
     /// 返回冻结 Enforcer 对应的 policy revision。
     pub(crate) fn policy_revision(&self) -> u64 {
         self.policy_revision
@@ -1442,19 +1460,49 @@ mod tests {
     #[test]
     fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
         let permission = Permission::parse("approval_instance:decide").unwrap();
+        let read = Permission::parse("stock_adjustment:detail").unwrap();
+        let create = Permission::parse("stock_adjustment:create").unwrap();
         let snapshot = RolePermissionSnapshot {
-            role_ids: vec!["role-a".to_string(), "role-b".to_string()],
-            grants: HashMap::from([("role-b".to_string(), HashSet::from([permission.clone()]))]),
+            role_ids: vec!["role-a".to_string(), "role-b".to_string(), "role-c".to_string()],
+            grants: HashMap::from([
+                ("role-a".to_string(), HashSet::from([read.clone()])),
+                (
+                    "role-b".to_string(),
+                    HashSet::from([permission.clone(), read.clone(), create.clone()]),
+                ),
+                ("role-c".to_string(), HashSet::from([create.clone()])),
+            ]),
             policy_revision: 7,
         };
-        assert_eq!(snapshot.role_ids(), &["role-a", "role-b"]);
+        assert_eq!(snapshot.role_ids(), &["role-a", "role-b", "role-c"]);
         assert_eq!(snapshot.granting_role_ids(&permission), vec!["role-b"]);
+        assert_eq!(
+            snapshot.granting_role_ids_for_all(&[read, create]),
+            vec!["role-b"]
+        );
         assert_eq!(snapshot.policy_revision(), 7);
         assert!(ensure_policy_snapshot_revision(7, 7).is_ok());
         assert!(matches!(
             ensure_policy_snapshot_revision(7, 8),
             Err(Error::Rbac(message)) if message.contains("授权策略版本已变化")
         ));
+    }
+
+    #[test]
+    fn all_required_permissions_cannot_be_spliced_across_roles() {
+        let detail = Permission::parse("stock_adjustment:detail").unwrap();
+        let create = Permission::parse("stock_adjustment:create").unwrap();
+        let snapshot = RolePermissionSnapshot {
+            role_ids: vec!["role-detail".to_string(), "role-create".to_string()],
+            grants: HashMap::from([
+                ("role-detail".to_string(), HashSet::from([detail.clone()])),
+                ("role-create".to_string(), HashSet::from([create.clone()])),
+            ]),
+            policy_revision: 9,
+        };
+
+        assert!(snapshot.granting_role_ids_for_all(&[detail, create]).is_empty());
+        assert!(snapshot.granting_role_ids_for_all(&[]).is_empty());
     }
 
     #[test]

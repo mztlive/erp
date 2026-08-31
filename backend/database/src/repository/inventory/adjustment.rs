@@ -52,8 +52,8 @@ pub struct StockAdjustmentRow {
 /// 库存调整单列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct StockAdjustmentFilter {
-    /// 仓库；`None` 表示不筛选。
-    pub warehouse_id: Option<WarehouseId>,
+    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// 单据状态；`None` 表示不筛选。
     pub status: Option<StockAdjustmentState>,
     /// 页码（1 起）。
@@ -73,8 +73,11 @@ impl QueryFilter for StockAdjustmentFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_id) = &self.warehouse_id {
-            filter.insert("warehouse_id", warehouse_id.to_string());
+        if let Some(warehouse_ids) = &self.warehouse_ids {
+            filter.insert(
+                "warehouse_id",
+                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+            );
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -125,11 +128,7 @@ impl<'a> Repository<'a, StockAdjustment> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockAdjustmentRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "adjustment_no"],
-            ))
+            .sort(stock_adjustment_sort(filter))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(stock_adjustment_projection())
@@ -142,6 +141,17 @@ impl<'a> Repository<'a, StockAdjustment> {
             total: total as i64,
         })
     }
+}
+
+/// 为调整单分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+fn stock_adjustment_sort(filter: &StockAdjustmentFilter) -> Document {
+    let mut sort = sort_doc(
+        filter.sort_by.as_deref(),
+        filter.sort_ascending,
+        &["created_at", "adjustment_no"],
+    );
+    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
+    sort
 }
 
 impl<'a> InventoryRepository<'a> {
@@ -398,5 +408,55 @@ fn stock_adjustment_projection() -> Document {
         "occurred_at": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod filter_tests {
+    use super::{stock_adjustment_sort, StockAdjustmentFilter};
+    use crate::repository::QueryFilter;
+    use entities::ids::WarehouseId;
+    use mongodb::bson::{doc, Bson};
+
+    fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockAdjustmentFilter {
+        StockAdjustmentFilter {
+            warehouse_ids,
+            status: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+
+    #[test]
+    fn authorized_warehouse_filter_is_applied_before_page_and_total_queries() {
+        assert_eq!(
+            filter(Some(vec![WarehouseId::new("warehouse-1")]))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap(),
+            &doc! { "$in": ["warehouse-1"] }
+        );
+        assert_eq!(
+            filter(Some(Vec::new()))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &Vec::<Bson>::new()
+        );
+        assert!(!filter(None).to_doc().contains_key("warehouse_id"));
+    }
+
+    #[test]
+    fn adjustment_sort_uses_unique_id_as_same_direction_tie_breaker() {
+        let mut value = filter(None);
+        value.sort_by = Some("created_at".to_string());
+        value.sort_ascending = true;
+        assert_eq!(stock_adjustment_sort(&value), doc! { "created_at": 1, "id": 1 });
+        value.sort_ascending = false;
+        assert_eq!(stock_adjustment_sort(&value), doc! { "created_at": -1, "id": -1 });
     }
 }

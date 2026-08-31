@@ -340,7 +340,11 @@ fn message_of(code: ErrorCode) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use axum::{body::to_bytes, http::HeaderValue, response::IntoResponse};
+    use axum::{
+        body::to_bytes,
+        http::{HeaderValue, StatusCode},
+        response::IntoResponse,
+    };
     use serde_json::Value;
 
     use services::ErrorCode;
@@ -423,6 +427,33 @@ mod tests {
         assert_eq!(
             body["errorMessage"],
             "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员"
+        );
+    }
+
+    /// 库存调整更新的越权与不存在必须经实际 Handler 适配器保持不可区分。
+    #[tokio::test]
+    async fn stock_adjustment_update_hidden_failures_have_identical_http_projection() {
+        async fn project(error: services::Error) -> (StatusCode, Value) {
+            let response =
+                ApprovalHttpError::from_service(error, &axum::http::HeaderMap::new()).into_response();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("response body should be readable");
+            let body = serde_json::from_slice(&body).expect("response body should be valid JSON");
+            (status, body)
+        }
+
+        let unauthorized = project(services::Error::NotFound("库存调整单不存在".to_string())).await;
+        let missing = project(services::Error::NotFound("库存调整单不存在".to_string())).await;
+
+        assert_eq!(unauthorized, missing);
+        assert_eq!(unauthorized.0, StatusCode::NOT_FOUND);
+        assert_eq!(unauthorized.1["status"], 404);
+        assert_eq!(unauthorized.1["code"], "NOT_FOUND");
+        assert_eq!(
+            unauthorized.1["errorMessage"],
+            "库存调整单不存在，请刷新后重新选择"
         );
     }
 }

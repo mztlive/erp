@@ -266,7 +266,7 @@ export function InventoryLedgerPage() {
             )?.name
             chips.push({
                 key: "warehouseId",
-                label: `仓库：${warehouseLabel ?? warehouseId}`,
+                label: `仓库：${warehouseLabel ?? "已选仓库"}`,
             })
         }
         if (view === "balance" && availability !== "all") {

@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 
 use database::{
     AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction, Transactional,
-    WorkItemExt,
+    WarehouseExt, WorkItemExt,
 };
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
@@ -49,10 +49,13 @@ use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 
 use self::adapter::{
-    build_stock_adjustment_snapshot, execute_stock_adjustment_domain_action, require_frozen_binding,
-    start_approval_command_kind, stock_adjustment_adapter, stock_adjustment_start_command,
-    stock_adjustment_subject_ref, RECENT_HISTORY_LIMIT,
+    build_stock_adjustment_snapshot, document_approval_view_with_history,
+    execute_stock_adjustment_domain_action, require_frozen_binding, start_approval_command_kind,
+    stock_adjustment_adapter, stock_adjustment_start_command, stock_adjustment_subject_ref,
+    RECENT_HISTORY_LIMIT,
 };
+use self::authorization::stock_adjustment_authorization_with_executor;
+use self::dto::DocumentApprovalHistoryPageView;
 use self::dto::SortDir;
 pub use self::dto::{
     CancelStockAdjustmentApprovalRequest, CancelStockAdjustmentApprovalTokenView,
@@ -66,6 +69,7 @@ pub use self::dto::{
 
 mod adapter;
 mod approval_query;
+mod authorization;
 mod cancel_approval;
 mod dto;
 mod start_approval;
@@ -108,6 +112,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `params` - 查询参数（`warehouse_id`/`sku_id` 扁平筛选）
+    /// * `actor` - 当前认证操作人，用于计算余额范围与调整动作
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
@@ -123,21 +128,41 @@ impl InventoryService {
     pub async fn stock_balance_list(
         &self,
         params: &StockBalanceListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<StockBalanceView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = StockBalanceFilter {
-            warehouse_id: query.warehouse_id,
-            sku_id: query.sku_id,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .stock_balances()
-            .search_stock_balances(&filter, &mut NoTransaction)
+        let page_no = query.paging.page;
+        let page_size = query.paging.page_size;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let client = db.client().clone();
+        let (page, authorization) = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let authorization =
+                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    if !authorization.actor_is_active() {
+                        return Err(Error::Forbidden("当前账号无库存读取权限".to_string()));
+                    }
+                    let filter = StockBalanceFilter {
+                        warehouse_ids: authorization
+                            .balance_list_scope()
+                            .repository_warehouse_ids(query.warehouse_id),
+                        sku_id: query.sku_id,
+                        page: query.paging.page,
+                        page_size: query.paging.page_size,
+                        sort_by: Some(query.paging.sort_by.to_string()),
+                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                    };
+                    let page = db
+                        .stock_balances()
+                        .search_stock_balances(&filter, session)
+                        .await?;
+                    Ok::<_, Error>((page, authorization))
+                })
+            })
             .await?;
         let warehouse_ids: Vec<String> = page
             .items
@@ -195,6 +220,9 @@ impl InventoryService {
                         .map(|movement| movement.movement_type),
                     has_active_reservation: active_reservation_dims
                         .contains(&(row.warehouse_id.to_string(), row.sku_id.to_string())),
+                    allowed_actions: balance_allowed_actions(
+                        warehouse.is_some() && authorization.can_create(row.warehouse_id.as_ref()),
+                    ),
                 }
             })
             .collect();
@@ -202,8 +230,8 @@ impl InventoryService {
         Ok(PageView {
             items,
             total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            page: page_no,
+            page_size,
         })
     }
 
@@ -211,6 +239,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `id` - 余额主键
+    /// * `actor` - 当前认证操作人，用于验证余额范围与调整动作
     ///
     /// # 返回
     /// 返回余额详情视图。
@@ -223,13 +252,31 @@ impl InventoryService {
         skip_all,
         fields(layer = "service", domain = "inventory", operation = "stock_balance_detail")
     )]
-    pub async fn stock_balance_detail(&self, id: &str) -> Result<StockBalanceDetailView> {
-        let balance = self
-            .db
-            .inventory()
-            .stock_balance(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+    pub async fn stock_balance_detail(&self, id: &str, actor: &AuditActor) -> Result<StockBalanceDetailView> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let id = id.to_string();
+        let client = db.client().clone();
+        let (balance, authorization) = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let authorization =
+                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    let balance = db
+                        .inventory()
+                        .stock_balance(&id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+                    if !authorization.actor_is_active()
+                        || !authorization.can_read_balance_detail(balance.warehouse_id.as_ref())
+                    {
+                        return Err(Error::NotFound("库存余额不存在".to_string()));
+                    }
+                    Ok::<_, Error>((balance, authorization))
+                })
+            })
+            .await?;
         let filter = StockMovementFilter {
             warehouse_id: Some(balance.warehouse_id.clone()),
             sku_id: Some(balance.sku_id.clone()),
@@ -252,11 +299,14 @@ impl InventoryService {
             .inventory()
             .operable_reservations_for_balance(&balance.warehouse_id, &balance.sku_id, &mut NoTransaction)
             .await?;
-        let pending = self
-            .db
-            .inventory()
-            .pending_adjustments_for_warehouse(&balance.warehouse_id, &mut NoTransaction)
-            .await?;
+        let pending = if authorization.read_scope().covers(balance.warehouse_id.as_ref()) {
+            self.db
+                .inventory()
+                .pending_adjustments_for_warehouse(&balance.warehouse_id, &mut NoTransaction)
+                .await?
+        } else {
+            Vec::new()
+        };
         let enrichments = self
             .load_enrichments(
                 &[balance.warehouse_id.to_string()],
@@ -264,7 +314,12 @@ impl InventoryService {
                 &[],
             )
             .await?;
-        let balance_view = build_balance_view(&balance, &enrichments, !reservations.is_empty());
+        let balance_view = build_balance_view(
+            &balance,
+            &enrichments,
+            !reservations.is_empty(),
+            authorization.can_create(balance.warehouse_id.as_ref()),
+        );
         let mut recent_movements: Vec<StockMovementView> = movements
             .items
             .into_iter()
@@ -428,6 +483,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `params` - 查询参数（仓库/状态筛选）
+    /// * `actor` - 当前认证操作人，用于计算对象读取范围
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -443,21 +499,41 @@ impl InventoryService {
     pub async fn stock_adjustment_list(
         &self,
         params: &StockAdjustmentListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<StockAdjustmentView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = StockAdjustmentFilter {
-            warehouse_id: query.warehouse_id,
-            status: query.status,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .stock_adjustments()
-            .search_stock_adjustments(&filter, &mut NoTransaction)
+        let page_no = query.paging.page;
+        let page_size = query.paging.page_size;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let client = db.client().clone();
+        let page = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let authorization =
+                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    if !authorization.actor_is_active() {
+                        return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
+                    }
+                    let filter = StockAdjustmentFilter {
+                        warehouse_ids: authorization
+                            .adjustment_list_scope()
+                            .repository_warehouse_ids(query.warehouse_id),
+                        status: query.status,
+                        page: query.paging.page,
+                        page_size: query.paging.page_size,
+                        sort_by: Some(query.paging.sort_by.to_string()),
+                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                    };
+                    Ok::<_, Error>(
+                        db.stock_adjustments()
+                            .search_stock_adjustments(&filter, session)
+                            .await?,
+                    )
+                })
+            })
             .await?;
         let items = page
             .items
@@ -480,8 +556,8 @@ impl InventoryService {
         Ok(PageView {
             items,
             total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            page: page_no,
+            page_size,
         })
     }
 
@@ -521,12 +597,7 @@ impl InventoryService {
         actor: &AuditActor,
         approval_instance: Option<(&str, u32)>,
     ) -> Result<StockAdjustmentDetailView> {
-        let adjustment = self
-            .db
-            .inventory()
-            .stock_adjustment(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+        let adjustment = self.readable_stock_adjustment(id, actor).await?;
         let lines = self
             .db
             .inventory()
@@ -559,6 +630,36 @@ impl InventoryService {
             lines: lines.into_iter().map(Into::into).collect(),
             posted_movements: movements.into_iter().map(Into::into).collect(),
         })
+    }
+
+    /// 在同一快照内加载表头并验证对象读取范围；拒绝结果隐藏资源存在性。
+    async fn readable_stock_adjustment(&self, id: &str, actor: &AuditActor) -> Result<StockAdjustment> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let id = id.to_string();
+        let actor = actor.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let authorization =
+                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    let adjustment = db
+                        .inventory()
+                        .stock_adjustment(&id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+                    if !authorization.actor_is_active()
+                        || !authorization
+                            .read_scope()
+                            .covers(adjustment.warehouse_id.as_ref())
+                    {
+                        return Err(Error::NotFound("库存调整单不存在".to_string()));
+                    }
+                    Ok::<_, Error>(adjustment)
+                })
+            })
+            .await
     }
 
     /// 创建库存调整单（草稿，跨集合：表头 + 明细 + 绑定 + 审计）。
@@ -639,8 +740,7 @@ impl InventoryService {
                 expected_balance_version,
             },
         )
-        .await?;
-        self.stock_adjustment_detail(id.as_ref(), actor).await
+        .await
     }
 
     /// 更新库存调整单（仅草稿/驳回；乐观锁语义）。
@@ -673,36 +773,44 @@ impl InventoryService {
         actor: &AuditActor,
     ) -> Result<StockAdjustmentView> {
         req.validate()?;
-        let mut adjustment = self
-            .db
-            .inventory()
-            .stock_adjustment(id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
-        if !adjustment.matches_version(req.version) {
-            return Err(Error::ConflictError(
-                "数据已被其他请求修改，请刷新后重试".to_string(),
-            ));
-        }
         let line_updates = build_adjustment_line_updates(req.lines.as_deref().unwrap_or_default())?;
         let requires_line_validation = req.reason_type.is_some() || !line_updates.is_empty();
-        adjustment.update(StockAdjustmentUpdate {
-            reason_type: req.reason_type,
-            reviewed_by: None,
-            finance_reviewed_by: None,
-            note: req.note,
-            occurred_at: req.occurred_at.map(Instant::from_unix_secs),
-        })?;
         let audit =
             actor
                 .clone()
                 .resource_log("stock_adjustment.update", "stock_adjustment", id.to_string())?;
         let db = self.db.clone();
+        let rbac = self.rbac.clone();
         let client = db.client().clone();
         let adjustment_id = StockAdjustmentId::new(id.to_string());
+        let actor = actor.clone();
         let updated = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    let authorization =
+                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    let mut adjustment = db
+                        .inventory()
+                        .stock_adjustment(adjustment_id.as_ref(), session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("库存调整单不存在".to_string()))?;
+                    if !authorization.actor_is_active()
+                        || !authorization.can_update(adjustment.warehouse_id.as_ref())
+                    {
+                        return Err(Error::NotFound("库存调整单不存在".to_string()));
+                    }
+                    if !adjustment.matches_version(req.version) {
+                        return Err(Error::ConflictError(
+                            "数据已被其他请求修改，请刷新后重试".to_string(),
+                        ));
+                    }
+                    adjustment.update(StockAdjustmentUpdate {
+                        reason_type: req.reason_type,
+                        reviewed_by: None,
+                        finance_reviewed_by: None,
+                        note: req.note,
+                        occurred_at: req.occurred_at.map(Instant::from_unix_secs),
+                    })?;
                     if requires_line_validation {
                         let mut existing = db
                             .inventory()
@@ -1391,7 +1499,7 @@ async fn persist_created_adjustment(
     db: &Database,
     rbac: &SharedRbacService,
     persist: CreatedAdjustmentPersist,
-) -> Result<()> {
+) -> Result<StockAdjustmentDetailView> {
     let CreatedAdjustmentPersist {
         adjustment,
         lines,
@@ -1408,26 +1516,94 @@ async fn persist_created_adjustment(
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                let authorization =
+                    stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                if !authorization.actor_is_active()
+                    || !authorization.can_create(adjustment.warehouse_id.as_ref())
+                {
+                    return Err(Error::Forbidden("无权在该仓库创建库存调整单".to_string()));
+                }
+                db.warehouse()
+                    .warehouse(adjustment.warehouse_id.as_ref(), session)
+                    .await?
+                    .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
                 let balance = db
                     .inventory()
                     .stock_balance(&balance_id, session)
                     .await?
                     .ok_or_else(|| Error::NotFound("库存余额不存在".to_string()))?;
+                if balance.warehouse_id != adjustment.warehouse_id {
+                    return Err(Error::NotFound("库存余额不存在".to_string()));
+                }
                 if !balance.matches_version(expected_balance_version) {
                     return Err(Error::ConflictError("库存余额已变化，请刷新后重试".to_string()));
                 }
                 if !balance.matches_adjustment_dimensions(&adjustment, &lines) {
                     return Err(Error::ValidationError("库存余额与调整单维度不一致".to_string()));
                 }
+                let can_submit =
+                    match start_approval::ensure_stock_adjustment_submit_authorized_with_executor(
+                        &db,
+                        &rbac,
+                        &adjustment,
+                        &actor,
+                        session,
+                    )
+                    .await
+                    {
+                        Ok(()) => true,
+                        Err(Error::Forbidden(_)) => false,
+                        Err(error) => return Err(error),
+                    };
                 db.inventory()
                     .create_stock_adjustment_with_lines(&adjustment, &lines, session)
                     .await?;
-                persist_bound_document(&db, &rbac, &mut document, &bind_command, &actor, session).await?;
+                let binding =
+                    persist_bound_document(&db, &rbac, &mut document, &bind_command, &actor, session).await?;
                 db.audit_logs().create(&audit, session).await?;
-                Ok::<(), crate::errors::Error>(())
+                created_adjustment_detail(adjustment, lines, binding, can_submit)
             })
         })
         .await
+}
+
+/// 使用创建事务已持有的事实构造成功响应，避免提交后再次授权或查询失败。
+fn created_adjustment_detail(
+    adjustment: StockAdjustment,
+    lines: Vec<StockAdjustmentLine>,
+    binding: ApprovalDefinitionBinding,
+    can_submit: bool,
+) -> Result<StockAdjustmentDetailView> {
+    let submit_command = if can_submit {
+        let expected_subject_version = adjustment
+            .approval_subject_version
+            .checked_add(1)
+            .ok_or_else(|| Error::ConflictError("库存调整审批主题版本已达上限".to_string()))?;
+        Some(SubmitStockAdjustmentApprovalTokenView {
+            expected_version: adjustment.base.version.to_string(),
+            expected_subject_version: expected_subject_version.to_string(),
+        })
+    } else {
+        None
+    };
+    let approval = document_approval_view_with_history(
+        Some(&binding),
+        None,
+        Vec::new(),
+        DocumentApprovalHistoryPageView {
+            next_cursor: None,
+            has_more: false,
+        },
+        adjustment.status,
+        submit_command,
+        None,
+    );
+    Ok(StockAdjustmentDetailView {
+        adjustment: adjustment.into(),
+        lines: lines.into_iter().map(Into::into).collect(),
+        posted_movements: Vec::new(),
+        approval,
+    })
 }
 
 /// 把服务输入转换为已解析的调整明细更新值对象。
@@ -1488,12 +1664,13 @@ async fn persist_bound_document(
     bind_command: &BindPublishedDefinitionCommand,
     actor: &AuditActor,
     session: &mut mongodb::ClientSession,
-) -> Result<()> {
+) -> Result<ApprovalDefinitionBinding> {
     let binding =
         bind_published_definition_on_document_create(db, rbac, bind_command, actor, session).await?;
     let binding = binding.ok_or_else(|| Error::Internal("库存调整单必须绑定已发布定义".to_string()))?;
-    attach_published_binding(document, binding)?;
-    persist_registered_document(db, document, session).await
+    attach_published_binding(document, binding.clone())?;
+    persist_registered_document(db, document, session).await?;
+    Ok(binding)
 }
 
 /// 余额列表/详情的基础信息投影映射。
@@ -1948,6 +2125,7 @@ fn build_balance_view(
     balance: &StockBalance,
     enrichments: &BalanceEnrichments,
     has_active_reservation: bool,
+    can_create_adjustment: bool,
 ) -> StockBalanceView {
     let warehouse = enrichments.warehouses.get(&balance.warehouse_id.to_string());
     let warehouse_name = warehouse
@@ -1985,7 +2163,15 @@ fn build_balance_view(
             .and_then(|id| enrichments.movements.get(&id.to_string()))
             .map(|movement| movement.movement_type),
         has_active_reservation,
+        allowed_actions: balance_allowed_actions(can_create_adjustment && warehouse.is_some()),
     }
+}
+
+fn balance_allowed_actions(can_create_adjustment: bool) -> Vec<String> {
+    can_create_adjustment
+        .then(|| "CREATE_ADJUSTMENT".to_string())
+        .into_iter()
+        .collect()
 }
 
 impl From<StockMovement> for StockMovementView {
@@ -2059,7 +2245,7 @@ impl From<StockAdjustmentLine> for StockAdjustmentLineView {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_adjustment_lines, StockAdjustmentLineInput};
+    use super::{balance_allowed_actions, build_adjustment_lines, StockAdjustmentLineInput};
     use entities::ids::{SkuId, StockAdjustmentId};
     use entities::inventory::{AdjustmentReasonType, MovementDirection};
     use entities::money::Quantity;
@@ -2101,5 +2287,14 @@ mod tests {
             }],
         );
         assert!(invalid_direction.is_err(), "盘亏明细必须为减少方向");
+    }
+
+    #[test]
+    fn balance_create_action_is_only_emitted_from_server_authorization() {
+        assert!(balance_allowed_actions(false).is_empty());
+        assert_eq!(
+            balance_allowed_actions(true),
+            vec!["CREATE_ADJUSTMENT".to_string()]
+        );
     }
 }

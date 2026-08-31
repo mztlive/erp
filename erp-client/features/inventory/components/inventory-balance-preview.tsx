@@ -90,33 +90,32 @@ function InventoryBalancePreview({
                         >
                             查看全部流水
                         </Button>
-                        <Button
-                            id="inventory-balance-preview-start-adjustment"
-                            type="button"
-                            disabled={
-                                isCreating ||
-                                !detail.balance.allowedActions.includes(
-                                    "CREATE_ADJUSTMENT",
-                                )
-                            }
-                            title={
-                                detail.balance.actionBlockers.find(
-                                    (b) => b.action === "CREATE_ADJUSTMENT",
-                                )?.message
-                            }
-                            onClick={() =>
-                                void onStartAdjustment(detail.balance)
-                            }
-                        >
-                            {isCreating ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
-                            {isCreating ? "创建中…" : "发起库存调整"}
-                        </Button>
+                        {detail.balance.allowedActions.includes(
+                            "CREATE_ADJUSTMENT",
+                        ) ? (
+                            <Button
+                                id="inventory-balance-preview-start-adjustment"
+                                type="button"
+                                disabled={isCreating}
+                                title={
+                                    detail.balance.actionBlockers.find(
+                                        (b) => b.action === "CREATE_ADJUSTMENT",
+                                    )?.message
+                                }
+                                onClick={() =>
+                                    void onStartAdjustment(detail.balance)
+                                }
+                            >
+                                {isCreating ? (
+                                    <LoaderCircleIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                        className="animate-spin"
+                                    />
+                                ) : null}
+                                {isCreating ? "创建中…" : "发起库存调整"}
+                            </Button>
+                        ) : null}
                     </>
                 ) : null
             }

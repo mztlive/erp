@@ -47,6 +47,7 @@ import type {
 
 const U64_MAX_DECIMAL = "18446744073709551615"
 const U32_MAX_DECIMAL = "4294967295"
+const AUTHORIZED_WAREHOUSE_LABEL = "已授权仓库"
 
 function isCanonicalPositiveDecimalWithin(
     value: unknown,
@@ -143,6 +144,14 @@ function balanceStatus(row: BackendStockBalance): {
     return { statusLabel: "有可用", statusTone: "success" }
 }
 
+function balanceAllowedActions(
+    value: BackendStockBalance["allowed_actions"],
+): StockBalanceRow["allowedActions"] {
+    return Array.isArray(value) && value.includes("CREATE_ADJUSTMENT")
+        ? ["CREATE_ADJUSTMENT"]
+        : []
+}
+
 export function mapBalance(b: BackendStockBalance): StockBalanceRow {
     const { statusLabel, statusTone } = balanceStatus(b)
     return {
@@ -169,7 +178,7 @@ export function mapBalance(b: BackendStockBalance): StockBalanceRow {
         statusTone,
         hasActiveReservation: b.has_active_reservation,
         stockKind: "OWN_PHYSICAL",
-        allowedActions: ["CREATE_ADJUSTMENT", "VIEW_SOURCE"],
+        allowedActions: balanceAllowedActions(b.allowed_actions),
         actionBlockers: [],
     }
 }
@@ -192,7 +201,7 @@ export function mapMovement(
         movementId: m.id,
         balanceId: `${m.warehouse_id}:${m.sku_id}`,
         warehouseId: m.warehouse_id,
-        warehouseName: labels?.warehouseName ?? m.warehouse_id,
+        warehouseName: labels?.warehouseName ?? AUTHORIZED_WAREHOUSE_LABEL,
         skuId: m.sku_id,
         skuCode: labels?.skuCode ?? m.sku_id,
         skuName: labels?.skuName ?? m.sku_id,
@@ -225,7 +234,7 @@ export function mapReservation(
         reservationId: r.id,
         balanceId: `${r.warehouse_id}:${r.sku_id}`,
         warehouseId: r.warehouse_id,
-        warehouseName: r.warehouse_id, // backend_gap: no warehouse/sku names on reservation view
+        warehouseName: AUTHORIZED_WAREHOUSE_LABEL, // backend_gap: no warehouse/sku names on reservation view
         skuId: r.sku_id,
         skuCode: r.sku_id,
         skuName: r.sku_id,
@@ -365,7 +374,7 @@ export function mapAdjustment(
         adjustmentNo: a.adjustment_no,
         balanceId: line ? `${a.warehouse_id}:${line.sku_id}` : a.warehouse_id,
         warehouseId: a.warehouse_id,
-        warehouseName: a.warehouse_id, // backend_gap
+        warehouseName: AUTHORIZED_WAREHOUSE_LABEL, // backend_gap
         skuId: line?.sku_id ?? "",
         skuCode: line?.sku_id ?? "",
         skuName: line?.sku_id ?? "",
@@ -402,7 +411,7 @@ export function toDraftView(
         adjustmentNo: a.adjustment_no,
         balanceId: line ? `${a.warehouse_id}:${line.sku_id}` : a.warehouse_id,
         warehouseId: a.warehouse_id,
-        warehouseName: a.warehouse_id,
+        warehouseName: AUTHORIZED_WAREHOUSE_LABEL,
         skuId: line?.sku_id ?? "",
         skuCode: line?.sku_id ?? "",
         skuName: line?.sku_id ?? "",

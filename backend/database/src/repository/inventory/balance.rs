@@ -38,8 +38,8 @@ pub struct StockBalanceRow {
 /// 库存余额列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct StockBalanceFilter {
-    /// 仓库；`None` 表示不筛选。
-    pub warehouse_id: Option<WarehouseId>,
+    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
     pub sku_id: Option<SkuId>,
     /// 页码（1 起）。
@@ -59,8 +59,11 @@ impl QueryFilter for StockBalanceFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_id) = &self.warehouse_id {
-            filter.insert("warehouse_id", warehouse_id.to_string());
+        if let Some(warehouse_ids) = &self.warehouse_ids {
+            filter.insert(
+                "warehouse_id",
+                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+            );
         }
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
@@ -111,11 +114,7 @@ impl<'a> Repository<'a, StockBalance> {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockBalanceRow>> {
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["sku_id", "created_at"],
-            ))
+            .sort(stock_balance_sort(filter))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(stock_balance_projection())
@@ -377,6 +376,17 @@ impl<'a> Repository<'a, StockBalance> {
     }
 }
 
+/// 为余额分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+fn stock_balance_sort(filter: &StockBalanceFilter) -> Document {
+    let mut sort = sort_doc(
+        filter.sort_by.as_deref(),
+        filter.sort_ascending,
+        &["sku_id", "created_at"],
+    );
+    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
+    sort
+}
+
 impl<'a> InventoryRepository<'a> {
     /// 按主键读取未删除的库存余额。
     ///
@@ -483,5 +493,55 @@ fn stock_balance_projection() -> Document {
         "available_quantity": 1,
         "last_movement_id": 1,
         "version": 1,
+    }
+}
+
+#[cfg(test)]
+mod filter_tests {
+    use super::{stock_balance_sort, StockBalanceFilter};
+    use crate::repository::QueryFilter;
+    use entities::ids::WarehouseId;
+    use mongodb::bson::{doc, Bson};
+
+    fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockBalanceFilter {
+        StockBalanceFilter {
+            warehouse_ids,
+            sku_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+
+    #[test]
+    fn authorized_warehouse_filter_is_applied_before_page_and_total_queries() {
+        assert_eq!(
+            filter(Some(vec![WarehouseId::new("warehouse-1")]))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap(),
+            &doc! { "$in": ["warehouse-1"] }
+        );
+        assert_eq!(
+            filter(Some(Vec::new()))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &Vec::<Bson>::new()
+        );
+        assert!(!filter(None).to_doc().contains_key("warehouse_id"));
+    }
+
+    #[test]
+    fn balance_sort_uses_unique_id_as_same_direction_tie_breaker() {
+        let mut value = filter(None);
+        value.sort_by = Some("sku_id".to_string());
+        value.sort_ascending = true;
+        assert_eq!(stock_balance_sort(&value), doc! { "sku_id": 1, "id": 1 });
+        value.sort_ascending = false;
+        assert_eq!(stock_balance_sort(&value), doc! { "sku_id": -1, "id": -1 });
     }
 }

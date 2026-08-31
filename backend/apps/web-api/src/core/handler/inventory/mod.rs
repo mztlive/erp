@@ -188,15 +188,19 @@ impl StockAdjustmentSubmitResultHttpQuery {
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前认证操作人，用于服务端范围与动作投影
 /// * `query` - 分页与筛选参数（`warehouse_id`/`sku_id` 扁平传递）
 ///
 /// # 返回
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
 pub async fn stock_balance_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockBalanceListParams>,
 ) -> Result<PageView<StockBalanceView>> {
-    let page = inventory_service(&state).stock_balance_list(&params).await?;
+    let page = inventory_service(&state)
+        .stock_balance_list(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -212,15 +216,19 @@ pub async fn stock_balance_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前认证操作人，用于服务端范围与动作投影
 /// * `id` - 余额主键
 ///
 /// # 返回
 /// 返回余额详情视图。
 pub async fn stock_balance_detail(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
 ) -> Result<StockBalanceDetailView> {
-    let view = inventory_service(&state).stock_balance_detail(&id).await?;
+    let view = inventory_service(&state)
+        .stock_balance_detail(&id, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -284,15 +292,19 @@ pub async fn stock_reservation_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前认证操作人，用于服务端对象读取范围
 /// * `query` - 分页与筛选参数（仓库/状态）
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
 pub async fn stock_adjustment_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockAdjustmentListParams>,
 ) -> Result<PageView<StockAdjustmentView>> {
-    let page = inventory_service(&state).stock_adjustment_list(&params).await?;
+    let page = inventory_service(&state)
+        .stock_adjustment_list(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -611,6 +623,19 @@ mod tests {
         assert!(production.contains("action = \"cancel\""));
         assert!(production.contains("pub async fn stock_adjustment_post"));
         assert!(production.contains("审批最终通过动作调用"));
+    }
+
+    /// 库存读入口必须把认证主体传入 Service，静态权限宏不能替代对象范围。
+    #[test]
+    fn scoped_inventory_reads_forward_actor_to_service() {
+        let production = include_str!("mod.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产 handler 必须存在");
+        assert!(production.contains("stock_balance_list(&params, &actor)"));
+        assert!(production.contains("stock_balance_detail(&id, &actor)"));
+        assert!(production.contains("stock_adjustment_list(&params, &actor)"));
+        assert!(production.contains("stock_adjustment_detail(&id, &actor)"));
     }
 
     /// 普通撤回 HTTP wire 只接受字符串版本并拒绝额外运行字段。

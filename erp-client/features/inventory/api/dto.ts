@@ -25,6 +25,8 @@ export type BackendStockBalance = {
     last_movement_at?: number | null
     last_movement_type?: string | null
     has_active_reservation: boolean
+    /** 逐余额签发的服务端动作；rollout 期间缺失或 null 必须按空集处理。 */
+    allowed_actions?: string[] | null
 }
 
 export type BackendStockMovement = {

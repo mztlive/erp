@@ -233,7 +233,7 @@ export function filterSummary(
         VIEW_LABEL[query.view],
         query.warehouseId
             ? (warehouses.find((w) => w.id === query.warehouseId)?.name ??
-              query.warehouseId)
+              "已选仓库")
             : "全部仓库",
         query.availability && query.availability !== "all"
             ? AVAILABILITY_LABEL[query.availability]

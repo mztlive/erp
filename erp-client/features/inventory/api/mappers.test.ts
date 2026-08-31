@@ -5,15 +5,26 @@ import {
     mapRuntimeInstanceDto,
 } from "@/features/approval-workflow/types"
 import type {
+    BackendStockAdjustment,
     BackendStockAdjustmentApproval,
     BackendStockAdjustmentCancelCommand,
+    BackendStockAdjustmentDetail,
+    BackendStockAdjustmentLine,
     BackendStockAdjustmentSubmitCommand,
+    BackendStockBalance,
+    BackendStockMovement,
+    BackendStockReservation,
 } from "@/features/inventory/api/dto"
 
 import {
+    mapAdjustment,
     mapAdjustmentApproval,
+    mapBalance,
+    mapMovement,
+    mapReservation,
     mapStockAdjustmentCancelCommand,
     mapStockAdjustmentSubmitCommand,
+    toDraftView,
 } from "./mappers"
 
 const cancelCommand: BackendStockAdjustmentCancelCommand = {
@@ -49,6 +60,112 @@ const approvalDto: BackendStockAdjustmentApproval = {
     submit_command: submitCommand,
     cancel_command: cancelCommand,
 }
+
+const balanceDto: BackendStockBalance = {
+    id: "balance-1",
+    warehouse_id: "warehouse-1",
+    warehouse_code: "WH-1",
+    warehouse_name: "一号仓",
+    sku_id: "sku-1",
+    sku_code: "SKU-1",
+    sku_name: "商品一",
+    on_hand_quantity: "10",
+    reserved_quantity: "2",
+    available_quantity: "8",
+    version: "7",
+    has_active_reservation: true,
+}
+
+describe("stock balance allowed action mapping", () => {
+    it("keeps only the server-issued create action", () => {
+        expect(
+            mapBalance({
+                ...balanceDto,
+                allowed_actions: [
+                    "CREATE_ADJUSTMENT",
+                    "VIEW_SOURCE",
+                    "UNKNOWN_ACTION",
+                    "CREATE_ADJUSTMENT",
+                ],
+            }).allowedActions,
+        ).toEqual(["CREATE_ADJUSTMENT"])
+    })
+
+    it.each([undefined, null, [], ["VIEW_SOURCE"], "CREATE_ADJUSTMENT"])(
+        "fails closed for a missing or unknown action payload: %j",
+        (allowedActions) => {
+            const dto = {
+                ...balanceDto,
+                allowed_actions: allowedActions,
+            } as unknown as BackendStockBalance
+            expect(mapBalance(dto).allowedActions).toEqual([])
+        },
+    )
+})
+
+describe("inventory warehouse label fallback", () => {
+    const internalWarehouseId = "warehouse-internal-1"
+    const line: BackendStockAdjustmentLine = {
+        id: "line-1",
+        sku_id: "sku-1",
+        quantity: "1",
+        direction: "INCREASE",
+    }
+    const adjustment: BackendStockAdjustment = {
+        id: "adjustment-1",
+        adjustment_no: "ADJ-1",
+        warehouse_id: internalWarehouseId,
+        reason_type: "STOCK_GAIN",
+        status: "DRAFT",
+        prepared_by: "operator-1",
+        version: "1",
+        created_at: 1,
+    }
+    const detail: BackendStockAdjustmentDetail = {
+        adjustment,
+        lines: [line],
+        posted_movements: [],
+    }
+    const movement: BackendStockMovement = {
+        id: "movement-1",
+        warehouse_id: internalWarehouseId,
+        sku_id: "sku-1",
+        movement_type: "STOCK_GAIN",
+        direction: "INCREASE",
+        quantity: "1",
+        source_document_id: "adjustment-1",
+        occurred_at: 1,
+        recorded_at: 1,
+    }
+    const reservation: BackendStockReservation = {
+        id: "reservation-1",
+        warehouse_id: internalWarehouseId,
+        sku_id: "sku-1",
+        sales_order_line_id: "sales-line-1",
+        reserved_quantity: "1",
+        consumed_quantity: "0",
+        released_quantity: "0",
+        status: "ACTIVE",
+        version: 1,
+    }
+
+    it("uses a fixed display label instead of a raw warehouse id", () => {
+        const labels = [
+            mapMovement(movement).warehouseName,
+            mapReservation(reservation).warehouseName,
+            mapAdjustment(adjustment, line).warehouseName,
+            toDraftView(detail, "1").warehouseName,
+        ]
+
+        expect(labels).toEqual([
+            "已授权仓库",
+            "已授权仓库",
+            "已授权仓库",
+            "已授权仓库",
+        ])
+        expect(labels.join(" ")).not.toContain(internalWarehouseId)
+    })
+})
 
 describe("stock adjustment approval detail mapping", () => {
     it("retains the server-issued cancellation token without numeric conversion", () => {

@@ -27,11 +27,7 @@ export type InventoryQuery = {
     balanceId?: string
 }
 
-type AllowedAction =
-    | "CREATE_ADJUSTMENT"
-    | "EXPORT"
-    | "VIEW_SOURCE"
-    | "VIEW_ADJUSTMENT"
+type AllowedAction = "CREATE_ADJUSTMENT"
 
 type ActionBlocker = Readonly<{
     action: AllowedAction | string
@@ -175,9 +171,9 @@ export type InventoryListView = Readonly<{
     dataWatermark: string
     lastMovementWatermark: string
     queriedAt: string
+    /** 仅由目标库存视图请求成功与否确认，不得从仓库选项目录推断。 */
     hasWarehouseScope: boolean
     moduleAllowed: boolean
-    canCreateAdjustment: boolean
     canExport: boolean
     emptyReason?: InventoryEmptyReason
     excludedKindsNote: string

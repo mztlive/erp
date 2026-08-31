@@ -132,8 +132,7 @@ export function buildBalanceColumns({
             header: "操作",
             meta: { label: "操作", width: "default", align: "end" },
             cell: ({ row }) => {
-                const canAdjust =
-                    !isPhoneNarrow &&
+                const hasCreateAction =
                     row.original.allowedActions.includes("CREATE_ADJUSTMENT")
                 const blocker = isPhoneNarrow
                     ? {
@@ -161,24 +160,28 @@ export function buildBalanceColumns({
                         >
                             查看
                         </Button>
-                        <Button
-                            id={`inventory-ledger-balance-row-${toAutomationIdSegment(row.original.balanceId)}-adjust`}
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            disabled={!canAdjust || isCreating}
-                            title={blocker?.message}
-                            onClick={() => void startAdjustment(row.original)}
-                        >
-                            {isCreating ? (
-                                <LoaderCircleIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                    className="animate-spin"
-                                />
-                            ) : null}
-                            {isCreating ? "创建中…" : "库存调整"}
-                        </Button>
+                        {hasCreateAction ? (
+                            <Button
+                                id={`inventory-ledger-balance-row-${toAutomationIdSegment(row.original.balanceId)}-adjust`}
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                disabled={isPhoneNarrow || isCreating}
+                                title={blocker?.message}
+                                onClick={() =>
+                                    void startAdjustment(row.original)
+                                }
+                            >
+                                {isCreating ? (
+                                    <LoaderCircleIcon
+                                        data-icon="inline-start"
+                                        aria-hidden="true"
+                                        className="animate-spin"
+                                    />
+                                ) : null}
+                                {isCreating ? "创建中…" : "库存调整"}
+                            </Button>
+                        ) : null}
                     </div>
                 )
             },

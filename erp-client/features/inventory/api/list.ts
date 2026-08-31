@@ -67,6 +67,51 @@ async function fetchWarehouses(): Promise<
     }
 }
 
+async function fetchOptionalMetrics(query: InventoryQuery): Promise<{
+    balanceDimensionCount: number
+    pendingAdjustmentCount: number
+}> {
+    const [balanceResult, adjustmentResult] = await Promise.allSettled([
+        apiGet<BackendPage<BackendStockBalance>>("/admin/stock-balances", {
+            page: 1,
+            page_size: 1,
+            warehouse_id: query.warehouseId,
+            sku_id: query.skuId,
+        }),
+        apiGet<BackendPage<BackendStockAdjustment>>(
+            "/admin/stock-adjustments",
+            {
+                page: 1,
+                page_size: 1,
+                warehouse_id: query.warehouseId,
+                status: "IN_APPROVAL",
+            },
+        ),
+    ])
+    return {
+        balanceDimensionCount:
+            balanceResult.status === "fulfilled"
+                ? balanceResult.value.total
+                : 0,
+        pendingAdjustmentCount:
+            adjustmentResult.status === "fulfilled"
+                ? adjustmentResult.value.total
+                : 0,
+    }
+}
+
+async function fetchTargetView<T>(
+    path: string,
+    query: Record<string, unknown>,
+): Promise<T | null> {
+    try {
+        return await apiGet<T>(path, query)
+    } catch (error) {
+        if (isApiError(error) && error.status === 403) return null
+        throw error
+    }
+}
+
 export async function fetchInventoryList(
     query: InventoryQuery,
 ): Promise<InventoryListView> {
@@ -74,9 +119,15 @@ export async function fetchInventoryList(
     const page = pageFromCursor(query.cursor, query.view, pageSize)
     const sort = query.sort.length > 0 ? query.sort : []
     const { sort_by, sort_dir } = sortTokenToBackend(sort, query.view)
-    const warehouses = await fetchWarehouses()
-    const hasWarehouseScope = warehouses.length > 0
-
+    const warehouseOptions = fetchWarehouses()
+    const optionalMetrics = fetchOptionalMetrics(query)
+    let loadedWarehouseOptions:
+        | { id: string; code: string; name: string }[]
+        | undefined
+    const loadWarehouseOptions = async () => {
+        loadedWarehouseOptions ??= await warehouseOptions
+        return loadedWarehouseOptions
+    }
     const emptyBase = (
         emptyReason: InventoryListView["emptyReason"],
         extras: Partial<InventoryListView> = {},
@@ -101,67 +152,21 @@ export async function fetchInventoryList(
         dataWatermark: "",
         lastMovementWatermark: "",
         queriedAt: new Date().toISOString(),
-        hasWarehouseScope,
+        hasWarehouseScope: false,
         moduleAllowed: true,
-        canCreateAdjustment: true,
         canExport: true,
         emptyReason,
         excludedKindsNote: EXCLUDED_NOTE,
         openingStockNote: OPENING_STOCK_NOTE,
-        warehouses,
+        warehouses: [],
         ...extras,
     })
-
-    if (!hasWarehouseScope) {
-        return emptyBase("NO_DATA_SCOPE", {
-            filterSummary: "未配置仓库数据范围",
-            moduleAllowed: true,
-            canCreateAdjustment: false,
+    const permissionRevoked = () =>
+        emptyBase("PERMISSION_REVOKED", {
+            filterSummary: "权限已收回",
+            moduleAllowed: false,
             canExport: false,
         })
-    }
-
-    // Metrics: use server totals where available (no qty recompute)
-    let balanceDimensionCount = 0
-    let reservedDimensionCount = 0
-    let zeroAvailableDimensionCount = 0
-    let pendingAdjustmentCount = 0
-
-    try {
-        const [balPage, pendingApproval] = await Promise.all([
-            apiGet<BackendPage<BackendStockBalance>>("/admin/stock-balances", {
-                page: 1,
-                page_size: 1,
-                warehouse_id: query.warehouseId,
-                sku_id: query.skuId,
-            }),
-            apiGet<BackendPage<BackendStockAdjustment>>(
-                "/admin/stock-adjustments",
-                {
-                    page: 1,
-                    page_size: 1,
-                    warehouse_id: query.warehouseId,
-                    status: "IN_APPROVAL",
-                },
-            ),
-        ])
-        balanceDimensionCount = balPage.total
-        // reserved/zero metrics require availability filters the backend lacks
-        reservedDimensionCount = 0
-        zeroAvailableDimensionCount = 0
-        pendingAdjustmentCount = pendingApproval.total
-    } catch (error) {
-        if (isApiError(error) && error.status === 403) {
-            return emptyBase("PERMISSION_REVOKED", {
-                filterSummary: "权限已收回",
-                moduleAllowed: false,
-                canCreateAdjustment: false,
-                canExport: false,
-                hasWarehouseScope: false,
-            })
-        }
-        throw error
-    }
 
     let balances: StockBalanceRow[] = []
     let movements: StockMovementRow[] = []
@@ -172,7 +177,7 @@ export async function fetchInventoryList(
 
     if (query.view === "balance") {
         // availability filter not on backend — documented gap; still pass warehouse/sku
-        const res = await apiGet<BackendPage<BackendStockBalance>>(
+        const res = await fetchTargetView<BackendPage<BackendStockBalance>>(
             "/admin/stock-balances",
             {
                 page,
@@ -183,6 +188,7 @@ export async function fetchInventoryList(
                 sort_dir,
             },
         )
+        if (!res) return permissionRevoked()
         balances = res.items.map(mapBalance)
         // client-side availability narrow only when backend can't — mark as gap adaptation
         if (query.availability && query.availability !== "all") {
@@ -218,7 +224,7 @@ export async function fetchInventoryList(
             total = balances.length
         }
     } else if (query.view === "movement") {
-        const res = await apiGet<BackendPage<BackendStockMovement>>(
+        const res = await fetchTargetView<BackendPage<BackendStockMovement>>(
             "/admin/stock-movements",
             {
                 page,
@@ -232,6 +238,8 @@ export async function fetchInventoryList(
                 sort_dir: sort_dir ?? "desc",
             },
         )
+        if (!res) return permissionRevoked()
+        const warehouses = await loadWarehouseOptions()
         const whMap = new Map(warehouses.map((w) => [w.id, w.name]))
         movements = res.items.map((m) =>
             mapMovement(m, { warehouseName: whMap.get(m.warehouse_id) }),
@@ -243,7 +251,7 @@ export async function fetchInventoryList(
                 .sort()
                 .at(-1) ?? ""
     } else if (query.view === "reservation") {
-        const res = await apiGet<BackendPage<BackendStockReservation>>(
+        const res = await fetchTargetView<BackendPage<BackendStockReservation>>(
             "/admin/stock-reservations",
             {
                 page,
@@ -255,11 +263,12 @@ export async function fetchInventoryList(
                 sort_dir: sort_dir ?? "desc",
             },
         )
+        if (!res) return permissionRevoked()
         reservations = res.items.map(mapReservation)
         total = res.total
     } else {
         // adjustment
-        const res = await apiGet<BackendPage<BackendStockAdjustment>>(
+        const res = await fetchTargetView<BackendPage<BackendStockAdjustment>>(
             "/admin/stock-adjustments",
             {
                 page,
@@ -269,6 +278,7 @@ export async function fetchInventoryList(
                 sort_dir: sort_dir ?? "desc",
             },
         )
+        if (!res) return permissionRevoked()
         // hydrate lines for quantity/sku when possible (N+1 limited to page)
         adjustments = await Promise.all(
             res.items.map(async (a) => {
@@ -297,6 +307,13 @@ export async function fetchInventoryList(
         }
         total = res.total
     }
+
+    const { balanceDimensionCount, pendingAdjustmentCount } =
+        await optionalMetrics
+    const warehouses = await loadWarehouseOptions()
+    // reserved/zero metrics require availability filters the backend lacks
+    const reservedDimensionCount = 0
+    const zeroAvailableDimensionCount = 0
 
     const { cursor, nextCursor, previousCursor } = cursorsFromPage(
         query.view,
@@ -350,7 +367,6 @@ export async function fetchInventoryList(
         queriedAt: new Date().toISOString(),
         hasWarehouseScope: true,
         moduleAllowed: true,
-        canCreateAdjustment: true,
         canExport: true,
         emptyReason,
         excludedKindsNote: EXCLUDED_NOTE,
