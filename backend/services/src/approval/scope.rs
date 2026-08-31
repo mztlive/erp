@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use database::{AccessControlExt, MongoCasbinAdapter, NoTransaction};
+use database::{AccessControlExt, Executor, MongoCasbinAdapter, NoTransaction};
 use entities::{
     access_control::{DataScope, DataScopeSubjectType, DataScopeType},
     document_registry::DocumentType,
@@ -158,9 +158,29 @@ impl ApprovalManagementScope {
 /// 调用方必须在读取具体审批资源前执行本重验，并把 `false` 映射为不泄露资源
 /// 存在性的拒绝结果。
 pub async fn approval_actor_is_active(db: &Database, actor: &AuditActor) -> Result<bool> {
+    approval_actor_is_active_with_executor(db, actor, &mut NoTransaction).await
+}
+
+/// 在调用方执行器的同一数据库快照内重验审批主体仍有效。
+///
+/// # 参数
+/// * `db` - 当前 MongoDB 数据库
+/// * `actor` - Handler 已认证的身份快照
+/// * `executor` - 调用方持有的事务或非事务执行器
+///
+/// # 返回
+/// 账号仍存在、类型未漂移且允许登录时返回 `true`。
+///
+/// # 错误
+/// 账号仓储读取失败时返回服务错误。
+pub async fn approval_actor_is_active_with_executor(
+    db: &Database,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
     Ok(db
         .accounts()
-        .find_by_id(actor.id(), &mut NoTransaction)
+        .find_by_id(actor.id(), executor)
         .await?
         .as_ref()
         .is_some_and(|account| approval_account_matches_actor(account, actor)))
@@ -193,49 +213,79 @@ pub async fn definition_management_visibility(
     rbac: &RbacService,
     actor: &AuditActor,
 ) -> Result<DefinitionManagementVisibility> {
-    let role_ids = enabled_actor_role_ids(db, rbac, actor).await?;
-    let mut enforced = Vec::new();
-    for document_type in ALL_DOCUMENT_TYPES {
-        let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type)? else {
-            continue;
-        };
-        let can_define = any_role_grants(rbac, &role_ids, &policy.definition_admin_permission).await?;
-        let can_runtime = any_role_grants(rbac, &role_ids, &policy.runtime_admin_permission).await?;
-        enforced.push((document_type, can_define, can_runtime));
-    }
-    Ok(visibility_from_enforced_permissions(enforced))
+    definition_management_visibility_with_executor(db, rbac, actor, &mut NoTransaction).await
 }
 
-/// 读取 actor 直接绑定且当前仍启用的角色 ID。
+/// 在调用方执行器的同一数据库快照内计算定义与运行管理的类型级可见范围。
 ///
-/// Casbin 角色绑定与角色实体状态是两份事实；前者未清理不得让已停用
-/// 角色继续授权。
-async fn enabled_actor_role_ids(
+/// # 参数
+/// * `db` - 当前 MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `actor` - 已认证操作人
+/// * `executor` - 调用方持有的事务或非事务执行器
+///
+/// # 返回
+/// 返回仅由事务快照内仍启用角色形成的类型级可见范围。
+///
+/// # 错误
+/// 角色、政策读取或 RBAC 判定失败时返回服务错误。
+pub async fn definition_management_visibility_with_executor(
     db: &Database,
     rbac: &RbacService,
     actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionManagementVisibility> {
+    let policies = ALL_DOCUMENT_TYPES
+        .iter()
+        .copied()
+        .filter_map(|document_type| match policy_of(document_type) {
+            Ok(DocumentApprovalPolicy::ProcessRequired(policy)) => Some(Ok((
+                document_type,
+                policy.definition_admin_permission,
+                policy.runtime_admin_permission,
+            ))),
+            Ok(DocumentApprovalPolicy::NoApproval(_)) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let required = policies
+        .iter()
+        .flat_map(|(_, define, runtime)| [define.clone(), runtime.clone()])
+        .collect::<Vec<_>>();
+    let policy_snapshot = rbac
+        .role_permission_snapshot(actor.kind(), actor.id(), &required)
+        .await?;
+    let role_ids = enabled_role_ids_from_snapshot(db, policy_snapshot.role_ids(), executor).await?;
+    let mut enforced = Vec::new();
+    for (document_type, definition_permission, runtime_permission) in policies {
+        let can_define = policy_snapshot
+            .granting_role_ids(&definition_permission)
+            .iter()
+            .any(|role_id| role_ids.contains(role_id));
+        let can_runtime = policy_snapshot
+            .granting_role_ids(&runtime_permission)
+            .iter()
+            .any(|role_id| role_ids.contains(role_id));
+        enforced.push((document_type, can_define, can_runtime));
+    }
+    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
+        .await?;
+    Ok(visibility_from_enforced_permissions(enforced))
+}
+
+/// 在调用方执行器内把冻结 policy 角色收敛为仍启用的角色。
+async fn enabled_role_ids_from_snapshot(
+    db: &Database,
+    role_ids: &[String],
+    executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
-    let role_ids = rbac.role_ids(actor.kind(), actor.id()).await?;
     Ok(db
         .roles()
-        .enabled_roles(&role_ids, &mut NoTransaction)
+        .enabled_roles(role_ids, executor)
         .await?
         .into_iter()
         .map(|role| role.base.id)
         .collect())
-}
-
-/// 判断是否存在同一个启用角色实际授予指定权限。
-///
-/// 本方法只接收已经 Repository 证明启用的角色，不对 actor 主体整体
-/// enforce，防止停用角色的权限与其他启用角色的对象读取权拼接。
-async fn any_role_grants(rbac: &RbacService, role_ids: &[String], permission: &Permission) -> Result<bool> {
-    for role_id in role_ids {
-        if rbac.enforce(&format!("role:{role_id}"), permission).await? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 /// 按各类型 enforce 结果构造可见范围，不把系统管理员角色当成全部类型管理权。
@@ -304,10 +354,101 @@ pub async fn approval_document_read_scope(
     actor: &AuditActor,
     document_type: DocumentType,
 ) -> Result<ApprovalManagementScope> {
+    approval_document_read_scope_with_executor(db, rbac, actor, document_type, &mut NoTransaction).await
+}
+
+/// 在调用方执行器的同一数据库快照内计算对象读取 DataScope。
+///
+/// # 错误
+/// 单据类型未登记、权限格式非法或授权事实读取失败时返回服务错误。
+pub async fn approval_document_read_scope_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    document_type: DocumentType,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalManagementScope> {
     let relation = WorkItemType::DocumentApproval
         .brief_relation(document_type.as_str())
         .ok_or_else(|| Error::from_approval_code(crate::errors::ErrorCode::ApprovalPolicyNotRegistered))?;
-    permission_scope(db, rbac, actor, relation.read_permission).await
+    permission_scope_with_executor(db, rbac, actor, relation.read_permission, executor).await
+}
+
+/// 在调用方执行器的同一数据库快照内计算普通取消动作 DataScope。
+///
+/// # 错误
+/// 账号角色、RBAC policy、权限代码或 DataScope 事实读取失败时返回服务错误。
+pub async fn approval_cancel_scope_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalManagementScope> {
+    permission_scope_with_executor(db, rbac, actor, "approval_instance:cancel", executor).await
+}
+
+/// 在调用方执行器的同一数据库快照内计算受阻取消动作 DataScope。
+///
+/// # 错误
+/// 账号角色、RBAC policy、权限代码或 DataScope 事实读取失败时返回服务错误。
+///
+/// # 关键业务约束
+/// `cancel_blocked` 与普通 `cancel` 是两个独立动作权限，禁止以恢复或普通取消
+/// 权限替代；只有真正授予本动作的启用角色范围才能参与实例组织授权。
+pub async fn approval_cancel_blocked_scope_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalManagementScope> {
+    permission_scope_with_executor(db, rbac, actor, "approval_instance:cancel_blocked", executor).await
+}
+
+/// 在调用方执行器的同一数据库快照内计算审批决定动作 DataScope。
+///
+/// # 错误
+/// 账号角色、RBAC policy、权限代码或 DataScope 事实读取失败时返回服务错误。
+///
+/// # 关键业务约束
+/// 决定权限必须由同一个仍启用的角色授予，并与该角色及用户的组织范围求交；
+/// 禁止把停用角色残留策略或不同角色的权限与范围拼接成有效授权。
+pub async fn approval_decide_scope_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalManagementScope> {
+    permission_scope_with_executor(db, rbac, actor, "approval_instance:decide", executor).await
+}
+
+/// 在调用方执行器的同一数据库快照内计算指定单据动作的 DataScope。
+///
+/// # 参数
+/// * `db` - 当前 MongoDB 数据库
+/// * `rbac` - 当前 RBAC 服务
+/// * `actor` - 已认证且已重验的操作人
+/// * `permission` - 业务单据已登记的稳定动作权限代码
+/// * `executor` - 调用方持有的事务或非事务执行器
+///
+/// # 返回
+/// 返回仅由实际授予该动作的启用角色与用户范围共同证明的组织范围；没有有效
+/// 授权或范围时返回空组织集合。
+///
+/// # 错误
+/// 账号角色、RBAC policy、权限代码或 DataScope 事实读取失败时返回服务错误。
+///
+/// # 关键业务约束
+/// 本方法仅供 Service 在具体单据事务内重验 actor-specific 动作权限。调用方仍
+/// 必须把返回范围与冻结单据组织精确比对；不得把权限字符串或授权判断下沉到
+/// Repository、Entity 或 BPM。
+pub async fn approval_document_action_scope_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    permission: &str,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalManagementScope> {
+    permission_scope_with_executor(db, rbac, actor, permission, executor).await
 }
 
 /// 从实际授予恢复权限的角色与用户范围形成恢复授权边界。
@@ -364,7 +505,18 @@ async fn permission_scope(
     actor: &AuditActor,
     permission: &str,
 ) -> Result<ApprovalManagementScope> {
-    permission_scope_and_roles(db, rbac, actor, permission)
+    permission_scope_with_executor(db, rbac, actor, permission, &mut NoTransaction).await
+}
+
+/// 使用调用方执行器计算权限与组织范围交集。
+async fn permission_scope_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    permission: &str,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalManagementScope> {
+    permission_scope_and_roles_with_executor(db, rbac, actor, permission, executor)
         .await
         .map(|(scope, _)| scope)
 }
@@ -391,56 +543,39 @@ async fn permission_scope_and_roles(
     actor: &AuditActor,
     permission: &str,
 ) -> Result<(ApprovalManagementScope, Vec<String>)> {
-    let enabled_role_ids = enabled_actor_role_ids(db, rbac, actor).await?;
-    let user_scopes = db
-        .data_scopes()
-        .list_by_subject(DataScopeSubjectType::User, actor.id(), &mut NoTransaction)
-        .await?;
-    let required = Permission::parse(permission)?;
-    let permitted_role_ids = permission_granting_role_ids(rbac, enabled_role_ids, &required).await?;
-    let role_scopes = db
-        .data_scopes()
-        .list_by_subjects(
-            DataScopeSubjectType::Role,
-            &permitted_role_ids,
-            &mut NoTransaction,
-        )
-        .await?;
-    Ok(scope_from_role_facts(
-        &user_scopes,
-        permitted_role_ids,
-        role_scopes,
-    ))
+    permission_scope_and_roles_with_executor(db, rbac, actor, permission, &mut NoTransaction).await
 }
 
-/// 从当前 Casbin 事实中收敛实际授予目标权限的角色 ID。
-///
-/// # 参数
-/// * `rbac` - 共享 RBAC 服务
-/// * `role_ids` - 当前用户绑定的角色 ID
-/// * `required` - 本次组织范围需要的权限
-///
-/// # 返回
-/// 返回按输入顺序保留的授权角色 ID。
-///
-/// # 错误
-/// 任一角色的 RBAC 判定失败时返回错误。
-///
-/// # 关键业务约束
-/// 只有实际授予目标权限的角色才能进入 DataScope 授权交集。
-async fn permission_granting_role_ids(
+/// 在调用方执行器内计算权限范围与实际授权角色。
+async fn permission_scope_and_roles_with_executor(
+    db: &Database,
     rbac: &RbacService,
-    role_ids: Vec<String>,
-    required: &Permission,
-) -> Result<Vec<String>> {
-    let mut permitted = Vec::new();
-    for role_id in role_ids {
-        if !rbac.enforce(&format!("role:{role_id}"), required).await? {
-            continue;
-        }
-        permitted.push(role_id);
-    }
-    Ok(permitted)
+    actor: &AuditActor,
+    permission: &str,
+    executor: &mut dyn Executor,
+) -> Result<(ApprovalManagementScope, Vec<String>)> {
+    let required = Permission::parse(permission)?;
+    let policy_snapshot = rbac
+        .role_permission_snapshot(actor.kind(), actor.id(), std::slice::from_ref(&required))
+        .await?;
+    let enabled_role_ids = enabled_role_ids_from_snapshot(db, policy_snapshot.role_ids(), executor).await?;
+    let user_scopes = db
+        .data_scopes()
+        .list_by_subject(DataScopeSubjectType::User, actor.id(), executor)
+        .await?;
+    let permitted_role_ids = policy_snapshot
+        .granting_role_ids(&required)
+        .into_iter()
+        .filter(|role_id| enabled_role_ids.contains(role_id))
+        .collect::<Vec<_>>();
+    let role_scopes = db
+        .data_scopes()
+        .list_by_subjects(DataScopeSubjectType::Role, &permitted_role_ids, executor)
+        .await?;
+    let result = scope_from_role_facts(&user_scopes, permitted_role_ids, role_scopes);
+    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
+        .await?;
+    Ok(result)
 }
 
 /// 用批量读取的角色范围事实计算最终组织授权。

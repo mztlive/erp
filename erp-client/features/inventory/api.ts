@@ -5,6 +5,8 @@
 
 export {
     buildAdjustmentSubmitRequest,
+    buildCancelStockAdjustmentApprovalRequest,
+    cancelStockAdjustmentApproval,
     createAdjustmentDraft,
     fetchAdjustmentDetail,
     fetchBalanceDetail,
@@ -15,4 +17,7 @@ export {
     STOCK_ADJUSTMENT_DOCUMENT_TYPE,
     submitAdjustment,
 } from "./api/inventory"
-export type { InventoryExportJob } from "./api/inventory"
+export type {
+    CancelStockAdjustmentApprovalRequest,
+    InventoryExportJob,
+} from "./api/inventory"

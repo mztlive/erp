@@ -52,7 +52,7 @@ export type StockBalanceRow = Readonly<{
     onHandQuantity: string
     reservedQuantity: string
     availableQuantity: string
-    lockVersion: number
+    lockVersion: string
     lastMovementId: string
     lastMovementAt: string
     lastMovementTypeLabel: string
@@ -211,6 +211,28 @@ export type AdjustmentReasonType =
     | "DAMAGE"
     | "OTHER"
 
+/** 库存调整普通撤回的服务端运行时令牌。禁止从实例摘要拼装或转换版本。 */
+export type StockAdjustmentCancelCommand = Readonly<{
+    expectedVersion: string
+    approvalProcessInstanceId: string
+    expectedSubjectVersion: string
+    expectedInstanceVersion: string
+    expectedExecutionVersion: string
+    expectedTaskVersion: string | null
+}>
+
+/** 库存调整草稿提交的服务端令牌。 */
+export type StockAdjustmentSubmitCommand = Readonly<{
+    expectedVersion: string
+    expectedSubjectVersion: string
+}>
+
+export type StockAdjustmentApprovalView = DocumentApprovalView &
+    Readonly<{
+        submitCommand?: StockAdjustmentSubmitCommand
+        cancelCommand?: StockAdjustmentCancelCommand
+    }>
+
 export type AdjustmentDraftView = Readonly<{
     stockAdjustmentId: string
     lineId: string
@@ -230,17 +252,21 @@ export type AdjustmentDraftView = Readonly<{
     occurredAt: string
     status: string
     statusLabel: string
-    balanceLockVersion: number
-    editVersion: number
+    balanceLockVersion: string
     operatorLabel: string
     segregationNote: string
-    approval?: DocumentApprovalView
+    approval?: StockAdjustmentApprovalView
 }>
 
 export type AdjustmentDetailView = Readonly<{
     adjustment: StockAdjustmentRow
-    approval: DocumentApprovalView
+    approval: StockAdjustmentApprovalView
     queriedAt: string
+}>
+
+export type CancelStockAdjustmentApprovalResult = Readonly<{
+    stockAdjustmentId: string
+    status: string
 }>
 
 export type AdjustmentSubmitResponse =
@@ -254,14 +280,14 @@ export type AdjustmentSubmitResponse =
               currentNodeLabel?: string
               reference: string
               submittedAt: string
-              balanceLockVersion: number
+              balanceLockVersion?: string
           }
       }
     | {
           status: "failed"
           code: string
           message: string
-          latestLockVersion?: number
+          latestLockVersion?: string
       }
     | {
           status: "unknown"

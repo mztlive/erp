@@ -1599,7 +1599,7 @@ mod tests {
     /// 无。
     ///
     /// # 返回
-    /// 无；任一并发错误未映射为稳定冲突文案时测试失败。
+    /// 无；任一并发错误未映射为稳定冲突类型时测试失败。
     ///
     /// # 错误
     /// 无。
@@ -1620,7 +1620,7 @@ mod tests {
         ));
         assert!(matches!(
             transient,
-            crate::errors::Error::ConflictError(message) if message == "并发事务冲突，请重试"
+            crate::errors::Error::TransientTransaction(database::Error::TransientTransactionConflict(_))
         ));
     }
 

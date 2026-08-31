@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use mongodb::{
     error::UNKNOWN_TRANSACTION_COMMIT_RESULT,
-    options::{SessionOptions, TransactionOptions, WriteConcern},
+    options::{ReadConcern, SessionOptions, TransactionOptions, WriteConcern},
     Client, ClientSession,
 };
 use std::future::Future;
@@ -35,9 +35,13 @@ fn commit_error_action(has_unknown_result_label: bool, elapsed: Duration) -> Com
     CommitErrorAction::OutcomeUnknown
 }
 
-/// 构建保证已提交事务不会因副本集主节点切换回滚的默认选项。
+/// 构建统一业务事务选项：读取同一个 majority-committed 快照，并以 majority 提交。
+///
+/// 不得依赖 MongoDB 默认的 `local` read concern：它不能为分片部署保证跨集合、
+/// 跨分片的一致快照，会破坏 Service 在同一事务内重验业务与授权事实的前提。
 fn transaction_options() -> TransactionOptions {
     TransactionOptions::builder()
+        .read_concern(ReadConcern::snapshot())
         .write_concern(WriteConcern::majority())
         .build()
 }
@@ -146,7 +150,7 @@ impl Transactional for Client {
 
 #[cfg(test)]
 mod tests {
-    use mongodb::options::WriteConcern;
+    use mongodb::options::{ReadConcern, WriteConcern};
 
     use super::{commit_error_action, transaction_options, CommitErrorAction, COMMIT_RETRY_TIMEOUT};
     use std::time::Duration;
@@ -175,7 +179,8 @@ mod tests {
     }
 
     #[test]
-    fn transactions_require_majority_commit_durability() {
+    fn transactions_require_snapshot_reads_and_majority_commit_durability() {
+        assert_eq!(transaction_options().read_concern, Some(ReadConcern::snapshot()));
         assert_eq!(
             transaction_options().write_concern,
             Some(WriteConcern::majority())

@@ -27,7 +27,7 @@ use crate::errors::{Error, Result};
 
 pub use apply_plan::{apply_plan, DomainActionKind, PlannedWrites};
 pub use authorization::{converge_eligibility, AuthorizationFailure};
-pub use cancel::{prepare_cancel, CancelExecutionInput};
+pub use cancel::{prepare_cancel, prepare_document_cancel, CancelExecutionInput};
 pub use decision::{prepare_decision, DecisionExecutionInput};
 pub use notification_worker::ApprovalNotificationOutboxPort;
 pub use reassign::{prepare_reassign, ReassignExecutionInput};
@@ -89,9 +89,9 @@ pub fn refuse_unwired() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        prepare_cancel, prepare_decision, prepare_reassign, prepare_resume, prepare_start, refuse_unwired,
-        CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput, PreparedExecution,
-        ReassignExecutionInput, ResumeExecutionInput, StartExecutionInput,
+        prepare_cancel, prepare_decision, prepare_document_cancel, prepare_reassign, prepare_resume,
+        prepare_start, refuse_unwired, CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput,
+        PreparedExecution, ReassignExecutionInput, ResumeExecutionInput, StartExecutionInput,
     };
     use crate::approval::execution::decision::decision_commits_blocked;
     use crate::approval::execution::idempotency::normalize_idempotency_key;
@@ -239,6 +239,37 @@ mod tests {
             cancel_writes.instance.status,
             ApprovalProcessInstanceStatus::Cancelled
         );
+    }
+
+    /// 业务撤回收据同载荷可回放，业务单据版本漂移必须返回幂等冲突。
+    #[test]
+    fn document_cancel_receipt_binds_expected_document_version() {
+        let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
+        let PreparedExecution::Apply(start_writes) = started else {
+            panic!("启动必须写入");
+        };
+        let input = cancel_input(
+            start_writes.instance,
+            start_writes.created_executions[0].clone(),
+            false,
+            None,
+        );
+        let prepared = prepare_document_cancel(input.clone(), 7).unwrap();
+        let PreparedExecution::Apply(writes) = prepared else {
+            panic!("首次业务撤回必须写入");
+        };
+
+        let mut replay_input = input.clone();
+        replay_input.command.receipt = Some(writes.receipt.clone());
+        assert!(matches!(
+            prepare_document_cancel(replay_input.clone(), 7).unwrap(),
+            PreparedExecution::Replay { .. }
+        ));
+
+        let conflict = prepare_document_cancel(replay_input, 8).unwrap_err();
+        assert!(conflict
+            .to_string()
+            .contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
     }
 
     /// 恢复与改派创建新执行；结构阻塞不能改派。

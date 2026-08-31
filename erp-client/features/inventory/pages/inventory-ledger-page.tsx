@@ -40,6 +40,11 @@ import type { LedgerAppliedChip } from "./hooks/use-ledger-filters"
 import { useLedgerFilters } from "./hooks/use-ledger-filters"
 import { useLedgerSearch } from "./hooks/use-ledger-search"
 import { usePhoneNarrow } from "./hooks/use-phone-narrow"
+import { bindAdjustmentDecisionWorkItem } from "./lib/adjustment-work-item-binding"
+import {
+    closeAdjustmentPreviewPatch,
+    openAdjustmentPreviewPatch,
+} from "./lib/adjustment-navigation"
 import { buildListQuery } from "./lib/build-list-query"
 
 export function InventoryLedgerPage() {
@@ -161,6 +166,11 @@ export function InventoryLedgerPage() {
         adjustmentIdParam ?? workItemAdjustmentId ?? null
     const detailQuery = useBalanceDetailQuery(previewBalanceId)
     const adjustmentDetailQuery = useAdjustmentDetailQuery(previewAdjustmentId)
+    const decisionWorkItem = bindAdjustmentDecisionWorkItem(
+        workItem,
+        previewAdjustmentId,
+        adjustmentDetailQuery.data?.approval?.instance,
+    )
 
     const { exportJob, startExport, closeExport, isExporting } =
         useInventoryExportJob()
@@ -209,17 +219,13 @@ export function InventoryLedgerPage() {
     const openAdjustment = React.useCallback(
         (adjustmentId: string) => {
             setPreviewBalanceId(null)
-            patchUrl({
-                view: "adjustment",
-                adjustmentId,
-                balanceId: null,
-            })
+            patchUrl(openAdjustmentPreviewPatch(adjustmentId))
         },
         [patchUrl],
     )
 
     const closeAdjustment = React.useCallback(() => {
-        patchUrl({ adjustmentId: null })
+        patchUrl(closeAdjustmentPreviewPatch())
     }, [patchUrl])
 
     const {
@@ -472,9 +478,9 @@ export function InventoryLedgerPage() {
                 open={previewAdjustmentId != null}
                 detail={adjustmentDetailQuery.data}
                 isPending={adjustmentDetailQuery.isPending}
-                workItemId={workItem?.workItemId}
-                expectedTaskVersion={workItem?.taskVersion}
-                workItemAllowedActions={workItem?.allowedActions}
+                workItemId={decisionWorkItem?.workItemId}
+                expectedTaskVersion={decisionWorkItem?.expectedTaskVersion}
+                workItemAllowedActions={decisionWorkItem?.allowedActions}
                 onClose={closeAdjustment}
                 onDecisionApplied={() => {
                     void listQuery.refetch()

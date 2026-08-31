@@ -693,6 +693,32 @@ impl<'a> BpmWorkflowRepository<'a> {
         list_projection: &ApprovalInstanceListProjection,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.create_bpm_runtime_after_receipt(
+            instance,
+            assignees,
+            first_execution,
+            list_projection,
+            executor,
+        )
+        .await?;
+        self.insert_command_receipt(receipt, executor).await
+    }
+
+    /// 在命令收据已先行仲裁后写入启动实例、审批人绑定和首个执行。
+    ///
+    /// 本方法不写收据、不创建事务。要求并发启动以收据作为第一写的调用方，
+    /// 必须先在同一事务调用 [`Self::insert_command_receipt`]，再调用本方法。
+    ///
+    /// # 错误
+    /// 任一运行集合插入失败时返回错误，调用方事务必须整体回滚。
+    pub async fn create_bpm_runtime_after_receipt(
+        &self,
+        instance: &ApprovalProcessInstance,
+        assignees: &[ApprovalInstanceAssignee],
+        first_execution: &ApprovalNodeExecution,
+        list_projection: &ApprovalInstanceListProjection,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         mongo_ops::insert_one(
             &self.db.collection(INSTANCES),
             &instance_insert_document(instance, list_projection)?,
@@ -700,8 +726,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         )
         .await?;
         mongo_ops::insert_many(&self.db.collection(ASSIGNEES), assignees.to_vec(), executor).await?;
-        mongo_ops::insert_one(&self.db.collection(EXECUTIONS), first_execution, executor).await?;
-        mongo_ops::insert_one(&self.db.collection(RECEIPTS), receipt, executor).await
+        mongo_ops::insert_one(&self.db.collection(EXECUTIONS), first_execution, executor).await
     }
 
     /// 按视图、状态和 DataScope 过滤分页读取实例摘要。
@@ -842,6 +867,26 @@ impl<'a> BpmWorkflowRepository<'a> {
         receipt: &ApprovalCommandReceipt,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        self.persist_cancelled_runtime_after_receipt(instance, updated_executions, executor)
+            .await?;
+        self.insert_command_receipt(receipt, executor).await
+    }
+
+    /// 在命令收据已先行仲裁后持久化取消实例与结束执行。
+    ///
+    /// 本方法不写命令收据、不创建事务。需要以唯一收据作为并发仲裁点的调用方
+    /// 必须先在同一事务内调用 [`Self::insert_command_receipt`]，再调用本方法，
+    /// 最后写业务单据、任务、通知和审计。旧调用方继续使用
+    /// [`Self::persist_cancelled_runtime`]，其行为保持不变。
+    ///
+    /// # 错误
+    /// 取消计划缺少执行、版本元数据非法、CAS 未命中或 MongoDB 写入失败时返回错误。
+    pub async fn persist_cancelled_runtime_after_receipt(
+        &self,
+        instance: &ApprovalProcessInstance,
+        updated_executions: &[ApprovalNodeExecution],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let current = updated_executions
             .first()
             .ok_or(Error::EntityMetadataOutOfRange("cancelled_execution"))?;
@@ -864,7 +909,7 @@ impl<'a> BpmWorkflowRepository<'a> {
                     .await?,
             )?;
         }
-        self.insert_command_receipt(receipt, executor).await
+        Ok(())
     }
 
     /// 以 `id + expected_instance_version + current_execution_id + RUNNING|BLOCKED` 推进实例。

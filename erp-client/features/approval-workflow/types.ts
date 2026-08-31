@@ -108,7 +108,7 @@ export type CancelApprovalRequest = Readonly<{
 /** 下一开放任务摘要。 */
 export type OpenTaskSummaryDto = Readonly<{
     work_item_id: string
-    task_version: string | number
+    task_version: string
     owner_user_id: string
 }>
 
@@ -158,8 +158,14 @@ export type ApprovalRuntimeInstanceDto = Readonly<{
     current_assignee_name?: string | null
     latest_rejection?: string | null
     latest_rejection_by?: string | null
+    subject_version?: string | number | null
     instance_version?: string | number | null
+    current_execution_id?: string | null
+    /** 新版单据审批投影字段；保留 execution_version 兼容既有接口。 */
+    current_execution_version?: string | number | null
     execution_version?: string | number | null
+    current_task_id?: string | null
+    current_task_version?: string | number | null
     assignment_version?: string | number | null
     process_name?: string | null
     process_version?: string | number | null
@@ -279,8 +285,12 @@ export type ApprovalRuntimeInstance = Readonly<{
     currentAssigneeName?: string
     latestRejection?: string
     latestRejectionBy?: string
+    subjectVersion?: string
     instanceVersion?: string
+    currentExecutionId?: string
     executionVersion?: string
+    currentTaskId?: string
+    currentTaskVersion?: string
     assignmentVersion?: string
     processName?: string
     processVersion?: string
@@ -445,8 +455,14 @@ export const mapRuntimeInstanceDto = (
     ),
     latestRejection: optionalText(dto.latest_rejection),
     latestRejectionBy: optionalText(dto.latest_rejection_by),
+    subjectVersion: optionalVersion(dto.subject_version),
     instanceVersion: optionalVersion(dto.instance_version),
-    executionVersion: optionalVersion(dto.execution_version),
+    currentExecutionId: optionalText(dto.current_execution_id),
+    executionVersion: optionalVersion(
+        dto.current_execution_version ?? dto.execution_version,
+    ),
+    currentTaskId: optionalText(dto.current_task_id),
+    currentTaskVersion: optionalVersion(dto.current_task_version),
     assignmentVersion: optionalVersion(dto.assignment_version),
     processName: optionalText(dto.process_name),
     processVersion: optionalVersion(dto.process_version),
@@ -505,15 +521,27 @@ export const mapCommandViewDto = (
     currentAssigneeName: optionalText(dto.current_assignee_name),
     subjectStatus: optionalText(dto.subject_status),
     latestRejectionReason: optionalText(dto.latest_rejection_reason),
-    nextOpenTask: dto.next_open_task
+    nextOpenTask:
+        dto.next_open_task &&
+        isCanonicalPositiveU64(dto.next_open_task.task_version)
         ? {
               workItemId: dto.next_open_task.work_item_id,
-              taskVersion: String(dto.next_open_task.task_version),
+              taskVersion: dto.next_open_task.task_version,
               ownerUserId: dto.next_open_task.owner_user_id,
           }
         : undefined,
     outcome: dto.outcome,
 })
+
+function isCanonicalPositiveU64(value: unknown): value is string {
+    const maximum = "18446744073709551615"
+    return (
+        typeof value === "string" &&
+        /^[1-9]\d*$/.test(value) &&
+        (value.length < maximum.length ||
+            (value.length === maximum.length && value <= maximum))
+    )
+}
 
 /**
  * 把实例列表行转成工作台/只读摘要投影。

@@ -5,7 +5,6 @@
 
 use bpm::SubjectRef;
 use entities::approval_integration::{ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload};
-use entities::common::state::ensure_transition;
 use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
@@ -24,8 +23,9 @@ use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 
 use super::dto::{
-    DocumentApprovalDefinitionView, DocumentApprovalHistoryPageView, DocumentApprovalInstanceView,
-    DocumentApprovalView,
+    CancelStockAdjustmentApprovalTokenView, DocumentApprovalDefinitionView, DocumentApprovalHistoryItemView,
+    DocumentApprovalHistoryPageView, DocumentApprovalInstanceView, DocumentApprovalView,
+    SubmitStockAdjustmentApprovalTokenView,
 };
 
 /// 详情最近审批历史条数上限。完整历史走分页端点。
@@ -115,82 +115,6 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
 /// 主键为空或超长时返回校验错误。
 pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     subject_ref_for(DocumentType::StockAdjustment, business_object_id)
-}
-
-/// 提交并启动：冻结 `approval_subject_version` 并进入 `IN_APPROVAL`。
-///
-/// 仅允许草稿提交。版本使用 checked add，成功后不回退。
-///
-/// # 参数
-/// * `adjustment` - 待提交调整单
-///
-/// # 返回
-/// 返回冻结后的提交版本。
-///
-/// # 错误
-/// 非草稿或版本溢出时返回冲突。
-pub fn start_stock_adjustment_approval(adjustment: &mut StockAdjustment) -> Result<u32> {
-    ensure_draft_for_submit(adjustment.status)?;
-    ensure_transition(adjustment.status, StockAdjustmentState::InApproval)?;
-    let next = increment_subject_version(adjustment.approval_subject_version)?;
-    adjustment.approval_subject_version = next;
-    adjustment.status = StockAdjustmentState::InApproval;
-    Ok(next)
-}
-
-/// 撤回审批：回到草稿，且 `subject_version` 不回退。
-///
-/// # 参数
-/// * `adjustment` - 审批中的调整单
-///
-/// # 错误
-/// 非审批中时返回冲突。
-pub fn cancel_stock_adjustment_to_draft(adjustment: &mut StockAdjustment) -> Result<()> {
-    if adjustment.status != StockAdjustmentState::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的库存调整单可以撤回审批".to_string(),
-        ));
-    }
-    ensure_transition(adjustment.status, StockAdjustmentState::Draft)?;
-    adjustment.status = StockAdjustmentState::Draft;
-    Ok(())
-}
-
-/// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
-///
-/// # 错误
-/// 状态不是审批中时返回冲突。
-pub fn ensure_final_approve_posting(adjustment: &StockAdjustment) -> Result<()> {
-    if adjustment.status != StockAdjustmentState::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的库存调整单可以由最终通过动作过账".to_string(),
-        ));
-    }
-    ensure_transition(adjustment.status, StockAdjustmentState::Posted)?;
-    Ok(())
-}
-
-/// 校验提交只接受草稿。
-///
-/// # 错误
-/// 非草稿时返回冲突。
-fn ensure_draft_for_submit(status: StockAdjustmentState) -> Result<()> {
-    if status == StockAdjustmentState::Draft {
-        return Ok(());
-    }
-    Err(Error::ConflictError(
-        "只有草稿状态的库存调整单可以提交审批".to_string(),
-    ))
-}
-
-/// 递增审批提交版本。
-///
-/// # 错误
-/// `u32` 溢出时返回冲突。
-fn increment_subject_version(current: u32) -> Result<u32> {
-    current
-        .checked_add(1)
-        .ok_or_else(|| Error::ConflictError("审批提交版本溢出".to_string()))
 }
 
 /// 按合同 §4.4.5 冻结库存调整快照。
@@ -329,12 +253,16 @@ pub fn execute_stock_adjustment_domain_action(
     action: ApprovalDomainAction,
 ) -> Result<()> {
     match action {
-        ApprovalDomainAction::StockAdjustmentSubmit => {
-            start_stock_adjustment_approval(adjustment)?;
-            Ok(())
-        }
-        ApprovalDomainAction::StockAdjustmentPost => ensure_final_approve_posting(adjustment),
-        ApprovalDomainAction::StockAdjustmentCancelApproval => cancel_stock_adjustment_to_draft(adjustment),
+        ApprovalDomainAction::StockAdjustmentSubmit => adjustment
+            .start_approval()
+            .map(|_| ())
+            .map_err(|error| Error::ConflictError(error.to_string())),
+        ApprovalDomainAction::StockAdjustmentPost => adjustment
+            .ensure_approval_postable()
+            .map_err(|error| Error::ConflictError(error.to_string())),
+        ApprovalDomainAction::StockAdjustmentCancelApproval => adjustment
+            .cancel_approval()
+            .map_err(|error| Error::ConflictError(error.to_string())),
         other => Err(Error::ValidationError(format!(
             "动作 {} 不属于库存调整单",
             other.as_str()
@@ -342,42 +270,18 @@ pub fn execute_stock_adjustment_domain_action(
     }
 }
 
-/// 按单据组织判定审批人对象读取权。
-///
-/// 未提供组织或审批人时失败关闭，不得默认放行。
-///
-/// # 参数
-/// * `organization_id` - 单据责任组织（仓库）
-/// * `assignee_user_id` - 指定审批人
-///
-/// # 返回
-/// 组织与审批人均非空时允许读取。
-///
-/// # 错误
-/// 组织或审批人为空时返回校验错误。
-pub fn stock_adjustment_object_readable(organization_id: &str, assignee_user_id: &str) -> Result<bool> {
-    if organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
-        return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
-    }
-    Ok(true)
-}
-
-/// 由绑定与可选实例事实构造只读审批结构。
-///
-/// 创建后未提交只返回绑定定义；客户端不得据此选择定义或审批人。
-///
-/// # 参数
-/// * `binding` - 创建时冻结的定义绑定
-/// * `instance` - 已启动时的实例摘要
-/// * `status` - 当前业务状态
-///
-/// # 返回
-/// 返回有界只读审批结构。
-pub fn document_approval_view(
+/// 由绑定、运行摘要、历史和 actor-aware 提交/撤回令牌构造只读审批结构。
+pub(super) fn document_approval_view_with_history(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
+    recent_history: Vec<DocumentApprovalHistoryItemView>,
+    history_page: DocumentApprovalHistoryPageView,
     status: StockAdjustmentState,
+    submit_command: Option<SubmitStockAdjustmentApprovalTokenView>,
+    cancel_command: Option<CancelStockAdjustmentApprovalTokenView>,
 ) -> DocumentApprovalView {
+    let can_submit = submit_command.is_some();
+    let can_cancel = cancel_command.is_some();
     DocumentApprovalView {
         requirement: match ApprovalRequirement::ProcessRequired {
             ApprovalRequirement::ProcessRequired => "PROCESS_REQUIRED",
@@ -386,12 +290,11 @@ pub fn document_approval_view(
         .to_string(),
         definition: binding.map(definition_view_from_binding),
         instance,
-        recent_history: Vec::new(),
-        history_page: DocumentApprovalHistoryPageView {
-            next_cursor: None,
-            has_more: false,
-        },
-        allowed_actions: allowed_document_actions(status),
+        recent_history,
+        history_page,
+        allowed_actions: allowed_document_actions(status, can_submit, can_cancel),
+        submit_command,
+        cancel_command,
     }
 }
 
@@ -406,10 +309,12 @@ fn definition_view_from_binding(binding: &ApprovalDefinitionBinding) -> Document
 }
 
 /// 单据详情允许的审批相关动作。不含选择定义或审批人。
-fn allowed_document_actions(status: StockAdjustmentState) -> Vec<String> {
+fn allowed_document_actions(status: StockAdjustmentState, can_submit: bool, can_cancel: bool) -> Vec<String> {
     match status {
-        StockAdjustmentState::Draft => vec!["SUBMIT".to_string()],
-        StockAdjustmentState::InApproval => vec!["CANCEL".to_string()],
+        StockAdjustmentState::Draft if can_submit => vec!["SUBMIT".to_string()],
+        StockAdjustmentState::Draft => Vec::new(),
+        StockAdjustmentState::InApproval if can_cancel => vec!["CANCEL".to_string()],
+        StockAdjustmentState::InApproval => Vec::new(),
         StockAdjustmentState::Posted
         | StockAdjustmentState::Reversed
         | StockAdjustmentState::PendingWarehouseReview
@@ -508,15 +413,20 @@ mod tests {
     fn submit_freezes_version_and_cancel_does_not_rollback() {
         let mut adjustment = draft_adjustment();
         assert_eq!(adjustment.approval_subject_version, 0);
-        let version = start_stock_adjustment_approval(&mut adjustment).unwrap();
-        assert_eq!(version, 1);
+        execute_stock_adjustment_domain_action(&mut adjustment, ApprovalDomainAction::StockAdjustmentSubmit)
+            .unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
         assert_eq!(adjustment.approval_subject_version, 1);
-        cancel_stock_adjustment_to_draft(&mut adjustment).unwrap();
+        execute_stock_adjustment_domain_action(
+            &mut adjustment,
+            ApprovalDomainAction::StockAdjustmentCancelApproval,
+        )
+        .unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::Draft);
         assert_eq!(adjustment.approval_subject_version, 1);
-        let again = start_stock_adjustment_approval(&mut adjustment).unwrap();
-        assert_eq!(again, 2);
+        execute_stock_adjustment_domain_action(&mut adjustment, ApprovalDomainAction::StockAdjustmentSubmit)
+            .unwrap();
+        assert_eq!(adjustment.approval_subject_version, 2);
     }
 
     /// 非草稿不得提交；非审批中不得撤回或过账。
@@ -524,24 +434,53 @@ mod tests {
     fn illegal_status_transitions_fail_closed() {
         let mut posted = draft_adjustment();
         posted.status = StockAdjustmentState::Posted;
-        assert!(start_stock_adjustment_approval(&mut posted).is_err());
-        assert!(cancel_stock_adjustment_to_draft(&mut posted).is_err());
-        assert!(ensure_final_approve_posting(&posted).is_err());
+        assert!(execute_stock_adjustment_domain_action(
+            &mut posted,
+            ApprovalDomainAction::StockAdjustmentSubmit,
+        )
+        .is_err());
+        assert!(execute_stock_adjustment_domain_action(
+            &mut posted,
+            ApprovalDomainAction::StockAdjustmentCancelApproval,
+        )
+        .is_err());
+        assert!(execute_stock_adjustment_domain_action(
+            &mut posted,
+            ApprovalDomainAction::StockAdjustmentPost,
+        )
+        .is_err());
 
         let mut pending = draft_adjustment();
         pending.status = StockAdjustmentState::PendingWarehouseReview;
-        assert!(start_stock_adjustment_approval(&mut pending).is_err());
-        assert!(ensure_final_approve_posting(&pending).is_err());
+        assert!(execute_stock_adjustment_domain_action(
+            &mut pending,
+            ApprovalDomainAction::StockAdjustmentSubmit,
+        )
+        .is_err());
+        assert!(execute_stock_adjustment_domain_action(
+            &mut pending,
+            ApprovalDomainAction::StockAdjustmentPost,
+        )
+        .is_err());
     }
 
     /// 过账只允许审批中，旧复核态不得再作为过账入口。
     #[test]
     fn post_only_accepts_in_approval() {
         let mut adjustment = draft_adjustment();
-        start_stock_adjustment_approval(&mut adjustment).unwrap();
-        assert!(ensure_final_approve_posting(&adjustment).is_ok());
+        execute_stock_adjustment_domain_action(&mut adjustment, ApprovalDomainAction::StockAdjustmentSubmit)
+            .unwrap();
+        assert!(execute_stock_adjustment_domain_action(
+            &mut adjustment,
+            ApprovalDomainAction::StockAdjustmentPost,
+        )
+        .is_ok());
         adjustment.status = StockAdjustmentState::PendingFinanceReview;
-        assert!(ensure_final_approve_posting(&adjustment).is_err());
+        assert!(execute_stock_adjustment_domain_action(
+            &mut adjustment,
+            ApprovalDomainAction::StockAdjustmentPost,
+        )
+        .is_err());
     }
 
     /// 快照冻结仓库对手方与数量合计，客户端不能写入定义。
@@ -590,7 +529,21 @@ mod tests {
             Instant::from_unix_secs(1),
         )
         .unwrap();
-        let view = document_approval_view(Some(&binding), None, StockAdjustmentState::Draft);
+        let view = document_approval_view_with_history(
+            Some(&binding),
+            None,
+            Vec::new(),
+            DocumentApprovalHistoryPageView {
+                next_cursor: None,
+                has_more: false,
+            },
+            StockAdjustmentState::Draft,
+            Some(SubmitStockAdjustmentApprovalTokenView {
+                expected_version: "1".to_string(),
+                expected_subject_version: "1".to_string(),
+            }),
+            None,
+        );
         assert_eq!(view.requirement, "PROCESS_REQUIRED");
         assert_eq!(view.definition.as_ref().unwrap().id, "def-1");
         assert_eq!(view.definition.as_ref().unwrap().version, 2);
@@ -603,16 +556,39 @@ mod tests {
             .iter()
             .any(|item| item.contains("DEFINITION")));
         assert!(!view.allowed_actions.iter().any(|item| item.contains("ASSIGNEE")));
-        let running = document_approval_view(Some(&binding), None, StockAdjustmentState::InApproval);
-        assert_eq!(running.allowed_actions, vec!["CANCEL".to_string()]);
-    }
-
-    /// 对象读取权空组织或空审批人失败关闭。
-    #[test]
-    fn object_read_fails_closed_on_empty_identity() {
-        assert!(stock_adjustment_object_readable("wh-1", "u1").unwrap());
-        assert!(stock_adjustment_object_readable(" ", "u1").is_err());
-        assert!(stock_adjustment_object_readable("wh-1", "").is_err());
+        let running = document_approval_view_with_history(
+            Some(&binding),
+            None,
+            Vec::new(),
+            DocumentApprovalHistoryPageView {
+                next_cursor: None,
+                has_more: false,
+            },
+            StockAdjustmentState::InApproval,
+            None,
+            None,
+        );
+        assert!(running.allowed_actions.is_empty());
+        let authorized = document_approval_view_with_history(
+            Some(&binding),
+            None,
+            Vec::new(),
+            DocumentApprovalHistoryPageView {
+                next_cursor: None,
+                has_more: false,
+            },
+            StockAdjustmentState::InApproval,
+            None,
+            Some(CancelStockAdjustmentApprovalTokenView {
+                expected_version: "7".to_string(),
+                approval_process_instance_id: "instance-1".to_string(),
+                expected_subject_version: "2".to_string(),
+                expected_instance_version: "3".to_string(),
+                expected_execution_version: "4".to_string(),
+                expected_task_version: Some("5".to_string()),
+            }),
+        );
+        assert_eq!(authorized.allowed_actions, vec!["CANCEL".to_string()]);
     }
 
     /// 领域动作分派只接受三类签署动作。

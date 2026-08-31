@@ -30,6 +30,7 @@ use super::policy::{
     ProcessRequiredApprovalPolicy, STATIC_APPROVE_PERMISSION,
 };
 use super::process_kind::process_kind_of;
+use super::scope::approval_document_read_scope_with_executor;
 
 /// 绑定审计动作。
 pub const DEFINITION_BOUND_AUDIT_ACTION: &str = "approval.definition.bound";
@@ -321,6 +322,10 @@ async fn revalidate_binding_graph(
     let accounts = load_assignee_accounts(db, &assignee_ids, executor).await?;
     for user_id in &assignee_ids {
         let account = require_ready_assignee(accounts.get(user_id))?;
+        if policy.document_type == DocumentType::StockAdjustment {
+            revalidate_stock_adjustment_binding_access(db, rbac, context, account, executor).await?;
+            continue;
+        }
         ensure_static_decide_permission(rbac, account).await?;
         let (user_scopes, role_scope_sets) = load_assignee_scope_sets(db, rbac, account, executor).await?;
         revalidate_assignee_binding_access_by_role(&spec, &user_scopes, &role_scope_sets, context, user_id)?;
@@ -544,6 +549,38 @@ fn revalidate_assignee_binding_access_by_role(
         })
         .unwrap_or(&[]);
     revalidate_assignee_binding_access(spec, user_scopes, role_scopes, context, assignee_user_id)
+}
+
+/// 库存调整绑定在同一 executor 内分别证明决定与对象读取范围。
+async fn revalidate_stock_adjustment_binding_access(
+    db: &Database,
+    rbac: &SharedRbacService,
+    context: &BindingRevalidationContext,
+    account: &AccountCore,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let assignee = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
+    let decide_scope =
+        crate::approval::approval_decide_scope_with_executor(db, rbac, &assignee, executor).await?;
+    let read_scope = approval_document_read_scope_with_executor(
+        db,
+        rbac,
+        &assignee,
+        DocumentType::StockAdjustment,
+        executor,
+    )
+    .await?;
+    if !decide_scope.covers(&context.organization_id) {
+        return Err(Error::ValidationError(
+            "指定审批人缺少审批权限或数据范围不覆盖当前单据组织".to_string(),
+        ));
+    }
+    if !read_scope.covers(&context.organization_id) {
+        return Err(Error::ValidationError(
+            "指定审批人不能读取当前库存调整单".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// 读取 Casbin 绑定且仍然启用的角色 ID。

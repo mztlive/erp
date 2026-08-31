@@ -14,8 +14,16 @@ Repository 不自行启动、提交或回滚事务。`MongoCasbinAdapter` 的业
 独立所有权任务中完成事务收尾。
 
 MongoDB 事务要求副本集或支持事务的分片集群；单机 standalone MongoDB 不能执行事务。
-事务统一使用 `majority` write concern，确保成功返回的业务写与 policy revision 不会在
-副本集主节点切换后回滚并复用旧 revision。
+所有通过 `Transactional::with_transaction` 启动的业务事务必须同时使用
+`snapshot` read concern 与 `majority` write concern。`snapshot` 保证事务内的业务事实、
+授权事实和 policy revision 来自同一个 majority-committed 快照；`majority` 保证成功返回的
+业务写与 policy revision 不会在副本集主节点切换后回滚并复用旧 revision。禁止依赖驱动或
+服务端默认的 `local` read concern 证明跨集合或跨分片一致性。
+
+统一业务事务不得显式创建或删除 collection/index，不得访问 capped collection，也不得执行
+`$out`、`$merge` 或其他不支持 `snapshot` 的命令。collection 与 index 必须由启动阶段的
+`ensure_indexes` 或独立迁移在业务事务开始前完成。新增事务操作前，实施方必须先确认该操作
+支持 transaction-level `snapshot`；不支持时不得降低统一事务隔离级别。
 
 ## 基本用法
 
@@ -83,10 +91,11 @@ pub trait Executor: Send {
 
 ## Casbin policy revision
 
-policy rule 与全局 revision 必须在同一个 MongoDB 事务中提交。授权读取先比较数据库
-revision 与本地 Enforcer 已加载版本；版本变化时，只有在 reload 前后 revision 保持一致
-才发布新快照。事务的 `majority` write concern 保证 revision 单调持久，避免主节点切换后
-回退并复用旧版本。数据库不可读、reload 失败或 policy 持续变化时均失败关闭，不使用旧缓存。
+policy rule 与全局 revision 必须在同一个 MongoDB 事务中提交。授权读取先比较事务
+`snapshot` 中的数据库 revision 与本地 Enforcer 已加载版本；版本变化时，只有在 reload
+前后 revision 保持一致才发布新快照。事务的 `majority` write concern 保证 revision 单调
+持久，避免主节点切换后回退并复用旧版本。数据库不可读、reload 失败或 policy 持续变化时
+均失败关闭，不使用旧缓存。
 
 禁止直接修改 `casbin_rules`，也禁止在 `RbacService` 的 policy 事务运行器之外调用
 Adapter 的 policy 写方法。否则 revision 不会变化，其他实例无法感知该写入。Casbin
@@ -122,3 +131,7 @@ MongoDB 为提交错误标记 `UnknownTransactionCommitResult` 时，实现在�
 - 多集合写入、角色实体与 policy 同步、账号与 Profile/角色绑定同步时使用事务。
 - 在事务闭包内完成依赖事务快照的存在性和状态校验。
 - 保持事务短小，不在事务内执行外部 HTTP、文件 I/O 或 CPU 密集工作。
+- 禁止在业务事务内执行显式 collection/index DDL、capped collection 操作或不支持
+  `snapshot` 的聚合阶段；DDL 与索引变更必须在启动门禁或独立迁移中完成。
+- 长事务必须受业务超时约束；出现 `SnapshotTooOld` 或同类快照过期错误时按确定失败处理，
+  不得降低 read concern 后重放同一正式命令。

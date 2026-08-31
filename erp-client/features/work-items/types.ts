@@ -81,7 +81,7 @@ export type WorkItemDto = Readonly<{
     business_object_label?: string | null
     counterparty_label?: string | null
     subject_version: string
-    task_version: string | number
+    task_version: string
     allowed_actions?: readonly WorkItemAllowedAction[]
     action_blockers?: readonly WorkItemActionBlockerDto[]
     priority: string | number
@@ -264,7 +264,11 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         businessObjectLabel: dto.business_object_label ?? dto.work_item_type,
         counterpartyLabel: dto.counterparty_label ?? undefined,
         subjectVersion: dto.subject_version,
-        taskVersion: String(dto.task_version),
+        taskVersion:
+            typeof dto.task_version === "string" &&
+            /^[1-9]\d*$/.test(dto.task_version)
+                ? dto.task_version
+                : "",
         allowedActions: dto.allowed_actions ?? [],
         actionBlockers: (dto.action_blockers ?? []).map(blockerMessage),
         priority: dto.priority,

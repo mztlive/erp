@@ -179,6 +179,62 @@ pub fn cancel_digest(
     ]))
 }
 
+/// 业务单据普通撤回的版本化 canonical 载荷。
+///
+/// 普通撤回除了审批运行版本，还必须绑定业务单据乐观锁版本。该摘要只供
+/// 业务域签署的 `cancel_action` 使用；受阻取消继续使用独立摘要合同。
+///
+/// # 参数
+/// * `subject_version` - 冻结提交版本
+/// * `expected_document_version` - 期望业务单据版本
+/// * `expected_instance_version` - 期望实例版本
+/// * `expected_execution_version` - 期望执行版本
+/// * `expected_task_version` - 可空任务版本
+/// * `reason` - 已 trim 原因
+/// * `actor_id` - 取消人
+///
+/// # 返回
+/// 返回带稳定版本标识的普通业务撤回载荷摘要。
+pub fn document_cancel_digest(
+    subject_version: u32,
+    expected_document_version: u64,
+    expected_instance_version: u64,
+    expected_execution_version: u64,
+    expected_task_version: Option<u64>,
+    reason: &str,
+    actor_id: &str,
+) -> String {
+    let subject_version = subject_version.to_string();
+    let document_version = expected_document_version.to_string();
+    let instance_version = expected_instance_version.to_string();
+    let execution_version = expected_execution_version.to_string();
+    let task_version = expected_task_version.map(|value| value.to_string());
+    let mut canonical = String::new();
+    push_length_prefixed(&mut canonical, "DOCUMENT_CANCEL");
+    push_length_prefixed(&mut canonical, "1");
+    push_length_prefixed(&mut canonical, &subject_version);
+    push_length_prefixed(&mut canonical, &document_version);
+    push_length_prefixed(&mut canonical, &instance_version);
+    push_length_prefixed(&mut canonical, &execution_version);
+    match task_version.as_deref() {
+        Some(value) => {
+            push_length_prefixed(&mut canonical, "SOME");
+            push_length_prefixed(&mut canonical, value);
+        }
+        None => push_length_prefixed(&mut canonical, "NONE"),
+    }
+    push_length_prefixed(&mut canonical, reason.trim());
+    push_length_prefixed(&mut canonical, actor_id.trim());
+    payload_digest(&canonical)
+}
+
+/// 追加一个以 UTF-8 字节长度定界的字段。
+fn push_length_prefixed(target: &mut String, value: &str) {
+    target.push_str(&value.len().to_string());
+    target.push(':');
+    target.push_str(value);
+}
+
 /// 恢复命令 canonical 载荷。
 ///
 /// # 参数
@@ -312,8 +368,9 @@ mod tests {
     use crate::ErrorCode;
 
     use super::{
-        cancel_digest, canonical_payload, classify_receipt, decision_digest, normalize_idempotency_key,
-        payload_conflict_error, payload_digest, resume_digest, start_digest, start_scope, ReceiptBranch,
+        cancel_digest, canonical_payload, classify_receipt, decision_digest, document_cancel_digest,
+        normalize_idempotency_key, payload_conflict_error, payload_digest, resume_digest, start_digest,
+        start_scope, ReceiptBranch,
     };
     use bpm::ids::ApprovalCommandReceiptId;
     use bpm::model::types::ApprovalCommandKind;
@@ -325,6 +382,41 @@ mod tests {
         assert_eq!(normalize_idempotency_key("  key-1  ").unwrap(), "key-1");
         assert!(normalize_idempotency_key("   ").is_err());
         assert!(normalize_idempotency_key(&"k".repeat(129)).is_err());
+    }
+
+    /// 业务撤回摘要必须绑定单据版本，并与未绑定单据版本的通用取消摘要隔离。
+    #[test]
+    fn document_cancel_digest_is_versioned_and_binds_document_version() {
+        let first = document_cancel_digest(3, 7, 11, 13, Some(17), " 撤回 ", " u1 ");
+        assert_eq!(
+            first,
+            "acb3b94957c7c60ff44e8c54ef57d354ddb09061e8a05332253ebb0d7245954e"
+        );
+        assert_ne!(
+            first,
+            document_cancel_digest(3, 8, 11, 13, Some(17), "撤回", "u1")
+        );
+        assert_ne!(first, cancel_digest(3, 11, 13, Some(17), "撤回", "u1"));
+        assert_eq!(
+            document_cancel_digest(3, 7, 11, 13, None, "撤回", "u1"),
+            "320cd813e84ebf6fc0ace92bf1d3091ef34cb78e0fa10875a0dbeccbd8239a9d"
+        );
+    }
+
+    /// 长度前缀必须区分分隔符、字面 NULL、空值与 Unicode 载荷。
+    #[test]
+    fn document_cancel_digest_has_no_text_field_collisions() {
+        let separator_left = document_cancel_digest(1, 2, 3, 4, None, "a\u{1f}b", "c");
+        let separator_right = document_cancel_digest(1, 2, 3, 4, None, "a", "b\u{1f}c");
+        assert_ne!(separator_left, separator_right);
+        assert_ne!(
+            document_cancel_digest(1, 2, 3, 4, None, "NULL", "用户"),
+            document_cancel_digest(1, 2, 3, 4, None, "", "用户")
+        );
+        assert_eq!(
+            document_cancel_digest(1, 2, 3, 4, Some(5), " 原因 ", " 用户 "),
+            document_cancel_digest(1, 2, 3, 4, Some(5), "原因", "用户")
+        );
     }
 
     /// canonical 编码使用固定分隔符和 NULL 空值。

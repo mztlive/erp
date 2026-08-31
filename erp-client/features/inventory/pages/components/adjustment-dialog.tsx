@@ -235,6 +235,12 @@ export function AdjustmentDialog({
                                     <form.SubmitButton
                                         id="inventory-adjustment-dialog-submit"
                                         label="提交审批"
+                                        disabled={
+                                            !meta.approval?.submitCommand ||
+                                            !meta.approval.allowedActions.includes(
+                                                "SUBMIT",
+                                            )
+                                        }
                                     />
                                 </form.AppForm>
                             </DialogFooter>

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import {
+    cancelStockAdjustmentApproval,
     createAdjustmentDraft,
     fetchAdjustmentDetail,
     fetchBalanceDetail,
@@ -82,6 +83,29 @@ export function useSubmitAdjustmentMutation() {
                     }),
                 ])
             }
+        },
+    })
+}
+
+/**
+ * 撤回成功后刷新库存详情、审批运行事实与工作任务。
+ */
+export function useCancelStockAdjustmentApprovalMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: cancelStockAdjustmentApproval,
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: inventoryKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                }),
+            ])
         },
     })
 }

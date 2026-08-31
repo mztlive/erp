@@ -20,7 +20,7 @@ export type BackendStockBalance = {
     on_hand_quantity: string
     reserved_quantity: string
     available_quantity: string
-    version: number
+    version: string
     last_movement_id?: string | null
     last_movement_at?: number | null
     last_movement_type?: string | null
@@ -65,7 +65,7 @@ export type BackendStockAdjustment = {
     finance_reviewed_by?: string | null
     note?: string | null
     occurred_at?: number | null
-    version: number
+    version: string
     created_at: number
 }
 
@@ -76,11 +76,32 @@ export type BackendStockAdjustmentLine = {
     direction: string
 }
 
+/** 详情投影下发的普通撤回 CAS 令牌；所有版本必须保持字符串。 */
+export type BackendStockAdjustmentCancelCommand = {
+    expected_version: string
+    approval_process_instance_id: string
+    expected_subject_version: string
+    expected_instance_version: string
+    expected_execution_version: string
+    expected_task_version?: string | null
+}
+
+/** 草稿详情下发的提交 CAS 令牌；主题版本不得由前端推算。 */
+export type BackendStockAdjustmentSubmitCommand = {
+    expected_version: string
+    expected_subject_version: string
+}
+
+export type BackendStockAdjustmentApproval = DocumentApprovalViewDto & {
+    submit_command?: BackendStockAdjustmentSubmitCommand | null
+    cancel_command?: BackendStockAdjustmentCancelCommand | null
+}
+
 export type BackendStockAdjustmentDetail = {
     adjustment: BackendStockAdjustment
     lines: BackendStockAdjustmentLine[]
     posted_movements: BackendStockMovement[]
-    approval?: DocumentApprovalViewDto | null
+    approval?: BackendStockAdjustmentApproval | null
 }
 
 export type BackendStockBalanceDetail = {

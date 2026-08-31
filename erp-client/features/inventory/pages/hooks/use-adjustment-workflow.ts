@@ -16,9 +16,10 @@ import {
     localNowInput,
 } from "@/features/inventory/lib/presentation"
 import { REASON_TYPE_OPTIONS } from "@/features/inventory/types"
-import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type {
     AdjustmentReasonType,
+    StockAdjustmentApprovalView,
+    StockAdjustmentSubmitCommand,
     StockBalanceRow,
 } from "@/features/inventory/types"
 
@@ -33,17 +34,16 @@ export type AdjustmentMeta = {
     onHand: string
     available: string
     adjustmentNo: string
-    editVersion: number
     segregationNote: string
-    approval?: DocumentApprovalView
+    approval?: StockAdjustmentApprovalView
 }
 
 export type AdjustmentPendingPayload = {
     stockAdjustmentId: string
-    expectedDocumentVersion: number
+    submitCommand: StockAdjustmentSubmitCommand
     lineId: string
     balanceId: string
-    expectedBalanceLockVersion: number
+    expectedBalanceLockVersion: string
     reasonType: AdjustmentReasonType
     reasonTypeLabel: string
     direction: "increase" | "decrease"
@@ -97,7 +97,7 @@ export function useAdjustmentWorkflow({
     const [adjustDraftId, setAdjustDraftId] = React.useState<string | null>(
         null,
     )
-    const [adjustLockVersion, setAdjustLockVersion] = React.useState<number>(0)
+    const [adjustLockVersion, setAdjustLockVersion] = React.useState("")
     const [adjustMeta, setAdjustMeta] = React.useState<AdjustmentMeta | null>(
         null,
     )
@@ -177,7 +177,6 @@ export function useAdjustmentWorkflow({
                     onHand: row.onHandQuantity,
                     available: row.availableQuantity,
                     adjustmentNo: draft.adjustmentNo,
-                    editVersion: draft.editVersion,
                     segregationNote: draft.segregationNote,
                     approval: draft.approval,
                 })
@@ -207,6 +206,15 @@ export function useAdjustmentWorkflow({
 
     const doSubmit = React.useCallback(async () => {
         if (!adjustDraftId || !adjustMeta) return
+        const submitCommand = adjustMeta.approval?.submitCommand
+        if (
+            !submitCommand ||
+            !adjustMeta.approval?.allowedActions.includes("SUBMIT")
+        ) {
+            setActionError("当前调整单不能提交，请关闭后重新发起。")
+            setConfirmOpen(false)
+            return
+        }
         const values = form.state.values
         const reason =
             REASON_TYPE_OPTIONS.find((r) => r.value === values.reasonType) ??
@@ -216,7 +224,7 @@ export function useAdjustmentWorkflow({
         }
         const payload: AdjustmentPendingPayload = {
             stockAdjustmentId: adjustDraftId,
-            expectedDocumentVersion: adjustMeta.editVersion,
+            submitCommand,
             lineId: adjustMeta.lineId,
             balanceId: adjustMeta.balanceId,
             expectedBalanceLockVersion: adjustLockVersion,
@@ -277,12 +285,14 @@ export function useAdjustmentWorkflow({
     ])
 
     const resolveLastUnknown = React.useCallback(async () => {
-        if (!lastResult?.pendingIdempotencyKey) return
+        if (!lastResult?.pendingIdempotencyKey || !pendingPayload) return
         const r = await resolveUnknownMutation.mutateAsync({
             idempotencyKey: lastResult.pendingIdempotencyKey,
-            stockAdjustmentId: pendingPayload?.stockAdjustmentId,
+            stockAdjustmentId: pendingPayload.stockAdjustmentId,
+            expectedSubjectVersion:
+                pendingPayload.submitCommand.expectedSubjectVersion,
             expectedBalanceLockVersion:
-                pendingPayload?.expectedBalanceLockVersion,
+                pendingPayload.expectedBalanceLockVersion,
         })
         if (r.status === "succeeded") {
             setLastResult({

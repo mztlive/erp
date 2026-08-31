@@ -22,8 +22,8 @@ pub enum ApprovalCommandOutcome {
 pub struct OpenTaskSummary {
     /// 任务 ID。
     pub work_item_id: String,
-    /// 任务版本。
-    pub task_version: u64,
+    /// 任务版本十进制字符串，避免 JSON/JavaScript 安全整数精度损失。
+    pub task_version: String,
     /// 责任人。
     pub owner_user_id: String,
 }
@@ -138,13 +138,19 @@ mod tests {
             Some("IN_APPROVAL".into()),
             Some(OpenTaskSummary {
                 work_item_id: "wi-1".into(),
-                task_version: 1,
+                task_version: "9007199254740993".into(),
                 owner_user_id: "u1".into(),
             }),
             CommitRequired::Proceed,
             false,
         );
         assert_eq!(view.instance_status, "RUNNING");
+        assert_eq!(
+            view.next_open_task
+                .as_ref()
+                .map(|task| task.task_version.as_str()),
+            Some("9007199254740993")
+        );
         assert_eq!(view.latest_rejection_reason.as_deref(), Some("资料不全"));
         assert_eq!(view.outcome, ApprovalCommandOutcome::Applied);
         let replay = map_command_view(&instance, None, None, None, None, CommitRequired::Proceed, true);

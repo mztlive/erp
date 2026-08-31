@@ -788,6 +788,7 @@ dependencies = [
 name = "bpm"
 version = "0.1.0"
 dependencies = [
+ "bson",
  "chrono",
  "entity-core",
  "entity-macros",

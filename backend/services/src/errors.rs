@@ -15,6 +15,12 @@ pub enum Error {
     #[error("数据冲突: {0}")]
     ConflictError(String),
 
+    #[error("数据冲突: 数据已存在，请勿重复提交")]
+    ReceiptDuplicate(#[source] database::Error),
+
+    #[error("数据冲突: 并发事务冲突，请重试")]
+    TransientTransaction(#[source] database::Error),
+
     #[error("权限不足: {0}")]
     Forbidden(String),
 
@@ -51,9 +57,7 @@ impl From<database::Error> for Error {
             database::Error::OptimisticLockingError => {
                 Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
             }
-            database::Error::TransientTransactionConflict(_) => {
-                Self::ConflictError("并发事务冲突，请重试".to_string())
-            }
+            error @ database::Error::TransientTransactionConflict(_) => Self::TransientTransaction(error),
             error @ database::Error::CommitOutcomeUnknown(_) => Self::OutcomeUnknown(error),
             other => Self::RepositoryError(other),
         }
@@ -338,7 +342,19 @@ mod tests {
             "write conflict",
         )));
 
-        assert!(matches!(error, Error::ConflictError(_)));
+        assert!(matches!(&error, Error::TransientTransaction(_)));
+        assert_eq!(error.to_string(), "数据冲突: 并发事务冲突，请重试");
+        assert!(std::error::Error::source(&error).is_some());
+    }
+
+    #[test]
+    fn receipt_duplicate_keeps_source_and_existing_conflict_wire_message() {
+        let error = Error::ReceiptDuplicate(database::Error::DuplicateKey(MongoError::custom(
+            "duplicate receipt",
+        )));
+
+        assert_eq!(error.to_string(), "数据冲突: 数据已存在，请勿重复提交");
+        assert!(std::error::Error::source(&error).is_some());
     }
 
     #[test]

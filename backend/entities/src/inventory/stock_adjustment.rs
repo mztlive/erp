@@ -365,6 +365,63 @@ impl StockAdjustment {
         Ok(())
     }
 
+    /// 提交并启动审批：递增审批主题版本并进入审批中。
+    ///
+    /// 仅草稿可提交。版本递增与状态迁移在全部校验成功后一起写入，
+    /// 因此版本溢出或状态非法时实体保持不变。
+    ///
+    /// # 返回
+    /// 返回本次冻结的审批主题版本。
+    ///
+    /// # 错误
+    /// 非草稿或审批主题版本溢出时返回错误。
+    pub fn start_approval(&mut self) -> Result<u32> {
+        if self.status != StockAdjustmentState::Draft {
+            return Err(Error::from("只有草稿状态的库存调整单可以提交审批"));
+        }
+        let next = self
+            .approval_subject_version
+            .checked_add(1)
+            .ok_or_else(|| Error::from("审批提交版本溢出"))?;
+        ensure_transition(self.status, StockAdjustmentState::InApproval)?;
+        self.approval_subject_version = next;
+        self.status = StockAdjustmentState::InApproval;
+        Ok(next)
+    }
+
+    /// 撤回审批并回到草稿，审批主题版本保持不变。
+    ///
+    /// # 返回
+    /// 撤回成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不是审批中时返回错误。
+    pub fn cancel_approval(&mut self) -> Result<()> {
+        if self.status != StockAdjustmentState::InApproval {
+            return Err(Error::from("只有审批中的库存调整单可以撤回审批"));
+        }
+        ensure_transition(self.status, StockAdjustmentState::Draft)?;
+        self.status = StockAdjustmentState::Draft;
+        Ok(())
+    }
+
+    /// 校验调整单可由审批最终通过动作进入过账事务。
+    ///
+    /// 该方法只执行专用状态守卫，不修改调整单。库存流水、余额及最终状态
+    /// 仍由 Service 在同一事务内持久化。
+    ///
+    /// # 返回
+    /// 当前状态为审批中时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不是审批中时返回错误；旧人工财务复核状态不得通过该守卫。
+    pub fn ensure_approval_postable(&self) -> Result<()> {
+        if self.status != StockAdjustmentState::InApproval {
+            return Err(Error::from("只有审批中的库存调整单可以由最终通过动作过账"));
+        }
+        ensure_transition(self.status, StockAdjustmentState::Posted)
+    }
+
     /// 提交仓储复核（草稿/驳回 → 待仓储复核）。
     ///
     /// 驳回的调整单在修改后重新提交复核（§6.5.5）；提交时登记仓储复核人，
@@ -761,6 +818,13 @@ mod tests {
         }
     }
 
+    fn adjustment_in_state(status: StockAdjustmentState, subject_version: u32) -> StockAdjustment {
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("approval-adj"), data()).unwrap();
+        adjustment.status = status;
+        adjustment.approval_subject_version = subject_version;
+        adjustment
+    }
+
     /// happy path：单号规范化、岗位分离、双审核与过账/冲正全链路。
     #[test]
     fn new_normalizes_and_drives_full_state_machine() {
@@ -811,6 +875,107 @@ mod tests {
             .is_err());
         assert!(adjustment.mark_posted().is_err(), "未经审核不能过账");
         assert!(adjustment.reverse().is_err(), "草稿不能冲正");
+    }
+
+    /// 审批提交和撤回保持主题版本单调递增，重复动作失败且不修改实体。
+    #[test]
+    fn approval_submit_and_cancel_keep_monotonic_subject_version() {
+        let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, 0);
+        assert_eq!(adjustment.start_approval().unwrap(), 1);
+        assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
+
+        let submitted = adjustment.clone();
+        assert!(adjustment.start_approval().is_err());
+        assert_eq!(adjustment, submitted, "重复提交不得修改实体");
+
+        adjustment.cancel_approval().unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Draft);
+        assert_eq!(adjustment.approval_subject_version, 1);
+
+        let cancelled = adjustment.clone();
+        assert!(adjustment.cancel_approval().is_err());
+        assert_eq!(adjustment, cancelled, "重复撤回不得修改实体");
+        assert_eq!(adjustment.start_approval().unwrap(), 2);
+    }
+
+    /// 审批提交只接受草稿，全部禁止状态均失败且保持实体逐字段不变。
+    #[test]
+    fn approval_submit_rejects_every_non_draft_state_atomically() {
+        let forbidden = [
+            StockAdjustmentState::InApproval,
+            StockAdjustmentState::PendingWarehouseReview,
+            StockAdjustmentState::PendingFinanceReview,
+            StockAdjustmentState::Posted,
+            StockAdjustmentState::Rejected,
+            StockAdjustmentState::Reversed,
+        ];
+        for status in forbidden {
+            let mut adjustment = adjustment_in_state(status, 7);
+            let before = adjustment.clone();
+            assert!(adjustment.start_approval().is_err(), "{status:?} 不得提交审批");
+            assert_eq!(adjustment, before, "{status:?} 提交失败后实体必须不变");
+        }
+    }
+
+    /// 审批主题版本溢出失败，不得先写状态或其他实体字段。
+    #[test]
+    fn approval_submit_overflow_is_atomic() {
+        let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, u32::MAX);
+        let before = adjustment.clone();
+        assert!(adjustment.start_approval().is_err());
+        assert_eq!(adjustment, before);
+    }
+
+    /// 审批撤回只接受审批中，全部禁止状态均失败且保持主题版本与实体不变。
+    #[test]
+    fn approval_cancel_rejects_every_non_approval_state_atomically() {
+        let forbidden = [
+            StockAdjustmentState::Draft,
+            StockAdjustmentState::PendingWarehouseReview,
+            StockAdjustmentState::PendingFinanceReview,
+            StockAdjustmentState::Posted,
+            StockAdjustmentState::Rejected,
+            StockAdjustmentState::Reversed,
+        ];
+        for status in forbidden {
+            let mut adjustment = adjustment_in_state(status, 7);
+            let before = adjustment.clone();
+            assert!(adjustment.cancel_approval().is_err(), "{status:?} 不得撤回审批");
+            assert_eq!(adjustment, before, "{status:?} 撤回失败后实体必须不变");
+        }
+    }
+
+    /// 审批过账专用守卫只接受审批中，并保持实体只读。
+    #[test]
+    fn approval_postable_guard_accepts_only_in_approval_without_mutation() {
+        let states = [
+            StockAdjustmentState::Draft,
+            StockAdjustmentState::PendingWarehouseReview,
+            StockAdjustmentState::PendingFinanceReview,
+            StockAdjustmentState::Posted,
+            StockAdjustmentState::Rejected,
+            StockAdjustmentState::Reversed,
+            StockAdjustmentState::InApproval,
+        ];
+        for status in states {
+            let adjustment = adjustment_in_state(status, 3);
+            let before = adjustment.clone();
+            let result = adjustment.ensure_approval_postable();
+            assert_eq!(
+                result.is_ok(),
+                status == StockAdjustmentState::InApproval,
+                "{status:?}"
+            );
+            assert_eq!(adjustment, before, "专用守卫不得修改实体");
+        }
+    }
+
+    /// 旧人工复核路径仍可从待财务确认调用通用过账方法。
+    #[test]
+    fn legacy_mark_posted_still_accepts_pending_finance_review() {
+        let mut adjustment = adjustment_in_state(StockAdjustmentState::PendingFinanceReview, 0);
+        adjustment.mark_posted().unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Posted);
     }
 
     /// 驳回路径：复核/财务确认可驳回，驳回后修改并重新提交复核。

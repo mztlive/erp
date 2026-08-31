@@ -98,6 +98,22 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/stock-adjustments/{id}/submit-result",
+            with_permission(
+                get(inventory::stock_adjustment_submit_result),
+                rbac,
+                inventory::stock_adjustment_submit_result_permission_key(),
+            ),
+        )
+        .route(
+            "/stock-adjustments/{id}/cancel-approval",
+            with_permission(
+                post(inventory::stock_adjustment_cancel_approval),
+                rbac,
+                inventory::stock_adjustment_cancel_approval_permission_key(),
+            ),
+        )
+        .route(
             "/stock-adjustments/{id}/post",
             with_permission(
                 post(inventory::stock_adjustment_post),
@@ -121,5 +137,10 @@ mod tests {
         assert!(!production.contains("stock_adjustment_approve"));
         assert!(!production.contains("stock_adjustment_reject"));
         assert!(production.contains("/stock-adjustments/{id}/submit"));
+        assert!(production.contains("/stock-adjustments/{id}/submit-result"));
+        assert!(production.contains("stock_adjustment_submit_result"));
+        assert!(production.contains("/stock-adjustments/{id}/cancel-approval"));
+        assert!(production.contains("stock_adjustment_cancel_approval"));
+        assert!(production.contains("/stock-adjustments/{id}/post"));
     }
 }

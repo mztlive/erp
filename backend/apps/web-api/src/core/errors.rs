@@ -146,6 +146,8 @@ impl From<services::Error> for Error {
             services::Error::ValidationError(msg) => Error::BadRequest(msg),
             services::Error::NotFound(msg) => Error::NotFound(msg),
             services::Error::ConflictError(msg) => Error::Conflict(msg),
+            services::Error::ReceiptDuplicate(_) => Error::Conflict("数据已存在，请勿重复提交".to_string()),
+            services::Error::TransientTransaction(_) => Error::Conflict("并发事务冲突，请重试".to_string()),
             services::Error::BusinessLogicError(msg) => Error::Unprocessable(msg),
             services::Error::Forbidden(msg) => Error::Forbidden(msg),
             services::Error::Unauthenticated(msg) => Error::Unauthorized(msg),
@@ -407,6 +409,14 @@ mod tests {
             mongodb::error::Error::custom("unknown"),
         ))
         .into();
+        let receipt_duplicate: Error = services::Error::ReceiptDuplicate(database::Error::DuplicateKey(
+            mongodb::error::Error::custom("duplicate receipt source"),
+        ))
+        .into();
+        let transient: Error = services::Error::from(database::Error::TransientTransactionConflict(
+            mongodb::error::Error::custom("transient source"),
+        ))
+        .into();
 
         assert!(matches!(not_found, Error::NotFound(_)));
         assert!(matches!(conflict, Error::Conflict(_)));
@@ -416,6 +426,10 @@ mod tests {
         assert!(matches!(unauthorized, Error::Unauthorized(_)));
         assert!(matches!(logic, Error::Logic(_)));
         assert!(matches!(outcome_unknown, Error::OutcomeUnknown(_)));
+        assert!(
+            matches!(receipt_duplicate, Error::Conflict(message) if message == "数据已存在，请勿重复提交")
+        );
+        assert!(matches!(transient, Error::Conflict(message) if message == "并发事务冲突，请重试"));
     }
 
     #[test]

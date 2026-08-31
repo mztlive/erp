@@ -13,10 +13,11 @@ import {
     filterAllowedActions,
     type ApprovalAllowedAction,
     type ApprovalCommandView,
-    type DocumentApprovalView,
 } from "@/features/approval-workflow/types"
 import { STOCK_ADJUSTMENT_DOCUMENT_TYPE } from "@/features/inventory/api/adjustment"
 import { isDraftAdjustmentStatus } from "@/features/inventory/api/display"
+import { CancelAdjustmentApprovalDialog } from "@/features/inventory/components/cancel-adjustment-approval-dialog"
+import type { StockAdjustmentApprovalView } from "@/features/inventory/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type AdjustmentApprovalPhase = "draft" | "confirm" | "runtime"
@@ -59,7 +60,7 @@ export function AdjustmentApprovalArea({
     idPrefix,
 }: {
     phase: AdjustmentApprovalPhase
-    approval?: DocumentApprovalView
+    approval?: StockAdjustmentApprovalView
     documentId?: string
     workItemId?: string
     expectedTaskVersion?: string
@@ -84,6 +85,11 @@ export function AdjustmentApprovalArea({
         approval?.allowedActions,
         workItemAllowedActions,
     )
+    const cancelCommand = approval?.cancelCommand
+    const showCancelApproval =
+        Boolean(documentId) &&
+        allowedActions.includes("CANCEL") &&
+        Boolean(cancelCommand)
     const derivedApprovalBarId =
         idPrefix ??
         id ??
@@ -99,6 +105,7 @@ export function AdjustmentApprovalArea({
                     <ApprovalActionBar
                         id={derivedApprovalBarId}
                         allowedActions={allowedActions}
+                        hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
                         definition={approval?.definition}
                         documentType={STOCK_ADJUSTMENT_DOCUMENT_TYPE}
                         documentId={documentId}
@@ -138,8 +145,19 @@ export function AdjustmentApprovalArea({
                 documentType={STOCK_ADJUSTMENT_DOCUMENT_TYPE}
                 documentId={documentId}
                 afterCancelStatusLabel="草稿"
+                hiddenActions={["CANCEL", "CANCEL_APPROVAL"]}
                 onDecisionApplied={onDecisionApplied}
             />
+            {showCancelApproval && documentId && cancelCommand ? (
+                <div className="flex flex-wrap gap-2">
+                    <CancelAdjustmentApprovalDialog
+                        id={`${derivedApprovalBarId}-cancel-approval`}
+                        stockAdjustmentId={documentId}
+                        command={cancelCommand}
+                        currentNodeName={approval?.instance?.currentNodeName}
+                    />
+                </div>
+            ) : null}
         </div>
     )
 }

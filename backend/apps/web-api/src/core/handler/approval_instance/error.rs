@@ -234,6 +234,13 @@ pub fn correlation_id(headers: &HeaderMap) -> String {
 /// # 错误
 /// 非正整数字符串时返回 400。
 pub fn parse_version(value: &str, _label: &str, headers: &HeaderMap) -> Result<u64, ApprovalHttpError> {
+    let bytes = value.as_bytes();
+    if bytes.is_empty() || !matches!(bytes[0], b'1'..=b'9') || !bytes[1..].iter().all(u8::is_ascii_digit) {
+        return Err(ApprovalHttpError::bad_request(
+            "页面数据已失效，请刷新后重试",
+            headers,
+        ));
+    }
     let version = value
         .parse::<u64>()
         .map_err(|_| ApprovalHttpError::bad_request("页面数据已失效，请刷新后重试", headers))?;
@@ -338,7 +345,29 @@ mod tests {
 
     use services::ErrorCode;
 
-    use super::{status_of, ApprovalHttpError, TRACE_ID_HEADER};
+    use super::{parse_version, status_of, ApprovalHttpError, TRACE_ID_HEADER};
+
+    #[test]
+    fn version_parser_only_accepts_canonical_positive_decimal_strings() {
+        let headers = axum::http::HeaderMap::new();
+        for value in ["1", "9", "9007199254740993", "18446744073709551615"] {
+            assert!(parse_version(value, "版本", &headers).is_ok(), "{value}");
+        }
+        for value in [
+            "",
+            "0",
+            "01",
+            "+1",
+            "-1",
+            " 1",
+            "1 ",
+            "1.0",
+            "一",
+            "18446744073709551616",
+        ] {
+            assert!(parse_version(value, "版本", &headers).is_err(), "{value:?}");
+        }
+    }
 
     #[test]
     fn policy_not_registered_is_internal_error() {

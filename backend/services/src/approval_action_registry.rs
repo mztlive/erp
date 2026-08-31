@@ -67,15 +67,10 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                         .await
                 }
                 ApprovalDomainAction::StockAdjustmentPost => {
-                    let session = require_transaction(executor)?;
-                    crate::inventory::post_stock_adjustment_in_transaction(
-                        &self.db,
-                        &entities::ids::StockAdjustmentId::new(&context.business_object_id),
-                        actor,
-                        session,
-                    )
-                    .await
-                    .map(|_| ())
+                    crate::inventory::InventoryService::new(self.db.clone(), self.rbac.clone())
+                        .post_stock_adjustment(context, actor, executor)
+                        .await
+                        .map(|_| ())
                 }
                 ApprovalDomainAction::CustomerReceiptPost => {
                     let session = require_transaction(executor)?;
@@ -144,11 +139,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 }
                 ApprovalDomainAction::StockAdjustmentCancelApproval => {
                     crate::inventory::cancel_stock_adjustment_approval_in_transaction(
-                        &self.db,
-                        &entities::ids::StockAdjustmentId::new(&context.business_object_id),
-                        action,
-                        actor,
-                        executor,
+                        &self.db, context, action, actor, executor,
                     )
                     .await
                 }

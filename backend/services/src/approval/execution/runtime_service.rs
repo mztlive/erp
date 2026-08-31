@@ -5,6 +5,7 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Duration,
 };
 
 use bpm::engine::{CommitRequired, Eligibility, TaskCloseReason, TaskIntent};
@@ -13,7 +14,9 @@ use bpm::model::types::{
     ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision, ApprovalNodeExecutionStatus,
     ApprovalProcessInstanceStatus, ModelError,
 };
-use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
+use bpm::model::{
+    ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
+};
 use database::repository::approval_integration::{
     ApprovalRuntimeReadRepository, ApprovalRuntimeReadRow, ApprovalRuntimeReadScope,
     ApprovalRuntimeReadTypeScope,
@@ -22,7 +25,9 @@ use database::repository::bpm::{
     ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
     ApprovalInstanceSummary, ApprovalInstanceTextQuery,
 };
-use database::{AccessControlExt, ApprovalIntegrationExt, BpmExt, NoTransaction, Transactional, WorkItemExt};
+use database::{
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, Transactional, WorkItemExt,
+};
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::common::time::Instant;
 use entities::document_registry::DocumentType;
@@ -34,12 +39,15 @@ use entities::work_item::{
 use id_generator::next_id;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::apply_plan::PlannedWrites;
-use super::authorization::{converge_eligibility, AuthorizationFailure};
+use super::authorization::{
+    converge_eligibility, hidden_forbidden, requires_blocked_cancel, AuthorizationFailure,
+};
 use super::decision::prepare_decision;
 use super::idempotency::{
-    cancel_blocked_digest, normalize_idempotency_key, payload_conflict_error, resume_digest,
+    cancel_blocked_digest, decision_digest, normalize_idempotency_key, payload_conflict_error, resume_digest,
 };
 use super::resume::prepare_resume;
 use super::runtime_history::{history_item_from_execution, history_page_from, RuntimeHistoryPage};
@@ -54,18 +62,20 @@ use super::{
 use crate::approval::binding::upgrade_unsubmitted_document_definition;
 use crate::approval::business_adapter::{
     adapter_object_read_decision, adapter_spec_of, document_type_from_subject_kind,
-    BindingRevalidationContext,
+    ensure_separation_of_duties, BindingRevalidationContext,
 };
 use crate::approval::policy::{
-    policy_of, DocumentApprovalPolicy, ALL_DOCUMENT_TYPES, STATIC_APPROVE_PERMISSION,
+    policy_of, DocumentApprovalPolicy, SeparationOfDutiesPolicy, ALL_DOCUMENT_TYPES,
+    STATIC_APPROVE_PERMISSION,
 };
 use crate::approval::process_kind::process_kind_of;
-use crate::approval::scope::{
-    approval_actor_is_active, approval_document_read_scope, definition_management_visibility,
-};
+use crate::approval::scope::definition_management_visibility;
 use crate::approval::{
-    approval_recovery_scope, ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort,
-    ApprovalResumeCommand, FailClosedApprovalActionPort,
+    approval_actor_is_active, approval_actor_is_active_with_executor,
+    approval_cancel_blocked_scope_with_executor, approval_decide_scope_with_executor,
+    approval_document_read_scope, approval_document_read_scope_with_executor, approval_recovery_scope,
+    definition_management_visibility_with_executor, ApprovalActionContext, ApprovalCancelBlockedCommand,
+    ApprovalDomainActionPort, ApprovalResumeCommand, FailClosedApprovalActionPort,
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, ErrorCode, Result};
@@ -495,6 +505,170 @@ struct RuntimeReadSubject {
     document_type: DocumentType,
 }
 
+/// 已规范化的审批决定命令；协议字段保持不变，摘要在进入事务前固定。
+#[derive(Debug, Clone)]
+struct RuntimeDecisionCommand {
+    work_item_id: String,
+    decision: ApprovalDecision,
+    reason: Option<String>,
+    expected_task_version: u64,
+    idempotency_key: String,
+    payload_digest: String,
+    legacy_payload_digest: String,
+}
+
+/// Fresh 决定前置只允许开放任务继续；已终结任务才可能进入收据回放。
+#[derive(Debug)]
+enum DecisionReceiptLookup {
+    Fresh,
+    Terminal(ApprovalNodeExecutionId),
+}
+
+/// 已提交受阻取消的不可变终态事实；先证明原操作人，再允许比较请求摘要。
+struct CancelBlockedTerminalFacts {
+    blocker: ApprovalBlockerCode,
+    actor_id: String,
+    reason: String,
+    execution_version: u64,
+    task_versions: Vec<u64>,
+}
+
+/// V2 命令摘要字段。类型标签与长度前缀共同保证字段边界不可碰撞。
+#[derive(Debug, Clone, Copy)]
+enum V2DigestField<'a> {
+    Text(&'a str),
+    U64(u64),
+    OptionalText(Option<&'a str>),
+    OptionalU64(Option<u64>),
+}
+
+const V2_DIGEST_PREFIX: &str = "v2:";
+
+/// 使用带类型标签和长度前缀的固定元组计算 V2 命令摘要。
+fn versioned_digest_v2(domain: &str, fields: &[V2DigestField<'_>]) -> String {
+    fn update_text(hasher: &mut Sha256, value: &str) {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value.as_bytes());
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"erp.approval.command-digest");
+    hasher.update([0, 2]);
+    update_text(&mut hasher, domain);
+    hasher.update((fields.len() as u64).to_be_bytes());
+    for field in fields {
+        match field {
+            V2DigestField::Text(value) => {
+                hasher.update([1]);
+                update_text(&mut hasher, value);
+            }
+            V2DigestField::U64(value) => {
+                hasher.update([2]);
+                hasher.update(value.to_be_bytes());
+            }
+            V2DigestField::OptionalText(value) => {
+                hasher.update([3]);
+                match value {
+                    Some(value) => {
+                        hasher.update([1]);
+                        update_text(&mut hasher, value);
+                    }
+                    None => hasher.update([0]),
+                }
+            }
+            V2DigestField::OptionalU64(value) => {
+                hasher.update([4]);
+                match value {
+                    Some(value) => {
+                        hasher.update([1]);
+                        hasher.update(value.to_be_bytes());
+                    }
+                    None => hasher.update([0]),
+                }
+            }
+        }
+    }
+    format!("{V2_DIGEST_PREFIX}{}", hex::encode(hasher.finalize()))
+}
+
+/// 新决定命令只写 V2 摘要；协议字段不变。
+fn decision_digest_v2(
+    work_item_id: &str,
+    decision: &str,
+    reason: Option<&str>,
+    expected_task_version: u64,
+    actor_id: &str,
+) -> String {
+    versioned_digest_v2(
+        "SUBMIT_DECISION",
+        &[
+            V2DigestField::Text(work_item_id),
+            V2DigestField::Text(decision),
+            V2DigestField::OptionalText(reason),
+            V2DigestField::U64(expected_task_version),
+            V2DigestField::Text(actor_id),
+        ],
+    )
+}
+
+/// 新受阻取消命令只写 V2 摘要；blocker 仍属于冻结命令载荷。
+fn cancel_blocked_digest_v2(
+    blocker: &str,
+    expected_instance_version: u64,
+    expected_execution_version: u64,
+    expected_task_version: Option<u64>,
+    reason: &str,
+    actor_id: &str,
+) -> String {
+    versioned_digest_v2(
+        "CANCEL_BLOCKED",
+        &[
+            V2DigestField::Text(blocker),
+            V2DigestField::U64(expected_instance_version),
+            V2DigestField::U64(expected_execution_version),
+            V2DigestField::OptionalU64(expected_task_version),
+            V2DigestField::Text(reason),
+            V2DigestField::Text(actor_id),
+        ],
+    )
+}
+
+/// 有版本前缀的收据禁止降级；仅无前缀历史收据允许匹配旧摘要。
+fn reconcile_versioned_receipt_digest(
+    receipt_digest: &str,
+    v2_candidates: &[String],
+    legacy_candidates: &[String],
+) -> Result<()> {
+    let matches = if receipt_digest.starts_with(V2_DIGEST_PREFIX) {
+        v2_candidates.iter().any(|candidate| candidate == receipt_digest)
+    } else {
+        legacy_candidates
+            .iter()
+            .any(|candidate| candidate == receipt_digest)
+    };
+    if matches {
+        Ok(())
+    } else {
+        Err(payload_conflict_error())
+    }
+}
+
+/// 决定事务的提交结果；受阻事实提交后由外层转换为稳定 409。
+struct RuntimeDecisionOutcome {
+    view: ApprovalCommandView,
+    blocked: bool,
+}
+
+/// 决定通知只消费冻结快照、实际执行与当前权限事实。
+struct DecisionNotificationFacts<'a> {
+    document_type_label: &'a str,
+    document_no: &'a str,
+    submitted_by: &'a str,
+    ended_execution: &'a ApprovalNodeExecution,
+    reject_reason: Option<&'a str>,
+    runtime_admin_ids: &'a [String],
+}
+
 /// 纯授权矩阵输入；I/O 与政策解析由 Service 先完成。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeReadAuthorizationFacts {
@@ -726,237 +900,106 @@ impl ApprovalRuntimeService {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
-
-        // ---------- 任务：存在、责任、开放与版本 ----------
-        let item = self
-            .db
-            .work_items()
-            .find_document_approval_by_id(work_item_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let execution_id = item
-            .approval_execution_for_decision(actor.id(), expected_task_version)
-            .map_err(map_approval_task_error)?
-            .as_ref()
-            .to_string();
-
-        // ---------- 执行、实例与定义图 ----------
-        let execution = self
-            .db
-            .bpm_workflow()
-            .find_execution_by_id(&ApprovalNodeExecutionId::new(&execution_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        // CAS 期望版本 = 加载时的持久化版本（引擎计划会在快照上自增版本）。
-        let expected_execution_version = execution.base.version;
-        let instance_id = execution.process_instance_id.as_ref().to_string();
-        let instance = self
-            .db
-            .bpm_workflow()
-            .find_instance_by_id(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let expected_instance_version = instance.base.version;
-        let graph = self
-            .db
-            .bpm_workflow()
-            .load_definition_graph(&instance.process_definition_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
-        let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
-        let spec = adapter_spec_of(document_type)?;
-        let organization_id = item.owner_organization_id.clone();
-
-        // ---------- 写时资格：当前决定人与下一节点审批人 ----------
-        let current_eligibility = self
-            .revalidate_approver(
-                actor.id(),
-                &execution.assignee_name_snapshot,
-                &organization_id,
-                &spec,
-            )
-            .await?;
-        let target_node_key = graph
-            .decision_target_node_key(&execution.node_key, decision)
-            .map_err(map_runtime_graph_error)?;
-        let next_eligibility = match &target_node_key {
-            Some(node_key) => {
-                let node = graph
-                    .node(node_key)
-                    .ok_or_else(|| Error::ConflictError("审批定义缺少目标节点".to_string()))?;
-                self.revalidate_approver(
-                    node.assignee_participant_id.as_str(),
-                    &node.assignee_label_snapshot,
-                    &organization_id,
-                    &spec,
-                )
-                .await?
-            }
-            None => current_eligibility.clone(),
-        };
-
-        // ---------- 幂等与开放任务数 ----------
         let key = normalize_idempotency_key(idempotency_key)?;
-        let receipt = self
-            .db
-            .bpm_workflow()
-            .find_command_receipt(
-                ApprovalCommandKind::SubmitDecision,
-                &execution_id,
-                &key,
-                &mut NoTransaction,
-            )
-            .await?;
-        let open_task_count = self
-            .db
-            .work_items()
-            .count_open_document_approval_by_execution(
-                &ApprovalNodeExecutionId::new(&execution_id),
-                &mut NoTransaction,
-            )
-            .await?;
-        let open_task_count = usize::try_from(open_task_count)
-            .map_err(|_| Error::Internal("开放审批任务数量溢出".to_string()))?;
-
-        // ---------- 规划决定 ----------
-        let now = Instant::now();
-        let instance_assignee_id = self
-            .instance_assignee_id(&instance_id, &execution.node_key)
-            .await?;
-        let prepared = prepare_decision(DecisionExecutionInput {
-            command: ExecutionCommandInput {
-                graph,
-                current_eligibility,
-                next_eligibility,
-                receipt,
-                idempotency_key: key.clone(),
-                now: Timestamp::from_utc(now.as_utc()),
-            },
-            instance,
-            current: execution.clone(),
+        let payload_digest = decision_digest_v2(
+            work_item_id,
+            decision.as_str(),
+            reason.as_deref(),
+            expected_task_version,
+            actor.id(),
+        );
+        let legacy_payload_digest = decision_digest(
+            work_item_id,
+            decision.as_str(),
+            reason.as_deref(),
+            expected_task_version,
+            actor.id(),
+        );
+        let command = RuntimeDecisionCommand {
             work_item_id: work_item_id.to_string(),
-            task_owner_id: item.owner_user_id.clone().unwrap_or_default(),
-            instance_assignee_id,
             decision,
             reason: reason.clone(),
             expected_task_version,
-            actor: ParticipantId::new(actor.id())
-                .map_err(|_| Error::ValidationError("决定人引用无效".to_string()))?,
-            next_execution_id: ApprovalNodeExecutionId::new(next_id()),
-            next_execution_no: execution.execution_no + 1,
-            receipt_id: ApprovalCommandReceiptId::new(next_id()),
-            open_task_count,
-        })?;
-
-        match prepared {
-            PreparedExecution::Replay { .. } => {
-                // 同载荷回读：以当前持久化事实构造视图，不得重放写入。
-                let current = self
-                    .db
-                    .bpm_workflow()
-                    .find_current_execution(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
-                    .await?;
-                let instance = self
-                    .db
-                    .bpm_workflow()
-                    .find_instance_by_id(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
+            idempotency_key: key.clone(),
+            payload_digest,
+            legacy_payload_digest,
+        };
+        let outcome = self.commit_decision(actor, command.clone()).await;
+        let outcome = match outcome {
+            Ok(outcome) => outcome,
+            Err(error) if decision_command_may_have_committed(&error) => {
+                self.recover_decision_after_competing_commit(actor, command, error)
                     .await?
-                    .ok_or_else(hidden_not_found)?;
-                Ok(map_command_view(
-                    &instance,
-                    current.as_ref(),
-                    reason,
-                    None,
-                    None,
-                    CommitRequired::Proceed,
-                    true,
-                ))
             }
-            PreparedExecution::Apply(writes) => {
-                let db = self.db.clone();
-                let action_port = Arc::clone(&self.action_port);
-                let actor = actor.clone();
-                let actor_id = actor.id().to_string();
-                let owner_role = spec.owner_role.as_str().to_string();
-                let owner_organization_id = organization_id.clone();
-                let subject_version = writes.instance.subject_version.to_string();
-                let business_object_id = writes.instance.subject.subject_id().to_string();
-                let document_type_label = document_type.label().to_string();
-                let current_node_name = execution.node_name.clone();
-                let should_finalize = writes.commit == CommitRequired::TerminalApproved;
-                let action_context = ApprovalActionContext {
-                    approval_process_instance_id: instance_id.clone(),
-                    approval_node_execution_id: Some(execution_id.clone()),
-                    work_item_id: Some(work_item_id.to_string()),
-                    business_object_type: document_type.as_str().to_string(),
-                    business_object_id: business_object_id.clone(),
-                    subject_version: subject_version.clone(),
-                    actor_id: actor_id.clone(),
-                    reason: reason.clone(),
-                    idempotency_key: key,
-                };
-                let final_action = spec.on_final_approve;
-                let new_task_ids: Vec<String> = writes.create_tasks.iter().map(|_| next_id()).collect();
-                let list_projection =
-                    list_projection_from_writes(&writes, &execution_id, reason.clone(), now);
-                let audit = actor.clone().resource_log_with_message(
-                    "approval.decide",
-                    "approval_process_instance",
-                    instance_id.clone(),
-                    Some(format!(
-                        "decision={} reason={:?} work_item={}",
-                        decision.as_str(),
-                        reason,
-                        work_item_id
-                    )),
-                )?;
-                let client = self.db.client().clone();
-                let work_item_id_owned = work_item_id.to_string();
-                let view = client
-                    .with_transaction(move |session| {
-                        Box::pin(async move {
-                            if should_finalize {
-                                action_port
-                                    .execute(final_action, &action_context, &actor, session)
-                                    .await?;
-                            }
-                            persist_decision_writes(
-                                &db,
-                                &writes,
-                                &execution_id,
-                                expected_instance_version,
-                                expected_execution_version,
-                                expected_task_version,
-                                &work_item_id_owned,
-                                &new_task_ids,
-                                &list_projection,
-                                &audit,
-                                now,
-                                &actor_id,
-                                &owner_role,
-                                &owner_organization_id,
-                                &subject_version,
-                                &business_object_id,
-                                &document_type_label,
-                                &current_node_name,
-                                session,
-                            )
-                            .await?;
-                            Ok::<ApprovalCommandView, crate::errors::Error>(map_command_view(
-                                &writes.instance,
-                                writes.created_executions.last(),
-                                reason,
-                                None,
-                                first_open_task(&writes, &new_task_ids),
-                                writes.commit,
-                                false,
-                            ))
-                        })
+            Err(error) => return Err(error),
+        };
+        if outcome.blocked {
+            return Err(Error::from_approval_code(ErrorCode::ApprovalInstanceBlocked));
+        }
+        Ok(outcome.view)
+    }
+
+    /// 在唯一 MongoDB 事务中先查收据，再执行决定前置、授权与全部写入。
+    async fn commit_decision(
+        &self,
+        actor: &AuditActor,
+        command: RuntimeDecisionCommand,
+    ) -> Result<RuntimeDecisionOutcome> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let action_port = Arc::clone(&self.action_port);
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    submit_decision_in_transaction(
+                        &db,
+                        &rbac,
+                        action_port.as_ref(),
+                        &actor,
+                        &command,
+                        session,
+                    )
+                    .await
+                })
+            })
+            .await
+    }
+
+    /// 并发唯一键或提交结果未知后，必须使用新的事务会话只读胜者收据。
+    async fn recover_decision_after_competing_commit(
+        &self,
+        actor: &AuditActor,
+        command: RuntimeDecisionCommand,
+        original_error: Error,
+    ) -> Result<RuntimeDecisionOutcome> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let rbac = self.rbac.clone();
+            let actor = actor.clone();
+            let command = command.clone();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        replay_decision_in_transaction(&db, &rbac, &actor, &command, session).await
                     })
-                    .await?;
-                Ok(view)
+                })
+                .await;
+            match recovered {
+                Ok(Some(outcome)) => return Ok(outcome),
+                Ok(None) => {}
+                Err(error) if decision_command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(decision_recovery_delay(attempt)).await;
             }
         }
+        Err(original_error)
     }
 
     /// 写时重验审批人资格：账号启用、具备 `approval_instance:decide`、能读取
@@ -965,8 +1008,9 @@ impl ApprovalRuntimeService {
     /// # 参数
     /// * `assignee_id` - 当前或下一节点审批人账号 ID
     /// * `assignee_name` - 定义或执行中的显示名快照
-    /// * `organization_id` - 被审单据责任组织
+    /// * `snapshot` - 被审单据冻结主体与责任组织
     /// * `spec` - 单据类型审批适配器规格
+    /// * `executor` - 调用方持有的数据库快照执行器
     ///
     /// # 返回
     /// 返回 BPM 可消费的有效或结构化受阻资格。
@@ -980,13 +1024,28 @@ impl ApprovalRuntimeService {
         &self,
         assignee_id: &str,
         assignee_name: &str,
-        organization_id: &str,
+        snapshot: &ApprovalSubjectSnapshot,
         spec: &crate::approval::business_adapter::ApprovalAdapterSpec,
+        executor: &mut dyn Executor,
     ) -> Result<Eligibility> {
+        if spec.document_type == DocumentType::StockAdjustment {
+            return revalidate_decision_approver(
+                &self.db,
+                &self.rbac,
+                assignee_id,
+                assignee_name,
+                None,
+                snapshot,
+                spec,
+                process_required_separation_policy(snapshot.document_type)?,
+                executor,
+            )
+            .await;
+        }
         let failure = match self
             .db
             .accounts()
-            .find_approval_assignee_by_id(assignee_id, &mut NoTransaction)
+            .find_approval_assignee_by_id(assignee_id, executor)
             .await?
         {
             Some(account) if account.is_active_backoffice() => {
@@ -998,7 +1057,7 @@ impl ApprovalRuntimeService {
                     .await?
                 {
                     let context = BindingRevalidationContext {
-                        organization_id: organization_id.to_string(),
+                        organization_id: snapshot.payload.responsible_org_id.clone(),
                         creator_id: String::new(),
                     };
                     match adapter_object_read_decision(spec, &context, assignee_id)? {
@@ -1012,34 +1071,6 @@ impl ApprovalRuntimeService {
             _ => Some(AuthorizationFailure::AccountInactive),
         };
         converge_eligibility(assignee_id, assignee_name, failure)
-    }
-
-    /// 读取实例节点当前审批人，作为三方责任校验的实例侧事实。
-    ///
-    /// # 参数
-    /// * `instance_id` - 审批实例 ID
-    /// * `node_key` - 当前定义节点键
-    ///
-    /// # 返回
-    /// 返回实例审批人绑定中的当前参与人 ID。
-    ///
-    /// # 错误
-    /// Repository 查询失败或实例缺少节点审批人绑定时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 查询条件由 BPM Repository 封装，Service 不拼装实例与节点过滤文档。
-    async fn instance_assignee_id(&self, instance_id: &str, node_key: &str) -> Result<String> {
-        let assignee = self
-            .db
-            .bpm_workflow()
-            .find_assignee_for_node(
-                &ApprovalProcessInstanceId::new(instance_id),
-                node_key,
-                &mut NoTransaction,
-            )
-            .await?
-            .ok_or_else(|| Error::ConflictError("实例缺少节点审批人绑定".to_string()))?;
-        Ok(assignee.current_assignee_participant_id.as_str().to_string())
     }
 
     /// 在原审批人重新合格后恢复当前受阻执行。
@@ -1156,10 +1187,12 @@ impl ApprovalRuntimeService {
             .revalidate_approver(
                 assignee.current_assignee_participant_id.as_str(),
                 &current.assignee_name_snapshot,
-                &snapshot.payload.responsible_org_id,
+                &snapshot,
                 &spec,
+                &mut NoTransaction,
             )
             .await?;
+        ensure_resume_approver_recovered(&eligibility)?;
         let graph = self
             .db
             .bpm_workflow()
@@ -1178,7 +1211,7 @@ impl ApprovalRuntimeService {
             },
             instance,
             current: current.clone(),
-            assignee,
+            assignee: assignee.clone(),
             expected_instance_version: command.expected_instance_version,
             expected_execution_version: command.expected_execution_version,
             expected_assignment_version: command.expected_assignment_version,
@@ -1212,9 +1245,35 @@ impl ApprovalRuntimeService {
         let document_type_label = document_type.label().to_string();
         let current_node_name = current.node_name.clone();
         let ended_execution_id = current.base.id.clone();
+        let rbac = self.rbac.clone();
+        let stock_resume_revalidation = (document_type == DocumentType::StockAdjustment).then(|| {
+            (
+                assignee.current_assignee_participant_id.as_str().to_string(),
+                current.assignee_name_snapshot.clone(),
+                snapshot.clone(),
+                spec.clone(),
+            )
+        });
         let view = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    if let Some((assignee_id, assignee_name, snapshot, spec)) =
+                        stock_resume_revalidation.as_ref()
+                    {
+                        let eligibility = revalidate_decision_approver(
+                            &db,
+                            &rbac,
+                            assignee_id,
+                            assignee_name,
+                            None,
+                            snapshot,
+                            spec,
+                            process_required_separation_policy(snapshot.document_type)?,
+                            session,
+                        )
+                        .await?;
+                        ensure_resume_approver_recovered(&eligibility)?;
+                    }
                     persist_resume_writes(
                         &db,
                         ResumePersistInput {
@@ -1270,196 +1329,79 @@ impl ApprovalRuntimeService {
     pub async fn cancel_blocked(
         &self,
         actor: &AuditActor,
-        command: ApprovalCancelBlockedCommand,
+        mut command: ApprovalCancelBlockedCommand,
     ) -> Result<ApprovalCommandView> {
         ensure_command_actor(actor, &command.actor_id)?;
-        let instance_id = command.approval_process_instance_id.clone();
-        let reason = command.reason.trim().to_string();
-        if reason.is_empty() {
+        command.reason = command.reason.trim().to_string();
+        if command.reason.is_empty() {
             return Err(Error::ValidationError("受阻取消原因不能为空".to_string()));
         }
-        let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
-        let snapshot = self
-            .db
-            .approval_subject_snapshots()
-            .find_by_process_instance_id(&instance_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        let recovery_scope = approval_recovery_scope(&self.db, &self.rbac, actor).await?;
-        if !recovery_scope.covers(&snapshot.payload.responsible_org_id) {
-            return Err(Error::Forbidden("无权取消该责任组织的受阻审批实例".to_string()));
+        command.idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
+        let outcome = self.commit_cancel_blocked(actor, command.clone()).await;
+        match outcome {
+            Ok(view) => Ok(view),
+            Err(error) if decision_command_may_have_committed(&error) => {
+                self.recover_cancel_blocked_after_competing_commit(actor, command, error)
+                    .await
+            }
+            Err(error) => Err(error),
         }
-        if let Some(receipt) = self
-            .db
-            .bpm_workflow()
-            .find_command_receipt(
-                ApprovalCommandKind::CancelBlocked,
-                &instance_id,
-                &idempotency_key,
-                &mut NoTransaction,
-            )
-            .await?
-        {
-            reconcile_cancel_blocked_receipt(&receipt, &command, &reason, actor.id())?;
-            return self
-                .persisted_command_view(&instance_id, CommitRequired::Cancelled, true)
-                .await;
-        }
+    }
 
-        self.require_recovery_action(&instance_id, RuntimeRecoveryAction::CancelBlocked)
-            .await?;
-        let instance = self
-            .db
-            .bpm_workflow()
-            .find_instance_by_id(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(hidden_not_found)?;
-        ensure_expected_version(
-            "审批实例",
-            command.expected_instance_version,
-            instance.base.version,
-        )?;
-        let task_policy = instance
-            .cancellation_task_policy()
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        if task_policy.closes_open_task() {
-            return Err(Error::ConflictError("受阻取消不得处理运行中审批实例".to_string()));
-        }
-        let current = self
-            .db
-            .bpm_workflow()
-            .find_current_execution(&ApprovalProcessInstanceId::new(&instance_id), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::ConflictError("审批实例缺少当前受阻执行".to_string()))?;
-        ensure_expected_version(
-            "审批执行",
-            command.expected_execution_version,
-            current.base.version,
-        )?;
-        let execution_id = ApprovalNodeExecutionId::new(current.base.id.clone());
-        let open_tasks = self
-            .db
-            .work_items()
-            .open_approval_tasks_for_execution(&execution_id, &mut NoTransaction)
-            .await?;
-        task_policy
-            .ensure_open_task_count(open_tasks.len())
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        self.validate_cancel_task_version(&execution_id, command.expected_task_version)
-            .await?;
-
-        let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
-        snapshot
-            .ensure_matches_runtime_subject(
-                document_type,
-                instance.subject.subject_id(),
-                instance.subject_version,
-            )
-            .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
-        let spec = adapter_spec_of(document_type)?;
-        let graph = self
-            .db
-            .bpm_workflow()
-            .load_definition_graph(&instance.process_definition_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
-        let eligibility = converge_eligibility(
-            current.assignee_participant_id.as_str(),
-            &current.assignee_name_snapshot,
-            None,
-        )?;
-        let now = Instant::now();
-        let prepared = prepare_cancel(CancelExecutionInput {
-            command: ExecutionCommandInput {
-                graph,
-                current_eligibility: eligibility.clone(),
-                next_eligibility: eligibility,
-                receipt: None,
-                idempotency_key: idempotency_key.clone(),
-                now: Timestamp::from_utc(now.as_utc()),
-            },
-            instance,
-            current: current.clone(),
-            subject_version: snapshot.subject_version,
-            expected_instance_version: command.expected_instance_version,
-            expected_execution_version: command.expected_execution_version,
-            expected_task_version: command.expected_task_version,
-            reason: reason.clone(),
-            actor: ParticipantId::new(actor.id())
-                .map_err(|_| Error::ValidationError("取消人引用无效".to_string()))?,
-            close_open_task: false,
-            blocked_port: true,
-            receipt_id: ApprovalCommandReceiptId::new(next_id()),
-        })?;
-        let PreparedExecution::Apply(writes) = prepared else {
-            return Err(Error::Internal("新受阻取消命令不得进入幂等回放分支".to_string()));
-        };
-        let writes = *writes;
-        let action_context = ApprovalActionContext {
-            approval_process_instance_id: instance_id.clone(),
-            approval_node_execution_id: Some(current.base.id.clone()),
-            work_item_id: None,
-            business_object_type: document_type.as_str().to_string(),
-            business_object_id: snapshot.business_object_id.clone(),
-            subject_version: snapshot.subject_version.to_string(),
-            actor_id: actor.id().to_string(),
-            reason: Some(reason.clone()),
-            idempotency_key,
-        };
-        let audit = actor.clone().resource_log_with_message(
-            "approval.cancel_blocked",
-            "approval_process_instance",
-            instance_id.clone(),
-            Some(format!("execution={} reason={reason}", current.base.id)),
-        )?;
+    /// 在唯一事务内先查/写收据，再执行受阻取消的强类型动作与全部副作用。
+    async fn commit_cancel_blocked(
+        &self,
+        actor: &AuditActor,
+        command: ApprovalCancelBlockedCommand,
+    ) -> Result<ApprovalCommandView> {
         let db = self.db.clone();
+        let rbac = self.rbac.clone();
         let action_port = Arc::clone(&self.action_port);
         let actor = actor.clone();
-        let business_object_id = snapshot.business_object_id.clone();
-        let document_type_label = document_type.label().to_string();
-        let current_node_name = current.node_name.clone();
-        let actor_id = actor.id().to_string();
-        let cancel_action = spec.cancel_action;
-        let client = self.db.client().clone();
-        let view = client
+        self.db
+            .client()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    action_port
-                        .execute(cancel_action, &action_context, &actor, session)
-                        .await?;
-                    db.bpm_workflow()
-                        .persist_cancelled_runtime(
-                            &writes.instance,
-                            &writes.updated_executions,
-                            &writes.receipt,
-                            session,
-                        )
-                        .await?;
-                    persist_cancel_notifications(
-                        &db,
-                        &writes,
-                        &actor_id,
-                        &document_type_label,
-                        &business_object_id,
-                        &current_node_name,
-                        now,
-                        session,
-                    )
-                    .await?;
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<ApprovalCommandView, crate::errors::Error>(map_command_view(
-                        &writes.instance,
-                        None,
-                        None,
-                        Some("DRAFT".to_string()),
-                        None,
-                        writes.commit,
-                        false,
-                    ))
+                    cancel_blocked_in_transaction(&db, &rbac, action_port.as_ref(), &actor, &command, session)
+                        .await
                 })
             })
-            .await?;
-        Ok(view)
+            .await
+    }
+
+    /// 并发唯一键或提交结果未知后使用新会话只读胜者收据。
+    async fn recover_cancel_blocked_after_competing_commit(
+        &self,
+        actor: &AuditActor,
+        command: ApprovalCancelBlockedCommand,
+        original_error: Error,
+    ) -> Result<ApprovalCommandView> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let rbac = self.rbac.clone();
+            let actor = actor.clone();
+            let command = command.clone();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        replay_cancel_blocked_in_transaction(&db, &rbac, &actor, &command, session).await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(view)) => return Ok(view),
+                Ok(None) => {}
+                Err(error) if decision_command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(decision_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 升级未提交单据绑定到当前发布定义。
@@ -1941,27 +1883,6 @@ impl ApprovalRuntimeService {
         }))
     }
 
-    async fn validate_cancel_task_version(
-        &self,
-        execution_id: &ApprovalNodeExecutionId,
-        expected_task_version: Option<u64>,
-    ) -> Result<()> {
-        let Some(expected) = expected_task_version else {
-            return Ok(());
-        };
-        let tasks = self
-            .db
-            .work_items()
-            .approval_tasks_for_execution(execution_id, &mut NoTransaction)
-            .await?;
-        if tasks.len() != 1 {
-            return Err(Error::ConflictError(
-                "调用方声明了审批任务版本，但受阻执行未关联唯一历史任务".to_string(),
-            ));
-        }
-        ensure_expected_version("审批任务", expected, tasks[0].base.version)
-    }
-
     async fn persisted_command_view(
         &self,
         instance_id: &str,
@@ -1994,7 +1915,7 @@ impl ApprovalRuntimeService {
                 }
                 tasks.into_iter().next().map(|task| OpenTaskSummary {
                     work_item_id: task.base.id,
-                    task_version: task.base.version,
+                    task_version: task.base.version.to_string(),
                     owner_user_id: task.owner_user_id.unwrap_or_default(),
                 })
             }
@@ -2010,6 +1931,1142 @@ impl ApprovalRuntimeService {
             replay,
         ))
     }
+}
+
+/// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
+async fn replay_cancel_blocked_in_transaction(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    command: &ApprovalCancelBlockedCommand,
+    session: &mut mongodb::ClientSession,
+) -> Result<Option<ApprovalCommandView>> {
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(
+            &ApprovalProcessInstanceId::new(&command.approval_process_instance_id),
+            session,
+        )
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    if instance.base.id != command.approval_process_instance_id {
+        return Err(hidden_not_found());
+    }
+    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, session, true).await?;
+
+    let terminal_facts = if instance.status == ApprovalProcessInstanceStatus::Cancelled {
+        // 与 Fresh 路径保持相同顺序：失权调用方在任何收据读取或摘要比较前即失败关闭。
+        ensure_cancel_blocked_authorized(db, rbac, actor, document_type, &snapshot, session).await?;
+        let facts = load_cancel_blocked_terminal_facts(db, &instance, session)
+            .await?
+            .ok_or_else(hidden_not_found)?;
+        if facts.actor_id != actor.id() {
+            return match ensure_cancel_blocked_instance_preconditions(&instance, command) {
+                Err(error) => Err(error),
+                Ok(()) => Err(hidden_forbidden()),
+            };
+        }
+        Some(facts)
+    } else {
+        None
+    };
+
+    let Some(receipt) = db
+        .bpm_workflow()
+        .find_command_receipt(
+            ApprovalCommandKind::CancelBlocked,
+            &command.approval_process_instance_id,
+            &command.idempotency_key,
+            session,
+        )
+        .await?
+    else {
+        return Ok(None);
+    };
+    if receipt.scope_id != command.approval_process_instance_id
+        || receipt.result_ref != command.approval_process_instance_id
+    {
+        return Err(hidden_not_found());
+    }
+    let Some(terminal_facts) = terminal_facts else {
+        return Err(hidden_not_found());
+    };
+    // V2 与 legacy 都必须由同一组终态事实证明 receipt result；legacy 不能只依赖旧摘要。
+    if !cancel_blocked_terminal_facts_match(&instance, &terminal_facts, command, actor.id()) {
+        return Err(payload_conflict_error());
+    }
+    reconcile_cancel_blocked_receipt(
+        &receipt,
+        command,
+        &command.reason,
+        actor.id(),
+        terminal_facts.blocker,
+    )?;
+    persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Cancelled, true, session)
+        .await
+        .map(Some)
+}
+
+/// 加载受阻取消的结构化终态、唯一成功审计与历史任务事实，不使用当前请求字段筛选。
+async fn load_cancel_blocked_terminal_facts(
+    db: &Database,
+    instance: &ApprovalProcessInstance,
+    executor: &mut dyn Executor,
+) -> Result<Option<CancelBlockedTerminalFacts>> {
+    if instance.status != ApprovalProcessInstanceStatus::Cancelled
+        || instance.current_node_execution_id.is_some()
+        || instance.blocker_code.is_some()
+        || instance.ended_at.is_none()
+    {
+        return Ok(None);
+    }
+
+    let audits = db
+        .audit_logs()
+        .list_successful_by_resource("approval_process_instance", &instance.base.id, executor)
+        .await?;
+    let matching_audits = audits
+        .iter()
+        .filter(|audit| audit.action == "approval.cancel_blocked")
+        .filter_map(|audit| {
+            let message = audit.message.as_deref()?;
+            let (execution_id, reason) = message.strip_prefix("execution=")?.split_once(" reason=")?;
+            (!execution_id.is_empty()).then(|| {
+                (
+                    audit.actor_id.clone(),
+                    execution_id.to_string(),
+                    reason.to_string(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let [(actor_id, execution_id, reason)] = matching_audits.as_slice() else {
+        return Ok(None);
+    };
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(&ApprovalNodeExecutionId::new(execution_id), executor)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    if execution.process_instance_id.as_ref() != instance.base.id
+        || execution.status != ApprovalNodeExecutionStatus::Cancelled
+        || execution.ended_at != instance.ended_at
+    {
+        return Ok(None);
+    }
+    let Some(blocker) = execution.blocker_code else {
+        return Ok(None);
+    };
+    if !requires_blocked_cancel(blocker) {
+        return Ok(None);
+    }
+
+    let tasks = db
+        .work_items()
+        .approval_tasks_for_execution(&ApprovalNodeExecutionId::new(execution_id), executor)
+        .await?;
+    Ok(Some(CancelBlockedTerminalFacts {
+        blocker,
+        actor_id: actor_id.clone(),
+        reason: reason.clone(),
+        execution_version: execution.base.version,
+        task_versions: tasks.into_iter().map(|task| task.base.version).collect(),
+    }))
+}
+
+/// 只有原操作人、原因、版本与历史任务事实全部相同时，终态才证明当前取消载荷。
+fn cancel_blocked_terminal_facts_match(
+    instance: &ApprovalProcessInstance,
+    facts: &CancelBlockedTerminalFacts,
+    command: &ApprovalCancelBlockedCommand,
+    actor_id: &str,
+) -> bool {
+    let Some(expected_instance_version) = command.expected_instance_version.checked_add(1) else {
+        return false;
+    };
+    let Some(expected_execution_version) = command.expected_execution_version.checked_add(1) else {
+        return false;
+    };
+    let task_identity_matches = match command.expected_task_version {
+        Some(expected) => facts.task_versions.as_slice() == [expected],
+        None => facts.task_versions.is_empty(),
+    };
+    instance.base.version == expected_instance_version
+        && facts.execution_version == expected_execution_version
+        && facts.actor_id == actor_id
+        && facts.reason == command.reason
+        && task_identity_matches
+}
+
+/// 复用 Fresh 受阻取消的实例版本与可恢复状态判定，隐藏收据是否存在。
+fn ensure_cancel_blocked_instance_preconditions(
+    instance: &ApprovalProcessInstance,
+    command: &ApprovalCancelBlockedCommand,
+) -> Result<()> {
+    ensure_expected_version(
+        "审批实例",
+        command.expected_instance_version,
+        instance.base.version,
+    )?;
+    let blocked = instance.status == ApprovalProcessInstanceStatus::Blocked;
+    if !recovery_options_for(blocked, instance.blocker_code).contains(&RuntimeRecoveryAction::CancelBlocked) {
+        return Err(Error::ConflictError("当前 blocker 不允许该恢复动作".to_string()));
+    }
+    Ok(())
+}
+
+/// 在同一事务内完成受阻取消的收据仲裁、授权、动作、运行时、通知与审计。
+async fn cancel_blocked_in_transaction(
+    db: &Database,
+    rbac: &SharedRbacService,
+    action_port: &dyn ApprovalDomainActionPort,
+    actor: &AuditActor,
+    command: &ApprovalCancelBlockedCommand,
+    session: &mut mongodb::ClientSession,
+) -> Result<ApprovalCommandView> {
+    if let Some(replay) = replay_cancel_blocked_in_transaction(db, rbac, actor, command, session).await? {
+        return Ok(replay);
+    }
+    let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&instance_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let (document_type, snapshot) = load_exact_runtime_snapshot(db, &instance, session, false).await?;
+    ensure_cancel_blocked_authorized(db, rbac, actor, document_type, &snapshot, session).await?;
+    ensure_cancel_blocked_instance_preconditions(&instance, command)?;
+    let task_policy = instance
+        .cancellation_task_policy()
+        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    if task_policy.closes_open_task() {
+        return Err(Error::ConflictError("受阻取消不得处理运行中审批实例".to_string()));
+    }
+    let current = db
+        .bpm_workflow()
+        .find_current_execution(&instance_id, session)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批实例缺少当前受阻执行".to_string()))?;
+    if current.process_instance_id != instance_id
+        || instance.current_node_execution_id.as_ref()
+            != Some(&ApprovalNodeExecutionId::new(&current.base.id))
+        || current.status != ApprovalNodeExecutionStatus::Blocked
+    {
+        return Err(Error::ConflictError("受阻审批当前执行引用不一致".to_string()));
+    }
+    ensure_expected_version(
+        "审批执行",
+        command.expected_execution_version,
+        current.base.version,
+    )?;
+    let execution_id = ApprovalNodeExecutionId::new(&current.base.id);
+    let open_tasks = db
+        .work_items()
+        .open_approval_tasks_for_execution(&execution_id, session)
+        .await?;
+    task_policy
+        .ensure_open_task_count(open_tasks.len())
+        .map_err(|error| Error::ConflictError(error.to_string()))?;
+    validate_cancel_task_version_with_executor(db, &execution_id, command.expected_task_version, session)
+        .await?;
+    let spec = adapter_spec_of(document_type)?;
+    let graph = db
+        .bpm_workflow()
+        .load_definition_graph(&instance.process_definition_id, session)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
+    let blocker = match (instance.blocker_code, current.blocker_code) {
+        (Some(instance_blocker), Some(execution_blocker)) if instance_blocker == execution_blocker => {
+            instance_blocker
+        }
+        _ => {
+            return Err(Error::ConflictError(
+                "受阻实例与当前执行 blocker 不一致".to_string(),
+            ))
+        }
+    };
+    let payload_digest = cancel_blocked_digest_v2(
+        blocker.as_str(),
+        command.expected_instance_version,
+        command.expected_execution_version,
+        command.expected_task_version,
+        &command.reason,
+        actor.id(),
+    );
+    let eligibility = converge_eligibility(
+        current.assignee_participant_id.as_str(),
+        &current.assignee_name_snapshot,
+        None,
+    )?;
+    let now = Instant::now();
+    let prepared = prepare_cancel(CancelExecutionInput {
+        command: ExecutionCommandInput {
+            graph,
+            current_eligibility: eligibility.clone(),
+            next_eligibility: eligibility,
+            receipt: None,
+            idempotency_key: command.idempotency_key.clone(),
+            now: Timestamp::from_utc(now.as_utc()),
+        },
+        instance,
+        current: current.clone(),
+        subject_version: snapshot.subject_version,
+        expected_instance_version: command.expected_instance_version,
+        expected_execution_version: command.expected_execution_version,
+        expected_task_version: command.expected_task_version,
+        reason: command.reason.clone(),
+        actor: ParticipantId::new(actor.id())
+            .map_err(|_| Error::ValidationError("取消人引用无效".to_string()))?,
+        close_open_task: false,
+        blocked_port: true,
+        receipt_id: ApprovalCommandReceiptId::new(next_id()),
+    })?;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Err(Error::Internal("新受阻取消命令不得进入幂等回放分支".to_string()));
+    };
+    let mut writes = *writes;
+    // prepare_cancel 仍服务其他旧命令；此签署端口只把无碰撞 V2 摘要写入新收据。
+    writes.receipt.payload_digest = payload_digest;
+    let action_context = ApprovalActionContext {
+        approval_process_instance_id: command.approval_process_instance_id.clone(),
+        approval_node_execution_id: Some(current.base.id.clone()),
+        work_item_id: None,
+        business_object_type: document_type.as_str().to_string(),
+        business_object_id: snapshot.business_object_id.clone(),
+        subject_version: snapshot.subject_version.to_string(),
+        actor_id: actor.id().to_string(),
+        reason: Some(command.reason.clone()),
+        idempotency_key: command.idempotency_key.clone(),
+    };
+    let audit = actor.clone().resource_log_with_message(
+        "approval.cancel_blocked",
+        "approval_process_instance",
+        command.approval_process_instance_id.clone(),
+        Some(format!("execution={} reason={}", current.base.id, command.reason)),
+    )?;
+
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, session)
+        .await
+        .map_err(mark_receipt_duplicate_for_recovery)?;
+    action_port
+        .execute(spec.cancel_action, &action_context, actor, session)
+        .await?;
+    db.bpm_workflow()
+        .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, session)
+        .await?;
+    persist_cancel_notifications(
+        db,
+        &writes,
+        &snapshot.payload.submitted_by,
+        actor.id(),
+        document_type.label(),
+        &snapshot.payload.document_no,
+        &current.node_name,
+        &current.assignee_name_snapshot,
+        now,
+        session,
+    )
+    .await?;
+    db.audit_logs().create(&audit, session).await?;
+    Ok(map_command_view(
+        &writes.instance,
+        None,
+        None,
+        Some("DRAFT".to_string()),
+        None,
+        writes.commit,
+        false,
+    ))
+}
+
+/// 加载并校验实例、process_kind 与冻结快照的不可变主体三元组。
+async fn load_exact_runtime_snapshot(
+    db: &Database,
+    instance: &ApprovalProcessInstance,
+    executor: &mut dyn Executor,
+    hide_mismatch: bool,
+) -> Result<(DocumentType, ApprovalSubjectSnapshot)> {
+    let mismatch = || {
+        if hide_mismatch {
+            hidden_not_found()
+        } else {
+            Error::ConflictError("审批实例与冻结业务快照不一致".to_string())
+        }
+    };
+    let document_type =
+        document_type_from_subject_kind(instance.subject.subject_kind()).map_err(|_| mismatch())?;
+    if instance.process_kind != process_kind_of(document_type) {
+        return Err(mismatch());
+    }
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&instance.base.id, executor)
+        .await?
+        .ok_or_else(mismatch)?;
+    snapshot
+        .ensure_matches_runtime_subject(
+            document_type,
+            instance.subject.subject_id(),
+            instance.subject_version,
+        )
+        .map_err(|_| mismatch())?;
+    Ok((document_type, snapshot))
+}
+
+/// 事务内重验受阻取消账号、动作权限、类型级运行管理、对象读取与 DataScope。
+async fn ensure_cancel_blocked_authorized(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    document_type: DocumentType,
+    snapshot: &ApprovalSubjectSnapshot,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if !approval_actor_is_active_with_executor(db, actor, executor).await? {
+        return Err(hidden_forbidden());
+    }
+    let action_scope = approval_cancel_blocked_scope_with_executor(db, rbac, actor, executor).await?;
+    let read_scope =
+        approval_document_read_scope_with_executor(db, rbac, actor, document_type, executor).await?;
+    let visibility = definition_management_visibility_with_executor(db, rbac, actor, executor).await?;
+    let spec = adapter_spec_of(document_type)?;
+    let context = BindingRevalidationContext {
+        organization_id: snapshot.payload.responsible_org_id.clone(),
+        creator_id: snapshot.payload.submitted_by.clone(),
+    };
+    let read_scope_covers = !read_scope.is_empty() && read_scope.covers(&snapshot.payload.responsible_org_id);
+    let object_readable = runtime_object_readable(&spec, &context, actor.id(), read_scope_covers)?;
+    if action_scope.is_empty()
+        || !action_scope.covers(&snapshot.payload.responsible_org_id)
+        || !read_scope_covers
+        || !visibility.runtime_admin_types().contains(&document_type)
+        || !object_readable
+    {
+        return Err(hidden_forbidden());
+    }
+    Ok(())
+}
+
+/// 在调用方事务内校验受阻取消携带的可空历史任务版本。
+async fn validate_cancel_task_version_with_executor(
+    db: &Database,
+    execution_id: &ApprovalNodeExecutionId,
+    expected_task_version: Option<u64>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let Some(expected) = expected_task_version else {
+        return Ok(());
+    };
+    let tasks = db
+        .work_items()
+        .approval_tasks_for_execution(execution_id, executor)
+        .await?;
+    if tasks.len() != 1 {
+        return Err(Error::ConflictError(
+            "调用方声明了审批任务版本，但受阻执行未关联唯一历史任务".to_string(),
+        ));
+    }
+    ensure_expected_version("审批任务", expected, tasks[0].base.version)
+}
+
+/// 执行与 Fresh 相同的任务前置；只有 `NotOpen` 才可继续证明终态回放。
+fn decision_receipt_lookup_gate(
+    item: &WorkItem,
+    actor_id: &str,
+    expected_task_version: u64,
+) -> Result<DecisionReceiptLookup> {
+    match item.approval_execution_for_decision(actor_id, expected_task_version) {
+        Ok(_) => Ok(DecisionReceiptLookup::Fresh),
+        Err(ApprovalDecisionTaskError::NotOpen) => item
+            .approval_node_execution_id
+            .clone()
+            .map(DecisionReceiptLookup::Terminal)
+            .ok_or_else(|| Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)),
+        Err(error) => Err(map_approval_task_error(error)),
+    }
+}
+
+/// 终态任务的 Fresh 语义固定为稳定 `APPROVAL_TASK_NOT_OPEN`，不得暴露收据或授权差异。
+fn decision_terminal_fresh_error() -> Error {
+    Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)
+}
+
+/// 决定回放先执行与 Fresh 相同的任务前置和当前授权，再允许查询和比较收据。
+async fn replay_decision_in_transaction(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    command: &RuntimeDecisionCommand,
+    session: &mut mongodb::ClientSession,
+) -> Result<Option<RuntimeDecisionOutcome>> {
+    let item = db
+        .work_items()
+        .find_document_approval_by_id(&command.work_item_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let execution_id = match decision_receipt_lookup_gate(&item, actor.id(), command.expected_task_version)? {
+        DecisionReceiptLookup::Fresh => return Ok(None),
+        DecisionReceiptLookup::Terminal(execution_id) => execution_id,
+    };
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(&execution_id, session)
+        .await?
+        .ok_or_else(decision_terminal_fresh_error)?;
+    let Some(original_actor_id) = decision_terminal_actor(&item, &execution) else {
+        return Err(decision_terminal_fresh_error());
+    };
+    if original_actor_id != actor.id() {
+        return Err(decision_terminal_fresh_error());
+    }
+    match authorize_decision_terminal_replay(db, rbac, actor, &execution, session).await {
+        Ok(()) => {}
+        Err(Error::Forbidden(_)) => {
+            return Err(decision_terminal_fresh_error());
+        }
+        Err(error) => return Err(error),
+    }
+    let Some(receipt) = db
+        .bpm_workflow()
+        .find_command_receipt(
+            ApprovalCommandKind::SubmitDecision,
+            execution_id.as_ref(),
+            &command.idempotency_key,
+            session,
+        )
+        .await?
+    else {
+        return Err(decision_terminal_fresh_error());
+    };
+    // 历史无版本摘要可能存在分隔符碰撞，必须先证明收据仍指向该任务的冻结运行身份。
+    let ended_execution =
+        verify_decision_receipt_runtime_identity(db, &receipt, &execution_id, session).await?;
+    let legacy_candidates = (!receipt.payload_digest.starts_with(V2_DIGEST_PREFIX)
+        && legacy_decision_terminal_facts_match(&item, &ended_execution, command, actor.id()))
+    .then(|| command.legacy_payload_digest.clone())
+    .into_iter()
+    .collect::<Vec<_>>();
+    reconcile_versioned_receipt_digest(
+        &receipt.payload_digest,
+        std::slice::from_ref(&command.payload_digest),
+        &legacy_candidates,
+    )?;
+    let view =
+        persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Proceed, true, session)
+            .await?;
+    Ok(Some(RuntimeDecisionOutcome {
+        blocked: view.instance_status == ApprovalProcessInstanceStatus::Blocked.as_str(),
+        view,
+    }))
+}
+
+/// 在同一事务内执行决定的完整前置、授权、领域动作与运行时写入。
+async fn submit_decision_in_transaction(
+    db: &Database,
+    rbac: &SharedRbacService,
+    action_port: &dyn ApprovalDomainActionPort,
+    actor: &AuditActor,
+    command: &RuntimeDecisionCommand,
+    session: &mut mongodb::ClientSession,
+) -> Result<RuntimeDecisionOutcome> {
+    if let Some(replay) = replay_decision_in_transaction(db, rbac, actor, command, session).await? {
+        return Ok(replay);
+    }
+
+    let item = db
+        .work_items()
+        .find_document_approval_by_id(&command.work_item_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let execution_id = item
+        .approval_execution_for_decision(actor.id(), command.expected_task_version)
+        .map_err(map_approval_task_error)?
+        .clone();
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(&execution_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let expected_execution_version = execution.base.version;
+    let instance_id = execution.process_instance_id.clone();
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&instance_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let expected_instance_version = instance.base.version;
+    let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
+    if instance.process_kind != process_kind_of(document_type) {
+        return Err(Error::ConflictError(
+            "审批实例流程种类与单据类型不一致".to_string(),
+        ));
+    }
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(instance_id.as_ref(), session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    snapshot
+        .ensure_matches_runtime_subject(
+            document_type,
+            instance.subject.subject_id(),
+            instance.subject_version,
+        )
+        .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+    let spec = adapter_spec_of(document_type)?;
+    let separation_policy = process_required_separation_policy(document_type)?;
+    let subject = RuntimeReadSubject {
+        instance: instance.clone(),
+        current_execution: Some(execution.clone()),
+        snapshot: snapshot.clone(),
+        document_type,
+    };
+    if !task_proves_current_responsibility(&item, &execution, &subject, actor.id(), spec.owner_role.as_str())
+    {
+        return Err(Error::ConflictError(
+            "APPROVAL_RESPONSIBILITY_CONFLICT".to_string(),
+        ));
+    }
+    let open_tasks = db
+        .work_items()
+        .open_approval_tasks_for_execution(&execution_id, session)
+        .await?;
+    if open_tasks.is_empty() || !open_tasks.iter().any(|task| task.base.id == command.work_item_id) {
+        return Err(Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen));
+    }
+    let instance_assignee = db
+        .bpm_workflow()
+        .find_assignee_for_node(&instance_id, &execution.node_key, session)
+        .await?
+        .ok_or_else(|| Error::ConflictError("实例缺少节点审批人绑定".to_string()))?;
+    let graph = db
+        .bpm_workflow()
+        .load_definition_graph(&instance.process_definition_id, session)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
+    let current_eligibility = revalidate_decision_approver(
+        db,
+        rbac,
+        actor.id(),
+        &execution.assignee_name_snapshot,
+        Some(actor),
+        &snapshot,
+        &spec,
+        separation_policy,
+        session,
+    )
+    .await?;
+    let decision_target = graph
+        .decision_target_node_key(&execution.node_key, command.decision)
+        .map_err(map_runtime_graph_error)?;
+    let next_eligibility = match decision_target {
+        Some(node_key) => match graph.node(&node_key) {
+            Some(node) => {
+                revalidate_decision_approver(
+                    db,
+                    rbac,
+                    node.assignee_participant_id.as_str(),
+                    &node.assignee_label_snapshot,
+                    None,
+                    &snapshot,
+                    &spec,
+                    separation_policy,
+                    session,
+                )
+                .await?
+            }
+            None => return Err(Error::ConflictError("审批定义缺少目标节点".to_string())),
+        },
+        None => current_eligibility.clone(),
+    };
+    let now = Instant::now();
+    let prepared = prepare_decision(DecisionExecutionInput {
+        command: ExecutionCommandInput {
+            graph,
+            current_eligibility,
+            next_eligibility,
+            receipt: None,
+            idempotency_key: command.idempotency_key.clone(),
+            now: Timestamp::from_utc(now.as_utc()),
+        },
+        instance,
+        current: execution.clone(),
+        work_item_id: command.work_item_id.clone(),
+        task_owner_id: item.owner_user_id.clone().unwrap_or_default(),
+        instance_assignee_id: instance_assignee
+            .current_assignee_participant_id
+            .as_str()
+            .to_string(),
+        decision: command.decision,
+        reason: command.reason.clone(),
+        expected_task_version: command.expected_task_version,
+        actor: ParticipantId::new(actor.id())
+            .map_err(|_| Error::ValidationError("决定人引用无效".to_string()))?,
+        next_execution_id: ApprovalNodeExecutionId::new(next_id()),
+        next_execution_no: execution
+            .execution_no
+            .checked_add(1)
+            .ok_or_else(|| Error::ConflictError("审批执行序号溢出".to_string()))?,
+        receipt_id: ApprovalCommandReceiptId::new(next_id()),
+        open_task_count: open_tasks.len(),
+    })?;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Err(Error::Internal("新决定命令不得进入幂等回放分支".to_string()));
+    };
+    let mut writes = *writes;
+    // prepare_decision 仍服务旧规划单测；此签署端口只把无碰撞 V2 摘要写入新收据。
+    writes.receipt.payload_digest = command.payload_digest.clone();
+    let actor_id = actor.id().to_string();
+    let owner_role = spec.owner_role.as_str().to_string();
+    let owner_organization_id = snapshot.payload.responsible_org_id.clone();
+    let subject_version = writes.instance.subject_version.to_string();
+    let business_object_id = writes.instance.subject.subject_id().to_string();
+    let document_type_label = document_type.label().to_string();
+    let runtime_admin_ids = if writes.notifications.iter().any(|intent| {
+        intent.event_kind == entities::approval_integration::ApprovalNotificationEventKind::Blocked
+    }) {
+        runtime_admin_notification_recipients(db, rbac, document_type, &snapshot, session).await?
+    } else {
+        Vec::new()
+    };
+    let should_finalize = writes.commit == CommitRequired::TerminalApproved;
+    let action_context = ApprovalActionContext {
+        approval_process_instance_id: instance_id.to_string(),
+        approval_node_execution_id: Some(execution_id.to_string()),
+        work_item_id: Some(command.work_item_id.clone()),
+        business_object_type: document_type.as_str().to_string(),
+        business_object_id: business_object_id.clone(),
+        subject_version: subject_version.clone(),
+        actor_id: actor_id.clone(),
+        reason: command.reason.clone(),
+        idempotency_key: command.idempotency_key.clone(),
+    };
+    let new_task_ids: Vec<String> = writes.create_tasks.iter().map(|_| next_id()).collect();
+    let list_projection =
+        list_projection_from_writes(&writes, execution_id.as_ref(), command.reason.clone(), now);
+    let audit = actor.clone().resource_log_with_message(
+        "approval.decide",
+        "approval_process_instance",
+        instance_id.to_string(),
+        Some(format!(
+            "decision={} reason={:?} work_item={}",
+            command.decision.as_str(),
+            command.reason,
+            command.work_item_id
+        )),
+    )?;
+
+    // 收据唯一键先于任何领域写入仲裁同键并发；后续失败会随事务整体回滚。
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, session)
+        .await
+        .map_err(mark_receipt_duplicate_for_recovery)?;
+    if should_finalize {
+        action_port
+            .execute(spec.on_final_approve, &action_context, actor, session)
+            .await?;
+    }
+    persist_decision_writes(
+        db,
+        &writes,
+        execution_id.as_ref(),
+        expected_instance_version,
+        expected_execution_version,
+        command.expected_task_version,
+        &command.work_item_id,
+        &new_task_ids,
+        &list_projection,
+        &audit,
+        now,
+        &actor_id,
+        &owner_role,
+        &owner_organization_id,
+        &subject_version,
+        &business_object_id,
+        &document_type_label,
+        &snapshot.payload.document_no,
+        &snapshot.payload.submitted_by,
+        &execution,
+        command.reason.as_deref(),
+        &runtime_admin_ids,
+        session,
+    )
+    .await?;
+    let blocked = writes.commit == CommitRequired::Blocked;
+    let view = map_command_view(
+        &writes.instance,
+        writes.created_executions.last(),
+        command.reason.clone(),
+        None,
+        first_open_task(&writes, &new_task_ids),
+        writes.commit,
+        false,
+    );
+    Ok(RuntimeDecisionOutcome { view, blocked })
+}
+
+/// 在 legacy 摘要双读前验证收据、任务执行、实例、流程类型与冻结主体属于同一运行身份。
+async fn verify_decision_receipt_runtime_identity(
+    db: &Database,
+    receipt: &ApprovalCommandReceipt,
+    expected_execution_id: &ApprovalNodeExecutionId,
+    session: &mut mongodb::ClientSession,
+) -> Result<ApprovalNodeExecution> {
+    if receipt.scope_id != expected_execution_id.as_ref() {
+        return Err(hidden_not_found());
+    }
+    let execution = db
+        .bpm_workflow()
+        .find_execution_by_id(expected_execution_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    if execution.process_instance_id.as_ref() != receipt.result_ref || instance.base.id != receipt.result_ref
+    {
+        return Err(hidden_not_found());
+    }
+    let document_type =
+        document_type_from_subject_kind(instance.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+    if instance.process_kind != process_kind_of(document_type) {
+        return Err(hidden_not_found());
+    }
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&instance.base.id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    snapshot
+        .ensure_matches_runtime_subject(
+            document_type,
+            instance.subject.subject_id(),
+            instance.subject_version,
+        )
+        .map_err(|_| hidden_not_found())?;
+    Ok(execution)
+}
+
+/// 从任务不可逆终态与执行事实提取原决定人；不得把当前 owner 投影作为回放授权。
+fn decision_terminal_actor<'a>(item: &'a WorkItem, execution: &'a ApprovalNodeExecution) -> Option<&'a str> {
+    if item.approval_node_execution_id.as_ref()
+        != Some(&ApprovalNodeExecutionId::new(execution.base.id.clone()))
+    {
+        return None;
+    }
+    match item.status {
+        WorkItemStatus::Completed => {
+            let completed_by = item.completed_by.as_deref()?;
+            let decided_by = execution.decided_by.as_ref()?.as_str();
+            let terminal_decision_matches = matches!(
+                (execution.status, execution.decision),
+                (
+                    ApprovalNodeExecutionStatus::Approved,
+                    Some(ApprovalDecision::Approve)
+                ) | (
+                    ApprovalNodeExecutionStatus::Rejected,
+                    Some(ApprovalDecision::Reject)
+                )
+            );
+            (terminal_decision_matches
+                && completed_by == decided_by
+                && execution.decided_at.is_some()
+                && execution.ended_at.is_some())
+            .then_some(completed_by)
+        }
+        WorkItemStatus::Closed => {
+            let closed_by = item.closed_by.as_deref()?;
+            (item.close_reason.as_deref() == Some(TaskCloseReason::ApprovalRuntimeBlocked.as_str())
+                && execution.status == ApprovalNodeExecutionStatus::Blocked
+                && execution.blocker_code.is_some()
+                && execution.blocked_at.is_some()
+                && execution.ended_at.is_none()
+                && execution.assignee_participant_id.as_str() == closed_by)
+                .then_some(closed_by)
+        }
+        WorkItemStatus::Open => None,
+    }
+}
+
+/// legacy 决定摘要只有在不可变终态执行与任务完整证明原命令时才允许回放。
+fn legacy_decision_terminal_facts_match(
+    item: &WorkItem,
+    execution: &ApprovalNodeExecution,
+    command: &RuntimeDecisionCommand,
+    actor_id: &str,
+) -> bool {
+    let Some(persisted_task_version) = command.expected_task_version.checked_add(1) else {
+        return false;
+    };
+    let expected_execution_status = match command.decision {
+        ApprovalDecision::Approve => ApprovalNodeExecutionStatus::Approved,
+        ApprovalDecision::Reject => ApprovalNodeExecutionStatus::Rejected,
+    };
+    item.base.id == command.work_item_id
+        && item.approval_node_execution_id.as_ref()
+            == Some(&ApprovalNodeExecutionId::new(execution.base.id.clone()))
+        && item.status == WorkItemStatus::Completed
+        && item.completed_by.as_deref() == Some(actor_id)
+        && item.base.version == persisted_task_version
+        && execution.status == expected_execution_status
+        && execution.decision == Some(command.decision)
+        && execution.decision_reason.as_deref() == command.reason.as_deref()
+        && execution.decided_by.as_ref().map(ParticipantId::as_str) == Some(actor_id)
+        && execution.decided_at.is_some()
+        && execution.ended_at.is_some()
+}
+
+/// 回放只使用冻结运行事实证明原决定人当前仍具备动作权限，不信任收据或 WorkItem owner 投影。
+async fn authorize_decision_terminal_replay(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    execution: &ApprovalNodeExecution,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&execution.process_instance_id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    if execution.process_instance_id.as_ref() != instance.base.id {
+        return Err(hidden_not_found());
+    }
+    let document_type =
+        document_type_from_subject_kind(instance.subject.subject_kind()).map_err(|_| hidden_not_found())?;
+    if instance.process_kind != process_kind_of(document_type) {
+        return Err(hidden_not_found());
+    }
+    let snapshot = db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&instance.base.id, session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    snapshot
+        .ensure_matches_runtime_subject(
+            document_type,
+            instance.subject.subject_id(),
+            instance.subject_version,
+        )
+        .map_err(|_| hidden_not_found())?;
+    let assignee = db
+        .bpm_workflow()
+        .find_assignee_for_node(
+            &ApprovalProcessInstanceId::new(&instance.base.id),
+            &execution.node_key,
+            session,
+        )
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    if execution.assignee_participant_id.as_str() != actor.id()
+        || assignee.current_assignee_participant_id.as_str() != actor.id()
+    {
+        return Err(hidden_forbidden());
+    }
+    let spec = adapter_spec_of(document_type)?;
+    let eligibility = revalidate_decision_approver(
+        db,
+        rbac,
+        actor.id(),
+        &execution.assignee_name_snapshot,
+        Some(actor),
+        &snapshot,
+        &spec,
+        process_required_separation_policy(document_type)?,
+        session,
+    )
+    .await?;
+    if eligibility.blocked_code().is_some() {
+        return Err(hidden_forbidden());
+    }
+    Ok(())
+}
+
+/// 按冻结快照重验审批人账号、动作权限、对象读取、DataScope 与岗位分离。
+#[allow(clippy::too_many_arguments)]
+async fn revalidate_decision_approver(
+    db: &Database,
+    rbac: &SharedRbacService,
+    assignee_id: &str,
+    assignee_name: &str,
+    authenticated_actor: Option<&AuditActor>,
+    snapshot: &ApprovalSubjectSnapshot,
+    spec: &crate::approval::business_adapter::ApprovalAdapterSpec,
+    separation_policy: SeparationOfDutiesPolicy,
+    executor: &mut dyn Executor,
+) -> Result<Eligibility> {
+    let account = db
+        .accounts()
+        .find_approval_assignee_by_id(assignee_id, executor)
+        .await?;
+    let failure = match account {
+        None => Some(AuthorizationFailure::AccountInactive),
+        Some(account)
+            if !account.is_active_backoffice()
+                || authenticated_actor
+                    .is_some_and(|actor| actor.id() != account.base.id || actor.kind() != account.kind) =>
+        {
+            Some(AuthorizationFailure::AccountInactive)
+        }
+        Some(account) => {
+            let scope_actor = authenticated_actor.cloned().unwrap_or_else(|| {
+                AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind)
+            });
+            let decide_scope = approval_decide_scope_with_executor(db, rbac, &scope_actor, executor).await?;
+            if decide_scope.is_empty() {
+                Some(AuthorizationFailure::NotEligible)
+            } else if !decide_scope.covers(&snapshot.payload.responsible_org_id) {
+                Some(AuthorizationFailure::OutOfDataScope)
+            } else {
+                let read_scope = approval_document_read_scope_with_executor(
+                    db,
+                    rbac,
+                    &scope_actor,
+                    snapshot.document_type,
+                    executor,
+                )
+                .await?;
+                if read_scope.is_empty() {
+                    Some(AuthorizationFailure::CannotReadSubject)
+                } else if !read_scope.covers(&snapshot.payload.responsible_org_id) {
+                    Some(AuthorizationFailure::OutOfDataScope)
+                } else {
+                    let context = BindingRevalidationContext {
+                        organization_id: snapshot.payload.responsible_org_id.clone(),
+                        creator_id: snapshot.payload.submitted_by.clone(),
+                    };
+                    match runtime_object_readable(spec, &context, assignee_id, true)? {
+                        true => {
+                            if ensure_separation_of_duties(
+                                separation_policy,
+                                &snapshot.payload.submitted_by,
+                                &[assignee_id.to_string()],
+                            )
+                            .is_err()
+                            {
+                                Some(AuthorizationFailure::SeparationOfDuties)
+                            } else {
+                                None
+                            }
+                        }
+                        false => Some(AuthorizationFailure::CannotReadSubject),
+                    }
+                }
+            }
+        }
+    };
+    converge_eligibility(assignee_id, assignee_name, failure)
+}
+
+/// 按当前已签署对象读取端口判定审批运行可读性。
+///
+/// `StockAdjustment` 的真实读取端口是 Entity 登记的
+/// `stock_adjustment:detail` 与当前组织 DataScope 交集；不得回退到已删除的
+/// 常量 helper。其它类型仍要求业务 Adapter 显式接线。
+fn runtime_object_readable(
+    spec: &crate::approval::business_adapter::ApprovalAdapterSpec,
+    context: &BindingRevalidationContext,
+    actor_id: &str,
+    read_scope_covers: bool,
+) -> Result<bool> {
+    if spec.document_type == DocumentType::StockAdjustment {
+        return Ok(read_scope_covers);
+    }
+    Ok(adapter_object_read_decision(spec, context, actor_id)?.unwrap_or(false))
+}
+
+/// 读取必须审批政策唯一签署的岗位分离规则。
+fn process_required_separation_policy(document_type: DocumentType) -> Result<SeparationOfDutiesPolicy> {
+    match policy_of(document_type)? {
+        DocumentApprovalPolicy::ProcessRequired(policy) => Ok(policy.separation_of_duties_policy),
+        DocumentApprovalPolicy::NoApproval(_) => {
+            Err(Error::from_approval_code(ErrorCode::ApprovalPolicyNotRegistered))
+        }
+    }
+}
+
+/// 恢复端口只接受已重新满足全部资格的原审批人。
+fn ensure_resume_approver_recovered(eligibility: &Eligibility) -> Result<()> {
+    if eligibility.blocked_code().is_some() {
+        return Err(Error::from_approval_code(
+            ErrorCode::ApprovalCurrentApproverNotRecovered,
+        ));
+    }
+    Ok(())
+}
+
+/// 以调用方事务执行器读取最新运行视图；回放不依赖原任务仍为 OPEN。
+async fn persisted_command_view_with_executor(
+    db: &Database,
+    instance_id: &str,
+    commit: CommitRequired,
+    replay: bool,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalCommandView> {
+    let instance_id = ApprovalProcessInstanceId::new(instance_id);
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&instance_id, executor)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let current = db
+        .bpm_workflow()
+        .find_current_execution(&instance_id, executor)
+        .await?;
+    let next_open_task = match current.as_ref() {
+        Some(execution) => {
+            let tasks = db
+                .work_items()
+                .open_approval_tasks_for_execution(
+                    &ApprovalNodeExecutionId::new(execution.base.id.clone()),
+                    executor,
+                )
+                .await?;
+            if tasks.len() > 1 {
+                return Err(Error::ConflictError("当前执行关联多个开放审批任务".to_string()));
+            }
+            tasks.into_iter().next().map(|task| OpenTaskSummary {
+                work_item_id: task.base.id,
+                task_version: task.base.version.to_string(),
+                owner_user_id: task.owner_user_id.unwrap_or_default(),
+            })
+        }
+        None => None,
+    };
+    Ok(map_command_view(
+        &instance,
+        current.as_ref(),
+        None,
+        None,
+        next_open_task,
+        commit,
+        replay,
+    ))
+}
+
+/// 标记收据首写的唯一键竞争，与后续业务集合冲突区分。
+fn mark_receipt_duplicate_for_recovery(error: database::Error) -> Error {
+    match error {
+        error @ database::Error::DuplicateKey(_) => Error::ReceiptDuplicate(error),
+        other => Error::from(other),
+    }
+}
+
+/// 只有收据首写唯一键竞争、瞬态事务冲突或提交结果未知才回读收据。
+fn decision_command_may_have_committed(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::OutcomeUnknown(_) | Error::ReceiptDuplicate(_) | Error::TransientTransaction(_)
+    )
+}
+
+/// 并发胜者可能仍在提交；新会话回读使用有界退避，不得复用失败会话。
+fn decision_recovery_delay(attempt: usize) -> Duration {
+    let shift = attempt.min(5);
+    Duration::from_millis(5_u64 << shift)
 }
 
 /// 将单据审批任务前置校验映射为稳定的 Service 错误。
@@ -2503,29 +3560,25 @@ fn reconcile_cancel_blocked_receipt(
     command: &ApprovalCancelBlockedCommand,
     reason: &str,
     actor_id: &str,
+    proven_blocker: ApprovalBlockerCode,
 ) -> Result<()> {
-    const STRUCTURAL_BLOCKERS: [ApprovalBlockerCode; 5] = [
-        ApprovalBlockerCode::DefinitionGraphCorrupted,
-        ApprovalBlockerCode::InstanceLinkCorrupted,
-        ApprovalBlockerCode::OpenTaskConflict,
-        ApprovalBlockerCode::SubjectVersionConflict,
-        ApprovalBlockerCode::InternalInvariantBroken,
-    ];
-    let same_payload = STRUCTURAL_BLOCKERS.into_iter().any(|blocker| {
-        receipt.payload_digest
-            == cancel_blocked_digest(
-                blocker.as_str(),
-                command.expected_instance_version,
-                command.expected_execution_version,
-                command.expected_task_version,
-                reason,
-                actor_id,
-            )
-    });
-    if same_payload {
-        return Ok(());
-    }
-    Err(payload_conflict_error())
+    let v2_candidates = [cancel_blocked_digest_v2(
+        proven_blocker.as_str(),
+        command.expected_instance_version,
+        command.expected_execution_version,
+        command.expected_task_version,
+        reason,
+        actor_id,
+    )];
+    let legacy_candidates = [cancel_blocked_digest(
+        proven_blocker.as_str(),
+        command.expected_instance_version,
+        command.expected_execution_version,
+        command.expected_task_version,
+        reason,
+        actor_id,
+    )];
+    reconcile_versioned_receipt_digest(&receipt.payload_digest, &v2_candidates, &legacy_candidates)
 }
 
 /// 在受阻取消事务内追加通知 outbox。
@@ -2533,10 +3586,12 @@ fn reconcile_cancel_blocked_receipt(
 async fn persist_cancel_notifications(
     db: &Database,
     writes: &PlannedWrites,
+    submitted_by: &str,
     actor_id: &str,
     document_type_label: &str,
-    business_object_id: &str,
+    document_no: &str,
     current_node_name: &str,
+    current_approver_display_name: &str,
     now: Instant,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -2546,26 +3601,41 @@ async fn persist_cancel_notifications(
             "受阻取消计划不得创建、完成或关闭审批任务".to_string(),
         ));
     }
-    for intent in &writes.notifications {
-        let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
-            entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
-            intent.dedup_key.clone(),
-            intent.event_kind,
-            vec![actor_id.to_string()],
-            entities::approval_integration::ApprovalNotificationTemplateParams {
-                document_type_label: document_type_label.to_string(),
-                document_no: business_object_id.to_string(),
-                current_node_name: current_node_name.to_string(),
-                current_approver_display_name: actor_id.to_string(),
-                round_no: writes.instance.current_round_no,
-                reject_reason_summary: None,
-            },
-            now,
-        )
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
-        db.approval_notification_outbox().create(&record, session).await?;
+    let [intent] = writes.notifications.as_slice() else {
+        return Err(Error::Internal("受阻取消必须且只能产生一条通知意图".to_string()));
+    };
+    let expected_dedup = format!("blocked_cancelled:{}", writes.instance.base.id);
+    if intent.event_kind != entities::approval_integration::ApprovalNotificationEventKind::BlockedCancelled
+        || intent.dedup_key != expected_dedup
+    {
+        return Err(Error::Internal("受阻取消通知意图不匹配".to_string()));
     }
+    let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
+        entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
+        intent.dedup_key.clone(),
+        intent.event_kind,
+        blocked_cancel_notification_recipients(submitted_by, actor_id),
+        entities::approval_integration::ApprovalNotificationTemplateParams {
+            document_type_label: document_type_label.to_string(),
+            document_no: document_no.to_string(),
+            current_node_name: current_node_name.to_string(),
+            current_approver_display_name: current_approver_display_name.to_string(),
+            round_no: writes.instance.current_round_no,
+            reject_reason_summary: None,
+        },
+        now,
+    )
+    .map_err(|error| Error::ValidationError(error.to_string()))?;
+    db.approval_notification_outbox().create(&record, session).await?;
     Ok(())
+}
+
+/// 受阻取消固定通知提交人和实际执行取消的运行管理员；同人时只保留一次。
+fn blocked_cancel_notification_recipients(submitted_by: &str, actor_id: &str) -> Vec<String> {
+    if submitted_by == actor_id {
+        return vec![submitted_by.to_string()];
+    }
+    vec![submitted_by.to_string(), actor_id.to_string()]
 }
 
 /// 视图中的首个新建开放任务摘要。
@@ -2577,13 +3647,146 @@ fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -> Option<Op
     };
     Some(OpenTaskSummary {
         work_item_id: task_id.clone(),
-        task_version: 1,
+        task_version: "1".to_string(),
         owner_user_id: assignee.as_str().to_string(),
     })
 }
 
-/// 单事务应用决定写入：实例 CAS 推进、执行结束/插入、审批人绑定、收据、
-/// 任务完成/关闭/新建、通知 outbox 与审计。
+/// 读取当前有效且真正具备该单据类型运行管理权限的通知收件人。
+async fn runtime_admin_notification_recipients(
+    db: &Database,
+    rbac: &SharedRbacService,
+    document_type: DocumentType,
+    snapshot: &ApprovalSubjectSnapshot,
+    executor: &mut dyn Executor,
+) -> Result<Vec<String>> {
+    let spec = adapter_spec_of(document_type)?;
+    let accounts = db
+        .accounts()
+        .list_by_kind(entities::AccountKind::Admin, executor)
+        .await?;
+    let mut recipients = Vec::new();
+    for account in accounts {
+        if !account.is_active_backoffice() {
+            continue;
+        }
+        let actor = AuditActor::new(account.base.id.clone(), account.base.id.clone(), account.kind);
+        let visibility = definition_management_visibility_with_executor(db, rbac, &actor, executor).await?;
+        let read_scope =
+            approval_document_read_scope_with_executor(db, rbac, &actor, document_type, executor).await?;
+        let context = BindingRevalidationContext {
+            organization_id: snapshot.payload.responsible_org_id.clone(),
+            creator_id: snapshot.payload.submitted_by.clone(),
+        };
+        let read_scope_covers =
+            !read_scope.is_empty() && read_scope.covers(&snapshot.payload.responsible_org_id);
+        let object_readable = runtime_object_readable(&spec, &context, &account.base.id, read_scope_covers)?;
+        if visibility.runtime_admin_types().contains(&document_type) && read_scope_covers && object_readable {
+            recipients.push(account.base.id);
+        }
+    }
+    recipients.sort();
+    recipients.dedup();
+    Ok(recipients)
+}
+
+/// 按 §16.5 消费决定计划中的每个通知意图并写入同一事务 outbox。
+async fn persist_decision_notifications(
+    db: &Database,
+    writes: &PlannedWrites,
+    facts: DecisionNotificationFacts<'_>,
+    now: Instant,
+    session: &mut mongodb::ClientSession,
+) -> Result<()> {
+    use entities::approval_integration::ApprovalNotificationEventKind as EventKind;
+
+    if writes.notifications.is_empty() {
+        return Err(Error::Internal("审批决定计划缺少通知意图".to_string()));
+    }
+    let mut seen = HashSet::with_capacity(writes.notifications.len());
+    for intent in &writes.notifications {
+        if !seen.insert(intent.dedup_key.as_str()) {
+            return Err(Error::Internal("审批决定计划包含重复通知意图".to_string()));
+        }
+        let event_execution = match intent.event_kind {
+            EventKind::Entered | EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Blocked => {
+                let execution_id = intent
+                    .dedup_key
+                    .split_once(':')
+                    .map(|(_, id)| id)
+                    .filter(|id| !id.is_empty())
+                    .ok_or_else(|| Error::Internal("审批决定通知缺少执行引用".to_string()))?;
+                writes
+                    .created_executions
+                    .iter()
+                    .chain(writes.updated_executions.iter())
+                    .find(|execution| execution.base.id == execution_id)
+                    .or_else(|| {
+                        (facts.ended_execution.base.id == execution_id).then_some(facts.ended_execution)
+                    })
+                    .ok_or_else(|| Error::Internal("审批决定通知执行引用不存在".to_string()))?
+            }
+            EventKind::Completed => facts.ended_execution,
+            _ => return Err(Error::Internal("审批决定计划包含非决定通知事件".to_string())),
+        };
+        let expected_dedup = match intent.event_kind {
+            EventKind::Entered => format!("entered:{}", event_execution.base.id),
+            EventKind::NodeApproved => format!("approved:{}", event_execution.base.id),
+            EventKind::NodeRejected => format!("rejected:{}", event_execution.base.id),
+            EventKind::Blocked => format!("blocked:{}", event_execution.base.id),
+            EventKind::Completed => format!("completed:{}", writes.instance.base.id),
+            _ => unreachable!("unsupported decision event was rejected above"),
+        };
+        if intent.dedup_key != expected_dedup {
+            return Err(Error::Internal("审批决定通知去重键不匹配".to_string()));
+        }
+        let recipients = match intent.event_kind {
+            EventKind::Entered => vec![event_execution.assignee_participant_id.as_str().to_string()],
+            EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Completed => {
+                vec![facts.submitted_by.to_string()]
+            }
+            EventKind::Blocked => notification_recipients(
+                facts.submitted_by,
+                facts.runtime_admin_ids.iter().map(String::as_str),
+            ),
+            _ => unreachable!("unsupported decision event was rejected above"),
+        };
+        let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
+            entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
+            intent.dedup_key.clone(),
+            intent.event_kind,
+            recipients,
+            entities::approval_integration::ApprovalNotificationTemplateParams {
+                document_type_label: facts.document_type_label.to_string(),
+                document_no: facts.document_no.to_string(),
+                current_node_name: event_execution.node_name.clone(),
+                current_approver_display_name: event_execution.assignee_name_snapshot.clone(),
+                round_no: event_execution.round_no,
+                reject_reason_summary: (intent.event_kind == EventKind::NodeRejected)
+                    .then(|| facts.reject_reason.map(ToOwned::to_owned))
+                    .flatten(),
+            },
+            now,
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+        db.approval_notification_outbox().create(&record, session).await?;
+    }
+    Ok(())
+}
+
+/// 以主收件人开头追加其它收件人并稳定去重。
+fn notification_recipients<'a>(primary: &str, additional: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut recipients = vec![primary.to_string()];
+    for recipient in additional {
+        if !recipients.iter().any(|existing| existing == recipient) {
+            recipients.push(recipient.to_string());
+        }
+    }
+    recipients
+}
+
+/// 单事务应用决定写入：实例 CAS 推进、执行结束/插入、审批人绑定、任务
+/// 完成/关闭/新建、通知 outbox 与审计。命令收据必须由调用方先写入以仲裁并发。
 #[allow(clippy::too_many_arguments)]
 async fn persist_decision_writes(
     db: &Database,
@@ -2603,7 +3806,11 @@ async fn persist_decision_writes(
     subject_version: &str,
     business_object_id: &str,
     document_type_label: &str,
-    current_node_name: &str,
+    document_no: &str,
+    submitted_by: &str,
+    ended_execution: &ApprovalNodeExecution,
+    reject_reason: Option<&str>,
+    runtime_admin_ids: &[String],
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
     // 实例 CAS 推进（RUNNING|BLOCKED + 当前执行不变式）。期望版本为加载时的
@@ -2648,10 +3855,6 @@ async fn persist_decision_writes(
     if !assignees.is_empty() {
         db.bpm_workflow().insert_assignees(&assignees, session).await?;
     }
-    // 命令收据。
-    db.bpm_workflow()
-        .insert_command_receipt(&writes.receipt, session)
-        .await?;
     // 任务：完成当前、按原因关闭、为下一节点新建。
     complete_or_close_tasks(
         db,
@@ -2681,26 +3884,21 @@ async fn persist_decision_writes(
         session,
     )
     .await?;
-    // 通知 outbox（按去重键追加）。
-    for intent in &writes.notifications {
-        let record = entities::approval_integration::ApprovalNotificationOutbox::enqueue(
-            entities::ids::ApprovalNotificationOutboxId::new(intent.dedup_key.clone()),
-            intent.dedup_key.clone(),
-            intent.event_kind,
-            vec![actor_id.to_string()],
-            entities::approval_integration::ApprovalNotificationTemplateParams {
-                document_type_label: document_type_label.to_string(),
-                document_no: business_object_id.to_string(),
-                current_node_name: current_node_name.to_string(),
-                current_approver_display_name: actor_id.to_string(),
-                round_no: writes.instance.current_round_no,
-                reject_reason_summary: None,
-            },
-            now,
-        )
-        .map_err(|error| Error::ValidationError(error.to_string()))?;
-        db.approval_notification_outbox().create(&record, session).await?;
-    }
+    persist_decision_notifications(
+        db,
+        writes,
+        DecisionNotificationFacts {
+            document_type_label,
+            document_no,
+            submitted_by,
+            ended_execution,
+            reject_reason,
+            runtime_admin_ids,
+        },
+        now,
+        session,
+    )
+    .await?;
     db.audit_logs().create(audit, session).await?;
     Ok(())
 }
@@ -2983,7 +4181,10 @@ mod tests {
 
     use bpm::engine::TaskCloseReason;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
-    use bpm::model::types::{ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus};
+    use bpm::model::types::{
+        ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource,
+        ApprovalProcessInstanceStatus,
+    };
     use bpm::model::{
         ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
         Timestamp,
@@ -3003,15 +4204,24 @@ mod tests {
         WorkItemPriority, WorkItemStatus,
     };
 
+    use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+    use crate::approval::ApprovalCancelBlockedCommand;
     use crate::audit::AuditActor;
-    use crate::errors::Error;
+    use crate::errors::{Error, ErrorCode};
 
     use super::{
-        approval_task_ending, cursor_from_summary, ensure_mine_page_integrity, item_from_runtime_read_row,
-        item_from_summary, management_runtime_read_allowed, mine_execution_ids, mine_instance_ids,
-        mine_runtime_chain_matches, ordinary_runtime_read_allowed, started_runtime_read_allowed,
-        task_proves_current_responsibility, unique_by_id, CompleteOrCloseTasksInput, RuntimeInstanceListView,
-        RuntimeReadAuthorizationFacts, RuntimeReadSubject,
+        approval_task_ending, blocked_cancel_notification_recipients, cancel_blocked_terminal_facts_match,
+        cursor_from_summary, decision_command_may_have_committed, decision_digest, decision_digest_v2,
+        decision_receipt_lookup_gate, decision_recovery_delay, decision_terminal_actor,
+        decision_terminal_fresh_error, ensure_cancel_blocked_instance_preconditions,
+        ensure_mine_page_integrity, item_from_runtime_read_row, item_from_summary,
+        legacy_decision_terminal_facts_match, management_runtime_read_allowed, map_approval_task_error,
+        mark_receipt_duplicate_for_recovery, mine_execution_ids, mine_instance_ids,
+        mine_runtime_chain_matches, notification_recipients, ordinary_runtime_read_allowed,
+        reconcile_versioned_receipt_digest, runtime_object_readable, started_runtime_read_allowed,
+        task_proves_current_responsibility, unique_by_id, versioned_digest_v2, CancelBlockedTerminalFacts,
+        CompleteOrCloseTasksInput, DecisionReceiptLookup, RuntimeDecisionCommand, RuntimeInstanceListView,
+        RuntimeReadAuthorizationFacts, RuntimeReadSubject, V2DigestField,
     };
 
     fn summary() -> ApprovalInstanceSummary {
@@ -3102,6 +4312,12 @@ mod tests {
             error,
             Error::NotFound(message) if message == "审批实例不存在"
         ));
+    }
+
+    fn assert_same_error_semantics(actual: Error, expected: Error) {
+        assert_eq!(std::mem::discriminant(&actual), std::mem::discriminant(&expected));
+        assert_eq!(actual.code(), expected.code());
+        assert_eq!(actual.to_string(), expected.to_string());
     }
 
     fn runtime_responsibility_fixture() -> (RuntimeReadSubject, WorkItem) {
@@ -3434,5 +4650,291 @@ mod tests {
             ..input
         };
         assert!(approval_task_ending(&conflicting, &execution_id).is_err());
+    }
+
+    #[test]
+    fn decision_and_blocked_cancel_notification_recipients_are_contract_exact() {
+        assert_eq!(
+            notification_recipients("submitter", ["runtime-admin", "submitter", "runtime-admin"]),
+            vec!["submitter".to_string(), "runtime-admin".to_string()]
+        );
+        assert_eq!(
+            blocked_cancel_notification_recipients("submitter", "executing-admin"),
+            vec!["submitter".to_string(), "executing-admin".to_string()]
+        );
+        assert_eq!(
+            blocked_cancel_notification_recipients("same-user", "same-user"),
+            vec!["same-user".to_string()]
+        );
+    }
+
+    #[test]
+    fn decision_recovery_only_polls_receipt_competition_and_uncertain_commits() {
+        let duplicate = mark_receipt_duplicate_for_recovery(database::Error::DuplicateKey(
+            mongodb::error::Error::custom("duplicate receipt"),
+        ));
+        assert!(decision_command_may_have_committed(&duplicate));
+        assert!(matches!(duplicate, Error::ReceiptDuplicate(_)));
+        let transient = Error::from(database::Error::TransientTransactionConflict(
+            mongodb::error::Error::custom("write conflict"),
+        ));
+        assert!(decision_command_may_have_committed(&transient));
+        assert!(matches!(transient, Error::TransientTransaction(_)));
+        assert!(decision_command_may_have_committed(&Error::OutcomeUnknown(
+            database::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit")),
+        )));
+        assert!(!decision_command_may_have_committed(&Error::ConflictError(
+            "数据已存在，请勿重复提交".to_string()
+        )));
+        assert!(!decision_command_may_have_committed(&Error::ConflictError(
+            "并发事务冲突，请重试".to_string()
+        )));
+        assert!(!decision_command_may_have_committed(&Error::ConflictError(
+            "审批任务已结束".to_string()
+        )));
+        assert!(!decision_command_may_have_committed(&Error::ValidationError(
+            "请求无效".to_string()
+        )));
+        assert_eq!(decision_recovery_delay(0).as_millis(), 5);
+        assert_eq!(decision_recovery_delay(5).as_millis(), 160);
+        assert_eq!(decision_recovery_delay(99).as_millis(), 160);
+    }
+
+    #[test]
+    fn v2_command_digest_has_unambiguous_boundaries_and_stable_golden() {
+        let separator_left = versioned_digest_v2(
+            "TEST",
+            &[V2DigestField::Text("a\u{1f}b"), V2DigestField::Text("c")],
+        );
+        let separator_right = versioned_digest_v2(
+            "TEST",
+            &[V2DigestField::Text("a"), V2DigestField::Text("b\u{1f}c")],
+        );
+        assert_ne!(separator_left, separator_right);
+
+        assert_ne!(
+            versioned_digest_v2("TEST", &[V2DigestField::OptionalText(None)]),
+            versioned_digest_v2("TEST", &[V2DigestField::OptionalText(Some("NULL"))])
+        );
+        assert_ne!(
+            versioned_digest_v2("TEST", &[V2DigestField::Text("")]),
+            versioned_digest_v2("TEST", &[V2DigestField::Text("NULL")])
+        );
+        assert_ne!(
+            versioned_digest_v2("TEST", &[V2DigestField::Text("你"), V2DigestField::Text("好")]),
+            versioned_digest_v2("TEST", &[V2DigestField::Text("你好"), V2DigestField::Text("")])
+        );
+
+        assert_eq!(
+            decision_digest_v2("wi-1", "APPROVE", Some("同意"), 3, "u1"),
+            "v2:6055117016d832d58080637660733dac57779af9764bc1fc0429c74b60a91765"
+        );
+    }
+
+    #[test]
+    fn versioned_receipt_accepts_legacy_but_never_falls_back_for_v2() {
+        let legacy_none = decision_digest("wi-1", "APPROVE", None, 3, "u1");
+        let legacy_literal_null = decision_digest("wi-1", "APPROVE", Some("NULL"), 3, "u1");
+        assert_eq!(legacy_none, legacy_literal_null, "锁定旧摘要的字面 NULL 碰撞");
+
+        let v2_none = decision_digest_v2("wi-1", "APPROVE", None, 3, "u1");
+        let v2_literal_null = decision_digest_v2("wi-1", "APPROVE", Some("NULL"), 3, "u1");
+        assert_ne!(v2_none, v2_literal_null);
+        reconcile_versioned_receipt_digest(
+            &legacy_none,
+            std::slice::from_ref(&v2_none),
+            std::slice::from_ref(&legacy_none),
+        )
+        .expect("无前缀历史收据允许 legacy 双读");
+        assert!(reconcile_versioned_receipt_digest(
+            &v2_none,
+            std::slice::from_ref(&v2_literal_null),
+            std::slice::from_ref(&legacy_literal_null),
+        )
+        .is_err());
+    }
+
+    fn decided_fixture(
+        reason: Option<&str>,
+        expected_task_version: u64,
+    ) -> (WorkItem, ApprovalNodeExecution) {
+        let mut execution = active_execution("exec-legacy", "inst-legacy");
+        execution
+            .record_approve(
+                ParticipantId::new("warehouse-1").expect("决定人"),
+                reason.map(ToOwned::to_owned),
+                Timestamp::from_unix_secs(20).expect("决定时间"),
+            )
+            .expect("记录终态决定");
+        let mut item = approval_task("wi-legacy", "exec-legacy");
+        item.complete_by_approval_runtime("warehouse-1", Instant::from_unix_secs(20))
+            .expect("完成审批任务");
+        item.base.version = expected_task_version + 1;
+        (item, execution)
+    }
+
+    fn runtime_decision_command(
+        reason: Option<&str>,
+        expected_task_version: u64,
+        actor_id: &str,
+    ) -> RuntimeDecisionCommand {
+        RuntimeDecisionCommand {
+            work_item_id: "wi-legacy".to_string(),
+            decision: ApprovalDecision::Approve,
+            reason: reason.map(ToOwned::to_owned),
+            expected_task_version,
+            idempotency_key: "legacy-key".to_string(),
+            payload_digest: decision_digest_v2(
+                "wi-legacy",
+                "APPROVE",
+                reason,
+                expected_task_version,
+                actor_id,
+            ),
+            legacy_payload_digest: decision_digest(
+                "wi-legacy",
+                "APPROVE",
+                reason,
+                expected_task_version,
+                actor_id,
+            ),
+        }
+    }
+
+    #[test]
+    fn decision_existing_and_missing_keys_hide_from_outsider_and_revoked_actor() {
+        let (item, execution) = decided_fixture(None, 3);
+        assert_eq!(decision_terminal_actor(&item, &execution), Some("warehouse-1"));
+
+        let missing_outsider = map_approval_task_error(
+            item.approval_execution_for_decision("outsider", 3)
+                .expect_err("非原责任人 Fresh 路径必须拒绝"),
+        );
+        let existing_outsider =
+            decision_receipt_lookup_gate(&item, "outsider", 3).expect_err("非原责任人不得进入收据查询");
+        assert_same_error_semantics(existing_outsider, missing_outsider);
+
+        let missing_original = map_approval_task_error(
+            item.approval_execution_for_decision("warehouse-1", 3)
+                .expect_err("已完成任务 Fresh 路径必须稳定返回 NotOpen"),
+        );
+        assert!(matches!(
+            decision_receipt_lookup_gate(&item, "warehouse-1", 3).expect("原责任人可继续证明回放"),
+            DecisionReceiptLookup::Terminal(execution_id) if execution_id.as_ref() == "exec-legacy"
+        ));
+        let existing_revoked = decision_terminal_fresh_error();
+        assert_same_error_semantics(existing_revoked, missing_original);
+        assert_eq!(
+            decision_terminal_fresh_error().code(),
+            Some(ErrorCode::ApprovalTaskNotOpen)
+        );
+    }
+
+    #[test]
+    fn cancel_existing_and_missing_keys_share_fresh_terminal_errors_before_digest() {
+        let (mut subject, _) = runtime_responsibility_fixture();
+        let expected_instance_version = subject.instance.base.version;
+        subject
+            .instance
+            .cancel(Timestamp::from_unix_secs(20).expect("取消时间"))
+            .expect("构造已取消终态");
+        let command = ApprovalCancelBlockedCommand {
+            approval_process_instance_id: subject.instance.base.id.clone(),
+            expected_instance_version,
+            expected_execution_version: 7,
+            expected_task_version: None,
+            reason: "结构受损退出".to_string(),
+            idempotency_key: "cancel-key".to_string(),
+            actor_id: "runtime-admin".to_string(),
+        };
+        let missing_stale = ensure_cancel_blocked_instance_preconditions(&subject.instance, &command)
+            .expect_err("Fresh 路径先返回实例版本冲突");
+        let existing_non_actor = ensure_cancel_blocked_instance_preconditions(&subject.instance, &command)
+            .expect_err("existing key 非原 actor 必须复用同一 Fresh 冲突");
+        assert_same_error_semantics(existing_non_actor, missing_stale);
+
+        let mut current_version = command.clone();
+        current_version.expected_instance_version = subject.instance.base.version;
+        let missing_status =
+            ensure_cancel_blocked_instance_preconditions(&subject.instance, &current_version)
+                .expect_err("伪造当前版本仍必须按 Fresh 状态失败");
+        let existing_status =
+            ensure_cancel_blocked_instance_preconditions(&subject.instance, &current_version)
+                .expect_err("existing key 不得改为摘要冲突");
+        assert_same_error_semantics(existing_status, missing_status);
+
+        let facts = CancelBlockedTerminalFacts {
+            blocker: ApprovalBlockerCode::DefinitionGraphCorrupted,
+            actor_id: "runtime-admin".to_string(),
+            reason: command.reason.clone(),
+            execution_version: command.expected_execution_version + 1,
+            task_versions: Vec::new(),
+        };
+        assert!(cancel_blocked_terminal_facts_match(
+            &subject.instance,
+            &facts,
+            &command,
+            "runtime-admin"
+        ));
+        assert!(!cancel_blocked_terminal_facts_match(
+            &subject.instance,
+            &facts,
+            &command,
+            "other-admin"
+        ));
+    }
+
+    #[test]
+    fn legacy_decision_requires_exact_terminal_facts_despite_digest_collisions() {
+        let (none_item, none_execution) = decided_fixture(None, 3);
+        let exact_none = runtime_decision_command(None, 3, "warehouse-1");
+        let literal_null = runtime_decision_command(Some("NULL"), 3, "warehouse-1");
+        assert_eq!(
+            exact_none.legacy_payload_digest,
+            literal_null.legacy_payload_digest
+        );
+        assert!(legacy_decision_terminal_facts_match(
+            &none_item,
+            &none_execution,
+            &exact_none,
+            "warehouse-1"
+        ));
+        assert!(!legacy_decision_terminal_facts_match(
+            &none_item,
+            &none_execution,
+            &literal_null,
+            "warehouse-1"
+        ));
+
+        let (separator_item, separator_execution) = decided_fixture(Some("x\u{1f}3"), 4);
+        let separator_exact = runtime_decision_command(Some("x\u{1f}3"), 4, "warehouse-1");
+        let separator_relocated = runtime_decision_command(Some("x"), 3, "4\u{1f}warehouse-1");
+        assert_eq!(
+            separator_exact.legacy_payload_digest,
+            separator_relocated.legacy_payload_digest
+        );
+        assert!(legacy_decision_terminal_facts_match(
+            &separator_item,
+            &separator_execution,
+            &separator_exact,
+            "warehouse-1"
+        ));
+        assert!(!legacy_decision_terminal_facts_match(
+            &separator_item,
+            &separator_execution,
+            &separator_relocated,
+            "4\u{1f}warehouse-1"
+        ));
+    }
+
+    #[test]
+    fn stock_adjustment_runtime_object_read_uses_registered_permission_scope() {
+        let spec = adapter_spec_of(DocumentType::StockAdjustment).expect("库存调整适配器");
+        let context = BindingRevalidationContext {
+            organization_id: "org-1".to_string(),
+            creator_id: "submitter".to_string(),
+        };
+        assert!(runtime_object_readable(&spec, &context, "approver", true).expect("已登记读权且范围覆盖"));
+        assert!(!runtime_object_readable(&spec, &context, "approver", false).expect("范围不覆盖必须拒绝"));
     }
 }

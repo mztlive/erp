@@ -3,7 +3,7 @@
 mod seed;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
     sync::{
@@ -60,6 +60,39 @@ pub struct RbacService {
     policy_stale: AtomicBool,
     policy_consistency_unknown: AtomicBool,
     policy_write: Arc<Mutex<()>>,
+}
+
+/// 一次 Enforcer 读锁下冻结的账号角色与逐角色权限事实。
+#[derive(Debug, Clone)]
+pub(crate) struct RolePermissionSnapshot {
+    role_ids: Vec<String>,
+    grants: HashMap<String, HashSet<Permission>>,
+    policy_revision: u64,
+}
+
+impl RolePermissionSnapshot {
+    /// 返回账号在该 policy revision 下直接绑定的角色。
+    pub(crate) fn role_ids(&self) -> &[String] {
+        &self.role_ids
+    }
+
+    /// 返回实际授予指定权限的角色，保持冻结角色顺序。
+    pub(crate) fn granting_role_ids(&self, permission: &Permission) -> Vec<String> {
+        self.role_ids
+            .iter()
+            .filter(|role_id| {
+                self.grants
+                    .get(*role_id)
+                    .is_some_and(|permissions| permissions.contains(permission))
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// 返回冻结 Enforcer 对应的 policy revision。
+    pub(crate) fn policy_revision(&self) -> u64 {
+        self.policy_revision
+    }
 }
 
 /// 已基于操作人当前权限校验的角色授予上下文。
@@ -234,6 +267,46 @@ impl RbacService {
     /// 数据库读取失败时返回错误。
     pub(crate) async fn policy_revision_with_executor(&self, executor: &mut dyn Executor) -> Result<u64> {
         Ok(self.policy_store.policy_revision(executor).await?)
+    }
+
+    /// 在一次 Enforcer 读锁下冻结账号角色及指定权限的逐角色授权结果。
+    pub(crate) async fn role_permission_snapshot(
+        &self,
+        account_kind: AccountKind,
+        account_id: &str,
+        permissions: &[Permission],
+    ) -> Result<RolePermissionSnapshot> {
+        let enforcer = self.fresh_enforcer().await?.read().await;
+        let role_ids = role_ids_for_account(&enforcer, account_kind, account_id);
+        let mut grants = HashMap::with_capacity(role_ids.len());
+        for role_id in &role_ids {
+            let role_subject = format!("role:{role_id}");
+            let mut granted = HashSet::new();
+            for permission in permissions {
+                if enforcer
+                    .enforce((role_subject.as_str(), permission.resource(), permission.action()))
+                    .map_err(rbac_error)?
+                {
+                    granted.insert(permission.clone());
+                }
+            }
+            grants.insert(role_id.clone(), granted);
+        }
+        Ok(RolePermissionSnapshot {
+            role_ids,
+            grants,
+            policy_revision: self.loaded_policy_revision.load(Ordering::Acquire),
+        })
+    }
+
+    /// 证明冻结 Enforcer revision 与调用方事务快照可见 revision 完全一致。
+    pub(crate) async fn ensure_policy_snapshot_with_executor(
+        &self,
+        expected_revision: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let visible_revision = self.policy_revision_with_executor(executor).await?;
+        ensure_policy_snapshot_revision(expected_revision, visible_revision)
     }
 
     /// 创建角色并写入 Casbin 权限策略。
@@ -1317,21 +1390,34 @@ fn policy_revisions_match(loaded: u64, database: u64) -> bool {
     loaded == database
 }
 
+/// 冻结 Enforcer 与事务快照 revision 必须完全一致。
+fn ensure_policy_snapshot_revision(expected: u64, visible: u64) -> Result<()> {
+    if expected == visible {
+        return Ok(());
+    }
+    Err(Error::Rbac(
+        "授权策略版本已变化，无法在当前事务中证明授权快照".to_string(),
+    ))
+}
+
 fn rbac_error(error: impl std::fmt::Display) -> Error {
     Error::Rbac(error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, HashSet};
+
     use casbin::{CoreApi, Enforcer, MemoryAdapter, RbacApi};
     use entities::{AccountKind, Permission, PermissionSet, Role, RoleData};
 
     use super::{
         collect_role_ids, collect_role_permissions, commit_outcome_unknown, ensure_all_roles_assignable,
-        ensure_management_subset, ensure_permission_subset, ensure_role_deletable, ensure_role_mutable,
-        ensure_roles_delegable, ensure_target_roles_manageable, parse_policy_permissions, permission_pairs,
-        permissions_for_roles, policy_revisions_match, role_key, role_or_not_found, root_role_is_current,
-        stable_policy_revision, RbacService, RBAC_MODEL, ROOT_ROLE_ID,
+        ensure_management_subset, ensure_permission_subset, ensure_policy_snapshot_revision,
+        ensure_role_deletable, ensure_role_mutable, ensure_roles_delegable, ensure_target_roles_manageable,
+        parse_policy_permissions, permission_pairs, permissions_for_roles, policy_revisions_match, role_key,
+        role_or_not_found, root_role_is_current, stable_policy_revision, RbacService, RolePermissionSnapshot,
+        RBAC_MODEL, ROOT_ROLE_ID,
     };
     use crate::errors::Error;
 
@@ -1350,6 +1436,25 @@ mod tests {
     fn policy_snapshot_is_accepted_only_when_revision_stays_stable() {
         assert_eq!(stable_policy_revision(7, 7), Some(7));
         assert_eq!(stable_policy_revision(7, 8), None);
+    }
+
+    /// 角色绑定与逐角色授权必须来自同一个可验证 revision，禁止 R/R+1 拼接。
+    #[test]
+    fn role_permission_snapshot_keeps_roles_grants_and_revision_together() {
+        let permission = Permission::parse("approval_instance:decide").unwrap();
+        let snapshot = RolePermissionSnapshot {
+            role_ids: vec!["role-a".to_string(), "role-b".to_string()],
+            grants: HashMap::from([("role-b".to_string(), HashSet::from([permission.clone()]))]),
+            policy_revision: 7,
+        };
+        assert_eq!(snapshot.role_ids(), &["role-a", "role-b"]);
+        assert_eq!(snapshot.granting_role_ids(&permission), vec!["role-b"]);
+        assert_eq!(snapshot.policy_revision(), 7);
+        assert!(ensure_policy_snapshot_revision(7, 7).is_ok());
+        assert!(matches!(
+            ensure_policy_snapshot_revision(7, 8),
+            Err(Error::Rbac(message)) if message.contains("授权策略版本已变化")
+        ));
     }
 
     #[test]

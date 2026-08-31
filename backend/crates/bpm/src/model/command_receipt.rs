@@ -2,7 +2,11 @@
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use serde::{Deserialize, Serialize};
+use serde::{
+    de::{Error as DeserializeError, IgnoredAny, MapAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
+use std::fmt;
 
 use crate::ids::ApprovalCommandReceiptId;
 use crate::model::types::{
@@ -12,7 +16,7 @@ use crate::model::types::{
 use crate::model::Timestamp;
 
 /// 命令执行收据。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+#[derive(Debug, Serialize, Clone, Entity, PartialEq, Eq)]
 pub struct ApprovalCommandReceipt {
     #[serde(flatten)]
     pub base: BaseModel,
@@ -26,8 +30,142 @@ pub struct ApprovalCommandReceipt {
     pub payload_digest: String,
     /// 不可变结果引用。
     pub result_ref: String,
-    /// 创建时间。
-    pub created_at: Timestamp,
+}
+
+impl<'de> Deserialize<'de> for ApprovalCommandReceipt {
+    /// 兼容历史 writer 可能写出的两个同名 `created_at`。
+    ///
+    /// 历史模型同时展开 `BaseModel.created_at` 并显式序列化 `created_at`；MongoDB
+    /// 驱动直接序列化实体时会保留两个 BSON 键。两个值相同时按一个创建时间读取；
+    /// 值不一致时失败关闭，禁止任意选择一个时间掩盖损坏事实。
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ReceiptVisitor;
+
+        impl<'de> Visitor<'de> for ReceiptVisitor {
+            type Value = ApprovalCommandReceipt;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("an approval command receipt")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut id = None;
+                let mut version = None;
+                let mut created_at = None;
+                let mut created_at_count = 0_u8;
+                let mut updated_at = None;
+                let mut deleted_at = None;
+                let mut command_kind = None;
+                let mut scope_id = None;
+                let mut idempotency_key = None;
+                let mut payload_digest = None;
+                let mut result_ref = None;
+
+                while let Some(field) = map.next_key::<String>()? {
+                    match field.as_str() {
+                        "id" => {
+                            if id.is_some() {
+                                return Err(A::Error::duplicate_field("id"));
+                            }
+                            id = Some(map.next_value()?);
+                        }
+                        "version" => {
+                            if version.is_some() {
+                                return Err(A::Error::duplicate_field("version"));
+                            }
+                            version = Some(map.next_value()?);
+                        }
+                        "created_at" => {
+                            created_at_count = created_at_count.saturating_add(1);
+                            if created_at_count > 2 {
+                                return Err(A::Error::custom(
+                                    "created_at may appear at most twice for legacy receipts",
+                                ));
+                            }
+                            let value = map.next_value()?;
+                            match created_at {
+                                Some(existing) if existing != value => {
+                                    return Err(A::Error::custom("duplicate created_at values do not match"));
+                                }
+                                Some(_) => {}
+                                None => created_at = Some(value),
+                            }
+                        }
+                        "updated_at" => {
+                            if updated_at.is_some() {
+                                return Err(A::Error::duplicate_field("updated_at"));
+                            }
+                            updated_at = Some(map.next_value()?);
+                        }
+                        "deleted_at" => {
+                            if deleted_at.is_some() {
+                                return Err(A::Error::duplicate_field("deleted_at"));
+                            }
+                            deleted_at = Some(map.next_value()?);
+                        }
+                        "command_kind" => {
+                            if command_kind.is_some() {
+                                return Err(A::Error::duplicate_field("command_kind"));
+                            }
+                            command_kind = Some(map.next_value()?);
+                        }
+                        "scope_id" => {
+                            if scope_id.is_some() {
+                                return Err(A::Error::duplicate_field("scope_id"));
+                            }
+                            scope_id = Some(map.next_value()?);
+                        }
+                        "idempotency_key" => {
+                            if idempotency_key.is_some() {
+                                return Err(A::Error::duplicate_field("idempotency_key"));
+                            }
+                            idempotency_key = Some(map.next_value()?);
+                        }
+                        "payload_digest" => {
+                            if payload_digest.is_some() {
+                                return Err(A::Error::duplicate_field("payload_digest"));
+                            }
+                            payload_digest = Some(map.next_value()?);
+                        }
+                        "result_ref" => {
+                            if result_ref.is_some() {
+                                return Err(A::Error::duplicate_field("result_ref"));
+                            }
+                            result_ref = Some(map.next_value()?);
+                        }
+                        _ => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                    }
+                }
+
+                Ok(ApprovalCommandReceipt {
+                    base: BaseModel {
+                        id: id.ok_or_else(|| A::Error::missing_field("id"))?,
+                        version: version.ok_or_else(|| A::Error::missing_field("version"))?,
+                        created_at: created_at.ok_or_else(|| A::Error::missing_field("created_at"))?,
+                        updated_at: updated_at.ok_or_else(|| A::Error::missing_field("updated_at"))?,
+                        deleted_at: deleted_at.ok_or_else(|| A::Error::missing_field("deleted_at"))?,
+                    },
+                    command_kind: command_kind.ok_or_else(|| A::Error::missing_field("command_kind"))?,
+                    scope_id: scope_id.ok_or_else(|| A::Error::missing_field("scope_id"))?,
+                    idempotency_key: idempotency_key
+                        .ok_or_else(|| A::Error::missing_field("idempotency_key"))?,
+                    payload_digest: payload_digest
+                        .ok_or_else(|| A::Error::missing_field("payload_digest"))?,
+                    result_ref: result_ref.ok_or_else(|| A::Error::missing_field("result_ref"))?,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(ReceiptVisitor)
+    }
 }
 
 impl ApprovalCommandReceipt {
@@ -70,7 +208,6 @@ impl ApprovalCommandReceipt {
                 "请求摘要过长",
             )?,
             result_ref: normalize_required(result_ref, "结果引用不能为空", SCOPE_MAX_LEN, "结果引用过长")?,
-            created_at: at,
         })
     }
 
@@ -98,6 +235,28 @@ mod tests {
     use crate::ids::ApprovalCommandReceiptId;
     use crate::model::types::{ApprovalCommandKind, ModelError};
     use crate::model::Timestamp;
+    use entity_core::BaseModel;
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct LegacyApprovalCommandReceipt {
+        #[serde(flatten)]
+        base: BaseModel,
+        command_kind: ApprovalCommandKind,
+        scope_id: String,
+        idempotency_key: String,
+        payload_digest: String,
+        result_ref: String,
+        created_at: Timestamp,
+    }
+
+    #[derive(Serialize)]
+    struct CorruptApprovalCommandReceipt {
+        #[serde(flatten)]
+        legacy: LegacyApprovalCommandReceipt,
+        created_at: Timestamp,
+    }
+    use bson;
 
     fn receipt() -> ApprovalCommandReceipt {
         ApprovalCommandReceipt::new(
@@ -120,6 +279,101 @@ mod tests {
         assert_eq!(
             receipt.reconcile("digest-b"),
             Err(ModelError::CommandReceiptConflict)
+        );
+    }
+
+    /// 收据只使用 BaseModel 的创建时间；BSON 不得出现同名字段反序列化冲突。
+    #[test]
+    fn bson_round_trip_has_single_created_at_field() {
+        let receipt = receipt();
+        let document = bson::serialize_to_document(&receipt).expect("命令收据必须可序列化");
+        assert_eq!(document.keys().filter(|key| *key == "created_at").count(), 1);
+        let decoded: ApprovalCommandReceipt = bson::deserialize_from_document(document)
+            .expect("历史单 created_at 字段必须由 BaseModel 唯一读取");
+        assert_eq!(decoded, receipt);
+        assert_eq!(decoded.base.created_at, 1);
+    }
+
+    /// 历史 Mongo raw writer 保留的双创建时间同值时必须继续可读。
+    #[test]
+    fn raw_bson_reads_matching_legacy_duplicate_created_at_fields() {
+        let receipt = receipt();
+        let legacy = LegacyApprovalCommandReceipt {
+            base: receipt.base.clone(),
+            command_kind: receipt.command_kind,
+            scope_id: receipt.scope_id.clone(),
+            idempotency_key: receipt.idempotency_key.clone(),
+            payload_digest: receipt.payload_digest.clone(),
+            result_ref: receipt.result_ref.clone(),
+            created_at: Timestamp::from_unix_secs(1).unwrap(),
+        };
+        let raw =
+            bson::serialize_to_raw_document_buf(&legacy).expect("历史命令收据必须按 Mongo raw writer 序列化");
+        let created_at_count = raw
+            .iter()
+            .map(|entry| entry.expect("raw BSON 字段必须有效"))
+            .filter(|(key, _)| *key == "created_at")
+            .count();
+        assert_eq!(created_at_count, 2, "fixture 必须真实包含两个同名 BSON 键");
+
+        let decoded: ApprovalCommandReceipt =
+            bson::deserialize_from_slice(raw.as_bytes()).expect("同值的历史双 created_at 必须兼容读取");
+        assert_eq!(decoded, receipt);
+    }
+
+    /// 历史双创建时间若不一致必须失败关闭，禁止任意覆盖。
+    #[test]
+    fn raw_bson_rejects_conflicting_legacy_duplicate_created_at_fields() {
+        let receipt = receipt();
+        let legacy = LegacyApprovalCommandReceipt {
+            base: receipt.base.clone(),
+            command_kind: receipt.command_kind,
+            scope_id: receipt.scope_id,
+            idempotency_key: receipt.idempotency_key,
+            payload_digest: receipt.payload_digest,
+            result_ref: receipt.result_ref,
+            created_at: Timestamp::from_unix_secs(2).unwrap(),
+        };
+        let raw =
+            bson::serialize_to_raw_document_buf(&legacy).expect("损坏历史命令收据 fixture 必须可序列化");
+
+        let error = bson::deserialize_from_slice::<ApprovalCommandReceipt>(raw.as_bytes())
+            .expect_err("不一致的历史双 created_at 必须失败关闭");
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate created_at values do not match"),
+            "unexpected error: {error}"
+        );
+    }
+
+    /// 历史合法形态最多两个创建时间；第三个同值键也属于损坏文档。
+    #[test]
+    fn raw_bson_rejects_more_than_two_created_at_fields() {
+        let receipt = receipt();
+        let legacy = LegacyApprovalCommandReceipt {
+            base: receipt.base,
+            command_kind: receipt.command_kind,
+            scope_id: receipt.scope_id,
+            idempotency_key: receipt.idempotency_key,
+            payload_digest: receipt.payload_digest,
+            result_ref: receipt.result_ref,
+            created_at: Timestamp::from_unix_secs(1).unwrap(),
+        };
+        let corrupt = CorruptApprovalCommandReceipt {
+            legacy,
+            created_at: Timestamp::from_unix_secs(1).unwrap(),
+        };
+        let raw =
+            bson::serialize_to_raw_document_buf(&corrupt).expect("三 created_at 损坏 fixture 必须可序列化");
+
+        let error = bson::deserialize_from_slice::<ApprovalCommandReceipt>(raw.as_bytes())
+            .expect_err("第三个 created_at 必须失败关闭");
+        assert!(
+            error
+                .to_string()
+                .contains("created_at may appear at most twice for legacy receipts"),
+            "unexpected error: {error}"
         );
     }
 }

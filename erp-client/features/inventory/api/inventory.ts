@@ -8,6 +8,8 @@
 
 export {
     buildAdjustmentSubmitRequest,
+    buildCancelStockAdjustmentApprovalRequest,
+    cancelStockAdjustmentApproval,
     createAdjustmentDraft,
     fetchAdjustmentDetail,
     readInstanceResponsibility,
@@ -15,6 +17,7 @@ export {
     STOCK_ADJUSTMENT_DOCUMENT_TYPE,
     submitAdjustment,
 } from "./adjustment"
+export type { CancelStockAdjustmentApprovalRequest } from "./adjustment"
 export { fetchBalanceDetail } from "./detail"
 export { startInventoryExport } from "./export"
 export { fetchInventoryList } from "./list"

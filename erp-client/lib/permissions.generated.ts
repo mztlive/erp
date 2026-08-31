@@ -549,6 +549,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "upgrade_binding",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/cancel-approval",
+                description: "撤回库存调整审批",
+                permission: {
+                    resource: "approval_instance",
+                    action: "cancel",
+                },
+            },
         ],
     },
     {
@@ -2591,6 +2601,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "stock_adjustment",
                     action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-adjustments/{id}/submit-result",
+                description: "查询库存调整提交结果",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "detail",
                 },
             },
             {

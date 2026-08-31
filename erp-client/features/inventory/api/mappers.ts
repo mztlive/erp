@@ -6,12 +6,15 @@
 import {
     mapDocumentApprovalViewDto,
     type DocumentApprovalView,
-    type DocumentApprovalViewDto,
+    type ApprovalRuntimeInstanceDto,
 } from "@/features/approval-workflow/types"
 import type {
     AdjustmentDetailView,
     AdjustmentDraftView,
     AdjustmentReasonType,
+    StockAdjustmentApprovalView,
+    StockAdjustmentCancelCommand,
+    StockAdjustmentSubmitCommand,
     StockAdjustmentRow,
     StockBalanceRow,
     StockMovementRow,
@@ -32,12 +35,89 @@ import {
 import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
 import type {
     BackendStockAdjustment,
+    BackendStockAdjustmentApproval,
+    BackendStockAdjustmentCancelCommand,
     BackendStockAdjustmentDetail,
     BackendStockAdjustmentLine,
+    BackendStockAdjustmentSubmitCommand,
     BackendStockBalance,
     BackendStockMovement,
     BackendStockReservation,
 } from "@/features/inventory/api/dto"
+
+const U64_MAX_DECIMAL = "18446744073709551615"
+const U32_MAX_DECIMAL = "4294967295"
+
+function isCanonicalPositiveDecimalWithin(
+    value: unknown,
+    maximum: string,
+): value is string {
+    if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+        return false
+    }
+    return (
+        value.length < maximum.length ||
+        (value.length === maximum.length && value <= maximum)
+    )
+}
+
+function isExactNonBlankText(value: unknown): value is string {
+    return (
+        typeof value === "string" && value.length > 0 && value === value.trim()
+    )
+}
+
+/** 库存调整详情只接受后端签发的字符串版本与成对运行身份。 */
+function strictInventoryRuntimeInstance(
+    dto?: ApprovalRuntimeInstanceDto | null,
+): ApprovalRuntimeInstanceDto | undefined {
+    if (
+        !dto ||
+        !isExactNonBlankText(dto.id) ||
+        !isCanonicalPositiveDecimalWithin(
+            dto.subject_version,
+            U32_MAX_DECIMAL,
+        ) ||
+        !isCanonicalPositiveDecimalWithin(dto.instance_version, U64_MAX_DECIMAL)
+    ) {
+        return undefined
+    }
+    const hasExecution = dto.current_execution_id != null
+    if (
+        hasExecution !== (dto.current_execution_version != null) ||
+        (hasExecution &&
+            (!isExactNonBlankText(dto.current_execution_id) ||
+                !isCanonicalPositiveDecimalWithin(
+                    dto.current_execution_version,
+                    U64_MAX_DECIMAL,
+                )))
+    ) {
+        return undefined
+    }
+    const hasTask = dto.current_task_id != null
+    if (
+        hasTask !== (dto.current_task_version != null) ||
+        (hasTask &&
+            (!hasExecution ||
+                !isExactNonBlankText(dto.current_task_id) ||
+                !isCanonicalPositiveDecimalWithin(
+                    dto.current_task_version,
+                    U64_MAX_DECIMAL,
+                )))
+    ) {
+        return undefined
+    }
+    const knownShape =
+        (dto.status === "RUNNING" && hasExecution && hasTask) ||
+        (dto.status === "BLOCKED" && hasExecution && !hasTask) ||
+        ((dto.status === "APPROVED" || dto.status === "CANCELLED") &&
+            !hasExecution &&
+            !hasTask)
+    if (!knownShape) {
+        return undefined
+    }
+    return { ...dto, execution_version: undefined }
+}
 
 function availabilityOf(
     row: BackendStockBalance,
@@ -166,14 +246,78 @@ export function mapReservation(
     }
 }
 
+/** 把详情下发的撤回令牌映射为库存专用命令；任何非字符串版本均拒绝。 */
+export function mapStockAdjustmentCancelCommand(
+    dto?: BackendStockAdjustmentCancelCommand | null,
+): StockAdjustmentCancelCommand | undefined {
+    if (!dto) return undefined
+    if (
+        !isCanonicalPositiveDecimalWithin(
+            dto.expected_version,
+            U64_MAX_DECIMAL,
+        ) ||
+        !isExactNonBlankText(dto.approval_process_instance_id) ||
+        !isCanonicalPositiveDecimalWithin(
+            dto.expected_subject_version,
+            U32_MAX_DECIMAL,
+        ) ||
+        !isCanonicalPositiveDecimalWithin(
+            dto.expected_instance_version,
+            U64_MAX_DECIMAL,
+        ) ||
+        !isCanonicalPositiveDecimalWithin(
+            dto.expected_execution_version,
+            U64_MAX_DECIMAL,
+        ) ||
+        (dto.expected_task_version != null &&
+            !isCanonicalPositiveDecimalWithin(
+                dto.expected_task_version,
+                U64_MAX_DECIMAL,
+            ))
+    ) {
+        return undefined
+    }
+    return {
+        expectedVersion: dto.expected_version,
+        approvalProcessInstanceId: dto.approval_process_instance_id,
+        expectedSubjectVersion: dto.expected_subject_version,
+        expectedInstanceVersion: dto.expected_instance_version,
+        expectedExecutionVersion: dto.expected_execution_version,
+        expectedTaskVersion: dto.expected_task_version ?? null,
+    }
+}
+
+/** 把草稿详情下发的提交令牌原样映射；任何非字符串版本均拒绝。 */
+export function mapStockAdjustmentSubmitCommand(
+    dto?: BackendStockAdjustmentSubmitCommand | null,
+): StockAdjustmentSubmitCommand | undefined {
+    if (
+        !dto ||
+        !isCanonicalPositiveDecimalWithin(
+            dto.expected_version,
+            U64_MAX_DECIMAL,
+        ) ||
+        !isCanonicalPositiveDecimalWithin(
+            dto.expected_subject_version,
+            U32_MAX_DECIMAL,
+        )
+    ) {
+        return undefined
+    }
+    return {
+        expectedVersion: dto.expected_version,
+        expectedSubjectVersion: dto.expected_subject_version,
+    }
+}
+
 /**
- * 把单据详情上的只读审批结构转成通用审批区投影。
+ * 把单据详情上的只读审批结构转成库存审批区投影。
  *
- * 缺省时返回未绑定的空结构，禁止前端补默认审批人或节点。
+ * 缺省时返回未绑定的空结构，禁止前端补默认审批人、节点或撤回令牌。
  */
 export function mapAdjustmentApproval(
-    dto?: DocumentApprovalViewDto | null,
-): DocumentApprovalView {
+    dto?: BackendStockAdjustmentApproval | null,
+): StockAdjustmentApprovalView {
     if (!dto) {
         return {
             requirement: "PROCESS_REQUIRED",
@@ -182,7 +326,29 @@ export function mapAdjustmentApproval(
             allowedActions: [],
         }
     }
-    return mapDocumentApprovalViewDto(dto)
+    const runtimeDto = strictInventoryRuntimeInstance(dto.instance)
+    const approval = mapDocumentApprovalViewDto({
+        ...dto,
+        instance: runtimeDto,
+    })
+    const candidateCancel = mapStockAdjustmentCancelCommand(dto.cancel_command)
+    const runtime = approval.instance
+    const cancelCommand =
+        candidateCancel &&
+        runtime &&
+        candidateCancel.approvalProcessInstanceId === runtime.id &&
+        candidateCancel.expectedSubjectVersion === runtime.subjectVersion &&
+        candidateCancel.expectedInstanceVersion === runtime.instanceVersion &&
+        candidateCancel.expectedExecutionVersion === runtime.executionVersion &&
+        candidateCancel.expectedTaskVersion ===
+            (runtime.currentTaskVersion ?? null)
+            ? candidateCancel
+            : undefined
+    return {
+        ...approval,
+        submitCommand: mapStockAdjustmentSubmitCommand(dto.submit_command),
+        cancelCommand,
+    }
 }
 
 export function mapAdjustment(
@@ -224,7 +390,7 @@ export function mapAdjustment(
 
 export function toDraftView(
     detail: BackendStockAdjustmentDetail,
-    balanceLockVersion: number,
+    balanceLockVersion: string,
 ): AdjustmentDraftView {
     const a = detail.adjustment
     const line = detail.lines[0]
@@ -252,7 +418,6 @@ export function toDraftView(
         status: st.status,
         statusLabel: st.statusLabel,
         balanceLockVersion,
-        editVersion: a.version,
         operatorLabel: a.prepared_by,
         segregationNote: SEGREGATION_NOTE,
         approval: mapAdjustmentApproval(detail.approval),

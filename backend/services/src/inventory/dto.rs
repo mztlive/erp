@@ -85,7 +85,7 @@ pub struct StockBalanceView {
     /// 可用数量。
     pub available_quantity: Quantity,
     /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
-    pub version: u64,
+    pub version: String,
     /// 已应用最后流水。
     pub last_movement_id: Option<String>,
     /// 最后流水业务时间（秒级时间戳）。
@@ -172,7 +172,7 @@ pub struct StockAdjustmentView {
     /// 业务发生时间（秒级时间戳；可空）。
     pub occurred_at: Option<i64>,
     /// 乐观锁版本。
-    pub version: u64,
+    pub version: String,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -218,6 +218,40 @@ pub struct DocumentApprovalView {
     pub history_page: DocumentApprovalHistoryPageView,
     /// 服务端允许的动作；不含选择定义或审批人。
     pub allowed_actions: Vec<String>,
+    /// 当前调用人可提交草稿时返回的服务端权威 CAS 令牌。
+    pub submit_command: Option<SubmitStockAdjustmentApprovalTokenView>,
+    /// 当前调用人可执行普通撤回时返回的不可伪造运行时 CAS 令牌。
+    pub cancel_command: Option<CancelStockAdjustmentApprovalTokenView>,
+}
+
+/// 库存调整提交审批的服务端权威 CAS 令牌。
+///
+/// 客户端必须原样回传目标冻结版本，禁止根据当前值自行递增。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SubmitStockAdjustmentApprovalTokenView {
+    /// 当前库存调整单版本。
+    pub expected_version: String,
+    /// 本次提交应形成的目标冻结版本。
+    pub expected_subject_version: String,
+}
+
+/// 库存调整普通撤回的当前运行时 CAS 令牌。
+///
+/// 所有版本均序列化为十进制字符串，禁止浏览器以 JS number 承载乐观锁。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CancelStockAdjustmentApprovalTokenView {
+    /// 当前库存调整单版本。
+    pub expected_version: String,
+    /// 当前审批实例 ID。
+    pub approval_process_instance_id: String,
+    /// 冻结提交版本。
+    pub expected_subject_version: String,
+    /// 当前实例版本。
+    pub expected_instance_version: String,
+    /// 当前执行版本。
+    pub expected_execution_version: String,
+    /// 运行中实例的唯一开放任务版本；人员失效阻塞实例为空。
+    pub expected_task_version: Option<String>,
 }
 
 /// 绑定定义只读摘要。
@@ -257,6 +291,18 @@ pub struct DocumentApprovalInstanceView {
     pub current_assignee: Option<String>,
     /// 最近驳回原因。
     pub latest_rejection: Option<String>,
+    /// 冻结提交版本（十进制字符串）。
+    pub subject_version: String,
+    /// 当前实例乐观锁版本（十进制字符串）。
+    pub instance_version: String,
+    /// 当前执行 ID；终态为空。
+    pub current_execution_id: Option<String>,
+    /// 当前执行版本（十进制字符串）；终态为空。
+    pub current_execution_version: Option<String>,
+    /// 当前开放任务 ID；BLOCKED/终态为空。
+    pub current_task_id: Option<String>,
+    /// 当前开放任务版本（十进制字符串）；BLOCKED/终态为空。
+    pub current_task_version: Option<String>,
 }
 
 /// 有界历史项。
@@ -635,6 +681,9 @@ pub struct SubmitStockAdjustmentRequest {
     /// 期望的单据乐观锁版本。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub expected_version: u64,
+    /// 服务端详情令牌下发的本次目标冻结版本。
+    #[validate(range(min = 1, message = "审批主题版本必须大于 0"))]
+    pub expected_subject_version: u32,
     /// 调整原因类型；与明细方向在服务端共同校验。
     pub reason_type: AdjustmentReasonType,
     /// 最终明细值。提交事务内先覆盖草稿，再冻结审批快照。
@@ -655,13 +704,43 @@ pub struct SubmitStockAdjustmentRequest {
     pub idempotency_key: String,
 }
 
-/// 撤回库存调整审批请求。原因必填。
+/// 查询库存调整提交结果的稳定命令身份。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct StockAdjustmentSubmitResultQuery {
+    /// 原提交命令要形成的冻结审批主题版本。
+    #[validate(range(min = 1, message = "审批主题版本必须大于 0"))]
+    pub expected_subject_version: u32,
+    /// 原提交命令的幂等键。
+    #[validate(length(min = 1, max = 128, message = "幂等键长度必须在1-128之间"))]
+    pub idempotency_key: String,
+}
+
+/// 撤回库存调整审批请求。
+///
+/// 请求显式绑定原审批实例与运行事实版本，使同一幂等键在单据修改、重新提交
+/// 后仍可按原实例安全回放，且不会从终态反推执行或任务版本。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CancelStockAdjustmentApprovalRequest {
-    /// 期望的单据乐观锁版本。
-    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    /// 期望的库存调整单乐观锁版本。
+    #[validate(range(min = 1, message = "库存调整单版本必须大于 0"))]
     pub expected_version: u64,
+    /// 审批实例 ID，也是取消命令收据的稳定作用域。
+    #[validate(length(min = 1, max = 128, message = "审批实例 id 不能为空"))]
+    pub approval_process_instance_id: String,
+    /// 冻结提交版本。
+    #[validate(range(min = 1, message = "审批主题版本必须大于 0"))]
+    pub expected_subject_version: u32,
+    /// 期望实例版本。
+    #[validate(range(min = 1, message = "审批实例版本必须大于 0"))]
+    pub expected_instance_version: u64,
+    /// 期望当前执行版本。
+    #[validate(range(min = 1, message = "审批执行版本必须大于 0"))]
+    pub expected_execution_version: u64,
+    /// 运行中实例的唯一开放任务版本；人员失效阻塞实例必须为空。
+    #[validate(range(min = 1, message = "审批任务版本必须大于 0"))]
+    pub expected_task_version: Option<u64>,
     /// 非空撤回原因。
     #[validate(length(min = 1, max = 512, message = "撤回原因不能为空"))]
     pub reason: String,
@@ -673,11 +752,13 @@ pub struct CancelStockAdjustmentApprovalRequest {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_sort, SortDir, StockAdjustmentListParams, StockBalanceListParams, StockMovementListParams,
-        StockReservationListParams,
+        normalize_sort, SortDir, StockAdjustmentListParams, StockAdjustmentView, StockBalanceListParams,
+        StockBalanceView, StockMovementListParams, StockReservationListParams,
     };
     use entities::ids::{SalesOrderLineId, SkuId, WarehouseId};
-    use entities::inventory::{MovementType, ReservationStatus, StockAdjustmentState};
+    use entities::inventory::{AdjustmentReasonType, MovementType, ReservationStatus, StockAdjustmentState};
+    use entities::money::Quantity;
+    use std::str::FromStr;
     use validator::Validate;
 
     #[test]
@@ -783,6 +864,20 @@ mod tests {
             .is_err()
         );
         assert!(
+            serde_json::from_value::<CancelStockAdjustmentApprovalRequest>(serde_json::json!({
+                "expected_version": 1,
+                "approval_process_instance_id": "instance-1",
+                "expected_subject_version": 1,
+                "expected_instance_version": 1,
+                "expected_execution_version": 1,
+                "expected_task_version": 1,
+                "reason": "改单",
+                "idempotency_key": "k2",
+                "assignee": "forged"
+            }))
+            .is_err()
+        );
+        assert!(
             serde_json::from_value::<SubmitStockAdjustmentRequest>(serde_json::json!({
                 "expected_version": 1,
                 "idempotency_key": "k1",
@@ -790,17 +885,9 @@ mod tests {
             }))
             .is_err()
         );
-        assert!(
-            serde_json::from_value::<CancelStockAdjustmentApprovalRequest>(serde_json::json!({
-                "expected_version": 1,
-                "reason": "改单",
-                "idempotency_key": "k2",
-                "assignee": "forged"
-            }))
-            .is_err()
-        );
         let submit: SubmitStockAdjustmentRequest = serde_json::from_value(serde_json::json!({
             "expected_version": 1,
+            "expected_subject_version": 1,
             "reason_type": "STOCK_LOSS",
             "lines": [{
                 "line_id": "line-1",
@@ -817,5 +904,52 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(submit.expected_version, 1);
+    }
+
+    /// 余额响应版本必须保持十进制字符串，不能经过 JS number。
+    #[test]
+    fn stock_balance_view_serializes_version_as_decimal_string() {
+        let quantity = Quantity::from_str("1").unwrap();
+        let value = serde_json::to_value(StockBalanceView {
+            id: "balance-1".to_string(),
+            warehouse_id: "warehouse-1".to_string(),
+            warehouse_code: "WH-1".to_string(),
+            warehouse_name: "主仓".to_string(),
+            sku_id: "sku-1".to_string(),
+            sku_code: "SKU-1".to_string(),
+            sku_name: "商品".to_string(),
+            spec_summary: None,
+            on_hand_quantity: quantity,
+            reserved_quantity: quantity,
+            available_quantity: quantity,
+            version: "9007199254740993".to_string(),
+            last_movement_id: None,
+            last_movement_at: None,
+            last_movement_type: None,
+            has_active_reservation: false,
+        })
+        .unwrap();
+        assert_eq!(value["version"], serde_json::json!("9007199254740993"));
+    }
+
+    /// 库存调整列表、详情及 PUT 响应的版本不得经过 JSON number。
+    #[test]
+    fn stock_adjustment_view_serializes_version_as_decimal_string() {
+        let value = serde_json::to_value(StockAdjustmentView {
+            id: "adjustment-1".to_string(),
+            adjustment_no: "ADJ-1".to_string(),
+            warehouse_id: "warehouse-1".to_string(),
+            reason_type: AdjustmentReasonType::StockGain,
+            status: StockAdjustmentState::Draft,
+            prepared_by: "operator-1".to_string(),
+            reviewed_by: None,
+            finance_reviewed_by: None,
+            note: None,
+            occurred_at: None,
+            version: "9007199254740993".to_string(),
+            created_at: 1,
+        })
+        .unwrap();
+        assert_eq!(value["version"], serde_json::json!("9007199254740993"));
     }
 }

@@ -7,6 +7,7 @@ export {
     inventoryKeys,
     useAdjustmentDetailQuery,
     useBalanceDetailQuery,
+    useCancelStockAdjustmentApprovalMutation,
     useCreateAdjustmentDraftMutation,
     useInventoryListQuery,
     useResolveAdjustmentUnknownMutation,

@@ -7,7 +7,9 @@ use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessI
 
 use super::apply_plan::{apply_plan, DomainActionKind};
 use super::authorization::requires_blocked_cancel;
-use super::idempotency::{cancel_blocked_digest, cancel_digest, classify_receipt, ReceiptBranch};
+use super::idempotency::{
+    cancel_blocked_digest, cancel_digest, classify_receipt, document_cancel_digest, ReceiptBranch,
+};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::errors::{Error, Result};
@@ -49,6 +51,35 @@ pub struct CancelExecutionInput {
 /// # 错误
 /// 端口与 blocker 类别不匹配、异载荷冲突或引擎失败时返回错误。
 pub fn prepare_cancel(input: CancelExecutionInput) -> Result<PreparedExecution> {
+    prepare_cancel_with_document_version(input, None)
+}
+
+/// 规划业务单据普通撤回，并把业务乐观锁版本纳入命令收据摘要。
+///
+/// # 参数
+/// * `input` - 普通撤回输入；不得标记为受阻取消端口
+/// * `expected_document_version` - 调用方已重验的业务单据版本
+///
+/// # 错误
+/// 输入误用受阻端口、端口与 blocker 类别不匹配、异载荷冲突或引擎失败时
+/// 返回错误。
+pub fn prepare_document_cancel(
+    input: CancelExecutionInput,
+    expected_document_version: u64,
+) -> Result<PreparedExecution> {
+    if input.blocked_port {
+        return Err(Error::ValidationError(
+            "业务单据普通撤回不得使用受阻取消端口".to_string(),
+        ));
+    }
+    prepare_cancel_with_document_version(input, Some(expected_document_version))
+}
+
+/// 使用可选业务单据版本形成取消计划。
+fn prepare_cancel_with_document_version(
+    input: CancelExecutionInput,
+    expected_document_version: Option<u64>,
+) -> Result<PreparedExecution> {
     let digest = if input.blocked_port {
         let blocker = input
             .instance
@@ -72,14 +103,25 @@ pub fn prepare_cancel(input: CancelExecutionInput) -> Result<PreparedExecution> 
                 "非人员一致性阻塞只能走受阻取消".to_string(),
             ));
         }
-        cancel_digest(
-            input.subject_version,
-            input.expected_instance_version,
-            input.expected_execution_version,
-            input.expected_task_version,
-            &input.reason,
-            input.actor.as_str(),
-        )
+        match expected_document_version {
+            Some(version) => document_cancel_digest(
+                input.subject_version,
+                version,
+                input.expected_instance_version,
+                input.expected_execution_version,
+                input.expected_task_version,
+                &input.reason,
+                input.actor.as_str(),
+            ),
+            None => cancel_digest(
+                input.subject_version,
+                input.expected_instance_version,
+                input.expected_execution_version,
+                input.expected_task_version,
+                &input.reason,
+                input.actor.as_str(),
+            ),
+        }
     };
     match classify_receipt(input.command.receipt.as_ref(), &digest) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),

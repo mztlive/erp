@@ -302,12 +302,6 @@ pub fn adapter_object_read_decision(
     if context.organization_id.trim().is_empty() || assignee_user_id.trim().is_empty() {
         return Err(Error::ValidationError("单据组织或审批人不能为空".to_string()));
     }
-    if spec.document_type == DocumentType::StockAdjustment {
-        return Ok(Some(crate::inventory::stock_adjustment_object_readable(
-            &context.organization_id,
-            assignee_user_id,
-        )?));
-    }
     if spec.document_type == DocumentType::SalesOrder || spec.document_type == DocumentType::VoucherSalesOrder
     {
         return Ok(Some(crate::sales_order::sales_order_object_readable(
@@ -604,8 +598,9 @@ mod tests {
         };
         let pilot = adapter_spec_of(DocumentType::StockAdjustment).expect("试点必须有适配器");
         assert_eq!(
-            adapter_object_read_decision(&pilot, &context, "creator-1").expect("创建人可读"),
-            Some(true)
+            adapter_object_read_decision(&pilot, &context, "creator-1")
+                .expect("库存读取由真实权限范围端口接线"),
+            None
         );
         let sales = adapter_spec_of(DocumentType::SalesOrder).expect("销售单必须有适配器");
         assert_eq!(
@@ -660,8 +655,8 @@ mod tests {
             Some(true)
         );
         assert_eq!(
-            adapter_object_read_decision(&pilot, &context, "u1").expect("组织上下文已给出"),
-            Some(true)
+            adapter_object_read_decision(&pilot, &context, "u1").expect("库存读取不得恢复常量 helper"),
+            None
         );
         assert!(require_wired_object_read(None).is_err());
         assert!(ensure_object_readable(false).is_err());
@@ -692,14 +687,15 @@ mod tests {
             DataScopeType::Organization,
             &["org-1"],
         );
-        revalidate_assignee_binding_access(
+        let stock_unwired = revalidate_assignee_binding_access(
             &spec,
             std::slice::from_ref(&user_org),
             std::slice::from_ref(&role_company),
             &context,
             "u1",
         )
-        .expect("试点读取权已接线且组织覆盖时应通过");
+        .expect_err("库存调整不得回退 generic adapter 常量放行");
+        assert!(stock_unwired.to_string().contains("对象读取权未接线"));
         revalidate_assignee_binding_access(
             &adapter_spec_of(DocumentType::PaymentReversal).expect("付款冲正必须有适配器"),
             std::slice::from_ref(&user_org),

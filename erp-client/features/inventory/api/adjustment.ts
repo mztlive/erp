@@ -9,9 +9,11 @@ import type {
     AdjustmentDraftView,
     AdjustmentReasonType,
     AdjustmentSubmitResponse,
+    CancelStockAdjustmentApprovalResult,
+    StockAdjustmentCancelCommand,
+    StockAdjustmentSubmitCommand,
 } from "@/features/inventory/types"
 import {
-    adjustmentStatusMap,
     isApiError,
     reasonTypeBackend,
     secsToIso,
@@ -21,18 +23,50 @@ import {
     toDraftView,
 } from "@/features/inventory/api/mappers"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import type { BackendStockAdjustmentDetail } from "@/features/inventory/api/dto"
+import type {
+    BackendStockAdjustment,
+    BackendStockAdjustmentDetail,
+} from "@/features/inventory/api/dto"
 
 /** 库存调整作为试点单据的合同 DocumentType。 */
 export const STOCK_ADJUSTMENT_DOCUMENT_TYPE = "StockAdjustment" as const
+
+export type CancelStockAdjustmentApprovalRequest = Readonly<{
+    expected_version: string
+    approval_process_instance_id: string
+    expected_subject_version: string
+    expected_instance_version: string
+    expected_execution_version: string
+    expected_task_version: string | null
+    reason: string
+    idempotency_key: string
+}>
+
+/**
+ * 由详情令牌构造库存调整撤回请求。版本值原样透传，不允许从实例摘要补齐。
+ */
+export const buildCancelStockAdjustmentApprovalRequest = (input: {
+    command: StockAdjustmentCancelCommand
+    reason: string
+    idempotencyKey: string
+}): CancelStockAdjustmentApprovalRequest => ({
+    expected_version: input.command.expectedVersion,
+    approval_process_instance_id: input.command.approvalProcessInstanceId,
+    expected_subject_version: input.command.expectedSubjectVersion,
+    expected_instance_version: input.command.expectedInstanceVersion,
+    expected_execution_version: input.command.expectedExecutionVersion,
+    expected_task_version: input.command.expectedTaskVersion,
+    reason: input.reason.trim(),
+    idempotency_key: input.idempotencyKey,
+})
 
 /**
  * 构造保存最终草稿并提交审批的原子命令，不得带复核人或审批人。
  */
 export const buildAdjustmentSubmitRequest = (input: {
-    expectedVersion: number
+    command: StockAdjustmentSubmitCommand
     balanceId: string
-    expectedBalanceVersion: number
+    expectedBalanceVersion: string
     lineId: string
     reasonType: AdjustmentReasonType
     direction: "increase" | "decrease"
@@ -41,7 +75,8 @@ export const buildAdjustmentSubmitRequest = (input: {
     occurredAt: string
     idempotencyKey: string
 }) => ({
-    expected_version: input.expectedVersion,
+    expected_version: input.command.expectedVersion,
+    expected_subject_version: input.command.expectedSubjectVersion,
     reason_type: reasonTypeBackend(input.reasonType),
     lines: [
         {
@@ -91,9 +126,28 @@ export async function fetchAdjustmentDetail(
     return toAdjustmentDetailView(detail)
 }
 
+/**
+ * 撤回库存调整审批。该端口返回库存调整单视图，不按审批命令响应解析。
+ */
+export async function cancelStockAdjustmentApproval(input: {
+    stockAdjustmentId: string
+    command: StockAdjustmentCancelCommand
+    reason: string
+    idempotencyKey: string
+}): Promise<CancelStockAdjustmentApprovalResult> {
+    const adjustment = await apiPost<BackendStockAdjustment>(
+        `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}/cancel-approval`,
+        buildCancelStockAdjustmentApprovalRequest(input),
+    )
+    return {
+        stockAdjustmentId: adjustment.id,
+        status: adjustment.status,
+    }
+}
+
 export async function createAdjustmentDraft(input: {
     balanceId: string
-    balanceLockVersion: number
+    balanceLockVersion: string
     warehouseId: string
     warehouseName: string
     skuId: string
@@ -135,10 +189,10 @@ export async function createAdjustmentDraft(input: {
 
 export async function submitAdjustment(input: {
     stockAdjustmentId: string
-    expectedDocumentVersion: number
+    submitCommand: StockAdjustmentSubmitCommand
     balanceId: string
     lineId: string
-    expectedBalanceLockVersion: number
+    expectedBalanceLockVersion: string
     reasonType: AdjustmentReasonType
     reasonTypeLabel: string
     direction: "increase" | "decrease"
@@ -151,7 +205,7 @@ export async function submitAdjustment(input: {
         const submitted = await apiPost<BackendStockAdjustmentDetail>(
             `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}/submit`,
             buildAdjustmentSubmitRequest({
-                expectedVersion: input.expectedDocumentVersion,
+                command: input.submitCommand,
                 balanceId: input.balanceId,
                 expectedBalanceVersion: input.expectedBalanceLockVersion,
                 lineId: input.lineId,
@@ -181,15 +235,6 @@ export async function submitAdjustment(input: {
         }
     } catch (error) {
         if (isApiError(error)) {
-            if (error.status === 409) {
-                return {
-                    status: "failed",
-                    code: "BALANCE_LOCK_CONFLICT",
-                    // 后端冲突码自带具体原因，前端透传不再改写
-                    message: getErrorMessage(error, "数据已变更，请刷新后重试"),
-                    latestLockVersion: input.expectedBalanceLockVersion,
-                }
-            }
             if (error.code === "OUTCOME_UNKNOWN") {
                 return {
                     status: "unknown",
@@ -212,37 +257,50 @@ export async function submitAdjustment(input: {
 
 export async function resolveAdjustmentUnknown(input: {
     idempotencyKey: string
-    stockAdjustmentId?: string
-    expectedBalanceLockVersion?: number
+    stockAdjustmentId: string
+    expectedSubjectVersion: string
+    expectedBalanceLockVersion?: string
 }): Promise<AdjustmentSubmitResponse> {
-    if (input.stockAdjustmentId) {
-        try {
-            const detail = await apiGet<BackendStockAdjustmentDetail>(
-                `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`,
-            )
-            const st = adjustmentStatusMap(detail.adjustment.status)
-            if (st.status === "IN_APPROVAL" || st.status === "POSTED") {
-                const responsibility = readInstanceResponsibility(
-                    toAdjustmentDetailView(detail).approval,
-                )
-                return {
-                    status: "succeeded",
-                    outcome: {
-                        kind: "SUBMITTED_FOR_APPROVAL",
-                        stockAdjustmentId: detail.adjustment.id,
-                        adjustmentNo: detail.adjustment.adjustment_no,
-                        nextResponsible: responsibility.nextResponsible,
-                        currentNodeLabel: responsibility.currentNodeLabel,
-                        reference: detail.adjustment.adjustment_no,
-                        submittedAt: secsToIso(detail.adjustment.created_at),
-                        balanceLockVersion:
-                            input.expectedBalanceLockVersion ??
-                            detail.adjustment.version,
-                    },
-                }
+    const query = new URLSearchParams({
+        expected_subject_version: input.expectedSubjectVersion,
+        idempotency_key: input.idempotencyKey,
+    })
+    try {
+        // 只有服务端按精确 scope/key 找到并重验的收据才能确认原命令成功。
+        // 禁止根据单据当前状态推测未知命令的结果。
+        const detail = await apiGet<BackendStockAdjustmentDetail>(
+            `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}/submit-result?${query.toString()}`,
+        )
+        const responsibility = readInstanceResponsibility(
+            toAdjustmentDetailView(detail).approval,
+        )
+        return {
+            status: "succeeded",
+            outcome: {
+                kind: "SUBMITTED_FOR_APPROVAL",
+                stockAdjustmentId: detail.adjustment.id,
+                adjustmentNo: detail.adjustment.adjustment_no,
+                nextResponsible: responsibility.nextResponsible,
+                currentNodeLabel: responsibility.currentNodeLabel,
+                reference: detail.adjustment.adjustment_no,
+                submittedAt: secsToIso(detail.adjustment.created_at),
+                ...(input.expectedBalanceLockVersion
+                    ? {
+                          balanceLockVersion: input.expectedBalanceLockVersion,
+                      }
+                    : {}),
+            },
+        }
+    } catch (error) {
+        if (isApiError(error) && error.status !== 404) {
+            return {
+                status: "unknown",
+                message: getErrorMessage(
+                    error,
+                    "操作结果仍无法确认，请稍后使用原任务号再查询。",
+                ),
+                idempotencyKey: input.idempotencyKey,
             }
-        } catch {
-            // fall through
         }
     }
     return {
