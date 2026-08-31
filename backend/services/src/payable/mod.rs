@@ -47,7 +47,7 @@ use crate::approval::binding::{
     bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::audit::{AuditActor, CommandReceipt};
+use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::file_asset::{FileAssetView, PendingFileAssetRequest};
@@ -579,9 +579,9 @@ impl PayableService {
         actor: &AuditActor,
     ) -> Result<SupplierPaymentWithAssetsResult> {
         req.validate()?;
-        let command_receipt = CommandReceipt::new(
+        let command_receipt = CommandReceipt::from_payload(
             "supplier-payment-commit-",
-            actor,
+            actor.id(),
             "supplier_payment.commit",
             "supplier_payment",
             &req.idempotency_key,
@@ -776,9 +776,9 @@ impl PayableService {
         actor: &AuditActor,
     ) -> Result<PurchaseInvoiceRegisteredView> {
         req.validate()?;
-        let command_receipt = CommandReceipt::new(
+        let command_receipt = CommandReceipt::from_payload(
             "purchase-invoice-register-",
-            actor,
+            actor.id(),
             "purchase_invoice_allocation.post",
             "purchase_invoice_allocation",
             &req.idempotency_key,

@@ -329,8 +329,6 @@ pub struct BalanceSnapshotView {
 /// 余额快照列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct BalanceSnapshotListParams {
-    /// 卡实例筛选。
-    pub mall_card_instance_id: Option<MallCardInstanceId>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -346,8 +344,6 @@ pub struct BalanceSnapshotListParams {
 /// 归一化后的余额快照列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BalanceSnapshotListQuery {
-    /// 卡实例筛选。
-    pub mall_card_instance_id: Option<MallCardInstanceId>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -364,7 +360,6 @@ impl BalanceSnapshotListParams {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, BALANCE_SNAPSHOT_SORT_FIELDS)?;
         Ok(BalanceSnapshotListQuery {
-            mall_card_instance_id: self.mall_card_instance_id.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -405,8 +400,6 @@ pub struct CorrectionView {
 /// 纠错列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CorrectionListParams {
-    /// 卡实例筛选。
-    pub mall_card_instance_id: Option<MallCardInstanceId>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -422,8 +415,6 @@ pub struct CorrectionListParams {
 /// 归一化后的纠错列表查询参数。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CorrectionListQuery {
-    /// 卡实例筛选。
-    pub mall_card_instance_id: Option<MallCardInstanceId>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -439,7 +430,6 @@ impl CorrectionListParams {
     pub(crate) fn normalized(&self) -> Result<CorrectionListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CORRECTION_SORT_FIELDS)?;
         Ok(CorrectionListQuery {
-            mall_card_instance_id: self.mall_card_instance_id.clone(),
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),

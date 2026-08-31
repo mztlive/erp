@@ -7,6 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
+use entities::ids::MallCardInstanceId;
 use services::{
     audit::AuditActor,
     card_instance::{
@@ -209,16 +210,18 @@ pub async fn card_instance_detail(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`mall_card_instance_id`）
+/// * `id` - URI 中必填的卡实例 ID
+/// * `query` - 分页与排序参数
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
 pub async fn balance_snapshot_list(
     State(state): State<AppState>,
+    Path(id): Path<MallCardInstanceId>,
     Query(params): Query<BalanceSnapshotListParams>,
 ) -> Result<PageView<BalanceSnapshotView>> {
     let page = CardInstanceService::new(state.db())
-        .balance_snapshot_list(&params)
+        .balance_snapshot_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -261,16 +264,18 @@ pub async fn balance_snapshot_create(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`mall_card_instance_id`）
+/// * `id` - URI 中必填的卡实例 ID
+/// * `query` - 分页与排序参数
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
 pub async fn correction_list(
     State(state): State<AppState>,
+    Path(id): Path<MallCardInstanceId>,
     Query(params): Query<CorrectionListParams>,
 ) -> Result<PageView<CorrectionView>> {
     let page = CardInstanceService::new(state.db())
-        .correction_list(&params)
+        .correction_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
 }

@@ -9,10 +9,12 @@
 //! 跨域协作只调对方 Repository（P3-service-api.md §2）：本域经
 //! `SalesOrderExt::sales_orders`（D13）校验原销售单存在；不依赖任何 Service。
 
-use database::{AccessControlExt, CardInstanceExt, NoTransaction, SalesOrderExt, Transactional};
+use database::{
+    AccessControlExt, CardBaselineRegistration, CardInstanceExt, NoTransaction, SalesOrderExt, Transactional,
+};
 use entities::card_instance::{
-    MallBalanceSnapshot, MallBalanceSnapshotData, MallCardInstance, MallCardInstanceCorrection,
-    MallCardInstanceData, MallConsumptionCutover, MallConsumptionCutoverData,
+    CutoverEnableResult, MallBalanceSnapshot, MallBalanceSnapshotData, MallCardBaselineAggregate,
+    MallCardInstance, MallCardInstanceData, MallConsumptionCutover, MallConsumptionCutoverData,
 };
 use entities::ids::{MallBalanceSnapshotId, MallCardInstanceId, MallConsumptionCutoverId};
 use entities::money::Amount;
@@ -26,13 +28,13 @@ use crate::errors::{Error, Result};
 
 mod dto;
 
+use self::dto::SortDir;
 pub use self::dto::{
     BalanceSnapshotListParams, BalanceSnapshotView, CardInstanceDetailView, CardInstanceListParams,
     CardInstanceView, CorrectionListParams, CorrectionView, CreateBalanceSnapshotRequest,
     CreateCardInstanceRequest, CreateCutoverRequest, CutoverListParams, CutoverView, EnableCutoverRequest,
     PageView,
 };
-use self::dto::{PageParams, SortDir};
 
 /// 切换记录列表筛选条件类型（经 `CardInstanceExt` 关联类型跨 crate 可达）。
 type CutoverFilter = <mongodb::Database as CardInstanceExt>::MallConsumptionCutoverFilter;
@@ -190,18 +192,16 @@ impl CardInstanceService {
                         .find_by_id(&id_owned, session)
                         .await?
                         .ok_or_else(|| Error::NotFound("切换记录不存在".to_string()))?;
-                    if cutover.base.version != expected_version {
-                        return Err(Error::ConflictError(
-                            "数据已被其他请求修改，请刷新后重试".to_string(),
-                        ));
+                    let outcome =
+                        cutover.enable_idempotently(expected_version, enabled_at, actor_id.clone())?;
+                    if outcome == CutoverEnableResult::AlreadySame {
+                        db.audit_logs().create(&audit, session).await?;
+                        return Ok(cutover);
                     }
-                    if cutover.status.is_enabled() {
-                        // 幂等：同一 T 重复启用按既有结果返回。
-                        if cutover.enabled_at == Some(enabled_at) {
-                            db.audit_logs().create(&audit, session).await?;
-                            return Ok(cutover);
-                        }
-                        return Err(Error::ConflictError("切换已启用，T 不得重复登记".to_string()));
+                    if outcome == CutoverEnableResult::Conflict {
+                        return Err(Error::ConflictError(
+                            "数据已被其他请求修改或切换时间冲突，请刷新后重试".to_string(),
+                        ));
                     }
                     if db
                         .mall_consumption_cutovers()
@@ -211,7 +211,6 @@ impl CardInstanceService {
                     {
                         return Err(Error::ConflictError("该商城已存在启用切换记录".to_string()));
                     }
-                    cutover.enable(enabled_at, actor_id.clone())?;
                     db.mall_consumption_cutovers()
                         .update(&mut cutover, session)
                         .await?;
@@ -333,8 +332,9 @@ impl CardInstanceService {
         let mall_id = req.mall_id.trim().to_string();
         let opaque_instance_ref = req.opaque_instance_ref.trim().to_string();
         let baseline_at = entities::common::time::Instant::from_unix_secs(req.baseline_at as i64);
-        let instance = MallCardInstance::new(
+        let aggregate = MallCardBaselineAggregate::new(
             MallCardInstanceId::new(next_id()),
+            MallBalanceSnapshotId::new(next_id()),
             MallCardInstanceData {
                 mall_id: mall_id.clone(),
                 opaque_instance_ref: opaque_instance_ref.clone(),
@@ -347,55 +347,57 @@ impl CardInstanceService {
                 source_type: req.source_type,
             },
         )?;
-        let snapshot = MallBalanceSnapshot::new(
-            MallBalanceSnapshotId::new(next_id()),
-            MallBalanceSnapshotData {
-                mall_card_instance_id: instance.base.id.clone().into(),
-                snapshot_at: baseline_at,
-                balance: instance.initial_balance,
-                source_snapshot_version: None,
-                source_event_id: format!("baseline:{mall_id}:{opaque_instance_ref}"),
-            },
-        )?;
+        let (instance, snapshot) = aggregate.into_parts();
         let audit = actor.clone().resource_log(
             "mall_card_instance.create",
             "mall_card_instance",
             instance.base.id.clone(),
         )?;
 
-        // 幂等：重复基线完全一致时只确认接收，不新增卡实例（§6.17）。
-        if let Some(existing) = self
-            .db
-            .mall_card_instances()
-            .find_by_identity(&mall_id, &opaque_instance_ref, &mut NoTransaction)
-            .await?
-        {
-            if existing.initial_balance == instance.initial_balance
-                && existing.origin_sales_order_id == instance.origin_sales_order_id
-            {
-                return Ok(card_instance_view(&existing));
-            }
-            return Err(Error::ConflictError(
-                "同一卡实例存在冲突基线，请按纠错流程处理".to_string(),
-            ));
-        }
-
         let db = self.db.clone();
         let client = db.client().clone();
         let instance_for_tx = instance.clone();
-        client
+        let registration = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.card_instance()
+                    let registration = db
+                        .card_instance()
                         .create_card_instance_with_initial_snapshot(&instance_for_tx, &snapshot, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
+                    Ok::<CardBaselineRegistration, database::Error>(registration)
                 })
             })
-            .await?;
+            .await;
 
-        Ok(card_instance_view(&instance))
+        match registration {
+            Ok(CardBaselineRegistration::Created) => Ok(card_instance_view(&instance)),
+            Ok(CardBaselineRegistration::ExistingSame(existing)) => Ok(card_instance_view(&existing)),
+            Ok(CardBaselineRegistration::ExistingConflict(_)) => Err(Error::ConflictError(
+                "同一卡实例存在冲突基线，请按纠错流程处理".to_string(),
+            )),
+            Err(database::Error::DuplicateKey(_)) => {
+                // 唯一竞争已使上一个事务退出；必须使用新的非事务 executor 复核，
+                // 禁止复用已失败 session。
+                match self
+                    .db
+                    .card_instance()
+                    .registration_by_identity(&instance, &mut NoTransaction)
+                    .await?
+                {
+                    Some(CardBaselineRegistration::ExistingSame(existing)) => {
+                        Ok(card_instance_view(&existing))
+                    }
+                    Some(CardBaselineRegistration::ExistingConflict(_)) => Err(Error::ConflictError(
+                        "同一卡实例存在冲突基线，请按纠错流程处理".to_string(),
+                    )),
+                    Some(CardBaselineRegistration::Created) | None => Err(Error::ConflictError(
+                        "卡实例唯一竞争结果已变化，请刷新后重试".to_string(),
+                    )),
+                }
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// 查询卡实例详情（基线 + 最新余额 + 快照/纠错摘要）。
@@ -415,25 +417,23 @@ impl CardInstanceService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("卡实例不存在".to_string()))?;
-        let snapshots = self
+        let card_id = MallCardInstanceId::new(instance.base.id.clone());
+        let (latest_balance, balance_snapshot_count) = self
             .db
             .balance_snapshots()
-            .list_by_card_and_range(&instance.base.id.clone().into(), None, None, &mut NoTransaction)
+            .latest_balance_and_count(&card_id, &mut NoTransaction)
             .await?;
-        let corrections = self
+        let correction_count = self
             .db
             .card_instance_corrections()
-            .list_by_card(&instance.base.id.clone().into(), &mut NoTransaction)
+            .count_by_card(&card_id, &mut NoTransaction)
             .await?;
 
         Ok(CardInstanceDetailView {
             instance: card_instance_view(&instance),
-            latest_balance: snapshots
-                .iter()
-                .max_by_key(|snapshot| snapshot.snapshot_at)
-                .map(|snapshot| snapshot.balance.to_string()),
-            balance_snapshot_count: snapshots.len() as u64,
-            correction_count: corrections.len() as u64,
+            latest_balance: latest_balance.map(|balance| balance.to_string()),
+            balance_snapshot_count,
+            correction_count,
         })
     }
 
@@ -450,34 +450,47 @@ impl CardInstanceService {
     /// * `RepositoryError` - 数据库查询失败
     pub async fn balance_snapshot_list(
         &self,
+        mall_card_instance_id: &MallCardInstanceId,
         params: &BalanceSnapshotListParams,
     ) -> Result<PageView<BalanceSnapshotView>> {
         params.validate()?;
         let query = params.normalized()?;
-        // P2 仓储按卡实例一次性取回（不可变追加序列，无服务端分页筛选）；
-        // 此处按白名单字段内存排序 + 分页，避免为只读小集合引入额外仓储接口。
-        let mut snapshots = match &query.mall_card_instance_id {
-            Some(card_id) => {
-                self.db
-                    .balance_snapshots()
-                    .list_by_card_and_range(card_id, None, None, &mut NoTransaction)
-                    .await?
-            }
-            None => Vec::new(),
-        };
-        sort_snapshots(&mut snapshots, query.paging.sort_by, query.paging.sort_dir);
-        let (items, total) = slice_page(snapshots, query.paging, |snapshot| BalanceSnapshotView {
-            id: snapshot.base.id.clone(),
-            mall_card_instance_id: snapshot.mall_card_instance_id.to_string(),
-            snapshot_at: snapshot.snapshot_at.unix_secs() as u64,
-            balance: snapshot.balance.to_string(),
-            source_snapshot_version: snapshot.source_snapshot_version.clone(),
-            source_event_id: snapshot.source_event_id.clone(),
-            created_at: snapshot.base.created_at,
-        });
+        if !self
+            .db
+            .mall_card_instances()
+            .exists_by_id(mall_card_instance_id, &mut NoTransaction)
+            .await?
+        {
+            return Err(Error::NotFound("卡实例不存在".to_string()));
+        }
+        let page = self
+            .db
+            .balance_snapshots()
+            .page_by_card(
+                mall_card_instance_id,
+                query.paging.page,
+                query.paging.page_size,
+                query.paging.sort_by,
+                matches!(query.paging.sort_dir, SortDir::Asc),
+                &mut NoTransaction,
+            )
+            .await?;
+        let items = page
+            .items
+            .into_iter()
+            .map(|snapshot| BalanceSnapshotView {
+                id: snapshot.base.id.clone(),
+                mall_card_instance_id: snapshot.mall_card_instance_id.to_string(),
+                snapshot_at: snapshot.snapshot_at.unix_secs() as u64,
+                balance: snapshot.balance.to_string(),
+                source_snapshot_version: snapshot.source_snapshot_version.clone(),
+                source_event_id: snapshot.source_event_id.clone(),
+                created_at: snapshot.base.created_at,
+            })
+            .collect();
         Ok(PageView {
             items,
-            total,
+            total: page.total,
             page: query.paging.page,
             page_size: query.paging.page_size,
         })
@@ -555,97 +568,57 @@ impl CardInstanceService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
-    pub async fn correction_list(&self, params: &CorrectionListParams) -> Result<PageView<CorrectionView>> {
+    pub async fn correction_list(
+        &self,
+        mall_card_instance_id: &MallCardInstanceId,
+        params: &CorrectionListParams,
+    ) -> Result<PageView<CorrectionView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let mut corrections = match &query.mall_card_instance_id {
-            Some(card_id) => {
-                self.db
-                    .card_instance_corrections()
-                    .list_by_card(card_id, &mut NoTransaction)
-                    .await?
-            }
-            None => Vec::new(),
-        };
-        sort_corrections(&mut corrections, query.paging.sort_by, query.paging.sort_dir);
-        let (items, total) = slice_page(corrections, query.paging, |correction| CorrectionView {
-            id: correction.base.id.clone(),
-            mall_card_instance_id: correction.mall_card_instance_id.to_string(),
-            correction_no: correction.correction_no,
-            correction_type: correction.correction_type,
-            before_value: correction.before_value.clone(),
-            after_value: correction.after_value.clone(),
-            reason: correction.reason.clone(),
-            approved_by: correction.approved_by.clone(),
-            approved_at: correction.approved_at.unix_secs() as u64,
-            supersedes_correction_id: correction.supersedes_correction_id.map(|id| id.to_string()),
-            created_at: correction.base.created_at,
-        });
+        if !self
+            .db
+            .mall_card_instances()
+            .exists_by_id(mall_card_instance_id, &mut NoTransaction)
+            .await?
+        {
+            return Err(Error::NotFound("卡实例不存在".to_string()));
+        }
+        let page = self
+            .db
+            .card_instance_corrections()
+            .page_by_card(
+                mall_card_instance_id,
+                query.paging.page,
+                query.paging.page_size,
+                query.paging.sort_by,
+                matches!(query.paging.sort_dir, SortDir::Asc),
+                &mut NoTransaction,
+            )
+            .await?;
+        let items = page
+            .items
+            .into_iter()
+            .map(|correction| CorrectionView {
+                id: correction.base.id.clone(),
+                mall_card_instance_id: correction.mall_card_instance_id.to_string(),
+                correction_no: correction.correction_no,
+                correction_type: correction.correction_type,
+                before_value: correction.before_value.clone(),
+                after_value: correction.after_value.clone(),
+                reason: correction.reason.clone(),
+                approved_by: correction.approved_by.clone(),
+                approved_at: correction.approved_at.unix_secs() as u64,
+                supersedes_correction_id: correction.supersedes_correction_id.map(|id| id.to_string()),
+                created_at: correction.base.created_at,
+            })
+            .collect();
         Ok(PageView {
             items,
-            total,
+            total: page.total,
             page: query.paging.page,
             page_size: query.paging.page_size,
         })
     }
-}
-
-/// 按白名单字段与方向对余额快照排序（`snapshot_at` 或 `created_at`）。
-///
-/// # 参数
-/// * `snapshots` - 待排序的快照列表（原序为 `snapshot_at` 升序）
-/// * `sort_by` - 已过白名单校验的排序字段
-/// * `sort_dir` - 排序方向
-fn sort_snapshots(snapshots: &mut [MallBalanceSnapshot], sort_by: &str, sort_dir: SortDir) {
-    let ascending = matches!(sort_dir, SortDir::Asc);
-    match sort_by {
-        "snapshot_at" => snapshots.sort_by_key(|s| (s.snapshot_at, s.base.id.clone())),
-        _ => snapshots.sort_by_key(|s| (s.base.created_at, s.base.id.clone())),
-    }
-    if !ascending {
-        snapshots.reverse();
-    }
-}
-
-/// 按白名单字段与方向对纠错链排序（`correction_no` 或 `created_at`）。
-///
-/// # 参数
-/// * `corrections` - 待排序的纠错链（原序为 `correction_no` 升序）
-/// * `sort_by` - 已过白名单校验的排序字段
-/// * `sort_dir` - 排序方向
-fn sort_corrections(corrections: &mut [MallCardInstanceCorrection], sort_by: &str, sort_dir: SortDir) {
-    let ascending = matches!(sort_dir, SortDir::Asc);
-    match sort_by {
-        "correction_no" => corrections.sort_by_key(|c| (c.correction_no, c.base.id.clone())),
-        _ => corrections.sort_by_key(|c| (c.base.created_at, c.base.id.clone())),
-    }
-    if !ascending {
-        corrections.reverse();
-    }
-}
-
-/// 对已排序集合做内存分页切片并映射为视图。
-///
-/// # 参数
-/// * `rows` - 已按白名单排序的全量记录
-/// * `paging` - 分页参数
-/// * `map` - 实体 → 视图映射
-///
-/// # 返回
-/// 返回 `(当前页视图, 总数)`。
-fn slice_page<T, V, F>(rows: Vec<T>, paging: PageParams, map: F) -> (Vec<V>, i64)
-where
-    F: Fn(T) -> V,
-{
-    let total = rows.len() as i64;
-    let start = ((paging.page.max(1) - 1) * u64::from(paging.page_size)) as usize;
-    let items = rows
-        .into_iter()
-        .skip(start)
-        .take(paging.page_size as usize)
-        .map(map)
-        .collect();
-    (items, total)
 }
 
 /// 从实体构造切换记录视图。

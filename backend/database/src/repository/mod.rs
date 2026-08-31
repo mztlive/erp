@@ -51,12 +51,15 @@ mod work_item_fulfillment_queue;
 
 pub use audit_log::AuditLogFilter;
 pub use base::{PageResult, Pagination, QueryFilter, Repository};
+pub use bulk_job::BackgroundJobRegistration;
+pub use card_instance::CardBaselineRegistration;
 pub use catalog::SkuRow;
 pub use customer::CustomerAccountRow;
 pub use customer_center_receivable::CustomerCenterReceivableRow;
 pub use customer_center_related::{
     CustomerCenterContractRow, CustomerCenterRelatedRow, CustomerCenterSalesOrderRow,
 };
+pub use document_registry::ApprovalBindingLookup;
 pub use extensions::DatabaseExt;
 pub use procurement_responsibility::ProcurementResponsibilityRuleFilter;
 pub use projection::{ProjectionDeliveryEscalation, ProjectionDeliveryFailure};

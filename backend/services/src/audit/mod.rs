@@ -1,9 +1,7 @@
 use database::{repository::AuditLogFilter, AccessControlExt, NoTransaction};
-use entities::{AuditLog, AuditLogData};
+use entities::{AuditLog, AuditLogData, CommandReceiptMatch};
 use id_generator::next_id;
 use mongodb::Database;
-use serde::Serialize;
-use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::{
@@ -16,7 +14,7 @@ pub use self::dto::{AuditLogItem, AuditLogListParams};
 
 mod dto;
 
-const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
+pub(crate) use entities::CommandReceipt;
 
 /// 已通过 HTTP 鉴权的审计操作人。
 ///
@@ -168,139 +166,52 @@ impl AuditActor {
     }
 }
 
-/// 使用成功审计行承载的根级业务命令收据。
-///
-/// 收据 ID 只保存操作人、动作和原始操作号的不可逆摘要；消息只保存规范请求
-/// 指纹。业务结果通过审计资源 ID 回放，收据与业务写入必须位于同一事务。
-#[derive(Debug, Clone)]
-pub(crate) struct CommandReceipt {
-    id: String,
-    actor_id: String,
-    action: String,
-    resource_type: String,
-    fingerprint: String,
-}
-
-impl CommandReceipt {
-    /// 为根级命令构造稳定收据身份和请求指纹。
-    ///
-    /// # 参数
-    /// * `prefix` - 固定命令类别前缀
-    /// * `actor` - 已认证操作人
-    /// * `action` - 固定审计动作
-    /// * `resource_type` - 成功结果资源类型
-    /// * `idempotency_key` - 客户端操作号，仅参与不可逆摘要
-    /// * `payload` - 完整请求载荷，用于拒绝同号异载荷
-    ///
-    /// # 返回值
-    /// 返回不包含原始操作号的稳定命令收据。
-    ///
-    /// # 错误
-    /// 操作号为空或请求载荷无法序列化时返回错误。
-    pub(crate) fn new<T: Serialize>(
-        prefix: &str,
-        actor: &AuditActor,
-        action: &str,
-        resource_type: &str,
-        idempotency_key: &str,
-        payload: &T,
-    ) -> Result<Self> {
-        let key = idempotency_key.trim();
-        if key.is_empty() {
-            return Err(Error::ValidationError("操作号不能为空".to_string()));
-        }
-        let payload = serde_json::to_string(payload)
-            .map_err(|error| Error::Internal(format!("业务命令请求序列化失败: {error}")))?;
-        Ok(Self {
-            id: format!(
-                "{prefix}{}",
-                digest_parts(&[actor.id(), action, resource_type, key])
-            ),
-            actor_id: actor.id().to_string(),
-            action: action.to_string(),
-            resource_type: resource_type.to_string(),
-            fingerprint: digest_parts(&[action, resource_type, &payload]),
-        })
-    }
-
+/// 命令收据的 Service I/O 适配。
+pub(crate) trait CommandReceiptServiceExt {
     /// 查询并校验已经提交的同一业务命令。
-    ///
-    /// # 参数
-    /// * `db` - 当前业务数据库
-    ///
-    /// # 返回值
-    /// 收据不存在时返回 `None`；存在且请求一致时返回首次业务资源 ID。
-    ///
-    /// # 错误
-    /// 查询失败、同一操作号载荷不一致或收据损坏时返回错误。
-    pub(crate) async fn committed_resource_id(&self, db: &Database) -> Result<Option<String>> {
-        let Some(audit) = db.audit_logs().find_by_id(&self.id, &mut NoTransaction).await? else {
-            return Ok(None);
-        };
-        self.resource_id_from_audit(&audit).map(Some)
-    }
+    async fn committed_resource_id(&self, db: &Database) -> Result<Option<String>>;
 
     /// 构造必须与业务写入同事务持久化的成功收据审计。
-    ///
-    /// # 参数
-    /// * `actor` - 当前已认证操作人
-    /// * `resource_id` - 首次成功业务资源 ID
-    ///
-    /// # 返回值
-    /// 返回使用稳定 ID 和请求指纹的成功审计实体。
-    ///
-    /// # 错误
-    /// 操作人不一致或审计字段无效时返回错误。
-    pub(crate) fn audit(&self, actor: AuditActor, resource_id: String) -> Result<AuditLog> {
-        if actor.id() != self.actor_id {
+    fn audit(&self, actor: AuditActor, resource_id: String) -> Result<AuditLog>;
+}
+
+impl CommandReceiptServiceExt for CommandReceipt {
+    async fn committed_resource_id(&self, db: &Database) -> Result<Option<String>> {
+        let candidates = self.id_candidates();
+        let facts = db
+            .audit_logs()
+            .find_command_receipts_by_ids(&candidates, &mut NoTransaction)
+            .await?;
+        for candidate in candidates {
+            let Some(fact) = facts.iter().find(|fact| fact.id == candidate) else {
+                continue;
+            };
+            return match self.match_fact(fact) {
+                CommandReceiptMatch::SamePayload(resource_id) => Ok(Some(resource_id)),
+                CommandReceiptMatch::DifferentPayload => Err(command_conflict()),
+                CommandReceiptMatch::Corrupted => Err(Error::Internal("业务命令收据格式无效".to_string())),
+            };
+        }
+        Ok(None)
+    }
+
+    fn audit(&self, actor: AuditActor, resource_id: String) -> Result<AuditLog> {
+        if actor.id() != self.actor_id() {
             return Err(Error::Forbidden("当前账号不能复用其他账号的操作号".to_string()));
         }
         actor.resource_log_with_id(
-            self.id.clone(),
-            &self.action,
-            &self.resource_type,
+            self.id().to_string(),
+            self.action(),
+            self.resource_type(),
             resource_id,
-            Some(format!("{COMMAND_FINGERPRINT_PREFIX}{}", self.fingerprint)),
+            Some(self.message(None)),
         )
-    }
-
-    /// 校验收据身份、请求指纹并提取首次业务资源 ID。
-    fn resource_id_from_audit(&self, audit: &AuditLog) -> Result<String> {
-        let identity_matches = audit.success
-            && audit.actor_id == self.actor_id
-            && audit.action == self.action
-            && audit.resource_type == self.resource_type;
-        if !identity_matches {
-            return Err(command_conflict());
-        }
-        let fingerprint = audit
-            .message
-            .as_deref()
-            .and_then(|message| message.strip_prefix(COMMAND_FINGERPRINT_PREFIX))
-            .ok_or_else(|| Error::Internal("业务命令收据格式无效".to_string()))?;
-        if fingerprint != self.fingerprint {
-            return Err(command_conflict());
-        }
-        audit
-            .resource_id
-            .clone()
-            .ok_or_else(|| Error::Internal("业务命令收据缺少结果身份".to_string()))
     }
 }
 
 /// 返回同一操作号被不同请求占用时的稳定冲突说明。
 fn command_conflict() -> Error {
     Error::ConflictError("同一操作号已用于不同提交，请重新发起操作".to_string())
-}
-
-/// 对带长度边界的文本片段计算稳定 SHA-256 摘要。
-fn digest_parts(parts: &[&str]) -> String {
-    let mut hasher = Sha256::new();
-    for part in parts {
-        hasher.update((part.len() as u64).to_be_bytes());
-        hasher.update(part.as_bytes());
-    }
-    hex::encode(hasher.finalize())
 }
 
 /// 审计日志服务
@@ -375,9 +286,9 @@ impl AuditLogService {
 mod tests {
     use serde::Serialize;
 
-    use entities::AccountKind;
+    use entities::{AccountKind, CommandReceiptFact, CommandReceiptMatch};
 
-    use super::{AuditActor, CommandReceipt};
+    use super::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 
     #[derive(Serialize)]
     struct CommandPayload {
@@ -438,9 +349,9 @@ mod tests {
             amount: 100,
             idempotency_key: "raw-operation-key".to_string(),
         };
-        let receipt = CommandReceipt::new(
+        let receipt = CommandReceipt::from_payload(
             "receipt-command-",
-            &actor,
+            actor.id(),
             "customer_receipt.commit",
             "customer_receipt",
             &payload.idempotency_key,
@@ -451,7 +362,19 @@ mod tests {
 
         assert!(!audit.base.id.contains("raw-operation-key"));
         assert!(!audit.message.as_deref().unwrap().contains("raw-operation-key"));
-        assert_eq!(receipt.resource_id_from_audit(&audit).unwrap(), "receipt-1");
+        let fact = CommandReceiptFact {
+            id: audit.base.id,
+            actor_id: audit.actor_id,
+            action: audit.action,
+            resource_type: audit.resource_type,
+            resource_id: audit.resource_id,
+            success: audit.success,
+            message: audit.message,
+        };
+        assert_eq!(
+            receipt.match_fact(&fact),
+            CommandReceiptMatch::SamePayload("receipt-1".to_string())
+        );
     }
 
     #[test]
@@ -465,9 +388,9 @@ mod tests {
             amount: 200,
             idempotency_key: "operation-key".to_string(),
         };
-        let first_receipt = CommandReceipt::new(
+        let first_receipt = CommandReceipt::from_payload(
             "receipt-command-",
-            &actor,
+            actor.id(),
             "customer_receipt.commit",
             "customer_receipt",
             &first.idempotency_key,
@@ -477,9 +400,9 @@ mod tests {
         let audit = first_receipt
             .audit(actor.clone(), "receipt-1".to_string())
             .unwrap();
-        let changed_receipt = CommandReceipt::new(
+        let changed_receipt = CommandReceipt::from_payload(
             "receipt-command-",
-            &actor,
+            actor.id(),
             "customer_receipt.commit",
             "customer_receipt",
             &changed.idempotency_key,
@@ -487,6 +410,18 @@ mod tests {
         )
         .unwrap();
 
-        assert!(changed_receipt.resource_id_from_audit(&audit).is_err());
+        let fact = CommandReceiptFact {
+            id: audit.base.id,
+            actor_id: audit.actor_id,
+            action: audit.action,
+            resource_type: audit.resource_type,
+            resource_id: audit.resource_id,
+            success: audit.success,
+            message: audit.message,
+        };
+        assert_eq!(
+            changed_receipt.match_fact(&fact),
+            CommandReceiptMatch::DifferentPayload
+        );
     }
 }

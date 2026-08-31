@@ -42,10 +42,14 @@ pub struct PermissionRow {
     pub action: String,
     /// 展示名称。
     pub name: String,
+    /// 描述。
+    pub description: Option<String>,
     /// 系统内建权限标记。
     pub system: bool,
     /// 停用标记。
     pub disabled: bool,
+    /// 乐观锁版本。
+    pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -170,6 +174,8 @@ pub struct DataScopeRow {
     pub scope_type: DataScopeType,
     /// 范围对象。
     pub scope_targets: Vec<String>,
+    /// 乐观锁版本。
+    pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -179,6 +185,8 @@ pub struct DataScopeRow {
 pub struct DataScopeFilter {
     /// 范围主体类型；`None` 表示不筛选。
     pub subject_type: Option<DataScopeSubjectType>,
+    /// 范围主体 ID；`None` 表示不筛选。
+    pub subject_id: Option<String>,
     /// 范围类型；`None` 表示不筛选。
     pub scope_type: Option<DataScopeType>,
     /// 页码（1 起）。
@@ -201,6 +209,9 @@ impl QueryFilter for DataScopeFilter {
         if let Some(subject_type) = self.subject_type {
             filter.insert("subject_type", subject_type.as_str());
         }
+        if let Some(subject_id) = &self.subject_id {
+            filter.insert("subject_id", subject_id);
+        }
         if let Some(scope_type) = self.scope_type {
             filter.insert("scope_type", scope_type.as_str());
         }
@@ -219,6 +230,36 @@ impl Pagination for DataScopeFilter {
 }
 
 impl<'a> Repository<'a, DataScope> {
+    /// 判断指定主体是否存在至少一个未软删除的数据范围。
+    ///
+    /// 查询只投影 `_id` 并在首条命中后停止，不反序列化完整范围集合。
+    ///
+    /// # 参数
+    /// * `subject_type` - 范围主体类型
+    /// * `subject_id` - 范围主体 ID
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 返回
+    /// 存在至少一个活跃范围时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn exists_by_subject(
+        &self,
+        subject_type: DataScopeSubjectType,
+        subject_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(
+            doc! {
+                "subject_type": subject_type.as_str(),
+                "subject_id": subject_id,
+            },
+            executor,
+        )
+        .await
+    }
+
     /// 分页检索数据范围列表（投影查询）。
     ///
     /// 只返回 [`DataScopeRow`] 所需的配置字段，不加载整文档。
@@ -525,7 +566,7 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
         Some("updated_at") => "updated_at",
         _ => "created_at",
     };
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 权限定义列表投影字段。
@@ -538,8 +579,10 @@ fn permission_projection() -> Document {
         "resource": 1,
         "action": 1,
         "name": 1,
+        "description": 1,
         "system": 1,
         "disabled": 1,
+        "version": 1,
         "created_at": 1,
     }
 }
@@ -555,6 +598,7 @@ fn data_scope_projection() -> Document {
         "subject_id": 1,
         "scope_type": 1,
         "scope_targets": 1,
+        "version": 1,
         "created_at": 1,
     }
 }
@@ -615,6 +659,7 @@ mod tests {
     fn data_scope_filter_applies_subject_and_scope_type() {
         let filter = DataScopeFilter {
             subject_type: Some(DataScopeSubjectType::Role),
+            subject_id: Some("role-sales".to_string()),
             scope_type: Some(DataScopeType::Team),
             page: 1,
             page_size: 20,
@@ -624,6 +669,7 @@ mod tests {
 
         let document = filter.to_doc();
         assert_eq!(document.get_str("subject_type").unwrap(), "role");
+        assert_eq!(document.get_str("subject_id").unwrap(), "role-sales");
         assert_eq!(document.get_str("scope_type").unwrap(), "team");
     }
 
@@ -691,11 +737,14 @@ mod tests {
 
     #[test]
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
-        assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc(Some("updated_at"), true), doc! { "updated_at": 1 });
+        assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
+        assert_eq!(
+            sort_doc(Some("updated_at"), true),
+            doc! { "updated_at": 1, "id": 1 }
+        );
         assert_eq!(
             sort_doc(Some("actor_id"), false),
-            doc! { "created_at": -1 },
+            doc! { "created_at": -1, "id": -1 },
             "白名单外字段回落默认排序"
         );
     }

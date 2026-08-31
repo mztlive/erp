@@ -102,6 +102,25 @@ impl Pagination for FileAssetFilter {
 }
 
 impl<'a> Repository<'a, FileAsset> {
+    /// 在调用方执行器内有序批量创建文件资产。
+    ///
+    /// 空集合直接返回且不访问数据库；MongoDB 默认的 ordered 插入保证首个失败
+    /// 后不继续写入，完整原子性仍由调用方事务负责。
+    ///
+    /// # 参数
+    /// * `assets` - 按业务命令顺序排列的文件资产
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 错误
+    /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。
+    pub async fn create_many_ordered(&self, assets: &[FileAsset], executor: &mut dyn Executor) -> Result<()> {
+        if assets.is_empty() {
+            return Ok(());
+        }
+        mongo_ops::insert_many(&self.collection(), assets.to_vec(), executor).await?;
+        Ok(())
+    }
+
     /// 批量按文件资产 ID 读取活跃文件事实。
     ///
     /// 查询复用通用仓储的未软删除过滤；空 ID 集合直接返回空结果，不访问

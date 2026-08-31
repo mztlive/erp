@@ -1,5 +1,5 @@
 use database::{AccessControlExt, NoTransaction};
-use entities::{AccountCore, AccountKind as DomainAccountKind, LoginAccount, Secret};
+use entities::{AccountCore, AccountKind as DomainAccountKind, LoginAccount};
 use mongodb::Database;
 use validator::Validate;
 
@@ -101,7 +101,10 @@ impl BackofficeAuthService {
     pub async fn authenticate(&self, request: &dto::AuthRequest) -> Result<BackofficeAuthResult> {
         request.validate()?;
         let mut stored_account = self.find_account(&request.account).await?;
-        let secret = secret_for_authentication(stored_account.as_ref(), request.account_kind);
+        let secret = stored_account
+            .as_ref()
+            .and_then(|account| account.authentication_secret_for(request.account_kind))
+            .cloned();
         let is_authenticatable = secret.is_some();
         let password_check = password::verify_password(secret, request.password.clone()).await?;
         if !is_authenticatable || !password_check.is_match() {
@@ -149,8 +152,9 @@ impl BackofficeAuthService {
             .accounts()
             .find_by_id(account_id, &mut NoTransaction)
             .await?;
-        let Some(stored_account) =
-            valid_session_account(stored_account.as_ref(), account, account_kind, account_version)
+        let Some(stored_account) = stored_account
+            .as_ref()
+            .filter(|stored| stored.matches_session_identity(account, account_kind, account_version))
         else {
             return Err(invalid_session());
         };
@@ -172,31 +176,6 @@ impl BackofficeAuthService {
     }
 }
 
-/// 仅为类型与状态均可登录的后台账号复制凭证，其余场景进入 dummy 校验。
-fn secret_for_authentication(
-    account: Option<&AccountCore>,
-    expected_kind: DomainAccountKind,
-) -> Option<Secret> {
-    account
-        .filter(|account| account.kind == expected_kind && account.can_login())
-        .map(|account| account.secret.clone())
-}
-
-/// 返回与 token 身份完全一致且当前可用的后台账号。
-fn valid_session_account<'a>(
-    stored_account: Option<&'a AccountCore>,
-    token_account: &str,
-    expected_kind: DomainAccountKind,
-    expected_version: u64,
-) -> Option<&'a AccountCore> {
-    stored_account.filter(|account| {
-        account.kind == expected_kind
-            && account.can_login()
-            && account.secret.account() == token_account
-            && account.base.version == expected_version
-    })
-}
-
 /// 构造不泄露具体失败原因的凭证错误。
 fn invalid_credentials() -> Error {
     Error::Unauthenticated("用户名或密码错误".to_string())
@@ -211,10 +190,7 @@ pub use dto::{AuthRequest, AuthResponse, PasswordLoginPayload};
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        password::verify_password, password::PasswordCheck, secret_for_authentication, valid_session_account,
-        BackofficeAuthResult,
-    };
+    use super::{password::verify_password, password::PasswordCheck, BackofficeAuthResult};
     use entities::{AccountCore, AccountCoreData, AccountKind, AccountStatus, LoginAccount, Secret};
 
     fn account(kind: AccountKind, status: AccountStatus) -> AccountCore {
@@ -236,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn authentication_rules_should_accept_matching_active_account() {
         let account = account(AccountKind::Admin, AccountStatus::Active);
-        let secret = secret_for_authentication(Some(&account), AccountKind::Admin);
+        let secret = account.authentication_secret_for(AccountKind::Admin).cloned();
         let result = verify_password(secret, "password123".to_string()).await.unwrap();
 
         assert!(matches!(result, PasswordCheck::Current));
@@ -246,7 +222,7 @@ mod tests {
     async fn inactive_account_should_still_use_password_boundary() {
         let suspended = account(AccountKind::Admin, AccountStatus::Suspended);
 
-        let secret = secret_for_authentication(Some(&suspended), AccountKind::Admin);
+        let secret = suspended.authentication_secret_for(AccountKind::Admin).cloned();
         let result = verify_password(secret, "password123".to_string()).await.unwrap();
         assert!(matches!(result, PasswordCheck::Mismatch));
     }
@@ -268,27 +244,17 @@ mod tests {
     fn session_rules_should_accept_only_current_active_identity() {
         let active = account(AccountKind::Admin, AccountStatus::Active);
 
-        assert!(valid_session_account(
-            Some(&active),
+        assert!(active.matches_session_identity(
             active.secret.account(),
             AccountKind::Admin,
             active.base.version,
-        )
-        .is_some());
-        assert!(valid_session_account(
-            Some(&active),
-            "renamed-account",
-            AccountKind::Admin,
-            active.base.version,
-        )
-        .is_none());
-        assert!(valid_session_account(
-            Some(&active),
+        ));
+        assert!(!active.matches_session_identity("renamed-account", AccountKind::Admin, active.base.version));
+        assert!(!active.matches_session_identity(
             active.secret.account(),
             AccountKind::Admin,
             active.base.version + 1,
-        )
-        .is_none());
+        ));
     }
 
     #[test]
@@ -296,20 +262,15 @@ mod tests {
         let suspended = account(AccountKind::Admin, AccountStatus::Suspended);
         let archived = account(AccountKind::Admin, AccountStatus::Archived);
 
-        assert!(valid_session_account(None, "admin01", AccountKind::Admin, 1).is_none());
-        assert!(valid_session_account(
-            Some(&suspended),
+        assert!(!suspended.matches_session_identity(
             suspended.secret.account(),
             AccountKind::Admin,
             suspended.base.version,
-        )
-        .is_none());
-        assert!(valid_session_account(
-            Some(&archived),
+        ));
+        assert!(!archived.matches_session_identity(
             archived.secret.account(),
             AccountKind::Admin,
             archived.base.version,
-        )
-        .is_none());
+        ));
     }
 }

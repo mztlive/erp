@@ -36,6 +36,17 @@ const MALL_CARD_INSTANCE_CORRECTIONS: &str =
 /// `mall_balance_snapshot` 集合名（单一来源：`CardInstanceExt` 关联常量）。
 const MALL_BALANCE_SNAPSHOTS: &str = <mongodb::Database as CardInstanceExt>::MALL_BALANCE_SNAPSHOTS;
 
+/// 唯一索引仲裁后的卡基线登记结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CardBaselineRegistration {
+    /// 本次原子写入了基线与首次快照。
+    Created,
+    /// 唯一身份已存在，且全部不可变基线关系一致。
+    ExistingSame(MallCardInstance),
+    /// 唯一身份已存在，但至少一项不可变基线关系漂移。
+    ExistingConflict(MallCardInstance),
+}
+
 /// 切换记录列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MallConsumptionCutoverRow {
@@ -137,6 +148,13 @@ pub struct MallCardInstanceFilter {
     pub sort_by: Option<String>,
     /// 是否升序；`false` 表示降序（默认）。
     pub sort_ascending: bool,
+}
+
+/// 最新余额窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+struct LatestBalanceRow {
+    /// 最新快照余额。
+    balance: entities::money::Amount,
 }
 
 impl QueryFilter for MallCardInstanceFilter {
@@ -241,6 +259,15 @@ impl<'a> Repository<'a, MallConsumptionCutover> {
 }
 
 impl<'a> Repository<'a, MallCardInstance> {
+    /// 判断未删除卡实例是否存在。
+    pub async fn exists_by_id(
+        &self,
+        id: &entities::ids::MallCardInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(doc! { "id": id.to_string() }, executor).await
+    }
+
     /// 分页检索卡实例列表（投影查询）。
     ///
     /// 只返回 [`MallCardInstanceRow`] 所需的列表字段，不加载整文档；
@@ -318,6 +345,80 @@ pub struct BalanceSnapshotRepository<'a> {
 }
 
 impl<'a> BalanceSnapshotRepository<'a> {
+    /// 按卡实例分页查询余额快照。
+    ///
+    /// # 参数
+    /// * `mall_card_instance_id` - URI 子资源所属卡实例
+    /// * `page` - 1 起页码
+    /// * `page_size` - 单页条数
+    /// * `sort_by` - 白名单字段 `snapshot_at` / `created_at`
+    /// * `sort_ascending` - 排序方向
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回当前页实体和按同一卡实例过滤后的总数。
+    ///
+    /// # 错误
+    /// MongoDB 查询、计数或游标读取失败时返回错误。
+    pub async fn page_by_card(
+        &self,
+        mall_card_instance_id: &entities::ids::MallCardInstanceId,
+        page: u64,
+        page_size: u32,
+        sort_by: &str,
+        sort_ascending: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<MallBalanceSnapshot>> {
+        let filter = card_child_filter(mall_card_instance_id);
+        let options = FindOptions::builder()
+            .sort(sort_doc(
+                Some(sort_by),
+                &["snapshot_at", "created_at"],
+                sort_ascending,
+            ))
+            .skip(page.saturating_sub(1).saturating_mul(u64::from(page_size)))
+            .limit(i64::from(page_size))
+            .build();
+        let items = mongo_ops::find_many(&self.collection(), filter.clone(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
+        Ok(PageResult {
+            items,
+            total: total as i64,
+        })
+    }
+
+    /// 返回同一卡实例的最新余额及快照总数。
+    ///
+    /// # 返回
+    /// 返回 `(最新余额, 快照数)`；无快照时余额为空且数量为零。
+    ///
+    /// # 错误
+    /// MongoDB 查询或计数失败时返回错误。
+    pub async fn latest_balance_and_count(
+        &self,
+        mall_card_instance_id: &entities::ids::MallCardInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<(Option<entities::money::Amount>, u64)> {
+        let filter = card_child_filter(mall_card_instance_id);
+        let collection = self.collection().clone_with_type::<LatestBalanceRow>();
+        let latest = mongo_ops::find_many(
+            &collection,
+            filter.clone(),
+            FindOptions::builder()
+                .sort(doc! { "snapshot_at": -1, "id": -1 })
+                .limit(1)
+                .projection(doc! { "balance": 1 })
+                .build(),
+            executor,
+        )
+        .await?
+        .into_iter()
+        .next()
+        .map(|row| row.balance);
+        let count = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
+        Ok((latest, count))
+    }
+
     /// 创建仓储实例。
     ///
     /// # 参数
@@ -428,6 +529,62 @@ pub struct CardInstanceCorrectionRepository<'a> {
 }
 
 impl<'a> CardInstanceCorrectionRepository<'a> {
+    /// 按卡实例分页查询纠错事实。
+    ///
+    /// # 参数
+    /// * `mall_card_instance_id` - URI 子资源所属卡实例
+    /// * `page` - 1 起页码
+    /// * `page_size` - 单页条数
+    /// * `sort_by` - 白名单字段 `correction_no` / `created_at`
+    /// * `sort_ascending` - 排序方向
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回当前页实体和按同一卡实例过滤后的总数。
+    ///
+    /// # 错误
+    /// MongoDB 查询、计数或游标读取失败时返回错误。
+    pub async fn page_by_card(
+        &self,
+        mall_card_instance_id: &entities::ids::MallCardInstanceId,
+        page: u64,
+        page_size: u32,
+        sort_by: &str,
+        sort_ascending: bool,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<MallCardInstanceCorrection>> {
+        let filter = card_child_filter(mall_card_instance_id);
+        let options = FindOptions::builder()
+            .sort(sort_doc(
+                Some(sort_by),
+                &["correction_no", "created_at"],
+                sort_ascending,
+            ))
+            .skip(page.saturating_sub(1).saturating_mul(u64::from(page_size)))
+            .limit(i64::from(page_size))
+            .build();
+        let items = mongo_ops::find_many(&self.collection(), filter.clone(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter, executor).await?;
+        Ok(PageResult {
+            items,
+            total: total as i64,
+        })
+    }
+
+    /// 统计同一卡实例的纠错事实数。
+    pub async fn count_by_card(
+        &self,
+        mall_card_instance_id: &entities::ids::MallCardInstanceId,
+        executor: &mut dyn Executor,
+    ) -> Result<u64> {
+        mongo_ops::count_documents(
+            &self.collection(),
+            card_child_filter(mall_card_instance_id),
+            executor,
+        )
+        .await
+    }
+
     /// 创建仓储实例。
     ///
     /// # 参数
@@ -533,6 +690,37 @@ pub struct CardInstanceRepository<'a> {
 }
 
 impl<'a> CardInstanceRepository<'a> {
+    /// 在唯一键竞争事务结束后按身份复核登记结果。
+    ///
+    /// 本方法必须由 Service 在失败事务已经退出后使用新的 executor 调用；不得
+    /// 复用被 DuplicateKey 中止的 session。
+    ///
+    /// # 返回
+    /// 身份不存在返回 `None`；存在时返回完整基线同载荷或冲突分类。
+    pub async fn registration_by_identity(
+        &self,
+        requested: &MallCardInstance,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CardBaselineRegistration>> {
+        let existing = mongo_ops::find_one(
+            &self.db.collection::<MallCardInstance>(MALL_CARD_INSTANCES),
+            doc! {
+                "mall_id": &requested.mall_id,
+                "opaque_instance_ref": &requested.opaque_instance_ref,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await?;
+        Ok(existing.map(|existing| {
+            if existing.same_baseline_as(requested) {
+                CardBaselineRegistration::ExistingSame(existing)
+            } else {
+                CardBaselineRegistration::ExistingConflict(existing)
+            }
+        }))
+    }
+
     /// 创建域专用仓储。
     ///
     /// # 参数
@@ -565,7 +753,7 @@ impl<'a> CardInstanceRepository<'a> {
         instance: &MallCardInstance,
         snapshot: &MallBalanceSnapshot,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
+    ) -> Result<CardBaselineRegistration> {
         mongo_ops::insert_one(
             &self.db.collection::<MallCardInstance>(MALL_CARD_INSTANCES),
             instance,
@@ -578,7 +766,7 @@ impl<'a> CardInstanceRepository<'a> {
             executor,
         )
         .await?;
-        Ok(())
+        Ok(CardBaselineRegistration::Created)
     }
 }
 
@@ -596,7 +784,15 @@ fn sort_doc(sort_by: Option<&str>, allowed: &[&str], sort_ascending: bool) -> Do
         .filter(|field| allowed.contains(field))
         .unwrap_or("created_at");
     let direction = if sort_ascending { 1 } else { -1 };
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
+}
+
+/// 构造卡实例子资源固定过滤。
+fn card_child_filter(mall_card_instance_id: &entities::ids::MallCardInstanceId) -> Document {
+    doc! {
+        "mall_card_instance_id": mall_card_instance_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
 }
 
 /// 切换记录列表投影字段。
@@ -680,15 +876,15 @@ mod tests {
     fn sort_doc_maps_only_whitelisted_fields_and_defaults_to_created_at() {
         assert_eq!(
             sort_doc(None, &["created_at", "enabled_at"], false),
-            doc! { "created_at": -1 }
+            doc! { "created_at": -1, "id": -1 }
         );
         assert_eq!(
             sort_doc(Some("enabled_at"), &["created_at", "enabled_at"], true),
-            doc! { "enabled_at": 1 }
+            doc! { "enabled_at": 1, "id": 1 }
         );
         assert_eq!(
             sort_doc(Some("malicious_field"), &["created_at", "enabled_at"], false),
-            doc! { "created_at": -1 },
+            doc! { "created_at": -1, "id": -1 },
             "白名单外字段必须回落到默认排序"
         );
     }

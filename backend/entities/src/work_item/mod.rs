@@ -3,11 +3,15 @@
 //! `status` 只表达 `OPEN / COMPLETED / CLOSED` 生命周期；开放任务必须有个人责任人。
 //! 审批推进与正式业务结果不由本域决定。
 
+mod due;
 mod entity;
 mod finance_responsibility;
+mod fulfillment_responsibility;
+mod queue_context;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::WorkItemId;
+pub use due::{WorkItemDueFilter, WorkItemDueWindow};
 pub use entity::{
     ApprovalDecisionTaskError, AssignmentSource, AvailableWorkItemAccount, DocumentApprovalWorkItemData,
     WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation,
@@ -17,3 +21,5 @@ pub use finance_responsibility::{
     FinanceResponsibilityOperation, FinanceResponsibilityRule, FinanceResponsibilityRuleData,
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
 };
+pub use fulfillment_responsibility::FulfillmentResponsibilityKey;
+pub use queue_context::{QueueContextField, QueueContextIdentity};

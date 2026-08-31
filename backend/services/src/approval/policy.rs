@@ -3,6 +3,7 @@
 //! 政策由代码注册，禁止默认政策、Noop 动作或复制 `process_kind.rs` 映射。
 
 use bpm::ProcessKind;
+pub use entities::approval_integration::ApprovalDomainAction;
 use entities::document_registry::DocumentType;
 use entities::Permission;
 
@@ -145,125 +146,6 @@ pub enum ApproverEligibilityPolicy {
 pub enum SeparationOfDutiesPolicy {
     /// 禁止提交人审批自己的提交；节点间允许同一审批人。
     ForbidSubmitterAsApprover,
-}
-
-/// 合同 §4.4.4 签署的强类型领域动作。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ApprovalDomainAction {
-    /// 销售单提交并启动审批。
-    SalesOrderStartApprovalSubmission,
-    /// 销售单最终通过并形式化提交。
-    SalesOrderFormalizeApprovedSubmission,
-    /// 销售单撤回审批提交。
-    SalesOrderCancelApprovalSubmission,
-    /// 卡券销售单提交并启动审批。
-    VoucherSalesOrderStartApprovalSubmission,
-    /// 卡券销售单最终通过并形式化提交。
-    VoucherSalesOrderFormalizeApprovedSubmission,
-    /// 卡券销售单撤回审批提交。
-    VoucherSalesOrderCancelApprovalSubmission,
-    /// 销售变更单提交。
-    SalesChangeOrderSubmitSalesChange,
-    /// 销售变更单最终生效。
-    SalesChangeOrderApplyEffectiveChange,
-    /// 销售变更单撤回审批。
-    SalesChangeOrderCancelApproval,
-    /// 采购单提交。
-    PurchaseOrderSubmit,
-    /// 采购单最终形式化。
-    PurchaseOrderFormalizeApprovedOrder,
-    /// 采购单撤回审批。
-    PurchaseOrderCancelApproval,
-    /// 采购变更单提交。
-    PurchaseChangeOrderSubmitChange,
-    /// 采购变更单最终生效。
-    PurchaseChangeOrderApplyEffectiveChange,
-    /// 采购变更单撤回审批。
-    PurchaseChangeOrderCancelApproval,
-    /// 库存调整单提交。
-    StockAdjustmentSubmit,
-    /// 库存调整单过账。
-    StockAdjustmentPost,
-    /// 库存调整单撤回审批。
-    StockAdjustmentCancelApproval,
-    /// 客户回款单提交。
-    CustomerReceiptSubmit,
-    /// 客户回款单过账。
-    CustomerReceiptPost,
-    /// 客户回款单撤回审批。
-    CustomerReceiptCancelApproval,
-    /// 客户退款单提交。
-    CustomerRefundSubmit,
-    /// 客户退款单过账。
-    CustomerRefundPost,
-    /// 客户退款单撤回审批。
-    CustomerRefundCancelApproval,
-    /// 供应商退款单提交。
-    SupplierRefundSubmit,
-    /// 供应商退款单过账。
-    SupplierRefundPost,
-    /// 供应商退款单撤回审批。
-    SupplierRefundCancelApproval,
-    /// 回款冲正单提交。
-    ReceiptReversalSubmit,
-    /// 回款冲正单过账。
-    ReceiptReversalPost,
-    /// 回款冲正单撤回审批。
-    ReceiptReversalCancelApproval,
-    /// 付款冲正单提交。
-    PaymentReversalSubmit,
-    /// 付款冲正单过账。
-    PaymentReversalPost,
-    /// 付款冲正单撤回审批。
-    PaymentReversalCancelApproval,
-}
-
-impl ApprovalDomainAction {
-    /// 返回稳定动作代码。
-    ///
-    /// # 返回
-    /// 返回合同端口名对应的稳定字符串。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::SalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
-            Self::SalesOrderFormalizeApprovedSubmission => "SalesOrderService::formalize_approved_submission",
-            Self::SalesOrderCancelApprovalSubmission => "SalesOrderService::cancel_approval_submission",
-            Self::VoucherSalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",
-            Self::VoucherSalesOrderFormalizeApprovedSubmission => {
-                "SalesOrderService::formalize_approved_submission"
-            }
-            Self::VoucherSalesOrderCancelApprovalSubmission => {
-                "SalesOrderService::cancel_approval_submission"
-            }
-            Self::SalesChangeOrderSubmitSalesChange => "SalesChangeOrderService::submit_sales_change",
-            Self::SalesChangeOrderApplyEffectiveChange => "SalesChangeOrderService::apply_effective_change",
-            Self::SalesChangeOrderCancelApproval => "SalesChangeOrderService::cancel_approval",
-            Self::PurchaseOrderSubmit => "PurchaseOrderService::submit",
-            Self::PurchaseOrderFormalizeApprovedOrder => "PurchaseOrderService::formalize_approved_order",
-            Self::PurchaseOrderCancelApproval => "PurchaseOrderService::cancel_approval",
-            Self::PurchaseChangeOrderSubmitChange => "PurchaseChangeService::submit_change",
-            Self::PurchaseChangeOrderApplyEffectiveChange => "PurchaseChangeService::apply_effective_change",
-            Self::PurchaseChangeOrderCancelApproval => "PurchaseChangeService::cancel_approval",
-            Self::StockAdjustmentSubmit => "InventoryService::submit_stock_adjustment",
-            Self::StockAdjustmentPost => "InventoryService::post_stock_adjustment",
-            Self::StockAdjustmentCancelApproval => "InventoryService::cancel_stock_adjustment_approval",
-            Self::CustomerReceiptSubmit => "ReceivableService::submit_customer_receipt",
-            Self::CustomerReceiptPost => "ReceivableService::post_customer_receipt",
-            Self::CustomerReceiptCancelApproval => "ReceivableService::cancel_customer_receipt_approval",
-            Self::CustomerRefundSubmit => "ReturnsService::submit_customer_refund",
-            Self::CustomerRefundPost => "ReturnsService::post_customer_refund",
-            Self::CustomerRefundCancelApproval => "ReturnsService::cancel_customer_refund_approval",
-            Self::SupplierRefundSubmit => "ReturnsService::submit_supplier_refund",
-            Self::SupplierRefundPost => "ReturnsService::post_supplier_refund",
-            Self::SupplierRefundCancelApproval => "ReturnsService::cancel_supplier_refund_approval",
-            Self::ReceiptReversalSubmit => "ReturnsService::submit_receipt_reversal",
-            Self::ReceiptReversalPost => "ReturnsService::post_receipt_reversal",
-            Self::ReceiptReversalCancelApproval => "ReturnsService::cancel_receipt_reversal_approval",
-            Self::PaymentReversalSubmit => "ReturnsService::submit_payment_reversal",
-            Self::PaymentReversalPost => "ReturnsService::post_payment_reversal",
-            Self::PaymentReversalCancelApproval => "ReturnsService::cancel_payment_reversal_approval",
-        }
-    }
 }
 
 /// 无审批政策。只含单据类型、要求与流程种类。

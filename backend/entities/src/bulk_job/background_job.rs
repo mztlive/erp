@@ -4,6 +4,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
+use crate::command::CommandFingerprint;
 use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
@@ -204,6 +205,9 @@ pub struct BackgroundJob {
     pub requested_by: String,
     /// 请求幂等身份。
     pub request_id: String,
+    /// v1 规范请求指纹；历史行可能缺失。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_fingerprint: Option<CommandFingerprint>,
     /// 合规输入包文件资产。
     pub input_file_asset_id: Option<FileAssetId>,
     /// 结果文件资产。
@@ -274,6 +278,7 @@ impl BackgroundJob {
             selection_snapshot_id: data.selection_snapshot_id,
             requested_by,
             request_id,
+            request_fingerprint: None,
             input_file_asset_id: data.input_file_asset_id,
             result_file_asset_id: data.result_file_asset_id,
             status: JobStatus::Pending,
@@ -288,6 +293,21 @@ impl BackgroundJob {
             result_expires_at: None,
             error_summary: None,
         })
+    }
+
+    /// 在聚合创建阶段附加规范请求指纹。
+    ///
+    /// # 错误
+    /// 指纹已附加或任务已离开初始待执行状态时返回错误。
+    pub fn attach_request_fingerprint(&mut self, fingerprint: CommandFingerprint) -> Result<()> {
+        if self.request_fingerprint.is_some()
+            || self.status != JobStatus::Pending
+            || self.processed_count != 0
+        {
+            return Err(Error::from("后台任务请求指纹只能在创建阶段附加一次"));
+        }
+        self.request_fingerprint = Some(fingerprint);
+        Ok(())
     }
 
     /// 开始执行。

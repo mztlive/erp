@@ -9,6 +9,7 @@
 //! 筛选/行类型定义在本文件，经 `DocumentRegistryExt` 的关联类型对外暴露。
 
 use entities::common::time::Instant;
+use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
     BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
     WorkflowAction, WorkflowActionType,
@@ -17,6 +18,7 @@ use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 use super::bpm::{assign_document_no_filter, classify_assign_document_no_miss, AssignDocumentNoOutcome};
 use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
@@ -57,6 +59,42 @@ pub struct BusinessDocumentFilter {
     pub sort_ascending: bool,
 }
 
+/// 单据审批绑定窄投影的三态查询事实。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApprovalBindingLookup {
+    /// 未找到未删除的单据注册行。
+    DocumentMissing,
+    /// 单据已注册但尚未绑定审批定义。
+    Unbound,
+    /// 单据已注册且已绑定审批定义。
+    Bound(ApprovalDefinitionBinding),
+}
+
+/// 单据审批绑定窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+struct ApprovalBindingRow {
+    /// 单据注册行 ID。
+    #[serde(rename = "id")]
+    _id: String,
+    /// 可选审批绑定。
+    #[serde(default)]
+    approval_binding: Option<ApprovalDefinitionBinding>,
+}
+
+/// 单据存在性窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+struct BusinessDocumentIdRow {
+    /// 单据注册行 ID。
+    id: String,
+}
+
+/// 单据参与记录的单据 ID 窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+struct ParticipantDocumentIdRow {
+    /// 业务单据 ID。
+    document_id: String,
+}
+
 impl QueryFilter for BusinessDocumentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
@@ -83,6 +121,105 @@ impl Pagination for BusinessDocumentFilter {
 }
 
 impl<'a> Repository<'a, BusinessDocument> {
+    /// 查询单据审批绑定事实，仅投影 `id` 与 `approval_binding`。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回单据不存在、已注册未绑定、已注册且已绑定三态之一。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn approval_binding_lookup(
+        &self,
+        document_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ApprovalBindingLookup> {
+        let collection = self.collection().clone_with_type::<ApprovalBindingRow>();
+        let options = FindOptions::builder()
+            .projection(doc! { "id": 1, "approval_binding": 1 })
+            .limit(1)
+            .build();
+        let row = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "id": document_id,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await?
+        .into_iter()
+        .next();
+
+        Ok(classify_approval_binding(row))
+    }
+
+    /// 判断未删除的单据注册行是否存在。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 存在时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn exists_by_id(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        self.exists(doc! { "id": document_id.to_string() }, executor)
+            .await
+    }
+
+    /// 批量返回输入 ID 中实际存在且未删除的单据 ID。
+    ///
+    /// 输入会先去重；查询仅投影 `id`，空集合不会访问数据库。
+    ///
+    /// # 参数
+    /// * `document_ids` - 待核验业务单据 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按 ID 升序排列的已存在 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn existing_ids(
+        &self,
+        document_ids: &[BusinessDocumentId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let ids = distinct_document_ids(document_ids);
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let collection = self.collection().clone_with_type::<BusinessDocumentIdRow>();
+        let options = FindOptions::builder().projection(doc! { "id": 1 }).build();
+        let mut existing = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "id": { "$in": ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await?
+        .into_iter()
+        .map(|row| row.id)
+        .collect::<Vec<_>>();
+        existing.sort_unstable();
+        existing.dedup();
+        Ok(existing)
+    }
+
     /// 批量按业务单据 ID 读取注册行。
     ///
     /// # 参数
@@ -246,49 +383,25 @@ impl<'a> Repository<'a, BusinessDocument> {
 }
 
 impl<'a> Repository<'a, DocumentRelation> {
-    /// 按源单据查询全部出向关系（变更、退货、退款、冲正、红票、派生）。
+    /// 单次查询与指定单据相关的全部出向及入向关系。
     ///
     /// # 参数
-    /// * `from_document_id` - 源单据 ID
+    /// * `document_id` - 业务单据 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回按创建时间升序排列的出向关系。
+    /// 返回按 `created_at, id` 升序稳定排列的关系；历史自关联脏数据只返回一次。
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_from_document(
+    pub async fn list_for_document(
         &self,
-        from_document_id: &BusinessDocumentId,
+        document_id: &BusinessDocumentId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<DocumentRelation>> {
         self.find_many_sorted(
-            doc! { "from_document_id": from_document_id.to_string() },
-            doc! { "created_at": 1 },
-            executor,
-        )
-        .await
-    }
-
-    /// 按目标单据查询全部入向关系（反向查询索引 `idx_document_relations_reverse`）。
-    ///
-    /// # 参数
-    /// * `to_document_id` - 被引用或被纠正的原单 ID
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回按创建时间升序排列的入向关系。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_by_to_document(
-        &self,
-        to_document_id: &BusinessDocumentId,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<DocumentRelation>> {
-        self.find_many_sorted(
-            doc! { "to_document_id": to_document_id.to_string() },
-            doc! { "created_at": 1 },
+            document_relation_filter(document_id),
+            doc! { "created_at": 1, "id": 1 },
             executor,
         )
         .await
@@ -296,6 +409,44 @@ impl<'a> Repository<'a, DocumentRelation> {
 }
 
 impl<'a> Repository<'a, DocumentParticipant> {
+    /// 按参与人返回去重后的业务单据 ID，仅投影 `document_id`。
+    ///
+    /// # 参数
+    /// * `user_id` - 参与人用户 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回按 ID 升序排列的未删除参与单据 ID。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn document_ids_by_user(
+        &self,
+        user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let collection = self.collection().clone_with_type::<ParticipantDocumentIdRow>();
+        let options = FindOptions::builder()
+            .projection(doc! { "document_id": 1 })
+            .build();
+        let mut ids = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "participant_user_id": user_id,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            options,
+            executor,
+        )
+        .await?
+        .into_iter()
+        .map(|row| row.document_id)
+        .collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.dedup();
+        Ok(ids)
+    }
+
     /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
     ///
     /// # 参数
@@ -467,6 +618,42 @@ impl<'a> Repository<'a, WorkflowAction> {
 /// 无。
 fn same_id_registration<T>(existing: Option<&T>, expected_id: &str, id_of: impl FnOnce(&T) -> &str) -> bool {
     existing.is_some_and(|row| id_of(row) == expected_id)
+}
+
+/// 将审批绑定窄投影分类为稳定三态事实。
+fn classify_approval_binding(row: Option<ApprovalBindingRow>) -> ApprovalBindingLookup {
+    match row {
+        None => ApprovalBindingLookup::DocumentMissing,
+        Some(ApprovalBindingRow {
+            approval_binding: None,
+            ..
+        }) => ApprovalBindingLookup::Unbound,
+        Some(ApprovalBindingRow {
+            approval_binding: Some(binding),
+            ..
+        }) => ApprovalBindingLookup::Bound(binding),
+    }
+}
+
+/// 对批量单据 ID 去重并转换为稳定字符串集合。
+fn distinct_document_ids(document_ids: &[BusinessDocumentId]) -> Vec<String> {
+    let mut seen = HashSet::with_capacity(document_ids.len());
+    document_ids
+        .iter()
+        .map(ToString::to_string)
+        .filter(|id| seen.insert(id.clone()))
+        .collect()
+}
+
+/// 构造单据关系双向查询条件。
+fn document_relation_filter(document_id: &BusinessDocumentId) -> Document {
+    let document_id = document_id.to_string();
+    doc! {
+        "$or": [
+            { "from_document_id": &document_id },
+            { "to_document_id": &document_id },
+        ]
+    }
 }
 
 /// 一次性编号赋值更新管道。

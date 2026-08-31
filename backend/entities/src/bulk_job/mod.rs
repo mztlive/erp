@@ -10,6 +10,7 @@
 //!   逐项一致、`job_no`/`request_id`/`(background_job_id, item_no)` 唯一）由
 //!   P2 索引与 P3 事务实现，实体层只实现单行不变量。
 
+mod aggregate;
 pub mod background_job;
 pub mod background_job_item;
 pub mod bulk_selection_item;
@@ -17,6 +18,10 @@ pub mod bulk_selection_snapshot;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{BackgroundJobId, BackgroundJobItemId, BulkSelectionItemId, BulkSelectionSnapshotId};
+pub use aggregate::{
+    BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobItemDraft, BulkSelectionItemDraft,
+    BulkSelectionSnapshotAggregate, BulkSelectionSnapshotAggregateData,
+};
 pub use background_job::{BackgroundJob, BackgroundJobData, JobStatus, JobType, JobUpdate};
 pub use background_job_item::{BackgroundJobItem, BackgroundJobItemData, ItemStatus};
 pub use bulk_selection_item::{BulkSelectionItem, BulkSelectionItemData, SelectionItemStatus};

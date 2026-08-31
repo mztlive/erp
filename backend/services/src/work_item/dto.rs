@@ -1,5 +1,6 @@
 //! D03 人工任务责任队列的 HTTP 共用 DTO。
 
+pub use entities::work_item::WorkItemDueFilter;
 use entities::work_item::{AssignmentSource, WorkItem, WorkItemPriority, WorkItemStatus, WorkItemType};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -80,16 +81,6 @@ impl WorkItemFamily {
             .filter(|work_item_type| family_of(*work_item_type) == self)
             .collect()
     }
-}
-
-/// 到期时间筛选。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkItemDueFilter {
-    /// 当前业务时区今天到期。
-    Today,
-    /// 当前业务时区今天之前到期。
-    Overdue,
 }
 
 /// 队列排序。

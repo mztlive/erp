@@ -23,6 +23,8 @@ bson = { workspace = true }
 # 使用，须为正式依赖（P0 放置在 dev-dependencies 下，P1 移正）。
 hmac = { workspace = true }
 sha2 = { workspace = true }
+hex = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 mongodb = { workspace = true }

@@ -2,9 +2,11 @@
 //!
 //! 本模块不得重新定义流程定义、实例、执行、审批人或命令收据。
 
+mod action_policy;
 pub mod notification_outbox;
 pub mod subject_snapshot;
 
+pub use action_policy::ApprovalDomainAction;
 pub use notification_outbox::{
     ApprovalNotificationDeliveryStatus, ApprovalNotificationEventKind, ApprovalNotificationOutbox,
     ApprovalNotificationTemplateParams, MAX_DELIVERY_ATTEMPTS, RETRY_BACKOFF_SECS,

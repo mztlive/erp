@@ -25,7 +25,7 @@ use crate::approval::binding::{
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
 use crate::approval::execution::{prepare_cancel, prepare_start};
-use crate::audit::{AuditActor, CommandReceipt};
+use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
@@ -163,9 +163,9 @@ impl ReturnsService {
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
         req.validate()?;
-        let command_receipt = CommandReceipt::new(
+        let command_receipt = CommandReceipt::from_payload(
             "customer-refund-commit-",
-            actor,
+            actor.id(),
             "customer_refund.commit",
             "customer_refund",
             &req.idempotency_key,

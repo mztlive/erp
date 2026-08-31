@@ -163,12 +163,11 @@ impl RbacService {
     /// # 业务约束
     /// 只统计未删除记录；软删除范围视为管理员已收回，不得据此跳过唯一键冲突处理。
     async fn role_has_live_data_scope(&self, role_id: &str) -> Result<bool> {
-        Ok(!self
+        Ok(self
             .db
             .data_scopes()
-            .list_by_subject(DataScopeSubjectType::Role, role_id, &mut NoTransaction)
-            .await?
-            .is_empty())
+            .exists_by_subject(DataScopeSubjectType::Role, role_id, &mut NoTransaction)
+            .await?)
     }
 
     /// 写入角色公司级数据范围；唯一键冲突视为另一实例已写入或历史身份仍占用。
@@ -218,9 +217,8 @@ impl RbacService {
         Ok(self
             .db
             .roles()
-            .find_by_id(role_id, &mut NoTransaction)
-            .await?
-            .is_some())
+            .exists_active_by_id(role_id, &mut NoTransaction)
+            .await?)
     }
 
     /// 提交预定义角色权限替换，并把并发冲突收敛为幂等结果。

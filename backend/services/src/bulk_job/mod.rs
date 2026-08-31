@@ -16,11 +16,14 @@
 
 use std::collections::HashSet;
 
-use database::{AccessControlExt, BulkJobExt, DocumentRegistryExt, NoTransaction, Transactional};
+use database::{
+    AccessControlExt, BackgroundJobRegistration, BulkJobExt, DocumentRegistryExt, NoTransaction,
+    Transactional,
+};
 use entities::bulk_job::{
-    BackgroundJob, BackgroundJobData, BackgroundJobId, BackgroundJobItem, BackgroundJobItemData,
-    BulkSelectionItem, BulkSelectionItemData, BulkSelectionSnapshot, BulkSelectionSnapshotData,
-    BulkSelectionSnapshotId,
+    BackgroundJob, BackgroundJobAggregate, BackgroundJobAggregateData, BackgroundJobId,
+    BackgroundJobItemDraft, BulkSelectionItemDraft, BulkSelectionSnapshot, BulkSelectionSnapshotAggregate,
+    BulkSelectionSnapshotAggregateData, BulkSelectionSnapshotId,
 };
 use entities::document_registry::DocumentType;
 use entities::ids::FileAssetId;
@@ -107,7 +110,7 @@ impl BulkJobService {
                 created_by: row.created_by,
                 expires_at: row.expires_at,
                 status: row.status,
-                version: 0,
+                version: row.version,
                 created_at: row.created_at,
             })
             .collect();
@@ -145,17 +148,28 @@ impl BulkJobService {
         req.validate()?;
         self.ensure_items_registered(&req.items).await?;
         let snapshot_id = BulkSelectionSnapshotId::new(next_id());
-        let snapshot = BulkSelectionSnapshot::new(
+        let drafts = req
+            .items
+            .into_iter()
+            .map(|item| BulkSelectionItemDraft {
+                id: entities::ids::BulkSelectionItemId::new(next_id()),
+                object_type: item.object_type,
+                object_id: item.object_id,
+                expected_version: item.expected_version,
+                expected_hash: item.expected_hash,
+            })
+            .collect();
+        let aggregate = BulkSelectionSnapshotAggregate::new(
             snapshot_id.clone(),
-            BulkSelectionSnapshotData {
+            BulkSelectionSnapshotAggregateData {
                 selection_type: req.selection_type,
                 data_cutoff_at: entities::common::time::Instant::from_unix_secs(req.data_cutoff_at as i64),
-                item_count: req.items.len() as u32,
                 created_by: actor.id().to_string(),
                 expires_at: entities::common::time::Instant::from_unix_secs(req.expires_at as i64),
             },
+            drafts,
         )?;
-        let items = build_selection_items(&snapshot_id, req.items)?;
+        let (snapshot, items) = aggregate.into_parts();
         let audit = actor.clone().resource_log(
             "bulk_selection_snapshot.create",
             "bulk_selection_snapshot",
@@ -327,25 +341,25 @@ impl BulkJobService {
                 id: row.id,
                 job_no: row.job_no,
                 job_type: row.job_type,
-                domain_job_type: None,
-                domain_job_id: None,
-                selection_snapshot_id: None,
+                domain_job_type: row.domain_job_type,
+                domain_job_id: row.domain_job_id,
+                selection_snapshot_id: row.selection_snapshot_id,
                 requested_by: row.requested_by,
                 request_id: row.request_id,
-                input_file_asset_id: None,
-                result_file_asset_id: None,
+                input_file_asset_id: row.input_file_asset_id,
+                result_file_asset_id: row.result_file_asset_id,
                 status: row.status,
                 total_count: row.total_count,
                 processed_count: row.processed_count,
                 success_count: row.success_count,
                 skipped_count: row.skipped_count,
                 failed_count: row.failed_count,
-                started_at: None,
-                finished_at: None,
-                last_progress_at: None,
+                started_at: row.started_at,
+                finished_at: row.finished_at,
+                last_progress_at: row.last_progress_at,
                 result_expires_at: row.result_expires_at,
-                error_summary: None,
-                version: 0,
+                error_summary: row.error_summary,
+                version: row.version,
                 created_at: row.created_at,
             })
             .collect();
@@ -399,18 +413,24 @@ impl BulkJobService {
         actor: &AuditActor,
     ) -> Result<BackgroundJobView> {
         req.validate()?;
-        if let Some(existing) = self
-            .db
-            .background_jobs()
-            .find_by_request_id(&req.request_id, &mut NoTransaction)
-            .await?
-        {
-            return Ok(existing.into());
-        }
         let job_id = BackgroundJobId::new(next_id());
-        let job = BackgroundJob::new(
+        let drafts = req
+            .items
+            .into_iter()
+            .map(|item| BackgroundJobItemDraft {
+                id: entities::ids::BackgroundJobItemId::new(next_id()),
+                object_type: item.object_type,
+                object_id: item.object_id,
+                expected_version: item.expected_version,
+                expected_hash: item.expected_hash,
+                worksheet_name: item.worksheet_name,
+                source_row_no: item.source_row_no,
+                source_column_name: item.source_column_name,
+            })
+            .collect();
+        let aggregate = BackgroundJobAggregate::new(
             job_id.clone(),
-            BackgroundJobData {
+            BackgroundJobAggregateData {
                 job_no: req.job_no,
                 job_type: req.job_type,
                 domain_job_type: req.domain_job_type,
@@ -420,10 +440,11 @@ impl BulkJobService {
                 request_id: req.request_id,
                 input_file_asset_id: req.input_file_asset_id.map(FileAssetId::new),
                 result_file_asset_id: None,
-                total_count: req.total_count,
+                declared_total_count: req.total_count,
             },
+            drafts,
         )?;
-        let items = build_job_items(&job_id, req.items)?;
+        let (job, items) = aggregate.into_parts();
         let audit =
             actor
                 .clone()
@@ -431,19 +452,46 @@ impl BulkJobService {
         let db = self.db.clone();
         let client = db.client().clone();
         let job_for_tx = job.clone();
-        client
+        let registration = client
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    db.bulk_job()
+                    let registration = db
+                        .bulk_job()
                         .create_job_with_items(&job_for_tx, items, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
+                    Ok::<BackgroundJobRegistration, database::Error>(registration)
                 })
             })
-            .await?;
+            .await;
 
-        Ok(job.into())
+        match registration {
+            Ok(BackgroundJobRegistration::Created) => Ok(job.into()),
+            Ok(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
+            Ok(BackgroundJobRegistration::ConflictDifferentPayload(_)) => Err(Error::ConflictError(
+                "同一请求身份已用于不同后台任务载荷".to_string(),
+            )),
+            Err(database::Error::DuplicateKey(_)) => {
+                match self
+                    .db
+                    .bulk_job()
+                    .registration_by_request_id(&job, &mut NoTransaction)
+                    .await?
+                {
+                    Some(BackgroundJobRegistration::ReplaySame(existing)) => Ok(existing.into()),
+                    Some(BackgroundJobRegistration::ConflictDifferentPayload(_)) => {
+                        Err(Error::ConflictError(
+                            "同一请求身份已用于不同后台任务载荷；历史无指纹任务须使用新的请求身份"
+                                .to_string(),
+                        ))
+                    }
+                    Some(BackgroundJobRegistration::Created) | None => Err(Error::ConflictError(
+                        "后台任务唯一竞争结果已变化，请刷新后重试".to_string(),
+                    )),
+                }
+            }
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// 取消后台任务。
@@ -673,74 +721,6 @@ impl BulkJobService {
         }
         Ok(job)
     }
-}
-
-/// 构建选择快照冻结目标（`selection_snapshot_id` 统一注入）。
-///
-/// # 参数
-/// * `snapshot_id` - 选择快照 ID
-/// * `items` - 冻结目标请求
-///
-/// # 返回
-/// 返回实体层冻结目标集合。
-///
-/// # 错误
-/// 任意一项实体校验失败时返回错误。
-fn build_selection_items(
-    snapshot_id: &BulkSelectionSnapshotId,
-    items: Vec<CreateBulkSelectionItemRequest>,
-) -> Result<Vec<BulkSelectionItem>> {
-    let mut built = Vec::with_capacity(items.len());
-    for item in items {
-        let selection_item = BulkSelectionItem::new(
-            entities::ids::BulkSelectionItemId::new(next_id()),
-            BulkSelectionItemData {
-                selection_snapshot_id: snapshot_id.clone(),
-                object_type: item.object_type,
-                object_id: item.object_id,
-                expected_version: item.expected_version,
-                expected_hash: item.expected_hash,
-            },
-        )?;
-        built.push(selection_item);
-    }
-    Ok(built)
-}
-
-/// 构建后台任务逐项结果行（`item_no` 从 1 递增）。
-///
-/// # 参数
-/// * `job_id` - 后台任务 ID
-/// * `items` - 逐项请求
-///
-/// # 返回
-/// 返回实体层逐项结果行。
-///
-/// # 错误
-/// 任意一行实体校验失败时返回错误。
-fn build_job_items(
-    job_id: &BackgroundJobId,
-    items: Vec<CreateBackgroundJobItemRequest>,
-) -> Result<Vec<BackgroundJobItem>> {
-    let mut built = Vec::with_capacity(items.len());
-    for (index, item) in items.into_iter().enumerate() {
-        let job_item = BackgroundJobItem::new(
-            entities::ids::BackgroundJobItemId::new(next_id()),
-            BackgroundJobItemData {
-                background_job_id: job_id.clone(),
-                item_no: index as u32 + 1,
-                object_type: item.object_type,
-                object_id: item.object_id,
-                expected_version: item.expected_version,
-                expected_hash: item.expected_hash,
-                worksheet_name: item.worksheet_name,
-                source_row_no: item.source_row_no,
-                source_column_name: item.source_column_name,
-            },
-        )?;
-        built.push(job_item);
-    }
-    Ok(built)
 }
 
 /// 判断对象类型代码是否属于业务单据目录。

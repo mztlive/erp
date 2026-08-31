@@ -9,6 +9,8 @@
 //! 集合名常量统一从 `CustomerExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `CustomerExt` 的关联类型对外暴露。
 
+use std::collections::HashMap;
+
 use entities::common::time::BusinessDate;
 use entities::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment, CustomerProfileCommand,
@@ -43,6 +45,15 @@ pub struct CustomerAccountRow {
     pub created_at: u64,
     /// 最后更新时间（秒级时间戳）。
     pub updated_at: u64,
+}
+
+/// 客户编号窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+struct CustomerNumberRow {
+    /// 客户稳定 ID。
+    id: String,
+    /// 客户编号。
+    customer_no: String,
 }
 
 /// 客户角色列表筛选条件。
@@ -113,6 +124,42 @@ impl Pagination for CustomerAccountFilter {
 }
 
 impl<'a> Repository<'a, CustomerAccount> {
+    /// 批量读取未删除客户的稳定 ID 与客户编号。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 客户 ID 集合；空集合不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回实际存在的客户编号映射；停用但未删除客户仍保留编号，软删除或缺失不补行。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn customer_numbers_by_ids(
+        &self,
+        customer_ids: &[CustomerAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        if customer_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let ids = customer_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let collection = self.collection().clone_with_type::<CustomerNumberRow>();
+        let rows = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "id": { "$in": ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "customer_no": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| (row.id, row.customer_no)).collect())
+    }
+
     /// 按客户角色 ID 集合批量读取活跃客户。
     pub async fn find_accounts_by_ids(
         &self,

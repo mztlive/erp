@@ -32,7 +32,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use validator::Validate;
 
-use crate::audit::{AuditActor, CommandReceipt};
+use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::errors::{Error, Result};
 use crate::publication::{PublicationService, SystemSafetyPauseTrigger, UnavailableMallConnector};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
@@ -603,9 +603,9 @@ impl SupplierOfferingService {
             return Err(Error::ValidationError("任务 ID 与来源版本不能为空".to_string()));
         }
         let expected_task_version = crate::work_item::expected_task_version(&req.expected_task_version)?;
-        let receipt = CommandReceipt::new(
+        let receipt = CommandReceipt::from_payload(
             "supplier-supply-exception:",
-            actor,
+            actor.id(),
             SUPPLY_EXCEPTION_COMPLETE_ACTION,
             "work_item",
             &req.idempotency_key,

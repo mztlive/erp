@@ -8,7 +8,6 @@ use std::{
     num::NonZeroU32,
 };
 
-use chrono::{Datelike, FixedOffset, TimeZone, Utc};
 use database::{
     AccessControlExt, BpmExt, DocumentRegistryExt, Executor, IntegrationOpsExt, InventoryExt,
     LegacyImportExt, MallSyncExt, MongoCasbinAdapter, NoTransaction, PurchaseOrderExt, ReceivableExt,
@@ -17,25 +16,25 @@ use database::{
 };
 use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 use entities::{
-    access_control::{DataScope, DataScopeSubjectType, DataScopeType},
+    access_control::{DataScope, DataScopeSubjectType, OrganizationCoverage, ResponsibilityScopeSet},
     common::time::Instant,
     integration_ops::{
         ErrorClass, ErrorTaskStatus, IntegrationErrorTask, ReconciliationDifference,
         ReconciliationDifferenceId, ReconciliationDifferenceResolution, ReconciliationDifferenceResolutionId,
-        ResolutionAction, ResolutionType,
+        ResolutionType, W29CloseDecision, W29EvidenceReference,
     },
     work_item::{
-        AvailableWorkItemAccount, WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind,
-        WorkItemBriefRelation, WorkItemCloseData, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
+        AvailableWorkItemAccount, FulfillmentResponsibilityKey, QueueContextField, QueueContextIdentity,
+        WorkItem, WorkItemAssignmentSeparationPolicy, WorkItemBriefObjectKind, WorkItemBriefRelation,
+        WorkItemCloseData, WorkItemStatus, WorkItemSubjectVersions, WorkItemType,
     },
-    Permission,
+    CommandFingerprint, CommandReceipt, Permission, PermissionSet,
 };
 use mongodb::Database;
-use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::{
-    audit::AuditActor,
+    audit::{AuditActor, CommandReceiptServiceExt as _},
     errors::{Error, ErrorCode, Result},
     iam::SharedRbacService,
 };
@@ -77,7 +76,6 @@ const MANAGE_PERMISSION: &str = "work_item:manage";
 const REASSIGN_PERMISSION: &str = "work_item:reassign";
 const CLOSE_PERMISSION: &str = "work_item:close";
 const IDEMPOTENCY_AUDIT_PREFIX: &str = "work-item-command-";
-const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 const REASSIGN_VERSION_CONFLICT: &str = "任务版本已变化";
 const AUTHORIZATION_SNAPSHOT_ATTEMPTS: usize = 3;
 const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
@@ -902,7 +900,7 @@ impl WorkItemService {
         ensure_item_in_managed_scope(&item, &managed_access)?;
 
         let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
-        let cascade_tasks = if let Some(purchase_order_id) = purchase_order_id {
+        let cascade_tasks = if let Some(purchase_order_id) = purchase_order_id.as_deref() {
             let (_, tasks) =
                 load_purchase_order_fulfillment_scope(&self.db, &item, purchase_order_id, &mut NoTransaction)
                     .await?;
@@ -980,9 +978,16 @@ impl WorkItemService {
         let reason = required_text(&req.reason, "转交原因不能为空")?;
         let expected_task_version = expected_task_version(&req.expected_task_version)?;
         let version = expected_task_version.to_string();
-        let fingerprint = command_fingerprint(&[&version, &target_user_id, &reason]);
-        let audit_id = idempotency_audit_id(actor.id(), action, id, &idempotency_key);
-        if let Some(item) = self.idempotent_replay(&audit_id, &fingerprint, id).await? {
+        let receipt = CommandReceipt::from_resource_parts(
+            IDEMPOTENCY_AUDIT_PREFIX,
+            actor.id(),
+            action,
+            "work_item",
+            id,
+            &idempotency_key,
+            [version, target_user_id.clone(), reason.clone()],
+        )?;
+        if let Some(item) = self.idempotent_replay(&receipt, id).await? {
             return self.applied_outcome(item, actor).await;
         }
         let item = self.load(id).await?;
@@ -1003,9 +1008,8 @@ impl WorkItemService {
                 expected_task_version,
                 target_user_id,
                 actor,
-                action,
-                audit_id,
-                audit_message: command_audit_message(&fingerprint, Some(&reason)),
+                receipt,
+                audit_detail: reason,
                 authorization,
             })
             .await?;
@@ -1038,16 +1042,27 @@ impl WorkItemService {
             .as_deref()
             .map(|value| required_text(value, "替代任务ID不能为空"))
             .transpose()?;
-        let close_reason = w29_close_reason(&reason_code, req.comment.as_deref(), replacement_id.as_deref())?;
+        let decision =
+            W29CloseDecision::new(&reason_code, req.comment.as_deref(), replacement_id.as_deref())?;
         let expected_task_version = expected_task_version(&req.expected_task_version)?;
         let version = expected_task_version.to_string();
-        let fingerprint = command_fingerprint(&[
-            &version,
-            &close_reason,
-            replacement_id.as_deref().unwrap_or_default(),
-        ]);
-        let audit_id = idempotency_audit_id(actor.id(), action, id, &idempotency_key);
-        if let Some(item) = self.idempotent_replay(&audit_id, &fingerprint, id).await? {
+        let receipt = CommandReceipt::from_resource_parts(
+            IDEMPOTENCY_AUDIT_PREFIX,
+            actor.id(),
+            action,
+            "work_item",
+            id,
+            &idempotency_key,
+            [
+                version,
+                decision.close_reason().to_string(),
+                decision
+                    .replacement_work_item_id()
+                    .unwrap_or_default()
+                    .to_string(),
+            ],
+        )?;
+        if let Some(item) = self.idempotent_replay(&receipt, id).await? {
             return self.applied_outcome(item, actor).await;
         }
         let item = self.load(id).await?;
@@ -1065,7 +1080,7 @@ impl WorkItemService {
                 "只有 W29 登记的异常任务允许受控关闭".to_string(),
             ));
         }
-        if let Some(replacement_id) = replacement_id.as_deref() {
+        if let Some(replacement_id) = decision.replacement_work_item_id() {
             self.ensure_w29_replacement(&item, replacement_id, actor, &managed_access)
                 .await?;
         }
@@ -1073,12 +1088,8 @@ impl WorkItemService {
             .close_with_domain_evidence(CloseDomainEvidenceInput {
                 item,
                 actor,
-                reason_code: &reason_code,
-                replacement_work_item_id: replacement_id.as_deref(),
-                action,
-                audit_id,
-                audit_message: command_audit_message(&fingerprint, Some(&close_reason)),
-                close_reason,
+                decision,
+                receipt,
             })
             .await?;
         match updated {
@@ -1143,10 +1154,9 @@ impl WorkItemService {
         let participant_document_ids = self
             .db
             .document_participants()
-            .list_by_user(actor_id, &mut NoTransaction)
+            .document_ids_by_user(actor_id, &mut NoTransaction)
             .await?
             .into_iter()
-            .map(|participant| participant.document_id.to_string())
             .collect();
         let manage_permission = Permission::parse(MANAGE_PERMISSION).expect("固定权限合法");
         let has_manage_permission = permissions
@@ -1194,22 +1204,30 @@ impl WorkItemService {
         role_ids: &[String],
         manage_role_ids: &[String],
     ) -> Result<(Vec<String>, Vec<(String, Option<String>)>)> {
+        let user_subject_ids = vec![actor_id.to_string()];
         let user_scopes = self
             .db
             .data_scopes()
-            .list_by_subject(DataScopeSubjectType::User, actor_id, &mut NoTransaction)
+            .list_by_subjects(DataScopeSubjectType::User, &user_subject_ids, &mut NoTransaction)
             .await?;
+        let role_scopes = self
+            .db
+            .data_scopes()
+            .list_by_subjects(DataScopeSubjectType::Role, role_ids, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .fold(HashMap::<String, Vec<DataScope>>::new(), |mut grouped, scope| {
+                grouped.entry(scope.subject_id.clone()).or_default().push(scope);
+                grouped
+            });
         let mut responsibility_scopes = Vec::new();
         let mut management_scopes = Vec::new();
         for role_id in role_ids {
-            let role_scopes = self
-                .db
-                .data_scopes()
-                .list_by_subject(DataScopeSubjectType::Role, role_id, &mut NoTransaction)
-                .await?;
-            responsibility_scopes.extend(responsibility_pairs(role_id, &role_scopes, &user_scopes));
+            let role_scopes = role_scopes.get(role_id).map(Vec::as_slice).unwrap_or_default();
+            let pairs = responsibility_scope_for_role(role_id, role_scopes, &user_scopes);
+            responsibility_scopes.extend(pairs.iter().cloned());
             if manage_role_ids.contains(role_id) {
-                management_scopes.extend(responsibility_pairs(role_id, &role_scopes, &user_scopes));
+                management_scopes.extend(pairs);
             }
         }
         responsibility_scopes.sort();
@@ -1875,10 +1893,9 @@ impl WorkItemService {
         let participant_document_ids = self
             .db
             .document_participants()
-            .list_by_user(actor_id, executor)
+            .document_ids_by_user(actor_id, executor)
             .await?
             .into_iter()
-            .map(|participant| participant.document_id.to_string())
             .collect();
         let (organization_ids, responsibility_scopes) = self
             .scope_access_for_executor(actor_id, &role_ids, &active_manage_roles, executor)
@@ -1901,22 +1918,30 @@ impl WorkItemService {
         manage_role_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<(Vec<String>, Vec<(String, Option<String>)>)> {
+        let user_subject_ids = vec![actor_id.to_string()];
         let user_scopes = self
             .db
             .data_scopes()
-            .list_by_subject(DataScopeSubjectType::User, actor_id, executor)
+            .list_by_subjects(DataScopeSubjectType::User, &user_subject_ids, executor)
             .await?;
+        let role_scopes = self
+            .db
+            .data_scopes()
+            .list_by_subjects(DataScopeSubjectType::Role, role_ids, executor)
+            .await?
+            .into_iter()
+            .fold(HashMap::<String, Vec<DataScope>>::new(), |mut grouped, scope| {
+                grouped.entry(scope.subject_id.clone()).or_default().push(scope);
+                grouped
+            });
         let mut responsibility_scopes = Vec::new();
         let mut management_scopes = Vec::new();
         for role_id in role_ids {
-            let role_scopes = self
-                .db
-                .data_scopes()
-                .list_by_subject(DataScopeSubjectType::Role, role_id, executor)
-                .await?;
-            responsibility_scopes.extend(responsibility_pairs(role_id, &role_scopes, &user_scopes));
+            let role_scopes = role_scopes.get(role_id).map(Vec::as_slice).unwrap_or_default();
+            let pairs = responsibility_scope_for_role(role_id, role_scopes, &user_scopes);
+            responsibility_scopes.extend(pairs.iter().cloned());
             if manage_role_ids.contains(role_id) {
-                management_scopes.extend(responsibility_pairs(role_id, &role_scopes, &user_scopes));
+                management_scopes.extend(pairs);
             }
         }
         responsibility_scopes.sort();
@@ -1998,12 +2023,11 @@ impl WorkItemService {
             .await?;
         let role_ids = active_role_ids(&self.db, actor.kind(), actor.id(), executor).await?;
         let execution_permissions =
-            execution_permission_codes(item.work_item_type, &item.business_object_type)
+            required_execution_permissions(item.work_item_type, &item.business_object_type)
                 .ok_or_else(|| Error::Forbidden("任务类型未注册完整执行权限".to_string()))?;
-        for code in execution_permissions {
-            let permission = Permission::parse(code).map_err(|error| Error::Internal(error.to_string()))?;
+        for permission in execution_permissions.as_slice() {
             let granting_roles = self
-                .roles_granting_permission(&role_ids, &permission, true)
+                .roles_granting_permission(&role_ids, permission, true)
                 .await?;
             if granting_roles.is_empty() {
                 return Err(Error::Forbidden(
@@ -2069,12 +2093,10 @@ struct AssignmentPolicyAuditInput<'a> {
     target_user_id: String,
     /// 操作人。
     actor: &'a AuditActor,
-    /// 审计动作。
-    action: &'a str,
-    /// 幂等审计主键。
-    audit_id: String,
-    /// 审计消息。
-    audit_message: String,
+    /// 强类型幂等命令收据。
+    receipt: CommandReceipt,
+    /// 权限安全的转交说明。
+    audit_detail: String,
     /// 事务外冻结的授权快照。
     authorization: AssignmentAuthorizationSnapshot,
 }
@@ -2100,18 +2122,10 @@ struct CloseDomainEvidenceInput<'a> {
     item: WorkItem,
     /// 操作人。
     actor: &'a AuditActor,
-    /// 关闭原因代码。
-    reason_code: &'a str,
-    /// 替代任务 ID。
-    replacement_work_item_id: Option<&'a str>,
-    /// 审计动作。
-    action: &'a str,
-    /// 幂等审计主键。
-    audit_id: String,
-    /// 审计消息。
-    audit_message: String,
-    /// 面向用户的关闭原因。
-    close_reason: String,
+    /// 已规范化的 W29 关闭决策。
+    decision: W29CloseDecision,
+    /// 强类型幂等命令收据。
+    receipt: CommandReceipt,
 }
 
 impl WorkItemService {
@@ -2140,24 +2154,20 @@ impl WorkItemService {
             expected_task_version,
             target_user_id,
             actor,
-            action,
-            audit_id,
-            audit_message,
+            receipt,
+            audit_detail,
             authorization,
         } = input;
-        let replay_audit_id = audit_id.clone();
+        let replay_receipt = receipt.clone();
         let replay_item_id = item.base.id.clone();
-        let replay_fingerprint = audit_command_fingerprint(&audit_message)
-            .expect("服务端审计消息必须携带指纹")
-            .to_string();
-        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?.map(str::to_string);
+        let purchase_order_id = purchase_order_fulfillment_responsibility_id(&item)?;
         let source_user_id = item.owner_user_id.as_deref().unwrap_or("未指定").to_string();
         let selected_work_item_id = item.base.id.clone();
         let purchase_order_audit = purchase_order_id
             .as_ref()
             .map(|purchase_order_id| {
                 actor.clone().resource_log_with_id(
-                    format!("{audit_id}-purchase-order"),
+                    format!("{}-purchase-order", receipt.id()),
                     "purchase_order.owner_reassign",
                     "purchase_order",
                     purchase_order_id.clone(),
@@ -2168,11 +2178,11 @@ impl WorkItemService {
             })
             .transpose()?;
         let audit = actor.clone().resource_log_with_id(
-            audit_id,
-            action,
-            "work_item",
+            receipt.id().to_string(),
+            receipt.action(),
+            receipt.resource_type(),
             item.base.id.clone(),
-            Some(audit_message),
+            Some(receipt.message(Some(&audit_detail))),
         )?;
         let item_id = item.base.id;
         let actor_id = actor.id().to_string();
@@ -2262,10 +2272,7 @@ impl WorkItemService {
             Err(Error::ConflictError(message)) if message == REASSIGN_VERSION_CONFLICT => {
                 Ok(WorkItemWriteOutcome::VersionConflict)
             }
-            Err(error) => match self
-                .idempotent_replay(&replay_audit_id, &replay_fingerprint, &replay_item_id)
-                .await?
-            {
+            Err(error) => match self.idempotent_replay(&replay_receipt, &replay_item_id).await? {
                 Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
                 None => Err(error),
             },
@@ -2295,30 +2302,23 @@ impl WorkItemService {
         let CloseDomainEvidenceInput {
             mut item,
             actor,
-            reason_code,
-            replacement_work_item_id,
-            action,
-            audit_id,
-            audit_message,
-            close_reason,
+            decision,
+            receipt,
         } = input;
         let closed_at = Instant::now();
-        item.close(actor.id(), WorkItemCloseData { close_reason }, closed_at)?;
-        let replay_audit_id = audit_id.clone();
-        let replay_item_id = item.base.id.clone();
-        let replay_fingerprint = audit_command_fingerprint(&audit_message)
-            .expect("服务端审计消息必须携带指纹")
-            .to_string();
-        let audit = actor.clone().resource_log_with_id(
-            audit_id.clone(),
-            action,
-            "work_item",
-            item.base.id.clone(),
-            Some(audit_message),
+        item.close(
+            actor.id(),
+            WorkItemCloseData {
+                close_reason: decision.close_reason().to_string(),
+            },
+            closed_at,
         )?;
+        let evidence_reference = decision.evidence_reference(&item.base.id, receipt.id())?;
+        let replay_receipt = receipt.clone();
+        let replay_item_id = item.base.id.clone();
+        let audit = receipt.audit(actor.clone(), item.base.id.clone())?;
         let actor_id = actor.id().to_string();
-        let reason_code = reason_code.to_string();
-        let replacement_work_item_id = replacement_work_item_id.map(ToString::to_string);
+        let receipt_id = receipt.id().to_string();
         let db = self.db.clone();
         let client = db.client().clone();
         let result = client
@@ -2328,10 +2328,10 @@ impl WorkItemService {
                         &db,
                         CloseW29DomainObjectInput {
                             item: &item,
-                            reason_code: &reason_code,
-                            replacement_work_item_id: replacement_work_item_id.as_deref(),
+                            decision: &decision,
+                            evidence_reference: &evidence_reference,
                             actor_id: &actor_id,
-                            audit_id: &audit_id,
+                            receipt_id: &receipt_id,
                             closed_at,
                         },
                         session,
@@ -2349,36 +2349,22 @@ impl WorkItemService {
         match result {
             Ok(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
             Err(WorkItemWriteError::VersionConflict) => Ok(WorkItemWriteOutcome::VersionConflict),
-            Err(WorkItemWriteError::Service(error)) => match self
-                .idempotent_replay(&replay_audit_id, &replay_fingerprint, &replay_item_id)
-                .await?
-            {
-                Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
-                None => Err(error),
-            },
+            Err(WorkItemWriteError::Service(error)) => {
+                match self.idempotent_replay(&replay_receipt, &replay_item_id).await? {
+                    Some(item) => Ok(WorkItemWriteOutcome::Updated(Box::new(item))),
+                    None => Err(error),
+                }
+            }
         }
     }
 
     /// 读取已完成的同一幂等命令，并拒绝相同键混用不同请求。
-    async fn idempotent_replay(
-        &self,
-        audit_id: &str,
-        expected_fingerprint: &str,
-        item_id: &str,
-    ) -> Result<Option<WorkItem>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_work_item_command_audit(audit_id, &mut NoTransaction)
-            .await?
-        else {
+    async fn idempotent_replay(&self, receipt: &CommandReceipt, item_id: &str) -> Result<Option<WorkItem>> {
+        let Some(resource_id) = receipt.committed_resource_id(&self.db).await? else {
             return Ok(None);
         };
-        if audit.resource_id.as_deref() != Some(item_id) {
+        if resource_id != item_id {
             return Err(Error::Internal("幂等审计资源与命令不一致".to_string()));
-        }
-        if audit.message.as_deref().and_then(audit_command_fingerprint) != Some(expected_fingerprint) {
-            return Err(Error::ConflictError("幂等键已用于不同的命令内容".to_string()));
         }
         self.load(item_id).await.map(Some)
     }
@@ -2540,60 +2526,20 @@ async fn ensure_assignment_policy_in_transaction(
 ///
 /// # 错误
 /// 对象类型、责任角色、原因码或责任键不符合固定履约合同时返回错误。
-fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> Result<Option<&str>> {
-    if !item.work_item_type.is_fulfillment_operation() {
-        return Ok(None);
-    }
-    let key = item
-        .responsibility_key()
-        .ok_or_else(|| Error::BusinessLogicError("履约任务缺少责任键，请联系管理员修复后重试".to_string()))?;
-    match (
-        item.business_object_type.as_str(),
-        item.owner_role.as_str(),
-        item.reason_code.as_deref(),
-    ) {
-        ("delivery", "purchase_order_owner", Some("SUPPLIER_DIRECT_DELIVERY_READY"))
-        | ("electronic_delivery", "purchase_order_owner", Some("ELECTRONIC_DELIVERY_READY"))
-        | ("service_fulfillment", "purchase_order_owner", Some("SERVICE_FULFILLMENT_READY")) => {
-            parse_purchase_order_responsibility_key(key).map(Some)
-        }
-        ("purchase_receipt", "warehouse_inbound_handler", Some("PURCHASE_RECEIPT_READY")) => {
-            ensure_warehouse_responsibility_key(key, ":receipt", "入库任务")?;
-            Ok(None)
-        }
-        ("delivery", "warehouse_outbound_handler", Some("WAREHOUSE_DELIVERY_READY")) => {
-            ensure_warehouse_responsibility_key(key, ":warehouse_ship", "仓发任务")?;
-            Ok(None)
-        }
-        _ => Err(Error::BusinessLogicError(
-            "履约任务的对象、责任角色或原因码不一致，请联系管理员修复后重试".to_string(),
-        )),
-    }
-}
-
-/// 解析采购履约任务的唯一采购单责任键。
-fn parse_purchase_order_responsibility_key(key: &str) -> Result<&str> {
-    key.strip_prefix("purchase_order:")
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && !value.contains(':'))
-        .ok_or_else(|| {
-            Error::BusinessLogicError("采购履约任务的采购单责任键无效，请联系管理员修复后重试".to_string())
-        })
-}
-
-/// 校验仓库履约任务的固定操作责任键。
-fn ensure_warehouse_responsibility_key(key: &str, suffix: &str, operation_label: &str) -> Result<()> {
-    let warehouse_id = key
-        .strip_prefix("warehouse:")
-        .and_then(|value| value.strip_suffix(suffix))
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && !value.contains(':'));
-    if warehouse_id.is_some() {
-        return Ok(());
-    }
-    Err(Error::BusinessLogicError(format!(
-        "{operation_label}的仓库责任键无效，请联系管理员修复后重试"
-    )))
+fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> Result<Option<String>> {
+    let key = item.fulfillment_responsibility_key().map_err(|_| {
+        Error::BusinessLogicError(
+            "履约任务的对象、责任角色、原因码或责任键不一致，请联系管理员修复后重试".to_string(),
+        )
+    })?;
+    Ok(match key {
+        Some(FulfillmentResponsibilityKey::PurchaseOrder(id)) => Some(id),
+        Some(
+            FulfillmentResponsibilityKey::WarehouseReceipt(_)
+            | FulfillmentResponsibilityKey::WarehouseShip(_),
+        )
+        | None => None,
+    })
 }
 
 /// 原子变更采购单当前责任人与其全部开放采购履约任务。
@@ -2844,14 +2790,14 @@ fn approval_assignment_separated(
 struct CloseW29DomainObjectInput<'a> {
     /// 被关闭的任务。
     item: &'a WorkItem,
-    /// 关闭原因代码。
-    reason_code: &'a str,
-    /// 替代任务 ID。
-    replacement_work_item_id: Option<&'a str>,
+    /// 已规范化的关闭决策。
+    decision: &'a W29CloseDecision,
+    /// 与关闭决策一致的领域证据引用。
+    evidence_reference: &'a W29EvidenceReference,
     /// 操作人 ID。
     actor_id: &'a str,
-    /// 审计主键。
-    audit_id: &'a str,
+    /// 命令收据主键。
+    receipt_id: &'a str,
     /// 关闭时间。
     closed_at: Instant,
 }
@@ -2881,18 +2827,13 @@ async fn close_w29_domain_object(
 ) -> Result<()> {
     let CloseW29DomainObjectInput {
         item,
-        reason_code,
-        replacement_work_item_id,
+        decision,
+        evidence_reference,
         actor_id,
-        audit_id,
+        receipt_id,
         closed_at,
     } = input;
-    let evidence_reference =
-        w29_domain_evidence_reference(&item.base.id, reason_code, replacement_work_item_id, audit_id)?;
-    if let Some(replacement_work_item_id) = replacement_work_item_id {
-        if replacement_work_item_id == item.base.id.as_str() {
-            return Err(Error::ValidationError("替代任务不能引用自身".to_string()));
-        }
+    if let Some(replacement_work_item_id) = decision.replacement_work_item_id() {
         let replacement = db
             .work_items()
             .find_work_item(replacement_work_item_id, executor)
@@ -2924,7 +2865,7 @@ async fn close_w29_domain_object(
             task.transition(
                 ErrorTaskStatus::Closed,
                 Some(ResolutionType::Close),
-                Some(evidence_reference),
+                Some(evidence_reference.to_string()),
                 closed_at,
             )?;
             db.integration_error_tasks().update(&mut task, executor).await?;
@@ -2946,26 +2887,19 @@ async fn close_w29_domain_object(
             {
                 return Err(Error::ConflictError("对账差异已经关闭或形成正式结论".to_string()));
             }
-            let resolution_no = latest
-                .map_or(Ok(1), |resolution| {
-                    resolution.resolution_no.checked_add(1).ok_or(())
-                })
-                .map_err(|()| Error::ConflictError("差异决定序号已达上限".to_string()))?;
-            let resolution_action = match reason_code {
-                "DUPLICATE" => ResolutionAction::CloseDuplicate,
-                "MISROUTED" => ResolutionAction::CloseMisrouted,
-                _ => {
-                    return Err(Error::ValidationError(
-                        "关闭原因只允许 DUPLICATE 或 MISROUTED".to_string(),
-                    ));
-                }
-            };
+            let resolution_no = W29CloseDecision::next_resolution_no(
+                latest.as_ref().map(|resolution| resolution.resolution_no),
+            )?;
+            let resolution_id_digest = CommandFingerprint::from_parts([receipt_id.to_string()]);
             let resolution = ReconciliationDifferenceResolution::new_close_evidence(
-                ReconciliationDifferenceResolutionId::new(format!("w29-close-{}", stable_digest(audit_id))),
+                ReconciliationDifferenceResolutionId::new(format!(
+                    "w29-close-{}",
+                    resolution_id_digest.digest_hex()
+                )),
                 difference_id,
                 resolution_no,
-                resolution_action,
-                evidence_reference,
+                decision.resolution_action(),
+                evidence_reference.clone(),
                 actor_id.to_string(),
                 closed_at,
             )?;
@@ -3495,10 +3429,7 @@ fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, String)> {
 /// 无；固定权限代码无效属于程序错误并触发断言。
 fn has_permission(access: &ActorAccess, permission: &str) -> bool {
     let required = Permission::parse(permission).expect("对象注册表权限必须合法");
-    access
-        .permissions
-        .iter()
-        .any(|permission| permission.covers(&required))
+    PermissionSet::new(access.permissions.clone()).covers_one(&required)
 }
 
 /// 按对象权限、参与关系与权威版本过滤工作项列表投影。
@@ -3606,32 +3537,17 @@ fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts:
 }
 
 /// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
-fn execution_permission_codes(
+fn required_execution_permissions(
     work_item_type: WorkItemType,
     business_object_type: &str,
-) -> Option<&'static [&'static str]> {
+) -> Option<PermissionSet> {
     if work_item_type == WorkItemType::BusinessException && business_object_type == "SUPPLIER_OFFERING" {
-        return Some(&["supplier_offering:resolve_supply_exception"]);
+        return Some(PermissionSet::new([Permission::parse(
+            "supplier_offering:resolve_supply_exception",
+        )
+        .expect("业务异常固定权限必须合法")]));
     }
-    if work_item_type.is_fulfillment_operation() {
-        return work_item_type.fulfillment_execution_permissions(business_object_type);
-    }
-    if work_item_type.is_customer_acceptance_registration() {
-        return work_item_type.customer_acceptance_execution_permissions(business_object_type);
-    }
-    if work_item_type.is_supplier_payment_execution() {
-        return work_item_type.supplier_payment_execution_permissions(business_object_type);
-    }
-    if work_item_type.is_sales_invoice_execution() {
-        return work_item_type.sales_invoice_execution_permissions(business_object_type);
-    }
-    if matches!(
-        work_item_type,
-        WorkItemType::CardFundsReview | WorkItemType::CardFundsDeltaReview
-    ) {
-        return work_item_type.card_funds_review_permissions(business_object_type);
-    }
-    Some(&[])
+    work_item_type.required_execution_permissions(business_object_type)
 }
 
 /// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
@@ -3640,11 +3556,8 @@ fn has_execution_permissions(
     business_object_type: &str,
     access: &ActorAccess,
 ) -> bool {
-    execution_permission_codes(work_item_type, business_object_type).is_some_and(|required| {
-        required
-            .iter()
-            .all(|permission| has_permission(access, permission))
-    })
+    required_execution_permissions(work_item_type, business_object_type)
+        .is_some_and(|required| PermissionSet::new(access.permissions.clone()).covers(&required))
 }
 
 /// 把对象事实中的标题、往来方和影响写回任务投影字段。
@@ -3869,34 +3782,6 @@ fn organization_filter(access: &ActorAccess) -> Vec<String> {
     access.organization_ids.to_vec()
 }
 
-#[derive(Clone)]
-enum OrganizationCoverage {
-    All,
-    Targets(Vec<String>),
-}
-
-fn organizations_from_scopes(scopes: &[DataScope]) -> Vec<String> {
-    if scopes
-        .iter()
-        .any(|scope| scope.scope_type == DataScopeType::Company)
-    {
-        return vec!["*".to_string()];
-    }
-    let mut organizations = scopes
-        .iter()
-        .filter(|scope| {
-            matches!(
-                scope.scope_type,
-                DataScopeType::Organization | DataScopeType::Team
-            )
-        })
-        .flat_map(|scope| scope.scope_targets.clone())
-        .collect::<Vec<_>>();
-    organizations.sort();
-    organizations.dedup();
-    organizations
-}
-
 fn organizations_from_pairs(pairs: &[(String, Option<String>)]) -> Vec<String> {
     if pairs.iter().any(|(_, organization_id)| organization_id.is_none()) {
         return vec!["*".to_string()];
@@ -3910,62 +3795,29 @@ fn organizations_from_pairs(pairs: &[(String, Option<String>)]) -> Vec<String> {
     organizations
 }
 
-fn responsibility_pairs(
+fn responsibility_scope_for_role(
     role_id: &str,
     role_scopes: &[DataScope],
     user_scopes: &[DataScope],
 ) -> Vec<(String, Option<String>)> {
-    let Some(role_coverage) = organization_coverage(role_scopes, false) else {
+    let Some(role_coverage) = OrganizationCoverage::from_scopes(role_scopes) else {
         return Vec::new();
     };
-    let Some(user_coverage) = organization_coverage(user_scopes, true) else {
-        return Vec::new();
-    };
-    intersect_coverage(role_coverage, user_coverage)
-        .into_iter()
-        .map(|organization_id| (role_id.to_string(), organization_id))
-        .collect()
-}
-
-fn organization_coverage(scopes: &[DataScope], empty_is_all: bool) -> Option<OrganizationCoverage> {
-    if scopes
-        .iter()
-        .any(|scope| scope.scope_type == DataScopeType::Company)
-    {
-        return Some(OrganizationCoverage::All);
-    }
-    let targets = organizations_from_scopes(scopes);
-    if !targets.is_empty() {
-        return Some(OrganizationCoverage::Targets(targets));
-    }
-    empty_is_all.then_some(OrganizationCoverage::All)
-}
-
-fn intersect_coverage(role: OrganizationCoverage, user: OrganizationCoverage) -> Vec<Option<String>> {
-    match (role, user) {
-        (OrganizationCoverage::All, OrganizationCoverage::All) => vec![None],
-        (OrganizationCoverage::Targets(targets), OrganizationCoverage::All)
-        | (OrganizationCoverage::All, OrganizationCoverage::Targets(targets)) => {
-            targets.into_iter().map(Some).collect()
-        }
-        (OrganizationCoverage::Targets(role), OrganizationCoverage::Targets(user)) => role
-            .into_iter()
-            .filter(|organization_id| user.contains(organization_id))
-            .map(Some)
-            .collect(),
-    }
+    // 默认政策仍由 Service 拥有：用户未配置显式范围时解释为 All；角色未配置
+    // 时上方已失败关闭为 None。
+    let user_coverage = OrganizationCoverage::from_scopes(user_scopes).unwrap_or(OrganizationCoverage::All);
+    role_coverage
+        .intersect(&user_coverage)
+        .map(|coverage| {
+            ResponsibilityScopeSet::for_role(role_id, &coverage)
+                .as_slice()
+                .to_vec()
+        })
+        .unwrap_or_default()
 }
 
 fn covers_responsibility(access: &ActorAccess, role: &str, organization_id: &str) -> bool {
-    access
-        .responsibility_scopes
-        .iter()
-        .any(|(allowed_role, allowed_organization)| {
-            allowed_role == role
-                && allowed_organization
-                    .as_deref()
-                    .is_none_or(|allowed| allowed == organization_id)
-        })
+    ResponsibilityScopeSet::new(access.responsibility_scopes.clone()).covers(role, organization_id)
 }
 
 fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
@@ -3994,48 +3846,31 @@ fn has_personal_history_access(item: &WorkItem, actor_id: &str) -> bool {
 }
 
 fn covers_organization(access: &ActorAccess, organization_id: &str) -> bool {
-    access
-        .organization_ids
-        .iter()
-        .any(|id| id == "*" || id == organization_id)
+    OrganizationCoverage::from_targets(access.organization_ids.clone())
+        .is_some_and(|coverage| coverage.covers(organization_id))
 }
 
 fn apply_due_filter(filter: &mut WorkItemFilter, due: Option<WorkItemDueFilter>) -> Result<()> {
     let Some(due) = due else {
         return Ok(());
     };
-    let (start, tomorrow) = business_day_bounds()?;
-    match due {
-        WorkItemDueFilter::Today => {
-            filter.due_from = Some(start);
-            filter.due_before = Some(tomorrow);
-        }
-        WorkItemDueFilter::Overdue => {
-            filter.due_before = Some(Instant::now());
-        }
-    }
+    let window = due
+        .window_at(Instant::now())
+        .map_err(|error| Error::Internal(error.to_string()))?;
+    filter.due_from = window.from;
+    filter.due_before = Some(window.before);
     Ok(())
 }
 
 fn business_day_bounds() -> Result<(Instant, Instant)> {
-    business_day_bounds_at(Utc::now().timestamp())
+    business_day_bounds_at(Instant::now().unix_secs())
 }
 
 fn business_day_bounds_at(now_unix_secs: i64) -> Result<(Instant, Instant)> {
-    let timezone = FixedOffset::east_opt(8 * 60 * 60)
-        .ok_or_else(|| Error::Internal("无法形成 Asia/Shanghai 时区".to_string()))?;
-    let now = timezone
-        .timestamp_opt(now_unix_secs, 0)
-        .single()
-        .ok_or_else(|| Error::Internal("无法读取统计时点".to_string()))?;
-    let start = timezone
-        .with_ymd_and_hms(now.year(), now.month(), now.day(), 0, 0, 0)
-        .single()
-        .ok_or_else(|| Error::Internal("无法形成业务日边界".to_string()))?;
-    Ok((
-        Instant::from_unix_secs(start.timestamp()),
-        Instant::from_unix_secs((start + chrono::Duration::days(1)).timestamp()),
-    ))
+    let window = WorkItemDueFilter::Today
+        .window_at(Instant::from_unix_secs(now_unix_secs))
+        .map_err(|error| Error::Internal(error.to_string()))?;
+    Ok((window.from.expect("今日窗口必须有下界"), window.before))
 }
 
 fn count_u64(value: usize) -> u64 {
@@ -4078,24 +3913,55 @@ fn family_counts_for_types(
 }
 
 fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &ActorAccess) -> String {
-    stable_digest(&format!(
-        "queue|{actor_id}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{}",
-        query.scope.as_str(),
-        query.work_item_types,
-        query.statuses,
-        query.due,
-        query.priorities,
-        query.query,
-        query.sort_by,
-        query.sort_ascending,
-        access.responsibility_scopes,
-        access.organization_ids,
-        access.can_manage,
-    ))
+    QueueContextIdentity::new(
+        "work-items",
+        [
+            QueueContextField::scalar("actor", actor_id),
+            QueueContextField::scalar("scope", query.scope.as_str()),
+            QueueContextField::set(
+                "types",
+                query
+                    .work_item_types
+                    .iter()
+                    .map(|value| value.as_str().to_string()),
+            ),
+            QueueContextField::set(
+                "statuses",
+                query.statuses.iter().map(|value| value.as_str().to_string()),
+            ),
+            QueueContextField::optional("due", query.due.map(WorkItemDueFilter::as_str)),
+            QueueContextField::set(
+                "priorities",
+                query.priorities.iter().map(|value| value.as_str().to_string()),
+            ),
+            QueueContextField::optional("query", query.query.as_deref()),
+            QueueContextField::scalar("sort", query.sort_by),
+            QueueContextField::scalar("ascending", query.sort_ascending.to_string()),
+            QueueContextField::set(
+                "responsibilities",
+                access.responsibility_scopes.iter().map(|(role, organization)| {
+                    QueueContextField::tuple([
+                        role.clone(),
+                        organization.clone().unwrap_or_else(|| "*".to_string()),
+                    ])
+                }),
+            ),
+            QueueContextField::set("organizations", access.organization_ids.clone()),
+            QueueContextField::scalar("can_manage", access.can_manage.to_string()),
+        ],
+    )
+    .into_string()
 }
 
 fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
-    stable_digest(&format!("queue-single|{actor_id}|{work_item_id}"))
+    QueueContextIdentity::new(
+        "work-item-single",
+        [
+            QueueContextField::scalar("actor", actor_id),
+            QueueContextField::scalar("work_item", work_item_id),
+        ],
+    )
+    .into_string()
 }
 
 fn ensure_queue_context(provided: &Option<String>, expected: &str) -> Result<()> {
@@ -4103,40 +3969,6 @@ fn ensure_queue_context(provided: &Option<String>, expected: &str) -> Result<()>
         return Ok(());
     }
     Err(Error::ConflictError("队列上下文已变化，请刷新队列".to_string()))
-}
-
-fn idempotency_audit_id(actor_id: &str, action: &str, item_id: &str, key: &str) -> String {
-    format!(
-        "{IDEMPOTENCY_AUDIT_PREFIX}{}",
-        stable_digest(&format!("{actor_id}|{action}|{item_id}|{key}"))
-    )
-}
-
-fn command_fingerprint(parts: &[&str]) -> String {
-    let mut digest = Sha256::new();
-    for part in parts {
-        digest.update((part.len() as u64).to_be_bytes());
-        digest.update(part.as_bytes());
-    }
-    hex::encode(digest.finalize())
-}
-
-fn command_audit_message(fingerprint: &str, reason: Option<&str>) -> String {
-    match reason {
-        Some(reason) => format!("{COMMAND_FINGERPRINT_PREFIX}{fingerprint}; reason={reason}"),
-        None => format!("{COMMAND_FINGERPRINT_PREFIX}{fingerprint}"),
-    }
-}
-
-fn audit_command_fingerprint(message: &str) -> Option<&str> {
-    message
-        .strip_prefix(COMMAND_FINGERPRINT_PREFIX)
-        .and_then(|value| value.split(';').next())
-        .filter(|value| value.len() == 64)
-}
-
-fn stable_digest(value: &str) -> String {
-    hex::encode(Sha256::digest(value.as_bytes()))
 }
 
 fn required_text(value: &str, message: &str) -> Result<String> {
@@ -4174,56 +4006,6 @@ fn is_w29_fields_closable(item: &dto::WorkItemFields) -> bool {
         &item.business_object_type,
         item.approval_node_execution_id.is_some(),
     )
-}
-
-fn w29_close_reason(
-    reason_code: &str,
-    comment: Option<&str>,
-    replacement_id: Option<&str>,
-) -> Result<String> {
-    let comment = comment.map(str::trim).filter(|value| !value.is_empty());
-    match reason_code.trim() {
-        "DUPLICATE" => {
-            let replacement_id = replacement_id
-                .ok_or_else(|| Error::ValidationError("DUPLICATE 必须提供替代任务".to_string()))?;
-            Ok(match comment {
-                Some(comment) => format!("DUPLICATE replacement={replacement_id}: {comment}"),
-                None => format!("DUPLICATE replacement={replacement_id}"),
-            })
-        }
-        "MISROUTED" => {
-            if replacement_id.is_some() {
-                return Err(Error::ValidationError("MISROUTED 不得提供替代任务".to_string()));
-            }
-            let comment =
-                comment.ok_or_else(|| Error::ValidationError("MISROUTED 必须填写原因说明".to_string()))?;
-            Ok(format!("MISROUTED: {comment}"))
-        }
-        _ => Err(Error::ValidationError(
-            "关闭原因只允许 DUPLICATE 或 MISROUTED".to_string(),
-        )),
-    }
-}
-
-fn w29_domain_evidence_reference(
-    work_item_id: &str,
-    reason_code: &str,
-    replacement_work_item_id: Option<&str>,
-    audit_id: &str,
-) -> Result<String> {
-    match reason_code {
-        "DUPLICATE" => {
-            let replacement_work_item_id = replacement_work_item_id
-                .ok_or_else(|| Error::ValidationError("DUPLICATE 必须提供替代任务".to_string()))?;
-            Ok(format!(
-                "work_item:{work_item_id};replacement_work_item:{replacement_work_item_id};audit_log:{audit_id}"
-            ))
-        }
-        "MISROUTED" => Ok(format!("work_item:{work_item_id};audit_log:{audit_id}")),
-        _ => Err(Error::ValidationError(
-            "关闭原因只允许 DUPLICATE 或 MISROUTED".to_string(),
-        )),
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -4287,13 +4069,12 @@ fn next_candidate_offset(current: u64, batch_len: usize) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allowed_actions, approval_assignment_separated, audit_command_fingerprint,
-        audited_fact_operator_actors, authorized_fields, authorized_item_fields, business_day_bounds_at,
-        command_audit_message, counts_as_processable_stat, detail_scope, expected_task_version,
-        family_counts_for_types, has_assignment_candidate_access, non_empty_assignment_actors,
-        object_access_shapes, object_policy, purchase_order_fulfillment_responsibility_id,
-        remove_approval_decision_actions, stable_digest, w29_close_reason, w29_domain_evidence_reference,
-        ActorAccess, AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
+        allowed_actions, approval_assignment_separated, audited_fact_operator_actors, authorized_fields,
+        authorized_item_fields, business_day_bounds_at, counts_as_processable_stat, detail_scope,
+        expected_task_version, family_counts_for_types, has_assignment_candidate_access,
+        non_empty_assignment_actors, object_access_shapes, object_policy,
+        purchase_order_fulfillment_responsibility_id, remove_approval_decision_actions, ActorAccess,
+        AssignmentSeparationPolicy, AuthorizedPage, AuthorizedPageCollector, Error, ObjectFact,
         ObjectFactMap, ObjectKind, ViewAccess, AUTHORIZED_SCAN_BATCH_SIZE,
     };
     use super::{ProcessingBlockerView, WorkItemAllowedAction, WorkItemScope};
@@ -4538,27 +4319,6 @@ mod tests {
     }
 
     #[test]
-    fn idempotency_digest_never_contains_raw_key() {
-        let digest = stable_digest("actor|action|item|secret-request-key");
-        assert_eq!(digest.len(), 64);
-        assert!(!digest.contains("secret-request-key"));
-    }
-
-    #[test]
-    fn close_reason_enforces_w29_evidence() {
-        assert_eq!(
-            w29_close_reason("DUPLICATE", Some("已有有效替代"), Some("wi-2")).unwrap(),
-            "DUPLICATE replacement=wi-2: 已有有效替代"
-        );
-        assert!(w29_close_reason("DUPLICATE", None, None).is_err());
-        assert!(w29_close_reason("MISROUTED", None, None).is_err());
-        assert_eq!(
-            w29_close_reason("MISROUTED", Some("对象类型登记错误"), None).unwrap(),
-            "MISROUTED: 对象类型登记错误"
-        );
-    }
-
-    #[test]
     fn w29_close_registry_excludes_other_business_exception_workspaces() {
         assert!(WorkItemType::IntegrationResultUnknown.is_w29_closable("integration_error_task", false,));
         assert!(WorkItemType::BusinessException.is_w29_closable("reconciliation_difference", false,));
@@ -4787,7 +4547,7 @@ mod tests {
         );
         assert_eq!(
             purchase_order_fulfillment_responsibility_id(&procurement).unwrap(),
-            Some("po-1")
+            Some("po-1".to_string())
         );
 
         let warehouse = fulfillment_item(
@@ -4824,29 +4584,6 @@ mod tests {
             "SUPPLIER_DIRECT_DELIVERY_READY",
         );
         assert!(purchase_order_fulfillment_responsibility_id(&mismatched_object).is_err());
-    }
-
-    #[test]
-    fn w29_domain_evidence_uses_only_fixed_relations() {
-        assert_eq!(
-            w29_domain_evidence_reference("wi-1", "DUPLICATE", Some("wi-2"), "audit-1").unwrap(),
-            "work_item:wi-1;replacement_work_item:wi-2;audit_log:audit-1"
-        );
-        assert_eq!(
-            w29_domain_evidence_reference("wi-1", "MISROUTED", None, "audit-2").unwrap(),
-            "work_item:wi-1;audit_log:audit-2"
-        );
-        assert!(w29_domain_evidence_reference("wi-1", "DUPLICATE", None, "audit-3").is_err());
-    }
-
-    #[test]
-    fn audit_message_keeps_only_request_fingerprint_and_safe_reason() {
-        let fingerprint = super::command_fingerprint(&["3", "user-1"]);
-        let message = command_audit_message(&fingerprint, Some("主管转交"));
-
-        assert_eq!(audit_command_fingerprint(&message), Some(fingerprint.as_str()));
-        assert!(message.contains("主管转交"));
-        assert!(!message.contains("raw-idempotency-key"));
     }
 
     #[test]

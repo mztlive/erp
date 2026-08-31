@@ -1587,6 +1587,7 @@ dependencies = [
  "chrono",
  "entity-core",
  "entity-macros",
+ "hex",
  "hmac 0.13.0",
  "md5",
  "mongodb",

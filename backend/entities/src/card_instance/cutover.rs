@@ -29,6 +29,17 @@ pub enum CutoverStatus {
     Enabled,
 }
 
+/// 启用切换的幂等领域结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CutoverEnableResult {
+    /// 准备态按期望版本写入了唯一启用时间。
+    Applied,
+    /// 实体已经以相同启用时间成功启用，本次不修改任何字段。
+    AlreadySame,
+    /// 版本过期，或实体已按其他启用时间完成切换。
+    Conflict,
+}
+
 impl CutoverStatus {
     /// 返回状态的中文展示名。
     ///
@@ -162,6 +173,43 @@ impl MallConsumptionCutover {
         Ok(())
     }
 
+    /// 按乐观锁版本幂等启用切换。
+    ///
+    /// 已启用实体先比较启用时间：相同 `T` 返回 [`CutoverEnableResult::AlreadySame`]，
+    /// 不比较旧版本且不修改版本、时间或原负责人；不同 `T` 返回冲突。准备态只有
+    /// 在版本匹配时才应用状态迁移。
+    ///
+    /// # 参数
+    /// * `expected_version` - 调用方读取到的期望版本
+    /// * `enabled_at` - 本次登记的启用时间 `T`
+    /// * `enabled_by` - 本次首次启用负责人
+    ///
+    /// # 返回
+    /// 返回已应用、相同结果回放或冲突。
+    ///
+    /// # 错误
+    /// 当状态机拒绝准备态到已启用迁移时返回错误。
+    pub fn enable_idempotently(
+        &mut self,
+        expected_version: u64,
+        enabled_at: Instant,
+        enabled_by: impl Into<String>,
+    ) -> Result<CutoverEnableResult> {
+        if self.status.is_enabled() {
+            return Ok(if self.enabled_at == Some(enabled_at) {
+                CutoverEnableResult::AlreadySame
+            } else {
+                CutoverEnableResult::Conflict
+            });
+        }
+        if self.base.version != expected_version {
+            return Ok(CutoverEnableResult::Conflict);
+        }
+
+        self.enable(enabled_at, enabled_by)?;
+        Ok(CutoverEnableResult::Applied)
+    }
+
     /// 更新上线核对文档引用。
     ///
     /// # 参数
@@ -187,7 +235,7 @@ impl MallConsumptionCutover {
 
 #[cfg(test)]
 mod tests {
-    use super::{CutoverStatus, MallConsumptionCutover, MallConsumptionCutoverData};
+    use super::{CutoverEnableResult, CutoverStatus, MallConsumptionCutover, MallConsumptionCutoverData};
     use crate::common::state::{ensure_transition, DocumentState};
     use crate::common::time::Instant;
     use crate::ids::MallConsumptionCutoverId;
@@ -281,5 +329,49 @@ mod tests {
             .set_checklist_reference(Some("doc-c".to_string()))
             .is_err());
         assert!(cutover.set_checklist_reference(None).is_err());
+    }
+
+    #[test]
+    fn enable_idempotently_replays_same_t_without_mutation() {
+        let mut cutover =
+            MallConsumptionCutover::new(MallConsumptionCutoverId::new("cutover-6"), data()).unwrap();
+        let enabled_at = Instant::from_unix_secs(1_700_000_000);
+
+        assert_eq!(
+            cutover.enable_idempotently(1, enabled_at, "owner-1").unwrap(),
+            CutoverEnableResult::Applied
+        );
+        let applied = cutover.clone();
+        assert_eq!(
+            cutover.enable_idempotently(0, enabled_at, "owner-2").unwrap(),
+            CutoverEnableResult::AlreadySame
+        );
+        assert_eq!(cutover, applied);
+    }
+
+    #[test]
+    fn enable_idempotently_rejects_stale_version_and_different_t() {
+        let mut cutover =
+            MallConsumptionCutover::new(MallConsumptionCutoverId::new("cutover-7"), data()).unwrap();
+        let before = cutover.clone();
+        assert_eq!(
+            cutover
+                .enable_idempotently(2, Instant::from_unix_secs(1_700_000_000), "owner-1")
+                .unwrap(),
+            CutoverEnableResult::Conflict
+        );
+        assert_eq!(cutover, before);
+
+        cutover
+            .enable_idempotently(1, Instant::from_unix_secs(1_700_000_000), "owner-1")
+            .unwrap();
+        let enabled = cutover.clone();
+        assert_eq!(
+            cutover
+                .enable_idempotently(1, Instant::from_unix_secs(1_700_000_001), "owner-1")
+                .unwrap(),
+            CutoverEnableResult::Conflict
+        );
+        assert_eq!(cutover, enabled);
     }
 }

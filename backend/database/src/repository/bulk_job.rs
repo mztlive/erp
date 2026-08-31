@@ -24,6 +24,17 @@ use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, Q
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
 
+/// 唯一请求身份仲裁后的后台任务登记结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackgroundJobRegistration {
+    /// 本次原子写入任务、逐项行和审计。
+    Created,
+    /// 既有任务携带相同 v1 请求指纹。
+    ReplaySame(BackgroundJob),
+    /// 既有任务指纹不同，或为无指纹历史行。
+    ConflictDifferentPayload(BackgroundJob),
+}
+
 /// `bulk_selection_snapshot` 集合名（单一来源：`BulkJobExt` 关联常量）。
 const BULK_SELECTION_SNAPSHOTS: &str = <mongodb::Database as BulkJobExt>::BULK_SELECTION_SNAPSHOTS;
 /// `bulk_selection_item` 集合名（单一来源：`BulkJobExt` 关联常量）。
@@ -50,6 +61,8 @@ pub struct BulkSelectionSnapshotRow {
     pub expires_at: u64,
     /// 快照状态。
     pub status: SelectionStatus,
+    /// 乐观锁版本。
+    pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -215,12 +228,22 @@ pub struct BackgroundJobRow {
     pub job_no: String,
     /// 任务类型。
     pub job_type: JobType,
+    /// 关联强类型领域任务类型代码。
+    pub domain_job_type: Option<String>,
+    /// 关联强类型领域任务 ID。
+    pub domain_job_id: Option<String>,
+    /// 批量或导出使用的不可变选择快照。
+    pub selection_snapshot_id: Option<String>,
     /// 任务状态。
     pub status: JobStatus,
     /// 发起人。
     pub requested_by: String,
     /// 请求幂等身份。
     pub request_id: String,
+    /// 合规输入包文件资产。
+    pub input_file_asset_id: Option<String>,
+    /// 结果文件资产。
+    pub result_file_asset_id: Option<String>,
     /// 目标总数。
     pub total_count: u64,
     /// 已处理数。
@@ -231,8 +254,18 @@ pub struct BackgroundJobRow {
     pub skipped_count: u64,
     /// 失败数。
     pub failed_count: u64,
+    /// 开始执行时间（秒级时间戳）。
+    pub started_at: Option<u64>,
+    /// 结束时间（秒级时间戳）。
+    pub finished_at: Option<u64>,
+    /// 最近进度时间（秒级时间戳）。
+    pub last_progress_at: Option<u64>,
     /// 结果下载到期时间（秒级时间戳）。
     pub result_expires_at: Option<u64>,
+    /// 脱敏任务级错误摘要。
+    pub error_summary: Option<String>,
+    /// 乐观锁版本。
+    pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
 }
@@ -449,6 +482,35 @@ pub struct BulkJobRepository<'a> {
 }
 
 impl<'a> BulkJobRepository<'a> {
+    /// 在唯一键竞争事务结束后按请求 ID 复核登记结果。
+    ///
+    /// 无指纹历史行采取失败关闭兼容策略：不猜测旧载荷，返回异载荷冲突，调用方
+    /// 必须使用新的 request_id 重新提交。
+    pub async fn registration_by_request_id(
+        &self,
+        requested: &BackgroundJob,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BackgroundJobRegistration>> {
+        let existing = mongo_ops::find_one(
+            &self.db.collection::<BackgroundJob>(BACKGROUND_JOBS),
+            doc! {
+                "request_id": &requested.request_id,
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            executor,
+        )
+        .await?;
+        Ok(existing.map(|existing| {
+            if existing.request_fingerprint.is_some()
+                && existing.request_fingerprint == requested.request_fingerprint
+            {
+                BackgroundJobRegistration::ReplaySame(existing)
+            } else {
+                BackgroundJobRegistration::ConflictDifferentPayload(existing)
+            }
+        }))
+    }
+
     /// 创建域专用仓储。
     ///
     /// # 参数
@@ -520,7 +582,7 @@ impl<'a> BulkJobRepository<'a> {
         job: &BackgroundJob,
         items: Vec<BackgroundJobItem>,
         executor: &mut dyn Executor,
-    ) -> Result<()> {
+    ) -> Result<BackgroundJobRegistration> {
         mongo_ops::insert_one(
             &self.db.collection::<BackgroundJob>(BACKGROUND_JOBS),
             job,
@@ -533,7 +595,7 @@ impl<'a> BulkJobRepository<'a> {
             executor,
         )
         .await?;
-        Ok(())
+        Ok(BackgroundJobRegistration::Created)
     }
 }
 
@@ -553,7 +615,7 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
         Some("updated_at") => "updated_at",
         _ => "created_at",
     };
-    doc! { field: direction }
+    doc! { field: direction, "id": direction }
 }
 
 /// 选择快照列表投影字段。
@@ -569,6 +631,7 @@ fn snapshot_projection() -> Document {
         "created_by": 1,
         "expires_at": 1,
         "status": 1,
+        "version": 1,
         "created_at": 1,
     }
 }
@@ -599,15 +662,25 @@ fn background_job_projection() -> Document {
         "id": 1,
         "job_no": 1,
         "job_type": 1,
+        "domain_job_type": 1,
+        "domain_job_id": 1,
+        "selection_snapshot_id": 1,
         "status": 1,
         "requested_by": 1,
         "request_id": 1,
+        "input_file_asset_id": 1,
+        "result_file_asset_id": 1,
         "total_count": 1,
         "processed_count": 1,
         "success_count": 1,
         "skipped_count": 1,
         "failed_count": 1,
+        "started_at": 1,
+        "finished_at": 1,
+        "last_progress_at": 1,
         "result_expires_at": 1,
+        "error_summary": 1,
+        "version": 1,
         "created_at": 1,
     }
 }
@@ -678,11 +751,14 @@ mod tests {
 
     #[test]
     fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
-        assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
-        assert_eq!(sort_doc(Some("updated_at"), true), doc! { "updated_at": 1 });
+        assert_eq!(sort_doc(None, false), doc! { "created_at": -1, "id": -1 });
+        assert_eq!(
+            sort_doc(Some("updated_at"), true),
+            doc! { "updated_at": 1, "id": 1 }
+        );
         assert_eq!(
             sort_doc(Some("job_no"), false),
-            doc! { "created_at": -1 },
+            doc! { "created_at": -1, "id": -1 },
             "白名单外字段回落默认排序"
         );
     }

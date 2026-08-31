@@ -13,10 +13,7 @@ use entities::common::time::BusinessDate;
 use entities::ids::{PartyId, PayableAccountId, ReceivableAccountId, SalesOrderRevisionLineId};
 use entities::party::Party;
 use entities::payable::{PayableAccount, PayableEntry, PaymentAllocation, SupplierPayment};
-use entities::receivable::{
-    CustomerReceipt, EntryDirection as ReceivableEntryDirection, PendingReceiptAllocation, ReceivableAccount,
-    ReceivableEntry,
-};
+use entities::receivable::{CustomerReceipt, PendingReceiptAllocation, ReceivableAccount, ReceivableEntry};
 use entities::sales_order::{SalesOrderRevisionLine, SalesOrderVoucherLineRevision};
 
 use super::brief::{
@@ -876,21 +873,11 @@ impl WorkItemService {
             .iter()
             .map(|account| PayableAccountId::new(account.base.id.clone()))
             .collect::<Vec<_>>();
-        let mut due_dates = HashMap::new();
-        for entry in self
-            .db
+        self.db
             .payable_entries()
-            .find_entries_by_accounts(&ids, executor)
-            .await?
-        {
-            due_dates
-                .entry(entry.payable_account_id.to_string())
-                .and_modify(|due: &mut entities::common::time::BusinessDate| {
-                    *due = (*due).min(entry.due_date)
-                })
-                .or_insert(entry.due_date);
-        }
-        Ok(due_dates)
+            .minimum_due_dates_by_accounts(&ids, executor)
+            .await
+            .map_err(Into::into)
     }
 
     /// 按主体 ID 批量读取当前修订法定名称。
@@ -1237,12 +1224,11 @@ impl WorkItemService {
             .iter()
             .map(|account| ReceivableAccountId::new(account.base.id.clone()))
             .collect::<Vec<_>>();
-        let entries = self
-            .db
+        self.db
             .receivable_entries()
-            .find_entries_by_accounts(&account_ids, executor)
-            .await?;
-        Ok(receivable_due_dates(&entries))
+            .minimum_increase_due_dates_by_accounts(&account_ids, executor)
+            .await
+            .map_err(Into::into)
     }
 
     /// 把回款待过账核销转成按回款单分组的简报行。
@@ -1817,30 +1803,6 @@ fn invoice_tax_profile_label(tax_no: Option<&str>) -> String {
     }
 }
 
-/// 按应收子账汇总正向分录的最早到期日。
-///
-/// # 参数
-/// * `entries` - 本批应收分录
-///
-/// # 返回
-/// 返回子账 ID 到最早正向应收到期日；冲减分录不参与计算。
-///
-/// # 错误
-/// 无。
-fn receivable_due_dates(entries: &[ReceivableEntry]) -> HashMap<String, BusinessDate> {
-    let mut due_dates = HashMap::new();
-    for entry in entries
-        .iter()
-        .filter(|entry| entry.direction == ReceivableEntryDirection::Increase)
-    {
-        due_dates
-            .entry(entry.receivable_account_id.to_string())
-            .and_modify(|due: &mut BusinessDate| *due = (*due).min(entry.due_date))
-            .or_insert(entry.due_date);
-    }
-    due_dates
-}
-
 /// 把待过账核销转成简报行。
 ///
 /// # 参数
@@ -2014,44 +1976,13 @@ fn amount_reason_brief(
 
 #[cfg(test)]
 mod tests {
-    use entities::common::time::{BusinessDate, Instant};
-    use entities::ids::{ReceivableAccountId, ReceivableEntryId};
     use entities::money::Amount;
-    use entities::receivable::{EntryDirection, ReceivableEntryData, ReceivableEntryType};
 
     use super::*;
     use crate::work_item::brief::BriefLine;
 
     fn amount(value: &str) -> Amount {
         value.parse().expect("测试金额必须合法")
-    }
-
-    fn receivable_entry(
-        id: &str,
-        account_id: &str,
-        direction: EntryDirection,
-        due_date: BusinessDate,
-    ) -> ReceivableEntry {
-        let entry_type = match direction {
-            EntryDirection::Increase => ReceivableEntryType::Original,
-            EntryDirection::Decrease => ReceivableEntryType::Refund,
-        };
-        ReceivableEntry::new(
-            ReceivableEntryId::new(id),
-            ReceivableEntryData {
-                receivable_account_id: ReceivableAccountId::new(account_id),
-                entry_type,
-                direction,
-                amount: amount("100"),
-                due_date,
-                source_fact_type: "sales_order".to_string(),
-                source_document_id: "SO-1".to_string(),
-                source_revision_id: "SOR-1".to_string(),
-                source_sequence: 1,
-                posted_at: Instant::from_unix_secs(1),
-            },
-        )
-        .expect("测试分录必须合法")
     }
 
     #[test]
@@ -2131,21 +2062,5 @@ mod tests {
             invoice_tax_profile_label(None),
             "未找到当前有效税务资料；登记开票前必须补齐"
         );
-    }
-
-    #[test]
-    fn receivable_due_dates_uses_earliest_increase_and_ignores_decrease() {
-        let later = BusinessDate::from_ymd(2026, 9, 20).expect("测试日期必须合法");
-        let earlier = BusinessDate::from_ymd(2026, 9, 10).expect("测试日期必须合法");
-        let decrease = BusinessDate::from_ymd(2026, 8, 1).expect("测试日期必须合法");
-        let entries = vec![
-            receivable_entry("RE-1", "RA-1", EntryDirection::Increase, later),
-            receivable_entry("RE-2", "RA-1", EntryDirection::Increase, earlier),
-            receivable_entry("RE-3", "RA-1", EntryDirection::Decrease, decrease),
-        ];
-
-        let result = receivable_due_dates(&entries);
-
-        assert_eq!(result.get("RA-1"), Some(&earlier));
     }
 }

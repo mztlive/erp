@@ -1,11 +1,95 @@
 use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
 use crate::errors::Result;
-use crate::Executor;
-use entities::AuditLog;
+use crate::{mongo_ops, Executor};
+use entities::{AuditLog, CommandReceiptFact};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
+use mongodb::options::FindOptions;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct CommandReceiptRow {
+    id: String,
+    actor_id: String,
+    action: String,
+    resource_type: String,
+    resource_id: Option<String>,
+    success: bool,
+    message: Option<String>,
+}
+
+impl From<CommandReceiptRow> for CommandReceiptFact {
+    fn from(row: CommandReceiptRow) -> Self {
+        Self {
+            id: row.id,
+            actor_id: row.actor_id,
+            action: row.action,
+            resource_type: row.resource_type,
+            resource_id: row.resource_id,
+            success: row.success,
+            message: row.message,
+        }
+    }
+}
 
 impl<'a> Repository<'a, AuditLog> {
+    /// 按当前及历史候选 ID 批量读取命令收据最小事实。
+    ///
+    /// 空集合不访问数据库；返回顺序不表达收据优先级，调用方必须
+    /// 按候选 ID 顺序选择当前格式或历史格式。
+    pub async fn find_command_receipts_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<CommandReceiptFact>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut ids = ids.to_vec();
+        ids.sort();
+        ids.dedup();
+        let collection = self.collection().clone_with_type::<CommandReceiptRow>();
+        let rows = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "id": { "$in": ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! {
+                    "id": 1,
+                    "actor_id": 1,
+                    "action": 1,
+                    "resource_type": 1,
+                    "resource_id": 1,
+                    "success": 1,
+                    "message": 1,
+                })
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    /// 在调用方执行器内有序批量创建审计日志。
+    ///
+    /// 空集合直接返回且不访问数据库；完整原子性由调用方事务负责。
+    ///
+    /// # 参数
+    /// * `logs` - 按对应业务事实顺序排列的审计日志
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 错误
+    /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。
+    pub async fn create_many_ordered(&self, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()> {
+        if logs.is_empty() {
+            return Ok(());
+        }
+        crate::mongo_ops::insert_many(&self.collection(), logs.to_vec(), executor).await?;
+        Ok(())
+    }
+
     /// 按条件检索审计日志列表。
     ///
     /// # 参数

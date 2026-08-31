@@ -14,6 +14,7 @@
 //! 手机号及其可逆映射。本域全部实体只承载 `opaque_instance_ref`（不可反推卡号、卡密的
 //! 稳定引用），实体结构不出现任何卡号/卡密/手机号字段，并由内联测试做静态断言。
 pub mod balance_snapshot;
+pub mod baseline;
 pub mod cutover;
 pub mod mall_card_instance;
 
@@ -21,5 +22,6 @@ pub use crate::ids::{
     MallBalanceSnapshotId, MallCardInstanceCorrectionId, MallCardInstanceId, MallConsumptionCutoverId,
 };
 pub use balance_snapshot::*;
+pub use baseline::*;
 pub use cutover::*;
 pub use mall_card_instance::*;

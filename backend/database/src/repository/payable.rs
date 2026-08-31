@@ -12,7 +12,9 @@
 //! 筛选/行类型定义在本文件，经 `PayableExt` 的关联类型对外暴露
 //! （`extensions/mod.rs` 已冻结，无法在 `repository/mod.rs` 增加 re-export）。
 
-use entities::common::stable::StableBase;
+use std::collections::HashMap;
+
+use entities::common::{stable::StableBase, time::BusinessDate};
 use entities::ids::{PayableAccountId, PayableEntryId, SupplierAccountId};
 use entities::money::Amount;
 use entities::payable::{
@@ -20,6 +22,7 @@ use entities::payable::{
     PaymentAllocation, PurchaseInvoiceAllocation, SupplierPayment, SupplierPaymentStatus,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
@@ -33,6 +36,16 @@ use crate::{mongo_ops, Result};
 
 /// `payable_entry` 集合名（单一来源：`PayableExt` 关联常量）。
 const PAYABLE_ENTRIES: &str = <mongodb::Database as PayableExt>::PAYABLE_ENTRIES;
+
+/// 应付账户最早到期日聚合行。
+#[derive(Debug, Deserialize)]
+struct AccountDueDateRow {
+    /// 应付账户 ID。
+    #[serde(rename = "_id")]
+    account_id: String,
+    /// 最早到期日。
+    due_date: BusinessDate,
+}
 
 /// 应付往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -469,6 +482,53 @@ impl<'a> Repository<'a, PayableAccount> {
 }
 
 impl<'a> Repository<'a, PayableEntry> {
+    /// 按应付账户聚合最早分录到期日。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应付账户 ID；空集合不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 每个存在分录的账户至多返回一个最早到期日；无分录账户不上表。
+    ///
+    /// # 错误
+    /// MongoDB 聚合或反序列化失败时返回错误。
+    pub async fn minimum_due_dates_by_accounts(
+        &self,
+        account_ids: &[PayableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, BusinessDate>> {
+        if account_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let pipeline = minimum_due_dates_pipeline("payable_account_id", ids, None);
+        let rows = match executor.session() {
+            Some(session) => {
+                self.collection()
+                    .aggregate(pipeline)
+                    .with_type::<AccountDueDateRow>()
+                    .session(&mut *session)
+                    .await?
+                    .stream(session)
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+            None => {
+                self.collection()
+                    .aggregate(pipeline)
+                    .with_type::<AccountDueDateRow>()
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+        };
+        Ok(rows
+            .into_iter()
+            .map(|row| (row.account_id, row.due_date))
+            .collect())
+    }
+
     /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
     ///
     /// 用于账龄汇总与付款核销锁定；只返回未删除分录（事实类恒未删除）。
@@ -541,6 +601,31 @@ impl<'a> Repository<'a, PayableEntry> {
         )
         .await
     }
+}
+
+/// 构造按账户求最早到期日的聚合管道。
+fn minimum_due_dates_pipeline(
+    account_field: &str,
+    account_ids: Vec<String>,
+    direction: Option<&str>,
+) -> Vec<Document> {
+    let mut matched = doc! {
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        account_field: { "$in": account_ids },
+    };
+    if let Some(direction) = direction {
+        matched.insert("direction", direction);
+    }
+    vec![
+        doc! { "$match": matched },
+        doc! {
+            "$group": {
+                "_id": format!("${account_field}"),
+                "due_date": { "$min": "$due_date" },
+            }
+        },
+        doc! { "$sort": { "_id": 1 } },
+    ]
 }
 
 impl<'a> Repository<'a, PayableEntryOffset> {
@@ -961,13 +1046,32 @@ fn supplier_payment_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        amount_bson, progress_pipeline, sort_doc, PayableAccountFilter, QueryFilter, SupplierPaymentFilter,
+        amount_bson, minimum_due_dates_pipeline, progress_pipeline, sort_doc, PayableAccountFilter,
+        QueryFilter, SupplierPaymentFilter,
     };
     use entities::ids::SupplierAccountId;
     use entities::money::Amount;
     use entities::payable::{PayableAccountStatus, PayableSourceType};
     use mongodb::bson::{doc, Bson};
     use std::str::FromStr;
+
+    #[test]
+    fn minimum_due_date_pipeline_groups_one_row_per_account() {
+        let pipeline = minimum_due_dates_pipeline(
+            "payable_account_id",
+            vec!["pa-1".to_string(), "pa-2".to_string()],
+            None,
+        );
+        let matched = pipeline[0].get_document("$match").unwrap();
+        assert_eq!(matched.get_i64("deleted_at").unwrap(), 0);
+        assert!(matched.get_document("payable_account_id").is_ok());
+        let group = pipeline[1].get_document("$group").unwrap();
+        assert_eq!(group.get_str("_id").unwrap(), "$payable_account_id");
+        assert_eq!(
+            group.get_document("due_date").unwrap(),
+            &doc! { "$min": "$due_date" }
+        );
+    }
 
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {

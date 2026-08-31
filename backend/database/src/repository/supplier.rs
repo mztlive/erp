@@ -80,6 +80,15 @@ pub struct SupplierAccountRow {
     pub created_at: u64,
 }
 
+/// 供应商编号窄投影行。
+#[derive(Debug, Clone, Deserialize)]
+struct SupplierNumberRow {
+    /// 供应商稳定 ID。
+    id: String,
+    /// 供应商编号。
+    supplier_no: String,
+}
+
 /// 供应商账号到企业主体的最小关联行。
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct SupplierPartyRefRow {
@@ -221,6 +230,42 @@ impl Pagination for SupplierAccountFilter {
 }
 
 impl<'a> Repository<'a, SupplierAccount> {
+    /// 批量读取未删除供应商的稳定 ID 与供应商编号。
+    ///
+    /// # 参数
+    /// * `supplier_ids` - 供应商 ID 集合；空集合不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回实际存在的供应商编号映射；停用但未删除供应商仍保留编号，软删除或缺失不补行。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn supplier_numbers_by_ids(
+        &self,
+        supplier_ids: &[SupplierAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        if supplier_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let ids = supplier_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let collection = self.collection().clone_with_type::<SupplierNumberRow>();
+        let rows = mongo_ops::find_many(
+            &collection,
+            doc! {
+                "id": { "$in": ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "supplier_no": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| (row.id, row.supplier_no)).collect())
+    }
+
     /// 按供应商角色 ID 集合批量读取活跃账户。
     ///
     /// # 参数

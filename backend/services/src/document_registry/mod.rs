@@ -11,7 +11,8 @@
 //! 已登记（读取对方仓储，不经过对方 Service）。
 
 use database::{
-    AccessControlExt, DocumentRegistryExt, Executor, NoTransaction, SourceRegistryExt, Transactional,
+    AccessControlExt, ApprovalBindingLookup, DocumentRegistryExt, Executor, NoTransaction, SourceRegistryExt,
+    Transactional,
 };
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{
@@ -105,10 +106,15 @@ pub async fn find_approval_binding(
     document_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Option<ApprovalDefinitionBinding>> {
-    let document = find_registered_document(db, document_id, executor)
+    match db
+        .business_documents()
+        .approval_binding_lookup(document_id, executor)
         .await?
-        .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
-    Ok(document.approval_binding)
+    {
+        ApprovalBindingLookup::DocumentMissing => Err(Error::NotFound("业务单据未注册".to_string())),
+        ApprovalBindingLookup::Unbound => Ok(None),
+        ApprovalBindingLookup::Bound(binding) => Ok(Some(binding)),
+    }
 }
 
 /// 单据注册列表筛选条件类型（经 `DocumentRegistryExt` 关联类型跨 crate 可达）。
@@ -315,7 +321,6 @@ impl DocumentRegistryService {
         actor: &AuditActor,
     ) -> Result<WorkflowActionView> {
         req.validate()?;
-        self.ensure_document_registered(&req.document_id).await?;
         let action = WorkflowAction::new(
             WorkflowActionId::new(next_id()),
             req.into_data(actor.kind().as_str(), actor.id()),
@@ -328,6 +333,13 @@ impl DocumentRegistryService {
         let action_for_tx = action.clone();
         self.write_with_audit(move |tx_db, session| {
             Box::pin(async move {
+                if !tx_db
+                    .business_documents()
+                    .exists_by_id(&action_for_tx.document_id, session)
+                    .await?
+                {
+                    return Err(Error::NotFound("业务单据未注册".to_string()));
+                }
                 tx_db.workflow_actions().create(&action_for_tx, session).await?;
                 tx_db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
@@ -407,18 +419,11 @@ impl DocumentRegistryService {
         &self,
         document_id: &BusinessDocumentId,
     ) -> Result<Vec<DocumentRelationView>> {
-        let mut relations = self
+        let relations = self
             .db
             .document_relations()
-            .list_by_from_document(document_id, &mut NoTransaction)
+            .list_for_document(document_id, &mut NoTransaction)
             .await?;
-        relations.extend(
-            self.db
-                .document_relations()
-                .list_by_to_document(document_id, &mut NoTransaction)
-                .await?,
-        );
-        relations.sort_by_key(|relation| relation.base.created_at);
         Ok(relations.into_iter().map(Into::into).collect())
     }
 
@@ -442,8 +447,6 @@ impl DocumentRegistryService {
         actor: &AuditActor,
     ) -> Result<DocumentRelationView> {
         req.validate()?;
-        self.ensure_document_registered(&req.from_document_id).await?;
-        self.ensure_document_registered(&req.to_document_id).await?;
         let relation = DocumentRelation::new(DocumentRelationId::new(next_id()), req.into_data())?;
         let audit = actor.clone().resource_log(
             "document_relation.create",
@@ -453,6 +456,19 @@ impl DocumentRegistryService {
         let relation_for_tx = relation.clone();
         self.write_with_audit(move |tx_db, session| {
             Box::pin(async move {
+                let document_ids = [
+                    relation_for_tx.from_document_id.clone(),
+                    relation_for_tx.to_document_id.clone(),
+                ];
+                if tx_db
+                    .business_documents()
+                    .existing_ids(&document_ids, session)
+                    .await?
+                    .len()
+                    != 2
+                {
+                    return Err(Error::NotFound("业务单据未注册".to_string()));
+                }
                 tx_db
                     .document_relations()
                     .create(&relation_for_tx, session)
@@ -510,7 +526,6 @@ impl DocumentRegistryService {
         actor: &AuditActor,
     ) -> Result<DocumentParticipantView> {
         req.validate()?;
-        self.ensure_document_registered(&req.document_id).await?;
         let participant = DocumentParticipant::new(
             entities::ids::DocumentParticipantId::new(next_id()),
             req.into_data(actor.id()),
@@ -523,6 +538,13 @@ impl DocumentRegistryService {
         let participant_for_tx = participant.clone();
         self.write_with_audit(move |tx_db, session| {
             Box::pin(async move {
+                if !tx_db
+                    .business_documents()
+                    .exists_by_id(&participant_for_tx.document_id, session)
+                    .await?
+                {
+                    return Err(Error::NotFound("业务单据未注册".to_string()));
+                }
                 tx_db
                     .document_participants()
                     .create(&participant_for_tx, session)
@@ -534,25 +556,6 @@ impl DocumentRegistryService {
         .await?;
 
         Ok(participant.into())
-    }
-
-    /// 校验业务单据已注册。
-    ///
-    /// # 参数
-    /// * `document_id` - 业务单据 ID
-    ///
-    /// # 返回
-    /// 无返回值。
-    ///
-    /// # 错误
-    /// 单据未注册时返回 `NotFound`。
-    async fn ensure_document_registered(&self, document_id: &BusinessDocumentId) -> Result<()> {
-        self.db
-            .business_documents()
-            .find_by_id(document_id, &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))?;
-        Ok(())
     }
 
     /// 在单个事务中执行业务写入并追加审计日志（TRANSACTIONS.md「基本用法」）。

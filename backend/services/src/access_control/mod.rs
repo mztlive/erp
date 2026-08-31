@@ -101,10 +101,10 @@ impl AccessControlService {
                 resource: row.resource,
                 action: row.action,
                 name: row.name,
-                description: None,
+                description: row.description,
                 system: row.system,
                 disabled: row.disabled,
-                version: 0,
+                version: row.version,
                 created_at: row.created_at,
             })
             .collect();
@@ -276,28 +276,9 @@ impl AccessControlService {
     pub async fn data_scope_list(&self, params: &DataScopeListParams) -> Result<PageView<DataScopeView>> {
         params.validate()?;
         let query = params.normalized()?;
-        if let Some(subject_id) = &query.subject_id {
-            let subject_type = query
-                .subject_type
-                .ok_or_else(|| Error::ValidationError("按主体查询时必须提供范围主体类型".to_string()))?;
-            let items: Vec<DataScopeView> = self
-                .db
-                .data_scopes()
-                .list_by_subject(subject_type, subject_id, &mut NoTransaction)
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect();
-            let total = items.len() as i64;
-            return Ok(PageView {
-                items,
-                total,
-                page: query.paging.page,
-                page_size: query.paging.page_size,
-            });
-        }
         let filter = DataScopeFilter {
             subject_type: query.subject_type,
+            subject_id: query.subject_id,
             scope_type: query.scope_type,
             page: query.paging.page,
             page_size: query.paging.page_size,
@@ -318,7 +299,7 @@ impl AccessControlService {
                 subject_id: row.subject_id,
                 scope_type: row.scope_type,
                 scope_targets: row.scope_targets,
-                version: 0,
+                version: row.version,
                 created_at: row.created_at,
             })
             .collect();

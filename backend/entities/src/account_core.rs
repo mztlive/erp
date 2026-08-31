@@ -231,6 +231,35 @@ impl AccountCore {
         self.status.is_active()
     }
 
+    /// 返回仅供后台认证边界使用的当前凭证。
+    ///
+    /// # 参数
+    /// * `expected_kind` - 本次认证入口要求的账号类型
+    ///
+    /// # 返回值
+    /// 账号类型匹配且状态允许登录时返回凭证借用，否则返回 `None`。
+    ///
+    /// # 安全约束
+    /// 本方法不验证密码、不选择哈希算法，也不改变错误文案；认证 Service 必须
+    /// 继续负责等成本校验和对外失败脱敏。
+    pub fn authentication_secret_for(&self, expected_kind: AccountKind) -> Option<&Secret> {
+        (self.kind == expected_kind && self.can_login()).then_some(&self.secret)
+    }
+
+    /// 判断持久化账号是否仍与已签发的会话身份完全一致。
+    ///
+    /// # 参数
+    /// * `account` - 会话中的登录账号
+    /// * `kind` - 会话中的账号类型
+    /// * `version` - 会话签发时的账号版本
+    ///
+    /// # 返回值
+    /// 账号仍可登录，且账号、类型与版本全部一致时返回 `true`。
+    pub fn matches_session_identity(&self, account: &str, kind: AccountKind, version: u64) -> bool {
+        self.authentication_secret_for(kind)
+            .is_some_and(|secret| secret.account() == account && self.base.version == version)
+    }
+
     /// 校验账号当前允许登录并参与业务操作。
     ///
     /// # 返回值
@@ -418,6 +447,26 @@ mod tests {
         assert!(active.is_active_backoffice());
         assert!(!suspended.is_active_backoffice());
         assert!(!archived.is_active_backoffice());
+    }
+
+    #[test]
+    fn authentication_secret_requires_matching_active_kind() {
+        let active = sample_account(AccountKind::Admin, AccountStatus::Active);
+        let suspended = sample_account(AccountKind::Admin, AccountStatus::Suspended);
+
+        assert!(active.authentication_secret_for(AccountKind::Admin).is_some());
+        assert!(suspended.authentication_secret_for(AccountKind::Admin).is_none());
+    }
+
+    #[test]
+    fn session_identity_requires_account_kind_status_and_version() {
+        let active = sample_account(AccountKind::Admin, AccountStatus::Active);
+
+        assert!(active.matches_session_identity("sample", AccountKind::Admin, 1));
+        assert!(!active.matches_session_identity("renamed", AccountKind::Admin, 1));
+        assert!(!active.matches_session_identity("sample", AccountKind::Admin, 2));
+        let suspended = sample_account(AccountKind::Admin, AccountStatus::Suspended);
+        assert!(!suspended.matches_session_identity("sample", AccountKind::Admin, 1));
     }
 
     #[test]

@@ -5,7 +5,6 @@
 //! 并强制复用审批运行时持有的唯一事务执行器。
 
 use database::Executor;
-use entities::document_registry::DocumentType;
 use mongodb::Database;
 
 use crate::approval::policy::ApprovalDomainAction;
@@ -95,7 +94,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                     let session = require_transaction(executor)?;
                     crate::returns::finalize_approved_return_in_transaction(
                         &self.db,
-                        document_type_for_action(action),
+                        action.document_type(),
                         &context.business_object_id,
                         actor,
                         session,
@@ -169,7 +168,7 @@ impl ApprovalDomainActionPort for ApprovalActionRegistry {
                 | ApprovalDomainAction::PaymentReversalCancelApproval => {
                     crate::returns::cancel_approval_in_transaction(
                         &self.db,
-                        document_type_for_action(action),
+                        action.document_type(),
                         &context.business_object_id,
                         action,
                         actor,
@@ -197,7 +196,7 @@ fn validate_context(
     context: &ApprovalActionContext,
     actor: &AuditActor,
 ) -> Result<()> {
-    let expected = document_type_for_action(action);
+    let expected = action.document_type();
     if context.business_object_type != expected.as_str() {
         return Err(Error::ConflictError(
             "审批领域动作与冻结单据类型不一致".to_string(),
@@ -207,42 +206,4 @@ fn validate_context(
         return Err(Error::Forbidden("审批领域动作操作人与认证身份不一致".to_string()));
     }
     Ok(())
-}
-
-fn document_type_for_action(action: ApprovalDomainAction) -> DocumentType {
-    match action {
-        ApprovalDomainAction::SalesOrderStartApprovalSubmission
-        | ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
-        | ApprovalDomainAction::SalesOrderCancelApprovalSubmission => DocumentType::SalesOrder,
-        ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission
-        | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
-        | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => DocumentType::VoucherSalesOrder,
-        ApprovalDomainAction::SalesChangeOrderSubmitSalesChange
-        | ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange
-        | ApprovalDomainAction::SalesChangeOrderCancelApproval => DocumentType::SalesChangeOrder,
-        ApprovalDomainAction::PurchaseOrderSubmit
-        | ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder
-        | ApprovalDomainAction::PurchaseOrderCancelApproval => DocumentType::PurchaseOrder,
-        ApprovalDomainAction::PurchaseChangeOrderSubmitChange
-        | ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange
-        | ApprovalDomainAction::PurchaseChangeOrderCancelApproval => DocumentType::PurchaseChangeOrder,
-        ApprovalDomainAction::StockAdjustmentSubmit
-        | ApprovalDomainAction::StockAdjustmentPost
-        | ApprovalDomainAction::StockAdjustmentCancelApproval => DocumentType::StockAdjustment,
-        ApprovalDomainAction::CustomerReceiptSubmit
-        | ApprovalDomainAction::CustomerReceiptPost
-        | ApprovalDomainAction::CustomerReceiptCancelApproval => DocumentType::CustomerReceipt,
-        ApprovalDomainAction::CustomerRefundSubmit
-        | ApprovalDomainAction::CustomerRefundPost
-        | ApprovalDomainAction::CustomerRefundCancelApproval => DocumentType::CustomerRefund,
-        ApprovalDomainAction::SupplierRefundSubmit
-        | ApprovalDomainAction::SupplierRefundPost
-        | ApprovalDomainAction::SupplierRefundCancelApproval => DocumentType::SupplierRefund,
-        ApprovalDomainAction::ReceiptReversalSubmit
-        | ApprovalDomainAction::ReceiptReversalPost
-        | ApprovalDomainAction::ReceiptReversalCancelApproval => DocumentType::ReceiptReversal,
-        ApprovalDomainAction::PaymentReversalSubmit
-        | ApprovalDomainAction::PaymentReversalPost
-        | ApprovalDomainAction::PaymentReversalCancelApproval => DocumentType::PaymentReversal,
-    }
 }

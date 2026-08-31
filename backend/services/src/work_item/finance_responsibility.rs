@@ -530,15 +530,48 @@ impl WorkItemService {
             .into_iter()
             .map(|account| (account.base.id, account.name))
             .collect::<HashMap<_, _>>();
+        let supplier_ids = rules
+            .iter()
+            .filter(|rule| rule.operation == FinanceResponsibilityOperation::SupplierPayment)
+            .filter_map(|rule| rule.counterparty_id.as_deref())
+            .map(SupplierAccountId::new)
+            .collect::<Vec<_>>();
+        let customer_ids = rules
+            .iter()
+            .filter(|rule| {
+                matches!(
+                    rule.operation,
+                    FinanceResponsibilityOperation::SalesInvoice
+                        | FinanceResponsibilityOperation::CardFundsReview
+                )
+            })
+            .filter_map(|rule| rule.counterparty_id.as_deref())
+            .map(CustomerAccountId::new)
+            .collect::<Vec<_>>();
+        let supplier_numbers = self
+            .db
+            .supplier_accounts()
+            .supplier_numbers_by_ids(&supplier_ids, &mut NoTransaction)
+            .await?;
+        let customer_numbers = self
+            .db
+            .customer_accounts()
+            .customer_numbers_by_ids(&customer_ids, &mut NoTransaction)
+            .await?;
         let mut views = Vec::with_capacity(rules.len());
         for rule in rules {
-            let counterparty_no = match rule.counterparty_id.as_deref() {
-                Some(counterparty_id) => self
-                    .ensure_counterparty(rule.operation, counterparty_id, &mut NoTransaction)
-                    .await
-                    .ok(),
-                None => None,
-            };
+            let counterparty_no =
+                rule.counterparty_id
+                    .as_ref()
+                    .and_then(|counterparty_id| match rule.operation {
+                        FinanceResponsibilityOperation::SupplierPayment => {
+                            supplier_numbers.get(counterparty_id).cloned()
+                        }
+                        FinanceResponsibilityOperation::SalesInvoice
+                        | FinanceResponsibilityOperation::CardFundsReview => {
+                            customer_numbers.get(counterparty_id).cloned()
+                        }
+                    });
             let owner_name = owner_names.get(&rule.owner_user_id).cloned();
             let mut view = FinanceResponsibilityRuleView::from(rule);
             view.counterparty_no = counterparty_no;

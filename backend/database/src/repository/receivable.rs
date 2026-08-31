@@ -23,6 +23,7 @@ use entities::receivable::{
     ReceivableEntryOffset, ReceivableFundsReview, SalesInvoiceAllocation,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
@@ -36,6 +37,16 @@ use crate::{mongo_ops, Result};
 
 /// `receivable_entry` 集合名（单一来源：`ReceivableExt` 关联常量）。
 const RECEIVABLE_ENTRIES: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_ENTRIES;
+
+/// 应收账户最早到期日聚合行。
+#[derive(Debug, Deserialize)]
+struct AccountDueDateRow {
+    /// 应收账户 ID。
+    #[serde(rename = "_id")]
+    account_id: String,
+    /// 最早到期日。
+    due_date: BusinessDate,
+}
 /// `receivable_funds_review` 集合名（单一来源：`ReceivableExt` 关联常量）。
 const RECEIVABLE_FUNDS_REVIEWS: &str = <mongodb::Database as ReceivableExt>::RECEIVABLE_FUNDS_REVIEWS;
 /// 应收往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
@@ -621,6 +632,53 @@ impl<'a> Repository<'a, ReceivableAccount> {
 }
 
 impl<'a> Repository<'a, ReceivableEntry> {
+    /// 按应收账户聚合最早正向分录到期日。
+    ///
+    /// # 参数
+    /// * `account_ids` - 应收账户 ID；空集合不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 每个存在 Increase 分录的账户至多返回一个最早到期日；Decrease 与无分录账户不上表。
+    ///
+    /// # 错误
+    /// MongoDB 聚合或反序列化失败时返回错误。
+    pub async fn minimum_increase_due_dates_by_accounts(
+        &self,
+        account_ids: &[ReceivableAccountId],
+        executor: &mut dyn Executor,
+    ) -> Result<std::collections::HashMap<String, BusinessDate>> {
+        if account_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let ids = account_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let pipeline = minimum_due_dates_pipeline(ids);
+        let rows = match executor.session() {
+            Some(session) => {
+                self.collection()
+                    .aggregate(pipeline)
+                    .with_type::<AccountDueDateRow>()
+                    .session(&mut *session)
+                    .await?
+                    .stream(session)
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+            None => {
+                self.collection()
+                    .aggregate(pipeline)
+                    .with_type::<AccountDueDateRow>()
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+        };
+        Ok(rows
+            .into_iter()
+            .map(|row| (row.account_id, row.due_date))
+            .collect())
+    }
+
     /// 批量按子账集合取回分录（`$in` 一次取回，禁止 N+1）。
     ///
     /// 用于账龄汇总与开票核销锁定；只返回未删除分录（事实类恒未删除）。
@@ -670,6 +728,26 @@ impl<'a> Repository<'a, ReceivableEntry> {
         )
         .await
     }
+}
+
+/// 构造应收正向分录最早到期日聚合管道。
+fn minimum_due_dates_pipeline(account_ids: Vec<String>) -> Vec<Document> {
+    vec![
+        doc! {
+            "$match": {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "receivable_account_id": { "$in": account_ids },
+                "direction": entities::receivable::EntryDirection::Increase.as_str(),
+            }
+        },
+        doc! {
+            "$group": {
+                "_id": "$receivable_account_id",
+                "due_date": { "$min": "$due_date" },
+            }
+        },
+        doc! { "$sort": { "_id": 1 } },
+    ]
 }
 
 impl<'a> Repository<'a, ReceivableEntryOffset> {
@@ -1370,13 +1448,29 @@ fn invoice_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{progress_pipeline, sort_doc, CustomerReceiptFilter, QueryFilter, ReceivableAccountFilter};
+    use super::{
+        minimum_due_dates_pipeline, progress_pipeline, sort_doc, CustomerReceiptFilter, QueryFilter,
+        ReceivableAccountFilter,
+    };
     use entities::ids::{CustomerAccountId, PartyId};
     use entities::money::Amount;
     use entities::receivable::ReceivableAccountStatus;
     use mongodb::bson::doc;
     use mongodb::bson::Bson;
     use std::str::FromStr;
+
+    #[test]
+    fn minimum_due_date_pipeline_excludes_decrease_entries() {
+        let pipeline = minimum_due_dates_pipeline(vec!["ra-1".to_string()]);
+        let matched = pipeline[0].get_document("$match").unwrap();
+        assert_eq!(matched.get_str("direction").unwrap(), "increase");
+        let group = pipeline[1].get_document("$group").unwrap();
+        assert_eq!(group.get_str("_id").unwrap(), "$receivable_account_id");
+        assert_eq!(
+            group.get_document("due_date").unwrap(),
+            &doc! { "$min": "$due_date" }
+        );
+    }
 
     #[test]
     fn account_filter_applies_optional_fields_and_deleted_filter() {

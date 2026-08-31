@@ -252,7 +252,7 @@ impl ReconciliationDifferenceResolution {
         reconciliation_difference_id: ReconciliationDifferenceId,
         resolution_no: u32,
         action: ResolutionAction,
-        evidence_reference: String,
+        evidence_reference: super::W29EvidenceReference,
         handled_by: String,
         handled_at: Instant,
     ) -> Result<Self> {
@@ -262,23 +262,7 @@ impl ReconciliationDifferenceResolution {
         ) {
             return Err(Error::from("领域关闭证据只接受重复或误派关闭动作"));
         }
-        let evidence_reference = evidence_reference.trim();
-        let fields = evidence_reference.split(';').collect::<Vec<_>>();
-        let valid = match action {
-            ResolutionAction::CloseDuplicate => {
-                fields.len() == 3
-                    && reference_field_is_present(fields[0], "work_item:")
-                    && reference_field_is_present(fields[1], "replacement_work_item:")
-                    && reference_field_is_present(fields[2], "audit_log:")
-            }
-            ResolutionAction::CloseMisrouted => {
-                fields.len() == 2
-                    && reference_field_is_present(fields[0], "work_item:")
-                    && reference_field_is_present(fields[1], "audit_log:")
-            }
-            _ => false,
-        };
-        if !valid {
+        if evidence_reference.resolution_action() != action {
             return Err(Error::from("领域关闭证据引用格式非法"));
         }
         Self::new(
@@ -333,12 +317,6 @@ impl ReconciliationDifferenceResolution {
     }
 }
 
-fn reference_field_is_present(field: &str, prefix: &str) -> bool {
-    field
-        .strip_prefix(prefix)
-        .is_some_and(|value| !value.trim().is_empty())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -347,6 +325,7 @@ mod tests {
     };
     use crate::common::time::Instant;
     use crate::ids::{ReconciliationDifferenceId, ReconciliationDifferenceResolutionId};
+    use crate::integration_ops::W29EvidenceReference;
 
     fn data(action: ResolutionAction) -> ReconciliationDifferenceResolutionData {
         ReconciliationDifferenceResolutionData {
@@ -426,7 +405,7 @@ mod tests {
             ReconciliationDifferenceId::new("diff-1"),
             2,
             ResolutionAction::ConfirmNoError,
-            "audit_log:audit-1".to_string(),
+            W29EvidenceReference::parse("work_item:wi-1;audit_log:audit-1").unwrap(),
             "ops-1".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         );
@@ -441,7 +420,7 @@ mod tests {
             ReconciliationDifferenceId::new("diff-1"),
             2,
             ResolutionAction::CloseDuplicate,
-            "work_item:wi-1;audit_log:audit-1".to_string(),
+            W29EvidenceReference::parse("work_item:wi-1;audit_log:audit-1").unwrap(),
             "ops-1".to_string(),
             Instant::from_unix_secs(1_700_000_001),
         );

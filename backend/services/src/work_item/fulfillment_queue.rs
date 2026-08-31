@@ -10,7 +10,7 @@ use database::{
 };
 use entities::{
     common::time::Instant,
-    work_item::{WorkItemPriority, WorkItemType},
+    work_item::{QueueContextField, QueueContextIdentity, WorkItemPriority, WorkItemType},
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -22,8 +22,7 @@ use crate::{
 };
 
 use super::{
-    business_day_bounds, ensure_queue_context, has_execution_permissions, stable_digest, ActorAccess,
-    WorkItemDueFilter, WorkItemService,
+    ensure_queue_context, has_execution_permissions, ActorAccess, WorkItemDueFilter, WorkItemService,
 };
 
 const ALL_OPERATION_TYPES: [FulfillmentQueueOperationType; 5] = [
@@ -466,11 +465,13 @@ fn due_bounds(due: Option<WorkItemDueFilter>) -> Result<(Option<i64>, Option<i64
     let Some(due) = due else {
         return Ok((None, None));
     };
-    let (start, tomorrow) = business_day_bounds()?;
-    Ok(match due {
-        WorkItemDueFilter::Today => (Some(start.unix_secs()), Some(tomorrow.unix_secs())),
-        WorkItemDueFilter::Overdue => (None, Some(start.unix_secs())),
-    })
+    let window = due
+        .window_at(Instant::now())
+        .map_err(|error| Error::Internal(error.to_string()))?;
+    Ok((
+        window.from.map(Instant::unix_secs),
+        Some(window.before.unix_secs()),
+    ))
 }
 
 fn fulfillment_queue_context_id(
@@ -478,17 +479,27 @@ fn fulfillment_queue_context_id(
     query: &FulfillmentQueueQuery,
     visible_types: &[FulfillmentQueueOperationType],
 ) -> String {
-    stable_digest(&format!(
-        "fulfillment-queue|{actor_id}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
-        visible_types,
-        query.operation_id,
-        query.sales_order_id,
-        query.purchase_order_id,
-        query.warehouse_id,
-        query.query,
-        query.due,
-        query.gate,
-    ))
+    QueueContextIdentity::new(
+        "fulfillment-queue",
+        [
+            QueueContextField::scalar("actor", actor_id),
+            QueueContextField::set(
+                "types",
+                visible_types.iter().map(|value| value.as_str().to_string()),
+            ),
+            QueueContextField::optional("operation", query.operation_id.as_deref()),
+            QueueContextField::optional("sales_order", query.sales_order_id.as_deref()),
+            QueueContextField::optional("purchase_order", query.purchase_order_id.as_deref()),
+            QueueContextField::optional("warehouse", query.warehouse_id.as_deref()),
+            QueueContextField::optional("query", query.query.as_deref()),
+            QueueContextField::optional("due", query.due.map(WorkItemDueFilter::as_str)),
+            QueueContextField::optional(
+                "gate",
+                query.gate.map(FulfillmentQueueGateFilter::as_repository_str),
+            ),
+        ],
+    )
+    .into_string()
 }
 
 fn map_item(row: FulfillmentQueueItemRow) -> Result<FulfillmentQueueItemView> {

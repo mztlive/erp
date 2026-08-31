@@ -59,7 +59,7 @@ use crate::approval::binding::{
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
 use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
-use crate::audit::{AuditActor, CommandReceipt};
+use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document, persist_registered_document};
 use crate::errors::{Error, Result};
 use crate::iam::{self, SharedRbacService};
@@ -1674,9 +1674,9 @@ impl ReceivableService {
         actor: &AuditActor,
     ) -> Result<CustomerReceiptView> {
         req.validate()?;
-        let command_receipt = CommandReceipt::new(
+        let command_receipt = CommandReceipt::from_payload(
             "customer-receipt-commit-",
-            actor,
+            actor.id(),
             "customer_receipt.commit",
             "customer_receipt",
             &req.idempotency_key,
@@ -2266,9 +2266,9 @@ impl ReceivableService {
     /// * `BusinessLogicError` - 跨主体、分配不守恒或超额开票
     pub async fn commit_invoice(&self, req: CommitInvoiceRequest, actor: &AuditActor) -> Result<InvoiceView> {
         req.validate()?;
-        let command_receipt = CommandReceipt::new(
+        let command_receipt = CommandReceipt::from_payload(
             "sales-invoice-commit-",
-            actor,
+            actor.id(),
             "invoice.commit",
             "invoice",
             &req.idempotency_key,

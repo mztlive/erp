@@ -1042,25 +1042,6 @@ impl<'a> Repository<'a, entities::AccountCore> {
 }
 
 impl<'a> Repository<'a, entities::AuditLog> {
-    /// 按稳定 ID 读取工作项幂等命令审计。
-    ///
-    /// # 参数
-    /// * `id` - 审计日志 ID
-    /// * `executor` - 数据访问执行器
-    ///
-    /// # 返回
-    /// 返回未删除审计；不存在时返回 `None`。
-    ///
-    /// # 错误
-    /// MongoDB 查询或反序列化失败时返回错误。
-    pub async fn find_work_item_command_audit(
-        &self,
-        id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<Option<entities::AuditLog>> {
-        self.find_by_id(id, executor).await
-    }
-
     /// 批量读取指定资源的成功创建审计。
     ///
     /// # 参数

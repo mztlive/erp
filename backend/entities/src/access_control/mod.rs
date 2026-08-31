@@ -15,6 +15,7 @@
 pub mod audit_event;
 pub mod data_scope;
 pub mod permission;
+pub mod responsibility_scope;
 pub mod user_role;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids；
@@ -24,4 +25,5 @@ pub use crate::rbac::RoleId;
 pub use audit_event::{AuditEvent, AuditEventData, AuditEventResult};
 pub use data_scope::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
 pub use permission::{Permission, PermissionData, PermissionUpdate};
+pub use responsibility_scope::{OrganizationCoverage, ResponsibilityScopeSet};
 pub use user_role::{UserRole, UserRoleData, UserRoleRevokeData};

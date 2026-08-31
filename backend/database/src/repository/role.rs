@@ -6,6 +6,24 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::doc;
 
 impl<'a> Repository<'a, Role> {
+    /// 判断指定角色 ID 是否对应未软删除记录。
+    ///
+    /// 本方法不把 `disabled` 解释为不存在；只用于种子过程区分已软删除身份，
+    /// 并通过 `_id` 窄投影在首条命中后停止。
+    ///
+    /// # 参数
+    /// * `id` - 角色 ID
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 返回值
+    /// 角色存在且未软删除时返回 `true`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn exists_active_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<bool> {
+        self.exists(doc! { "id": id }, executor).await
+    }
+
     /// 查询全部未删除且启用的角色。
     ///
     /// # 参数

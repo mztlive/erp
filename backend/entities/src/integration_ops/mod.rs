@@ -23,11 +23,13 @@ mod inbox_message;
 mod integration_error_task;
 mod reconciliation_difference;
 mod reconciliation_difference_resolution;
+mod w29_close;
 
 pub use inbox_message::*;
 pub use integration_error_task::*;
 pub use reconciliation_difference::*;
 pub use reconciliation_difference_resolution::*;
+pub use w29_close::*;
 
 /// W29 命令的稳定幂等身份与载荷指纹。
 #[derive(Debug, Clone, PartialEq, Eq)]

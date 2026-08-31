@@ -9,7 +9,9 @@ use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::WorkItemId;
 use crate::validation::{normalize_optional_text, normalize_required_text};
-use crate::{AccountCore, AccountKind};
+use crate::{AccountCore, AccountKind, Permission, PermissionSet};
+
+use super::FulfillmentResponsibilityKey;
 
 use bpm::ApprovalNodeExecutionId;
 
@@ -763,6 +765,31 @@ impl WorkItemType {
         ])
     }
 
+    /// 返回任务类型与业务对象组合所需的完整执行权限集合。
+    ///
+    /// # 返回
+    /// 需要完整执行权限的已注册组合返回非空集合；普通任务返回空集合；要求
+    /// 完整权限但对象组合未注册时返回 `None`。BusinessException 的对象特例
+    /// 由 Service 跨聚合政策追加，不在本通用映射中解释。
+    pub fn required_execution_permissions(self, business_object_type: &str) -> Option<PermissionSet> {
+        let codes = if self.is_fulfillment_operation() {
+            self.fulfillment_execution_permissions(business_object_type)?
+        } else if self.is_customer_acceptance_registration() {
+            self.customer_acceptance_execution_permissions(business_object_type)?
+        } else if self.is_supplier_payment_execution() {
+            self.supplier_payment_execution_permissions(business_object_type)?
+        } else if self.is_sales_invoice_execution() {
+            self.sales_invoice_execution_permissions(business_object_type)?
+        } else if matches!(self, Self::CardFundsReview | Self::CardFundsDeltaReview) {
+            self.card_funds_review_permissions(business_object_type)?
+        } else {
+            &[]
+        };
+        Some(PermissionSet::new(codes.iter().map(|code| {
+            Permission::parse(code).expect("工作项注册权限必须使用合法稳定代码")
+        })))
+    }
+
     /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
     ///
     /// # 返回
@@ -1261,6 +1288,61 @@ impl WorkItem {
     /// 普通任务返回 `None`；采用多责任维度开放唯一性的任务返回固定键。
     pub fn responsibility_key(&self) -> Option<&str> {
         self.responsibility_key.as_deref()
+    }
+
+    /// 解析并校验履约任务冻结的责任键与对象、角色、原因合同。
+    ///
+    /// # 返回
+    /// 非履约任务返回 `None`；已注册履约任务返回强类型责任键。
+    ///
+    /// # 错误
+    /// 履约任务缺少责任键，或对象、角色、原因与责任键类型不一致时返回错误。
+    pub fn fulfillment_responsibility_key(&self) -> Result<Option<FulfillmentResponsibilityKey>> {
+        if !self.work_item_type.is_fulfillment_operation() {
+            return Ok(None);
+        }
+        let key = self
+            .responsibility_key()
+            .ok_or_else(|| Error::from("履约任务缺少责任键"))
+            .and_then(FulfillmentResponsibilityKey::parse)?;
+        let matches = matches!(
+            (
+                self.business_object_type.as_str(),
+                self.owner_role.as_str(),
+                self.reason_code.as_deref(),
+                &key,
+            ),
+            (
+                "delivery",
+                "purchase_order_owner",
+                Some("SUPPLIER_DIRECT_DELIVERY_READY"),
+                FulfillmentResponsibilityKey::PurchaseOrder(_),
+            ) | (
+                "electronic_delivery",
+                "purchase_order_owner",
+                Some("ELECTRONIC_DELIVERY_READY"),
+                FulfillmentResponsibilityKey::PurchaseOrder(_),
+            ) | (
+                "service_fulfillment",
+                "purchase_order_owner",
+                Some("SERVICE_FULFILLMENT_READY"),
+                FulfillmentResponsibilityKey::PurchaseOrder(_),
+            ) | (
+                "purchase_receipt",
+                "warehouse_inbound_handler",
+                Some("PURCHASE_RECEIPT_READY"),
+                FulfillmentResponsibilityKey::WarehouseReceipt(_),
+            ) | (
+                "delivery",
+                "warehouse_outbound_handler",
+                Some("WAREHOUSE_DELIVERY_READY"),
+                FulfillmentResponsibilityKey::WarehouseShip(_),
+            )
+        );
+        if !matches {
+            return Err(Error::from("履约任务对象、责任角色、原因或责任键不一致"));
+        }
+        Ok(Some(key))
     }
 
     /// 返回创建时冻结的稳定业务行范围。
