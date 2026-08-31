@@ -29,7 +29,7 @@ export function AcceptanceRegisterLineNav({
 }) {
     return (
         <nav
-            className="flex max-h-40 w-full shrink-0 flex-col self-stretch overflow-y-auto border-b border-border bg-muted/40 md:max-h-none md:w-64 md:border-r md:border-b-0"
+            className="flex max-h-40 w-full shrink-0 flex-col self-stretch overflow-y-auto border-b border-grid md:max-h-none md:w-64 md:border-r md:border-b-0"
             aria-label="待验收明细"
         >
             <p className="px-4 py-3 text-xs font-medium text-muted-foreground">
@@ -43,7 +43,7 @@ export function AcceptanceRegisterLineNav({
                     return (
                         <Item
                             key={line.salesOrderLineId}
-                            variant={active ? "outline" : "default"}
+                            variant="default"
                             size="sm"
                             render={
                                 <button
@@ -54,9 +54,7 @@ export function AcceptanceRegisterLineNav({
                             }
                             className={cn(
                                 "w-full cursor-pointer",
-                                active
-                                    ? "bg-background shadow-xs"
-                                    : "hover:bg-background/70",
+                                active ? "bg-muted" : "hover:bg-muted/60",
                             )}
                             aria-current={active ? "true" : undefined}
                             onClick={() => onSelect(line.salesOrderLineId)}

@@ -94,7 +94,7 @@ export function AcceptanceRegisterDialog({
                 className="flex h-[min(90vh,48rem)] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
                 showCloseButton={!postPending}
             >
-                <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
+                <DialogHeader className="shrink-0 border-b border-grid px-6 py-4 text-left">
                     <DialogTitle>登记客户验收</DialogTitle>
                     <DialogDescription>
                         商品选通过、短少或拒收；服务选通过或不通过。打开时默认全部通过，也可把某批改成这次不验。
@@ -114,7 +114,7 @@ export function AcceptanceRegisterDialog({
                             void form.handleSubmit()
                         }}
                     >
-                        <div className="shrink-0 border-b border-border px-6 py-3">
+                        <div className="shrink-0 border-b border-grid px-6 py-3">
                             <form.AppField name="acceptedAt">
                                 {(field) => (
                                     <field.DateTimeField
@@ -221,7 +221,7 @@ export function AcceptanceRegisterDialog({
                             </div>
                         </div>
 
-                        <div className="shrink-0 border-t border-border px-6 py-3">
+                        <div className="shrink-0 border-t border-grid px-6 py-3">
                             <form.AppField name="comment">
                                 {(field) => (
                                     <field.TextareaField
@@ -237,7 +237,7 @@ export function AcceptanceRegisterDialog({
                     </form>
                 )}
 
-                <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:justify-between">
+                <DialogFooter className="shrink-0 border-t border-grid px-6 py-4 sm:justify-between">
                     <p className="text-sm text-muted-foreground">
                         已选 {selection.selected.size} / {pendingCount} 批
                         {exceptionHint}

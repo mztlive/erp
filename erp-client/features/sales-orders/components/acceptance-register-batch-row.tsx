@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
 import type { AcceptanceSelectionApi } from "@/features/sales-orders/hooks/use-acceptance-selection"
 import {
     exceptionQuantityLabel,
@@ -52,18 +51,7 @@ export function AcceptanceRegisterBatchRow({
     const segmentId = toAutomationIdSegment(fact.fulfillmentLineId)
 
     return (
-        <article
-            className={cn(
-                "rounded-lg border px-3 py-3",
-                !draft && "border-border bg-muted/30",
-                draft?.result === "PASS" && "border-success-border bg-card",
-                draft?.result === "SHORT" &&
-                    "border-warning-border bg-warning-soft",
-                (draft?.result === "REJECT" ||
-                    draft?.result === "SERVICE_FAIL") &&
-                    "border-destructive-border bg-destructive-soft",
-            )}
-        >
+        <article className="rounded-lg border border-border bg-card px-3 py-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                     <p className="text-sm font-medium">
@@ -109,7 +97,7 @@ export function AcceptanceRegisterBatchRow({
                         key={option}
                         id={decisionControlId(segmentId, option)}
                         value={option}
-                        className={decisionItemClassName(option)}
+                        className="data-[state=on]:bg-foreground data-[state=on]:text-background"
                     >
                         {option === SKIP_DECISION ? (
                             <CircleSlashIcon data-icon="inline-start" />
@@ -222,17 +210,4 @@ function decisionControlId(
         return `sales-orders-acceptance-batch-${segmentId}-skip`
     }
     return `sales-orders-acceptance-batch-${segmentId}-result-${toAutomationIdSegment(option)}`
-}
-
-function decisionItemClassName(option: AcceptanceBatchDecision): string {
-    return cn(
-        option === SKIP_DECISION &&
-            "data-[state=on]:bg-muted data-[state=on]:text-foreground",
-        option === "PASS" &&
-            "data-[state=on]:border-transparent data-[state=on]:bg-success data-[state=on]:text-success-foreground",
-        option === "SHORT" &&
-            "data-[state=on]:border-transparent data-[state=on]:bg-warning data-[state=on]:text-warning-foreground",
-        (option === "REJECT" || option === "SERVICE_FAIL") &&
-            "data-[state=on]:border-transparent data-[state=on]:bg-destructive data-[state=on]:text-destructive-foreground",
-    )
 }
