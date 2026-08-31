@@ -1,6 +1,14 @@
 "use client"
 
 import { BusinessStatusBadge } from "@/components/business"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import type { ExecutionProjectionDelivery } from "@/features/execution-projections/types"
 
 export function DeliveryHistoryTable({
@@ -9,47 +17,49 @@ export function DeliveryHistoryTable({
     deliveries: ExecutionProjectionDelivery[]
 }) {
     return (
-        <div className="overflow-x-auto rounded-xl border">
-            <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                    <tr>
-                        <th className="px-3 py-2">状态</th>
-                        <th className="px-3 py-2">尝试</th>
-                        <th className="px-3 py-2">最近</th>
-                        <th className="px-3 py-2">下次</th>
-                        <th className="px-3 py-2">确认</th>
-                        <th className="px-3 py-2">摘要</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <div className="overflow-hidden rounded-lg border">
+            <Table data-density="compact">
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>状态</TableHead>
+                        <TableHead>尝试</TableHead>
+                        <TableHead>最近</TableHead>
+                        <TableHead>下次</TableHead>
+                        <TableHead>确认</TableHead>
+                        <TableHead>摘要</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {deliveries.map((d) => (
-                        <tr key={d.deliveryId} className="border-t">
-                            <td className="px-3 py-2">
+                        <TableRow key={d.deliveryId}>
+                            <TableCell>
                                 <BusinessStatusBadge
                                     context="list"
                                     label={d.statusLabel}
                                     tone={d.statusTone}
                                 />
-                            </td>
-                            <td className="num px-3 py-2">{d.attemptCount}</td>
-                            <td className="num px-3 py-2">
+                            </TableCell>
+                            <TableCell className="num">
+                                {d.attemptCount}
+                            </TableCell>
+                            <TableCell className="num">
                                 {d.lastAttemptAt ?? "—"}
-                            </td>
-                            <td className="num px-3 py-2">
+                            </TableCell>
+                            <TableCell className="num">
                                 {d.nextAttemptAt ?? "—"}
-                            </td>
-                            <td className="num px-3 py-2">
+                            </TableCell>
+                            <TableCell className="num">
                                 {d.mallAckAt ?? "—"}
-                            </td>
-                            <td className="px-3 py-2 text-xs text-muted-foreground">
+                            </TableCell>
+                            <TableCell className="max-w-sm whitespace-normal text-xs text-muted-foreground">
                                 {d.errorSummary ??
                                     d.mallExecutionBaseline ??
                                     "—"}
-                            </td>
-                        </tr>
+                            </TableCell>
+                        </TableRow>
                     ))}
-                </tbody>
-            </table>
+                </TableBody>
+            </Table>
         </div>
     )
 }

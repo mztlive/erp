@@ -4,6 +4,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     MoneyInput,
@@ -59,27 +67,29 @@ function SkuRow({
     const skuSegment = toAutomationIdSegment(
         sku.skuId || sku.skuNo || sku.specificationSignature || `sku-${index}`,
     )
+    const cellPad = "h-auto whitespace-normal align-top"
+
     return (
-        <tr
-            key={`${sku.skuNo}-${index}`}
-            className="border-b border-grid align-top last:border-b-0"
-        >
+        <TableRow className="align-top">
             {activeSpecs.length > 0 ? (
                 activeSpecs.map((spec, specIndex) => (
-                    <td key={`${spec.name}-${specIndex}`} className="px-3 py-3">
+                    <TableCell
+                        key={`${spec.name}-${specIndex}`}
+                        className={cellPad}
+                    >
                         <Badge variant="secondary">
                             {sku.attributeValues[specIndex] || "—"}
                         </Badge>
-                    </td>
+                    </TableCell>
                 ))
             ) : (
-                <td className="px-3 py-3">
+                <TableCell className={cellPad}>
                     <Badge variant="secondary">
                         {masterDataCopy.productDefaultSpec}
                     </Badge>
-                </td>
+                </TableCell>
             )}
-            <td className="px-3 py-3">
+            <TableCell className={cellPad}>
                 <Input
                     id={`master-data-product-sku-${skuSegment}-code`}
                     className="h-8"
@@ -93,8 +103,8 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 产品编码`}
                     title="系统默认生成，可手动覆盖"
                 />
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <Input
                     id={`master-data-product-sku-${skuSegment}-name`}
                     className="h-8"
@@ -109,8 +119,8 @@ function SkuRow({
                     aria-label={`${sku.specLabel} SKU 名称`}
                     title="可与商品名称不同，保存后写入 SKU 修订"
                 />
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <Input
                     id={`master-data-product-sku-${skuSegment}-barcode`}
                     className="h-8"
@@ -123,8 +133,8 @@ function SkuRow({
                     }
                     aria-label={`${sku.specLabel} 条形码`}
                 />
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <SkuMainImageField
                     idPrefix={`master-data-product-sku-${skuSegment}-main-image`}
                     value={sku.mainImage}
@@ -156,8 +166,8 @@ function SkuRow({
                         }
                     }}
                 />
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-sale-price`}
                     value={sku.salePrice ?? ""}
@@ -169,8 +179,8 @@ function SkuRow({
                     }
                     aria-label={`${sku.specLabel} 销售价`}
                 />
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-market-price`}
                     value={sku.marketPrice ?? ""}
@@ -182,7 +192,7 @@ function SkuRow({
                     }
                     aria-label={`${sku.specLabel} 市场价`}
                 />
-            </td>
+            </TableCell>
             <SkuSupplierCell
                 sku={sku}
                 name={name}
@@ -195,7 +205,7 @@ function SkuRow({
                 supplierCountsError={supplierCountsError}
                 onRegisterSupply={onRegisterSupply}
             />
-            <td className="px-3 py-3">
+            <TableCell className={cellPad}>
                 {fields.productKind && fields.productKind !== "PHYSICAL" ? (
                     <span className="block text-xs text-muted-foreground">
                         不适用
@@ -218,8 +228,8 @@ function SkuRow({
                         保存后可查看
                     </span>
                 )}
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <Badge
                     variant={
                         sku.listingStatus === "LISTED" ? "success" : "secondary"
@@ -227,8 +237,8 @@ function SkuRow({
                 >
                     {sku.listingStatus === "LISTED" ? "已上架" : "已下架"}
                 </Badge>
-            </td>
-            <td className="px-3 py-3">
+            </TableCell>
+            <TableCell className={cellPad}>
                 <div className="flex items-center gap-2">
                     <Switch
                         id={`master-data-product-sku-${skuSegment}-enable`}
@@ -256,8 +266,8 @@ function SkuRow({
                         {sku.lifecycleStatus === "ENABLED" ? "启用" : "停用"}
                     </span>
                 </div>
-            </td>
-        </tr>
+            </TableCell>
+        </TableRow>
     )
 }
 
@@ -296,70 +306,59 @@ function ProductSkuTable({
     stableId,
 }: ProductSkuTableProps) {
     return (
-        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
-            <table className="w-full min-w-[64rem] border-collapse text-sm">
-                <thead>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+        <div className="w-full max-w-full overflow-hidden rounded-lg border">
+            <Table
+                data-density="comfortable"
+                className="min-w-[64rem] [&_thead_th]:!static"
+            >
+                <TableHeader>
+                    <TableRow>
                         {activeSpecs.length > 0 ? (
-                            <th
-                                colSpan={activeSpecs.length}
-                                className="px-3 py-2 font-medium"
-                            >
+                            <TableHead colSpan={activeSpecs.length}>
                                 规格
-                            </th>
+                            </TableHead>
                         ) : (
-                            <th className="px-3 py-2 font-medium">规格</th>
+                            <TableHead>规格</TableHead>
                         )}
-                        <th colSpan={4} className="px-3 py-2 font-medium">
-                            身份
-                        </th>
-                        <th colSpan={2} className="px-3 py-2 font-medium">
-                            公司商品池价格
-                        </th>
-                        <th colSpan={4} className="px-3 py-2 font-medium">
-                            关联与状态
-                        </th>
-                    </tr>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                        <TableHead colSpan={4}>身份</TableHead>
+                        <TableHead colSpan={2}>公司商品池价格</TableHead>
+                        <TableHead colSpan={4}>关联与状态</TableHead>
+                    </TableRow>
+                    <TableRow>
                         {activeSpecs.length > 0 ? (
                             activeSpecs.map((spec) => (
-                                <th
-                                    key={spec.name}
-                                    className="min-w-24 px-3 py-2 font-medium"
-                                >
+                                <TableHead key={spec.name} className="min-w-24">
                                     {spec.name}
-                                </th>
+                                </TableHead>
                             ))
                         ) : (
-                            <th className="min-w-24 px-3 py-2 font-medium">
-                                —
-                            </th>
+                            <TableHead className="min-w-24">—</TableHead>
                         )}
-                        <th className="min-w-32 px-3 py-2 font-medium">
+                        <TableHead className="min-w-32">
                             {masterDataCopy.fProductCode}
-                        </th>
-                        <th className="min-w-40 px-3 py-2 font-medium">
+                        </TableHead>
+                        <TableHead className="min-w-40">
                             {masterDataCopy.fSkuName}
-                        </th>
-                        <th className="min-w-32 px-3 py-2 font-medium">
+                        </TableHead>
+                        <TableHead className="min-w-32">
                             {masterDataCopy.fBarcode}
-                        </th>
-                        <th className="min-w-36 px-3 py-2 font-medium">
+                        </TableHead>
+                        <TableHead className="min-w-36">
                             {masterDataCopy.fMainImage}
-                        </th>
-                        <th className="min-w-28 px-3 py-2 font-medium">
+                        </TableHead>
+                        <TableHead className="min-w-28">
                             {masterDataCopy.fSalePrice}
-                        </th>
-                        <th className="min-w-28 px-3 py-2 font-medium">
+                        </TableHead>
+                        <TableHead className="min-w-28">
                             {masterDataCopy.fMarketPrice}
-                        </th>
-                        <th className="min-w-32 px-3 py-2 font-medium">供给</th>
-                        <th className="min-w-28 px-3 py-2 font-medium">库存</th>
-                        <th className="min-w-24 px-3 py-2 font-medium">上架</th>
-                        <th className="min-w-24 px-3 py-2 font-medium">启用</th>
-                    </tr>
-                </thead>
-                <tbody>
+                        </TableHead>
+                        <TableHead className="min-w-32">供给</TableHead>
+                        <TableHead className="min-w-28">库存</TableHead>
+                        <TableHead className="min-w-24">上架</TableHead>
+                        <TableHead className="min-w-24">启用</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {fields.skus.map((sku, index) => {
                         const supplierCount = sku.skuId
                             ? supplierCounts?.get(sku.skuId)
@@ -385,8 +384,8 @@ function ProductSkuTable({
                             />
                         )
                     })}
-                </tbody>
-            </table>
+                </TableBody>
+            </Table>
         </div>
     )
 }

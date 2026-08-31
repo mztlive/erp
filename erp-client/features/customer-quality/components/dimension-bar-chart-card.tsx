@@ -19,6 +19,15 @@ import {
     ChartTooltipContent,
     type ChartConfig,
 } from "@/components/ui/chart"
+import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CustomerQualityView } from "../types"
 
@@ -140,76 +149,64 @@ export function DimensionBarChartCard({
                                 </Bar>
                             </BarChart>
                         </ChartContainer>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <caption className="sr-only">
-                                    {tableCaption}
-                                </caption>
-                                <thead>
-                                    <tr className="border-b text-left text-muted-foreground">
-                                        <th className="py-1.5 pr-3 font-medium">
-                                            {labelColumnHeader}
-                                        </th>
-                                        <th className="py-1.5 pr-3 font-medium">
-                                            {valueColumnHeader}
-                                        </th>
-                                        <th className="py-1.5 pr-3 font-medium">
-                                            占比
-                                        </th>
-                                        <th className="py-1.5 font-medium">
-                                            户数
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {items.map((item) => {
-                                        const selected =
-                                            chartDimension === dimensionKey &&
-                                            chartCode === item.code
-                                        return (
-                                            <tr
-                                                key={item.code}
-                                                className={
-                                                    selected
-                                                        ? "bg-accent/60"
-                                                        : "border-b border-grid"
-                                                }
-                                            >
-                                                <td className="py-1.5 pr-3">
-                                                    <Button
-                                                        id={`customers-quality-chart-${toAutomationIdSegment(dimensionKey)}-${toAutomationIdSegment(item.code)}-filter`}
-                                                        type="button"
-                                                        size="xs"
-                                                        variant={
-                                                            selected
-                                                                ? "secondary"
-                                                                : "ghost"
-                                                        }
-                                                        aria-pressed={selected}
-                                                        onClick={() =>
-                                                            selectItem(
-                                                                item.code,
-                                                            )
-                                                        }
-                                                    >
-                                                        {item.label}
-                                                    </Button>
-                                                </td>
-                                                <td className="num py-1.5 pr-3">
-                                                    {item.value}
-                                                </td>
-                                                <td className="num py-1.5 pr-3">
-                                                    {item.share ?? "—"}
-                                                </td>
-                                                <td className="num py-1.5">
-                                                    {item.count ?? "—"}
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                        <Table data-density="compact">
+                            <TableCaption className="sr-only">
+                                {tableCaption}
+                            </TableCaption>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>{labelColumnHeader}</TableHead>
+                                    <TableHead>{valueColumnHeader}</TableHead>
+                                    <TableHead>占比</TableHead>
+                                    <TableHead>户数</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {items.map((item) => {
+                                    const selected =
+                                        chartDimension === dimensionKey &&
+                                        chartCode === item.code
+                                    return (
+                                        <TableRow
+                                            key={item.code}
+                                            data-state={
+                                                selected
+                                                    ? "selected"
+                                                    : undefined
+                                            }
+                                        >
+                                            <TableCell>
+                                                <Button
+                                                    id={`customers-quality-chart-${toAutomationIdSegment(dimensionKey)}-${toAutomationIdSegment(item.code)}-filter`}
+                                                    type="button"
+                                                    size="xs"
+                                                    variant={
+                                                        selected
+                                                            ? "secondary"
+                                                            : "ghost"
+                                                    }
+                                                    aria-pressed={selected}
+                                                    onClick={() =>
+                                                        selectItem(item.code)
+                                                    }
+                                                >
+                                                    {item.label}
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell className="num">
+                                                {item.value}
+                                            </TableCell>
+                                            <TableCell className="num">
+                                                {item.share ?? "—"}
+                                            </TableCell>
+                                            <TableCell className="num">
+                                                {item.count ?? "—"}
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })}
+                            </TableBody>
+                        </Table>
                     </>
                 )}
                 {footer}

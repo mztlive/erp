@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { TableCell } from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { toFixedSku } from "@/features/master-data/lib/product-fixed-sku"
 import type {
@@ -45,7 +46,7 @@ function SkuSupplierCell({
 }: SkuSupplierCellProps) {
     const skuSegment = toAutomationIdSegment(sku.skuId || sku.skuNo || name)
     return (
-        <td className="px-3 py-3">
+        <TableCell className="h-auto whitespace-normal align-top">
             <div className="space-y-1.5">
                 {sku.skuId && !isCreate ? (
                     <HoverCard>
@@ -120,7 +121,7 @@ function SkuSupplierCell({
                     </span>
                 ) : null}
             </div>
-        </td>
+        </TableCell>
     )
 }
 

@@ -14,6 +14,16 @@ import {
     ChartTooltipContent,
     type ChartConfig,
 } from "@/components/ui/chart"
+import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableFooter,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { formatMoneyDisplay } from "../../lib/presentation"
 import type { CardBusinessAnalyticsView, CostBasisCode } from "../../types"
 import { COST_BASIS_LABEL } from "../../types"
@@ -89,60 +99,51 @@ export function CostBasisChart({ coverage }: CostBasisChartProps) {
                         </Bar>
                     </BarChart>
                 </ChartContainer>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                        <caption className="mb-2 text-left text-muted-foreground">
-                            成本口径构成数据表（名称 · 金额 · 占比 · 成本）
-                        </caption>
-                        <thead>
-                            <tr className="border-b text-muted-foreground">
-                                <th scope="col" className="py-1 pr-2">
-                                    口径
-                                </th>
-                                <th scope="col" className="py-1 pr-2">
-                                    消费(含税)
-                                </th>
-                                <th scope="col" className="py-1 pr-2">
-                                    占比
-                                </th>
-                                <th scope="col" className="py-1">
-                                    成本(不含税)
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {basisChartData.map((r) => (
-                                <tr
-                                    key={r.basis}
-                                    className="border-b border-grid"
+                <Table className="caption-top" data-density="compact">
+                    <TableCaption className="mb-2 mt-0 text-left">
+                        成本口径构成数据表（名称 · 金额 · 占比 · 成本）
+                    </TableCaption>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>口径</TableHead>
+                            <TableHead>消费(含税)</TableHead>
+                            <TableHead>占比</TableHead>
+                            <TableHead>成本(不含税)</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {basisChartData.map((r) => (
+                            <TableRow key={r.basis}>
+                                <TableHead
+                                    scope="row"
+                                    className="bg-transparent font-medium text-foreground"
                                 >
-                                    <th
-                                        scope="row"
-                                        className="py-1 pr-2 font-medium"
-                                    >
-                                        {r.label}
-                                    </th>
-                                    <td className="num py-1 pr-2">
-                                        {r.amountLabel}
-                                    </td>
-                                    <td className="num py-1 pr-2">{r.share}</td>
-                                    <td className="num py-1">{r.costLabel}</td>
-                                </tr>
-                            ))}
-                            <tr className="font-medium">
-                                <th scope="row" className="py-1 pr-2">
-                                    合计
-                                </th>
-                                <td className="num py-1 pr-2" colSpan={3}>
-                                    {formatMoneyDisplay(
-                                        coverage.totalConsumptionGross,
-                                    )}{" "}
-                                    = 累计卡券消费
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                                    {r.label}
+                                </TableHead>
+                                <TableCell className="num">
+                                    {r.amountLabel}
+                                </TableCell>
+                                <TableCell className="num">{r.share}</TableCell>
+                                <TableCell className="num">
+                                    {r.costLabel}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                    <TableFooter>
+                        <TableRow>
+                            <TableHead scope="row" className="bg-transparent">
+                                合计
+                            </TableHead>
+                            <TableCell className="num" colSpan={3}>
+                                {formatMoneyDisplay(
+                                    coverage.totalConsumptionGross,
+                                )}{" "}
+                                = 累计卡券消费
+                            </TableCell>
+                        </TableRow>
+                    </TableFooter>
+                </Table>
             </CardContent>
         </Card>
     )

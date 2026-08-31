@@ -2,6 +2,16 @@
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableFooter,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { DocumentSection, MoneyValue } from "@/components/business"
 import type {
     MallConsumptionOrderView,
@@ -43,7 +53,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
         view.conservation.sourceColumnResults.some((r) => !r.valid)
 
     return (
-        <div className="space-y-3 overflow-x-auto">
+        <div className="space-y-3">
             {anyInvalid ? (
                 <Alert variant="destructive" role="alert">
                     <AlertTitle>分摊不守恒</AlertTitle>
@@ -64,39 +74,33 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                 </Alert>
             )}
 
-            <table className="w-full min-w-[40rem] border-collapse text-sm">
-                <caption className="sr-only">
+            <Table className="min-w-[40rem]" data-density="compact">
+                <TableCaption className="sr-only">
                     商品 × 支付来源分摊矩阵（仅卡券 / 微信）
-                </caption>
-                <thead>
-                    <tr className="border-b border-grid text-left">
-                        <th className="sticky left-0 bg-card p-2 font-medium">
+                </TableCaption>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="sticky left-0 z-30">
                             商品明细
-                        </th>
+                        </TableHead>
                         {sources.map((s) => (
-                            <th
-                                key={s.paymentSourceId}
-                                className="p-2 font-medium"
-                            >
+                            <TableHead key={s.paymentSourceId}>
                                 {sourceColumnTitle(s)}
-                            </th>
+                            </TableHead>
                         ))}
-                        <th className="p-2 text-right font-medium">明细实付</th>
-                    </tr>
-                </thead>
-                <tbody>
+                        <TableHead data-align="end">明细实付</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {items.map((item) => {
                         const rowResult = view.conservation.itemRowResults.find(
                             (r) => r.mallOrderItemId === item.mallOrderItemId,
                         )
                         return (
-                            <tr
-                                key={item.mallOrderItemId}
-                                className="border-b border-grid"
-                            >
-                                <th
+                            <TableRow key={item.mallOrderItemId}>
+                                <TableHead
                                     scope="row"
-                                    className="sticky left-0 bg-card p-2 text-left font-normal"
+                                    className="sticky left-0 z-10 h-auto whitespace-normal bg-card font-normal text-foreground"
                                 >
                                     <div className="font-medium">
                                         {item.nameSnapshot}
@@ -108,7 +112,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                                             {item.externalItemId}
                                         </span>
                                     </div>
-                                </th>
+                                </TableHead>
                                 {sources.map((s) => {
                                     const amount = allocationAmount(
                                         view,
@@ -116,17 +120,15 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                                         s.paymentSourceId,
                                     )
                                     return (
-                                        <td
-                                            key={s.paymentSourceId}
-                                            className="p-2"
-                                        >
+                                        <TableCell key={s.paymentSourceId}>
                                             <MoneyValue value={amount} />
-                                        </td>
+                                        </TableCell>
                                     )
                                 })}
-                                <td
+                                <TableCell
+                                    data-align="end"
                                     className={cn(
-                                        "p-2 text-right",
+                                        "whitespace-normal",
                                         rowResult &&
                                             !rowResult.valid &&
                                             "bg-destructive/10",
@@ -142,19 +144,19 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                                             {rowResult.actual}
                                         </div>
                                     ) : null}
-                                </td>
-                            </tr>
+                                </TableCell>
+                            </TableRow>
                         )
                     })}
-                </tbody>
-                <tfoot>
-                    <tr className="border-t border-grid font-medium">
-                        <th
+                </TableBody>
+                <TableFooter>
+                    <TableRow>
+                        <TableHead
                             scope="row"
-                            className="sticky left-0 bg-card p-2 text-left"
+                            className="sticky left-0 z-10 bg-muted/50"
                         >
                             来源合计
-                        </th>
+                        </TableHead>
                         {sources.map((s) => {
                             const col =
                                 view.conservation.sourceColumnResults.find(
@@ -162,10 +164,10 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                                         r.paymentSourceId === s.paymentSourceId,
                                 )
                             return (
-                                <td
+                                <TableCell
                                     key={s.paymentSourceId}
                                     className={cn(
-                                        "p-2",
+                                        "whitespace-normal",
                                         col &&
                                             !col.valid &&
                                             "bg-destructive/10",
@@ -177,18 +179,18 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
                                             期望 {col.expected}
                                         </div>
                                     ) : null}
-                                </td>
+                                </TableCell>
                             )
                         })}
-                        <td className="p-2 text-right">
+                        <TableCell data-align="end">
                             <MoneyValue
                                 value={view.conservation.orderTotal.actual}
                                 taxBasis="gross"
                             />
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
+                        </TableCell>
+                    </TableRow>
+                </TableFooter>
+            </Table>
             <p className="text-xs text-muted-foreground">
                 支付来源仅卡券与微信；不存在福利账户分支。成本不进入本矩阵。
             </p>

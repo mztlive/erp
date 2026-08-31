@@ -17,6 +17,15 @@ import {
     ChartTooltipContent,
     type ChartConfig,
 } from "@/components/ui/chart"
+import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { formatMoneyDisplay } from "../../lib/presentation"
 import type { CardBusinessAnalyticsView } from "../../types"
 
@@ -122,53 +131,40 @@ export function ContributionChart({
                                 />
                             </LineChart>
                         </ChartContainer>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                                <caption className="mb-2 text-left text-muted-foreground">
-                                    经营贡献趋势数据表（与图等价）
-                                </caption>
-                                <thead>
-                                    <tr className="border-b text-muted-foreground">
-                                        <th scope="col" className="py-1 pr-2">
-                                            周
-                                        </th>
-                                        <th scope="col" className="py-1 pr-2">
-                                            经营贡献(不含税)
-                                        </th>
-                                        <th scope="col" className="py-1 pr-2">
-                                            消费毛差(不含税)
-                                        </th>
-                                        <th scope="col" className="py-1">
-                                            覆盖率
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {contributionChartData.map((r) => (
-                                        <tr
-                                            key={r.period}
-                                            className="border-b border-grid"
+                        <Table className="caption-top" data-density="compact">
+                            <TableCaption className="mb-2 mt-0 text-left">
+                                经营贡献趋势数据表（与图等价）
+                            </TableCaption>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>周</TableHead>
+                                    <TableHead>经营贡献(不含税)</TableHead>
+                                    <TableHead>消费毛差(不含税)</TableHead>
+                                    <TableHead>覆盖率</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {contributionChartData.map((r) => (
+                                    <TableRow key={r.period}>
+                                        <TableHead
+                                            scope="row"
+                                            className="bg-transparent font-medium text-foreground"
                                         >
-                                            <th
-                                                scope="row"
-                                                className="py-1 pr-2 font-medium"
-                                            >
-                                                {r.period}
-                                            </th>
-                                            <td className="num py-1 pr-2">
-                                                {r.contributionLabel}
-                                            </td>
-                                            <td className="num py-1 pr-2">
-                                                {r.marginLabel}
-                                            </td>
-                                            <td className="num py-1">
-                                                {r.coverageLabel}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                            {r.period}
+                                        </TableHead>
+                                        <TableCell className="num">
+                                            {r.contributionLabel}
+                                        </TableCell>
+                                        <TableCell className="num">
+                                            {r.marginLabel}
+                                        </TableCell>
+                                        <TableCell className="num">
+                                            {r.coverageLabel}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
                     </>
                 ) : (
                     <BusinessEmptyState

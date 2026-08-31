@@ -22,6 +22,15 @@ import {
     ChartTooltipContent,
     type ChartConfig,
 } from "@/components/ui/chart"
+import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { formatMoneyDisplay } from "../../lib/presentation"
 import type { CardBusinessAnalyticsView } from "../../types"
 
@@ -108,60 +117,44 @@ export function ConsumptionTrendChart({ points }: ConsumptionTrendChartProps) {
                         />
                     </BarChart>
                 </ChartContainer>
-                {/* 键盘/读屏等价数据表 */}
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                        <caption className="mb-2 text-left text-muted-foreground">
-                            消费与余额趋势数据表（与图等价）
-                        </caption>
-                        <thead>
-                            <tr className="border-b text-muted-foreground">
-                                <th scope="col" className="py-1 pr-2">
-                                    周
-                                </th>
-                                <th scope="col" className="py-1 pr-2">
-                                    销售(含税)
-                                </th>
-                                <th scope="col" className="py-1 pr-2">
-                                    消费(含税)
-                                </th>
-                                <th scope="col" className="py-1 pr-2">
-                                    退款(含税)
-                                </th>
-                                <th scope="col" className="py-1">
-                                    余额(含税)
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {consumptionChartData.map((r) => (
-                                <tr
-                                    key={r.period}
-                                    className="border-b border-grid"
+                <Table className="caption-top" data-density="compact">
+                    <TableCaption className="mb-2 mt-0 text-left">
+                        消费与余额趋势数据表（与图等价）
+                    </TableCaption>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>周</TableHead>
+                            <TableHead>销售(含税)</TableHead>
+                            <TableHead>消费(含税)</TableHead>
+                            <TableHead>退款(含税)</TableHead>
+                            <TableHead>余额(含税)</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {consumptionChartData.map((r) => (
+                            <TableRow key={r.period}>
+                                <TableHead
+                                    scope="row"
+                                    className="bg-transparent font-medium text-foreground"
                                 >
-                                    <th
-                                        scope="row"
-                                        className="py-1 pr-2 font-medium"
-                                    >
-                                        {r.period}
-                                    </th>
-                                    <td className="num py-1 pr-2">
-                                        {r.salesLabel}
-                                    </td>
-                                    <td className="num py-1 pr-2">
-                                        {r.consumptionLabel}
-                                    </td>
-                                    <td className="num py-1 pr-2">
-                                        {r.refundLabel}
-                                    </td>
-                                    <td className="num py-1">
-                                        {r.balanceLabel}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                                    {r.period}
+                                </TableHead>
+                                <TableCell className="num">
+                                    {r.salesLabel}
+                                </TableCell>
+                                <TableCell className="num">
+                                    {r.consumptionLabel}
+                                </TableCell>
+                                <TableCell className="num">
+                                    {r.refundLabel}
+                                </TableCell>
+                                <TableCell className="num">
+                                    {r.balanceLabel}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
             </CardContent>
         </Card>
     )

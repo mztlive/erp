@@ -3,6 +3,14 @@
 import * as React from "react"
 
 import { MoneyValue } from "@/components/business"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { cn } from "@/lib/utils"
@@ -29,66 +37,48 @@ function OverviewField({
 export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
     return (
-        <div className="overflow-x-auto">
-            <table
-                className={cn(
-                    "w-full text-sm",
-                    isCard ? "min-w-[62rem]" : "min-w-[54rem]",
-                )}
+        <div className="overflow-hidden rounded-lg border">
+            <Table
+                data-density="compact"
+                className={isCard ? "min-w-[62rem]" : "min-w-[54rem]"}
             >
-                <thead className="bg-muted/50 text-left">
-                    <tr>
-                        <th className="whitespace-nowrap px-3 py-1.5 font-medium">
-                            项目
-                        </th>
-                        <th className="whitespace-nowrap px-3 py-1.5 font-medium">
-                            数量 / 单位
-                        </th>
-                        <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
-                            含税单价
-                        </th>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>项目</TableHead>
+                        <TableHead>数量 / 单位</TableHead>
+                        <TableHead data-align="end">含税单价</TableHead>
                         {isCard ? (
                             <>
-                                <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
-                                    面值
-                                </th>
-                                <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
-                                    配赠
-                                </th>
-                                <th className="whitespace-nowrap px-3 py-1.5 font-medium">
-                                    卡形态
-                                </th>
+                                <TableHead data-align="end">面值</TableHead>
+                                <TableHead data-align="end">配赠</TableHead>
+                                <TableHead>卡形态</TableHead>
                             </>
                         ) : (
-                            <th className="whitespace-nowrap px-3 py-1.5 font-medium">
-                                承诺交付日
-                            </th>
+                            <TableHead>承诺交付日</TableHead>
                         )}
-                        <th className="whitespace-nowrap px-3 py-1.5 text-right font-medium">
-                            含税小计
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
+                        <TableHead data-align="end">含税小计</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
                     {order.lineItems.map((line) => (
-                        <tr key={line.id} className="border-t border-grid">
-                            <td className="px-3 py-1.5">
+                        <TableRow key={line.id}>
+                            <TableCell className="whitespace-normal">
                                 <div>{line.name}</div>
                                 {line.sku ? (
                                     <div className="num text-xs text-muted-foreground">
                                         {line.sku}
                                     </div>
                                 ) : null}
-                            </td>
-                            <td className="num px-3 py-1.5">
+                            </TableCell>
+                            <TableCell data-align="end">
                                 {line.quantity} {line.unit}
-                            </td>
-                            <td className="px-3 py-1.5 text-right">
+                            </TableCell>
+                            <TableCell data-align="end">
                                 <MoneyValue value={line.unitPriceGross} />
-                            </td>
+                            </TableCell>
                             {isCard ? (
                                 <>
-                                    <td className="px-3 py-1.5 text-right text-sm">
+                                    <TableCell data-align="end">
                                         {line.faceValue ? (
                                             <MoneyValue
                                                 value={line.faceValue}
@@ -96,28 +86,28 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                         ) : (
                                             "—"
                                         )}
-                                    </td>
-                                    <td className="num px-3 py-1.5 text-right text-sm">
+                                    </TableCell>
+                                    <TableCell data-align="end">
                                         {line.giftRate
                                             ? `${line.giftRate}%`
                                             : "—"}
-                                    </td>
-                                    <td className="px-3 py-1.5 text-sm">
+                                    </TableCell>
+                                    <TableCell>
                                         {line.cardForm || "—"}
-                                    </td>
+                                    </TableCell>
                                 </>
                             ) : (
-                                <td className="num px-3 py-1.5 text-sm text-muted-foreground">
+                                <TableCell className="text-muted-foreground">
                                     {line.dueDate || "—"}
-                                </td>
+                                </TableCell>
                             )}
-                            <td className="px-3 py-1.5 text-right">
+                            <TableCell data-align="end">
                                 <MoneyValue value={line.amountGross} />
-                            </td>
-                        </tr>
+                            </TableCell>
+                        </TableRow>
                     ))}
-                </tbody>
-            </table>
+                </TableBody>
+            </Table>
         </div>
     )
 }

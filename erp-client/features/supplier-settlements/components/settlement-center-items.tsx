@@ -11,6 +11,14 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 import { cn } from "@/lib/utils"
 
@@ -32,31 +40,28 @@ function SettlementCenterItems({
                     冻结数据 + 不可变完成/取消/退款记录 · 金额只读，不可修改
                 </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto pt-0">
-                <table className="w-full min-w-[48rem] text-left text-sm">
-                    <thead className="border-b text-xs text-muted-foreground">
-                        <tr>
-                            <th className="px-2 py-2">供应商订单</th>
-                            <th className="px-2 py-2">采购单号</th>
-                            <th className="px-2 py-2">外部单号</th>
-                            <th className="px-2 py-2">商品</th>
-                            <th className="px-2 py-2 text-right">数量</th>
-                            <th className="px-2 py-2">记录</th>
-                            <th className="px-2 py-2 text-right">订单</th>
-                            <th className="px-2 py-2 text-right">运费</th>
-                            <th className="px-2 py-2 text-right">服务费</th>
-                            <th className="px-2 py-2 text-right">退款</th>
-                            <th className="px-2 py-2 text-right">ERP</th>
-                            <th className="px-2 py-2 text-right">账单行</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <CardContent className="pt-0">
+                <Table className="min-w-[48rem]" data-density="compact">
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>供应商订单</TableHead>
+                            <TableHead>采购单号</TableHead>
+                            <TableHead>外部单号</TableHead>
+                            <TableHead>商品</TableHead>
+                            <TableHead data-align="end">数量</TableHead>
+                            <TableHead>记录</TableHead>
+                            <TableHead data-align="end">订单</TableHead>
+                            <TableHead data-align="end">运费</TableHead>
+                            <TableHead data-align="end">服务费</TableHead>
+                            <TableHead data-align="end">退款</TableHead>
+                            <TableHead data-align="end">ERP</TableHead>
+                            <TableHead data-align="end">账单行</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
                         {items.map((it) => (
-                            <tr
-                                key={it.itemId}
-                                className="border-b border-grid"
-                            >
-                                <td className="px-2 py-2">
+                            <TableRow key={it.itemId}>
+                                <TableCell>
                                     <Link
                                         id={`supplier-settlements-items-row-${toAutomationIdSegment(it.itemId)}-supplier-order`}
                                         href={`/supplier-api/orders?q=${encodeURIComponent(it.supplierOrderNo)}`}
@@ -64,8 +69,8 @@ function SettlementCenterItems({
                                     >
                                         {it.supplierOrderNo}
                                     </Link>
-                                </td>
-                                <td className="px-2 py-2">
+                                </TableCell>
+                                <TableCell>
                                     {it.purchaseNo ? (
                                         <Link
                                             id={`supplier-settlements-items-row-${toAutomationIdSegment(it.itemId)}-purchase`}
@@ -83,48 +88,50 @@ function SettlementCenterItems({
                                             —
                                         </span>
                                     )}
-                                </td>
-                                <td className="num px-2 py-2 text-muted-foreground">
+                                </TableCell>
+                                <TableCell className="num text-muted-foreground">
                                     {it.externalOrderNo}
-                                </td>
-                                <td className="px-2 py-2">{it.productName}</td>
-                                <td className="num px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell className="whitespace-normal">
+                                    {it.productName}
+                                </TableCell>
+                                <TableCell data-align="end">
                                     {it.quantity}
-                                </td>
-                                <td className="px-2 py-2 text-xs">
+                                </TableCell>
+                                <TableCell className="text-xs">
                                     {it.factLabel}
-                                </td>
-                                <td className="px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={it.orderAmountGross}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={it.freightGross}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={it.serviceFeeGross}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={it.refundGross}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     <MoneyValue
                                         value={it.erpAmountGross}
                                         taxBasis="gross"
                                     />
-                                </td>
-                                <td className="px-2 py-2 text-right">
+                                </TableCell>
+                                <TableCell data-align="end">
                                     {it.supplierBillLineGross != null ? (
                                         <MoneyValue
                                             value={it.supplierBillLineGross}
@@ -133,21 +140,21 @@ function SettlementCenterItems({
                                     ) : (
                                         "—"
                                     )}
-                                </td>
-                            </tr>
+                                </TableCell>
+                            </TableRow>
                         ))}
                         {items.length === 0 ? (
-                            <tr>
-                                <td
+                            <TableRow>
+                                <TableCell
                                     colSpan={12}
-                                    className="px-2 py-6 text-center text-muted-foreground"
+                                    className="py-6 text-center text-muted-foreground"
                                 >
                                     暂无明细；可在草稿态刷新试算纳入不可变记录
-                                </td>
-                            </tr>
+                                </TableCell>
+                            </TableRow>
                         ) : null}
-                    </tbody>
-                </table>
+                    </TableBody>
+                </Table>
                 <p className="mt-2 text-xs text-muted-foreground">
                     输入控件未提供金额编辑路径；账单原值与订单记录不可覆盖。
                 </p>

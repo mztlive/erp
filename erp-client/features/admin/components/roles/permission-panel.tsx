@@ -7,6 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
@@ -295,121 +303,105 @@ function PermissionMatrixSection({
                     全选
                 </label>
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-[32rem] border-collapse text-sm">
-                    <thead>
-                        <tr className="border-b border-grid">
-                            <th
-                                scope="col"
-                                className="sticky left-0 z-10 w-full bg-card px-3 py-1.5 text-left text-xs font-medium text-muted-foreground"
-                            >
-                                对象
-                            </th>
-                            {group.actions.map((action, columnIndex) => {
-                                const codes = columnCodes(group, columnIndex)
-                                const state = checkedState(codes, selectedSet)
-                                const dangerous = isDangerousAction(action)
-                                return (
-                                    <th
-                                        key={action}
-                                        scope="col"
-                                        className="px-3 py-1.5 text-center align-bottom"
-                                    >
-                                        <button
-                                            id={`${baseId}-action-${toAutomationIdSegment(action)}-toggle`}
-                                            type="button"
-                                            onClick={() =>
-                                                onToggle(codes, state !== "all")
-                                            }
-                                            title={`勾选或取消整列：${actionLabel(action)}`}
-                                            className={cn(
-                                                "whitespace-nowrap rounded px-1 text-xs font-medium transition-colors hover:text-foreground",
-                                                dangerous
-                                                    ? "text-destructive"
-                                                    : "text-muted-foreground",
-                                            )}
-                                        >
-                                            {actionLabel(action)}
-                                        </button>
-                                    </th>
-                                )
-                            })}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {group.rows.map((row) => {
-                            const rowState = checkedState(
-                                row.codes,
-                                selectedSet,
-                            )
+            <Table className="min-w-[32rem]" data-density="compact">
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="sticky left-0 z-30 w-full">
+                            对象
+                        </TableHead>
+                        {group.actions.map((action, columnIndex) => {
+                            const codes = columnCodes(group, columnIndex)
+                            const state = checkedState(codes, selectedSet)
+                            const dangerous = isDangerousAction(action)
                             return (
-                                <tr
-                                    key={row.resource}
-                                    className="border-b border-grid last:border-0 hover:bg-muted/30"
+                                <TableHead
+                                    key={action}
+                                    data-align="center"
+                                    className="align-bottom"
                                 >
-                                    <th
-                                        scope="row"
-                                        className="sticky left-0 z-10 w-full bg-card px-3 py-1.5 text-left font-normal"
+                                    <button
+                                        id={`${baseId}-action-${toAutomationIdSegment(action)}-toggle`}
+                                        type="button"
+                                        onClick={() =>
+                                            onToggle(codes, state !== "all")
+                                        }
+                                        title={`勾选或取消整列：${actionLabel(action)}`}
+                                        className={cn(
+                                            "whitespace-nowrap rounded px-1 text-xs font-medium transition-colors hover:text-foreground",
+                                            dangerous
+                                                ? "text-destructive"
+                                                : "text-muted-foreground",
+                                        )}
                                     >
-                                        <label
-                                            htmlFor={`${baseId}-${row.resource}`}
-                                            className="flex cursor-pointer items-center gap-2"
-                                        >
-                                            <Checkbox
-                                                id={`${baseId}-${row.resource}`}
-                                                checked={rowState === "all"}
-                                                indeterminate={
-                                                    rowState === "some"
-                                                }
-                                                onCheckedChange={(next) =>
-                                                    onToggle(
-                                                        row.codes,
-                                                        next === true,
-                                                    )
-                                                }
-                                                aria-label={`全选 ${row.label}`}
-                                            />
-                                            <span className="whitespace-nowrap">
-                                                {row.label}
-                                            </span>
-                                        </label>
-                                    </th>
-                                    {row.cells.map((cell, index) => (
-                                        <td
-                                            key={group.actions[index]}
-                                            className="px-3 py-1.5 text-center"
-                                        >
-                                            {cell ? (
-                                                <PermissionCell
-                                                    id={`${baseId}-cell-${toAutomationIdSegment(row.resource)}-${toAutomationIdSegment(String(group.actions[index]))}`}
-                                                    item={cell}
-                                                    rowLabel={row.label}
-                                                    checked={selectedSet.has(
-                                                        cell.code,
-                                                    )}
-                                                    onCheckedChange={(next) =>
-                                                        onToggle(
-                                                            [cell.code],
-                                                            next,
-                                                        )
-                                                    }
-                                                />
-                                            ) : (
-                                                <span
-                                                    aria-hidden="true"
-                                                    className="text-muted-foreground/40"
-                                                >
-                                                    —
-                                                </span>
-                                            )}
-                                        </td>
-                                    ))}
-                                </tr>
+                                        {actionLabel(action)}
+                                    </button>
+                                </TableHead>
                             )
                         })}
-                    </tbody>
-                </table>
-            </div>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {group.rows.map((row) => {
+                        const rowState = checkedState(row.codes, selectedSet)
+                        return (
+                            <TableRow key={row.resource}>
+                                <TableHead
+                                    scope="row"
+                                    className="sticky left-0 z-10 w-full bg-card font-normal text-foreground"
+                                >
+                                    <label
+                                        htmlFor={`${baseId}-${row.resource}`}
+                                        className="flex cursor-pointer items-center gap-2"
+                                    >
+                                        <Checkbox
+                                            id={`${baseId}-${row.resource}`}
+                                            checked={rowState === "all"}
+                                            indeterminate={rowState === "some"}
+                                            onCheckedChange={(next) =>
+                                                onToggle(
+                                                    row.codes,
+                                                    next === true,
+                                                )
+                                            }
+                                            aria-label={`全选 ${row.label}`}
+                                        />
+                                        <span className="whitespace-nowrap">
+                                            {row.label}
+                                        </span>
+                                    </label>
+                                </TableHead>
+                                {row.cells.map((cell, index) => (
+                                    <TableCell
+                                        key={group.actions[index]}
+                                        data-align="center"
+                                    >
+                                        {cell ? (
+                                            <PermissionCell
+                                                id={`${baseId}-cell-${toAutomationIdSegment(row.resource)}-${toAutomationIdSegment(String(group.actions[index]))}`}
+                                                item={cell}
+                                                rowLabel={row.label}
+                                                checked={selectedSet.has(
+                                                    cell.code,
+                                                )}
+                                                onCheckedChange={(next) =>
+                                                    onToggle([cell.code], next)
+                                                }
+                                            />
+                                        ) : (
+                                            <span
+                                                aria-hidden="true"
+                                                className="text-muted-foreground/40"
+                                            >
+                                                —
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        )
+                    })}
+                </TableBody>
+            </Table>
         </section>
     )
 }

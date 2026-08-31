@@ -25,6 +25,15 @@ import {
     type ChartConfig,
 } from "@/components/ui/chart"
 import {
+    Table,
+    TableBody,
+    TableCaption,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import {
     DescriptionDetails,
     DescriptionItem,
     DescriptionList,
@@ -149,56 +158,51 @@ export function ProfitLossChartsAndStageReference({
                                         />
                                     </LineChart>
                                 </ChartContainer>
-                                <div className="mt-3 overflow-x-auto">
-                                    <table className="w-full text-left text-xs">
-                                        <caption className="sr-only">
+                                <div className="mt-3">
+                                    <Table data-density="compact">
+                                        <TableCaption className="sr-only">
                                             盈亏趋势数据表（单位：元，非卡券不含税；图内以万元展示）
-                                        </caption>
-                                        <thead>
-                                            <tr className="border-b text-muted-foreground">
-                                                <th className="py-1 pr-2">
-                                                    期间
-                                                </th>
-                                                <th className="py-1 pr-2 text-right">
+                                        </TableCaption>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>期间</TableHead>
+                                                <TableHead data-align="end">
                                                     收入
-                                                </th>
-                                                <th className="py-1 pr-2 text-right">
+                                                </TableHead>
+                                                <TableHead data-align="end">
                                                     成本
-                                                </th>
-                                                <th className="py-1 pr-2 text-right">
+                                                </TableHead>
+                                                <TableHead data-align="end">
                                                     盈亏
-                                                </th>
-                                                <th className="py-1">可靠性</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
+                                                </TableHead>
+                                                <TableHead>可靠性</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
                                             {data.trend.map((t) => (
-                                                <tr
-                                                    key={t.period}
-                                                    className="border-b border-grid"
-                                                >
-                                                    <td className="py-1 pr-2">
+                                                <TableRow key={t.period}>
+                                                    <TableCell>
                                                         {t.period}
-                                                    </td>
-                                                    <td className="num py-1 pr-2 text-right">
+                                                    </TableCell>
+                                                    <TableCell data-align="end">
                                                         {formatMoneyDisplay(
                                                             t.netSalesRevenue,
                                                         )}
-                                                    </td>
-                                                    <td className="num py-1 pr-2 text-right">
+                                                    </TableCell>
+                                                    <TableCell data-align="end">
                                                         {formatMoneyDisplay(
                                                             t.actualCostNet,
                                                         )}
-                                                    </td>
-                                                    <td className="num py-1 pr-2 text-right">
+                                                    </TableCell>
+                                                    <TableCell data-align="end">
                                                         {t.actualProfitLossNet !=
                                                         null
                                                             ? formatMoneyDisplay(
                                                                   t.actualProfitLossNet,
                                                               )
                                                             : "不可用"}
-                                                    </td>
-                                                    <td className="py-1 text-muted-foreground">
+                                                    </TableCell>
+                                                    <TableCell className="text-muted-foreground">
                                                         {t.reliability ===
                                                         "reliable"
                                                             ? "可靠"
@@ -206,11 +210,11 @@ export function ProfitLossChartsAndStageReference({
                                                                 "partial"
                                                               ? "部分可靠"
                                                               : "不可用"}
-                                                    </td>
-                                                </tr>
+                                                    </TableCell>
+                                                </TableRow>
                                             ))}
-                                        </tbody>
-                                    </table>
+                                        </TableBody>
+                                    </Table>
                                 </div>
                             </>
                         ) : (
