@@ -110,6 +110,7 @@ export function PurchaseOrderDetailSections({
     return (
         <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
             <ObjectSectionTabs
+                id={`procurement-orders-detail-tabs-${order.identity.purchaseOrderId}`}
                 value={activeSection}
                 onValueChange={handleSectionChange}
                 items={items}

@@ -41,6 +41,7 @@ export function CreateBackfillSheet({
                 side="right"
                 size="detail"
                 className="overflow-y-auto"
+                closeButtonId="operations-history-backfill-create-close"
             >
                 <SheetHeader>
                     <SheetTitle>创建回填任务</SheetTitle>
@@ -176,6 +177,7 @@ export function CreateBackfillSheet({
                     ) : null}
                     <div className="flex w-full justify-end gap-2">
                         <Button
+                            id="operations-history-backfill-create-cancel"
                             type="button"
                             variant="secondary"
                             onClick={() => onOpenChange(false)}
@@ -183,6 +185,7 @@ export function CreateBackfillSheet({
                             取消
                         </Button>
                         <Button
+                            id="operations-history-backfill-create-submit"
                             type="button"
                             disabled={blocked || pending || !context}
                             onClick={() => void onSubmit()}

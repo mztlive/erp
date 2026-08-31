@@ -10,7 +10,11 @@
 
 import { auditActionLabel } from "@/features/access-audit/lib/audit-labels"
 
-export type AccessResultFilterValue = "SUCCESS" | "DENIED" | "FAILED" | "UNKNOWN"
+export type AccessResultFilterValue =
+    | "SUCCESS"
+    | "DENIED"
+    | "FAILED"
+    | "UNKNOWN"
 
 /** 审计动作取值即后端 action_type（`<对象>.<动作>`），选项由查询结果实时归纳。 */
 export type AccessActionFilterValue = string

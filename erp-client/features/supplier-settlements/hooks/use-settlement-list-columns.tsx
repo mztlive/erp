@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { SettlementListRow } from "@/features/supplier-settlements/types"
 
@@ -157,6 +158,7 @@ export function useSettlementListColumns(
                 cell: ({ row }) => (
                     <div className="flex flex-wrap gap-1">
                         <Button
+                            id={`supplier-settlements-list-row-${toAutomationIdSegment(row.original.statementId)}-preview`}
                             type="button"
                             size="sm"
                             variant="outline"
@@ -167,6 +169,7 @@ export function useSettlementListColumns(
                             预览
                         </Button>
                         <Button
+                            id={`supplier-settlements-list-row-${toAutomationIdSegment(row.original.statementId)}-open`}
                             type="button"
                             size="sm"
                             onClick={() => onOpen(row.original.statementId)}

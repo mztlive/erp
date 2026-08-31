@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card"
 import type { MallConsumptionOrderView } from "@/features/mall-consumption-orders/types"
 import { ATTRIBUTION_STATUS_LABEL } from "@/features/mall-consumption-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 
 export function OriginSection({ view }: { view: MallConsumptionOrderView }) {
@@ -42,23 +43,14 @@ export function OriginSection({ view }: { view: MallConsumptionOrderView }) {
                                     {s.sourceReference}
                                 </span>
                                 {s.sourceType === "CARD" ? (
-                                    <Badge
-                                        variant="outline"
-                                        className="ml-2"
-                                    >
+                                    <Badge variant="outline" className="ml-2">
                                         非卡号
                                     </Badge>
                                 ) : null}
                             </CardTitle>
                             <CardDescription>
-                                金额{" "}
-                                <MoneyValue value={s.amount} />{" "}
-                                · 归集{" "}
-                                {
-                                    ATTRIBUTION_STATUS_LABEL[
-                                        s.attributionStatus
-                                    ]
-                                }
+                                金额 <MoneyValue value={s.amount} /> · 归集{" "}
+                                {ATTRIBUTION_STATUS_LABEL[s.attributionStatus]}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3">
@@ -100,6 +92,7 @@ export function OriginSection({ view }: { view: MallConsumptionOrderView }) {
                                             <>
                                                 {" · "}
                                                 <Link
+                                                    id={`mall-consumption-order-center-origin-${toAutomationIdSegment(s.paymentSourceId)}-workitem-link`}
                                                     className="underline"
                                                     href={`/governance/integration-errors?resolveWorkItemId=${s.attributionIssue.workItemId}&queueContextId=queue:W29:mine:all`}
                                                 >
@@ -129,11 +122,13 @@ export function OriginSection({ view }: { view: MallConsumptionOrderView }) {
                                             owner: "—",
                                             openAction: (
                                                 <Button
+                                                    id={`mall-consumption-order-center-origin-${toAutomationIdSegment(s.origin.customerId)}-customer`}
                                                     type="button"
                                                     size="xs"
                                                     variant="outline"
                                                     render={
                                                         <Link
+                                                            id={`mall-consumption-order-center-origin-${toAutomationIdSegment(s.origin.customerId)}-customer-link`}
                                                             href={`/sales/customers/${s.origin.customerId}`}
                                                         />
                                                     }
@@ -160,18 +155,18 @@ export function OriginSection({ view }: { view: MallConsumptionOrderView }) {
                                             owner: "—",
                                             openAction: (
                                                 <Button
+                                                    id={`mall-consumption-order-center-origin-${toAutomationIdSegment(s.origin.salesOrderId)}-sales-order`}
                                                     type="button"
                                                     size="xs"
                                                     variant="outline"
                                                     render={
                                                         <Link
+                                                            id={`mall-consumption-order-center-origin-${toAutomationIdSegment(s.origin.salesOrderId)}-sales-order-link`}
                                                             href={`/sales/orders/${s.origin.salesOrderId}`}
                                                         />
                                                     }
                                                 >
-                                                    {openWorkspaceLabel(
-                                                        "W05",
-                                                    )}
+                                                    {openWorkspaceLabel("W05")}
                                                 </Button>
                                             ),
                                         },

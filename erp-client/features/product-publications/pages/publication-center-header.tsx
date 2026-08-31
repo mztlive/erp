@@ -65,6 +65,7 @@ export function PublicationCenterHeader({
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="publication-center-header-back"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -74,6 +75,7 @@ export function PublicationCenterHeader({
                             返回列表
                         </Button>
                         <Button
+                            id="publication-center-header-refresh"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -147,6 +149,7 @@ export function PublicationCenterHeader({
                 primaryAction={
                     dirty ? (
                         <Button
+                            id="publication-center-header-submit-publish"
                             type="button"
                             size="sm"
                             disabled={publishBlocked || publishPending}
@@ -167,6 +170,7 @@ export function PublicationCenterHeader({
                         </Button>
                     ) : (
                         <Button
+                            id="publication-center-header-prepare"
                             type="button"
                             size="sm"
                             disabled={!canPrepare}
@@ -185,6 +189,7 @@ export function PublicationCenterHeader({
                 secondaryActions={
                     canPause ? (
                         <Button
+                            id="publication-center-header-pause"
                             type="button"
                             size="sm"
                             variant="outline"

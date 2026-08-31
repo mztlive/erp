@@ -14,11 +14,7 @@ import {
 } from "@/components/ui/card"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 
-function SettlementCenterTotals({
-    detail,
-}: {
-    detail: SettlementDetailView
-}) {
+function SettlementCenterTotals({ detail }: { detail: SettlementDetailView }) {
     const st = detail.statement
     return (
         <Card size="sm" className={surfacePanelClassName}>

@@ -42,6 +42,7 @@ export function DecisionDialog({
     allowedActions,
     context,
     onApplied,
+    id = "governance-approval-decision-dialog",
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -56,6 +57,7 @@ export function DecisionDialog({
         impactSummary?: string
     }>
     onApplied?: (view: ApprovalCommandView) => void
+    id?: string
 }) {
     const submitDecision = useSubmitDecisionMutation()
     const [slot, setSlot] = React.useState<IdempotencySlot | null>(null)
@@ -128,7 +130,7 @@ export function DecisionDialog({
                 onApplied?.(view)
             }}
         >
-            <DialogContent>
+            <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>
                         {defaultDecision === "REJECT" ? "确认驳回" : "确认通过"}
@@ -197,6 +199,7 @@ export function DecisionDialog({
                         name="reason"
                         children={(field) => (
                             <field.TextareaField
+                                id={`${id}-reason`}
                                 label={
                                     form.state.values.decision === "REJECT"
                                         ? "驳回原因"
@@ -220,6 +223,7 @@ export function DecisionDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id={`${id}-cancel`}
                             type="button"
                             variant="outline"
                             disabled={submitDecision.isPending}
@@ -229,6 +233,7 @@ export function DecisionDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id={`${id}-submit`}
                                 label={
                                     defaultDecision === "REJECT"
                                         ? "确认驳回"

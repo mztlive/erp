@@ -155,17 +155,23 @@ pub fn cancel_purchase_order_to_draft(order: &mut PurchaseOrder, updated_by: &st
     Ok(order.cancel_approval(updated_by)?)
 }
 
-/// 最终通过前置：仅 `IN_APPROVAL` 可进入生效。
+/// 将采购单最终生效领域守卫适配为既有 Service 冲突语义。
+///
+/// # 参数
+/// * `order` - 待执行最终通过动作的采购单聚合
+///
+/// # 返回
+/// 聚合主状态允许最终生效时返回 `Ok(())`。
 ///
 /// # 错误
-/// 状态不是审批中时返回冲突。
+/// 聚合不允许最终生效时返回文本不变的 `ConflictError`。
+///
+/// # 关键约束
+/// 仅调用实体的状态专用守卫，不附加冻结提交指针等更严格校验。
 pub fn ensure_final_approve_formalize(order: &PurchaseOrder) -> Result<()> {
-    if order.stable.status != PurchaseOrderStatus::InApproval {
-        return Err(Error::ConflictError(
-            "只有审批中的采购单可以由最终通过动作生效".to_string(),
-        ));
-    }
-    Ok(())
+    order
+        .ensure_can_formalize()
+        .map_err(|_| Error::ConflictError("只有审批中的采购单可以由最终通过动作生效".to_string()))
 }
 
 /// 无已绑定定义的必须审批单据不得提交。

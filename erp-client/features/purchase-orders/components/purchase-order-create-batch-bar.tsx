@@ -41,6 +41,7 @@ export function PurchaseOrderCreateBatchBar({
                 已选 {selectedCount} 行
             </p>
             <OptionCombobox
+                id="procurement-orders-create-batch-option"
                 className="w-64"
                 value={basisId}
                 onValueChange={setBasisId}
@@ -64,6 +65,7 @@ export function PurchaseOrderCreateBatchBar({
                 }))}
             />
             <Button
+                id="procurement-orders-create-batch-apply"
                 type="button"
                 size="sm"
                 variant="outline"
@@ -76,6 +78,7 @@ export function PurchaseOrderCreateBatchBar({
                 应用到选中行
             </Button>
             <Button
+                id="procurement-orders-create-batch-match"
                 type="button"
                 size="sm"
                 variant="outline"

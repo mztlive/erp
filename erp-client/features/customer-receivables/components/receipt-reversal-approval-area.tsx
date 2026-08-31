@@ -65,6 +65,7 @@ export function ReceiptReversalApprovalArea({
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
                     <ApprovalActionBar
+                        id="customer-receivables-reversal-approval-action-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={RECEIPT_REVERSAL_DOCUMENT_TYPE}
@@ -83,6 +84,7 @@ export function ReceiptReversalApprovalArea({
         <div className="space-y-3">
             <RuntimeSummary instance={approval?.instance} />
             <ExecutionHistory
+                id="customer-receivables-reversal-approval-history"
                 items={historyItems}
                 hasMore={historyQuery.hasNextPage}
                 loadingMore={historyQuery.isFetchingNextPage}
@@ -95,6 +97,7 @@ export function ReceiptReversalApprovalArea({
                 }
             />
             <ApprovalActionBar
+                id="customer-receivables-reversal-approval-action-bar"
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

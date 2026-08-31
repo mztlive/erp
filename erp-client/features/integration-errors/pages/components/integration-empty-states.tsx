@@ -14,6 +14,7 @@ export function IntegrationEmptyQueue({
             className="rounded-lg border-0 bg-transparent shadow-none ring-0"
             action={
                 <Button
+                    id="integration-queue-empty-clear-filters"
                     type="button"
                     size="sm"
                     variant="secondary"

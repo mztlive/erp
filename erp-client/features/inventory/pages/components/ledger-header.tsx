@@ -1,10 +1,6 @@
 "use client"
 
-import {
-    DownloadIcon,
-    LoaderCircleIcon,
-    RefreshCwIcon,
-} from "lucide-react"
+import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react"
 
 import { DataFreshness, PageActions, PageHeader } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
@@ -49,6 +45,7 @@ export function LedgerHeader({
                     actions={[
                         {
                             actionKey: "refresh",
+                            id: "inventory-ledger-refresh",
                             label: "刷新",
                             icon: RefreshCwIcon,
                             variant: "ghost",
@@ -56,10 +53,9 @@ export function LedgerHeader({
                         },
                         {
                             actionKey: "export",
+                            id: "inventory-ledger-export",
                             label: isExporting ? "导出中…" : "导出",
-                            icon: isExporting
-                                ? LoaderCircleIcon
-                                : DownloadIcon,
+                            icon: isExporting ? LoaderCircleIcon : DownloadIcon,
                             variant: "outline",
                             mobileVisibility: "hide",
                             disabled:

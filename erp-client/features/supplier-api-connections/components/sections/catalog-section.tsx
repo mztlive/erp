@@ -46,6 +46,7 @@ export function CatalogSection({
                     <CardDescription>
                         与连接状态分开展示 ·{" "}
                         <Link
+                            id="supplier-api-connections-catalog-open-offerings"
                             href={`/procurement/supplier-offerings?connectionId=${conn.connectionId}`}
                             className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
                         >
@@ -86,6 +87,7 @@ export function CatalogSection({
                     {canSync || syncBlocker ? (
                         <div className="flex flex-wrap gap-2">
                             <Button
+                                id="supplier-api-connections-catalog-sync"
                                 type="button"
                                 size="sm"
                                 disabled={!canSync || syncing}
@@ -93,7 +95,10 @@ export function CatalogSection({
                                 onClick={() => void onSync()}
                             >
                                 {syncing ? (
-                                    <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                                    <Spinner
+                                        className="size-4 animate-spin"
+                                        aria-hidden="true"
+                                    />
                                 ) : null}
                                 {syncing ? "同步中…" : "触发目录同步"}
                             </Button>

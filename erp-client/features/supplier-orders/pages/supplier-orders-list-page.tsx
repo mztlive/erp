@@ -192,6 +192,7 @@ export function SupplierOrdersListPage() {
                             label="列表数据"
                         />
                         <Button
+                            id="supplier-orders-list-export-trigger"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -203,7 +204,10 @@ export function SupplierOrdersListPage() {
                             onClick={openExportPreview}
                         >
                             {exportMutation.isPending ? (
-                                <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
+                                <Loader2Icon
+                                    className="size-3.5 animate-spin"
+                                    aria-hidden="true"
+                                />
                             ) : (
                                 <DownloadIcon className="size-3.5" />
                             )}
@@ -235,6 +239,7 @@ export function SupplierOrdersListPage() {
                     reference={actionResult.reference}
                     actions={
                         <Button
+                            id="supplier-orders-list-result-close"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -290,9 +295,7 @@ export function SupplierOrdersListPage() {
                             filters.setFulfillmentStatusesDraft
                         }
                         cancelStatusesDraft={filters.cancelStatusesDraft}
-                        setCancelStatusesDraft={
-                            filters.setCancelStatusesDraft
-                        }
+                        setCancelStatusesDraft={filters.setCancelStatusesDraft}
                         refundStatusesDraft={filters.refundStatusesDraft}
                         setRefundStatusesDraft={filters.setRefundStatusesDraft}
                         paidFromDraft={filters.paidFromDraft}

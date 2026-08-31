@@ -11,6 +11,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import type { ConnectionCenterView } from "@/features/supplier-api-connections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
@@ -51,6 +52,7 @@ export function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
                     </CardHeader>
                     <CardContent>
                         <Link
+                            id={`supplier-api-connections-related-${toAutomationIdSegment(item.label)}`}
                             href={item.href}
                             className="text-xs text-primary underline-offset-2 hover:underline"
                         >

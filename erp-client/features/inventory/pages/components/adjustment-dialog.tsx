@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { AdjustmentApprovalArea } from "@/features/inventory/components/adjustment-approval-area"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { REASON_TYPE_OPTIONS } from "@/features/inventory/types"
 import type { AdjustmentReasonType } from "@/features/inventory/types"
 import type {
@@ -43,7 +44,10 @@ export function AdjustmentDialog({
                 if (!nextOpen) onCancel()
             }}
         >
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                closeButtonId="inventory-adjustment-dialog-close"
+                className="sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>发起库存调整</DialogTitle>
                     <DialogDescription>
@@ -105,17 +109,15 @@ export function AdjustmentDialog({
                             }}
                         >
                             <div className="grid gap-1.5">
-                                <Label htmlFor="reasonType">
+                                <Label htmlFor="inventory-adjustment-dialog-reason-type">
                                     原因类型
-                                    <span className="text-destructive">
-                                        *
-                                    </span>
+                                    <span className="text-destructive">*</span>
                                 </Label>
                                 <form.AppField
                                     name="reasonType"
                                     children={(field) => (
                                         <OptionCombobox
-                                            id="reasonType"
+                                            id="inventory-adjustment-dialog-reason-type"
                                             value={field.state.value}
                                             onValueChange={(v) => {
                                                 field.handleChange(
@@ -148,6 +150,7 @@ export function AdjustmentDialog({
                                 name="quantity"
                                 children={(field) => (
                                     <field.TextField
+                                        id="inventory-adjustment-dialog-quantity"
                                         label={`调整数量（${meta.baseUnit}，正数）`}
                                         required
                                     />
@@ -158,13 +161,14 @@ export function AdjustmentDialog({
                                 name="occurredAt"
                                 children={(field) => (
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="adjust-occured-at">
+                                        <Label htmlFor="inventory-adjustment-dialog-occurred-at">
                                             业务发生时间
                                             <span className="text-destructive">
                                                 *
                                             </span>
                                         </Label>
                                         <DateTimeLocalPicker
+                                            id="inventory-adjustment-dialog-occurred-at"
                                             value={
                                                 field.state.value || undefined
                                             }
@@ -191,6 +195,7 @@ export function AdjustmentDialog({
                                 name="note"
                                 children={(field) => (
                                     <field.TextareaField
+                                        id="inventory-adjustment-dialog-note"
                                         label="原因说明"
                                         required
                                     />
@@ -198,6 +203,7 @@ export function AdjustmentDialog({
                             />
 
                             <AdjustmentApprovalArea
+                                id={`inventory-adjustment-dialog-approval-bar-${toAutomationIdSegment(meta.stockAdjustmentId)}`}
                                 phase="draft"
                                 approval={meta.approval}
                                 documentId={meta.stockAdjustmentId}
@@ -218,6 +224,7 @@ export function AdjustmentDialog({
 
                             <DialogFooter className="gap-2 sm:justify-between">
                                 <Button
+                                    id="inventory-adjustment-dialog-cancel"
                                     type="button"
                                     variant="outline"
                                     onClick={onCancel}
@@ -225,7 +232,10 @@ export function AdjustmentDialog({
                                     取消
                                 </Button>
                                 <form.AppForm>
-                                    <form.SubmitButton label="提交审批" />
+                                    <form.SubmitButton
+                                        id="inventory-adjustment-dialog-submit"
+                                        label="提交审批"
+                                    />
                                 </form.AppForm>
                             </DialogFooter>
                         </form>

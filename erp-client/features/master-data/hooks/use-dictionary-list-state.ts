@@ -90,11 +90,7 @@ export function useDictionaryListState({
                 lifecycleStatus: filters.lifecycleStatus,
                 revisionTiming: filters.revisionTiming,
             }),
-        [
-            filters.lifecycleStatus,
-            filters.q,
-            filters.revisionTiming,
-        ],
+        [filters.lifecycleStatus, filters.q, filters.revisionTiming],
     )
 
     const onExport = React.useCallback(() => {

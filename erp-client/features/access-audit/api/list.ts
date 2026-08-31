@@ -83,9 +83,7 @@ export async function fetchAccessList(
     const scopeSummaryFor = (...subjectIds: string[]) => {
         const labels = [
             ...new Set(
-                subjectIds.flatMap(
-                    (id) => scopeTextBySubject.get(id) ?? [],
-                ),
+                subjectIds.flatMap((id) => scopeTextBySubject.get(id) ?? []),
             ),
         ]
         return labels.length > 0 ? labels.join(" · ") : "—"
@@ -125,7 +123,10 @@ export async function fetchAccessList(
 
     if (query.q) {
         roleRows = roleRows.filter((r) =>
-            matchText(`${r.name} ${r.roleCode} ${r.permissionSummary}`, query.q),
+            matchText(
+                `${r.name} ${r.roleCode} ${r.permissionSummary}`,
+                query.q,
+            ),
         )
         userRows = userRows.filter((u) =>
             matchText(

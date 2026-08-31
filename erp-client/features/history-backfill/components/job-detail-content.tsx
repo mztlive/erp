@@ -77,9 +77,7 @@ export function JobDetailContent({
     const canResume = job.allowedActions.includes("RESUME")
     const canValidate = job.allowedActions.includes("VALIDATE_SOURCE")
     const canConfirmReport = job.allowedActions.includes("CONFIRM_REPORT")
-    const startBlockers = job.actionBlockers.filter(
-        (b) => b.action === "START",
-    )
+    const startBlockers = job.actionBlockers.filter((b) => b.action === "START")
 
     const filteredItems = view.items ?? []
     const sectionItems = filteredItems
@@ -144,8 +142,7 @@ export function JobDetailContent({
                     <AlertTitle>全历史覆盖不足 · 阻断执行</AlertTitle>
                     <AlertDescription>
                         必须覆盖起点=
-                        {formatDay(job.requiredHistoryStart)}，
-                        来源覆盖起点=
+                        {formatDay(job.requiredHistoryStart)}， 来源覆盖起点=
                         {job.sourceCoverageStart
                             ? formatDay(job.sourceCoverageStart)
                             : "—"}
@@ -188,7 +185,11 @@ export function JobDetailContent({
             >
                 <TabsList className="flex h-auto flex-wrap">
                     {SECTION_TABS.map((t) => (
-                        <TabsTrigger key={t.id} value={t.id}>
+                        <TabsTrigger
+                            key={t.id}
+                            id={`operations-history-backfill-detail-section-${t.id}-trigger`}
+                            value={t.id}
+                        >
                             {t.label}
                         </TabsTrigger>
                     ))}

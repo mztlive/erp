@@ -31,9 +31,8 @@ const UNSUBMITTED_STATUS_CODES = new Set([
  * @param status 服务端状态码；缺省视为未提交。
  * @returns 未提交为 true。
  */
-export const isUnsubmittedPaymentReversalStatus = (
-    status?: string,
-): boolean => !status || UNSUBMITTED_STATUS_CODES.has(status)
+export const isUnsubmittedPaymentReversalStatus = (status?: string): boolean =>
+    !status || UNSUBMITTED_STATUS_CODES.has(status)
 
 /**
  * 把付款冲正业务状态映射为用户可见中文，不上屏枚举原值。

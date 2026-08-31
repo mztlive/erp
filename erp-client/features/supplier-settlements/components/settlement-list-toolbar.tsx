@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -22,6 +18,7 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import {
     buildSettlementFilterChips,
@@ -116,6 +113,7 @@ export function SettlementListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="supplier-settlements-list-search-input"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -125,11 +123,11 @@ export function SettlementListToolbar({
                             aria-label="搜索结算单"
                             data-slot="settlement-list-search"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="supplier-settlements-list-filter-toggle"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -166,6 +164,7 @@ export function SettlementListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`supplier-settlements-list-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -174,6 +173,7 @@ export function SettlementListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="supplier-settlements-list-filter-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -190,6 +190,7 @@ export function SettlementListToolbar({
                                     aria-label="结算单列表更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="supplier-settlements-list-filter-difference-type"
                                         label="差异类型"
                                         value={differenceTypeDraft}
                                         onValueChange={setDifferenceTypeDraft}
@@ -201,6 +202,7 @@ export function SettlementListToolbar({
                                                 供应商
                                             </span>
                                             <SupplierSearchCombobox
+                                                id="supplier-settlements-list-filter-supplier"
                                                 purpose="filter"
                                                 className="w-full"
                                                 value={
@@ -220,12 +222,11 @@ export function SettlementListToolbar({
                                                 状态
                                             </span>
                                             <MultiOptionCombobox
+                                                id="supplier-settlements-list-filter-status"
                                                 className="w-full"
                                                 value={statusDraft}
                                                 onValueChange={setStatusDraft}
-                                                options={
-                                                    STATUS_FILTER_OPTIONS
-                                                }
+                                                options={STATUS_FILTER_OPTIONS}
                                                 placeholder="全部状态"
                                                 aria-label="状态"
                                             />
@@ -245,6 +246,7 @@ export function SettlementListToolbar({
                                                 }
                                             >
                                                 <DatePicker
+                                                    id="supplier-settlements-list-filter-period-from"
                                                     className="w-0 min-w-0 flex-1"
                                                     value={
                                                         periodFromDraft ||
@@ -265,6 +267,7 @@ export function SettlementListToolbar({
                                                     至
                                                 </span>
                                                 <DatePicker
+                                                    id="supplier-settlements-list-filter-period-to"
                                                     className="w-0 min-w-0 flex-1"
                                                     value={
                                                         periodToDraft ||
@@ -299,13 +302,17 @@ export function SettlementListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="supplier-settlements-list-filter-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="supplier-settlements-list-filter-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

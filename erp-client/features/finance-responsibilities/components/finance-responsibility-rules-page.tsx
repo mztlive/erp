@@ -163,7 +163,10 @@ function RuleDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-xl">
+            <DialogContent
+                className="sm:max-w-xl"
+                closeButtonId="finance-responsibilities-rule-dialog-close"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {target ? "编辑财务责任规则" : "新增财务责任规则"}
@@ -183,6 +186,7 @@ function RuleDialog({
                         <form.AppField name="operation">
                             {(field) => (
                                 <field.SelectField
+                                    id="finance-responsibilities-rule-operation"
                                     label="业务操作"
                                     options={OPERATION_VALUES.map((value) => ({
                                         value,
@@ -200,6 +204,7 @@ function RuleDialog({
                         <form.AppField name="scope">
                             {(field) => (
                                 <field.SelectField
+                                    id="finance-responsibilities-rule-scope"
                                     label="匹配层级"
                                     options={SCOPE_VALUES.map((value) => ({
                                         value,
@@ -238,6 +243,7 @@ function RuleDialog({
                                                     {operation ===
                                                     "SUPPLIER_PAYMENT" ? (
                                                         <SupplierSearchCombobox
+                                                            id="finance-responsibilities-rule-counterparty"
                                                             purpose="form"
                                                             value={
                                                                 field.state
@@ -255,6 +261,7 @@ function RuleDialog({
                                                         />
                                                     ) : (
                                                         <CustomerSearchCombobox
+                                                            id="finance-responsibilities-rule-counterparty"
                                                             purpose="form"
                                                             scope="all_authorized"
                                                             value={
@@ -279,6 +286,7 @@ function RuleDialog({
                                     <form.AppField name="ownerUserId">
                                         {(field) => (
                                             <field.SelectField
+                                                id="finance-responsibilities-rule-owner"
                                                 label="负责人"
                                                 options={eligibleOwners(
                                                     owners,
@@ -298,7 +306,7 @@ function RuleDialog({
                             {(field) => (
                                 <Field orientation="horizontal">
                                     <div className="flex-1">
-                                        <FieldLabel htmlFor="finance-rule-enabled">
+                                        <FieldLabel htmlFor="finance-responsibilities-rule-enabled">
                                             启用规则
                                         </FieldLabel>
                                         <FieldDescription>
@@ -306,7 +314,7 @@ function RuleDialog({
                                         </FieldDescription>
                                     </div>
                                     <Switch
-                                        id="finance-rule-enabled"
+                                        id="finance-responsibilities-rule-enabled"
                                         checked={field.state.value}
                                         onCheckedChange={(checked) =>
                                             field.handleChange(Boolean(checked))
@@ -318,6 +326,7 @@ function RuleDialog({
                     </FieldGroup>
                     <DialogFooter>
                         <DialogClose
+                            id="finance-responsibilities-rule-cancel"
                             render={<Button type="button" variant="outline" />}
                         >
                             取消
@@ -325,6 +334,7 @@ function RuleDialog({
                         <form.Subscribe selector={(state) => state.canSubmit}>
                             {(canSubmit) => (
                                 <Button
+                                    id="finance-responsibilities-rule-submit"
                                     type="submit"
                                     data-testid="finance-responsibility-save"
                                     disabled={!canSubmit || mutation.isPending}
@@ -378,7 +388,16 @@ export function FinanceResponsibilityRulesPage() {
                         profileQuery.error,
                         "暂时无法核对财务责任配置权限。",
                     )}
-                    onRetry={() => void profileQuery.refetch()}
+                    action={
+                        <Button
+                            id="finance-responsibilities-profile-retry"
+                            type="button"
+                            variant="outline"
+                            onClick={() => void profileQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    }
                 />
             </PageScaffold>
         )
@@ -415,6 +434,7 @@ export function FinanceResponsibilityRulesPage() {
                 actions={
                     canManage ? (
                         <Button
+                            id="finance-responsibilities-create"
                             type="button"
                             size="sm"
                             data-testid="finance-responsibility-create"
@@ -437,6 +457,7 @@ export function FinanceResponsibilityRulesPage() {
                     )}
                     action={
                         <Button
+                            id="finance-responsibilities-owner-retry"
                             type="button"
                             variant="outline"
                             onClick={() => void ownersQuery.refetch()}
@@ -467,6 +488,7 @@ export function FinanceResponsibilityRulesPage() {
                 description="负责人保存时校验账号状态及完整执行权限；缺少有效规则时业务单据不能形成付款或开票任务。"
                 table={
                     <DataTable
+                        id="finance-responsibilities-rules-table"
                         data={rows}
                         columns={columns}
                         getRowId={(row) => row.id}
@@ -485,6 +507,7 @@ export function FinanceResponsibilityRulesPage() {
                                     )}
                                     action={
                                         <Button
+                                            id="finance-responsibilities-rules-retry"
                                             type="button"
                                             variant="outline"
                                             onClick={() =>
@@ -507,6 +530,7 @@ export function FinanceResponsibilityRulesPage() {
                                     action={
                                         canManage && !ownerUnavailable ? (
                                             <Button
+                                                id="finance-responsibilities-empty-create"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

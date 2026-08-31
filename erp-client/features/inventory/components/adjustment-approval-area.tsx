@@ -17,6 +17,7 @@ import {
 } from "@/features/approval-workflow/types"
 import { STOCK_ADJUSTMENT_DOCUMENT_TYPE } from "@/features/inventory/api/adjustment"
 import { isDraftAdjustmentStatus } from "@/features/inventory/api/display"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type AdjustmentApprovalPhase = "draft" | "confirm" | "runtime"
 
@@ -54,6 +55,8 @@ export function AdjustmentApprovalArea({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    id,
+    idPrefix,
 }: {
     phase: AdjustmentApprovalPhase
     approval?: DocumentApprovalView
@@ -62,6 +65,8 @@ export function AdjustmentApprovalArea({
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    id?: string
+    idPrefix?: string
 }) {
     const instanceId = approval?.instance?.id
     const recoveryQuery = useRecoveryOptionsQuery(
@@ -79,6 +84,12 @@ export function AdjustmentApprovalArea({
         approval?.allowedActions,
         workItemAllowedActions,
     )
+    const derivedApprovalBarId =
+        idPrefix ??
+        id ??
+        (documentId
+            ? `inventory-adjustment-approval-bar-${toAutomationIdSegment(documentId)}`
+            : "inventory-adjustment-approval-bar")
 
     if (phase === "draft") {
         return (
@@ -86,6 +97,7 @@ export function AdjustmentApprovalArea({
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
                     <ApprovalActionBar
+                        id={derivedApprovalBarId}
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={STOCK_ADJUSTMENT_DOCUMENT_TYPE}
@@ -116,6 +128,7 @@ export function AdjustmentApprovalArea({
                 }
             />
             <ApprovalActionBar
+                id={derivedApprovalBarId}
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

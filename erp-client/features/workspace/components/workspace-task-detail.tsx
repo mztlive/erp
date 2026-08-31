@@ -11,6 +11,8 @@ import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     surfaceInsetClassName,
     taxAmountToneClass,
+    workspaceTaskSurfaceClassName,
+    workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -26,6 +28,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 import {
@@ -58,7 +61,12 @@ import { WorkspaceProcurementTask } from "./workspace-procurement-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
 import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
 import { WorkspaceSupplyExceptionTask } from "./workspace-supply-exception-task"
-import { WorkspaceTaskContext } from "./workspace-task-context"
+import { WorkspacePaneActions } from "./workspace-pane-actions"
+import {
+    WorkspaceTaskContextHelp,
+    WorkspaceTaskHeaderActions,
+    workspaceTaskHasInlineContextHelp,
+} from "./workspace-task-context"
 import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
 import {
     WorkspaceDocumentPaperDialog,
@@ -67,6 +75,7 @@ import {
 
 /**
  * 工作台作业面。金额、单据字段、明细全部展开，按区块分层。
+ * 任务说明收在标题栏问号里，不单独占一块说明区。
  * 履约、付款、开票与客户验收在本页提交正式命令；审批通过、驳回留在底栏。
  */
 type WorkspaceTaskDetailProps = Readonly<{
@@ -81,13 +90,24 @@ type WorkspaceTaskDetailProps = Readonly<{
 }>
 
 export function WorkspaceTaskDetail(props: WorkspaceTaskDetailProps) {
+    const inlineHelp = workspaceTaskHasInlineContextHelp(props.item)
+
     return (
         <section
-            className="flex h-full min-h-0 flex-col px-4 pt-4 lg:px-0 lg:pt-0"
+            data-slot="workspace-task-surface"
+            className={cn(
+                workspaceTaskSurfaceClassName,
+                "relative flex h-full min-h-0 flex-col",
+            )}
             aria-label="当前工作台任务"
         >
-            <WorkspaceTaskContext item={props.item} />
-            <div className="min-h-0 flex-1 pt-4">
+            {inlineHelp ? null : (
+                <div className="absolute top-5 right-5 z-10 flex items-center gap-1">
+                    <WorkspaceTaskContextHelp item={props.item} />
+                    <WorkspacePaneActions />
+                </div>
+            )}
+            <div className="min-h-0 flex-1">
                 <WorkspaceTaskSurfaceBoundary
                     workItemId={props.item.workItemId}
                 >
@@ -366,37 +386,39 @@ function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
-    const documentActions =
-        canReadPaper || (approvalTask && documentHref) ? (
-            <div className="flex shrink-0 items-center gap-1">
-                {canReadPaper && currentPaperKind ? (
-                    <IconActionButton
-                        label={readActionLabel}
-                        testId={`work-item-read-document-${item.workItemId}`}
-                        onClick={() =>
-                            setPaper({
-                                kind: currentPaperKind,
-                                objectId: item.businessObjectId,
-                                title: item.stableNumber,
-                            })
-                        }
-                    >
-                        <FileTextIcon aria-hidden="true" />
-                    </IconActionButton>
-                ) : null}
-                {approvalTask && documentHref ? (
-                    <IconActionButton
-                        label={openActionLabel}
-                        testId={`work-item-open-document-${item.workItemId}`}
-                        href={documentHref}
-                    >
-                        <ArrowUpRightIcon aria-hidden="true" />
-                    </IconActionButton>
-                ) : null}
-            </div>
-        ) : null
+    const documentActions = (
+        <WorkspaceTaskHeaderActions item={item}>
+            {canReadPaper && currentPaperKind ? (
+                <IconActionButton
+                    id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
+                    label={readActionLabel}
+                    testId={`work-item-read-document-${item.workItemId}`}
+                    onClick={() =>
+                        setPaper({
+                            kind: currentPaperKind,
+                            objectId: item.businessObjectId,
+                            title: item.stableNumber,
+                        })
+                    }
+                >
+                    <FileTextIcon aria-hidden="true" />
+                </IconActionButton>
+            ) : null}
+            {approvalTask && documentHref ? (
+                <IconActionButton
+                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
+                    label={openActionLabel}
+                    testId={`work-item-open-document-${item.workItemId}`}
+                    href={documentHref}
+                >
+                    <ArrowUpRightIcon aria-hidden="true" />
+                </IconActionButton>
+            ) : null}
+        </WorkspaceTaskHeaderActions>
+    )
     const actions = approvalTask ? (
         <ApprovalActionBar
+            id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
             allowedActions={item.allowedActions}
             recoveryOptions={recoveryQuery.data?.actions ?? []}
             workItemId={item.workItemId}
@@ -417,9 +439,16 @@ function WorkspaceDocumentTaskDetail({
     ) : documentHref &&
       (trackingTask || item.allowedActions.includes("PROCESS")) ? (
         <Button
+            id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
             type="button"
             data-testid={`work-item-open-document-${item.workItemId}`}
-            render={<a href={documentHref} aria-label={openActionLabel} />}
+            render={
+                <a
+                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
+                    href={documentHref}
+                    aria-label={openActionLabel}
+                />
+            }
         >
             {openActionLabel}
         </Button>
@@ -429,7 +458,12 @@ function WorkspaceDocumentTaskDetail({
         <section className="flex h-full min-h-0 flex-col" aria-label="当前任务">
             <div className="min-h-0 flex-1 overflow-auto">
                 <div className="flex w-full flex-col">
-                    <header className="flex items-start justify-between gap-3 border-b border-grid py-5">
+                    <header
+                        className={cn(
+                            workspaceTaskSurfacePadClassName,
+                            "flex items-start justify-between gap-3 border-b border-grid py-5",
+                        )}
+                    >
                         <div className="flex min-w-0 flex-col gap-2">
                             <div className="flex flex-wrap items-center gap-2">
                                 <WorkspaceDocumentBadge item={item} />
@@ -455,24 +489,34 @@ function WorkspaceDocumentTaskDetail({
                     </header>
 
                     {documentFacts.isError ? (
-                        <Alert variant="destructive" className="mt-4">
-                            <AlertTitle>单据补充信息读取失败</AlertTitle>
-                            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                                <span>
-                                    {facts
-                                        ? "已保留当前可见内容；部分最新信息可能暂未显示。"
-                                        : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
-                                </span>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => void documentFacts.refetch()}
-                                >
-                                    重试
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
+                        <div
+                            className={cn(
+                                workspaceTaskSurfacePadClassName,
+                                "mt-4",
+                            )}
+                        >
+                            <Alert variant="destructive">
+                                <AlertTitle>单据补充信息读取失败</AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                    <span>
+                                        {facts
+                                            ? "已保留当前可见内容；部分最新信息可能暂未显示。"
+                                            : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
+                                    </span>
+                                    <Button
+                                        id={`workspace-task-detail-document-facts-retry-${toAutomationIdSegment(item.workItemId)}`}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            void documentFacts.refetch()
+                                        }
+                                    >
+                                        重试
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        </div>
                     ) : null}
 
                     {primaryAmount ? (
@@ -620,6 +664,7 @@ function WorkspaceDocumentTaskDetail({
             {actions || item.nextActionHint ? (
                 <div
                     className={cn(
+                        workspaceTaskSurfacePadClassName,
                         "flex shrink-0 flex-col items-stretch gap-2 border-t border-border/40 py-3 sm:flex-row sm:items-center sm:gap-4",
                         actions ? "sm:justify-between" : "sm:justify-end",
                     )}
@@ -648,12 +693,14 @@ function WorkspaceDocumentTaskDetail({
 }
 
 function IconActionButton({
+    id,
     label,
     testId,
     href,
     onClick,
     children,
 }: {
+    id?: string
     label: string
     testId: string
     href?: string
@@ -663,9 +710,11 @@ function IconActionButton({
     return (
         <Tooltip>
             <TooltipTrigger
+                id={id}
                 render={
                     href ? (
                         <a
+                            id={id}
                             href={href}
                             aria-label={label}
                             data-testid={testId}
@@ -676,6 +725,7 @@ function IconActionButton({
                         />
                     ) : (
                         <Button
+                            id={id}
                             type="button"
                             variant="ghost"
                             size="icon-sm"
@@ -704,7 +754,12 @@ function DetailBlock({
     children: ReactNode
 }) {
     return (
-        <section className="flex flex-col gap-3 border-b border-grid py-5 last:border-b-0">
+        <section
+            className={cn(
+                workspaceTaskSurfacePadClassName,
+                "flex flex-col gap-3 border-b border-grid py-5 last:border-b-0",
+            )}
+        >
             <header className="flex items-baseline gap-2">
                 <h3 className="text-sm font-medium">{title}</h3>
                 {description ? (
@@ -773,6 +828,7 @@ function LinkedDocumentValue({
         <span className="inline-flex min-w-0 items-center gap-1">
             {canPreview ? (
                 <button
+                    id={`workspace-linked-document-preview-${toAutomationIdSegment(objectId)}`}
                     type="button"
                     className="num min-w-0 truncate text-left text-primary underline-offset-2 hover:underline"
                     aria-label={`预览${section.label} ${section.value}`}
@@ -783,6 +839,7 @@ function LinkedDocumentValue({
                 </button>
             ) : href ? (
                 <a
+                    id={`workspace-linked-document-open-${toAutomationIdSegment(objectId)}`}
                     href={href}
                     className="num min-w-0 truncate text-primary underline-offset-2 hover:underline"
                     aria-label={`打开${section.label} ${section.value}`}
@@ -794,6 +851,7 @@ function LinkedDocumentValue({
             )}
             {href ? (
                 <IconActionButton
+                    id={`workspace-linked-document-open-action-${toAutomationIdSegment(objectId)}`}
                     label={`打开${section.label}`}
                     testId={`source-document-open-${objectId}`}
                     href={href}

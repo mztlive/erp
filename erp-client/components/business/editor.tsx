@@ -11,6 +11,7 @@ import {
     TriangleAlertIcon,
 } from "lucide-react"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Card,
@@ -95,6 +96,8 @@ interface EditableLineItemTableProps<TItem> extends Omit<
     readonly getRowErrors?: (
         context: EditableLineItemContext<TItem>,
     ) => readonly React.ReactNode[]
+    readonly id?: string
+    readonly idPrefix?: string
 }
 
 type StickyTotalItem = Readonly<{
@@ -204,8 +207,11 @@ function EditableLineItemTable<TItem>({
     renderRowActions,
     getRowErrors,
     className,
+    id,
+    idPrefix,
     ...props
 }: EditableLineItemTableProps<TItem>) {
+    const baseId = idPrefix ?? id
     const hasRowActions = Boolean(onRemoveItem || renderRowActions)
     const columnCount = columns.length + (hasRowActions ? 1 : 0)
     const canAdd = Boolean(onAddItem) && !disabled && !addDisabledReason
@@ -223,7 +229,7 @@ function EditableLineItemTable<TItem>({
             className={cn("space-y-4", className)}
             {...props}
         >
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="erp-raised-surface overflow-hidden rounded-2xl border border-border bg-card">
                 <Table data-density="comfortable">
                     <caption className="sr-only">{caption}</caption>
                     <TableHeader>
@@ -326,6 +332,11 @@ function EditableLineItemTable<TItem>({
                                                         )}
                                                         {onRemoveItem ? (
                                                             <GuardedBusinessAction
+                                                                id={
+                                                                    baseId
+                                                                        ? `${baseId}-row-${toAutomationIdSegment(rowId)}-remove`
+                                                                        : undefined
+                                                                }
                                                                 type="button"
                                                                 variant="ghost"
                                                                 size="icon-sm"
@@ -409,6 +420,7 @@ function EditableLineItemTable<TItem>({
                     <div className="min-w-0 flex-1">{footer}</div>
                     {onAddItem ? (
                         <GuardedBusinessAction
+                            id={baseId ? `${baseId}-add` : undefined}
                             type="button"
                             variant="outline"
                             disabled={!canAdd}
@@ -460,6 +472,8 @@ interface ApprovalDecisionPanelProps extends Omit<
     readonly pendingDecision?: ApprovalPendingDecision
     readonly onApprove: () => void
     readonly onReject: () => void
+    readonly id?: string
+    readonly idPrefix?: string
 }
 
 /** 审批摘要、意见字段及正式决定影响的受控组合面板。 */
@@ -479,14 +493,18 @@ function ApprovalDecisionPanel({
     pendingDecision = null,
     onApprove,
     onReject,
+    id,
+    idPrefix,
     className,
     ...props
 }: ApprovalDecisionPanelProps) {
+    const baseId = idPrefix ?? id ?? "approval-decision-panel"
     const isPending = pendingDecision != null
 
     return (
         <section
             data-slot="approval-decision-panel"
+            id={baseId}
             className={className}
             {...props}
         >
@@ -552,6 +570,7 @@ function ApprovalDecisionPanel({
 
                 <CardFooter className="justify-end gap-2 border-t border-border">
                     <GuardedBusinessAction
+                        id={`${baseId}-reject`}
                         type="button"
                         variant="outline"
                         disabled={isPending || rejectDisabled}
@@ -577,6 +596,7 @@ function ApprovalDecisionPanel({
                         {rejectLabel}
                     </GuardedBusinessAction>
                     <GuardedBusinessAction
+                        id={`${baseId}-approve`}
                         type="button"
                         disabled={isPending || approveDisabled}
                         reason={
@@ -640,6 +660,8 @@ interface AllocationWorkspaceProps<TAllocation> extends Omit<
         rowId: string,
         rowIndex: number,
     ) => void
+    readonly id?: string
+    readonly idPrefix?: string
 }
 
 /** 分配数量摘要与分配行字段的受控工作区，不在组件内计算任何业务数值。 */
@@ -660,11 +682,15 @@ function AllocationWorkspace<TAllocation>({
     onAddAllocation,
     onRemoveAllocation,
     className,
+    id,
+    idPrefix,
     ...props
 }: AllocationWorkspaceProps<TAllocation>) {
+    const baseId = idPrefix ?? id
     return (
         <section
             data-slot="allocation-workspace"
+            id={baseId}
             className={className}
             {...props}
         >
@@ -699,6 +725,7 @@ function AllocationWorkspace<TAllocation>({
                     {statusNotice}
 
                     <EditableLineItemTable
+                        id={baseId ? `${baseId}-table` : undefined}
                         items={allocations}
                         columns={columns}
                         getRowId={getRowId}

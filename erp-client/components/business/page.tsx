@@ -11,6 +11,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 function MetricDetailTooltip({
@@ -61,20 +62,26 @@ export type PageActionsProps = Omit<React.ComponentProps<"div">, "children"> & {
     actions: readonly PageAction[]
     size?: LabeledButtonSize
     ariaLabel?: string
+    id?: string
+    idPrefix?: string
 }
 
 function PageActions({
     actions,
     size = "sm",
     ariaLabel = "页面操作",
+    id,
+    idPrefix,
     className,
     ...props
 }: PageActionsProps) {
+    const baseId = idPrefix ?? id ?? "page-actions"
     return (
         <div
             role="group"
             aria-label={ariaLabel}
             data-slot="page-actions"
+            id={baseId}
             className={cn("flex flex-wrap items-center gap-2", className)}
             {...props}
         >
@@ -86,12 +93,18 @@ function PageActions({
                     iconPosition = "start",
                     mobileVisibility = "show",
                     className: actionClassName,
+                    id: actionId,
                     ...buttonProps
                 } = action
+
+                const derivedId =
+                    actionId ??
+                    `${baseId}-action-${toAutomationIdSegment(String(actionKey))}`
 
                 return (
                     <Button
                         key={actionKey}
+                        id={derivedId}
                         {...buttonProps}
                         size={size}
                         className={cn(
@@ -234,6 +247,7 @@ function MetricFilterItem({
     active = false,
     detailMode = "inline",
     density = "default",
+    id,
     className,
     ...props
 }: MetricFilterItemProps) {
@@ -243,6 +257,7 @@ function MetricFilterItem({
         <div className="min-w-0">
             <button
                 type="button"
+                id={id}
                 aria-pressed={active}
                 data-density={density}
                 className={cn(
@@ -428,7 +443,76 @@ function PageScaffold({
 
 /** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
 const surfacePanelClassName =
-    "rounded-lg border border-border bg-card shadow-xs"
+    "erp-raised-surface rounded-lg border border-border bg-card shadow-xs"
+
+/** 嵌入已有表面时去掉卡片壳，只保留分区线。 */
+const surfaceFlatClassName =
+    "rounded-none border-0 border-b border-grid bg-transparent shadow-none ring-0 last:border-b-0"
+
+function surfaceClassName(flat?: boolean) {
+    return flat ? surfaceFlatClassName : surfacePanelClassName
+}
+
+/** 作业面内容左右内边距；分割线画在区块外沿，与容器同宽。 */
+const workspaceTaskSurfacePadClassName = "px-5"
+
+/** 工作台内嵌页面脚手架：贴齐作业面，不再套一层页边距和卡片间隙。 */
+const workspaceEmbeddedScaffoldClassName = cn(
+    "h-full min-h-0 max-w-none gap-0 p-0",
+    "[&>[data-slot=page-header]]:static",
+    "[&>[data-slot=page-header]]:mx-0",
+    "[&>[data-slot=page-header]]:mt-0",
+    "[&>[data-slot=page-header]]:mb-0",
+    "[&>[data-slot=page-header]]:bg-transparent",
+    "[&>[data-slot=page-header]]:px-5",
+    "[&>[data-slot=page-header]]:pt-5",
+    "[&>[data-slot=page-header]]:pb-5",
+)
+
+/**
+ * 工作台作业面：把嵌套浮起表面压成扁平分区。
+ * 审批详情已经按分区线铺开；嵌入的领域页不得再套一层卡片。
+ * 区块自己带左右内边距，分割线与容器同宽。
+ */
+const workspaceTaskSurfaceClassName = cn(
+    "[&_.erp-raised-surface]:rounded-none",
+    "[&_.erp-raised-surface]:border-x-0",
+    "[&_.erp-raised-surface]:border-t-0",
+    "[&_.erp-raised-surface]:shadow-none",
+    "[&_.erp-raised-surface]:bg-transparent",
+    "[&_.erp-raised-surface]:ring-0",
+    "[&_[data-slot=card]]:rounded-none",
+    "[&_[data-slot=card]]:border-x-0",
+    "[&_[data-slot=card]]:border-t-0",
+    "[&_[data-slot=card]]:border-b",
+    "[&_[data-slot=card]]:border-grid",
+    "[&_[data-slot=card]]:bg-transparent",
+    "[&_[data-slot=card]]:shadow-none",
+    "[&_[data-slot=card]]:px-5",
+    "[&_[data-slot=card]]:py-5",
+    "[&_[data-slot=card]]:gap-3",
+    "[&_[data-slot=card]]:[--card-spacing:0px]",
+    "[&_[data-slot=card-header]]:rounded-none",
+    "[&_[data-slot=card-header]]:-mx-5",
+    "[&_[data-slot=card-header]]:px-5",
+    "[&_[data-slot=card-footer]]:rounded-none",
+    "[&_[data-slot=card-footer]]:-mx-5",
+    "[&_[data-slot=card-footer]]:px-5",
+    "[&_[data-slot=sequential-process-bar]]:rounded-none",
+    "[&_[data-slot=sequential-process-bar]]:border-x-0",
+    "[&_[data-slot=sequential-process-bar]]:border-t-0",
+    "[&_[data-slot=sequential-process-bar]]:bg-transparent",
+    "[&_[data-slot=sequential-process-bar]]:px-5",
+    "[&_[data-slot=sequential-process-bar]]:shadow-none",
+    "[&_[data-slot=document-header]]:rounded-none",
+    "[&_[data-slot=document-header]]:border-x-0",
+    "[&_[data-slot=document-header]]:border-t-0",
+    "[&_[data-slot=document-header]]:shadow-none",
+    "[&_[data-slot=document-header]]:bg-transparent",
+    "[&_[data-slot=document-header]]:px-5",
+    "[&_[data-slot=page-header]]:px-5",
+    "[&_[data-slot=document-section]]:px-5",
+)
 
 /** 主卡内轻提示/工具条：无描边，仅浅底区分。 */
 const surfaceInsetClassName = "rounded-md bg-muted/40"
@@ -440,6 +524,11 @@ export {
     MetricStrip,
     PageActions,
     PageScaffold,
+    surfaceClassName,
+    surfaceFlatClassName,
     surfaceInsetClassName,
     surfacePanelClassName,
+    workspaceEmbeddedScaffoldClassName,
+    workspaceTaskSurfaceClassName,
+    workspaceTaskSurfacePadClassName,
 }

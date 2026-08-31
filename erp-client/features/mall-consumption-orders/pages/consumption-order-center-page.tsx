@@ -23,6 +23,7 @@ import {
     OBJECT_CENTER_SECTIONS,
 } from "@/features/mall-consumption-orders/types"
 import { customerLabelFor } from "@/features/mall-consumption-orders/lib/customer-title"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
 import {
@@ -88,15 +89,22 @@ export function ConsumptionOrderCenterPage({
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="mall-consumption-order-center-back"
                             type="button"
                             variant="outline"
                             size="sm"
-                            render={<Link href={backToListHref} />}
+                            render={
+                                <Link
+                                    id="mall-consumption-order-center-back-link"
+                                    href={backToListHref}
+                                />
+                            }
                         >
                             <ArrowLeftIcon data-icon="inline-start" />
                             返回列表
                         </Button>
                         <Button
+                            id="mall-consumption-order-center-copy-no"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -110,6 +118,7 @@ export function ConsumptionOrderCenterPage({
                             复制单号
                         </Button>
                         <Button
+                            id="mall-consumption-order-center-refresh"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -200,11 +209,13 @@ export function ConsumptionOrderCenterPage({
                         <div className="mt-2 flex flex-wrap gap-2">
                             {view.supplierOrders[0] ? (
                                 <Button
+                                    id={`mall-consumption-order-center-alert-supplier-${toAutomationIdSegment(view.supplierOrders[0].supplierFulfillmentOrderId)}`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
                                     render={
                                         <Link
+                                            id={`mall-consumption-order-center-alert-supplier-${toAutomationIdSegment(view.supplierOrders[0].supplierFulfillmentOrderId)}-link`}
                                             href={`/supplier-api/orders?supplierOrderId=${view.supplierOrders[0].supplierFulfillmentOrderId}&from=W25&mallOrderId=${view.identity.mallOrderId}`}
                                         />
                                     }
@@ -215,11 +226,13 @@ export function ConsumptionOrderCenterPage({
                             ) : null}
                             {view.workItemIds[0] ? (
                                 <Button
+                                    id={`mall-consumption-order-center-alert-workitem-${toAutomationIdSegment(view.workItemIds[0])}`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
                                     render={
                                         <Link
+                                            id={`mall-consumption-order-center-alert-workitem-${toAutomationIdSegment(view.workItemIds[0])}-link`}
                                             href={`/governance/integration-errors?resolveWorkItemId=${view.workItemIds[0]}&queueContextId=queue:W29:mine:all`}
                                         />
                                     }
@@ -259,6 +272,7 @@ export function ConsumptionOrderCenterPage({
                         {OBJECT_CENTER_SECTIONS.map((s) => (
                             <TabsTrigger
                                 key={s.id}
+                                id={`mall-consumption-order-center-tab-${toAutomationIdSegment(s.id)}`}
                                 value={s.id}
                                 className="flex-none"
                             >

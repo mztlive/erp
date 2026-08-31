@@ -52,10 +52,7 @@ export function PublicationListTable({
 }) {
     if (isPending) {
         return (
-            <div
-                className="h-64 animate-pulse rounded-lg bg-muted"
-                aria-busy
-            />
+            <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />
         )
     }
     if (isError) {
@@ -66,6 +63,7 @@ export function PublicationListTable({
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 action={
                     <Button
+                        id="publication-list-retry"
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
@@ -92,6 +90,7 @@ export function PublicationListTable({
                 action={
                     isFilterNoResult ? (
                         <Button
+                            id="publication-list-empty-clear-filters"
                             type="button"
                             variant="secondary"
                             size="sm"
@@ -107,6 +106,7 @@ export function PublicationListTable({
     }
     return (
         <DataTable
+            id="publication-list-table"
             data={items}
             columns={columns}
             getRowId={(row) => row.publicationId}

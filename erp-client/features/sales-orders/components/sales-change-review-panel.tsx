@@ -79,6 +79,7 @@ export function SalesChangeReviewPanel({
                 </AlertDescription>
             </Alert>
             <SequentialProcessBar
+                id="sales-orders-change-review-process-bar"
                 current={1}
                 total={1}
                 responsibilityStatus={responsibilityStatus}
@@ -92,6 +93,7 @@ export function SalesChangeReviewPanel({
             />
             <div className="flex flex-wrap gap-2">
                 <Button
+                    id="sales-orders-change-review-reject-trigger"
                     type="button"
                     variant="outline"
                     disabled={!canProcess || decision.isPending}
@@ -101,6 +103,7 @@ export function SalesChangeReviewPanel({
                 </Button>
             </div>
             <FormalActionConfirmDialog
+                id="sales-orders-change-review-approve-dialog"
                 open={actions.approveOpen}
                 onOpenChange={actions.setApproveOpen}
                 actionLabel="通过销售变更复核"
@@ -114,6 +117,7 @@ export function SalesChangeReviewPanel({
                 }}
                 description={
                     <Textarea
+                        id="sales-orders-change-review-approve-reason"
                         value={reason}
                         onChange={(event) => setReason(event.target.value)}
                         placeholder="复核意见（可选）"
@@ -124,6 +128,7 @@ export function SalesChangeReviewPanel({
                 onConfirm={() => actions.submitDecision("APPROVE")}
             />
             <FormalActionConfirmDialog
+                id="sales-orders-change-review-reject-dialog"
                 open={actions.rejectOpen}
                 onOpenChange={actions.setRejectOpen}
                 actionLabel="驳回销售变更复核"
@@ -131,6 +136,7 @@ export function SalesChangeReviewPanel({
                 toStatus={{ label: "退回改单", tone: "warning" }}
                 description={
                     <Textarea
+                        id="sales-orders-change-review-reject-reason"
                         value={reason}
                         onChange={(event) => setReason(event.target.value)}
                         placeholder="驳回原因（必填）"

@@ -3,7 +3,10 @@
 import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { MallOrderFactView } from "@/features/mall-consumption-orders/types"
-import { FACT_TYPE_LABEL, FACT_TYPE_TONE } from "@/features/mall-consumption-orders/types"
+import {
+    FACT_TYPE_LABEL,
+    FACT_TYPE_TONE,
+} from "@/features/mall-consumption-orders/types"
 import { formatDateTime } from "@/lib/datetime"
 import { SectionTitle } from "./section-title"
 

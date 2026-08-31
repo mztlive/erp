@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
+import { PurchaseOrderCreateClient } from "./purchase-order-create-client"
 import { PurchaseOrdersListPage } from "@/features/purchase-orders/pages/purchase-orders-list-page"
 
 export const metadata: Metadata = {
@@ -38,7 +38,7 @@ export default async function PurchaseOrdersPage({
     const params = await searchParams
     if (params.mode === "create" || params.action === "create") {
         return (
-            <PurchaseOrderCreatePage
+            <PurchaseOrderCreateClient
                 initialSalesOrderId={params.salesOrderId}
                 initialWorkItemId={params.workItemId}
             />

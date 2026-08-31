@@ -4,6 +4,7 @@ import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { MoreHorizontalIcon, ShieldOffIcon } from "lucide-react"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -78,6 +79,7 @@ function useUserColumns({
                     return (
                         <div className="flex items-center justify-end gap-1">
                             <Button
+                                id={`operations-access-users-row-${toAutomationIdSegment(user.id)}-adjust-role`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -98,6 +100,7 @@ function useUserColumns({
                             {user.roleAssignmentId ? (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger
+                                        id={`operations-access-users-row-${toAutomationIdSegment(user.id)}-menu-trigger`}
                                         render={
                                             <Button
                                                 type="button"
@@ -114,6 +117,7 @@ function useUserColumns({
                                         className="min-w-40"
                                     >
                                         <DropdownMenuItem
+                                            id={`operations-access-users-row-${toAutomationIdSegment(user.id)}-emergency-revoke`}
                                             variant="destructive"
                                             onClick={() =>
                                                 void startChange({
@@ -142,12 +146,7 @@ function useUserColumns({
                 },
             },
         ],
-        [
-            startChange,
-            data?.permissionVersion,
-            rowFocusRef,
-            setRoleAssignment,
-        ],
+        [startChange, data?.permissionVersion, rowFocusRef, setRoleAssignment],
     )
 }
 

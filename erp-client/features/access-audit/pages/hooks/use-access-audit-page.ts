@@ -148,9 +148,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
             }
             // 弹层（Dialog / Sheet）打开时不聚焦背景搜索框
             if (
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"]',
-                )
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
             ) {
                 return
             }
@@ -202,12 +200,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
                 result: applied.result,
                 traceId: applied.traceId,
             }),
-        [
-            view,
-            applied,
-            subjectTypeParam,
-            subjectIdParam,
-        ],
+        [view, applied, subjectTypeParam, subjectIdParam],
     )
 
     const pageQuery = useAccessListQuery(listQuery)
@@ -287,13 +280,13 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
     const hasActiveFilters = isAudit
         ? Boolean(
               applied.q ||
-                  applied.from ||
-                  applied.to ||
-                  applied.action ||
-                  applied.result ||
-                  applied.actorId ||
-                  applied.traceId ||
-                  applied.objectId,
+              applied.from ||
+              applied.to ||
+              applied.action ||
+              applied.result ||
+              applied.actorId ||
+              applied.traceId ||
+              applied.objectId,
           )
         : Boolean(applied.q)
 
@@ -369,8 +362,7 @@ function useAccessAuditPage(surface: "access" | "audit" = "access") {
         setLastResult({
             status: "blocked",
             title: "暂不能导出",
-            description:
-                "当前导出功能暂不可用，请稍后重试或联系管理员。",
+            description: "当前导出功能暂不可用，请稍后重试或联系管理员。",
         })
     }
 

@@ -37,6 +37,8 @@ import { AcceptanceProgressTable } from "@/features/sales-orders/components/acce
 import { AcceptanceRegisterDialog } from "@/features/sales-orders/components/acceptance-register-dialog"
 
 export function AcceptanceWorkspace({
+    id,
+    idPrefix,
     salesOrderId,
     ownerUserId,
     ownerName,
@@ -44,6 +46,8 @@ export function AcceptanceWorkspace({
     persistRegisterInUrl = true,
     onPosted,
 }: {
+    id?: string
+    idPrefix?: string
     salesOrderId: string
     ownerUserId?: string
     ownerName?: string
@@ -191,6 +195,7 @@ export function AcceptanceWorkspace({
                 error={workspaceQuery.error}
                 action={
                     <Button
+                        id="sales-orders-acceptance-retry"
                         type="button"
                         onClick={() => void workspaceQuery.refetch()}
                     >
@@ -249,8 +254,9 @@ export function AcceptanceWorkspace({
         closeRegister()
     }
 
+    const baseId = idPrefix ?? id
     return (
-        <div className="flex min-w-0 flex-col gap-4">
+        <div id={baseId} className="flex min-w-0 flex-col gap-4">
             {view.workItemConfigBlocker ? (
                 <Alert variant="warning" role="alert">
                     <AlertTitle>暂时不能从这条待办登记</AlertTitle>
@@ -294,6 +300,7 @@ export function AcceptanceWorkspace({
                                 还有 {progress.pendingFactCount} 批待客户验收。
                             </p>
                             <Button
+                                id="sales-orders-acceptance-register-open"
                                 type="button"
                                 size="sm"
                                 disabled={!canPost}

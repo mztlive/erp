@@ -40,6 +40,7 @@ export function IntegrationDirectReconciliation({
             {item.reconciliationReasonRegistry ? (
                 <>
                     <OptionCombobox
+                        id="integration-direct-recon-reason"
                         value={reconReasonId || null}
                         onValueChange={(v) => onReconReasonIdChange(v ?? "")}
                         options={item.reconciliationReasonRegistry.registeredReasons.map(
@@ -57,6 +58,7 @@ export function IntegrationDirectReconciliation({
                     <div className="flex flex-wrap gap-2">
                         {can("CONFIRM_NO_ERROR") ? (
                             <Button
+                                id="integration-direct-confirm-no-error"
                                 type="button"
                                 size="sm"
                                 disabled={
@@ -74,14 +76,13 @@ export function IntegrationDirectReconciliation({
                         ) : null}
                         {can("CONFIRM_VALID_DIFFERENCE") ? (
                             <Button
+                                id="integration-direct-confirm-valid-difference"
                                 type="button"
                                 size="sm"
                                 variant="secondary"
                                 disabled={
                                     formalPending ||
-                                    reasonMismatches(
-                                        "CONFIRM_VALID_DIFFERENCE",
-                                    )
+                                    reasonMismatches("CONFIRM_VALID_DIFFERENCE")
                                 }
                                 onClick={() =>
                                     onRequestTerminal({
@@ -105,6 +106,7 @@ export function IntegrationDirectReconciliation({
             <div className="flex flex-wrap gap-2">
                 {can("QUERY_ORIGINAL_RESULT") ? (
                     <Button
+                        id="integration-direct-query-original-result"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -118,6 +120,7 @@ export function IntegrationDirectReconciliation({
                 ) : null}
                 {can("REPLAY_ORIGINAL") ? (
                     <Button
+                        id="integration-direct-replay-original"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -129,6 +132,7 @@ export function IntegrationDirectReconciliation({
                 ) : null}
                 {can("REATTRIBUTE") ? (
                     <Button
+                        id="integration-direct-reatribute"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -140,21 +144,21 @@ export function IntegrationDirectReconciliation({
                 ) : null}
                 {can("LINK_COMPENSATION") ? (
                     <Button
+                        id="integration-direct-link-compensation"
                         type="button"
                         size="sm"
                         variant="outline"
                         disabled={
                             formalPending || item.linkedEvidence.length === 0
                         }
-                        onClick={() =>
-                            void onDirectAction("LINK_COMPENSATION")
-                        }
+                        onClick={() => void onDirectAction("LINK_COMPENSATION")}
                     >
                         关联补偿
                     </Button>
                 ) : null}
                 {can("ADD_EVIDENCE") ? (
                     <Button
+                        id="integration-direct-add-evidence"
                         type="button"
                         size="sm"
                         variant="outline"

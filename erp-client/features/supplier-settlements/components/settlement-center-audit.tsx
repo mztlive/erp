@@ -1,12 +1,7 @@
 "use client"
 
 import { surfaceInsetClassName } from "@/components/business"
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AUDIT_ACTION_LABEL } from "@/features/supplier-settlements/types"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 import { formatDateTime } from "@/lib/datetime"

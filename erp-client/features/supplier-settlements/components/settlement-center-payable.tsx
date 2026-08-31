@@ -55,6 +55,7 @@ function SettlementCenterPayable({
                             · 到期 {payable.dueDate} · {payable.statusLabel}
                         </p>
                         <Button
+                            id="supplier-settlements-center-payable-open-w12"
                             type="button"
                             size="sm"
                             render={<Link href={payable.w12Href} />}

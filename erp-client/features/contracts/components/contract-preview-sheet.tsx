@@ -3,10 +3,7 @@
 import Link from "next/link"
 import { PrinterIcon } from "lucide-react"
 
-import {
-    BusinessStatusBadge,
-    QuickPreviewSheet,
-} from "@/components/business"
+import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContractPreviewPanel } from "@/features/contracts/components/contract-preview-panel"
@@ -44,6 +41,7 @@ export function ContractPreviewSheet({
 
     return (
         <QuickPreviewSheet
+            id="card-contracts-preview-sheet"
             open={row != null}
             onOpenChange={onOpenChange}
             size="detail"
@@ -76,6 +74,7 @@ export function ContractPreviewSheet({
                 row ? (
                     <>
                         <Button
+                            id="card-contracts-preview-sheet-close"
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
@@ -83,6 +82,7 @@ export function ContractPreviewSheet({
                             关闭
                         </Button>
                         <Button
+                            id="card-contracts-preview-sheet-paper-preview"
                             type="button"
                             variant="outline"
                             disabled={!row.allowedActions.includes("PRINT")}
@@ -100,10 +100,12 @@ export function ContractPreviewSheet({
                             纸质预览
                         </Button>
                         <Button
+                            id="card-contracts-preview-sheet-detail"
                             type="button"
                             variant="outline"
                             render={
                                 <Link
+                                    id="card-contracts-preview-sheet-detail-link"
                                     href={`/sales/contracts/${row.contractId}`}
                                 />
                             }
@@ -112,13 +114,20 @@ export function ContractPreviewSheet({
                         </Button>
                         {canCreateSo && createSalesOrderHref ? (
                             <Button
+                                id="card-contracts-preview-sheet-create-sales-order"
                                 type="button"
-                                render={<Link href={createSalesOrderHref} />}
+                                render={
+                                    <Link
+                                        id="card-contracts-preview-sheet-create-sales-order-link"
+                                        href={createSalesOrderHref}
+                                    />
+                                }
                             >
                                 新建销售单
                             </Button>
                         ) : (
                             <Button
+                                id="card-contracts-preview-sheet-create-sales-order-disabled"
                                 type="button"
                                 disabled
                                 title={

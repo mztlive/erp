@@ -2,10 +2,7 @@ import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 import type { UseQueryResult } from "@tanstack/react-query"
 
-import {
-    BusinessStatusBadge,
-    QuickPreviewSheet,
-} from "@/components/business"
+import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -18,6 +15,7 @@ import {
     type CostEntryDetail,
     type ProfitLossRow,
 } from "@/features/actual-profit-loss/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function CostDetailSheet({
     open,
@@ -38,6 +36,7 @@ export function CostDetailSheet({
 }) {
     return (
         <QuickPreviewSheet
+            id="actual-profit-loss-cost-detail-sheet"
             open={open}
             onOpenChange={onOpenChange}
             size="detail"
@@ -55,8 +54,12 @@ export function CostDetailSheet({
                 costDetailRow ? (
                     <BusinessStatusBadge
                         context="preview"
-                        label={COVERAGE_STATE_UI[costDetailRow.coverageState].label}
-                        tone={COVERAGE_STATE_UI[costDetailRow.coverageState].tone}
+                        label={
+                            COVERAGE_STATE_UI[costDetailRow.coverageState].label
+                        }
+                        tone={
+                            COVERAGE_STATE_UI[costDetailRow.coverageState].tone
+                        }
                         description={costDetailRow.coverageBlockers
                             .map((b) => b.message)
                             .join("；")}
@@ -70,11 +73,13 @@ export function CostDetailSheet({
                     </p>
                     {costDetailRow?.objectId ? (
                         <Button
+                            id={`actual-profit-loss-cost-detail-${toAutomationIdSegment(costDetailRow.rowId)}-w05`}
                             type="button"
                             size="sm"
                             variant="outline"
                             render={
                                 <Link
+                                    id={`actual-profit-loss-cost-detail-${toAutomationIdSegment(costDetailRow.rowId)}-w05`}
                                     href={`/sales/orders/${encodeURIComponent(costDetailRow.objectId)}`}
                                     target="_blank"
                                 />
@@ -112,6 +117,11 @@ export function CostDetailSheet({
                                 "未能读取本条销售单的成本记录。请重试；不影响已展示金额。",
                             )}
                             <Button
+                                id={
+                                    costDetailRow
+                                        ? `actual-profit-loss-cost-detail-${toAutomationIdSegment(costDetailRow.rowId)}-retry`
+                                        : "actual-profit-loss-cost-detail-retry"
+                                }
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -128,6 +138,7 @@ export function CostDetailSheet({
                             {costEntries.data.map((entry) => (
                                 <Button
                                     key={entry.costEntryId}
+                                    id={`actual-profit-loss-cost-entry-${toAutomationIdSegment(entry.costEntryId)}`}
                                     type="button"
                                     size="sm"
                                     variant={

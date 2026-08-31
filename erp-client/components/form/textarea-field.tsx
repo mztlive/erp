@@ -22,6 +22,7 @@ type TextareaFieldProps = {
     maxLength?: number
     className?: string
     textareaClassName?: string
+    id?: string
 }
 
 /**
@@ -39,12 +40,14 @@ export function TextareaField({
     maxLength,
     className,
     textareaClassName,
+    id,
 }: TextareaFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
-    const descriptionId = `${field.name}-description`
-    const errorId = `${field.name}-error`
+    const resolvedId = id ?? field.name
+    const descriptionId = `${resolvedId}-description`
+    const errorId = `${resolvedId}-error`
     const describedBy = [
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
@@ -55,16 +58,14 @@ export function TextareaField({
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
             <FieldLabel
-                htmlFor={field.name}
+                htmlFor={resolvedId}
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
-                {required ? (
-                    <span className="text-destructive">*</span>
-                ) : null}
+                {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <Textarea
-                id={field.name}
+                id={resolvedId}
                 name={field.name}
                 value={field.state.value ?? ""}
                 placeholder={placeholder}

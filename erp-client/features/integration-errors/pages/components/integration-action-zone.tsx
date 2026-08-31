@@ -83,9 +83,9 @@ export function IntegrationActionZone({
                 ) : null}
 
                 <div className="space-y-1">
-                    <Label htmlFor="w29-comment">处理说明</Label>
+                    <Label htmlFor="integration-action-comment">处理说明</Label>
                     <Textarea
-                        id="w29-comment"
+                        id="integration-action-comment"
                         rows={2}
                         value={comment}
                         onChange={(e) => onCommentChange(e.target.value)}
@@ -96,6 +96,7 @@ export function IntegrationActionZone({
                 <div className="flex flex-wrap gap-2">
                     {can("QUERY_ORIGINAL_RESULT") && item.workItem ? (
                         <Button
+                            id="integration-action-query-original-result"
                             type="button"
                             disabled={assignedDisabled}
                             onClick={() =>
@@ -107,6 +108,7 @@ export function IntegrationActionZone({
                     ) : null}
                     {can("REPLAY_ORIGINAL") && item.workItem ? (
                         <Button
+                            id="integration-action-replay-original"
                             type="button"
                             variant="secondary"
                             disabled={assignedDisabled}
@@ -117,6 +119,7 @@ export function IntegrationActionZone({
                     ) : null}
                     {can("ADD_EVIDENCE") && item.workItem ? (
                         <Button
+                            id="integration-action-add-evidence"
                             type="button"
                             variant="outline"
                             disabled={assignedDisabled}
@@ -127,6 +130,7 @@ export function IntegrationActionZone({
                     ) : null}
                     {can("LINK_COMPENSATION") && item.workItem ? (
                         <Button
+                            id="integration-action-link-compensation"
                             type="button"
                             variant="outline"
                             disabled={assignedDisabled}
@@ -139,6 +143,7 @@ export function IntegrationActionZone({
                     ) : null}
                     {can("REATTRIBUTE") && item.workItem ? (
                         <Button
+                            id="integration-action-reatribute"
                             type="button"
                             variant="outline"
                             disabled={assignedDisabled}
@@ -151,6 +156,7 @@ export function IntegrationActionZone({
                     item.workItem &&
                     item.resolutionEvidencePolicy ? (
                         <Button
+                            id="integration-action-resolve"
                             type="button"
                             disabled={assignedDisabled}
                             onClick={() =>
@@ -165,6 +171,7 @@ export function IntegrationActionZone({
                             <div className="space-y-1">
                                 <Label className="text-xs">替代任务</Label>
                                 <ReplacementWorkItemSearchCombobox
+                                    id="integration-action-replacement-work-item"
                                     value={replacementTaskId || null}
                                     onValueChange={(v) =>
                                         onReplacementTaskIdChange(v ?? "")
@@ -178,6 +185,7 @@ export function IntegrationActionZone({
                                 />
                             </div>
                             <Button
+                                id="integration-action-close-duplicate"
                                 type="button"
                                 size="sm"
                                 disabled={formalPending || !replacementTaskId}
@@ -190,6 +198,7 @@ export function IntegrationActionZone({
                                 关闭重复
                             </Button>
                             <Button
+                                id="integration-action-close-misrouted"
                                 type="button"
                                 size="sm"
                                 variant="outline"

@@ -3,6 +3,7 @@
 import { surfaceInsetClassName } from "@/components/business"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SUPPLIER_SECTIONS } from "@/features/master-data/components/supplier/supplier-editor-fields"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export function SupplierSummaryStrip({
@@ -61,6 +62,7 @@ export function SupplierSectionTabs({
                 ).map((section) => (
                     <TabsTrigger
                         key={section.id}
+                        id={`master-data-supplier-editor-tab-${toAutomationIdSegment(section.id)}`}
                         value={section.id}
                         className="h-11 flex-none rounded-none px-4 text-sm after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary data-active:font-semibold"
                     >

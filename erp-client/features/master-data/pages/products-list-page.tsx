@@ -66,6 +66,7 @@ export function ProductsListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-products-list-export",
                     actionKey: "export",
                     label: masterDataCopy.actionExport,
                     icon: DownloadIcon,
@@ -75,6 +76,7 @@ export function ProductsListPage() {
                     onClick: state.onExport,
                 },
                 {
+                    id: "master-data-products-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     mobileVisibility: "hide",
@@ -88,6 +90,7 @@ export function ProductsListPage() {
             ]}
             metrics={
                 <LifecycleMetricStrip
+                    idPrefix="master-data-products-list-metrics"
                     metrics={state.syncedMetrics}
                     metricKey={filters.metricKey}
                     ariaLabel="商品列表指标筛选"
@@ -114,6 +117,7 @@ export function ProductsListPage() {
                 description={state.listTableDescription}
                 toolbar={
                     <ProductListToolbar
+                        idPrefix="master-data-products-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -183,6 +187,7 @@ export function ProductsListPage() {
                 }
                 table={
                     <DataTable
+                        id="master-data-products-list-table"
                         data={state.pageRows}
                         columns={columns}
                         getRowId={(row) => row.stableId}
@@ -199,8 +204,18 @@ export function ProductsListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() =>
-                                        void state.listQuery.refetch()
+                                    action={
+                                        <Button
+                                            id="master-data-products-list-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                void state.listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
                                 />
                             ) : undefined
@@ -225,6 +240,7 @@ export function ProductsListPage() {
                                     action={
                                         hasActiveFilters ? (
                                             <Button
+                                                id="master-data-products-list-empty-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -237,6 +253,7 @@ export function ProductsListPage() {
                                             </Button>
                                         ) : state.canCreate ? (
                                             <Button
+                                                id="master-data-products-list-empty-create"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

@@ -32,6 +32,7 @@ export function IntegrationActionResult({
                         actions={
                             lastResult.terminal && !autoNext ? (
                                 <Button
+                                    id="integration-action-result-next"
                                     type="button"
                                     size="sm"
                                     onClick={onNext}

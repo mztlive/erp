@@ -53,22 +53,22 @@ export function useSupplierOrdersFilters(
 
     const hasActiveFilters = Boolean(
         url.q ||
-            url.supplierId ||
-            url.fulfillmentStatuses?.length ||
-            url.cancelStatuses?.length ||
-            url.refundStatuses?.length ||
-            url.aftersalePending ||
-            url.paidFrom ||
-            url.paidTo,
+        url.supplierId ||
+        url.fulfillmentStatuses?.length ||
+        url.cancelStatuses?.length ||
+        url.refundStatuses?.length ||
+        url.aftersalePending ||
+        url.paidFrom ||
+        url.paidTo,
     )
     /** 「已启用」与初始展开只认结构化条件，不含 q 与快捷筛选。 */
     const hasStructuredFilters = Boolean(
         url.supplierId ||
-            url.fulfillmentStatuses?.length ||
-            url.cancelStatuses?.length ||
-            url.refundStatuses?.length ||
-            url.paidFrom ||
-            url.paidTo,
+        url.fulfillmentStatuses?.length ||
+        url.cancelStatuses?.length ||
+        url.refundStatuses?.length ||
+        url.paidFrom ||
+        url.paidTo,
     )
 
     const { searchDraft, setSearchDraft } = useSupplierOrdersSearchDraft({
@@ -117,9 +117,13 @@ export function useSupplierOrdersFilters(
                     ? fulfillmentStatusesDraft
                     : undefined,
             cancelStatuses:
-                cancelStatusesDraft.length > 0 ? cancelStatusesDraft : undefined,
+                cancelStatusesDraft.length > 0
+                    ? cancelStatusesDraft
+                    : undefined,
             refundStatuses:
-                refundStatusesDraft.length > 0 ? refundStatusesDraft : undefined,
+                refundStatusesDraft.length > 0
+                    ? refundStatusesDraft
+                    : undefined,
             paidFrom: from || undefined,
             paidTo: to || undefined,
             page: 1,
@@ -212,65 +216,64 @@ export function useSupplierOrdersFilters(
     }, [setSearchDraft, updateUrl])
 
     /** 已生效条件全部显性化为可移除 chip，无隐形查询参数。 */
-    const appliedChips = React.useMemo<readonly SupplierOrdersAppliedChip[]>(
-        () => {
-            const chips: SupplierOrdersAppliedChip[] = []
-            if (url.q?.trim()) {
-                chips.push({ key: "q", label: `搜索：${url.q.trim()}` })
-            }
-            if (url.supplierId) {
-                chips.push({
-                    key: "supplierId",
-                    label: `供应商：${selectedSupplierName ?? url.supplierId}`,
-                })
-            }
-            if (url.fulfillmentStatuses?.length) {
-                chips.push({
-                    key: "fulfillmentStatuses",
-                    label: `履约状态：${url.fulfillmentStatuses
-                        .map((s) => FULFILLMENT_STATUS_LABEL[s])
-                        .join("、")}`,
-                })
-            }
-            if (url.cancelStatuses?.length) {
-                chips.push({
-                    key: "cancelStatuses",
-                    label: `取消状态：${url.cancelStatuses
-                        .map((s) => CANCEL_STATUS_LABEL[s])
-                        .join("、")}`,
-                })
-            }
-            if (url.refundStatuses?.length) {
-                chips.push({
-                    key: "refundStatuses",
-                    label: `退款状态：${url.refundStatuses
-                        .map((s) => REFUND_STATUS_LABEL[s])
-                        .join("、")}`,
-                })
-            }
-            if (url.aftersalePending) {
-                chips.push({ key: "aftersalePending", label: "售后待处理" })
-            }
-            if (url.paidFrom || url.paidTo) {
-                chips.push({
-                    key: "paidRange",
-                    label: `支付时间：${url.paidFrom ?? "不限"} 至 ${url.paidTo ?? "不限"}`,
-                })
-            }
-            return chips
-        },
-        [
-            selectedSupplierName,
-            url.aftersalePending,
-            url.cancelStatuses,
-            url.fulfillmentStatuses,
-            url.paidFrom,
-            url.paidTo,
-            url.q,
-            url.refundStatuses,
-            url.supplierId,
-        ],
-    )
+    const appliedChips = React.useMemo<
+        readonly SupplierOrdersAppliedChip[]
+    >(() => {
+        const chips: SupplierOrdersAppliedChip[] = []
+        if (url.q?.trim()) {
+            chips.push({ key: "q", label: `搜索：${url.q.trim()}` })
+        }
+        if (url.supplierId) {
+            chips.push({
+                key: "supplierId",
+                label: `供应商：${selectedSupplierName ?? url.supplierId}`,
+            })
+        }
+        if (url.fulfillmentStatuses?.length) {
+            chips.push({
+                key: "fulfillmentStatuses",
+                label: `履约状态：${url.fulfillmentStatuses
+                    .map((s) => FULFILLMENT_STATUS_LABEL[s])
+                    .join("、")}`,
+            })
+        }
+        if (url.cancelStatuses?.length) {
+            chips.push({
+                key: "cancelStatuses",
+                label: `取消状态：${url.cancelStatuses
+                    .map((s) => CANCEL_STATUS_LABEL[s])
+                    .join("、")}`,
+            })
+        }
+        if (url.refundStatuses?.length) {
+            chips.push({
+                key: "refundStatuses",
+                label: `退款状态：${url.refundStatuses
+                    .map((s) => REFUND_STATUS_LABEL[s])
+                    .join("、")}`,
+            })
+        }
+        if (url.aftersalePending) {
+            chips.push({ key: "aftersalePending", label: "售后待处理" })
+        }
+        if (url.paidFrom || url.paidTo) {
+            chips.push({
+                key: "paidRange",
+                label: `支付时间：${url.paidFrom ?? "不限"} 至 ${url.paidTo ?? "不限"}`,
+            })
+        }
+        return chips
+    }, [
+        selectedSupplierName,
+        url.aftersalePending,
+        url.cancelStatuses,
+        url.fulfillmentStatuses,
+        url.paidFrom,
+        url.paidTo,
+        url.q,
+        url.refundStatuses,
+        url.supplierId,
+    ])
 
     // URL 回填：外部变化（快捷筛选 / 前进后退 / 刷新）同步结构化草稿；
     // 面板展开态不受回填影响（提交成功后不会因回填再次强制展开）。

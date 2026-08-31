@@ -4,6 +4,7 @@
  */
 
 import type { ValidationIssue } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     FulfillmentDraft,
     FulfillmentFormalOutcome,
@@ -112,12 +113,13 @@ export function clientValidation(
 
     if (draft.type === "RECEIPT") {
         draft.lines.forEach((line, i) => {
+            const segment = toAutomationIdSegment(line.purchaseRevisionLineId)
             if (!isPositiveQuantity(line.receivedQuantity)) {
                 issues.push({
                     id: `recv-${i}`,
                     label: "到货数量",
                     message: "必须大于 0",
-                    targetId: `receipt-recv-${i}`,
+                    targetId: `fulfillment-operations-receipt-form-received-quantity-${segment}`,
                 })
             }
             const qualityTotal = quantityTotal([
@@ -132,7 +134,7 @@ export function clientValidation(
                     id: `qty-sum-${i}`,
                     label: "质量数量",
                     message: "合格 + 不合格不得超过到货",
-                    targetId: `receipt-qual-${i}`,
+                    targetId: `fulfillment-operations-receipt-form-qualified-quantity-${segment}`,
                 })
             }
             if (!line.qualityResult) {
@@ -140,7 +142,7 @@ export function clientValidation(
                     id: `recv-qr-${i}`,
                     label: "质量结果",
                     message: "请选择质量结果",
-                    targetId: `receipt-qr-${i}`,
+                    targetId: `fulfillment-operations-receipt-form-quality-result-${segment}`,
                 })
             }
         })
@@ -151,7 +153,7 @@ export function clientValidation(
                 id: "carrier",
                 label: "承运方",
                 message: "必填",
-                targetId: "ship-carrier",
+                targetId: "fulfillment-operations-ship-form-carrier",
             })
         }
         if (!draft.trackingNo.trim()) {
@@ -159,7 +161,7 @@ export function clientValidation(
                 id: "tracking",
                 label: "物流单号",
                 message: "必填",
-                targetId: "ship-tracking",
+                targetId: "fulfillment-operations-ship-form-tracking-no",
             })
         }
         draft.lines.forEach((line, i) => {
@@ -167,19 +169,20 @@ export function clientValidation(
                 (l) => l.salesOrderLineId === line.salesOrderLineId,
             )
             const cap = src?.reservedQuantity ?? src?.remainingQuantity ?? "0"
+            const segment = toAutomationIdSegment(line.salesOrderLineId)
             if (!isPositiveQuantity(line.quantity)) {
                 issues.push({
                     id: `ship-qty-${i}`,
                     label: "发货数量",
                     message: "必须大于 0",
-                    targetId: `ship-qty-${i}`,
+                    targetId: `fulfillment-operations-ship-form-quantity-${segment}`,
                 })
             } else if (quantityExceeds(line.quantity, cap)) {
                 issues.push({
                     id: `ship-cap-${i}`,
                     label: "发货数量",
                     message: `不能超过为这单留的 ${cap}`,
-                    targetId: `ship-qty-${i}`,
+                    targetId: `fulfillment-operations-ship-form-quantity-${segment}`,
                 })
             }
             if (!line.stockReservationId) {
@@ -197,7 +200,7 @@ export function clientValidation(
                 id: "d-carrier",
                 label: "承运方",
                 message: "必填",
-                targetId: "direct-carrier",
+                targetId: "fulfillment-operations-direct-form-carrier",
             })
         }
         if (!draft.trackingNo.trim()) {
@@ -205,7 +208,7 @@ export function clientValidation(
                 id: "d-tracking",
                 label: "物流单号",
                 message: "必填",
-                targetId: "direct-tracking",
+                targetId: "fulfillment-operations-direct-form-tracking-no",
             })
         }
     }
@@ -215,7 +218,7 @@ export function clientValidation(
                 id: "el-result",
                 label: "履约结果",
                 message: "请选择履约结果",
-                targetId: "el-result",
+                targetId: "fulfillment-operations-electronic-form-result",
             })
         }
         if (!draft.recipientMasked.trim()) {
@@ -223,6 +226,7 @@ export function clientValidation(
                 id: "el-recipient",
                 label: "交付对象",
                 message: "交付对象不能为空",
+                targetId: "fulfillment-operations-electronic-form-recipient",
             })
         }
         draft.lines.forEach((line, i) => {
@@ -230,12 +234,13 @@ export function clientValidation(
                 (l) => l.salesOrderLineId === line.salesOrderLineId,
             )
             const cap = src?.remainingQuantity ?? "0"
+            const segment = toAutomationIdSegment(line.salesOrderLineId)
             if (!isPositiveQuantity(line.quantity)) {
                 issues.push({
                     id: `el-qty-${i}`,
                     label: "交付数量",
                     message: "必须大于 0",
-                    targetId: `el-qty-${i}`,
+                    targetId: `fulfillment-operations-electronic-form-quantity-${segment}`,
                 })
             } else if (
                 isPositiveQuantity(cap) &&
@@ -245,7 +250,7 @@ export function clientValidation(
                     id: `el-cap-${i}`,
                     label: "交付数量",
                     message: `不能超过剩余可交付 ${cap}`,
-                    targetId: `el-qty-${i}`,
+                    targetId: `fulfillment-operations-electronic-form-quantity-${segment}`,
                 })
             }
         })
@@ -256,7 +261,7 @@ export function clientValidation(
                 id: "svc-result",
                 label: "履约结果",
                 message: "请选择成功或失败",
-                targetId: "svc-result",
+                targetId: "fulfillment-operations-service-form-result",
             })
         }
         if (!draft.serviceLocation.trim()) {
@@ -264,7 +269,8 @@ export function clientValidation(
                 id: "svc-loc",
                 label: "服务地点",
                 message: "必填",
-                targetId: "service-loc",
+                targetId:
+                    "fulfillment-operations-service-form-service-location",
             })
         }
         if (!draft.startedAt || !draft.endedAt) {
@@ -272,7 +278,7 @@ export function clientValidation(
                 id: "svc-time-req",
                 label: "服务时间",
                 message: "开始与结束时间都要填",
-                targetId: "service-start",
+                targetId: "fulfillment-operations-service-form-service-time",
             })
         }
         if (
@@ -284,7 +290,7 @@ export function clientValidation(
                 id: "svc-time",
                 label: "服务时间",
                 message: "结束不得早于开始",
-                targetId: "service-start",
+                targetId: "fulfillment-operations-service-form-service-time",
             })
         }
         if (
@@ -295,7 +301,7 @@ export function clientValidation(
                 id: "svc-note",
                 label: "完成说明",
                 message: "至少 4 个字",
-                targetId: "service-note",
+                targetId: "fulfillment-operations-service-form-completion-note",
             })
         }
         if (!draft.evidenceFile && !draft.evidenceAttachmentId.trim()) {
@@ -303,7 +309,7 @@ export function clientValidation(
                 id: "svc-evidence",
                 label: "图片凭证",
                 message: "请上传现场图片凭证",
-                targetId: "service-evidence",
+                targetId: "fulfillment-operations-service-form-evidence",
             })
         } else if (draft.evidenceFile) {
             const type = draft.evidenceFile.type
@@ -316,7 +322,7 @@ export function clientValidation(
                     id: "svc-evidence-type",
                     label: "图片凭证",
                     message: "仅支持 JPG、PNG 或 WebP",
-                    targetId: "service-evidence",
+                    targetId: "fulfillment-operations-service-form-evidence",
                 })
             }
             if (draft.evidenceFile.size > 5 * 1024 * 1024) {
@@ -324,17 +330,18 @@ export function clientValidation(
                     id: "svc-evidence-size",
                     label: "图片凭证",
                     message: "图片不能超过 5 MB",
-                    targetId: "service-evidence",
+                    targetId: "fulfillment-operations-service-form-evidence",
                 })
             }
         }
-        draft.lines.forEach((line, i) => {
+        draft.lines.forEach((line) => {
             if (!isPositiveQuantity(line.quantity)) {
+                const segment = toAutomationIdSegment(line.salesOrderLineId)
                 issues.push({
-                    id: `svc-qty-${i}`,
+                    id: `svc-qty-${segment}`,
                     label: "服务数量",
                     message: "必须大于 0",
-                    targetId: `svc-qty-${i}`,
+                    targetId: `fulfillment-operations-service-form-quantity-${segment}`,
                 })
             }
         })

@@ -81,6 +81,7 @@ export function RejectReviewDialog({
                                     <span className="text-destructive">*</span>
                                 </Label>
                                 <OptionCombobox
+                                    id="card-contracts-funds-review-reject-reason"
                                     value={field.state.value}
                                     onValueChange={(v) =>
                                         field.handleChange(
@@ -128,8 +129,10 @@ export function RejectReviewDialog({
                     />
                     <DialogFooter>
                         <DialogClose
+                            id="card-contracts-funds-review-reject-cancel"
                             render={
                                 <Button
+                                    id="card-contracts-funds-review-reject-cancel"
                                     type="button"
                                     variant="outline"
                                     disabled={pending}
@@ -140,6 +143,7 @@ export function RejectReviewDialog({
                         </DialogClose>
                         <rejectForm.AppForm>
                             <rejectForm.SubmitButton
+                                id="card-contracts-funds-review-reject-confirm"
                                 label="确认驳回"
                                 pendingLabel="提交中…"
                                 variant="destructive"

@@ -70,12 +70,22 @@ export function VoucherCategoryFormDialog({
     open,
     onOpenChange,
     target = null,
+    id,
+    idPrefix,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     /** 非空为编辑；空为新建。 */
     target?: MasterDataListItem | null
+    id?: string
+    idPrefix?: string
 }) {
+    const baseId =
+        idPrefix ??
+        id ??
+        (target
+            ? "master-data-voucher-category-revise-dialog"
+            : "master-data-voucher-category-create-dialog")
     const isEdit = target != null
     const createMutation = useCreateMasterDataMutation()
     const reviseMutation = useCreateRevisionMutation()
@@ -210,7 +220,10 @@ export function VoucherCategoryFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={requestClose}>
-            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
+            <DialogContent
+                closeButtonId={`${baseId}-close`}
+                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
@@ -268,6 +281,7 @@ export function VoucherCategoryFormDialog({
                                 name="voucherNo"
                                 children={(field) => (
                                     <field.TextField
+                                        id={`${baseId}-voucher-no`}
                                         label="卡券类目编号"
                                         placeholder="全局唯一，同时作为商品与 SKU 编号"
                                         disabled={isEdit}
@@ -279,6 +293,7 @@ export function VoucherCategoryFormDialog({
                                 name="name"
                                 children={(field) => (
                                     <field.TextField
+                                        id={`${baseId}-name`}
                                         label="卡券类目名称"
                                         required
                                     />
@@ -288,6 +303,7 @@ export function VoucherCategoryFormDialog({
                                 name="description"
                                 children={(field) => (
                                     <field.TextareaField
+                                        id={`${baseId}-description`}
                                         label={masterDataCopy.fDescription}
                                         required
                                     />
@@ -295,6 +311,7 @@ export function VoucherCategoryFormDialog({
                             />
                             <DialogFooter>
                                 <DialogClose
+                                    id={`${baseId}-cancel`}
                                     render={
                                         <Button
                                             type="button"
@@ -306,12 +323,11 @@ export function VoucherCategoryFormDialog({
                                     关闭
                                 </DialogClose>
                                 <Button
+                                    id={`${baseId}-submit`}
                                     type="submit"
                                     disabled={mutationPending}
                                 >
-                                    {mutationPending
-                                        ? "提交中…"
-                                        : submitLabel}
+                                    {mutationPending ? "提交中…" : submitLabel}
                                 </Button>
                             </DialogFooter>
                         </form>
@@ -320,6 +336,7 @@ export function VoucherCategoryFormDialog({
             </DialogContent>
 
             <DiscardConfirmDialog
+                id={`${baseId}-discard`}
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
                 title="放弃本次填写？"

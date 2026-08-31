@@ -38,6 +38,7 @@ export function PublishDialog({
     onOpenChange,
     onConflict,
     onPublished,
+    id = "governance-approval-processes-publish-dialog",
 }: {
     detail: DefinitionDetailView
     lockVersion: string
@@ -45,6 +46,7 @@ export function PublishDialog({
     onOpenChange: (open: boolean) => void
     onConflict: () => void
     onPublished: () => void
+    id?: string
 }) {
     const publish = usePublishDefinitionMutation()
     const [error, setError] = React.useState<string | null>(null)
@@ -85,7 +87,7 @@ export function PublishDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>发布审批流程</DialogTitle>
                     <DialogDescription>
@@ -115,6 +117,7 @@ export function PublishDialog({
                 ) : null}
                 <DialogFooter>
                     <Button
+                        id={`${id}-cancel`}
                         type="button"
                         variant="outline"
                         disabled={publish.isPending}
@@ -123,6 +126,7 @@ export function PublishDialog({
                         取消
                     </Button>
                     <Button
+                        id={`${id}-confirm`}
                         type="button"
                         disabled={publish.isPending}
                         onClick={() => void handlePublish()}

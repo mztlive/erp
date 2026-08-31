@@ -42,7 +42,11 @@ export function SupplierAccountsAlerts({
                         {returnTo ? (
                             <>
                                 {" "}
-                                <Link className="underline" href={returnTo}>
+                                <Link
+                                    id="supplier-payables-alerts-return-source"
+                                    className="underline"
+                                    href={returnTo}
+                                >
                                     返回来源
                                 </Link>
                             </>
@@ -54,9 +58,7 @@ export function SupplierAccountsAlerts({
             {policy.state !== "AVAILABLE" ? (
                 <Alert>
                     <AlertTitle>混合自动分配不可用</AlertTitle>
-                    <AlertDescription>
-                        {policy.blockerMessage}
-                    </AlertDescription>
+                    <AlertDescription>{policy.blockerMessage}</AlertDescription>
                 </Alert>
             ) : null}
         </>
@@ -90,9 +92,9 @@ export function SupplierAccountsResultBanner({
                 reference={lastResult.reference ?? lastResult.operationId}
                 facts={lastResult.facts}
                 actions={
-                    lastResult.returnTo &&
-                    lastResult.status === "succeeded" ? (
+                    lastResult.returnTo && lastResult.status === "succeeded" ? (
                         <Button
+                            id="supplier-payables-alerts-return-action"
                             type="button"
                             size="sm"
                             render={<Link href={lastResult.returnTo} />}
@@ -103,6 +105,7 @@ export function SupplierAccountsResultBanner({
                 }
             />
             <Button
+                id="supplier-payables-alerts-dismiss"
                 type="button"
                 variant="ghost"
                 size="icon-sm"

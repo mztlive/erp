@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { MasterDataPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     MasterDataCenterView,
@@ -32,6 +33,9 @@ export function WarehousePreviewSheet({
     onDisable: (row: MasterDataListItem) => void
     canMaintainHandlers: boolean
 }) {
+    const previewIdSegment = previewRow
+        ? toAutomationIdSegment(previewRow.stableId)
+        : "preview"
     return (
         <QuickPreviewSheet
             open={previewRow != null}
@@ -79,6 +83,7 @@ export function WarehousePreviewSheet({
                 previewRow ? (
                     <>
                         <Button
+                            id={`master-data-warehouse-preview-${previewIdSegment}-close`}
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -93,6 +98,7 @@ export function WarehousePreviewSheet({
                             }
                         >
                             <Button
+                                id={`master-data-warehouse-preview-${previewIdSegment}-revise-handlers`}
                                 type="button"
                                 variant="outline"
                                 disabled={
@@ -114,6 +120,7 @@ export function WarehousePreviewSheet({
                             }
                         >
                             <Button
+                                id={`master-data-warehouse-preview-${previewIdSegment}-disable`}
                                 type="button"
                                 variant="outline"
                                 disabled={
@@ -127,6 +134,7 @@ export function WarehousePreviewSheet({
                             </Button>
                         </DisabledActionHint>
                         <Button
+                            id={`master-data-warehouse-preview-${previewIdSegment}-open-detail`}
                             type="button"
                             render={
                                 <Link

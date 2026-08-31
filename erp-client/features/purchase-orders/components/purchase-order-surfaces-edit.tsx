@@ -29,6 +29,7 @@ import {
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
 import { compactFixed, divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type LineEditDraft = {
@@ -96,6 +97,7 @@ function parseTaxRateInput(raw: string) {
 }
 
 function LineNumberInput({
+    id,
     value,
     ariaLabel,
     widthClass,
@@ -104,6 +106,7 @@ function LineNumberInput({
     suffix,
     onValueChange,
 }: {
+    id?: string
     value: string
     ariaLabel: string
     widthClass: string
@@ -115,6 +118,7 @@ function LineNumberInput({
     return (
         <>
             <input
+                id={id}
                 className={cn(
                     "num rounded border border-border bg-background px-2 py-1 text-right text-sm",
                     widthClass,
@@ -175,6 +179,7 @@ function buildPurchaseOrderEditLineColumns(
                 const draft = lineEdits[line.lineId]
                 return (
                     <LineNumberInput
+                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-quantity`}
                         value={draft?.quantity ?? ""}
                         ariaLabel={`${line.itemName} 数量`}
                         widthClass="w-20"
@@ -209,6 +214,7 @@ function buildPurchaseOrderEditLineColumns(
                 const draft = lineEdits[line.lineId]
                 return (
                     <LineNumberInput
+                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-cost`}
                         value={draft?.unitCostGross ?? ""}
                         ariaLabel={`${line.itemName} 含税单价`}
                         widthClass="w-28"
@@ -246,6 +252,7 @@ function buildPurchaseOrderEditLineColumns(
                 const storedRate = draft?.inputTaxRate ?? line.inputTaxRate
                 return (
                     <LineNumberInput
+                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-tax-rate`}
                         value={taxRateInputValue(storedRate)}
                         ariaLabel={`${line.itemName} 税率（%）`}
                         widthClass="w-20"
@@ -384,6 +391,7 @@ export function EditSurface({
                 </CardHeader>
                 <CardContent className="space-y-4 pt-4">
                     <DataTable
+                        id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
                         data={[...lines]}
                         columns={columns}
                         getRowId={(row) => row.lineId}
@@ -400,6 +408,7 @@ export function EditSurface({
 
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id={`procurement-orders-detail-edit-save-${order.identity.purchaseOrderId}`}
                             type="button"
                             variant="outline"
                             disabled={!draftEditToken || savePending}
@@ -408,6 +417,7 @@ export function EditSurface({
                             {savePending ? "保存中…" : "保存草稿"}
                         </Button>
                         <Button
+                            id={`procurement-orders-detail-edit-submit-${order.identity.purchaseOrderId}`}
                             type="button"
                             disabled={
                                 !draftEditToken || !canSubmit || savePending

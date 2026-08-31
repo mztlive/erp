@@ -1,6 +1,10 @@
 "use client"
 
-import { DocumentSection, DocumentSummary, MoneyValue } from "@/components/business"
+import {
+    DocumentSection,
+    DocumentSummary,
+    MoneyValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import {
     Card,
@@ -39,10 +43,7 @@ export function ItemsSection({ view }: { view: MallConsumptionOrderView }) {
                                         </span>
                                     </>
                                 ) : (
-                                    <Badge
-                                        variant="warning"
-                                        className="ml-2"
-                                    >
+                                    <Badge variant="warning" className="ml-2">
                                         待映射
                                     </Badge>
                                 )}

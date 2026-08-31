@@ -18,6 +18,7 @@ export function AssigneeCombobox({
     onChange,
     disabled = false,
     assignees,
+    id,
 }: {
     documentType: DocumentType
     value: string
@@ -26,6 +27,7 @@ export function AssigneeCombobox({
     disabled?: boolean
     /** 测试可注入候选人，生产路径走 Query。 */
     assignees?: readonly EligibleAssignee[]
+    id?: string
 }) {
     const [search, setSearch] = React.useState("")
     const [debounced, setDebounced] = React.useState("")
@@ -60,6 +62,7 @@ export function AssigneeCombobox({
 
     return (
         <OptionCombobox
+            id={id}
             aria-label="选择审批人"
             options={options}
             value={value || null}

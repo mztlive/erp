@@ -34,7 +34,10 @@ export function DisableConnectionDialog({
     const isProd = conn.environment === "PRODUCTION"
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                closeButtonId="supplier-api-connections-disable-close"
+                className="sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {isProd ? "停用生产环境连接" : "停用连接"}
@@ -92,18 +95,21 @@ export function DisableConnectionDialog({
                     <p className="flex flex-wrap items-center gap-x-3">
                         替代方案：
                         <Link
+                            id="supplier-api-connections-disable-offerings"
                             href="/procurement/supplier-offerings"
                             className="text-primary underline-offset-2 hover:underline"
                         >
                             供应商供给
                         </Link>
                         <Link
+                            id="supplier-api-connections-disable-orders"
                             href="/supplier-api/orders"
                             className="text-primary underline-offset-2 hover:underline"
                         >
                             供应商订单
                         </Link>
                         <Link
+                            id="supplier-api-connections-disable-errors"
                             href="/governance/integration-errors"
                             className="text-primary underline-offset-2 hover:underline"
                         >
@@ -113,6 +119,7 @@ export function DisableConnectionDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id="supplier-api-connections-disable-cancel"
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -121,13 +128,17 @@ export function DisableConnectionDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-api-connections-disable-confirm"
                         type="button"
                         variant="destructive"
                         disabled={!canDisable || pending}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : null}
                         {pending ? "停用中…" : "确认停用"}
                     </Button>

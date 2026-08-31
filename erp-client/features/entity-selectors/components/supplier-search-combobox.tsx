@@ -29,15 +29,18 @@ export function SupplierSearchCombobox({
         { query: search.input, purpose },
         value,
     )
-    const { rows, loading, emptyLabel: resolvedEmptyLabel } =
-        useRemoteSearchCombobox({
-            list: query.list,
-            selected: query.selected,
-            selectedItem,
-            idOf: (item) => item.supplierId,
-            emptyLabel,
-            fallbackError: "供应商加载失败，请重试",
-        })
+    const {
+        rows,
+        loading,
+        emptyLabel: resolvedEmptyLabel,
+    } = useRemoteSearchCombobox({
+        list: query.list,
+        selected: query.selected,
+        selectedItem,
+        idOf: (item) => item.supplierId,
+        emptyLabel,
+        fallbackError: "供应商加载失败，请重试",
+    })
     return (
         <SupplierCombobox
             {...props}

@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { PageScaffold } from "@/components/business"
+import {
+    PageScaffold,
+    workspaceEmbeddedScaffoldClassName,
+} from "@/components/business"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
@@ -229,7 +232,9 @@ export function IntegrationErrorsPage({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0" : undefined}
+            className={
+                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+            }
         >
             {!embedded ? (
                 <IntegrationPageHeader

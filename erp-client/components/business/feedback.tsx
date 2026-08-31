@@ -14,6 +14,7 @@ import {
     type LucideIcon,
 } from "lucide-react"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     AlertDialog,
@@ -58,6 +59,8 @@ type DraftSaveIndicatorProps = {
     message?: string
     onRetry?: () => void
     className?: string
+    id?: string
+    idPrefix?: string
 }
 
 const draftTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -88,13 +91,17 @@ function DraftSaveIndicator({
     message,
     onRetry,
     className,
+    id,
+    idPrefix,
 }: DraftSaveIndicatorProps) {
+    const baseId = idPrefix ?? id
     const presentation = draftStatePresentation[state]
     const savedSuffix =
         state === "saved" && savedAt ? ` ${formatDraftTime(savedAt)}` : ""
 
     return (
         <div
+            id={baseId}
             data-slot="draft-save-indicator"
             data-state={state}
             role="status"
@@ -114,6 +121,7 @@ function DraftSaveIndicator({
             ) : null}
             {state === "failed" && onRetry ? (
                 <Button
+                    id={baseId ? `${baseId}-retry` : undefined}
                     type="button"
                     variant="link"
                     size="xs"
@@ -138,6 +146,8 @@ type ValidationSummaryProps = {
     title?: string
     onLocate?: (issue: ValidationIssue) => void
     className?: string
+    id?: string
+    idPrefix?: string
 }
 
 function locateValidationIssue(issue: ValidationIssue) {
@@ -156,11 +166,15 @@ function ValidationSummary({
     title,
     onLocate,
     className,
+    id,
+    idPrefix,
 }: ValidationSummaryProps) {
     if (issues.length === 0) return null
+    const baseId = idPrefix ?? id
 
     return (
         <Alert
+            id={baseId}
             data-slot="validation-summary"
             variant="warning"
             className={className}
@@ -172,6 +186,11 @@ function ValidationSummary({
                     {issues.map((issue) => (
                         <li key={issue.id}>
                             <Button
+                                id={
+                                    baseId
+                                        ? `${baseId}-issue-${toAutomationIdSegment(issue.id)}`
+                                        : undefined
+                                }
                                 type="button"
                                 variant="link"
                                 size="xs"
@@ -328,7 +347,7 @@ function FormalActionResult({
             aria-live="polite"
             tabIndex={-1}
             className={cn(
-                "rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground shadow-xs",
+                "erp-raised-surface rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground shadow-xs",
                 className,
             )}
         >
@@ -519,6 +538,8 @@ type SensitiveValueProps = {
     onReveal?: () => Promise<string>
     autoHideAfterMs?: number
     className?: string
+    id?: string
+    idPrefix?: string
 }
 
 const defaultSensitiveValueAutoHideMs = 15_000
@@ -532,7 +553,10 @@ function SensitiveValue({
     onReveal,
     autoHideAfterMs = defaultSensitiveValueAutoHideMs,
     className,
+    id,
+    idPrefix,
 }: SensitiveValueProps) {
+    const baseId = idPrefix ?? id
     const [revealedValue, setRevealedValue] = React.useState<string | null>(
         null,
     )
@@ -593,6 +617,7 @@ function SensitiveValue({
 
     return (
         <div
+            id={baseId}
             data-slot="sensitive-value"
             className={cn(
                 "inline-flex flex-wrap items-center gap-2",
@@ -605,6 +630,7 @@ function SensitiveValue({
             </code>
             {onReveal ? (
                 <Button
+                    id={baseId ? `${baseId}-toggle` : undefined}
                     type="button"
                     variant="ghost"
                     size="xs"
@@ -648,6 +674,7 @@ function SensitiveValue({
                 >
                     <span>暂时无法显示敏感信息</span>
                     <Button
+                        id={baseId ? `${baseId}-retry` : undefined}
                         type="button"
                         variant="link"
                         size="xs"
@@ -670,6 +697,8 @@ type DiscardConfirmDialogProps = {
     description?: string
     confirmLabel?: string
     cancelLabel?: string
+    id?: string
+    idPrefix?: string
 }
 
 /**
@@ -683,7 +712,10 @@ function DiscardConfirmDialog({
     description = "本次输入尚未保存，离开后将丢失。",
     confirmLabel = "放弃更改",
     cancelLabel = "继续编辑",
+    id,
+    idPrefix,
 }: DiscardConfirmDialogProps) {
+    const baseId = idPrefix ?? id
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent className="sm:max-w-md">
@@ -694,8 +726,13 @@ function DiscardConfirmDialog({
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+                    <AlertDialogCancel
+                        id={baseId ? `${baseId}-cancel` : undefined}
+                    >
+                        {cancelLabel}
+                    </AlertDialogCancel>
                     <AlertDialogAction
+                        id={baseId ? `${baseId}-confirm` : undefined}
                         variant="destructive"
                         onClick={onConfirm}
                     >

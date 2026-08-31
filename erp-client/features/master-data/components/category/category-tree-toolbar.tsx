@@ -3,10 +3,7 @@
 import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
-import {
-    FilterChip,
-    ListToolbar,
-} from "@/components/business"
+import { FilterChip, ListToolbar } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     InputGroup,
@@ -14,6 +11,7 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     CategoryTreeAppliedChip,
     CategoryTreeFilterKey,
@@ -30,6 +28,7 @@ const LIFECYCLE_OPTIONS: ReadonlyArray<{
 
 /** 分类树筛选条：搜索、启停快捷筛选与已生效 chip（docs/ui-filter-design.md §2.2/§3.1）。 */
 export function CategoryTreeToolbar({
+    idPrefix,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -40,6 +39,7 @@ export function CategoryTreeToolbar({
     removeFilter,
     clearFilters,
 }: {
+    idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: (value: string) => void
@@ -50,6 +50,7 @@ export function CategoryTreeToolbar({
     removeFilter: (key: CategoryTreeFilterKey) => void
     clearFilters: () => void
 }) {
+    const prefix = idPrefix ?? "master-data-category-tree-toolbar"
     const hasChips = appliedChips.length > 0
 
     return (
@@ -68,11 +69,10 @@ export function CategoryTreeToolbar({
                             <SearchIcon aria-hidden />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id={`${prefix}-search`}
                             ref={searchInputRef}
                             value={searchDraft}
-                            onChange={(e) =>
-                                setSearchDraft(e.target.value)
-                            }
+                            onChange={(e) => setSearchDraft(e.target.value)}
                             placeholder={masterDataCopy.categoryTreeSearch}
                             aria-label={masterDataCopy.categoryTreeSearch}
                         />
@@ -88,6 +88,7 @@ export function CategoryTreeToolbar({
                             const active = lifecycleStatus === option.value
                             return (
                                 <Button
+                                    id={`${prefix}-lifecycle-${toAutomationIdSegment(option.value)}`}
                                     key={option.value}
                                     type="button"
                                     variant={active ? "secondary" : "ghost"}
@@ -98,9 +99,7 @@ export function CategoryTreeToolbar({
                                     }
                                     aria-pressed={active}
                                     onClick={() =>
-                                        onLifecycleStatusChange(
-                                            option.value,
-                                        )
+                                        onLifecycleStatusChange(option.value)
                                     }
                                 >
                                     {option.label}
@@ -118,12 +117,14 @@ export function CategoryTreeToolbar({
                             {appliedChips.map((chip) => (
                                 <FilterChip
                                     key={chip.key}
+                                    id={`${prefix}-filter-${toAutomationIdSegment(chip.key)}`}
                                     label={chip.label}
                                     clearLabel={`移除${chip.label}`}
                                     onClear={() => removeFilter(chip.key)}
                                 />
                             ))}
                             <Button
+                                id={`${prefix}-clear-all`}
                                 type="button"
                                 variant="ghost"
                                 size="xs"

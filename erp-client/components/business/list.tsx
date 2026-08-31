@@ -153,6 +153,8 @@ interface SelectionScopeBarProps extends Omit<DivProps, "children"> {
     readonly onScopeChange: (scope: SelectionScope) => void
     readonly onClearSelection?: () => void
     readonly scopeChangeDisabled?: boolean
+    readonly id?: string
+    readonly idPrefix?: string
 }
 
 /** 明确区分“本页选择”和“全部筛选结果”的受控选择范围条。 */
@@ -166,6 +168,8 @@ function SelectionScopeBar({
     onScopeChange,
     onClearSelection,
     scopeChangeDisabled = false,
+    id,
+    idPrefix,
     className,
     "aria-label": ariaLabel = "批量选择范围",
     ...props
@@ -174,9 +178,11 @@ function SelectionScopeBar({
     const formattedSelectedCount = selectedCount.toLocaleString("zh-CN")
     const formattedPageItemCount = pageItemCount.toLocaleString("zh-CN")
     const formattedFilteredCount = filteredCount.toLocaleString("zh-CN")
+    const baseId = idPrefix ?? id ?? "selection-scope"
 
     return (
         <div
+            id={baseId}
             role="region"
             aria-label={ariaLabel}
             aria-live="polite"
@@ -208,6 +214,7 @@ function SelectionScopeBar({
                     </span>
                 ) : null}
                 <Button
+                    id={`${baseId}-toggle`}
                     type="button"
                     variant="link"
                     size="sm"
@@ -233,6 +240,7 @@ function SelectionScopeBar({
                     {actions}
                     {onClearSelection ? (
                         <Button
+                            id={`${baseId}-clear`}
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -438,6 +446,8 @@ interface QuickPreviewSheetProps extends Omit<
      * detail：半屏 + 正文区由子树自管滚动，适合双栏读主记录。
      */
     readonly size?: QuickPreviewSheetSize
+    readonly id?: string
+    readonly idPrefix?: string
 }
 
 /** 受控的右侧预览抽屉；正文与页脚均由业务页面注入。 */
@@ -452,13 +462,22 @@ function QuickPreviewSheet({
     footer,
     contentClassName,
     size = "preview",
+    id,
+    idPrefix,
     ...props
 }: QuickPreviewSheetProps) {
     const isDetail = size === "detail"
+    const baseId = idPrefix ?? id
+    const closeButtonId = baseId ? `${baseId}-close` : undefined
 
     return (
         <Sheet {...props} open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" size={size} className={contentClassName}>
+            <SheetContent
+                side="right"
+                size={size}
+                className={contentClassName}
+                closeButtonId={closeButtonId}
+            >
                 <SheetHeader
                     className={cn(
                         "shrink-0 border-b border-border",

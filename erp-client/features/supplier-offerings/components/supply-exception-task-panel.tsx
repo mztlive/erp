@@ -163,6 +163,7 @@ export function SupplyExceptionTaskPanel({
                 action={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="supplier-offerings-exception-retry"
                             type="button"
                             variant="outline"
                             onClick={onRetry}
@@ -171,6 +172,7 @@ export function SupplyExceptionTaskPanel({
                         </Button>
                         {!embedded ? (
                             <Button
+                                id="supplier-offerings-exception-error-back-workspace"
                                 type="button"
                                 variant="outline"
                                 render={<Link href={returnHref} />}
@@ -204,6 +206,7 @@ export function SupplyExceptionTaskPanel({
                         </div>
                         {!embedded ? (
                             <Button
+                                id="supplier-offerings-exception-header-back-workspace"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -350,6 +353,7 @@ export function SupplyExceptionTaskPanel({
                             name="evidenceReference"
                             children={(field) => (
                                 <field.TextField
+                                    id="supplier-offerings-exception-evidence"
                                     label="处置证据引用"
                                     placeholder="例如：供应商停供函、替代采购事项或内部工单编号"
                                     required
@@ -360,6 +364,7 @@ export function SupplyExceptionTaskPanel({
                             name="comment"
                             children={(field) => (
                                 <field.TextareaField
+                                    id="supplier-offerings-exception-comment"
                                     label="核对结论"
                                     rows={4}
                                     placeholder="说明已核对的停供来源、受影响发布及后续安排"
@@ -369,6 +374,7 @@ export function SupplyExceptionTaskPanel({
                         />
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-offerings-exception-submit"
                                 label="确认已核对"
                                 pendingLabel="正在提交"
                                 disabled={
@@ -386,6 +392,7 @@ export function SupplyExceptionTaskPanel({
             </Card>
 
             <FormalActionConfirmDialog
+                idPrefix="supplier-offerings-exception-complete-confirm"
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
                 actionLabel="确认已核对并完成任务"

@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PurchaseOrderListItem } from "@/features/purchase-orders/types"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
@@ -78,6 +79,7 @@ export function buildPurchaseOrdersListColumns({
                                 render={
                                     <Link
                                         href={`/procurement/orders/${row.original.purchaseOrderId}`}
+                                        id={`procurement-orders-list-row-${toAutomationIdSegment(row.original.purchaseOrderId)}-open`}
                                     />
                                 }
                             >
@@ -106,6 +108,7 @@ export function buildPurchaseOrdersListColumns({
             meta: { label: "来源销售单", width: "reference" },
             cell: ({ row }) => (
                 <Link
+                    id={`procurement-orders-list-row-${toAutomationIdSegment(row.original.purchaseOrderId)}-sales-order`}
                     href={`/sales/orders/${row.original.salesOrderId}?from=W08&returnTo=${encodeURIComponent(listReturnHref)}`}
                     className="num text-sm text-primary underline-offset-2 hover:underline"
                     aria-label={`查看来源销售单 ${row.original.salesOrderNo}`}

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/description-list"
 import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentation"
 import type { CostEntryDetail } from "@/features/actual-profit-loss/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
@@ -150,11 +151,13 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                             本页不执行变更确认。打开原业务对象使用变更/冲减流程后，返回本页等待数据刷新。
                         </span>
                         <Button
+                            id={`actual-profit-loss-cost-entry-${toAutomationIdSegment(entry.costEntryId)}-correction`}
                             type="button"
                             size="sm"
                             variant="outline"
                             render={
                                 <Link
+                                    id={`actual-profit-loss-cost-entry-${toAutomationIdSegment(entry.costEntryId)}-correction`}
                                     href={entry.correctionHref}
                                     target="_blank"
                                 />

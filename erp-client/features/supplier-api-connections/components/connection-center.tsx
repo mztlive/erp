@@ -50,6 +50,7 @@ import {
     type ConnectionSection,
     type FormalOutcome,
 } from "@/features/supplier-api-connections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { type ResultState } from "@/components/business/feedback"
 
@@ -112,6 +113,7 @@ export function ConnectionCenter({
                     error={centerQuery.error}
                     action={
                         <Button
+                            id="supplier-api-connections-center-retry"
                             type="button"
                             onClick={() => void centerQuery.refetch()}
                         >
@@ -127,6 +129,7 @@ export function ConnectionCenter({
         return (
             <PageScaffold>
                 <Button
+                    id="supplier-api-connections-center-back-empty"
                     type="button"
                     variant="ghost"
                     size="sm"
@@ -209,6 +212,7 @@ export function ConnectionCenter({
                         {SECTIONS.map((s) => (
                             <TabsTrigger
                                 key={s}
+                                id={`supplier-api-connections-center-tab-${toAutomationIdSegment(s)}`}
                                 value={s}
                                 className="text-xs sm:text-sm"
                             >

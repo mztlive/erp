@@ -28,6 +28,7 @@ export function CustomerFormResultPanel({
             referenceLabel="原任务号"
             actions={
                 <Button
+                    id={`customers-form-${mode}-query-result`}
                     type="button"
                     size="sm"
                     variant="outline"
@@ -66,6 +67,7 @@ export function CustomerFormActionBar({
     return (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
+                id="customers-form-cancel"
                 type="button"
                 variant="outline"
                 onClick={() => {
@@ -86,12 +88,14 @@ export function CustomerFormActionBar({
             {!succeeded ? (
                 <form.AppForm>
                     <form.SubmitButton
+                        id="customers-form-submit"
                         label={submitLabel}
                         disabled={isPending}
                     />
                 </form.AppForm>
             ) : (
                 <Button
+                    id="customers-form-complete"
                     type="button"
                     onClick={() => {
                         onResetSession()

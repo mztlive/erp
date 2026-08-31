@@ -13,6 +13,7 @@ import type {
 } from "@/features/contracts/types"
 import { contractOwnerLabel } from "@/features/contracts/types"
 import { formatAsOf } from "@/features/contracts/lib/format-as-of"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 
@@ -45,7 +46,10 @@ export function ContractPreviewPanel({
                     <SectionTitle>基本信息</SectionTitle>
                     <div className="rounded-xl border border-border bg-card p-3">
                         <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-2 text-sm">
-                            <Fact label="客户" value={row.customer.displayName} />
+                            <Fact
+                                label="客户"
+                                value={row.customer.displayName}
+                            />
                             <Fact
                                 label="客户编号"
                                 value={row.customer.customerNo}
@@ -217,6 +221,7 @@ export function ContractPreviewPanel({
                                             <div className="min-w-0 space-y-1">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <Link
+                                                        id={`card-contracts-preview-panel-sales-order-${toAutomationIdSegment(so.salesOrderId)}-open`}
                                                         href={`/sales/orders/${so.salesOrderId}`}
                                                         className="num text-sm font-medium text-primary hover:underline"
                                                     >
@@ -226,17 +231,15 @@ export function ContractPreviewPanel({
                                                         {so.natureLabel}
                                                     </Badge>
                                                     <Badge variant="outline">
-                                                        {
-                                                            so.primaryStatus
-                                                                .label
-                                                        }
+                                                        {so.primaryStatus.label}
                                                     </Badge>
                                                 </div>
                                                 <p className="text-tiny text-muted-foreground">
-                                                    合同 v{so.contractRevisionNo}{" "}
-                                                    · 履约 {so.fulfillmentLabel}{" "}
-                                                    · 回款 {so.collectionLabel}{" "}
-                                                    · 开票 {so.invoicingLabel}
+                                                    合同 v
+                                                    {so.contractRevisionNo} ·
+                                                    履约 {so.fulfillmentLabel} ·
+                                                    回款 {so.collectionLabel} ·
+                                                    开票 {so.invoicingLabel}
                                                 </p>
                                             </div>
                                             <div className="shrink-0 text-right">

@@ -27,13 +27,13 @@ export function SalesOrderCreateDueDateBatchBar({
         >
             <Field orientation="horizontal" className="w-auto gap-1.5">
                 <FieldLabel
-                    htmlFor="sales-line-batch-due-date"
+                    htmlFor="sales-orders-create-batch-due-date"
                     className="shrink-0 text-xs text-muted-foreground"
                 >
                     批量交期
                 </FieldLabel>
                 <DatePicker
-                    id="sales-line-batch-due-date"
+                    id="sales-orders-create-batch-due-date"
                     size="sm"
                     value={dueDate || undefined}
                     onValueChange={(next) => setDueDate(next ?? "")}
@@ -43,6 +43,7 @@ export function SalesOrderCreateDueDateBatchBar({
                 />
             </Field>
             <Button
+                id="sales-orders-create-batch-due-date-apply"
                 type="button"
                 size="sm"
                 variant="outline"

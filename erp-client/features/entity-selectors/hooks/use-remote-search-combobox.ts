@@ -30,11 +30,7 @@ export function useRemoteSearchCombobox<TItem>(
     options: RemoteSearchComboboxOptions<TItem>,
 ) {
     const selectedRow = options.selectedItem ?? options.selected?.data
-    const rows = mergeSelected(
-        options.list.data,
-        selectedRow,
-        options.idOf,
-    )
+    const rows = mergeSelected(options.list.data, selectedRow, options.idOf)
     return {
         rows,
         loading:

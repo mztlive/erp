@@ -13,6 +13,7 @@ import {
     PageHeader,
     PageScaffold,
 } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { CustomerCreateDialog } from "@/features/customers/components/customer-create-dialog"
 import { SORT_COLUMN_TO_FIELD } from "@/features/customers/lib/directory-url"
 import { describeCustomerDirectoryTable } from "@/features/customers/lib/customer-center-description"
@@ -68,9 +69,19 @@ export function CustomerCenterPage() {
         <BusinessFailureState
             title="客户目录加载失败"
             error={directoryQuery.error}
-            onRetry={() => {
-                void directoryQuery.refetch()
-            }}
+            action={
+                <Button
+                    id="customers-directory-retry"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                        void directoryQuery.refetch()
+                    }}
+                >
+                    重试
+                </Button>
+            }
         />
     ) : directoryQuery.isPending && !data ? (
         <div
@@ -123,6 +134,7 @@ export function CustomerCenterPage() {
                                 ? [
                                       {
                                           actionKey: "create",
+                                          id: "customers-directory-create",
                                           label: "新建客户",
                                           icon: PlusIcon,
                                           onClick: () => setCreateOpen(true),

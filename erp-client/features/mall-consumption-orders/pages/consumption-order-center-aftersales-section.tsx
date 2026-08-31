@@ -70,6 +70,7 @@ export function AftersalesSection({
                             (s) => s.supplierRefundSummary,
                         ).length > 0 ? (
                             <Button
+                                id="mall-consumption-order-center-aftersales-open-supplier"
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -107,10 +108,7 @@ export function AftersalesSection({
                             </span>
                             <div className="mt-1 text-muted-foreground">
                                 {Object.entries(f.resultDetails)
-                                    .map(
-                                        ([k, v]) =>
-                                            `${k}=${String(v ?? "—")}`,
-                                    )
+                                    .map(([k, v]) => `${k}=${String(v ?? "—")}`)
                                     .join(" · ")}
                             </div>
                         </li>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { w29Href } from "@/features/execution-projections/lib/url-state"
 import type { ExecutionProjectionView } from "@/features/execution-projections/types"
 import { RECONCILIATION_LABEL } from "@/features/execution-projections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function ExecutionProjectionDiffPanel({
     detail,
@@ -27,11 +28,13 @@ export function ExecutionProjectionDiffPanel({
                         。请前往接口错误中心核对；本页不提供覆盖任一侧记录。
                         <div className="mt-2">
                             <Button
+                                id={`execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}-diff-w29`}
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 render={
                                     <Link
+                                        id={`execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}-diff-w29`}
                                         href={w29Href(
                                             detail.deliveries[0]?.workItemId,
                                             detail.deliveries[0]?.errorTaskId,
@@ -62,11 +65,13 @@ export function ExecutionProjectionDiffPanel({
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                             <Badge variant="secondary">关联错误任务</Badge>
                             <Button
+                                id={`execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}-error-w29`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
                                 render={
                                     <Link
+                                        id={`execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}-error-w29`}
                                         href={w29Href(
                                             detail.deliveries[0].workItemId,
                                             detail.deliveries[0].errorTaskId,

@@ -7,6 +7,7 @@ import {
     ItemGroup,
     ItemTitle,
 } from "@/components/ui/item"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type PurchaseOrderCreateSwitchItem = {
@@ -50,6 +51,7 @@ export function PurchaseOrderCreateSwitchList({
                             size="sm"
                             render={
                                 <button
+                                    id={`procurement-orders-create-switch-${toAutomationIdSegment(item.id)}`}
                                     type="button"
                                     aria-label={`${item.title}，${item.description}`}
                                     data-testid={`purchase-create-switch-${item.id}`}

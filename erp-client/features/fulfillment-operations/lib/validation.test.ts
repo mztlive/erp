@@ -55,6 +55,39 @@ describe("confirmDescription", () => {
     })
 })
 
+describe("clientValidation type alignment", () => {
+    it("rejects a leftover receipt draft on a supplier-direct job", () => {
+        const operation = {
+            ...makeOperation({
+                operationId: "dlv_direct_1",
+                operationType: "SUPPLIER_DIRECT",
+            }),
+            operationType: "SUPPLIER_DIRECT" as const,
+            draft: {
+                type: "SUPPLIER_DIRECT" as const,
+                carrier: "",
+                trackingNo: "",
+                shippedAt: "2026-08-31T11:00",
+                lines: [],
+            },
+        }
+        const issues = clientValidation(operation, {
+            type: "RECEIPT",
+            warehouseId: "",
+            warehouseLabel: "",
+            occurredAt: "",
+            lines: [],
+        })
+        expect(issues).toEqual([
+            {
+                id: "type-mismatch",
+                label: "单据类型",
+                message: "这条草稿和当前单据对不上",
+            },
+        ])
+    })
+})
+
 describe("clientValidation service evidence", () => {
     it("blocks confirm when the fulfillment result is missing", () => {
         const issues = clientValidation(

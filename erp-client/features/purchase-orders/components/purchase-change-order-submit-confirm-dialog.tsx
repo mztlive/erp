@@ -10,12 +10,16 @@ import { PurchaseChangeOrderApprovalArea } from "@/features/purchase-orders/comp
  * 只展示服务端冻结路线与固定驳回说明，不得选择下一节点或审批人。
  */
 export function PurchaseChangeOrderSubmitConfirmDialog({
+    id,
+    idPrefix,
     open,
     pending,
     approval,
     onOpenChange,
     onConfirm,
 }: {
+    id?: string
+    idPrefix?: string
     open: boolean
     pending: boolean
     approval?: DocumentApprovalView
@@ -24,6 +28,8 @@ export function PurchaseChangeOrderSubmitConfirmDialog({
 }) {
     return (
         <FormalActionConfirmDialog
+            id={id}
+            idPrefix={idPrefix}
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="提交改单"

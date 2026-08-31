@@ -8,6 +8,7 @@ import {
     BusinessFailureState,
     PageScaffold,
     surfacePanelClassName,
+    workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import {
     useSupplierOrderDetailQuery,
 } from "@/features/supplier-orders/hooks/queries"
 import { SECTION_LABEL, SECTIONS } from "@/features/supplier-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { SupplierOrderCenterDialogs } from "@/features/supplier-orders/components/supplier-order-preview-center-dialogs"
 import {
@@ -144,7 +146,9 @@ export function SupplierOrderCenterPage({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
                 <div className="h-28 animate-pulse rounded-lg bg-muted" />
@@ -157,13 +161,16 @@ export function SupplierOrderCenterPage({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <BusinessFailureState
                     title="供应商订单加载失败"
                     error={query.error}
                     action={
                         <Button
+                            id="supplier-order-center-error-retry"
                             type="button"
                             onClick={() => void query.refetch()}
                         >
@@ -179,13 +186,16 @@ export function SupplierOrderCenterPage({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <Alert variant="warning">
                     <AlertTitle>未找到供应商订单</AlertTitle>
                     <AlertDescription>
                         该订单不存在或当前角色无权访问。
                         <Button
+                            id="supplier-order-center-not-found-back"
                             type="button"
                             variant="link"
                             className="px-1"
@@ -204,7 +214,9 @@ export function SupplierOrderCenterPage({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0" : undefined}
+            className={
+                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+            }
         >
             <SupplierOrderCenterHeader
                 order={o}
@@ -263,7 +275,11 @@ export function SupplierOrderCenterPage({
                         className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
                     >
                         {SECTIONS.map((s) => (
-                            <TabsTrigger key={s} value={s}>
+                            <TabsTrigger
+                                key={s}
+                                value={s}
+                                id={`supplier-order-center-tab-${toAutomationIdSegment(s)}`}
+                            >
                                 {SECTION_LABEL[s]}
                             </TabsTrigger>
                         ))}

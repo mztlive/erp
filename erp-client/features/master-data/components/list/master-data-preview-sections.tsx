@@ -96,6 +96,7 @@ export function PreviewStockSection({
                     预占 <span className="num">{reservedQty}</span>
                 </p>
                 <Button
+                    id="master-data-list-master-data-preview-sections-button-1"
                     type="button"
                     size="sm"
                     variant="outline"

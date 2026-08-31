@@ -40,6 +40,11 @@ function EmptyByReason({
                     action={
                         onClearFilters ? (
                             <Button
+                                id={
+                                    isAudit
+                                        ? "operations-audit-empty-clear-filters"
+                                        : "operations-access-empty-clear-filters"
+                                }
                                 type="button"
                                 size="sm"
                                 variant="secondary"
@@ -80,6 +85,11 @@ function EmptyByReason({
                     action={
                         onClearFilters ? (
                             <Button
+                                id={
+                                    isAudit
+                                        ? "operations-audit-filter-empty-clear"
+                                        : "operations-access-filter-empty-clear"
+                                }
                                 type="button"
                                 size="sm"
                                 variant="secondary"

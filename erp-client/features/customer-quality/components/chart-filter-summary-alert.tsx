@@ -23,6 +23,7 @@ export function ChartFilterSummaryAlert({
                     <span className="num font-medium">{resultCount}</span> 户
                 </span>
                 <Button
+                    id="customers-quality-chart-clear"
                     type="button"
                     size="sm"
                     variant="ghost"

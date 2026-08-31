@@ -3,6 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { ColumnActions } from "./column-types"
 
 export function createReceivableColumns({
@@ -132,6 +133,7 @@ export function createReceivableColumns({
             cell: ({ row }) => (
                 <div className="flex flex-nowrap justify-end gap-1">
                     <Button
+                        id={`customer-receivables-receivable-row-${toAutomationIdSegment(row.original.accountId)}-preview`}
                         type="button"
                         size="xs"
                         variant="ghost"
@@ -145,6 +147,7 @@ export function createReceivableColumns({
                         预览
                     </Button>
                     <Button
+                        id={`customer-receivables-receivable-row-${toAutomationIdSegment(row.original.accountId)}-allocate`}
                         type="button"
                         size="xs"
                         variant="outline"

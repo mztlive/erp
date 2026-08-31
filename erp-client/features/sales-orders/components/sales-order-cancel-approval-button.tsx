@@ -24,6 +24,7 @@ import {
     salesOrderAllowsWithdrawApproval,
 } from "@/features/sales-orders/lib/sales-order-detail-permissions"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorPresentation } from "@/lib/api/errors"
 
 /**
@@ -72,6 +73,7 @@ export function SalesOrderCancelApprovalButton({
     return (
         <>
             <Button
+                id="sales-orders-detail-cancel-approval-trigger"
                 type="button"
                 size="sm"
                 variant="outline"
@@ -98,13 +100,13 @@ export function SalesOrderCancelApprovalButton({
                     </AlertDialogHeader>
                     <div className="space-y-2">
                         <label
-                            htmlFor={`sales-order-cancel-reason-${order.id}`}
+                            htmlFor={`sales-orders-detail-cancel-reason-${toAutomationIdSegment(order.id)}`}
                             className="text-sm font-medium"
                         >
                             撤回原因
                         </label>
                         <Textarea
-                            id={`sales-order-cancel-reason-${order.id}`}
+                            id={`sales-orders-detail-cancel-reason-${toAutomationIdSegment(order.id)}`}
                             value={reason}
                             onChange={(event) => setReason(event.target.value)}
                             placeholder="请输入撤回原因"
@@ -121,10 +123,14 @@ export function SalesOrderCancelApprovalButton({
                         ) : null}
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={cancelMutation.isPending}>
+                        <AlertDialogCancel
+                            id="sales-orders-detail-cancel-approval-cancel"
+                            disabled={cancelMutation.isPending}
+                        >
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
+                            id="sales-orders-detail-cancel-approval-confirm"
                             disabled={
                                 cancelMutation.isPending || !reason.trim()
                             }

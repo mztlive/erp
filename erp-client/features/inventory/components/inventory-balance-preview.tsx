@@ -16,6 +16,7 @@ import type {
     BalanceDetailView,
     StockBalanceRow,
 } from "@/features/inventory/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { workspaceLabel } from "@/lib/ui-text"
 import type { WorkspaceId } from "@/lib/workspace-registry"
@@ -43,6 +44,7 @@ function InventoryBalancePreview({
 }: InventoryBalancePreviewProps) {
     return (
         <QuickPreviewSheet
+            id="inventory-balance-preview-sheet"
             open={open}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
@@ -73,6 +75,7 @@ function InventoryBalancePreview({
                 detail ? (
                     <>
                         <Button
+                            id="inventory-balance-preview-close"
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -80,6 +83,7 @@ function InventoryBalancePreview({
                             关闭
                         </Button>
                         <Button
+                            id="inventory-balance-preview-view-movements"
                             type="button"
                             variant="outline"
                             onClick={() => onViewMovements(detail)}
@@ -87,6 +91,7 @@ function InventoryBalancePreview({
                             查看全部流水
                         </Button>
                         <Button
+                            id="inventory-balance-preview-start-adjustment"
                             type="button"
                             disabled={
                                 isCreating ||
@@ -201,6 +206,7 @@ function InventoryBalancePreview({
                                         </div>
                                         {m.sourceHref ? (
                                             <Button
+                                                id={`inventory-balance-preview-movement-${toAutomationIdSegment(m.movementId)}-source`}
                                                 type="button"
                                                 variant="link"
                                                 size="xs"
@@ -245,6 +251,7 @@ function InventoryBalancePreview({
                                         </span>
                                         {doc.href ? (
                                             <Button
+                                                id={`inventory-balance-preview-doc-${toAutomationIdSegment(doc.documentId)}-open`}
                                                 type="button"
                                                 variant="outline"
                                                 size="xs"
@@ -309,6 +316,7 @@ function InventoryBalancePreview({
                                         </div>
                                         {r.fulfillmentHref ? (
                                             <Button
+                                                id={`inventory-balance-preview-reservation-${toAutomationIdSegment(r.reservationId)}-fulfillment`}
                                                 type="button"
                                                 variant="link"
                                                 size="xs"
@@ -344,6 +352,7 @@ function InventoryBalancePreview({
                                         >
                                             {onOpenAdjustment ? (
                                                 <Button
+                                                    id={`inventory-balance-preview-adjustment-${toAutomationIdSegment(a.adjustmentId)}-open`}
                                                     type="button"
                                                     variant="link"
                                                     size="xs"

@@ -560,16 +560,27 @@ impl PurchaseOrderService {
     }
 
     /// 从变更单冻结的基准采购版本恢复完整目标行。
+    ///
+    /// # 参数
+    /// * `revision_id` - 变更单冻结的采购生效版本稳定身份
+    ///
+    /// # 返回
+    /// 返回按版本行号和稳定主键排序的完整目标行请求。
+    ///
+    /// # 错误
+    /// 仓储读取失败或基准版本没有明细时返回错误。
+    ///
+    /// # 关键约束
+    /// 排序由单版本仓储查询保证；空版本校验和 DTO 转换仍由 Service 负责。
     async fn change_lines_from_base_revision(
         &self,
         revision_id: &entities::ids::PurchaseOrderRevisionId,
     ) -> Result<Vec<SavePurchaseOrderLine>> {
-        let mut lines = self
+        let lines = self
             .db
-            .purchase_order_revision_lines()
-            .find_lines_by_revision_ids(std::slice::from_ref(revision_id), &mut NoTransaction)
+            .purchase_order()
+            .list_revision_lines(revision_id, &mut NoTransaction)
             .await?;
-        lines.sort_by_key(|line| line.line_no);
         if lines.is_empty() {
             return Err(Error::BusinessLogicError("采购变更基准版本缺少明细".to_string()));
         }

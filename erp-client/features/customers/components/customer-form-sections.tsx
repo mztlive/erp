@@ -7,7 +7,11 @@ import { DocumentSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import type { CustomerFormApi } from "@/features/customers/components/customer-form-values"
+import {
+    createCustomerFormDraftId,
+    type CustomerFormApi,
+} from "@/features/customers/components/customer-form-values"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export const ADDRESS_TYPE_OPTIONS = [
     { value: "履约地址", label: "履约地址" },
@@ -78,11 +82,14 @@ export function ContactRowsSection({
                 <form.AppField name="contacts">
                     {(field) => (
                         <Button
+                            id="customers-form-contacts-add"
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() =>
                                 field.pushValue({
+                                    draftId:
+                                        createCustomerFormDraftId("contact"),
                                     name: "",
                                     title: "",
                                     phone: "",
@@ -108,102 +115,124 @@ export function ContactRowsSection({
                                 : "暂无联系人"}
                         </p>
                     ) : (
-                        field.state.value.map((_row, index) => (
-                            <div
-                                key={`contact-${index}`}
-                                className="space-y-2 rounded-lg border border-border p-3"
-                            >
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    <form.AppField
-                                        name={`contacts[${index}].name`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="姓名"
-                                                required
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`contacts[${index}].title`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField label="职务" />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`contacts[${index}].phone`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="手机"
-                                                required
-                                                placeholder="11 位手机号"
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`contacts[${index}].telephone`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="固定电话"
-                                                placeholder="可选"
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`contacts[${index}].email`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="邮箱"
-                                                placeholder="可选"
-                                            />
-                                        )}
-                                    </form.AppField>
+                        field.state.value.map((_row, index) => {
+                            const rowKey = toAutomationIdSegment(
+                                _row.existingId ??
+                                    _row.draftId ??
+                                    `contact-${index}`,
+                            )
+                            return (
+                                <div
+                                    key={
+                                        _row.existingId ??
+                                        _row.draftId ??
+                                        `contact-${index}`
+                                    }
+                                    className="space-y-2 rounded-lg border border-border p-3"
+                                >
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <form.AppField
+                                            name={`contacts[${index}].name`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-contacts-${rowKey}-name`}
+                                                    label="姓名"
+                                                    required
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`contacts[${index}].title`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-contacts-${rowKey}-title`}
+                                                    label="职务"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`contacts[${index}].phone`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-contacts-${rowKey}-phone`}
+                                                    label="手机"
+                                                    required
+                                                    placeholder="11 位手机号"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`contacts[${index}].telephone`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-contacts-${rowKey}-telephone`}
+                                                    label="固定电话"
+                                                    placeholder="可选"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`contacts[${index}].email`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-contacts-${rowKey}-email`}
+                                                    label="邮箱"
+                                                    placeholder="可选"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <form.AppField
+                                            name={`contacts[${index}].isDefault`}
+                                        >
+                                            {(nested) => {
+                                                const checkboxId = `customers-form-contacts-${rowKey}-default`
+                                                return (
+                                                    <Label
+                                                        htmlFor={checkboxId}
+                                                        className="flex items-center gap-2 text-sm"
+                                                    >
+                                                        <Checkbox
+                                                            id={checkboxId}
+                                                            checked={
+                                                                nested.state
+                                                                    .value
+                                                            }
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) =>
+                                                                nested.handleChange(
+                                                                    checked ===
+                                                                        true,
+                                                                )
+                                                            }
+                                                        />
+                                                        默认联系人
+                                                    </Label>
+                                                )
+                                            }}
+                                        </form.AppField>
+                                        <Button
+                                            id={`customers-form-contacts-${rowKey}-remove`}
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                field.removeValue(index)
+                                            }
+                                        >
+                                            移除
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
-                                    <form.AppField
-                                        name={`contacts[${index}].isDefault`}
-                                    >
-                                        {(nested) => {
-                                            const checkboxId = `customer-contact-${index}-default`
-                                            return (
-                                                <Label
-                                                    htmlFor={checkboxId}
-                                                    className="flex items-center gap-2 text-sm"
-                                                >
-                                                    <Checkbox
-                                                        id={checkboxId}
-                                                        checked={
-                                                            nested.state.value
-                                                        }
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) =>
-                                                            nested.handleChange(
-                                                                checked ===
-                                                                    true,
-                                                            )
-                                                        }
-                                                    />
-                                                    默认联系人
-                                                </Label>
-                                            )
-                                        }}
-                                    </form.AppField>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => field.removeValue(index)}
-                                    >
-                                        移除
-                                    </Button>
-                                </div>
-                            </div>
-                        ))
+                            )
+                        })
                     )
                 }
             </form.AppField>
@@ -230,11 +259,14 @@ export function AddressRowsSection({
                 <form.AppField name="addresses">
                     {(field) => (
                         <Button
+                            id="customers-form-addresses-add"
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() =>
                                 field.pushValue({
+                                    draftId:
+                                        createCustomerFormDraftId("address"),
                                     addressType: "履约地址",
                                     contactName: "",
                                     address: "",
@@ -258,86 +290,106 @@ export function AddressRowsSection({
                                 : "暂无地址"}
                         </p>
                     ) : (
-                        field.state.value.map((_row, index) => (
-                            <div
-                                key={`address-${index}`}
-                                className="space-y-2 rounded-lg border border-border p-3"
-                            >
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    <form.AppField
-                                        name={`addresses[${index}].addressType`}
-                                    >
-                                        {(nested) => (
-                                            <nested.SelectField
-                                                label="地址类型"
-                                                required
-                                                options={ADDRESS_TYPE_OPTIONS}
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`addresses[${index}].address`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="地址"
-                                                required
-                                                placeholder="省市区 + 详细地址"
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`addresses[${index}].contactName`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="地址联系人"
-                                                placeholder="可选"
-                                            />
-                                        )}
-                                    </form.AppField>
+                        field.state.value.map((_row, index) => {
+                            const rowKey = toAutomationIdSegment(
+                                _row.existingId ??
+                                    _row.draftId ??
+                                    `address-${index}`,
+                            )
+                            return (
+                                <div
+                                    key={
+                                        _row.existingId ??
+                                        _row.draftId ??
+                                        `address-${index}`
+                                    }
+                                    className="space-y-2 rounded-lg border border-border p-3"
+                                >
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <form.AppField
+                                            name={`addresses[${index}].addressType`}
+                                        >
+                                            {(nested) => (
+                                                <nested.SelectField
+                                                    id={`customers-form-addresses-${rowKey}-type`}
+                                                    label="地址类型"
+                                                    required
+                                                    options={
+                                                        ADDRESS_TYPE_OPTIONS
+                                                    }
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`addresses[${index}].address`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-addresses-${rowKey}-address`}
+                                                    label="地址"
+                                                    required
+                                                    placeholder="省市区 + 详细地址"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`addresses[${index}].contactName`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-addresses-${rowKey}-contact-name`}
+                                                    label="地址联系人"
+                                                    placeholder="可选"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <form.AppField
+                                            name={`addresses[${index}].isDefault`}
+                                        >
+                                            {(nested) => {
+                                                const checkboxId = `customers-form-addresses-${rowKey}-default`
+                                                return (
+                                                    <Label
+                                                        htmlFor={checkboxId}
+                                                        className="flex items-center gap-2 text-sm"
+                                                    >
+                                                        <Checkbox
+                                                            id={checkboxId}
+                                                            checked={
+                                                                nested.state
+                                                                    .value
+                                                            }
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) =>
+                                                                nested.handleChange(
+                                                                    checked ===
+                                                                        true,
+                                                                )
+                                                            }
+                                                        />
+                                                        默认地址
+                                                    </Label>
+                                                )
+                                            }}
+                                        </form.AppField>
+                                        <Button
+                                            id={`customers-form-addresses-${rowKey}-remove`}
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                field.removeValue(index)
+                                            }
+                                        >
+                                            移除
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
-                                    <form.AppField
-                                        name={`addresses[${index}].isDefault`}
-                                    >
-                                        {(nested) => {
-                                            const checkboxId = `customer-address-${index}-default`
-                                            return (
-                                                <Label
-                                                    htmlFor={checkboxId}
-                                                    className="flex items-center gap-2 text-sm"
-                                                >
-                                                    <Checkbox
-                                                        id={checkboxId}
-                                                        checked={
-                                                            nested.state.value
-                                                        }
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) =>
-                                                            nested.handleChange(
-                                                                checked ===
-                                                                    true,
-                                                            )
-                                                        }
-                                                    />
-                                                    默认地址
-                                                </Label>
-                                            )
-                                        }}
-                                    </form.AppField>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => field.removeValue(index)}
-                                    >
-                                        移除
-                                    </Button>
-                                </div>
-                            </div>
-                        ))
+                            )
+                        })
                     )
                 }
             </form.AppField>

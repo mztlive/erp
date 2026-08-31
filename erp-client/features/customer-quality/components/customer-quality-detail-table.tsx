@@ -1,7 +1,11 @@
 "use client"
 
 import * as React from "react"
-import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
+import type {
+    ColumnDef,
+    PaginationState,
+    SortingState,
+} from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
@@ -85,6 +89,7 @@ export function CustomerQualityDetailTable({
                 toolbar={toolbar}
                 table={
                     <DataTable
+                        id="customers-quality-detail-table"
                         data={[...items]}
                         columns={columns}
                         getRowId={(row) => row.customerId}
@@ -119,6 +124,7 @@ export function CustomerQualityDetailTable({
                                         className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                                         action={
                                             <Button
+                                                id="customers-quality-detail-clear-filters"
                                                 type="button"
                                                 size="sm"
                                                 variant="secondary"

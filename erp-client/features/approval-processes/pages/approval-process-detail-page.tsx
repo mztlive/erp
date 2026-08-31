@@ -137,6 +137,7 @@ export function ApprovalProcessDetailPage({
                     description="地址中的单据类型不在固定目录中。"
                     action={
                         <Button
+                            id="governance-approval-processes-detail-invalid-back"
                             type="button"
                             render={<Link href="/system/approval-processes" />}
                         >
@@ -158,6 +159,7 @@ export function ApprovalProcessDetailPage({
                     description="地址中的查看参数无法识别。"
                     action={
                         <Button
+                            id="governance-approval-processes-detail-unknown-clear"
                             type="button"
                             onClick={() =>
                                 router.replace(
@@ -183,6 +185,7 @@ export function ApprovalProcessDetailPage({
                     description="当前账号不能查看审批流程定义。"
                     action={
                         <Button
+                            id="governance-approval-processes-detail-permission-back"
                             type="button"
                             render={<Link href="/system/approval-processes" />}
                         >
@@ -202,6 +205,7 @@ export function ApprovalProcessDetailPage({
                     description="无需审批 / 不适用"
                     actions={
                         <Button
+                            id="governance-approval-processes-detail-no-approval-back"
                             type="button"
                             variant="outline"
                             render={<Link href="/system/approval-processes" />}
@@ -240,6 +244,7 @@ export function ApprovalProcessDetailPage({
                 variant="object-chrome"
                 actions={
                     <Button
+                        id="governance-approval-processes-detail-back"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -288,6 +293,7 @@ export function ApprovalProcessDetailPage({
                 <div className="flex flex-wrap gap-2">
                     {canCreate ? (
                         <Button
+                            id="governance-approval-processes-detail-create-draft"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -298,6 +304,7 @@ export function ApprovalProcessDetailPage({
                     ) : null}
                     {canPublish && draft && urlState.view === "draft" ? (
                         <Button
+                            id="governance-approval-processes-detail-publish"
                             type="button"
                             size="sm"
                             onClick={() => setPublishOpen(true)}
@@ -307,6 +314,7 @@ export function ApprovalProcessDetailPage({
                     ) : null}
                     {canRetire && published ? (
                         <Button
+                            id="governance-approval-processes-detail-retire"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -337,13 +345,25 @@ export function ApprovalProcessDetailPage({
                         variant="line"
                         className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b border-grid bg-card px-3 py-1.5"
                     >
-                        <TabsTrigger value="current" className="flex-none">
+                        <TabsTrigger
+                            id="governance-approval-processes-detail-tab-current"
+                            value="current"
+                            className="flex-none"
+                        >
                             当前版本
                         </TabsTrigger>
-                        <TabsTrigger value="draft" className="flex-none">
+                        <TabsTrigger
+                            id="governance-approval-processes-detail-tab-draft"
+                            value="draft"
+                            className="flex-none"
+                        >
                             草稿
                         </TabsTrigger>
-                        <TabsTrigger value="history" className="flex-none">
+                        <TabsTrigger
+                            id="governance-approval-processes-detail-tab-history"
+                            value="history"
+                            className="flex-none"
+                        >
                             历史版本
                         </TabsTrigger>
                         {detailQuery.data ? (
@@ -375,6 +395,7 @@ export function ApprovalProcessDetailPage({
                             action={
                                 canCreate ? (
                                     <Button
+                                        id="governance-approval-processes-detail-missing-create"
                                         type="button"
                                         onClick={() => setCreateOpen(true)}
                                     >
@@ -399,6 +420,7 @@ export function ApprovalProcessDetailPage({
                         action={
                             canCreate ? (
                                 <Button
+                                    id="governance-approval-processes-detail-empty-create"
                                     type="button"
                                     variant="secondary"
                                     className="rounded-lg shadow-none"
@@ -418,6 +440,7 @@ export function ApprovalProcessDetailPage({
                         }
                     >
                         <VersionHistory
+                            id="governance-approval-processes-detail-history"
                             versions={versionsQuery.data ?? []}
                             selectedVersion={urlState.version}
                             onSelect={(item) =>
@@ -437,6 +460,7 @@ export function ApprovalProcessDetailPage({
                             )}
                             action={
                                 <Button
+                                    id="governance-approval-processes-detail-retry"
                                     type="button"
                                     onClick={() => void detailQuery.refetch()}
                                 >
@@ -449,6 +473,7 @@ export function ApprovalProcessDetailPage({
 
                 {showEditor && detailQuery.data ? (
                     <DefinitionEditor
+                        id="governance-approval-processes-detail-editor"
                         detail={detailQuery.data}
                         lockVersion={
                             lockVersion ||
@@ -464,6 +489,7 @@ export function ApprovalProcessDetailPage({
 
             {catalogItem ? (
                 <CreateDraftDialog
+                    id="governance-approval-processes-detail-create-draft-dialog"
                     item={catalogItem}
                     open={createOpen}
                     onOpenChange={setCreateOpen}
@@ -474,6 +500,7 @@ export function ApprovalProcessDetailPage({
             draft &&
             detailQuery.data.definition_id === draft.definition_id ? (
                 <PublishDialog
+                    id="governance-approval-processes-detail-publish-dialog"
                     detail={detailQuery.data}
                     lockVersion={
                         lockVersion || detailQuery.data.definition_lock_version

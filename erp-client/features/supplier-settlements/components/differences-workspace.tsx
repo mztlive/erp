@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { SettlementDifferenceView } from "@/features/supplier-settlements/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
@@ -59,6 +60,7 @@ export function DifferencesWorkspace({
                     {differences.map((d) => (
                         <button
                             key={d.differenceId}
+                            id={`supplier-settlements-differences-item-${toAutomationIdSegment(d.differenceId)}`}
                             type="button"
                             className={cn(
                                 "flex w-full flex-col rounded-md px-2 py-2 text-left text-sm hover:bg-foreground/5",
@@ -245,6 +247,7 @@ export function DifferencesWorkspace({
                             <div className="flex flex-wrap gap-2">
                                 {allowed.has("APPEND_EVIDENCE") ? (
                                     <Button
+                                        id="supplier-settlements-differences-append-evidence"
                                         type="button"
                                         size="sm"
                                         onClick={onEvidence}
@@ -255,6 +258,7 @@ export function DifferencesWorkspace({
                                 {allowed.has("RESOLVE_DIFFERENCE") &&
                                 activeDiff.status === "PENDING" ? (
                                     <Button
+                                        id="supplier-settlements-differences-resolve"
                                         type="button"
                                         size="sm"
                                         onClick={onResolve}

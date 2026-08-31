@@ -37,10 +37,7 @@ export function FulfillmentSection({
     onHide: () => void
 }) {
     return (
-        <DocumentSection
-            title="履约与物流"
-            description="接单、发货与地址"
-        >
+        <DocumentSection title="履约与物流" description="接单、发货与地址">
             <DescriptionList className="mb-4 gap-y-3">
                 <Item
                     label="接单时间"
@@ -93,10 +90,7 @@ export function FulfillmentSection({
 
             <Card
                 size="sm"
-                className={cn(
-                    surfaceInsetClassName,
-                    "shadow-none ring-0",
-                )}
+                className={cn(surfaceInsetClassName, "shadow-none ring-0")}
             >
                 <CardHeader className="rounded-t-lg border-b border-grid pb-2">
                     <CardTitle className="text-sm">收货信息</CardTitle>
@@ -123,6 +117,7 @@ export function FulfillmentSection({
                     ) : null}
                     <div className="flex gap-2 pt-1">
                         <Button
+                            id="supplier-order-center-fulfillment-reveal"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -130,7 +125,10 @@ export function FulfillmentSection({
                             onClick={onReveal}
                         >
                             {revealPending ? (
-                                <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
+                                <Loader2Icon
+                                    className="size-3.5 animate-spin"
+                                    aria-hidden="true"
+                                />
                             ) : (
                                 <EyeIcon className="size-3.5" />
                             )}
@@ -138,6 +136,7 @@ export function FulfillmentSection({
                         </Button>
                         {address.revealed ? (
                             <Button
+                                id="supplier-order-center-fulfillment-hide"
                                 type="button"
                                 size="sm"
                                 variant="ghost"

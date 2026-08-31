@@ -16,6 +16,7 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { MALLS } from "@/features/product-publications/api/publications"
 import type {
     PublicationDeliveryStatusSelection,
@@ -75,7 +76,7 @@ export function PublicationListToolbar({
     deliveryStatusDraft: PublicationDeliveryStatusSelection
     setDeliveryStatusDraft: SetState<PublicationDeliveryStatusSelection>
 }) {
-    const panelId = React.useId()
+    const panelId = "publication-list-filter-panel"
     const hasChips = appliedChips.length > 0
 
     return (
@@ -92,6 +93,7 @@ export function PublicationListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="publication-list-toolbar-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -104,6 +106,7 @@ export function PublicationListToolbar({
                 }
                 filters={
                     <Button
+                        id="publication-list-toolbar-filter-toggle"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -140,6 +143,7 @@ export function PublicationListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`publication-list-toolbar-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -148,6 +152,7 @@ export function PublicationListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="publication-list-toolbar-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -177,6 +182,7 @@ export function PublicationListToolbar({
                                                 目标商城
                                             </span>
                                             <OptionCombobox
+                                                id="publication-list-toolbar-mall"
                                                 className="w-full"
                                                 value={mallDraft ?? undefined}
                                                 onValueChange={setMallDraft}
@@ -194,6 +200,7 @@ export function PublicationListToolbar({
                                                 发布状态
                                             </span>
                                             <OptionCombobox
+                                                id="publication-list-toolbar-publication-status"
                                                 className="w-full"
                                                 value={
                                                     publicationStatusDraft ===
@@ -221,13 +228,17 @@ export function PublicationListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="publication-list-toolbar-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="publication-list-toolbar-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

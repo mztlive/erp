@@ -229,6 +229,7 @@ function SupplierAccountsTableBody({
                 description="换一个关键词或清除筛选后再试。"
                 action={
                     <Button
+                        id="supplier-payables-table-clear-filters"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -255,6 +256,7 @@ function SupplierAccountsTableBody({
     if (view === "payable") {
         return (
             <DataTable
+                id="supplier-payables-table-payable"
                 columns={payableColumns}
                 data={pageRows as PayableRow[]}
                 getRowId={(r) => r.payableAccountId}
@@ -276,6 +278,7 @@ function SupplierAccountsTableBody({
     if (view === "payment") {
         return (
             <DataTable
+                id="supplier-payables-table-payment"
                 columns={paymentColumns}
                 data={pageRows as PaymentRow[]}
                 getRowId={(r) => r.paymentId}
@@ -293,6 +296,7 @@ function SupplierAccountsTableBody({
     if (view === "purchase_invoice") {
         return (
             <DataTable
+                id="supplier-payables-table-invoice"
                 columns={invoiceColumns}
                 data={pageRows as PurchaseInvoiceRow[]}
                 getRowId={(r) => r.invoiceId}
@@ -307,6 +311,7 @@ function SupplierAccountsTableBody({
 
     return (
         <DataTable
+            id="supplier-payables-table-unallocated"
             columns={unallocatedColumns}
             data={pageRows as UnallocatedRow[]}
             getRowId={(r) => r.id}

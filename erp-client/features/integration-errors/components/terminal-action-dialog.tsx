@@ -32,6 +32,11 @@ export function TerminalActionDialog({
         const duplicate = confirm.kind === "CLOSE_DUPLICATE"
         return (
             <FormalActionConfirmDialog
+                id={
+                    duplicate
+                        ? "integration-terminal-action-dialog-close-duplicate"
+                        : "integration-terminal-action-dialog-close-misrouted"
+                }
                 open
                 onOpenChange={(open) => {
                     if (!open) onCancel()
@@ -51,6 +56,7 @@ export function TerminalActionDialog({
     if (confirm.kind === "RESOLVE") {
         return (
             <FormalActionConfirmDialog
+                id="integration-terminal-action-dialog-resolve"
                 open
                 onOpenChange={(open) => {
                     if (!open) onCancel()
@@ -77,6 +83,11 @@ export function TerminalActionDialog({
     const isNoError = confirm.kind === "CONFIRM_NO_ERROR"
     return (
         <FormalActionConfirmDialog
+            id={
+                isNoError
+                    ? "integration-terminal-action-dialog-confirm-no-error"
+                    : "integration-terminal-action-dialog-confirm-valid-difference"
+            }
             open
             onOpenChange={(open) => {
                 if (!open) onCancel()

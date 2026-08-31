@@ -10,9 +10,13 @@ function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
     return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
 }
 
-function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
+function AlertDialogTrigger({
+    id,
+    ...props
+}: AlertDialogPrimitive.Trigger.Props & { id?: string }) {
     return (
         <AlertDialogPrimitive.Trigger
+            id={id}
             data-slot="alert-dialog-trigger"
             {...props}
         />
@@ -149,10 +153,12 @@ function AlertDialogDescription({
 
 function AlertDialogAction({
     className,
+    id,
     ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { id?: string }) {
     return (
         <Button
+            id={id}
             data-slot="alert-dialog-action"
             className={cn(className)}
             {...props}
@@ -164,11 +170,15 @@ function AlertDialogCancel({
     className,
     variant = "outline",
     size = "default",
+    id,
     ...props
 }: AlertDialogPrimitive.Close.Props &
-    Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
+    Pick<React.ComponentProps<typeof Button>, "variant" | "size"> & {
+        id?: string
+    }) {
     return (
         <AlertDialogPrimitive.Close
+            id={id}
             data-slot="alert-dialog-cancel"
             className={cn(className)}
             render={<Button variant={variant} size={size} />}

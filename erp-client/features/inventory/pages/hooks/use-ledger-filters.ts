@@ -63,9 +63,8 @@ export function useLedgerFilters({
     >(warehouseId ?? null)
     const [availabilityDraft, setAvailabilityDraft] =
         React.useState<InventoryAvailability>(availability)
-    const [movementTypeDraft, setMovementTypeDraft] = React.useState<string[]>(
-        movementType,
-    )
+    const [movementTypeDraft, setMovementTypeDraft] =
+        React.useState<string[]>(movementType)
     const [occurredFromDraft, setOccurredFromDraft] = React.useState(
         occurredFrom ?? "",
     )

@@ -36,6 +36,7 @@ export function ItemFilters({
                     <div className="space-y-1">
                         <Label className="text-xs">结果</Label>
                         <OptionCombobox
+                            id="operations-history-backfill-detail-filter-result"
                             value={urlState.result ?? "all"}
                             onValueChange={(v) => {
                                 if (v == null) return
@@ -66,6 +67,7 @@ export function ItemFilters({
                     <div className="space-y-1">
                         <Label className="text-xs">记录类型</Label>
                         <OptionCombobox
+                            id="operations-history-backfill-detail-filter-fact-type"
                             value={urlState.factType ?? "all"}
                             onValueChange={(v) => {
                                 if (v == null) return
@@ -96,6 +98,7 @@ export function ItemFilters({
                     <div className="space-y-1">
                         <Label className="text-xs">成本口径</Label>
                         <OptionCombobox
+                            id="operations-history-backfill-detail-filter-cost-basis"
                             value={urlState.costBasis ?? "all"}
                             onValueChange={(v) => {
                                 if (v == null) return
@@ -133,6 +136,7 @@ export function ItemFilters({
                     }}
                 >
                     <Input
+                        id="operations-history-backfill-detail-filter-search"
                         className="h-8 w-[12rem]"
                         value={qDraft}
                         onChange={(e) => setQDraft(e.target.value)}
@@ -140,6 +144,7 @@ export function ItemFilters({
                     />
                     {urlState.q ? (
                         <Button
+                            id="operations-history-backfill-detail-filter-clear"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -151,7 +156,12 @@ export function ItemFilters({
                             清除
                         </Button>
                     ) : null}
-                    <Button type="submit" size="sm" variant="secondary">
+                    <Button
+                        id="operations-history-backfill-detail-filter-search-submit"
+                        type="submit"
+                        size="sm"
+                        variant="secondary"
+                    >
                         搜索
                     </Button>
                 </form>

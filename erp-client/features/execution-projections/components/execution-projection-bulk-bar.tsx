@@ -40,6 +40,7 @@ export function ExecutionProjectionBulkBar({
             </span>
             <div className="flex flex-wrap gap-2">
                 <Button
+                    id="execution-projections-bulk-bar-clear"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -48,6 +49,7 @@ export function ExecutionProjectionBulkBar({
                     清除选择
                 </Button>
                 <Button
+                    id="execution-projections-bulk-bar-bulk-query"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -57,6 +59,7 @@ export function ExecutionProjectionBulkBar({
                     批量查询
                 </Button>
                 <Button
+                    id="execution-projections-bulk-bar-bulk-retry"
                     type="button"
                     size="sm"
                     disabled={bulkOverLimit || bulkPending}

@@ -91,7 +91,9 @@ export function CostSection({
                                     <CardDescription>
                                         <BusinessStatusBadge
                                             context="list"
-                                            label={COST_BASIS_LABEL[ca.costBasis]}
+                                            label={
+                                                COST_BASIS_LABEL[ca.costBasis]
+                                            }
                                             tone={COST_BASIS_TONE[ca.costBasis]}
                                         />
                                         <span className="ml-2">

@@ -12,7 +12,10 @@ import type {
     SkuRevisionDto,
     UnitOfMeasureDto,
 } from "@/features/master-data/api/contracts"
-import { mapProductRow, isFutureDate } from "@/features/master-data/api/list-mappers"
+import {
+    mapProductRow,
+    isFutureDate,
+} from "@/features/master-data/api/list-mappers"
 import { fetchAllPages } from "@/features/master-data/api/lists"
 import {
     fetchFileAsset,

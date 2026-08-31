@@ -41,6 +41,7 @@ export function SourceReturnBanner({
                 。返回时会回到原来的位置。
             </span>
             <Button
+                id="fulfillment-operations-source-return-back"
                 type="button"
                 size="sm"
                 variant="ghost"

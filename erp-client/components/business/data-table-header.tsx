@@ -18,6 +18,7 @@ import {
 import type { ColumnResizeHandlers } from "@/components/business/data-table-resize"
 import { Button } from "@/components/ui/button"
 import { TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export function DataTableHeader<TData>({
@@ -27,6 +28,7 @@ export function DataTableHeader<TData>({
     enableColumnResizing,
     sortingInteractive,
     resize,
+    idPrefix,
 }: {
     table: TanStackTable<TData>
     columnSizing: ColumnSizingState
@@ -34,6 +36,7 @@ export function DataTableHeader<TData>({
     enableColumnResizing: boolean
     sortingInteractive: boolean
     resize: ColumnResizeHandlers<TData>
+    idPrefix?: string
 }) {
     return (
         <TableHeader>
@@ -98,6 +101,11 @@ export function DataTableHeader<TData>({
                                 {header.isPlaceholder ? null : sortingInteractive &&
                                   header.column.getCanSort() ? (
                                     <Button
+                                        id={
+                                            idPrefix
+                                                ? `${idPrefix}-header-${toAutomationIdSegment(header.column.id)}-sort`
+                                                : undefined
+                                        }
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -123,6 +131,11 @@ export function DataTableHeader<TData>({
 
                                 {header.column.getCanResize() ? (
                                     <button
+                                        id={
+                                            idPrefix
+                                                ? `${idPrefix}-header-${toAutomationIdSegment(header.column.id)}-resize`
+                                                : undefined
+                                        }
                                         type="button"
                                         role="separator"
                                         aria-label={`调整${meta?.label ?? header.column.id}列宽`}

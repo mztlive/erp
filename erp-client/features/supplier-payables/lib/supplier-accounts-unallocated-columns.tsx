@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     SessionState,
     SupplierAccountsListView,
@@ -80,6 +81,7 @@ export function buildUnallocatedColumns(input: {
                 const isPayment = row.original.track === "payment"
                 return (
                     <Button
+                        id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.id)}-continue-allocate`}
                         type="button"
                         size="xs"
                         disabled={isPayment || !invoice}

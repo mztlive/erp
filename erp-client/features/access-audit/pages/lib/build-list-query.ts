@@ -1,7 +1,4 @@
-import type {
-    AccessListQuery,
-    AccessView,
-} from "@/features/access-audit/types"
+import type { AccessListQuery, AccessView } from "@/features/access-audit/types"
 
 export type AccessListQueryInput = {
     view: AccessView

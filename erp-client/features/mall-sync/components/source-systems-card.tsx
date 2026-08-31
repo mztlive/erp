@@ -65,6 +65,7 @@ export function SourceSystemsCard() {
                             </AlertDescription>
                         </Alert>
                         <Button
+                            id="mall-sync-source-systems-retry"
                             type="button"
                             variant="outline"
                             size="sm"

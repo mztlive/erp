@@ -39,6 +39,7 @@ export function AcceptanceFormalResult({
                 actions={
                     formalResult.status === "unknown" ? (
                         <Button
+                            id="sales-orders-acceptance-formal-retry"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -48,6 +49,7 @@ export function AcceptanceFormalResult({
                         </Button>
                     ) : (
                         <Button
+                            id="sales-orders-acceptance-formal-dismiss"
                             type="button"
                             size="sm"
                             variant={exceptionCta ? "outline" : "secondary"}

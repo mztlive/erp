@@ -20,7 +20,11 @@ import { useAccessAuditPage } from "@/features/access-audit/pages/hooks/use-acce
 import { AccessChangeDialog } from "@/features/access-audit/pages/components/access-change-dialog"
 import { AccessViewTable } from "@/features/access-audit/pages/components/access-view-table"
 import { DeleteRoleDialog } from "@/features/admin/delete-role-dialog"
-import type { AccessView, RoleRow, UserRow } from "@/features/access-audit/types"
+import type {
+    AccessView,
+    RoleRow,
+    UserRow,
+} from "@/features/access-audit/types"
 
 /** 权限配置工作面展示的视图；审计查询已独立成页。 */
 const ACCESS_VIEWS: AccessView[] = ["roles", "users"]
@@ -52,6 +56,7 @@ export function AccessAuditPage() {
                     ]}
                     actions={
                         <Button
+                            id="operations-access-config-blocked-back"
                             type="button"
                             variant="outline"
                             onClick={() =>
@@ -107,6 +112,7 @@ export function AccessAuditPage() {
                     <div className="flex flex-wrap items-center gap-2">
                         {view === "roles" ? (
                             <Button
+                                id="operations-access-config-create-role"
                                 type="button"
                                 size="sm"
                                 onClick={() =>
@@ -121,6 +127,7 @@ export function AccessAuditPage() {
                             </Button>
                         ) : (
                             <Button
+                                id="operations-access-config-manage-accounts"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -164,6 +171,7 @@ export function AccessAuditPage() {
                     facts={page.lastResult.facts}
                     actions={
                         <Button
+                            id="operations-access-config-result-close"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -228,10 +236,13 @@ export function AccessAuditPage() {
                             error={page.pageQuery.error}
                             action={
                                 <Button
+                                    id="operations-access-config-retry"
                                     type="button"
                                     variant="secondary"
                                     className="rounded-lg shadow-none"
-                                    onClick={() => void page.pageQuery.refetch()}
+                                    onClick={() =>
+                                        void page.pageQuery.refetch()
+                                    }
                                 >
                                     重试
                                 </Button>

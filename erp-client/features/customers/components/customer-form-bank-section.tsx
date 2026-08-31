@@ -5,8 +5,12 @@ import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import type { CustomerFormApi } from "@/features/customers/components/customer-form-values"
+import {
+    createCustomerFormDraftId,
+    type CustomerFormApi,
+} from "@/features/customers/components/customer-form-values"
 import { FormSection } from "@/features/customers/components/customer-form-sections"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 银行账户行编辑器：已有账户锁定名称字段，移除按「结束账户」语义处理。 */
 export function BankAccountRowsSection({
@@ -27,11 +31,13 @@ export function BankAccountRowsSection({
                 <form.AppField name="bankAccounts">
                     {(field) => (
                         <Button
+                            id="customers-form-bank-add"
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() =>
                                 field.pushValue({
+                                    draftId: createCustomerFormDraftId("bank"),
                                     accountName: "",
                                     bankName: "",
                                     branchName: "",
@@ -56,105 +62,126 @@ export function BankAccountRowsSection({
                                 : "暂无银行账户"}
                         </p>
                     ) : (
-                        field.state.value.map((_row, index) => (
-                            <div
-                                key={`bank-${index}`}
-                                className="space-y-2 rounded-lg border border-border p-3"
-                            >
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    <form.AppField
-                                        name={`bankAccounts[${index}].accountName`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="户名"
-                                                required
-                                                disabled={Boolean(
-                                                    _row.existingId,
-                                                )}
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`bankAccounts[${index}].bankName`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="银行名称"
-                                                required
-                                                disabled={Boolean(
-                                                    _row.existingId,
-                                                )}
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`bankAccounts[${index}].branchName`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="支行名称"
-                                                disabled={Boolean(
-                                                    _row.existingId,
-                                                )}
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField
-                                        name={`bankAccounts[${index}].accountNumber`}
-                                    >
-                                        {(nested) => (
-                                            <nested.TextField
-                                                label="账号"
-                                                required
-                                                disabled={Boolean(
-                                                    _row.existingId,
-                                                )}
-                                            />
-                                        )}
-                                    </form.AppField>
+                        field.state.value.map((_row, index) => {
+                            const rowKey = toAutomationIdSegment(
+                                _row.existingId ??
+                                    _row.draftId ??
+                                    `bank-${index}`,
+                            )
+                            return (
+                                <div
+                                    key={
+                                        _row.existingId ??
+                                        _row.draftId ??
+                                        `bank-${index}`
+                                    }
+                                    className="space-y-2 rounded-lg border border-border p-3"
+                                >
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <form.AppField
+                                            name={`bankAccounts[${index}].accountName`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-bank-${rowKey}-account-name`}
+                                                    label="户名"
+                                                    required
+                                                    disabled={Boolean(
+                                                        _row.existingId,
+                                                    )}
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`bankAccounts[${index}].bankName`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-bank-${rowKey}-bank-name`}
+                                                    label="银行名称"
+                                                    required
+                                                    disabled={Boolean(
+                                                        _row.existingId,
+                                                    )}
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`bankAccounts[${index}].branchName`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-bank-${rowKey}-branch-name`}
+                                                    label="支行名称"
+                                                    disabled={Boolean(
+                                                        _row.existingId,
+                                                    )}
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField
+                                            name={`bankAccounts[${index}].accountNumber`}
+                                        >
+                                            {(nested) => (
+                                                <nested.TextField
+                                                    id={`customers-form-bank-${rowKey}-account-number`}
+                                                    label="账号"
+                                                    required
+                                                    disabled={Boolean(
+                                                        _row.existingId,
+                                                    )}
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <form.AppField
+                                            name={`bankAccounts[${index}].isDefault`}
+                                        >
+                                            {(nested) => {
+                                                const checkboxId = `customers-form-bank-${rowKey}-default`
+                                                return (
+                                                    <Label
+                                                        htmlFor={checkboxId}
+                                                        className="flex items-center gap-2 text-sm"
+                                                    >
+                                                        <Checkbox
+                                                            id={checkboxId}
+                                                            checked={
+                                                                nested.state
+                                                                    .value
+                                                            }
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) =>
+                                                                nested.handleChange(
+                                                                    checked ===
+                                                                        true,
+                                                                )
+                                                            }
+                                                        />
+                                                        默认账户
+                                                    </Label>
+                                                )
+                                            }}
+                                        </form.AppField>
+                                        <Button
+                                            id={`customers-form-bank-${rowKey}-remove`}
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                field.removeValue(index)
+                                            }
+                                        >
+                                            {_row.existingId
+                                                ? "结束账户"
+                                                : "移除"}
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
-                                    <form.AppField
-                                        name={`bankAccounts[${index}].isDefault`}
-                                    >
-                                        {(nested) => {
-                                            const checkboxId = `customer-bank-${index}-default`
-                                            return (
-                                                <Label
-                                                    htmlFor={checkboxId}
-                                                    className="flex items-center gap-2 text-sm"
-                                                >
-                                                    <Checkbox
-                                                        id={checkboxId}
-                                                        checked={
-                                                            nested.state.value
-                                                        }
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) =>
-                                                            nested.handleChange(
-                                                                checked ===
-                                                                    true,
-                                                            )
-                                                        }
-                                                    />
-                                                    默认账户
-                                                </Label>
-                                            )
-                                        }}
-                                    </form.AppField>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => field.removeValue(index)}
-                                    >
-                                        {_row.existingId ? "结束账户" : "移除"}
-                                    </Button>
-                                </div>
-                            </div>
-                        ))
+                            )
+                        })
                     )
                 }
             </form.AppField>

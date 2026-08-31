@@ -1,6 +1,7 @@
 "use client"
 
 import { BusinessFailureState } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -56,8 +57,10 @@ export function WorkspaceDocumentPaperDialog({
 
                 <div className="relative min-h-0 flex-1">
                     <DialogClose
+                        id="workspace-document-paper-dialog-close"
                         render={
                             <Button
+                                id="workspace-document-paper-dialog-close"
                                 type="button"
                                 variant="secondary"
                                 size="icon-sm"
@@ -104,6 +107,7 @@ function WorkspacePaperBody({
             return (
                 <PaperErrorState
                     error={salesQuery.error}
+                    objectId={objectId}
                     onRetry={() => {
                         void salesQuery.refetch()
                     }}
@@ -119,6 +123,7 @@ function WorkspacePaperBody({
         return (
             <PaperErrorState
                 error={purchaseQuery.error}
+                objectId={objectId}
                 onRetry={() => {
                     void purchaseQuery.refetch()
                 }}
@@ -142,14 +147,17 @@ function PaperLoadingState() {
 
 function PaperErrorState({
     error,
+    objectId,
     onRetry,
 }: {
     error: unknown
+    objectId: string
     onRetry: () => void
 }) {
     return (
         <div className="rounded-lg bg-card px-6 py-8 shadow-lg">
             <BusinessFailureState
+                id={`workspace-document-paper-dialog-${toAutomationIdSegment(objectId)}`}
                 title="单据读取失败"
                 error={error}
                 onRetry={onRetry}

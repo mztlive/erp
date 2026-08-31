@@ -16,14 +16,12 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 import { PublishGateAlert } from "@/features/product-publications/components/publish-gate-alert"
 import { SafetyPausePanel } from "@/features/product-publications/components/safety-pause-panel"
 import type { ProductPublicationView } from "@/features/product-publications/types"
-import {
-    SECTIONS,
-    type SectionId,
-} from "./publication-center-navigation"
+import { SECTIONS, type SectionId } from "./publication-center-navigation"
 
 /** 一屏识别：稳定发布 / 商城生效版 / 最新待确认版 */
 export function PublicationCenterVersionSummary({
@@ -135,6 +133,7 @@ export function PublicationCenterContextBar({
                         当前输入仅保存在当前页面，无草稿保存、无自动保存。刷新或关闭前将提示丢失。
                         <div className="mt-2 flex gap-2">
                             <Button
+                                id="publication-center-context-discard"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -171,6 +170,7 @@ export function PublicationCenterContextBar({
                 {SECTIONS.map((s) => (
                     <button
                         key={s.id}
+                        id={`publication-center-nav-${toAutomationIdSegment(s.id)}`}
                         type="button"
                         aria-pressed={section === s.id}
                         onClick={() => onSectionChange(s.id)}

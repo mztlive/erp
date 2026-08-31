@@ -1,21 +1,21 @@
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath } from "node:url"
 
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from "vitest/config"
 
 export default defineConfig({
     resolve: {
         alias: {
-            '@': fileURLToPath(new URL('.', import.meta.url)),
+            "@": fileURLToPath(new URL(".", import.meta.url)),
         },
     },
     oxc: {
         jsx: {
-            runtime: 'automatic',
+            runtime: "automatic",
         },
     },
     test: {
-        environment: 'jsdom',
-        include: ['features/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
+        environment: "jsdom",
+        include: ["features/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}"],
         cache: false,
         globals: false,
     },

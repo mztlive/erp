@@ -9,6 +9,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     Card,
     CardContent,
@@ -50,6 +51,7 @@ export function MallSyncJobsView({
                 description="基线 / 增量 / 单号补拉。同步进度不因映射失败回退。"
                 table={
                     <DataTable
+                        id="mall-sync-jobs-table"
                         data={pageJobs}
                         columns={jobColumns}
                         getRowId={(r) => r.jobId}
@@ -112,6 +114,7 @@ export function MallSyncJobsView({
                             "RETRY_FAILED_JOB",
                         ) ? (
                             <Button
+                                id={`mall-sync-jobs-${toAutomationIdSegment(selectedJob.jobId)}-retry`}
                                 type="button"
                                 size="sm"
                                 variant="secondary"

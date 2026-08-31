@@ -36,6 +36,7 @@ export function LedgerTableEmpty({
                 description={`没有符合「${filterSummary}」的记录。可清除筛选或切换视图。`}
                 action={
                     <Button
+                        id="inventory-ledger-empty-clear-filters"
                         type="button"
                         variant="secondary"
                         size="sm"
@@ -56,6 +57,7 @@ export function LedgerTableEmpty({
             description="期初库存需在「导入与期初」完成导入后才会形成流水；商城旧库存不会自动显示在此。"
             action={
                 <Button
+                    id="inventory-ledger-empty-go-imports"
                     type="button"
                     variant="secondary"
                     size="sm"
@@ -70,6 +72,7 @@ export function LedgerTableEmpty({
 }
 
 interface LedgerDataTableProps<TData> {
+    id?: string
     data: TData[]
     columns: ColumnDef<TData, unknown>[]
     getRowId: (row: TData) => string
@@ -83,6 +86,7 @@ interface LedgerDataTableProps<TData> {
 }
 
 export function LedgerDataTable<TData>({
+    id,
     data,
     columns,
     getRowId,
@@ -96,6 +100,7 @@ export function LedgerDataTable<TData>({
 }: LedgerDataTableProps<TData>) {
     return (
         <DataTable
+            id={id}
             data={data}
             loading={loading}
             showRefreshingBanner={loading}

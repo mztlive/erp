@@ -8,6 +8,8 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import {
     useRoleFilter,
     type RoleOption,
@@ -19,11 +21,13 @@ export function RoleOptionsPanel({
     selected,
     onToggle,
     invalid,
+    id = "governance-admin-role-options",
 }: {
     options: readonly RoleOption[]
     selected: readonly string[]
     onToggle: (id: string, checked: boolean) => void
     invalid: boolean
+    id?: string
 }) {
     const { keyword, setKeyword, filtered } = useRoleFilter(options)
 
@@ -34,6 +38,7 @@ export function RoleOptionsPanel({
                     <SearchIcon aria-hidden="true" />
                 </InputGroupAddon>
                 <InputGroupInput
+                    id={`${id}-search`}
                     type="search"
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -52,16 +57,19 @@ export function RoleOptionsPanel({
                 ) : (
                     filtered.map((role) => {
                         const checked = selected.includes(role.id)
+                        const segment = toAutomationIdSegment(role.id)
                         return (
                             <label
                                 key={role.id}
                                 className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1.5 text-sm hover:bg-muted/40"
                             >
                                 <Checkbox
+                                    id={`${id}-option-${segment}`}
                                     checked={checked}
                                     onCheckedChange={(next) =>
                                         onToggle(role.id, next === true)
                                     }
+                                    aria-label={role.name}
                                 />
                                 <span className="min-w-0 truncate">
                                     {role.name}

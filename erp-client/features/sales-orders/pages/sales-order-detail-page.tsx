@@ -161,7 +161,10 @@ export function SalesOrderDetailPage({
                     title="销售单不存在"
                     description="未找到这张销售单。可能编号有误，或当前角色无权查看。"
                     actions={
-                        <Button render={<Link href="/sales/orders" />}>
+                        <Button
+                            id="sales-orders-detail-not-found-back"
+                            render={<Link href="/sales/orders" />}
+                        >
                             返回列表
                         </Button>
                     }
@@ -195,6 +198,7 @@ export function SalesOrderDetailPage({
     )
     const primaryTaskAction = derived.actionableFocusTask ? (
         <Button
+            id={`sales-orders-detail-primary-${derived.actionableFocusTask.id}`}
             type="button"
             size="sm"
             disabled={
@@ -245,6 +249,7 @@ export function SalesOrderDetailPage({
                         actions={[
                             {
                                 actionKey: "back",
+                                id: "sales-orders-detail-back",
                                 label: backLabel,
                                 icon: ArrowLeftIcon,
                                 variant: "outline",
@@ -262,6 +267,7 @@ export function SalesOrderDetailPage({
                     action={
                         derived.bannerJump ? (
                             <Button
+                                id={`sales-orders-detail-banner-${derived.focusTask!.id}`}
                                 type="button"
                                 size="sm"
                                 onClick={() =>

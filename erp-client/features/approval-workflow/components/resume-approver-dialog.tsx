@@ -29,6 +29,7 @@ export function ResumeApproverDialog({
     expectedAssignmentVersion,
     expectedClosedTaskVersion,
     onApplied,
+    id = "governance-approval-resume-dialog",
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -38,6 +39,7 @@ export function ResumeApproverDialog({
     expectedAssignmentVersion: string
     expectedClosedTaskVersion?: string
     onApplied?: (view: ApprovalCommandView) => void
+    id?: string
 }) {
     const resume = useResumeApproverMutation(instanceId)
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
@@ -73,7 +75,7 @@ export function ResumeApproverDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>恢复当前审批人</DialogTitle>
                     <DialogDescription>
@@ -87,6 +89,7 @@ export function ResumeApproverDialog({
                 ) : null}
                 <DialogFooter>
                     <Button
+                        id={`${id}-cancel`}
                         type="button"
                         variant="outline"
                         disabled={resume.isPending}
@@ -95,6 +98,7 @@ export function ResumeApproverDialog({
                         取消
                     </Button>
                     <Button
+                        id={`${id}-confirm`}
                         type="button"
                         disabled={resume.isPending}
                         onClick={() => void submit()}

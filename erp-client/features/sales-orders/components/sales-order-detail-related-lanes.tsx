@@ -80,6 +80,7 @@ function RelatedLane({
             </div>
             {enabled ? (
                 <Button
+                    id={`sales-orders-detail-related-${lane}`}
                     type="button"
                     size="sm"
                     variant="secondary"
@@ -90,6 +91,7 @@ function RelatedLane({
                 </Button>
             ) : (
                 <Button
+                    id={`sales-orders-detail-related-${lane}`}
                     type="button"
                     size="sm"
                     variant="secondary"

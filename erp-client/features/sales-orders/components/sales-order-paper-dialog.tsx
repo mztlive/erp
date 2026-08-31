@@ -50,6 +50,7 @@ export function SalesOrderPaperDialog({
 
                 <div className="relative min-h-0 flex-1">
                     <DialogClose
+                        id="sales-orders-paper-close"
                         render={
                             <Button
                                 type="button"

@@ -9,7 +9,10 @@ import {
     type ProductInventoryPreviewSku,
 } from "@/features/master-data/components/product/product-inventory-preview-sheet"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
-import type { MasterDataCenterView, ProductKind } from "@/features/master-data/types"
+import type {
+    MasterDataCenterView,
+    ProductKind,
+} from "@/features/master-data/types"
 import type { FixedSku } from "@/features/supplier-offerings/types"
 
 type ProductDetailDialogsProps = {

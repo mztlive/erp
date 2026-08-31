@@ -1,4 +1,8 @@
-import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
+import type {
+    ColumnDef,
+    PaginationState,
+    SortingState,
+} from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
@@ -37,6 +41,7 @@ export function CardBusinessDrillTable({
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 action={
                     <Button
+                        id="card-contracts-analytics-drill-table-clear"
                         type="button"
                         size="sm"
                         variant="secondary"
@@ -55,6 +60,7 @@ export function CardBusinessDrillTable({
             description={`客户 / 销售单 / 卡券类目 / 卡实例引用 / 消费(含税) / 退款(含税) / 成本口径 / 成本(不含税) / 覆盖 / 未履约余额(含税) / 下钻。不包含卡号、卡密与绑定手机号。共 ${data.rows.total} 行 · ${data.filterSummary}`}
             table={
                 <DataTable
+                    id="card-contracts-analytics-drill-table"
                     columns={columns}
                     data={[...data.rows.items]}
                     getRowId={(row) => row.rowId}

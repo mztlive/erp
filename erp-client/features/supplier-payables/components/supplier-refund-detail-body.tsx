@@ -11,6 +11,7 @@ import { SupplierRefundApprovalArea } from "@/features/supplier-payables/compone
 import { paymentPreviewHref } from "@/features/supplier-payables/lib/related-documents"
 import { supplierRefundApprovalPhase } from "@/features/supplier-payables/lib/supplier-refund-approval"
 import type { SupplierRefundRow } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 /**
@@ -74,6 +75,7 @@ export function SupplierRefundDetailBody({
                             原付款单
                         </div>
                         <Button
+                            id={`supplier-payables-refund-detail-${toAutomationIdSegment(row.refundId)}-open-original`}
                             type="button"
                             size="xs"
                             variant="outline"

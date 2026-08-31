@@ -74,6 +74,7 @@ export function FulfillmentGateStatus({
             paymentAction={
                 blocked && showPaymentAction ? (
                     <Button
+                        id="fulfillment-operations-gate-register-payment"
                         type="button"
                         size="sm"
                         variant="outline"

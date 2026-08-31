@@ -1,6 +1,7 @@
 "use client"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     SUPPLIER_ACCOUNT_VIEWS,
     VIEW_LABEL,
@@ -22,6 +23,7 @@ export function SupplierAccountsViewTabs({
 }: SupplierAccountsViewTabsProps) {
     return (
         <Tabs
+            id="supplier-payables-view-tabs"
             value={view}
             onValueChange={(next) => {
                 if (!next) return
@@ -32,7 +34,11 @@ export function SupplierAccountsViewTabs({
         >
             <TabsList variant="solid" aria-label="供应商往来工作视图">
                 {SUPPLIER_ACCOUNT_VIEWS.map((item) => (
-                    <TabsTrigger key={item} value={item}>
+                    <TabsTrigger
+                        key={item}
+                        value={item}
+                        id={`supplier-payables-view-tabs-trigger-${toAutomationIdSegment(item)}`}
+                    >
                         {VIEW_LABEL[item]}
                     </TabsTrigger>
                 ))}

@@ -48,6 +48,7 @@ export function ExecutionProjectionPageHeader({
                     actions={[
                         {
                             actionKey: "refresh",
+                            id: "execution-projections-page-header-refresh",
                             label: "刷新",
                             icon: RefreshCwIcon,
                             variant: "ghost",
@@ -55,6 +56,7 @@ export function ExecutionProjectionPageHeader({
                         },
                         {
                             actionKey: "bulk-query",
+                            id: "execution-projections-page-header-bulk-query",
                             label: "批量查询",
                             variant: "outline",
                             mobileVisibility: "hide",
@@ -66,6 +68,7 @@ export function ExecutionProjectionPageHeader({
                         },
                         {
                             actionKey: "bulk-retry",
+                            id: "execution-projections-page-header-bulk-retry",
                             label: "批量重试",
                             mobileVisibility: "hide",
                             disabled:

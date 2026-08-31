@@ -7,12 +7,17 @@ import type { WorkItemProjection } from "@/features/work-items/types"
 export function AcceptancePanel({
     order,
     workItem,
+    id,
+    idPrefix,
 }: {
     order: SalesOrderDetailView
     workItem?: WorkItemProjection
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <AcceptanceWorkspace
+            id={idPrefix ?? id ?? "sales-orders-detail-acceptance-workspace"}
             salesOrderId={order.id}
             ownerUserId={order.ownerUserId}
             ownerName={order.ownerName}

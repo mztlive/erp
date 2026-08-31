@@ -184,7 +184,10 @@ function RuleDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent
+                className="sm:max-w-2xl"
+                closeButtonId="procurement-responsibility-rules-dialog-close"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {target ? "编辑采购责任规则" : "新增采购责任规则"}
@@ -204,6 +207,7 @@ function RuleDialog({
                         <form.AppField name="ruleType">
                             {(field) => (
                                 <field.SelectField
+                                    id="procurement-responsibility-rules-dialog-rule-type"
                                     label="规则类型"
                                     required
                                     allowClear={false}
@@ -232,6 +236,7 @@ function RuleDialog({
                                                         </span>
                                                     </FieldLabel>
                                                     <CompanySkuSearchCombobox
+                                                        id="procurement-responsibility-rules-dialog-sku"
                                                         purpose="form"
                                                         value={
                                                             field.state.value ||
@@ -263,6 +268,7 @@ function RuleDialog({
                                                         </span>
                                                     </FieldLabel>
                                                     <CategoryCombobox
+                                                        id="procurement-responsibility-rules-dialog-category"
                                                         categories={categories}
                                                         value={
                                                             field.state.value ||
@@ -284,6 +290,7 @@ function RuleDialog({
                                         <form.AppField name="serviceRegion">
                                             {(field) => (
                                                 <field.TextField
+                                                    id="procurement-responsibility-rules-dialog-service-region"
                                                     label="服务区域"
                                                     required
                                                     placeholder="例如：华东、上海市"
@@ -295,6 +302,7 @@ function RuleDialog({
                                         <form.AppField name="productKind">
                                             {(field) => (
                                                 <field.SelectField
+                                                    id="procurement-responsibility-rules-dialog-product-kind"
                                                     label="商品类型"
                                                     required
                                                     allowClear={false}
@@ -316,6 +324,7 @@ function RuleDialog({
                         <form.AppField name="ownerUserId">
                             {(field) => (
                                 <field.SelectField
+                                    id="procurement-responsibility-rules-dialog-owner"
                                     label="采购负责人"
                                     required
                                     options={ownerOptions}
@@ -328,7 +337,7 @@ function RuleDialog({
                             {(field) => (
                                 <Field orientation="horizontal">
                                     <div className="flex-1">
-                                        <FieldLabel htmlFor="rule-enabled">
+                                        <FieldLabel htmlFor="procurement-responsibility-rules-dialog-enabled">
                                             启用规则
                                         </FieldLabel>
                                         <FieldDescription>
@@ -336,7 +345,7 @@ function RuleDialog({
                                         </FieldDescription>
                                     </div>
                                     <Switch
-                                        id="rule-enabled"
+                                        id="procurement-responsibility-rules-dialog-enabled"
                                         checked={field.state.value}
                                         onCheckedChange={(checked) =>
                                             field.handleChange(Boolean(checked))
@@ -348,13 +357,20 @@ function RuleDialog({
                     </FieldGroup>
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    id="procurement-responsibility-rules-dialog-cancel"
+                                    type="button"
+                                    variant="outline"
+                                />
+                            }
                         >
                             取消
                         </DialogClose>
                         <form.Subscribe selector={(state) => state.canSubmit}>
                             {(canSubmit) => (
                                 <Button
+                                    id="procurement-responsibility-rules-dialog-save"
                                     type="submit"
                                     data-testid="procurement-responsibility-save"
                                     disabled={!canSubmit || mutation.isPending}
@@ -434,7 +450,17 @@ export function ProcurementResponsibilityRulesPage() {
                         profileQuery.error,
                         "暂时无法核对采购责任规则权限。",
                     )}
-                    onRetry={() => void profileQuery.refetch()}
+                    action={
+                        <Button
+                            id="procurement-responsibility-rules-profile-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void profileQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    }
                 />
             </PageScaffold>
         )
@@ -473,6 +499,7 @@ export function ProcurementResponsibilityRulesPage() {
                 actions={
                     canManage ? (
                         <Button
+                            id="procurement-responsibility-rules-create"
                             type="button"
                             size="sm"
                             data-testid="procurement-responsibility-create"
@@ -502,6 +529,7 @@ export function ProcurementResponsibilityRulesPage() {
                     )}
                     action={
                         <Button
+                            id="procurement-responsibility-rules-retry-dependencies"
                             type="button"
                             variant="outline"
                             onClick={() => {
@@ -538,6 +566,7 @@ export function ProcurementResponsibilityRulesPage() {
                 description="支持 SKU、分类与区域、分类、商品类型和默认调度人五个层级。"
                 table={
                     <DataTable
+                        id="procurement-responsibility-rules-table"
                         data={rows}
                         columns={columns}
                         getRowId={(row) => row.ruleId}
@@ -559,6 +588,7 @@ export function ProcurementResponsibilityRulesPage() {
                                     )}
                                     action={
                                         <Button
+                                            id="procurement-responsibility-rules-retry"
                                             type="button"
                                             variant="outline"
                                             onClick={() =>
@@ -583,6 +613,7 @@ export function ProcurementResponsibilityRulesPage() {
                                         !dependenciesPending &&
                                         !dependenciesFailed ? (
                                             <Button
+                                                id="procurement-responsibility-rules-empty-create"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

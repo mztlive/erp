@@ -25,6 +25,7 @@ import {
     ITEM_RESULT_TONE,
     PIPELINE_STAGE_LABEL,
 } from "@/features/history-backfill/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 export function ItemsTable({
@@ -150,6 +151,7 @@ export function ItemsTable({
                                 </div>
                                 <div className="flex flex-wrap gap-1">
                                     <Button
+                                        id={`operations-history-backfill-detail-item-${toAutomationIdSegment(item.itemId)}-integration-errors`}
                                         render={
                                             <Link href="/governance/integration-errors?view=mine" />
                                         }
@@ -162,6 +164,7 @@ export function ItemsTable({
                                     </Button>
                                     {onReattribute ? (
                                         <Button
+                                            id={`operations-history-backfill-detail-item-${toAutomationIdSegment(item.itemId)}-reattribute`}
                                             type="button"
                                             size="sm"
                                             variant="outline"
@@ -183,9 +186,10 @@ export function ItemsTable({
                                 {/* 后端 error_detail 优先；映射仅在后端缺说明时兜底，避免枚举原值上屏 */}
                                 <div>
                                     {item.failure.summary ??
-                                        (FAILURE_CODE_LABEL[
+                                        FAILURE_CODE_LABEL[
                                             item.failure.errorCode
-                                        ] ?? item.failure.errorCode)}
+                                        ] ??
+                                        item.failure.errorCode}
                                 </div>
                                 <div className="text-muted-foreground">
                                     {PIPELINE_STAGE_LABEL[
@@ -238,6 +242,7 @@ export function ItemsTable({
             description="不含卡号/卡密/手机/完整地址/原始消息内容"
             table={
                 <DataTable
+                    id={`operations-history-backfill-detail-items-${section}-table`}
                     data={[...items]}
                     columns={columns}
                     getRowId={(row) => row.itemId}

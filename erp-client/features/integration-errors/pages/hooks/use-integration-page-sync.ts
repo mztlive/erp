@@ -62,8 +62,7 @@ export function useIntegrationPageSync({
         const hasDiff = searchParams.has("differenceId")
         const hasView = searchParams.has("view")
         const hasCtx = searchParams.has("queueContextId")
-        if (hasView && hasCtx && (hasTask || hasDiff || itemCount === 0))
-            return
+        if (hasView && hasCtx && (hasTask || hasDiff || itemCount === 0)) return
         const params = buildIntegrationSearchParams({
             ...urlState,
             currentTaskId:

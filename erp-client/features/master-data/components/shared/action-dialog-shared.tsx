@@ -107,11 +107,10 @@ export function DateField({
         <div className="space-y-1.5">
             <Label htmlFor={id}>
                 {label}
-                {required ? (
-                    <span className="text-destructive">*</span>
-                ) : null}
+                {required ? <span className="text-destructive">*</span> : null}
             </Label>
             <DatePicker
+                id={id}
                 value={field.state.value || undefined}
                 onValueChange={(next) => field.handleChange(next ?? "")}
                 className="w-full"
@@ -127,6 +126,7 @@ export function DateField({
 }
 
 export function MediaSingleField({
+    id,
     label,
     hint,
     value,
@@ -137,6 +137,7 @@ export function MediaSingleField({
     previewUrl,
     onFilesSelected,
 }: {
+    id?: string
     label: string
     hint?: string
     value: string
@@ -172,6 +173,7 @@ export function MediaSingleField({
                 </Label>
                 {value ? (
                     <Button
+                        id={id ? `${id}-remove` : undefined}
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -255,6 +257,7 @@ export function MediaSingleField({
                 )
             ) : (
                 <FileUpload
+                    idPrefix={id}
                     accept="image/jpeg,image/png,image/webp"
                     multiple={false}
                     label={label}

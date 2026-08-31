@@ -49,9 +49,7 @@ type PublicationAppliedFilters = {
 }
 
 /** URL 中的非法枚举值降级为默认值，不能继续传给接口。 */
-function parsePublicationStatus(
-    raw: string | null,
-): PublicationStatus | "all" {
+function parsePublicationStatus(raw: string | null): PublicationStatus | "all" {
     return PUBLICATION_STATUS_VALUES.some((value) => value === raw)
         ? (raw as PublicationStatus)
         : "all"
@@ -89,8 +87,8 @@ function hasStructuredPublicationFilters(
 ): boolean {
     return Boolean(
         applied.mall ||
-            applied.publicationStatus !== "all" ||
-            applied.deliveryStatus !== "all",
+        applied.publicationStatus !== "all" ||
+        applied.deliveryStatus !== "all",
     )
 }
 
@@ -126,8 +124,9 @@ export function usePublicationListFilters() {
     const [mallDraft, setMallDraft] = React.useState<string | null>(
         applied.mall ?? null,
     )
-    const [publicationStatusDraft, setPublicationStatusDraft] =
-        React.useState<PublicationStatus | "all">(applied.publicationStatus)
+    const [publicationStatusDraft, setPublicationStatusDraft] = React.useState<
+        PublicationStatus | "all"
+    >(applied.publicationStatus)
     const [deliveryStatusDraft, setDeliveryStatusDraft] =
         React.useState<PublicationDeliveryStatusSelection>(
             applied.deliveryStatus,
@@ -302,12 +301,12 @@ export function usePublicationListFilters() {
 
     const hasActiveFilters = Boolean(
         applied.q ||
-            applied.mall ||
-            applied.skuId ||
-            applied.supplierOfferingRevisionId ||
-            applied.publicationStatus !== "all" ||
-            applied.deliveryStatus !== "all" ||
-            applied.metric !== "all",
+        applied.mall ||
+        applied.skuId ||
+        applied.supplierOfferingRevisionId ||
+        applied.publicationStatus !== "all" ||
+        applied.deliveryStatus !== "all" ||
+        applied.metric !== "all",
     )
 
     return {

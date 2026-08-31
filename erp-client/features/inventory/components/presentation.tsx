@@ -7,11 +7,13 @@ import { FilterChip } from "@/components/business/filter-chip"
 function ChipFilter({
     label,
     onClear,
+    id,
 }: {
     label: string
     onClear: () => void
+    id?: string
 }) {
-    return <FilterChip label={label} onClear={onClear} />
+    return <FilterChip id={id} label={label} onClear={onClear} />
 }
 
 function formatQty(value: string, unit: string) {

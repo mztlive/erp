@@ -1,6 +1,7 @@
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 function Accordion({ className, ...props }: AccordionPrimitive.Root.Props) {
@@ -29,11 +30,26 @@ function AccordionItem({ className, ...props }: AccordionPrimitive.Item.Props) {
 function AccordionTrigger({
     className,
     children,
+    id,
+    idPrefix,
     ...props
-}: AccordionPrimitive.Trigger.Props) {
+}: AccordionPrimitive.Trigger.Props & { id?: string; idPrefix?: string }) {
+    const rawValue = (props as { value?: unknown }).value
+    const segment =
+        typeof rawValue === "string" && rawValue
+            ? toAutomationIdSegment(rawValue)
+            : undefined
+    const triggerId =
+        id ??
+        (segment
+            ? idPrefix
+                ? `${idPrefix}-accordion-trigger-${segment}`
+                : `accordion-trigger-${segment}`
+            : undefined)
     return (
         <AccordionPrimitive.Header className="flex">
             <AccordionPrimitive.Trigger
+                id={triggerId}
                 data-slot="accordion-trigger"
                 className={cn(
                     "group/accordion-trigger relative flex flex-1 items-start justify-between gap-6 border border-transparent p-4 text-left text-sm font-medium transition-all outline-none hover:underline aria-disabled:pointer-events-none aria-disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground",

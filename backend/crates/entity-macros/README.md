@@ -20,37 +20,38 @@
 ### 使用方式
 
 1. 在 `Cargo.toml` 中添加依赖：
-    ```toml
-    [dependencies]
-    entity-macros = { path = "../entity-macros" }
-    entity-core = { path = "../entity-core" }
-    serde = { version = "1.0", features = ["derive"] }
-    ```
+
+   ```toml
+   [dependencies]
+   entity-macros = { path = "../entity-macros" }
+   entity-core = { path = "../entity-core" }
+   serde = { version = "1.0", features = ["derive"] }
+   ```
 
 2. 在实体定义中使用宏：
-    ```rust
-    use entity_macros::Entity;
-    use entity_core::BaseModel;
-    use serde::{Serialize, Deserialize};
+   ```rust
+   use entity_macros::Entity;
+   use entity_core::BaseModel;
+   use serde::{Serialize, Deserialize};
 
-    #[derive(Debug, Serialize, Deserialize, Entity)]
-    pub struct Product {
-        #[serde(flatten)]
-        pub base: BaseModel,
-        pub name: String,
-        pub price: f64,
-    }
+   #[derive(Debug, Serialize, Deserialize, Entity)]
+   pub struct Product {
+       #[serde(flatten)]
+       pub base: BaseModel,
+       pub name: String,
+       pub price: f64,
+   }
 
-    impl Product {
-        pub fn new(id: String, name: String, price: f64) -> Self {
-            Self {
-                base: BaseModel::new(id),
-                name,
-                price,
-            }
-        }
-    }
-    ```
+   impl Product {
+       pub fn new(id: String, name: String, price: f64) -> Self {
+           Self {
+               base: BaseModel::new(id),
+               name,
+               price,
+           }
+       }
+   }
+   ```
 
 ## 贡献
 
@@ -58,4 +59,4 @@
 
 ## 许可证
 
-该项目使用 MIT 许可证。详情请参阅 LICENSE 文件。 
+该项目使用 MIT 许可证。详情请参阅 LICENSE 文件。

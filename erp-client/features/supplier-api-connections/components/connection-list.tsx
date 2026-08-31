@@ -116,6 +116,7 @@ export function ConnectionList({
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
                         <Button
+                            id="supplier-api-connections-list-refresh"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -130,6 +131,7 @@ export function ConnectionList({
                         </Button>
                         <div className="max-sm:hidden">
                             <GuardedBusinessAction
+                                id="supplier-api-connections-list-create"
                                 type="button"
                                 size="sm"
                                 disabled={!data?.hasModulePermission}

@@ -223,7 +223,11 @@ export function ReportSection({
                     </p>
 
                     <div className="flex flex-wrap gap-2">
-                        <Button type="button" onClick={onDownload}>
+                        <Button
+                            id="operations-history-backfill-detail-report-section-download-report"
+                            type="button"
+                            onClick={onDownload}
+                        >
                             <DownloadIcon className="size-4" />
                             下载
                             {unconfirmed ? "技术报告 · 未确认" : "已确认报告"}

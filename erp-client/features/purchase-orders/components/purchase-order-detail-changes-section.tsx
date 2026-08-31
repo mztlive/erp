@@ -85,12 +85,20 @@ export function PurchaseOrderDetailChangesSection({
             />
             <div className="mt-4 flex flex-wrap gap-2">
                 {canChange ? (
-                    <Button type="button" onClick={onRequestChange}>
+                    <Button
+                        id={`procurement-orders-detail-changes-create-${order.identity.purchaseOrderId}`}
+                        type="button"
+                        onClick={onRequestChange}
+                    >
                         发起采购变更
                     </Button>
                 ) : (
                     <div className="space-y-1">
-                        <Button type="button" disabled>
+                        <Button
+                            id={`procurement-orders-detail-changes-disabled-${order.identity.purchaseOrderId}`}
+                            type="button"
+                            disabled
+                        >
                             发起采购变更
                         </Button>
                         <p className="text-xs text-muted-foreground">

@@ -15,15 +15,21 @@ export function SupplierRefundSubmitConfirmDialog({
     approval,
     onOpenChange,
     onConfirm,
+    id,
+    idPrefix,
 }: {
     open: boolean
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
     onConfirm: () => void
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <FormalActionConfirmDialog
+            id={id}
+            idPrefix={idPrefix ?? "supplier-payables-refund-submit-confirm"}
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="提交退款"

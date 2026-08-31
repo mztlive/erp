@@ -118,6 +118,7 @@ export function ExecutionProjectionListPanel({
             }
             table={
                 <DataTable
+                    id="execution-projections-list"
                     columns={columns}
                     data={rows}
                     getRowId={(row) => row.projectionId}
@@ -151,7 +152,17 @@ export function ExecutionProjectionListPanel({
                         listLoadFailed ? (
                             <BusinessFailureState
                                 error={queryError}
-                                onRetry={onRetry}
+                                action={
+                                    <Button
+                                        id="execution-projections-list-retry"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={onRetry}
+                                    >
+                                        重试
+                                    </Button>
+                                }
                             />
                         ) : undefined
                     }
@@ -169,6 +180,7 @@ export function ExecutionProjectionListPanel({
                                     className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                                     action={
                                         <Button
+                                            id="execution-projections-list-clear-filters"
                                             type="button"
                                             size="sm"
                                             variant="secondary"

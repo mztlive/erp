@@ -47,11 +47,11 @@ export function SupplierEditorInvoiceSection({
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
-                    <Label htmlFor="supplier-tax-no">
+                    <Label htmlFor="master-data-supplier-invoice-tax-no">
                         {masterDataCopy.fTaxNo}
                     </Label>
                     <Input
-                        id="supplier-tax-no"
+                        id="master-data-supplier-invoice-tax-no"
                         value={values.taxNo}
                         onChange={(event) =>
                             setFieldValue("taxNo", event.target.value)
@@ -61,11 +61,11 @@ export function SupplierEditorInvoiceSection({
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label htmlFor="supplier-bank-name">
+                    <Label htmlFor="master-data-supplier-invoice-bank-name">
                         {masterDataCopy.fBankName}
                     </Label>
                     <Input
-                        id="supplier-bank-name"
+                        id="master-data-supplier-invoice-bank-name"
                         value={values.bankName}
                         onChange={(event) =>
                             setFieldValue("bankName", event.target.value)
@@ -77,7 +77,7 @@ export function SupplierEditorInvoiceSection({
                 <FieldShell>
                     <SensitiveEditableField
                         label={masterDataCopy.fBankAccount}
-                        id="supplier-bank-account"
+                        id="master-data-supplier-invoice-bank-account"
                         value={values.bankAccount}
                         maskedValue={bankSensitive?.maskedValue}
                         revealToken={bankSensitive?.revealToken}
@@ -96,6 +96,7 @@ export function SupplierEditorInvoiceSection({
                 <FieldShell>
                     <Label>{masterDataCopy.fInvoiceType}</Label>
                     <OptionCombobox
+                        id="master-data-supplier-invoice-type-combobox"
                         value={values.invoiceType || null}
                         onValueChange={(v) =>
                             setFieldValue("invoiceType", v ?? "")
@@ -111,12 +112,12 @@ export function SupplierEditorInvoiceSection({
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label htmlFor="supplier-invoice-tax-rate">
+                    <Label htmlFor="master-data-supplier-invoice-tax-rate">
                         {masterDataCopy.fInvoiceTaxRate}
                     </Label>
                     <InputGroup>
                         <InputGroupInput
-                            id="supplier-invoice-tax-rate"
+                            id="master-data-supplier-invoice-tax-rate"
                             value={values.invoiceTaxRate}
                             inputMode="numeric"
                             onChange={(event) =>

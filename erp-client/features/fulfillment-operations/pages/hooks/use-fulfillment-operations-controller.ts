@@ -7,7 +7,7 @@ import { useSelector } from "@tanstack/react-form"
 import type { ResultState as SharedResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
-import { FIRST_INPUT_ID } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
+import { getFirstInputId } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
     useFulfillmentQueueQuery,
     usePostFulfillmentMutation,
@@ -31,17 +31,13 @@ import {
     type FulfillmentFormalOutcome,
     type FulfillmentOperationType,
 } from "@/features/fulfillment-operations/types"
+import {
+    activeFulfillmentDraft,
+    fulfillmentDraftFormSeed,
+} from "@/features/fulfillment-operations/pages/lib/draft-form-seed"
 import { useFulfillmentActions } from "./use-fulfillment-actions"
 
 type ResultState = SharedResultState<FulfillmentFormalOutcome>
-
-const EMPTY_FULFILLMENT_DRAFT: FulfillmentDraft = {
-    type: "RECEIPT",
-    warehouseId: "",
-    warehouseLabel: "",
-    occurredAt: "",
-    lines: [],
-}
 
 export type FulfillmentOperationsControllerContext = {
     roleValue: FulfillmentQueueFilters["role"]
@@ -186,13 +182,17 @@ export function useFulfillmentOperationsController({
     const resultRef = React.useRef<HTMLDivElement>(null)
     const operationRef = React.useRef(operation)
     operationRef.current = operation
+    const draftSeed = fulfillmentDraftFormSeed(operation)
     const draftForm = useAppForm({
-        defaultValues: { draft: EMPTY_FULFILLMENT_DRAFT },
+        formId: draftSeed.formId,
+        defaultValues: { draft: draftSeed.draft },
         validators: {
             onChange: ({ value }) => {
                 const current = operationRef.current
                 if (!current) return undefined
-                const issues = clientValidation(current, value.draft)
+                const aligned = activeFulfillmentDraft(current, value.draft)
+                if (!aligned) return undefined
+                const issues = clientValidation(current, aligned)
                 return issues.length === 0
                     ? undefined
                     : issues.map((issue) => issue.message).join("；")
@@ -209,17 +209,12 @@ export function useFulfillmentOperationsController({
         draftForm.store,
         (state) => state.canSubmit,
     )
-    const draft = operation ? draftValue : null
+    const draft = activeFulfillmentDraft(operation, draftValue)
 
     React.useEffect(() => {
-        if (!operation) {
-            draftForm.reset({ draft: EMPTY_FULFILLMENT_DRAFT })
-            return
-        }
-        draftForm.reset({ draft: cloneDraft(operation.draft) })
         setActionError(null)
         setSaveMessage(null)
-    }, [draftForm, operation])
+    }, [draftSeed.formId, operation?.editVersion])
 
     React.useEffect(() => {
         if (localState || queueQuery.isPending || !view) return
@@ -266,9 +261,10 @@ export function useFulfillmentOperationsController({
         // 可执行角色直接落到第一个要填的框并全选，省一次鼠标；
         // 标题挂了 aria-live，换条时仍会播报，不靠抢焦点来通知。
         if (canExecute) {
-            const el = document.getElementById(
-                FIRST_INPUT_ID[operation.operationType],
-            ) as HTMLInputElement | HTMLTextAreaElement | null
+            const el = document.getElementById(getFirstInputId(operation)) as
+                | HTMLInputElement
+                | HTMLTextAreaElement
+                | null
             if (el) {
                 el.focus()
                 el.select?.()

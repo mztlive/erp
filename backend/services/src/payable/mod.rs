@@ -956,49 +956,35 @@ impl PayableService {
 
     /// 分页查询进项发票分配列表（按应付子账筛选）。
     ///
-    /// 仓储冻结集未提供该组合的投影分页查询（`repository/payable.rs` 只提供
-    /// `find_allocations_by_accounts`），此处按既有取回结果做内存分页，排序固定
-    /// `created_at` 降序（分配行过账后不可更新，顺序稳定）。
+    /// 账户必填政策与请求校验保留在 Service；仓储复用既有批量读取入口及其
+    /// 未删除过滤，Service 按已验证方向执行稳定排序和分页。
     ///
     /// # 参数
-    /// * `params` - 查询参数
+    /// * `params` - 应付子账、分页与排序校验参数
     ///
     /// # 返回
-    /// 返回契约形状的分页视图。
+    /// 返回契约形状的分页视图，页码与单页条数沿用归一化请求值。
+    ///
+    /// # 错误
+    /// 参数非法、应付子账缺失或仓储查询失败时返回既有服务错误。
+    ///
+    /// # 约束
+    /// 排序固定使用 `(created_at, id)` 同方向并列键，不引入未建索引的新查询形状。
     pub async fn purchase_invoice_allocation_list(
         &self,
         params: &PurchaseInvoiceAllocationListParams,
     ) -> Result<PageView<PurchaseInvoiceAllocationView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let mut allocations = match &query.payable_account_id {
-            Some(account_id) => {
-                self.db
-                    .purchase_invoice_allocations()
-                    .find_allocations_by_accounts(std::slice::from_ref(account_id), &mut NoTransaction)
-                    .await?
-            }
-            None => {
-                return Err(Error::ValidationError(
-                    "按应付子账筛选进项发票分配为必填条件".to_string(),
-                ))
-            }
-        };
-        allocations.sort_by_key(|allocation| std::cmp::Reverse(allocation.base.created_at));
-        let total = allocations.len() as i64;
-        let start = (query.paging.page.saturating_sub(1)) as usize * query.paging.page_size as usize;
-        let items = allocations
-            .into_iter()
-            .skip(start)
-            .take(query.paging.page_size as usize)
-            .map(|allocation| purchase_invoice_allocation_view(&allocation))
-            .collect();
-        Ok(PageView {
-            items,
-            total,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-        })
+        let payable_account_id = query
+            .payable_account_id
+            .ok_or_else(|| Error::ValidationError("按应付子账筛选进项发票分配为必填条件".to_string()))?;
+        let allocations = self
+            .db
+            .purchase_invoice_allocations()
+            .find_allocations_by_accounts(std::slice::from_ref(&payable_account_id), &mut NoTransaction)
+            .await?;
+        Ok(purchase_invoice_allocation_page(allocations, query.paging))
     }
 
     // -----------------------------------------------------------------------
@@ -1681,6 +1667,49 @@ fn payment_allocation_view(
     (net, views)
 }
 
+/// 对进项发票分配执行稳定排序、分页和视图映射。
+///
+/// # 参数
+/// * `allocations` - 仓储按单个应付子账返回的未删除分配事实
+/// * `paging` - 已完成字段白名单和方向校验的分页参数
+///
+/// # 返回
+/// 返回带总数、原页码和原分页大小的契约分页视图。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// `created_at` 与 `id` 始终使用同一方向，确保同秒事实跨页顺序确定。
+fn purchase_invoice_allocation_page(
+    mut allocations: Vec<PurchaseInvoiceAllocation>,
+    paging: dto::PageParams,
+) -> PageView<PurchaseInvoiceAllocationView> {
+    allocations.sort_by(|left, right| {
+        left.base
+            .created_at
+            .cmp(&right.base.created_at)
+            .then_with(|| left.base.id.cmp(&right.base.id))
+    });
+    if matches!(paging.sort_dir, SortDir::Desc) {
+        allocations.reverse();
+    }
+    let total = allocations.len() as i64;
+    let start = (paging.page.saturating_sub(1) * u64::from(paging.page_size)) as usize;
+    let items = allocations
+        .iter()
+        .skip(start)
+        .take(paging.page_size as usize)
+        .map(purchase_invoice_allocation_view)
+        .collect();
+    PageView {
+        items,
+        total,
+        page: paging.page,
+        page_size: paging.page_size,
+    }
+}
+
 /// 装配进项发票分配视图。
 ///
 /// # 参数
@@ -1704,6 +1733,141 @@ fn purchase_invoice_allocation_view(
             .reverses_allocation_id
             .as_ref()
             .map(|id| id.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod purchase_invoice_allocation_list_tests {
+    use std::str::FromStr;
+
+    use entities::ids::{InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId};
+    use entities::money::Amount;
+    use entities::payable::{AllocationAction, PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
+
+    use super::dto::PageParams;
+    use super::{purchase_invoice_allocation_page, SortDir};
+
+    /// 构造具有指定稳定 ID 与秒级创建时间的最小进项发票分配事实。
+    ///
+    /// 参数提供排序键，返回通过实体校验的正式分配；测试金额固定为 `1.00`，
+    /// 构造失败时直接 panic，且不访问数据库。
+    fn allocation(id: &str, created_at: u64) -> PurchaseInvoiceAllocation {
+        let mut allocation = PurchaseInvoiceAllocation::new(
+            PurchaseInvoiceAllocationId::new(id),
+            PurchaseInvoiceAllocationData {
+                invoice_id: InvoiceId::new("invoice-1"),
+                payable_account_id: PayableAccountId::new("account-1"),
+                allocation_seq: 1,
+                allocation_action: AllocationAction::Apply,
+                allocated_gross_amount: Amount::from_str("1.00").unwrap(),
+                allocated_net_amount: Amount::from_str("1.00").unwrap(),
+                allocated_tax_amount: Amount::from_str("0.00").unwrap(),
+                reverses_allocation_id: None,
+            },
+        )
+        .unwrap();
+        allocation.base.created_at = created_at;
+        allocation
+    }
+
+    /// 验证升序分页按创建时间再按稳定 ID 返回。
+    ///
+    /// 测试使用乱序事实，不访问数据库；首升序页的 ID 顺序变化时失败。
+    #[test]
+    fn allocation_page_sorts_ascending() {
+        let page = purchase_invoice_allocation_page(
+            vec![
+                allocation("a-3", 30),
+                allocation("a-1", 10),
+                allocation("a-2", 20),
+            ],
+            PageParams {
+                page: 1,
+                page_size: 3,
+                sort_by: "created_at",
+                sort_dir: SortDir::Asc,
+            },
+        );
+
+        assert_eq!(
+            page.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            ["a-1", "a-2", "a-3"]
+        );
+    }
+
+    /// 验证降序分页对创建时间与稳定 ID 使用同一方向。
+    ///
+    /// 测试使用乱序事实，不访问数据库；业务时间或并列键方向变化时失败。
+    #[test]
+    fn allocation_page_sorts_descending() {
+        let page = purchase_invoice_allocation_page(
+            vec![
+                allocation("a-1", 10),
+                allocation("a-3", 30),
+                allocation("a-2", 20),
+            ],
+            PageParams {
+                page: 1,
+                page_size: 3,
+                sort_by: "created_at",
+                sort_dir: SortDir::Desc,
+            },
+        );
+
+        assert_eq!(
+            page.items.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            ["a-3", "a-2", "a-1"]
+        );
+    }
+
+    /// 验证同秒事实使用 ID 并列键后跨页边界保持确定。
+    ///
+    /// 测试同时断言升降序第二页和总数，避免同秒记录在页间漂移或重复。
+    #[test]
+    fn allocation_page_paginates_equal_timestamps_deterministically() {
+        let allocations = vec![
+            allocation("a-2", 10),
+            allocation("a-4", 10),
+            allocation("a-1", 10),
+            allocation("a-3", 10),
+        ];
+        let ascending = purchase_invoice_allocation_page(
+            allocations.clone(),
+            PageParams {
+                page: 2,
+                page_size: 2,
+                sort_by: "created_at",
+                sort_dir: SortDir::Asc,
+            },
+        );
+        let descending = purchase_invoice_allocation_page(
+            allocations,
+            PageParams {
+                page: 2,
+                page_size: 2,
+                sort_by: "created_at",
+                sort_dir: SortDir::Desc,
+            },
+        );
+
+        assert_eq!(
+            ascending
+                .items
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a-3", "a-4"]
+        );
+        assert_eq!(
+            descending
+                .items
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a-2", "a-1"]
+        );
+        assert_eq!(ascending.total, 4);
+        assert_eq!(descending.total, 4);
     }
 }
 

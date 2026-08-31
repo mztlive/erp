@@ -20,9 +20,11 @@ import { useRoleMutations } from "@/features/admin/hooks/queries"
 export function DeleteRoleDialog({
     role,
     onOpenChange,
+    id = "governance-admin-delete-role-dialog",
 }: {
     role: { id: string; name: string }
     onOpenChange: (open: boolean) => void
+    id?: string
 }) {
     const { deleteRole, isDeleting } = useRoleMutations()
     const [error, setError] = React.useState<string | null>(null)
@@ -43,10 +45,14 @@ export function DeleteRoleDialog({
                     </Alert>
                 ) : null}
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>
+                    <AlertDialogCancel
+                        id={`${id}-cancel`}
+                        disabled={isDeleting}
+                    >
                         取消
                     </AlertDialogCancel>
                     <AlertDialogAction
+                        id={`${id}-confirm`}
                         variant="destructive"
                         disabled={isDeleting}
                         onClick={async () => {

@@ -12,10 +12,7 @@ import { resolveSection } from "@/features/customers/pages/customer-detail-helpe
  * 客户详情页交互状态：分区切换、原地编辑、未保存拦截与保存成功提示。
  * 数据请求仍由 useCustomerCenterQuery 承载，本 hook 只编排 UI 状态。
  */
-export function useCustomerDetailState(
-    customerId: string,
-    section?: string,
-) {
+export function useCustomerDetailState(customerId: string, section?: string) {
     const query = useCustomerCenterQuery(customerId)
     const router = useRouter()
     const activeSection = resolveSection(section)

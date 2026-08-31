@@ -15,6 +15,7 @@ import {
     useComboboxAnchor,
 } from "@/components/ui/combobox"
 import type { ComboboxOption } from "@/components/business/option-combobox"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 type InternalOption = ComboboxOption & { __search: string }
@@ -38,6 +39,7 @@ export type MultiOptionComboboxProps = {
     disabled?: boolean
     id?: string
     "aria-label"?: string
+    "aria-describedby"?: string
     className?: string
     size?: "sm" | "default"
 }
@@ -55,6 +57,7 @@ export function MultiOptionCombobox({
     disabled = false,
     id,
     "aria-label": ariaLabel,
+    "aria-describedby": ariaDescribedBy,
     className,
     size = "default",
 }: MultiOptionComboboxProps) {
@@ -100,6 +103,11 @@ export function MultiOptionCombobox({
                             valueItems.map((item) => (
                                 <ComboboxChip
                                     key={item.value}
+                                    removeId={
+                                        id
+                                            ? `${id}-chip-${toAutomationIdSegment(item.value)}-remove`
+                                            : undefined
+                                    }
                                     aria-label={item.label}
                                 >
                                     {item.label}
@@ -110,6 +118,7 @@ export function MultiOptionCombobox({
                     <ComboboxChipsInput
                         id={id}
                         aria-label={ariaLabel}
+                        aria-describedby={ariaDescribedBy}
                         placeholder={selected.length > 0 ? "" : placeholder}
                         disabled={disabled}
                         className={cn(size === "sm" && "text-xs")}
@@ -122,6 +131,11 @@ export function MultiOptionCombobox({
                     {items.map((item) => (
                         <ComboboxItem
                             key={item.value}
+                            id={
+                                id
+                                    ? `${id}-option-${toAutomationIdSegment(item.value)}`
+                                    : undefined
+                            }
                             value={item}
                             disabled={item.disabled}
                         >

@@ -72,7 +72,10 @@ export function RoleAssignmentDialog({
 
     return (
         <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
-            <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-md">
+            <DialogContent
+                className="max-h-[88vh] overflow-y-auto sm:max-w-md"
+                closeButtonId="operations-access-role-assignment-close"
+            >
                 <DialogHeader>
                     <DialogTitle>调整角色</DialogTitle>
                     <DialogDescription>
@@ -96,7 +99,12 @@ export function RoleAssignmentDialog({
                                 !field.state.meta.isValid
                             return (
                                 <Field data-invalid={isInvalid || undefined}>
-                                    <FieldLabel>角色<span className="text-destructive">*</span></FieldLabel>
+                                    <FieldLabel>
+                                        角色
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
+                                    </FieldLabel>
                                     <RoleOptionsPanel
                                         options={roleOptions}
                                         selected={selected}
@@ -135,6 +143,7 @@ export function RoleAssignmentDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id="operations-access-role-assignment-cancel"
                             type="button"
                             variant="outline"
                             disabled={pending}
@@ -143,7 +152,10 @@ export function RoleAssignmentDialog({
                             取消
                         </Button>
                         <form.AppForm>
-                            <form.SubmitButton label="保存" />
+                            <form.SubmitButton
+                                id="operations-access-role-assignment-save"
+                                label="保存"
+                            />
                         </form.AppForm>
                     </DialogFooter>
                 </form>

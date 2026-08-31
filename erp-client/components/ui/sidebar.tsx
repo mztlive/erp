@@ -267,13 +267,15 @@ function Sidebar({
 
 function SidebarTrigger({
     className,
+    id,
     onClick,
     ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { id?: string }) {
     const { toggleSidebar } = useSidebar()
 
     return (
         <Button
+            id={id ?? "workspace-sidebar-trigger"}
             data-sidebar="trigger"
             data-slot="sidebar-trigger"
             variant="ghost"
@@ -291,11 +293,16 @@ function SidebarTrigger({
     )
 }
 
-function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
+function SidebarRail({
+    className,
+    id,
+    ...props
+}: React.ComponentProps<"button"> & { id?: string }) {
     const { toggleSidebar } = useSidebar()
 
     return (
         <button
+            id={id ?? "workspace-sidebar-rail"}
             data-sidebar="rail"
             data-slot="sidebar-rail"
             aria-label="切换导航栏"

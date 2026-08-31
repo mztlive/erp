@@ -2,10 +2,10 @@
 
 共享 ID 与可展示业务编号生成能力。
 
-| 能力 | 用途 | 说明 |
-| --- | --- | --- |
-| `next_id()` | 内部主键 `id` | UUID v4，32 位十六进制，不承载业务含义（数据模型 4.1） |
-| `DocumentNumberGenerator::next_number` | 业务编号 `*_no` | 原子取号，一经形成正式事实不得复用（数据模型 4.1） |
+| 能力                                   | 用途            | 说明                                                   |
+| -------------------------------------- | --------------- | ------------------------------------------------------ |
+| `next_id()`                            | 内部主键 `id`   | UUID v4，32 位十六进制，不承载业务含义（数据模型 4.1） |
+| `DocumentNumberGenerator::next_number` | 业务编号 `*_no` | 原子取号，一经形成正式事实不得复用（数据模型 4.1）     |
 
 ## 1. 业务编号格式
 
@@ -21,21 +21,21 @@
 
 ## 2. DocumentNumberKind 完整清单
 
-| 变体 | 前缀 | 中文名 | 阶段 | 数据模型落点 |
-| --- | --- | --- | --- | --- |
-| `SalesOrder` | `SO` | 销售单 | 一期 | `sales_order.order_no` |
-| `PurchaseOrder` | `PO` | 采购单 | 一期 | `purchase_order.purchase_no` |
-| `PurchaseReceipt` | `GRN` | 采购入库单 | 一期 | `purchase_receipt.receipt_no` |
-| `Delivery` | `DN` | 履约发货单 | 一期 | `delivery.delivery_no` |
-| `CustomerAcceptance` | `CA` | 客户验收单 | 一期 | `customer_acceptance.acceptance_no` |
-| `StockAdjustment` | `SA` | 库存调整单 | 一期 | `stock_adjustment.adjustment_no` |
-| `CustomerReceipt` | `CR` | 客户回款单 | 一期 | `customer_receipt.receipt_no` |
-| `SupplierPayment` | `PM` | 供应商付款单 | 一期 | `supplier_payment.payment_no` |
-| `Invoice` | `INV` | 发票 | 一期 | `invoice`（销项/进项共用序号空间） |
-| `SalesReturn` | `SR` | 销售退货单 | 一期 | `sales_return_case.return_no` |
-| `PurchaseReturn` | `PR` | 采购退货单 | 一期 | `purchase_return_order.purchase_return_no` |
-| `SupplierFulfillment` | `SF` | 供应商履约单 | 二期（仅预声明） | `supplier_fulfillment_order` |
-| `SupplierSettlement` | `SS` | 供应商结算单 | 二期（仅预声明） | `supplier_settlement_statement` |
+| 变体                  | 前缀  | 中文名       | 阶段             | 数据模型落点                               |
+| --------------------- | ----- | ------------ | ---------------- | ------------------------------------------ |
+| `SalesOrder`          | `SO`  | 销售单       | 一期             | `sales_order.order_no`                     |
+| `PurchaseOrder`       | `PO`  | 采购单       | 一期             | `purchase_order.purchase_no`               |
+| `PurchaseReceipt`     | `GRN` | 采购入库单   | 一期             | `purchase_receipt.receipt_no`              |
+| `Delivery`            | `DN`  | 履约发货单   | 一期             | `delivery.delivery_no`                     |
+| `CustomerAcceptance`  | `CA`  | 客户验收单   | 一期             | `customer_acceptance.acceptance_no`        |
+| `StockAdjustment`     | `SA`  | 库存调整单   | 一期             | `stock_adjustment.adjustment_no`           |
+| `CustomerReceipt`     | `CR`  | 客户回款单   | 一期             | `customer_receipt.receipt_no`              |
+| `SupplierPayment`     | `PM`  | 供应商付款单 | 一期             | `supplier_payment.payment_no`              |
+| `Invoice`             | `INV` | 发票         | 一期             | `invoice`（销项/进项共用序号空间）         |
+| `SalesReturn`         | `SR`  | 销售退货单   | 一期             | `sales_return_case.return_no`              |
+| `PurchaseReturn`      | `PR`  | 采购退货单   | 一期             | `purchase_return_order.purchase_return_no` |
+| `SupplierFulfillment` | `SF`  | 供应商履约单 | 二期（仅预声明） | `supplier_fulfillment_order`               |
+| `SupplierSettlement`  | `SS`  | 供应商结算单 | 二期（仅预声明） | `supplier_settlement_statement`            |
 
 数据模型未定义前缀时按业务缩写设计（SO=Sales Order、PO=Purchase Order、
 GRN=Goods Receipt Note、DN=Delivery Note、CA=Customer Acceptance、

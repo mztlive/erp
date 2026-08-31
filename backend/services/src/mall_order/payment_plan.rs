@@ -8,10 +8,11 @@ use entities::ids::{
     MallPaymentSourceId,
 };
 use entities::mall_order::{
-    AttributionStatus, ConsumptionDirection, FulfillmentChain, MallConsumptionCostAssessment,
-    MallConsumptionEntry, MallConsumptionEntryData, MallItemFundingAllocation, MallItemFundingAllocationData,
-    MallOrder, MallOrderData, MallOrderFact, MallOrderItem, MallOrderItemData, MallPaymentSource,
-    MallPaymentSourceData, PaymentSourceType, ProcessingStatus,
+    AttributionStatus, ConsumptionDirection, FulfillmentChain, FundingConservation,
+    FundingConservationViolation, FundingOrderAmounts, MallConsumptionCostAssessment, MallConsumptionEntry,
+    MallConsumptionEntryData, MallItemFundingAllocation, MallItemFundingAllocationData, MallOrder,
+    MallOrderData, MallOrderFact, MallOrderItem, MallOrderItemData, MallPaymentSource, MallPaymentSourceData,
+    PaymentSourceType, ProcessingStatus,
 };
 use entities::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use id_generator::next_id;
@@ -48,18 +49,25 @@ pub(super) struct PaymentPlan {
 impl MallOrderService {
     /// 构建消费入账写入计划（金额守恒校验 + 归集 + 成本评估）。
     ///
+    /// # 用途
+    /// 将支付事实载荷编排为事务内写入所需的订单图、消费事实和成本事实快照。
+    ///
     /// # 参数
     /// * `req` - 事实接收请求
     /// * `payment` - 付款载荷
     /// * `fact_id` - 事实 ID
     /// * `fact` - 待写入的支付事实（归集结果写入处理状态）
     /// * `order_id` - 订单 ID
+    /// * `actor` - 成本评估记录使用的审计操作人
     ///
     /// # 返回
     /// 返回全部待写实体。
     ///
     /// # 错误
     /// 金额守恒不成立、明细行/来源引用缺失或实体校验失败时返回错误。
+    ///
+    /// # 关键约束
+    /// 守恒规则由实体层统一评估；Service 保留外部错误文案、归集编排和事务写入边界。
     pub(super) async fn build_payment_plan(
         &self,
         req: &ReceiveMallOrderFactRequest,
@@ -189,7 +197,14 @@ impl MallOrderService {
                 },
             )?);
         }
-        self.ensure_conservation(&payment, &items, &sources, &allocations)?;
+        let order_amounts = FundingOrderAmounts {
+            gross: Amount::from_str(&payment.gross_amount)?,
+            discount: Amount::from_str(&payment.discount_amount)?,
+            paid: Amount::from_str(&payment.paid_amount)?,
+        };
+        FundingConservation::evaluate(order_amounts, &items, &sources, &allocations)
+            .ensure_valid()
+            .map_err(funding_conservation_error)?;
 
         let all_attributed = sources
             .iter()
@@ -213,10 +228,10 @@ impl MallOrderService {
                     .map(entities::ids::CustomerAccountId::new),
                 ordered_at: Instant::from_unix_secs(payment.ordered_at as i64),
                 paid_at: occurred,
-                gross_amount: Amount::from_str(&payment.gross_amount)?,
-                discount_amount: Amount::from_str(&payment.discount_amount)?,
+                gross_amount: order_amounts.gross,
+                discount_amount: order_amounts.discount,
                 freight_amount: Amount::from_str(&payment.freight_amount)?,
-                paid_amount: Amount::from_str(&payment.paid_amount)?,
+                paid_amount: order_amounts.paid,
                 fulfillment_chain: chain,
                 attribution_status: order_attribution,
                 address_snapshot_encrypted: payment.address_snapshot_encrypted.clone(),
@@ -287,72 +302,77 @@ impl MallOrderService {
             cost_allocations,
         })
     }
+}
 
-    /// 校验分摊矩阵守恒（§6.17）：行合计 = 明细实付、列合计 = 来源金额、
-    /// 订单汇总恒等。任一不成立即拒绝接收。
-    ///
-    /// # 参数
-    /// * `payment` - 付款载荷
-    /// * `items` - 商品明细
-    /// * `sources` - 支付来源
-    /// * `allocations` - 分摊记录
-    ///
-    /// # 返回
-    /// 守恒成立返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 守恒不成立返回 `BusinessLogicError`。
-    fn ensure_conservation(
-        &self,
-        payment: &dto::PaymentFactData,
-        items: &[MallOrderItem],
-        sources: &[MallPaymentSource],
-        allocations: &[MallItemFundingAllocation],
-    ) -> Result<()> {
-        let zero = Amount::from_str("0.00")?;
-        for item in items {
-            let allocated = allocations
-                .iter()
-                .filter(|allocation| allocation.mall_order_item_id.as_ref() == item.base.id)
-                .fold(zero, |acc, allocation| {
-                    acc.checked_add(allocation.allocated_payment_amount)
-                });
-            if allocated.to_decimal() != item.paid_amount.to_decimal() {
-                return Err(Error::BusinessLogicError(format!(
-                    "商品明细 {} 分摊合计与实付不一致",
-                    item.external_item_id
-                )));
-            }
+/// 将资金守恒领域违规映射为既有服务错误文案。
+///
+/// # 用途
+/// 保持支付事实接收接口的 `BusinessLogicError` 分类与中文消息不变。
+///
+/// # 参数
+/// * `violation` - 实体层返回的首个守恒违规
+///
+/// # 返回
+/// 返回对应的服务层业务逻辑错误。
+///
+/// # 错误
+/// 本函数只构造错误值，不执行可能失败的操作。
+///
+/// # 关键约束
+/// 商品和来源消息携带原身份；订单汇总与独立实付违规沿用同一既有汇总消息。
+fn funding_conservation_error(violation: FundingConservationViolation) -> Error {
+    let message = match violation {
+        FundingConservationViolation::ItemRow { external_item_id } => {
+            format!("商品明细 {external_item_id} 分摊合计与实付不一致")
         }
-        for source in sources {
-            let allocated = allocations
-                .iter()
-                .filter(|allocation| allocation.mall_payment_source_id.as_ref() == source.base.id)
-                .fold(zero, |acc, allocation| {
-                    acc.checked_add(allocation.allocated_payment_amount)
-                });
-            if allocated.to_decimal() != source.amount.to_decimal() {
-                return Err(Error::BusinessLogicError(format!(
-                    "支付来源 {} 分摊合计与支付金额不一致",
-                    source.source_no
-                )));
-            }
+        FundingConservationViolation::SourceColumn { source_no } => {
+            format!("支付来源 {source_no} 分摊合计与支付金额不一致")
         }
-        let totals = items.iter().fold((zero, zero, zero), |acc, item| {
+        FundingConservationViolation::OrderAmounts | FundingConservationViolation::OrderPaid => {
+            "商品明细汇总与订单金额不一致".to_string()
+        }
+    };
+    Error::BusinessLogicError(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use entities::mall_order::FundingConservationViolation;
+
+    use super::funding_conservation_error;
+    use crate::errors::Error;
+
+    /// 领域违规继续映射为既有商品、来源与订单汇总业务错误文案。
+    ///
+    /// 测试穷尽当前违规变体，不执行外部 I/O；错误分类或冻结文案变化时失败。
+    #[test]
+    fn conservation_violations_keep_service_error_messages() {
+        let cases = [
             (
-                acc.0.checked_add(item.line_gross_amount),
-                acc.1.checked_add(item.allocated_discount_amount),
-                acc.2.checked_add(item.paid_amount),
-            )
-        });
-        if totals.0.to_decimal() != Amount::from_str(&payment.gross_amount)?.to_decimal()
-            || totals.1.to_decimal() != Amount::from_str(&payment.discount_amount)?.to_decimal()
-            || totals.2.to_decimal() != Amount::from_str(&payment.paid_amount)?.to_decimal()
-        {
-            return Err(Error::BusinessLogicError(
-                "商品明细汇总与订单金额不一致".to_string(),
-            ));
+                FundingConservationViolation::ItemRow {
+                    external_item_id: "line-1".to_string(),
+                },
+                "商品明细 line-1 分摊合计与实付不一致",
+            ),
+            (
+                FundingConservationViolation::SourceColumn { source_no: 2 },
+                "支付来源 2 分摊合计与支付金额不一致",
+            ),
+            (
+                FundingConservationViolation::OrderAmounts,
+                "商品明细汇总与订单金额不一致",
+            ),
+            (
+                FundingConservationViolation::OrderPaid,
+                "商品明细汇总与订单金额不一致",
+            ),
+        ];
+
+        for (violation, expected) in cases {
+            match funding_conservation_error(violation) {
+                Error::BusinessLogicError(message) => assert_eq!(message, expected),
+                other => panic!("unexpected error: {other}"),
+            }
         }
-        Ok(())
     }
 }

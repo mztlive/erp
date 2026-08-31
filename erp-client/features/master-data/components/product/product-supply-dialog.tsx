@@ -160,6 +160,7 @@ export function ProductSupplyDialog({
                                             </p>
                                         </div>
                                         <Button
+                                            id="master-data-product-product-supply-dialog-button-1"
                                             type="button"
                                             size="sm"
                                             variant="outline"
@@ -279,7 +280,13 @@ export function ProductSupplyDialog({
 
                 <DialogFooter>
                     <DialogClose
-                        render={<Button type="button" variant="outline" />}
+                        render={
+                            <Button
+                                id="master-data-product-product-supply-dialog-button-2"
+                                type="button"
+                                variant="outline"
+                            />
+                        }
                     >
                         关闭
                     </DialogClose>

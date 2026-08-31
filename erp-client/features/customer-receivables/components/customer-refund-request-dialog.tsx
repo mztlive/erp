@@ -85,6 +85,7 @@ export function CustomerRefundRequestDialog({
                         name="reason"
                         children={(field) => (
                             <field.TextareaField
+                                id="customer-receivables-refund-reason"
                                 label="原因说明"
                                 placeholder="业务依据与说明"
                                 disabled={pending}
@@ -99,6 +100,7 @@ export function CustomerRefundRequestDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id="customer-receivables-refund-request-cancel"
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
@@ -108,6 +110,7 @@ export function CustomerRefundRequestDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="customer-receivables-refund-request-submit"
                                 label="下一步"
                                 disabled={pending}
                             />

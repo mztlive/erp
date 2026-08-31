@@ -17,7 +17,7 @@ export function WorkspaceSupplyExceptionTask({
 
     return (
         <section
-            className="h-full min-h-0 overflow-auto p-4"
+            className="h-full min-h-0 overflow-auto"
             aria-label="当前供应停止核对任务"
         >
             <SupplyExceptionTaskPanel

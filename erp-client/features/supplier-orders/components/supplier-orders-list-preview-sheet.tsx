@@ -31,6 +31,7 @@ export function SupplierOrdersListPreviewSheet({
 }: SupplierOrdersListPreviewSheetProps) {
     return (
         <QuickPreviewSheet
+            id="supplier-orders-list-preview-sheet"
             open={open}
             onOpenChange={onOpenChange}
             size="detail"
@@ -73,6 +74,7 @@ export function SupplierOrdersListPreviewSheet({
                 preview ? (
                     <>
                         <Button
+                            id="supplier-orders-list-preview-close"
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -80,6 +82,7 @@ export function SupplierOrdersListPreviewSheet({
                             关闭
                         </Button>
                         <Button
+                            id="supplier-orders-list-preview-open"
                             type="button"
                             variant="outline"
                             render={
@@ -93,6 +96,7 @@ export function SupplierOrdersListPreviewSheet({
                         {preview.allowedActions.includes("QUERY_RESULT") &&
                         !preview.workItem ? (
                             <Button
+                                id="supplier-orders-list-preview-query"
                                 type="button"
                                 disabled={queryPending}
                                 onClick={() => {

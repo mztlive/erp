@@ -46,6 +46,7 @@ export function SessionHeader({
                 </div>
                 {showClose ? (
                     <Button
+                        id="customer-receivables-session-close"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -66,6 +67,7 @@ export function SessionHeader({
                     <AlertDescription>
                         完成或取消后可回到销售单原入口；筛选与主体在本次核销内保留。
                         <Button
+                            id="customer-receivables-session-return-source"
                             type="button"
                             size="sm"
                             variant="link"

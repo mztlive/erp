@@ -8,6 +8,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatMoneyDisplay } from "../../lib/presentation"
 import type { CardBusinessAnalyticsView } from "../../types"
 
@@ -36,8 +37,8 @@ export function BreakdownPanel({ breakdowns }: BreakdownPanelProps) {
                             >
                                 <span>{item.label}</span>
                                 <span className="num text-muted-foreground">
-                                    {formatMoneyDisplay(item.consumptionGross)} ·
-                                    {item.share}
+                                    {formatMoneyDisplay(item.consumptionGross)}{" "}
+                                    ·{item.share}
                                 </span>
                             </li>
                         ))}
@@ -52,14 +53,15 @@ export function BreakdownPanel({ breakdowns }: BreakdownPanelProps) {
                                 className="flex items-center justify-between gap-2"
                             >
                                 <Link
+                                    id={`card-contracts-analytics-breakdown-customer-${toAutomationIdSegment(item.id)}`}
                                     href={`/sales/customers/${item.id}`}
                                     className="underline-offset-2 hover:underline"
                                 >
                                     {item.label}
                                 </Link>
                                 <span className="num text-muted-foreground">
-                                    {formatMoneyDisplay(item.consumptionGross)} ·
-                                    {item.share}
+                                    {formatMoneyDisplay(item.consumptionGross)}{" "}
+                                    ·{item.share}
                                 </span>
                             </li>
                         ))}

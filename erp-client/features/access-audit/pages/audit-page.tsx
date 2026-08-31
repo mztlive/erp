@@ -62,6 +62,7 @@ export function AuditPage() {
                 }
                 actions={
                     <Button
+                        id="operations-audit-go-access-config"
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -107,6 +108,7 @@ export function AuditPage() {
                     facts={page.lastResult.facts}
                     actions={
                         <Button
+                            id="operations-audit-result-close"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -169,10 +171,13 @@ export function AuditPage() {
                             error={page.pageQuery.error}
                             action={
                                 <Button
+                                    id="operations-audit-retry"
                                     type="button"
                                     variant="secondary"
                                     className="rounded-lg shadow-none"
-                                    onClick={() => void page.pageQuery.refetch()}
+                                    onClick={() =>
+                                        void page.pageQuery.refetch()
+                                    }
                                 >
                                     重试
                                 </Button>

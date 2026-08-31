@@ -6,6 +6,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     PurchaseInvoiceRow,
     ReverseTarget,
@@ -27,8 +28,7 @@ export function buildInvoiceColumns(input: {
                 <div className="text-sm">
                     <div className="font-medium">
                         <span className="num">
-                            {row.original.invoiceCode}-
-                            {row.original.invoiceNo}
+                            {row.original.invoiceCode}-{row.original.invoiceNo}
                         </span>
                         <Badge variant="neutral" className="ml-2">
                             {row.original.invoiceKindLabel}
@@ -51,7 +51,10 @@ export function buildInvoiceColumns(input: {
             },
             cell: ({ row }) => (
                 <div className="text-end text-sm">
-                    <MoneyValue value={row.original.grossAmount} taxBasis="gross" />
+                    <MoneyValue
+                        value={row.original.grossAmount}
+                        taxBasis="gross"
+                    />
                     <div className="text-xs text-muted-foreground">
                         未分配{" "}
                         <MoneyValue value={row.original.unallocatedAmount} />
@@ -97,6 +100,7 @@ export function buildInvoiceColumns(input: {
                         "CONTINUE_ALLOCATE",
                     ) ? (
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.invoiceId)}-continue-allocate`}
                             type="button"
                             size="xs"
                             onClick={() =>
@@ -112,6 +116,7 @@ export function buildInvoiceColumns(input: {
                     ) : null}
                     {row.original.allowedActions.includes("RED_INVOICE") ? (
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.invoiceId)}-red-invoice`}
                             type="button"
                             size="xs"
                             variant="outline"

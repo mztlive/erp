@@ -20,11 +20,8 @@ export function SessionRemoveLineDialog({
     onConfirmRemove: (lineKey: string) => void
 }) {
     return (
-        <Dialog
-            open={pendingRemove != null}
-            onOpenChange={onOpenChange}
-        >
-            <DialogContent>
+        <Dialog open={pendingRemove != null} onOpenChange={onOpenChange}>
+            <DialogContent closeButtonId="customer-receivables-session-remove-dialog-close">
                 <DialogHeader>
                     <DialogTitle>移除该分配行？</DialogTitle>
                     <DialogDescription>
@@ -33,6 +30,7 @@ export function SessionRemoveLineDialog({
                 </DialogHeader>
                 <DialogFooter>
                     <Button
+                        id="customer-receivables-session-remove-cancel"
                         type="button"
                         variant="outline"
                         onClick={() => onOpenChange(false)}
@@ -40,6 +38,7 @@ export function SessionRemoveLineDialog({
                         取消
                     </Button>
                     <Button
+                        id="customer-receivables-session-remove-confirm"
                         type="button"
                         variant="destructive"
                         onClick={() => {

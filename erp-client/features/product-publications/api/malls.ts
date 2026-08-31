@@ -9,7 +9,9 @@ import type { SourceSystem } from "@/features/product-publications/api/wire-type
 /** 商城选项：运行时从 source-systems 填充；初始为空，列表接口内补齐。 */
 export let MALLS: Array<{ id: string; name: string }> = []
 
-export async function loadMalls(): Promise<Array<{ id: string; name: string }>> {
+export async function loadMalls(): Promise<
+    Array<{ id: string; name: string }>
+> {
     try {
         const page = await apiGet<Page<SourceSystem>>("/admin/source-systems", {
             page: 1,

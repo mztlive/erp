@@ -103,18 +103,17 @@ export function useMallSyncUrlState(): MallSyncUrlState {
     const hasStructuredFilters = mappingType != null
     const hasActiveFilters = Boolean(
         q ||
-            mappingType ||
-            jobId ||
-            snapshotId ||
-            mappingTaskId ||
-            workItemId ||
-            differenceId,
+        mappingType ||
+        jobId ||
+        snapshotId ||
+        mappingTaskId ||
+        workItemId ||
+        differenceId,
     )
 
     const [searchDraft, setSearchDraft] = React.useState(q)
-    const [mappingTypeDraft, setMappingTypeDraft] = React.useState<
-        MallSyncMappingTypeDraft
-    >(mappingType ?? "all")
+    const [mappingTypeDraft, setMappingTypeDraft] =
+        React.useState<MallSyncMappingTypeDraft>(mappingType ?? "all")
     // 有结构化条件的初始深链展开面板；URL 回填不得再次强制展开
     const [panelOpen, setPanelOpen] = React.useState(hasStructuredFilters)
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -148,7 +147,9 @@ export function useMallSyncUrlState(): MallSyncUrlState {
             ) {
                 return
             }
-            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+            if (
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
+            ) {
                 return
             }
             event.preventDefault()

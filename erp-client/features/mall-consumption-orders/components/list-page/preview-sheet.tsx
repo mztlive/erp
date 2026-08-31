@@ -2,10 +2,7 @@
 
 import Link from "next/link"
 
-import {
-    BusinessStatusBadge,
-    QuickPreviewSheet,
-} from "@/components/business"
+import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConsumptionOrderPreviewPanel } from "@/features/mall-consumption-orders/components/consumption-order-preview-panel"
@@ -17,6 +14,7 @@ import {
     FULFILLMENT_CHAIN_LABEL,
     FULFILLMENT_CHAIN_TONE,
 } from "@/features/mall-consumption-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type Props = {
     previewId: string | null
@@ -90,6 +88,7 @@ export function ConsumptionOrderPreviewSheet({
                 previewQuery.data ? (
                     <>
                         <Button
+                            id="mall-consumption-orders-preview-close"
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -97,10 +96,12 @@ export function ConsumptionOrderPreviewSheet({
                             关闭
                         </Button>
                         <Button
+                            id={`mall-consumption-orders-preview-${toAutomationIdSegment(previewQuery.data.identity.mallOrderId)}-open`}
                             type="button"
                             variant="outline"
                             render={
                                 <Link
+                                    id={`mall-consumption-orders-preview-${toAutomationIdSegment(previewQuery.data.identity.mallOrderId)}-open-link`}
                                     href={`/commerce/consumption-orders/${previewQuery.data.identity.mallOrderId}?section=overview&returnTo=${encodeURIComponent(listReturnHref)}`}
                                 />
                             }

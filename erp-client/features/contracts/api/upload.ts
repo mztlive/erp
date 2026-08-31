@@ -1,7 +1,4 @@
-import {
-    createApiError,
-    apiPostForm,
-} from "@/lib/api"
+import { createApiError, apiPostForm } from "@/lib/api"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { contractPdfError } from "@/features/contracts/lib/pdf"
 

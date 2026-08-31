@@ -37,6 +37,7 @@ export function AdjustmentDetailSheet({
     const adjustment = detail?.adjustment
     return (
         <QuickPreviewSheet
+            id="inventory-adjustment-detail-sheet"
             open={open}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
@@ -60,7 +61,12 @@ export function AdjustmentDetailSheet({
                 ) : null
             }
             footer={
-                <Button type="button" variant="outline" onClick={onClose}>
+                <Button
+                    id="inventory-adjustment-detail-close"
+                    type="button"
+                    variant="outline"
+                    onClick={onClose}
+                >
                     关闭
                 </Button>
             }

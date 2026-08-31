@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { moveListItem } from "@/features/master-data/lib/move-list-item"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 function MoneyInput({
@@ -30,11 +31,13 @@ function MoneyInput({
     onChange,
     disabled = false,
     "aria-label": ariaLabel,
+    id,
 }: {
     value: string
     onChange: (next: string) => void
     disabled?: boolean
     "aria-label": string
+    id?: string
 }) {
     const showPrefix = !value.trim().startsWith("¥")
     return (
@@ -45,6 +48,7 @@ function MoneyInput({
                 </span>
             ) : null}
             <Input
+                id={id}
                 className={cn("h-8", showPrefix && "pl-6")}
                 value={value}
                 disabled={disabled}
@@ -58,6 +62,7 @@ function MoneyInput({
 }
 
 function MediaListEditor({
+    idPrefix,
     label,
     hint,
     value,
@@ -67,6 +72,7 @@ function MediaListEditor({
     onFilesSelected,
     mode = "carousel",
 }: {
+    idPrefix?: string
     label: string
     hint?: string
     value: readonly string[]
@@ -130,6 +136,8 @@ function MediaListEditor({
         })
     }, [updateLocalPreviewUrls, value])
 
+    const derivedBasePrefix =
+        idPrefix ?? `master-data-product-media-${toAutomationIdSegment(label)}`
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -156,12 +164,17 @@ function MediaListEditor({
                         localPreviewUrls.get(name) ??
                         previewUrls?.[name] ??
                         imagePreviewSource(name)
+                    const itemSegment = toAutomationIdSegment(
+                        name || `item-${index}`,
+                    )
+                    const base = `${derivedBasePrefix}-${itemSegment}`
                     return (
                         <div
                             key={`${name}-${index}`}
                             className="group relative overflow-hidden rounded-xl border border-border bg-surface-sunken"
                         >
                             <button
+                                id={`${base}-preview`}
                                 type="button"
                                 className={cn(
                                     "relative flex w-full flex-col items-center justify-center gap-2 overflow-hidden p-3 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -213,6 +226,7 @@ function MediaListEditor({
                             ) : null}
                             <div className="flex items-center justify-center gap-1 border-t border-border bg-surface-sunken/95 p-1">
                                 <Button
+                                    id={`${base}-move-up`}
                                     type="button"
                                     variant="ghost"
                                     size="icon-xs"
@@ -235,6 +249,7 @@ function MediaListEditor({
                                     aria-hidden
                                 />
                                 <Button
+                                    id={`${base}-move-down`}
                                     type="button"
                                     variant="ghost"
                                     size="icon-xs"
@@ -253,6 +268,7 @@ function MediaListEditor({
                                     <ArrowDownIcon />
                                 </Button>
                                 <Button
+                                    id={`${base}-remove`}
                                     type="button"
                                     variant="ghost"
                                     size="icon-xs"
@@ -270,6 +286,7 @@ function MediaListEditor({
                     )
                 })}
                 <FileUpload
+                    idPrefix={`${derivedBasePrefix}-upload`}
                     accept="image/jpeg,image/png,image/webp"
                     multiple
                     label={`添加${label}`}
@@ -320,7 +337,10 @@ function MediaListEditor({
                     if (!open) setExpandedPreview(null)
                 }}
             >
-                <DialogContent className="gap-4 p-4 sm:max-w-4xl">
+                <DialogContent
+                    className="gap-4 p-4 sm:max-w-4xl"
+                    closeButtonId={`${derivedBasePrefix}-preview-close`}
+                >
                     <DialogHeader className="pr-10">
                         <DialogTitle>
                             {expandedPreview?.name ?? "图片预览"}
@@ -349,6 +369,7 @@ function SkuMainImageField({
     onChange,
     onFilesSelected,
     disabled = false,
+    idPrefix,
 }: {
     value: string
     /** 可访问预览地址（远程 URL 或本地 blob）；缺省回退文件名。 */
@@ -357,9 +378,11 @@ function SkuMainImageField({
     /** 选择文件时透出原始文件（用于保存前上传）。 */
     onFilesSelected?: (files: File[]) => void
     disabled?: boolean
+    idPrefix?: string
 }) {
     return (
         <FileUpload
+            idPrefix={idPrefix ?? "master-data-product-sku-main-image"}
             accept="image/jpeg,image/png,image/webp"
             multiple={false}
             label={masterDataCopy.fMainImage}

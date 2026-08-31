@@ -189,6 +189,7 @@ export function ProductInventoryPreviewSheet({
                             label="库存记录更新时间"
                         />
                         <Button
+                            id="master-data-product-inventory-refresh"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -320,6 +321,7 @@ export function ProductInventoryPreviewSheet({
                     </div>
                     <div className="max-w-md">
                         <OptionCombobox
+                            id="master-data-product-inventory-sku-combobox"
                             options={skus.map((sku) => ({
                                 value: sku.skuId,
                                 label: `${sku.specLabel} · ${sku.skuNo}`,
@@ -343,6 +345,7 @@ export function ProductInventoryPreviewSheet({
             footer={
                 <>
                     <Button
+                        id="master-data-product-inventory-close"
                         type="button"
                         variant="outline"
                         onClick={() => onOpenChange(false)}
@@ -350,6 +353,7 @@ export function ProductInventoryPreviewSheet({
                         关闭
                     </Button>
                     <Button
+                        id="master-data-product-inventory-open-ledger"
                         type="button"
                         disabled={!selectedSku || productKind !== "PHYSICAL"}
                         render={

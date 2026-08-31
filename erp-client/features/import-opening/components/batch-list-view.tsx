@@ -66,9 +66,7 @@ export function BatchListView({
         const active: string[] = []
         if (urlState.q?.trim()) active.push(`搜索「${urlState.q.trim()}」`)
         if (filters.appliedObjectType) {
-            active.push(
-                `对象 ${OBJECT_CODE_LABEL[filters.appliedObjectType]}`,
-            )
+            active.push(`对象 ${OBJECT_CODE_LABEL[filters.appliedObjectType]}`)
         }
         if (filters.appliedStatus) {
             active.push(`状态 ${BATCH_STATUS_LABEL[filters.appliedStatus]}`)
@@ -123,8 +121,18 @@ export function BatchListView({
                     }}
                 >
                     <TabsList>
-                        <TabsTrigger value="VALIDATION">验证环境</TabsTrigger>
-                        <TabsTrigger value="PRODUCTION">生产环境</TabsTrigger>
+                        <TabsTrigger
+                            id="operations-import-batches-filter-environment-validation-trigger"
+                            value="VALIDATION"
+                        >
+                            验证环境
+                        </TabsTrigger>
+                        <TabsTrigger
+                            id="operations-import-batches-filter-environment-production-trigger"
+                            value="PRODUCTION"
+                        >
+                            生产环境
+                        </TabsTrigger>
                     </TabsList>
                 </Tabs>
                 {urlState.environment === "PRODUCTION" ? (
@@ -173,8 +181,7 @@ export function BatchListView({
                             aria-live="polite"
                             className="font-normal text-muted-foreground"
                         >
-                            {(data?.totalCount ?? 0).toLocaleString("zh-CN")}{" "}
-                            批
+                            {(data?.totalCount ?? 0).toLocaleString("zh-CN")} 批
                         </span>
                     </span>
                 }
@@ -205,6 +212,7 @@ export function BatchListView({
                 }
                 table={
                     <DataTable
+                        id="operations-import-batches-table"
                         data={[...(data?.rows ?? [])]}
                         columns={columns}
                         getRowId={(row) => row.batchId}
@@ -224,6 +232,7 @@ export function BatchListView({
                                     className="rounded-lg border-0 bg-transparent shadow-none ring-0"
                                     action={
                                         <Button
+                                            id="operations-import-batches-table-retry"
                                             type="button"
                                             variant="secondary"
                                             className="rounded-lg shadow-none"
@@ -260,6 +269,7 @@ export function BatchListView({
                                     action={
                                         filters.hasAppliedBatchFilters ? (
                                             <Button
+                                                id="operations-import-batches-table-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

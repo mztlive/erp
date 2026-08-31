@@ -33,9 +33,7 @@ export function SupplierEditorDocumentHeader({
         <DocumentHeader
             density="compact"
             title={title}
-            documentNumber={
-                isCreate ? "待生成" : data?.stableNo || "—"
-            }
+            documentNumber={isCreate ? "待生成" : data?.stableNo || "—"}
             primaryStatus={
                 !isCreate && data
                     ? {
@@ -72,6 +70,7 @@ export function SupplierEditorDocumentHeader({
             secondaryActions={
                 !isCreate && data ? (
                     <Button
+                        id="master-data-supplier-document-header-disable"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -85,7 +84,12 @@ export function SupplierEditorDocumentHeader({
                 ) : null
             }
             primaryAction={
-                <Button type="submit" size="sm" disabled={!canEdit || pending}>
+                <Button
+                    id="master-data-supplier-document-header-submit"
+                    type="submit"
+                    size="sm"
+                    disabled={!canEdit || pending}
+                >
                     <SaveIcon data-icon="inline-start" aria-hidden />
                     {pending
                         ? "提交中…"

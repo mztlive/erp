@@ -43,11 +43,11 @@ export function SupplierEditorContractSection({
                     <div className="grid gap-5 lg:grid-cols-2">
                         <div className="space-y-4">
                             <FieldShell>
-                                <Label htmlFor="supplier-contract-no">
+                                <Label htmlFor="master-data-supplier-contract-no">
                                     {masterDataCopy.fContractNo}
                                 </Label>
                                 <Input
-                                    id="supplier-contract-no"
+                                    id="master-data-supplier-contract-no"
                                     value={values.contractNo}
                                     onChange={(e) =>
                                         setFieldValue(
@@ -65,6 +65,7 @@ export function SupplierEditorContractSection({
                                         {masterDataCopy.fContractValidFrom}
                                     </Label>
                                     <DatePicker
+                                        id="master-data-supplier-contract-valid-from-picker"
                                         value={
                                             values.contractValidFrom ||
                                             undefined
@@ -84,6 +85,7 @@ export function SupplierEditorContractSection({
                                         {masterDataCopy.fContractValidTo}
                                     </Label>
                                     <DatePicker
+                                        id="master-data-supplier-contract-valid-to-picker"
                                         value={
                                             values.contractValidTo || undefined
                                         }
@@ -101,6 +103,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="border-grid lg:border-l lg:pl-5">
                             <MediaListField
+                                idPrefix="master-data-supplier-contract-contract-file-upload"
                                 label={masterDataCopy.fContractFile}
                                 hint={masterDataCopy.supplierQualificationHint}
                                 value={values.contractFile}
@@ -130,6 +133,7 @@ export function SupplierEditorContractSection({
                                     {masterDataCopy.fAuthorizationValidFrom}
                                 </Label>
                                 <DatePicker
+                                    id="master-data-supplier-contract-auth-from-picker"
                                     value={
                                         values.authorizationValidFrom ||
                                         undefined
@@ -149,6 +153,7 @@ export function SupplierEditorContractSection({
                                     {masterDataCopy.fAuthorizationValidTo}
                                 </Label>
                                 <DatePicker
+                                    id="master-data-supplier-contract-auth-to-picker"
                                     value={
                                         values.authorizationValidTo || undefined
                                     }
@@ -165,6 +170,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="border-grid lg:border-l lg:pl-5">
                             <MediaListField
+                                idPrefix="master-data-supplier-contract-authorization-file-upload"
                                 label={masterDataCopy.fAuthorizationFile}
                                 hint={masterDataCopy.supplierQualificationHint}
                                 value={values.authorizationFile}
@@ -192,6 +198,7 @@ export function SupplierEditorContractSection({
                     <div className="grid gap-4 lg:grid-cols-3">
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
+                                idPrefix="master-data-supplier-contract-qualification-upload"
                                 label={masterDataCopy.fQualification}
                                 hint={masterDataCopy.supplierQualificationHint}
                                 value={values.qualification}
@@ -209,6 +216,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
+                                idPrefix="master-data-supplier-contract-food-license-upload"
                                 label={masterDataCopy.fFoodLicense}
                                 hint={masterDataCopy.supplierQualificationHint}
                                 value={values.foodLicense}
@@ -226,6 +234,7 @@ export function SupplierEditorContractSection({
                         </div>
                         <div className="rounded-md border border-border bg-background p-4">
                             <MediaListField
+                                idPrefix="master-data-supplier-contract-legal-person-id-card-upload"
                                 label={masterDataCopy.fLegalPersonIdCard}
                                 hint={masterDataCopy.supplierQualificationHint}
                                 value={values.legalPersonIdCard}

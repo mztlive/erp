@@ -15,6 +15,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     CapabilityCode,
     ConnectionCenterView,
@@ -104,7 +105,7 @@ export function CapConfigDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-api-connections-cap-config-close">
                 <DialogHeader>
                     <DialogTitle>配置连接能力</DialogTitle>
                     <DialogDescription>
@@ -129,6 +130,7 @@ export function CapConfigDialog({
                                             {capability.capabilityLabel}
                                         </span>
                                         <input
+                                            id={`supplier-api-connections-cap-config-${toAutomationIdSegment(capability.capabilityCode)}`}
                                             type="checkbox"
                                             checked={field.state.value}
                                             disabled={pending || isSubmitting}
@@ -151,6 +153,7 @@ export function CapConfigDialog({
                     </div>
                     <DialogFooter>
                         <Button
+                            id="supplier-api-connections-cap-config-cancel"
                             type="button"
                             variant="outline"
                             disabled={pending || isSubmitting}
@@ -159,6 +162,7 @@ export function CapConfigDialog({
                             取消
                         </Button>
                         <Button
+                            id="supplier-api-connections-cap-config-submit"
                             type="submit"
                             disabled={
                                 pending || isSubmitting || !dirty || !canSubmit

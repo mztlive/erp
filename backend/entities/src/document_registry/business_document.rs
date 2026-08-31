@@ -65,6 +65,36 @@ pub enum DocumentType {
 }
 
 impl DocumentType {
+    /// 返回全部已登记单据类型的权威穷尽集合。
+    ///
+    /// # 返回
+    /// 按审批政策矩阵的稳定顺序提供全部二十个单据类型。
+    ///
+    /// # 约束
+    /// 解析、审批政策目录和穷尽测试必须复用本集合，不维护第二份变体清单。
+    pub const ALL: [Self; 20] = [
+        Self::SalesOrder,
+        Self::VoucherSalesOrder,
+        Self::SalesChangeOrder,
+        Self::PurchaseOrder,
+        Self::PurchaseChangeOrder,
+        Self::StockAdjustment,
+        Self::CustomerReceipt,
+        Self::SupplierPayment,
+        Self::CustomerRefund,
+        Self::SupplierRefund,
+        Self::ReceiptReversal,
+        Self::PaymentReversal,
+        Self::PurchaseReceipt,
+        Self::Delivery,
+        Self::ElectronicDelivery,
+        Self::ServiceFulfillment,
+        Self::CustomerAcceptance,
+        Self::Invoice,
+        Self::SalesReturnCase,
+        Self::PurchaseReturnOrder,
+    ];
+
     /// 返回类型的中文展示名。
     ///
     /// # 返回
@@ -121,6 +151,26 @@ impl DocumentType {
             Self::ReceiptReversal => "receipt_reversal",
             Self::PaymentReversal => "payment_reversal",
         }
+    }
+
+    /// 仅接受已登记的精确稳定代码。
+    ///
+    /// # 参数
+    /// * `code` - 待解析的单据类型稳定代码
+    ///
+    /// # 返回
+    /// 代码与冻结集合中的某一项完全一致时返回对应类型。
+    ///
+    /// # 错误
+    /// 空值、未知代码、大小写变化或任何前后空白均返回错误。
+    ///
+    /// # 关键业务约束
+    /// 本方法不裁剪、不折叠大小写、不接受别名，也不提供默认类型。
+    pub fn try_from_code(code: &str) -> Result<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|document_type| document_type.as_str() == code)
+            .ok_or_else(|| Error::from(format!("未登记单据类型: {code}")))
     }
 }
 
@@ -722,6 +772,58 @@ mod tests {
         doc.formalize(first);
         doc.formalize(second);
         assert_eq!(doc.formalized_at.unwrap(), first);
+    }
+
+    /// 验证全部二十个冻结代码都能精确解析。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 所有代码映射到对应枚举时测试通过。
+    ///
+    /// # 错误
+    /// 任一代码被拒绝或映射到错误类型时测试失败。
+    ///
+    /// # 关键业务约束
+    /// 用例覆盖 `DocumentType` 的完整稳定代码集合。
+    #[test]
+    fn document_type_try_from_code_accepts_all_stable_codes() {
+        assert_eq!(DocumentType::ALL.len(), 20);
+        for expected in DocumentType::ALL {
+            assert_eq!(DocumentType::try_from_code(expected.as_str()).unwrap(), expected);
+        }
+    }
+
+    /// 验证非精确代码按失败关闭处理。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 所有非法输入均被拒绝时测试通过。
+    ///
+    /// # 错误
+    /// 空值、未知值、大小写变化或空白变体被接受时测试失败。
+    ///
+    /// # 关键业务约束
+    /// 解析不得裁剪、折叠大小写、接受别名或回落默认类型。
+    #[test]
+    fn document_type_try_from_code_rejects_non_exact_codes() {
+        for code in [
+            "",
+            "unknown",
+            "Sales_order",
+            "SALES_ORDER",
+            "sales_order ",
+            " sales_order",
+            "sales_order\n",
+        ] {
+            assert!(
+                DocumentType::try_from_code(code).is_err(),
+                "unexpected code: {code:?}"
+            );
+        }
     }
 
     /// 合同 §4.3 的 20 个固定类型：as_str、label 与 serde 必须穷尽一致。

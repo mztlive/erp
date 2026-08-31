@@ -24,6 +24,7 @@ export function SalesChangeOrderSubmitConfirmDialog({
 }) {
     return (
         <FormalActionConfirmDialog
+            id="sales-orders-change-submit-confirm"
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="提交改单"

@@ -110,6 +110,7 @@ export function ContractDetailOverview({
                 action={
                     onOpenSalesOrders ? (
                         <Button
+                            id="card-contracts-detail-overview-open-sales-orders"
                             type="button"
                             size="sm"
                             variant="outline"

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { workspaceTaskSurfacePadClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
@@ -12,6 +13,8 @@ import {
 } from "@/features/customer-receivables/hooks/queries"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 
 import type { WorkspaceWorkItem } from "../types"
 import {
@@ -20,6 +23,7 @@ import {
     workspaceInvoiceMatchesReceivable,
 } from "../lib/workspace-invoice"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 
 type WorkspaceInvoiceTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -49,7 +53,12 @@ export function WorkspaceInvoiceTask({
             className="flex h-full min-h-0 flex-col"
             aria-label="当前开票任务"
         >
-            <header className="flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5">
+            <header
+                className={cn(
+                    workspaceTaskSurfacePadClassName,
+                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
+                )}
+            >
                 <div className="flex min-w-0 flex-col gap-2">
                     <WorkspaceDocumentBadge item={item} />
                     <h2 className="text-xl font-semibold tracking-tight">
@@ -65,9 +74,10 @@ export function WorkspaceInvoiceTask({
                             .join(" · ")}
                     </p>
                 </div>
+                <WorkspaceTaskHeaderActions item={item} />
             </header>
 
-            <div className="min-h-0 flex-1 overflow-auto py-4">
+            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
                 {!descriptor ? (
                     <Alert variant="destructive">
                         <AlertTitle>任务责任与开票对象不一致</AlertTitle>
@@ -88,6 +98,7 @@ export function WorkspaceInvoiceTask({
                                 )}
                             </span>
                             <Button
+                                id={`workspace-invoice-receivable-retry-${toAutomationIdSegment(item.workItemId)}`}
                                 type="button"
                                 variant="outline"
                                 size="sm"
@@ -128,7 +139,9 @@ export function WorkspaceInvoiceTask({
 /** 开票作业面加载占位。 */
 function InvoiceSessionSkeleton() {
     return (
-        <div className="grid gap-4">
+        <div
+            className={cn(workspaceTaskSurfacePadClassName, "grid gap-4 py-5")}
+        >
             <div className="h-40 animate-pulse rounded-lg bg-muted" />
             <div className="h-40 animate-pulse rounded-lg bg-muted" />
         </div>
@@ -189,6 +202,7 @@ function WorkspaceInvoiceSession({
                 <AlertDescription className="flex flex-col gap-3">
                     <span>{getErrorMessage(createError, "请刷新后重试")}</span>
                     <Button
+                        id={`workspace-invoice-session-retry-${toAutomationIdSegment(item.workItemId)}`}
                         type="button"
                         variant="outline"
                         size="sm"

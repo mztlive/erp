@@ -90,6 +90,7 @@ export function CustomerAccountDetailPreview({
 }: CustomerAccountDetailPreviewProps) {
     return (
         <QuickPreviewSheet
+            id="customer-receivables-preview-sheet"
             open={open}
             onOpenChange={(nextOpen) => {
                 if (!nextOpen) onClose()
@@ -161,6 +162,7 @@ export function CustomerAccountDetailPreview({
                 data ? (
                     <>
                         <Button
+                            id="customer-receivables-preview-close"
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -169,6 +171,7 @@ export function CustomerAccountDetailPreview({
                         </Button>
                         {data.receivable ? (
                             <Button
+                                id="customer-receivables-preview-receivable-register-receipt"
                                 type="button"
                                 disabled={!canStartSession("receipt")}
                                 title={
@@ -197,6 +200,7 @@ export function CustomerAccountDetailPreview({
                             "CONTINUE_ALLOCATE",
                         ) ? (
                             <Button
+                                id="customer-receivables-preview-receipt-continue-allocate"
                                 type="button"
                                 disabled={!canStartSession("receipt")}
                                 title={
@@ -220,6 +224,7 @@ export function CustomerAccountDetailPreview({
                             "REVERSE_RECEIPT",
                         ) ? (
                             <Button
+                                id="customer-receivables-preview-receipt-reverse"
                                 type="button"
                                 variant="outline"
                                 disabled={!canRequestReverse("receipt_reverse")}
@@ -243,6 +248,7 @@ export function CustomerAccountDetailPreview({
                         {showCorrectionActions &&
                         data.receipt?.allowedActions.includes("REFUND") ? (
                             <Button
+                                id="customer-receivables-preview-receipt-refund"
                                 type="button"
                                 variant="outline"
                                 disabled={!canRequestReverse("refund")}
@@ -267,6 +273,7 @@ export function CustomerAccountDetailPreview({
                             "CONTINUE_ALLOCATE",
                         ) ? (
                             <Button
+                                id="customer-receivables-preview-invoice-continue-allocate"
                                 type="button"
                                 disabled={!canStartSession("invoice")}
                                 title={
@@ -293,6 +300,7 @@ export function CustomerAccountDetailPreview({
                         ) &&
                         onRequestRefundSubmit ? (
                             <Button
+                                id="customer-receivables-preview-refund-submit"
                                 type="button"
                                 disabled={!canSubmitRefund}
                                 title={
@@ -315,6 +323,7 @@ export function CustomerAccountDetailPreview({
                         ) &&
                         onRequestReversalSubmit ? (
                             <Button
+                                id="customer-receivables-preview-reversal-submit"
                                 type="button"
                                 disabled={!canSubmitReversal}
                                 title={
@@ -332,6 +341,7 @@ export function CustomerAccountDetailPreview({
                             "ISSUE_RED_INVOICE",
                         ) ? (
                             <Button
+                                id="customer-receivables-preview-invoice-red"
                                 type="button"
                                 variant="outline"
                                 disabled={!canRequestReverse("red_invoice")}
@@ -367,6 +377,7 @@ export function CustomerAccountDetailPreview({
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
                     <Button
+                        id="customer-receivables-preview-retry"
                         type="button"
                         size="sm"
                         variant="outline"

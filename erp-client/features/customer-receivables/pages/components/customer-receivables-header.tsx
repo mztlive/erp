@@ -47,6 +47,9 @@ export function CustomerReceivablesHeader({
             actions={[
                 {
                     actionKey: "export",
+                    id: embedded
+                        ? "customer-receivables-header-embedded-export"
+                        : "customer-receivables-header-export",
                     label: "导出",
                     icon: DownloadIcon,
                     variant: "outline",
@@ -57,6 +60,9 @@ export function CustomerReceivablesHeader({
                 },
                 {
                     actionKey: "register-invoice",
+                    id: embedded
+                        ? "customer-receivables-header-embedded-register-invoice"
+                        : "customer-receivables-header-register-invoice",
                     label: "登记销项发票",
                     icon: FileTextIcon,
                     variant: "outline",
@@ -71,6 +77,9 @@ export function CustomerReceivablesHeader({
                 },
                 {
                     actionKey: "register-receipt",
+                    id: embedded
+                        ? "customer-receivables-header-embedded-register-receipt"
+                        : "customer-receivables-header-register-receipt",
                     label: "登记回款",
                     icon: WalletIcon,
                     mobileVisibility: embedded ? "show" : "hide",

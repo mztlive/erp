@@ -35,6 +35,7 @@ import {
     type SellableSkuPick,
 } from "@/features/sales-orders/lib/sellable-sku-pick"
 import { toSellablePickerListQuery } from "@/features/sales-orders/lib/sellable-sku-picker-query"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type SellableSkuSelectDialogProps = {
     open: boolean
@@ -252,6 +253,7 @@ export function SellableSkuSelectDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                closeButtonId="sales-orders-sku-picker-close"
                 className="flex max-h-[90vh] w-full flex-col gap-4 overflow-hidden sm:max-w-6xl"
                 showCloseButton
             >
@@ -260,66 +262,73 @@ export function SellableSkuSelectDialog({
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
 
-                <SellableListToolbar
-                    searchInputRef={filters.searchInputRef}
-                    searchDraft={filters.searchDraft}
-                    setSearchDraft={filters.setSearchDraft}
-                    hasActiveFilters={hasActiveFilters}
-                    clearAllFilters={filters.clearAllFilters}
-                    appliedChips={appliedChips}
-                    removeFilter={filters.removeFilter}
-                    supplyPreset={filters.supplyPreset ?? "all"}
-                    supplyPresetCounts={EMPTY_SUPPLY_PRESET_COUNTS}
-                    applySupplyPreset={filters.applySupplyPreset}
-                    sellableFilterPanelOpen={filters.sellableFilterPanelOpen}
-                    setSellableFilterPanelOpen={
-                        filters.setSellableFilterPanelOpen
-                    }
-                    hasStructuredSellableFilters={
-                        filters.hasStructuredSellableFilters
-                    }
-                    applySellableFilters={filters.applySellableFilters}
-                    resetMoreFilters={filters.resetMoreFilters}
-                    supplyRegionDraft={filters.supplyRegionDraft}
-                    setSupplyRegionDraft={filters.setSupplyRegionDraft}
-                    productKindDraft={filters.productKindDraft}
-                    setProductKindDraft={filters.setProductKindDraft}
-                    productCategoryIdDraft={filters.productCategoryIdDraft}
-                    setProductCategoryIdDraft={
-                        filters.setProductCategoryIdDraft
-                    }
-                    productBrandIdDraft={filters.productBrandIdDraft}
-                    setProductBrandIdDraft={filters.setProductBrandIdDraft}
-                    productSupplierIdDraft={filters.productSupplierIdDraft}
-                    setProductSupplierIdDraft={
-                        filters.setProductSupplierIdDraft
-                    }
-                    productSalesPriceMinDraft={
-                        filters.productSalesPriceMinDraft
-                    }
-                    setProductSalesPriceMinDraft={
-                        filters.setProductSalesPriceMinDraft
-                    }
-                    productSalesPriceMaxDraft={
-                        filters.productSalesPriceMaxDraft
-                    }
-                    setProductSalesPriceMaxDraft={
-                        filters.setProductSalesPriceMaxDraft
-                    }
-                    productSalesPriceError={filters.productSalesPriceError}
-                    setProductSalesPriceError={
-                        filters.setProductSalesPriceError
-                    }
-                    productFilterOptionsQuery={productFilterOptionsQuery}
-                    showSupplyPresetCounts={false}
-                    hiddenProductKinds={
-                        excludeProductKind ? [excludeProductKind] : undefined
-                    }
-                    applyHint="将同时应用上方关键词和以下筛选条件。"
-                />
+                <div id="sales-orders-sku-picker-toolbar">
+                    <SellableListToolbar
+                        searchInputRef={filters.searchInputRef}
+                        searchDraft={filters.searchDraft}
+                        setSearchDraft={filters.setSearchDraft}
+                        hasActiveFilters={hasActiveFilters}
+                        clearAllFilters={filters.clearAllFilters}
+                        appliedChips={appliedChips}
+                        removeFilter={filters.removeFilter}
+                        supplyPreset={filters.supplyPreset ?? "all"}
+                        supplyPresetCounts={EMPTY_SUPPLY_PRESET_COUNTS}
+                        applySupplyPreset={filters.applySupplyPreset}
+                        sellableFilterPanelOpen={
+                            filters.sellableFilterPanelOpen
+                        }
+                        setSellableFilterPanelOpen={
+                            filters.setSellableFilterPanelOpen
+                        }
+                        hasStructuredSellableFilters={
+                            filters.hasStructuredSellableFilters
+                        }
+                        applySellableFilters={filters.applySellableFilters}
+                        resetMoreFilters={filters.resetMoreFilters}
+                        supplyRegionDraft={filters.supplyRegionDraft}
+                        setSupplyRegionDraft={filters.setSupplyRegionDraft}
+                        productKindDraft={filters.productKindDraft}
+                        setProductKindDraft={filters.setProductKindDraft}
+                        productCategoryIdDraft={filters.productCategoryIdDraft}
+                        setProductCategoryIdDraft={
+                            filters.setProductCategoryIdDraft
+                        }
+                        productBrandIdDraft={filters.productBrandIdDraft}
+                        setProductBrandIdDraft={filters.setProductBrandIdDraft}
+                        productSupplierIdDraft={filters.productSupplierIdDraft}
+                        setProductSupplierIdDraft={
+                            filters.setProductSupplierIdDraft
+                        }
+                        productSalesPriceMinDraft={
+                            filters.productSalesPriceMinDraft
+                        }
+                        setProductSalesPriceMinDraft={
+                            filters.setProductSalesPriceMinDraft
+                        }
+                        productSalesPriceMaxDraft={
+                            filters.productSalesPriceMaxDraft
+                        }
+                        setProductSalesPriceMaxDraft={
+                            filters.setProductSalesPriceMaxDraft
+                        }
+                        productSalesPriceError={filters.productSalesPriceError}
+                        setProductSalesPriceError={
+                            filters.setProductSalesPriceError
+                        }
+                        productFilterOptionsQuery={productFilterOptionsQuery}
+                        showSupplyPresetCounts={false}
+                        hiddenProductKinds={
+                            excludeProductKind
+                                ? [excludeProductKind]
+                                : undefined
+                        }
+                        applyHint="将同时应用上方关键词和以下筛选条件。"
+                    />
+                </div>
 
                 <div className="min-h-96 flex-1 overflow-hidden">
                     <DataTable
+                        id="sales-orders-sku-picker-table"
                         data={rows}
                         columns={columns}
                         getRowId={(row) => row.stableId}
@@ -372,6 +381,7 @@ export function SellableSkuSelectDialog({
                                     action={
                                         hasActiveFilters ? (
                                             <Button
+                                                id="sales-orders-sku-picker-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -397,6 +407,7 @@ export function SellableSkuSelectDialog({
                         {selectedItems.map((item) => (
                             <FilterChip
                                 key={item.stableId}
+                                id={`sales-orders-sku-picker-selected-${toAutomationIdSegment(item.stableId)}`}
                                 label={item.name}
                                 clearLabel={`取消选择${item.name}`}
                                 onClear={() => removeSelected(item.stableId)}
@@ -407,6 +418,7 @@ export function SellableSkuSelectDialog({
 
                 <DialogFooter>
                     <Button
+                        id="sales-orders-sku-picker-cancel"
                         type="button"
                         variant="outline"
                         onClick={() => onOpenChange(false)}
@@ -414,6 +426,7 @@ export function SellableSkuSelectDialog({
                         取消
                     </Button>
                     <Button
+                        id="sales-orders-sku-picker-confirm"
                         type="button"
                         disabled={selectedItems.length === 0}
                         onClick={handleConfirm}

@@ -120,6 +120,7 @@ export function SalesOrderCreateLineItemsSection({
                 <form.AppField name="remark">
                     {(field) => (
                         <field.TextareaField
+                            id="sales-orders-create-remark"
                             label="内部说明"
                             placeholder="补充客户确认、交付或内部协同说明（可选）"
                             rows={2}

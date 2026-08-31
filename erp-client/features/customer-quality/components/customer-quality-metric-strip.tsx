@@ -1,6 +1,11 @@
 "use client"
 
-import { MetricFilterItem, MetricItem, MetricStrip } from "@/components/business"
+import {
+    MetricFilterItem,
+    MetricItem,
+    MetricStrip,
+} from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { metricReliabilityDetail } from "../lib/presentation"
 import type { CustomerQualityView } from "../types"
 
@@ -40,6 +45,7 @@ export function CustomerQualityMetricStrip({
                         // 用普通按钮语义（不带 active 筛选态），消除「点了只滚动不筛数」的指标
                         return (
                             <MetricFilterItem
+                                id={`customers-quality-metric-${toAutomationIdSegment(m.key)}-focus`}
                                 key={m.key}
                                 label={m.label}
                                 value={valueNode}

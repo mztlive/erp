@@ -148,70 +148,68 @@ export function ExecutionProjectionsPage() {
         pageSize,
     }
 
-    const appliedChips = React.useMemo<readonly ExecutionProjectionAppliedChip[]>(
-        () => {
-            const chips: ExecutionProjectionAppliedChip[] = []
-            if (filters.q.trim()) {
-                chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
-            }
-            if (filters.mallId !== "all") {
-                const mallName = view?.malls.find(
-                    (mall) => mall.id === filters.mallId,
-                )?.name
-                chips.push({
-                    key: "mall",
-                    label: `商城：${mallName ?? filters.mallId}`,
-                })
-            }
-            if (filters.deliveryStatus !== "all") {
-                chips.push({
-                    key: "deliveryStatus",
-                    label: `接收状态：${deliveryStatusChipLabel(
-                        filters.deliveryStatus,
-                    )}`,
-                })
-            }
-            if (filters.latency !== "all") {
-                chips.push({
-                    key: "latency",
-                    label: `等待时长：${LATENCY_LABEL[filters.latency]}`,
-                })
-            }
-            if (filters.reconciliation !== "all") {
-                chips.push({
-                    key: "reconciliation",
-                    label: `版本核对：${
-                        RECONCILIATION_LABEL[filters.reconciliation]
-                    }`,
-                })
-            }
-            if (filters.source !== "all") {
-                chips.push({
-                    key: "source",
-                    label: `数据来源：${SOURCE_LABEL[filters.source]}`,
-                })
-            }
-            if (filters.metric !== "all") {
-                const metricLabel =
-                    view?.metrics.find(
-                        (item) => item.key === filters.metric,
-                    )?.label ?? METRIC_CHIP_LABELS[filters.metric]
-                chips.push({ key: "metric", label: `指标：${metricLabel}` })
-            }
-            return chips
-        },
-        [
-            filters.deliveryStatus,
-            filters.latency,
-            filters.mallId,
-            filters.metric,
-            filters.q,
-            filters.reconciliation,
-            filters.source,
-            view?.malls,
-            view?.metrics,
-        ],
-    )
+    const appliedChips = React.useMemo<
+        readonly ExecutionProjectionAppliedChip[]
+    >(() => {
+        const chips: ExecutionProjectionAppliedChip[] = []
+        if (filters.q.trim()) {
+            chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
+        }
+        if (filters.mallId !== "all") {
+            const mallName = view?.malls.find(
+                (mall) => mall.id === filters.mallId,
+            )?.name
+            chips.push({
+                key: "mall",
+                label: `商城：${mallName ?? filters.mallId}`,
+            })
+        }
+        if (filters.deliveryStatus !== "all") {
+            chips.push({
+                key: "deliveryStatus",
+                label: `接收状态：${deliveryStatusChipLabel(
+                    filters.deliveryStatus,
+                )}`,
+            })
+        }
+        if (filters.latency !== "all") {
+            chips.push({
+                key: "latency",
+                label: `等待时长：${LATENCY_LABEL[filters.latency]}`,
+            })
+        }
+        if (filters.reconciliation !== "all") {
+            chips.push({
+                key: "reconciliation",
+                label: `版本核对：${
+                    RECONCILIATION_LABEL[filters.reconciliation]
+                }`,
+            })
+        }
+        if (filters.source !== "all") {
+            chips.push({
+                key: "source",
+                label: `数据来源：${SOURCE_LABEL[filters.source]}`,
+            })
+        }
+        if (filters.metric !== "all") {
+            const metricLabel =
+                view?.metrics.find((item) => item.key === filters.metric)
+                    ?.label ?? METRIC_CHIP_LABELS[filters.metric]
+            chips.push({ key: "metric", label: `指标：${metricLabel}` })
+        }
+        return chips
+    }, [
+        filters.deliveryStatus,
+        filters.latency,
+        filters.mallId,
+        filters.metric,
+        filters.q,
+        filters.reconciliation,
+        filters.source,
+        view?.malls,
+        view?.metrics,
+    ])
     const hasChips = hasActiveFilters && appliedChips.length > 0
 
     React.useEffect(() => {
@@ -264,10 +262,7 @@ export function ExecutionProjectionsPage() {
             setResult({
                 status: "blocked",
                 title: resultText.operationBlocked,
-                description: getErrorMessage(
-                    err,
-                    "网络连接异常，请刷新后重试",
-                ),
+                description: getErrorMessage(err, "网络连接异常，请刷新后重试"),
                 reference: row.projectionNo,
                 facts: [
                     { label: "对象", value: row.salesOrderNo },
@@ -357,9 +352,15 @@ export function ExecutionProjectionsPage() {
                         actions={
                             result.w29Href ? (
                                 <Button
+                                    id="execution-projections-result-w29"
                                     type="button"
                                     size="sm"
-                                    render={<Link href={result.w29Href} />}
+                                    render={
+                                        <Link
+                                            id="execution-projections-result-w29"
+                                            href={result.w29Href}
+                                        />
+                                    }
                                 >
                                     {openWorkspaceLabel("W29")}
                                 </Button>

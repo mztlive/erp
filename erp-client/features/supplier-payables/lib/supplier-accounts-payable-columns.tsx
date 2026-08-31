@@ -4,6 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     PayableRow,
     SessionState,
@@ -136,6 +137,7 @@ export function buildPayableColumns(input: {
                 return (
                     <div className="flex flex-nowrap justify-end gap-1">
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.payableAccountId)}-preview`}
                             type="button"
                             size="xs"
                             variant="outline"
@@ -146,6 +148,7 @@ export function buildPayableColumns(input: {
                             预览
                         </Button>
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.payableAccountId)}-allocate-payment`}
                             type="button"
                             size="xs"
                             onClick={() =>

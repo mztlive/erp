@@ -16,6 +16,7 @@ import {
 } from "@/components/business/data-table-layout"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TableBody, TableCell, TableRow } from "@/components/ui/table"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 const rowInteractiveTargetSelector = [
@@ -67,6 +68,7 @@ export function DataTableBody<TData>({
     highlightedRowId,
     enableColumnResizing,
     columnSizing,
+    idPrefix,
 }: {
     table: TanStackTable<TData>
     rowRefs: React.RefObject<Map<string, HTMLTableRowElement>>
@@ -88,6 +90,7 @@ export function DataTableBody<TData>({
     highlightedRowId?: string
     enableColumnResizing: boolean
     columnSizing: ColumnSizingState
+    idPrefix?: string
 }) {
     const rows = table.getRowModel().rows
     const visibleColumnCount = table.getVisibleLeafColumns().length
@@ -130,6 +133,11 @@ export function DataTableBody<TData>({
                 rows.map((row, rowIndex) => (
                     <TableRow
                         key={row.id}
+                        id={
+                            idPrefix
+                                ? `${idPrefix}-row-${toAutomationIdSegment(row.id)}`
+                                : undefined
+                        }
                         data-row-id={row.id}
                         ref={(node) => {
                             if (node) rowRefs.current.set(row.id, node)

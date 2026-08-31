@@ -11,6 +11,19 @@ vi.mock("@/features/workspace/hooks/use-workspace-home", () => ({
     useWorkspaceHome: () => home.current,
 }))
 
+vi.mock("@/features/workspace/components/workspace-task-detail", async () => {
+    const { WorkspacePaneActions } =
+        await import("@/features/workspace/components/workspace-pane-actions")
+    return {
+        WorkspaceTaskDetail: () => (
+            <div className="flex items-center justify-between">
+                <h1>供给分配</h1>
+                <WorkspacePaneActions />
+            </div>
+        ),
+    }
+})
+
 import { WorkspaceHomePage } from "./workspace-home-page"
 
 afterEach(cleanup)
@@ -186,4 +199,24 @@ test("我发起的审批搜索无结果时可以清除关键词", () => {
     expect(action).toBeTruthy()
     action.click()
     expect(clearSearch).toHaveBeenCalledTimes(1)
+})
+
+test("右侧全屏会收起左列队列，再次点击恢复", () => {
+    stubHome(emptyAllowedView({ total: 1 }), {
+        selected: {
+            workItemId: "wi-1",
+            objectTitle: "销售单 XS1",
+        },
+    })
+    render(<WorkspaceHomePage />)
+
+    const queue = document.querySelector('[data-slot="workspace-queue"]')
+    expect(queue?.className.includes("hidden")).toBe(false)
+
+    fireEvent.click(screen.getByRole("button", { name: "全屏处理" }))
+    expect(queue?.className.includes("hidden")).toBe(true)
+    expect(screen.getByRole("button", { name: "退出全屏" })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "退出全屏" }))
+    expect(queue?.className.includes("hidden")).toBe(false)
 })

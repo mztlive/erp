@@ -108,13 +108,17 @@ export function SupplierOrdersListExportPreview({
                     </p>
                 ) : null}
                 <Button
+                    id="supplier-orders-list-export-confirm"
                     type="button"
                     size="sm"
                     disabled={isPending}
                     onClick={onConfirm}
                 >
                     {isPending ? (
-                        <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                        <Spinner
+                            className="size-4 animate-spin"
+                            aria-hidden="true"
+                        />
                     ) : null}
                     {isPending
                         ? isRetry
@@ -125,6 +129,7 @@ export function SupplierOrdersListExportPreview({
                           : "确认导出"}
                 </Button>
                 <Button
+                    id="supplier-orders-list-export-cancel"
                     type="button"
                     size="sm"
                     variant="ghost"

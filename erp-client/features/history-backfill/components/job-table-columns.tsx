@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { HistoryBackfillListItem } from "@/features/history-backfill/types"
 import {
     ENVIRONMENT_LABEL,
@@ -23,6 +24,7 @@ export function buildJobListColumns(
             header: "任务号",
             cell: ({ row }) => (
                 <Button
+                    id={`operations-history-backfill-list-row-${toAutomationIdSegment(row.original.id)}-open`}
                     variant="link"
                     className="h-auto p-0 font-mono text-sm"
                     onClick={() => onOpenJob(row.original.id)}
@@ -95,7 +97,9 @@ export function buildJobListColumns(
             id: "progress",
             header: "进度",
             cell: ({ row }) => (
-                <span className="num text-sm">{row.original.progressLabel}</span>
+                <span className="num text-sm">
+                    {row.original.progressLabel}
+                </span>
             ),
         },
         {
@@ -120,7 +124,9 @@ export function buildJobListColumns(
             id: "cost",
             header: "成本覆盖",
             cell: ({ row }) => (
-                <span className="text-xs">{row.original.costCoverageLabel}</span>
+                <span className="text-xs">
+                    {row.original.costCoverageLabel}
+                </span>
             ),
         },
         {
@@ -128,6 +134,7 @@ export function buildJobListColumns(
             header: "操作",
             cell: ({ row }) => (
                 <Button
+                    id={`operations-history-backfill-list-row-${toAutomationIdSegment(row.original.id)}-open-action`}
                     type="button"
                     size="sm"
                     variant="outline"

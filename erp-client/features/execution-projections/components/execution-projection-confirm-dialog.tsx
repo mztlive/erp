@@ -42,6 +42,7 @@ export function ExecutionProjectionConfirmDialog({
 }) {
     return (
         <FormalActionConfirmDialog
+            id="execution-projections-confirm"
             open={pendingAction != null}
             onOpenChange={(open) => {
                 if (!open) onOpenChange(false)

@@ -88,7 +88,10 @@ export function ReviseOfferingDialog({
 
     return (
         <Dialog open onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-5xl">
+            <DialogContent
+                closeButtonId="supplier-offerings-dialog-revise-close"
+                className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-5xl"
+            >
                 <DialogHeader>
                     <DialogTitle>修订供给条款</DialogTitle>
                     <DialogDescription>
@@ -120,22 +123,35 @@ export function ReviseOfferingDialog({
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <form.AppField name="dropshipPrice">
                                         {(field) => (
-                                            <field.TextField label="一件代发供给价（含税）" required />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-dropship-price"
+                                                label="一件代发供给价（含税）"
+                                                required
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="bulkPrice">
                                         {(field) => (
-                                            <field.TextField label="集采供给价（含税）" required />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-bulk-price"
+                                                label="集采供给价（含税）"
+                                                required
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="minimumQuantity">
                                         {(field) => (
-                                            <field.TextField label="集采起订量" required />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-minimum-quantity"
+                                                label="集采起订量"
+                                                required
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="inputTaxPercentage">
                                         {(field) => (
                                             <field.TextField
+                                                id="supplier-offerings-dialog-revise-input-tax-percentage"
                                                 label="进项税率（%）"
                                                 required
                                                 description="例如 13 表示 13%"
@@ -154,6 +170,7 @@ export function ReviseOfferingDialog({
                                         {(field) => (
                                             <div className="sm:col-span-2">
                                                 <field.TextField
+                                                    id="supplier-offerings-dialog-revise-supply-region"
                                                     label="可供区域"
                                                     required
                                                     description="多个区域使用逗号分隔"
@@ -163,12 +180,19 @@ export function ReviseOfferingDialog({
                                     </form.AppField>
                                     <form.AppField name="validFrom">
                                         {(field) => (
-                                            <field.DateField label="生效日期" required />
+                                            <field.DateField
+                                                id="supplier-offerings-dialog-revise-valid-from"
+                                                label="生效日期"
+                                                required
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="validTo">
                                         {(field) => (
-                                            <field.DateField label="失效日期" />
+                                            <field.DateField
+                                                id="supplier-offerings-dialog-revise-valid-to"
+                                                label="失效日期"
+                                            />
                                         )}
                                     </form.AppField>
                                 </div>
@@ -183,17 +207,26 @@ export function ReviseOfferingDialog({
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <form.AppField name="dropshipExpress">
                                         {(field) => (
-                                            <field.TextField label="一件代发快递说明" />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-dropship-express"
+                                                label="一件代发快递说明"
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="freightAmount">
                                         {(field) => (
-                                            <field.TextField label="运费" />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-freight-amount"
+                                                label="运费"
+                                            />
                                         )}
                                     </form.AppField>
                                     <form.AppField name="serviceFeeAmount">
                                         {(field) => (
-                                            <field.TextField label="服务费" />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-service-fee-amount"
+                                                label="服务费"
+                                            />
                                         )}
                                     </form.AppField>
                                 </div>
@@ -207,6 +240,7 @@ export function ReviseOfferingDialog({
                                     <form.AppField name="status">
                                         {(field) => (
                                             <field.SelectField
+                                                id="supplier-offerings-dialog-revise-status"
                                                 label="供给关系状态"
                                                 required
                                                 options={Object.entries(
@@ -221,7 +255,11 @@ export function ReviseOfferingDialog({
                                     </form.AppField>
                                     <form.AppField name="changeReason">
                                         {(field) => (
-                                            <field.TextField label="变更原因" required />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-revise-change-reason"
+                                                label="变更原因"
+                                                required
+                                            />
                                         )}
                                     </form.AppField>
                                 </div>
@@ -232,6 +270,7 @@ export function ReviseOfferingDialog({
                         <DialogClose
                             render={
                                 <Button
+                                    id="supplier-offerings-dialog-revise-cancel"
                                     type="button"
                                     variant="outline"
                                     disabled={mutation.isPending}
@@ -242,6 +281,7 @@ export function ReviseOfferingDialog({
                         </DialogClose>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-offerings-dialog-revise-submit"
                                 label="保存新版本"
                                 disabled={mutation.isPending}
                             />

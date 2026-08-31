@@ -3,6 +3,7 @@
 import { FormalActionConfirmDialog } from "@/components/business"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
 import type { AfterSalesConfirmRequest } from "@/features/supplier-orders/hooks/use-supplier-order-center-actions"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function SupplierOrderCenterDialogs({
     order,
@@ -44,6 +45,7 @@ export function SupplierOrderCenterDialogs({
     return (
         <>
             <FormalActionConfirmDialog
+                id="supplier-order-center-dialog-replay"
                 open={replayOpen}
                 onOpenChange={onReplayOpenChange}
                 actionLabel="安全重发"
@@ -66,6 +68,7 @@ export function SupplierOrderCenterDialogs({
             />
 
             <FormalActionConfirmDialog
+                id="supplier-order-center-dialog-complete"
                 open={completeOpen}
                 onOpenChange={onCompleteOpenChange}
                 actionLabel="完成正式任务"
@@ -87,6 +90,11 @@ export function SupplierOrderCenterDialogs({
             />
 
             <FormalActionConfirmDialog
+                id={
+                    afterSalesRequest?.action
+                        ? `supplier-order-center-dialog-aftersales-${toAutomationIdSegment(afterSalesRequest.action)}`
+                        : "supplier-order-center-dialog-aftersales"
+                }
                 open={Boolean(afterSalesRequest)}
                 onOpenChange={(open) => {
                     if (!open) onAfterSalesRequestChange(null)

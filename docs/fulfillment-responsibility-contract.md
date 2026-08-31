@@ -19,13 +19,13 @@
 
 ## 2. 责任映射
 
-| 履约操作 | 责任事实来源 | 工作项责任角色 | 必需执行权限 |
-| --- | --- | --- | --- |
-| 采购入库 | 采购单冻结的目标仓库之入库经办人 | `warehouse_inbound_handler` | `purchase_receipt:list/detail/update/post` |
-| 仓库发货 | 发货单指定仓库之仓发经办人 | `warehouse_outbound_handler` | `delivery:list/detail/update/post` |
-| 供应商直发 | 采购单当前责任人 | `purchase_order_owner` | `delivery:list/detail/update/post` |
-| 电子交付 | 采购单当前责任人 | `purchase_order_owner` | `electronic_delivery:list/confirm` |
-| 线下服务交付 | 采购单当前责任人 | `purchase_order_owner` | `service_fulfillment:list/confirm` |
+| 履约操作     | 责任事实来源                     | 工作项责任角色               | 必需执行权限                               |
+| ------------ | -------------------------------- | ---------------------------- | ------------------------------------------ |
+| 采购入库     | 采购单冻结的目标仓库之入库经办人 | `warehouse_inbound_handler`  | `purchase_receipt:list/detail/update/post` |
+| 仓库发货     | 发货单指定仓库之仓发经办人       | `warehouse_outbound_handler` | `delivery:list/detail/update/post`         |
+| 供应商直发   | 采购单当前责任人                 | `purchase_order_owner`       | `delivery:list/detail/update/post`         |
+| 电子交付     | 采购单当前责任人                 | `purchase_order_owner`       | `electronic_delivery:list/confirm`         |
+| 线下服务交付 | 采购单当前责任人                 | `purchase_order_owner`       | `service_fulfillment:list/confirm`         |
 
 同一账号可以同时配置为同一仓库的入库经办人与仓发经办人。责任必须指定到具体有效账号，不得只指定角色或部门。
 
@@ -86,12 +86,12 @@
 
 工作项精确查询必须使用下列接口，不得先拉取分页列表后按 ID 筛选：
 
-| 工作项对象类型 | 查询接口 |
-| --- | --- |
-| `purchase_receipt` | `GET /admin/purchase-receipts/{id}` |
-| `delivery` | `GET /admin/deliveries/{id}` |
+| 工作项对象类型        | 查询接口                                |
+| --------------------- | --------------------------------------- |
+| `purchase_receipt`    | `GET /admin/purchase-receipts/{id}`     |
+| `delivery`            | `GET /admin/deliveries/{id}`            |
 | `electronic_delivery` | `GET /admin/electronic-deliveries/{id}` |
-| `service_fulfillment` | `GET /admin/service-fulfillments/{id}` |
+| `service_fulfillment` | `GET /admin/service-fulfillments/{id}`  |
 
 接口返回的对象 ID、对象类型或草稿状态与工作项冻结事实不一致时，W01 必须失败关闭，不得切换到同类型其他对象。
 

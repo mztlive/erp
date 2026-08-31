@@ -109,6 +109,8 @@ export type AllocationFactFormCardProps = {
     onSubmitClick: () => void
     paymentRecipient?: PaymentRecipient
     paymentRecipientReveal?: Omit<PaymentRecipientRevealProps, "recipient">
+    /** 工作台付款作业面已有标题，不再套「付款信息」区块头。 */
+    hideHeading?: boolean
 }
 
 /** 本次付款/进项发票记录卡：收款信息、记录表单与提交校验。 */
@@ -130,25 +132,32 @@ export function AllocationFactFormCard({
     onSubmitClick,
     paymentRecipient,
     paymentRecipientReveal,
+    hideHeading = false,
 }: AllocationFactFormCardProps) {
     return (
         <section
             className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             aria-label={track === "payment" ? "付款信息" : "本次进项发票记录"}
         >
-            <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">
-                    {track === "payment" ? "付款信息" : "本次进项发票记录"}
-                </h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                    {track === "payment"
-                        ? "银行回单为必填付款凭证，流水号仅用于辅助查找"
-                        : "未分配余额以提交后的系统结果为准"}
-                </p>
-            </div>
+            {hideHeading ? null : (
+                <div className="border-b border-border px-4 py-3">
+                    <h2 className="text-sm font-semibold">
+                        {track === "payment" ? "付款信息" : "本次进项发票记录"}
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {track === "payment"
+                            ? "银行回单为必填付款凭证，流水号仅用于辅助查找"
+                            : "未分配余额以提交后的系统结果为准"}
+                    </p>
+                </div>
+            )}
             {paymentRecipient && paymentRecipientReveal ? (
                 <div className="space-y-3 border-b border-border px-4 py-3">
-                    <PaymentRecipientHeading />
+                    <PaymentRecipientHeading
+                        payableAccountId={
+                            paymentRecipientReveal.payableAccountId
+                        }
+                    />
                     <PaymentRecipientFields
                         key={`${paymentRecipientReveal.workItemId}:${paymentRecipient.bankAccountId}:${paymentRecipient.version}`}
                         payableAccountId={
@@ -175,6 +184,7 @@ export function AllocationFactFormCard({
                             name="amount"
                             children={(field) => (
                                 <field.TextField
+                                    id="supplier-payables-allocation-form-amount"
                                     label="付款金额"
                                     required
                                     inputMode="decimal"
@@ -185,6 +195,7 @@ export function AllocationFactFormCard({
                             name="paidAt"
                             children={(field) => (
                                 <field.DateTimeField
+                                    id="supplier-payables-allocation-form-paid-at"
                                     label="实际付款时间"
                                     required
                                     clearable={false}
@@ -194,13 +205,17 @@ export function AllocationFactFormCard({
                         <paymentForm.AppField
                             name="bankReference"
                             children={(field) => (
-                                <field.TextField label="银行流水号（可选）" />
+                                <field.TextField
+                                    id="supplier-payables-allocation-form-bank-reference"
+                                    label="银行流水号（可选）"
+                                />
                             )}
                         />
                         <paymentForm.AppField
                             name="note"
                             children={(field) => (
                                 <field.TextareaField
+                                    id="supplier-payables-allocation-form-note"
                                     label="备注（可选）"
                                     rows={1}
                                     textareaClassName="min-h-control"
@@ -228,6 +243,7 @@ export function AllocationFactFormCard({
                                                 </span>
                                             </FieldLabel>
                                             <FileUpload
+                                                idPrefix="supplier-payables-allocation-form-bank-receipt"
                                                 className="w-full"
                                                 accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                                                 multiple={false}
@@ -278,38 +294,61 @@ export function AllocationFactFormCard({
                                 <invoiceForm.AppField
                                     name="invoiceCode"
                                     children={(field) => (
-                                        <field.TextField label="发票代码" />
+                                        <field.TextField
+                                            id="supplier-payables-allocation-form-invoice-code"
+                                            label="发票代码"
+                                        />
                                     )}
                                 />
                                 <invoiceForm.AppField
                                     name="invoiceNo"
                                     children={(field) => (
-                                        <field.TextField label="发票号码" required />
+                                        <field.TextField
+                                            id="supplier-payables-allocation-form-invoice-no"
+                                            label="发票号码"
+                                            required
+                                        />
                                     )}
                                 />
                                 <invoiceForm.AppField
                                     name="invoiceDate"
                                     children={(field) => (
-                                        <field.DateField label="开票日期" required />
+                                        <field.DateField
+                                            id="supplier-payables-allocation-form-invoice-date"
+                                            label="开票日期"
+                                            required
+                                        />
                                     )}
                                 />
                                 <invoiceForm.AppField
                                     name="grossAmount"
                                     children={(field) => (
-                                        <field.TextField label="含税金额" required />
+                                        <field.TextField
+                                            id="supplier-payables-allocation-form-gross-amount"
+                                            label="含税金额"
+                                            required
+                                        />
                                     )}
                                 />
                                 <div className="grid grid-cols-2 gap-2">
                                     <invoiceForm.AppField
                                         name="netAmount"
                                         children={(field) => (
-                                            <field.TextField label="不含税" required />
+                                            <field.TextField
+                                                id="supplier-payables-allocation-form-net-amount"
+                                                label="不含税"
+                                                required
+                                            />
                                         )}
                                     />
                                     <invoiceForm.AppField
                                         name="taxAmount"
                                         children={(field) => (
-                                            <field.TextField label="税额" required />
+                                            <field.TextField
+                                                id="supplier-payables-allocation-form-tax-amount"
+                                                label="税额"
+                                                required
+                                            />
                                         )}
                                     />
                                 </div>
@@ -358,6 +397,7 @@ export function AllocationFactFormCard({
                 <div className="flex items-center gap-2">
                     {onSaveDraft ? (
                         <Button
+                            id="supplier-payables-allocation-form-save-draft"
                             type="button"
                             variant="outline"
                             disabled={isSavingDraft || isSubmitting}
@@ -367,6 +407,7 @@ export function AllocationFactFormCard({
                         </Button>
                     ) : null}
                     <Button
+                        id="supplier-payables-allocation-form-submit"
                         type="button"
                         disabled={!canSubmit || isSubmitting}
                         onClick={onSubmitClick}

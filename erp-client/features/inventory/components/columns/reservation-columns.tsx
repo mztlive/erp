@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { StockReservationRow } from "@/features/inventory/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
     return [
@@ -94,6 +95,7 @@ export function buildReservationColumns(): ColumnDef<StockReservationRow>[] {
                 <div className="flex justify-end gap-1">
                     {row.original.fulfillmentHref ? (
                         <Button
+                            id={`inventory-ledger-reservation-row-${toAutomationIdSegment(row.original.reservationId)}-fulfillment`}
                             type="button"
                             variant="outline"
                             size="xs"

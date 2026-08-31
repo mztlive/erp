@@ -12,6 +12,8 @@ export function IntegrationItemProgress({
     onBack,
     onProcess,
     onProcessNext,
+    id,
+    idPrefix,
 }: {
     item: IntegrationResolutionItemView
     positionIndex: number
@@ -22,9 +24,13 @@ export function IntegrationItemProgress({
     onBack: () => void
     onProcess: () => void
     onProcessNext: () => void
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <SequentialProcessBar
+            id={id}
+            idPrefix={idPrefix ?? "integration-item-progress"}
             current={positionIndex}
             total={positionTotal}
             responsibilityStatus={responsibilityStatus}

@@ -61,10 +61,10 @@ export function useJobListFilters(
 
     const hasStructuredFilters = Boolean(
         mallId ||
-            environment ||
-            processingStatus ||
-            reportReviewStatus ||
-            basis,
+        environment ||
+        processingStatus ||
+        reportReviewStatus ||
+        basis,
     )
 
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -203,9 +203,7 @@ export function useJobListFilters(
                 return
             }
             if (
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"]',
-                )
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
             ) {
                 return
             }

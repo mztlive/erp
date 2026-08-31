@@ -59,6 +59,7 @@ export function SupplierAccountsHeader({
                     actions={[
                         {
                             actionKey: "refresh",
+                            id: "supplier-payables-header-refresh",
                             label: "刷新",
                             icon: RefreshCwIcon,
                             variant: "ghost",
@@ -68,6 +69,7 @@ export function SupplierAccountsHeader({
                         },
                         {
                             actionKey: "register-invoice",
+                            id: "supplier-payables-header-register-invoice",
                             label: "登记进项发票",
                             icon: FilePlus2Icon,
                             variant: "outline",
@@ -80,6 +82,7 @@ export function SupplierAccountsHeader({
                         },
                         {
                             actionKey: "register-payment",
+                            id: "supplier-payables-header-register-payment",
                             label: "登记付款",
                             icon: WalletCardsIcon,
                             mobileVisibility: "hide",
@@ -95,6 +98,7 @@ export function SupplierAccountsHeader({
                         },
                         {
                             actionKey: "settle",
+                            id: "supplier-payables-header-settle",
                             label: "去对账结算",
                             variant: "outline",
                             mobileVisibility: "hide",

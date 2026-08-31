@@ -61,7 +61,7 @@ export function CreateDraftDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-settlements-create-close">
                 <DialogHeader>
                     <DialogTitle>新建结算草稿</DialogTitle>
                     <DialogDescription>
@@ -79,8 +79,12 @@ export function CreateDraftDialog({
                         name="supplierId"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="supplierId">供应商<span className="text-destructive">*</span></Label>
+                                <Label htmlFor="supplier-settlements-create-supplier">
+                                    供应商
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <SupplierSearchCombobox
+                                    id="supplier-settlements-create-supplier"
                                     value={field.state.value || undefined}
                                     onValueChange={(id) =>
                                         field.handleChange(id ?? "")
@@ -94,8 +98,12 @@ export function CreateDraftDialog({
                         name="periodStart"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="periodStart">期间起<span className="text-destructive">*</span></Label>
+                                <Label htmlFor="supplier-settlements-create-period-start">
+                                    期间起
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <DatePicker
+                                    id="supplier-settlements-create-period-start"
                                     className="w-full"
                                     value={field.state.value || undefined}
                                     onValueChange={(next) =>
@@ -109,8 +117,12 @@ export function CreateDraftDialog({
                         name="periodEnd"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="periodEnd">期间止<span className="text-destructive">*</span></Label>
+                                <Label htmlFor="supplier-settlements-create-period-end">
+                                    期间止
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <DatePicker
+                                    id="supplier-settlements-create-period-end"
                                     className="w-full"
                                     value={field.state.value || undefined}
                                     onValueChange={(next) =>
@@ -122,6 +134,7 @@ export function CreateDraftDialog({
                     />
                     <DialogFooter>
                         <Button
+                            id="supplier-settlements-create-cancel"
                             type="button"
                             variant="ghost"
                             disabled={createMutation.isPending}
@@ -131,6 +144,7 @@ export function CreateDraftDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-settlements-create-confirm"
                                 label="确认创建草稿"
                                 disabled={createMutation.isPending}
                             />

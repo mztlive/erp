@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table"
 import type { ContractCenterView } from "@/features/contracts/types"
 import { formatAsOf } from "@/features/contracts/lib/format-as-of"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 关联销售单分区：追溯每张销售单使用的合同版本。 */
 export function ContractDetailSalesOrders({
@@ -88,11 +89,13 @@ export function ContractDetailSalesOrders({
                                     </TableCell>
                                     <TableCell data-align="end">
                                         <Button
+                                            id={`card-contracts-detail-sales-orders-row-${toAutomationIdSegment(so.salesOrderId)}-open`}
                                             type="button"
                                             size="xs"
                                             variant="outline"
                                             render={
                                                 <Link
+                                                    id={`card-contracts-detail-sales-orders-row-${toAutomationIdSegment(so.salesOrderId)}-open-link`}
                                                     href={`/sales/orders/${so.salesOrderId}`}
                                                 />
                                             }

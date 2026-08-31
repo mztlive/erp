@@ -127,10 +127,10 @@ export function useIntegrationPageUrl({
 
     const hasQueueFilters = Boolean(
         urlState.mode !== "all" ||
-            urlState.environment !== "production" ||
-            urlState.errorClass ||
-            urlState.owner !== "me" ||
-            urlState.q,
+        urlState.environment !== "production" ||
+        urlState.errorClass ||
+        urlState.owner !== "me" ||
+        urlState.q,
     )
 
     return {

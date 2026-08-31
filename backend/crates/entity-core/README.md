@@ -19,36 +19,37 @@
 ### 使用方式
 
 1. 在 `Cargo.toml` 中添加依赖：
-    ```toml
-    [dependencies]
-    entity-core = { path = "../entity-core" }
-    serde = { version = "1.0", features = ["derive"] }
-    chrono = "0.4"
-    ```
+
+   ```toml
+   [dependencies]
+   entity-core = { path = "../entity-core" }
+   serde = { version = "1.0", features = ["derive"] }
+   chrono = "0.4"
+   ```
 
 2. 使用基础模型：
-    ```rust
-    use entity_core::BaseModel;
-    use serde::{Serialize, Deserialize};
+   ```rust
+   use entity_core::BaseModel;
+   use serde::{Serialize, Deserialize};
 
-    #[derive(Debug, Serialize, Deserialize)]
-    pub struct User {
-        #[serde(flatten)]
-        pub base: BaseModel,
-        pub name: String,
-        pub email: String,
-    }
+   #[derive(Debug, Serialize, Deserialize)]
+   pub struct User {
+       #[serde(flatten)]
+       pub base: BaseModel,
+       pub name: String,
+       pub email: String,
+   }
 
-    impl User {
-        pub fn new(id: String, name: String, email: String) -> Self {
-            Self {
-                base: BaseModel::new(id),
-                name,
-                email,
-            }
-        }
-    }
-    ```
+   impl User {
+       pub fn new(id: String, name: String, email: String) -> Self {
+           Self {
+               base: BaseModel::new(id),
+               name,
+               email,
+           }
+       }
+   }
+   ```
 
 ## 贡献
 
@@ -56,4 +57,4 @@
 
 ## 许可证
 
-该项目使用 MIT 许可证。详情请参阅 LICENSE 文件。 
+该项目使用 MIT 许可证。详情请参阅 LICENSE 文件。

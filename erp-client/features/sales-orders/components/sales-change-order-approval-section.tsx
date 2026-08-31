@@ -157,7 +157,11 @@ export function SalesChangeOrderApprovalSection({
                 }
             />
             {canSubmit ? (
-                <Button type="button" onClick={() => setSubmitOpen(true)}>
+                <Button
+                    id="sales-orders-change-submit"
+                    type="button"
+                    onClick={() => setSubmitOpen(true)}
+                >
                     提交改单
                 </Button>
             ) : null}

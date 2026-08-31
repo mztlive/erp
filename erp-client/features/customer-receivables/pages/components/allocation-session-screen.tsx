@@ -65,7 +65,11 @@ export function AllocationSessionScreen({
                 title="本次核销无效"
                 description="本次核销已失效，请重新开始。"
                 action={
-                    <Button type="button" onClick={onBackToList}>
+                    <Button
+                        id="customer-receivables-session-invalid-back"
+                        type="button"
+                        onClick={onBackToList}
+                    >
                         {hideSessionClose ? "重试" : "返回列表"}
                     </Button>
                 }

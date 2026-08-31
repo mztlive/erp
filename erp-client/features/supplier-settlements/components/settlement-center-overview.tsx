@@ -2,12 +2,7 @@
 
 import { surfaceInsetClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 import { cn } from "@/lib/utils"
@@ -29,9 +24,7 @@ function SettlementCenterOverview({
                 <CardTitle className="text-base">概览</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 pt-4 text-sm">
-                <p>
-                    供应商：{st.supplierName}（记录时，不受后续更名影响）
-                </p>
+                <p>供应商：{st.supplierName}（记录时，不受后续更名影响）</p>
                 <p className="num">
                     期间：{st.periodStart} ~ {st.periodEnd}
                 </p>
@@ -46,6 +39,7 @@ function SettlementCenterOverview({
                 </p>
                 <div className="flex flex-wrap gap-2 pt-2">
                     <Button
+                        id="supplier-settlements-center-overview-open-differences"
                         type="button"
                         size="sm"
                         variant="secondary"
@@ -54,6 +48,7 @@ function SettlementCenterOverview({
                         打开差异处理
                     </Button>
                     <Button
+                        id="supplier-settlements-center-overview-open-items"
                         type="button"
                         size="sm"
                         variant="outline"

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { decimalProgressPercent } from "@/features/supplier-payables/lib/decimal-progress"
 import type { PayableActivityItem } from "@/features/supplier-payables/lib/payable-preview-activity"
 import type { PayableDetailView } from "@/features/supplier-payables/types"
@@ -193,6 +194,7 @@ function ActivityRow({ item }: { item: PayableActivityItem }) {
         return (
             <li>
                 <Link
+                    id={`supplier-payables-preview-activity-${toAutomationIdSegment(item.id)}-open`}
                     href={item.href}
                     className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-muted"
                 >

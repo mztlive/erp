@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 import type {
     ColumnDef,
     PaginationState,
@@ -42,6 +38,7 @@ import {
     type ProfitLossRow,
     type ProfitLossView,
 } from "@/features/actual-profit-loss/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -175,6 +172,7 @@ export function ProfitLossRowsPanel({
                                         <SearchIcon aria-hidden="true" />
                                     </InputGroupAddon>
                                     <InputGroupInput
+                                        id="actual-profit-loss-filter-search"
                                         ref={searchInputRef}
                                         value={searchInput}
                                         onChange={(event) =>
@@ -185,7 +183,6 @@ export function ProfitLossRowsPanel({
                                         placeholder="搜索销售单号、客户（/）"
                                         aria-label="搜索销售单或客户"
                                     />
-                                    
                                 </InputGroup>
                             }
                             filters={
@@ -201,6 +198,7 @@ export function ProfitLossRowsPanel({
                                             return (
                                                 <Button
                                                     key={option.value}
+                                                    id={`actual-profit-loss-coverage-${toAutomationIdSegment(option.value)}`}
                                                     type="button"
                                                     variant={
                                                         active
@@ -225,6 +223,7 @@ export function ProfitLossRowsPanel({
                                         })}
                                     </div>
                                     <Button
+                                        id="actual-profit-loss-filter-more-trigger"
                                         type="button"
                                         variant="outline"
                                         aria-expanded={panelOpen}
@@ -239,9 +238,7 @@ export function ProfitLossRowsPanel({
                                         />
                                         更多筛选
                                         {hasStructuredFilters ? (
-                                            <Badge variant="info">
-                                                已启用
-                                            </Badge>
+                                            <Badge variant="info">已启用</Badge>
                                         ) : null}
                                         <ChevronDownIcon
                                             data-icon="inline-end"
@@ -266,6 +263,7 @@ export function ProfitLossRowsPanel({
                                                 {appliedChips.map((chip) => (
                                                     <FilterChip
                                                         key={chip.key}
+                                                        id={`actual-profit-loss-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                                         label={chip.label}
                                                         clearLabel={`移除${chip.label}`}
                                                         onClear={() =>
@@ -276,6 +274,7 @@ export function ProfitLossRowsPanel({
                                                     />
                                                 ))}
                                                 <Button
+                                                    id="actual-profit-loss-filter-clear-all"
                                                     type="button"
                                                     variant="ghost"
                                                     size="xs"
@@ -297,6 +296,7 @@ export function ProfitLossRowsPanel({
                                                             福利场景
                                                         </span>
                                                         <OptionCombobox
+                                                            id="actual-profit-loss-filter-benefit-scenario"
                                                             className="w-full"
                                                             value={
                                                                 benefitScenarioDraft ||
@@ -322,6 +322,7 @@ export function ProfitLossRowsPanel({
                                                             履约方式
                                                         </span>
                                                         <MultiOptionCombobox
+                                                            id="actual-profit-loss-filter-fulfillment-modes"
                                                             className="w-full"
                                                             value={
                                                                 fulfillmentModesDraft
@@ -341,6 +342,7 @@ export function ProfitLossRowsPanel({
                                                             成本类型
                                                         </span>
                                                         <MultiOptionCombobox
+                                                            id="actual-profit-loss-filter-cost-types"
                                                             className="w-full"
                                                             value={
                                                                 costTypesDraft
@@ -362,6 +364,7 @@ export function ProfitLossRowsPanel({
                                                     </p>
                                                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                                         <Button
+                                                            id="actual-profit-loss-filter-reset"
                                                             type="button"
                                                             variant="ghost"
                                                             onClick={
@@ -370,7 +373,10 @@ export function ProfitLossRowsPanel({
                                                         >
                                                             重置更多条件
                                                         </Button>
-                                                        <Button type="submit">
+                                                        <Button
+                                                            id="actual-profit-loss-filter-apply"
+                                                            type="submit"
+                                                        >
                                                             <SearchIcon
                                                                 data-icon="inline-start"
                                                                 aria-hidden="true"
@@ -398,7 +404,11 @@ export function ProfitLossRowsPanel({
                                     DIMENSION_LABEL,
                                 ) as ProfitLossDimension[]
                             ).map((key) => (
-                                <TabsTrigger key={key} value={key}>
+                                <TabsTrigger
+                                    key={key}
+                                    id={`actual-profit-loss-dimension-${toAutomationIdSegment(key)}`}
+                                    value={key}
+                                >
                                     {DIMENSION_LABEL[key]}
                                 </TabsTrigger>
                             ))}
@@ -412,7 +422,17 @@ export function ProfitLossRowsPanel({
                         <BusinessFailureState
                             title="盈亏数据加载失败"
                             error={error}
-                            onRetry={onRetry}
+                            action={
+                                <Button
+                                    id="actual-profit-loss-table-retry"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={onRetry}
+                                >
+                                    重试
+                                </Button>
+                            }
                         />
                     </div>
                 ) : !data ? (
@@ -436,6 +456,7 @@ export function ProfitLossRowsPanel({
                         action={
                             hasFilters ? (
                                 <Button
+                                    id="actual-profit-loss-empty-clear-filters"
                                     type="button"
                                     variant="secondary"
                                     size="sm"
@@ -449,6 +470,7 @@ export function ProfitLossRowsPanel({
                     />
                 ) : (
                     <DataTable
+                        id="actual-profit-loss-table"
                         data={pageRows}
                         columns={columns}
                         getRowId={(row) => row.rowId}

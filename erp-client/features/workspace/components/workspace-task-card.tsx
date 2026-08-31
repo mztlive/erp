@@ -11,6 +11,7 @@ import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 队列只保留长单号的可辨识首尾，完整单号仍在右侧任务详情展示。 */
 function compactDocumentNumber(number: string): string {
@@ -59,7 +60,7 @@ export function WorkspaceTaskCard({
     return (
         <button
             type="button"
-            id={`workspace-task-${item.workItemId}`}
+            id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
             data-testid={
                 item.workItemType === "PROCUREMENT_ORDER_CREATION"
                     ? `work-item-procurement-order-creation-${item.workItemId}`

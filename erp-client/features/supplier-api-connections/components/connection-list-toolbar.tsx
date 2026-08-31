@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -38,6 +34,7 @@ import {
     type ConnectionEnvironment,
     type HealthResult,
 } from "@/features/supplier-api-connections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -155,6 +152,7 @@ export function ConnectionListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="supplier-api-connections-toolbar-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -163,7 +161,6 @@ export function ConnectionListToolbar({
                             placeholder="连接代码、供应商名称"
                             aria-label="搜索连接"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
@@ -178,6 +175,7 @@ export function ConnectionListToolbar({
                                 return (
                                     <Button
                                         key={option.value}
+                                        id={`supplier-api-connections-toolbar-environment-${toAutomationIdSegment(option.value)}`}
                                         type="button"
                                         variant={active ? "secondary" : "ghost"}
                                         className={
@@ -196,6 +194,7 @@ export function ConnectionListToolbar({
                             })}
                         </div>
                         <Button
+                            id="supplier-api-connections-toolbar-more-filters"
                             type="button"
                             variant="outline"
                             aria-expanded={filterPanelOpen}
@@ -235,6 +234,7 @@ export function ConnectionListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`supplier-api-connections-toolbar-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -243,6 +243,7 @@ export function ConnectionListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="supplier-api-connections-toolbar-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -270,6 +271,7 @@ export function ConnectionListToolbar({
                                                 供应商
                                             </span>
                                             <SupplierSearchCombobox
+                                                id="supplier-api-connections-toolbar-supplier"
                                                 value={
                                                     supplierIdDraft ?? undefined
                                                 }
@@ -289,10 +291,10 @@ export function ConnectionListToolbar({
                                                 能力
                                             </span>
                                             <OptionCombobox
+                                                id="supplier-api-connections-toolbar-capability"
                                                 className="w-full"
                                                 value={
-                                                    capabilityDraft ||
-                                                    undefined
+                                                    capabilityDraft || undefined
                                                 }
                                                 onValueChange={(value) =>
                                                     onCapabilityDraftChange(
@@ -311,6 +313,7 @@ export function ConnectionListToolbar({
                                                 健康结果
                                             </span>
                                             <MultiOptionCombobox
+                                                id="supplier-api-connections-toolbar-health"
                                                 className="w-full"
                                                 value={healthDraft}
                                                 onValueChange={
@@ -326,6 +329,7 @@ export function ConnectionListToolbar({
                                                 目录更新时间
                                             </span>
                                             <MultiOptionCombobox
+                                                id="supplier-api-connections-toolbar-catalog"
                                                 className="w-full"
                                                 value={catalogFreshnessDraft}
                                                 onValueChange={
@@ -345,13 +349,17 @@ export function ConnectionListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="supplier-api-connections-toolbar-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={onResetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="supplier-api-connections-toolbar-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

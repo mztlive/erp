@@ -1,6 +1,7 @@
 "use client"
 
 import { MetricFilterItem, MetricStrip } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     SupplierOrdersUrlState,
     SupplierOrdersUrlUpdater,
@@ -30,6 +31,7 @@ export function SupplierOrdersListMetricStrip({
             {metrics.map((m) => (
                 <MetricFilterItem
                     key={m.key}
+                    id={`supplier-orders-list-metric-${toAutomationIdSegment(m.key)}`}
                     label={m.label}
                     value={m.value}
                     title={

@@ -57,6 +57,7 @@ export function AllocationResultView({
                 <>
                     {result.status === "unknown" && hasSubmitKey ? (
                         <Button
+                            id="supplier-payables-allocation-result-resolve"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -69,6 +70,7 @@ export function AllocationResultView({
                     result.existingDocumentId &&
                     onGoToInvoiceView ? (
                         <Button
+                            id="supplier-payables-allocation-result-go-invoice"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -78,6 +80,7 @@ export function AllocationResultView({
                         </Button>
                     ) : null}
                     <Button
+                        id="supplier-payables-allocation-result-close"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -87,6 +90,7 @@ export function AllocationResultView({
                     </Button>
                     {showReturnToSource ? (
                         <Button
+                            id="supplier-payables-allocation-result-return-source"
                             type="button"
                             size="sm"
                             render={

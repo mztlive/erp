@@ -1,6 +1,5 @@
 "use client"
 
-import { useId } from "react"
 import {
     ArrowDownIcon,
     ArrowUpIcon,
@@ -24,12 +23,15 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 function DataTableViewOptions<TData>({
     table,
+    idPrefix,
 }: {
     table: TanStackTable<TData>
+    idPrefix?: string
 }) {
     const columns = table
         .getAllLeafColumns()
@@ -45,6 +47,11 @@ function DataTableViewOptions<TData>({
             <PopoverTrigger
                 render={
                     <Button
+                        id={
+                            idPrefix
+                                ? `${idPrefix}-column-visibility-trigger`
+                                : undefined
+                        }
                         type="button"
                         variant="ghost"
                         className="max-sm:hidden"
@@ -75,6 +82,11 @@ function DataTableViewOptions<TData>({
                                 >
                                     <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
                                         <Checkbox
+                                            id={
+                                                idPrefix
+                                                    ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-visibility`
+                                                    : undefined
+                                            }
                                             checked={column.getIsVisible()}
                                             disabled={
                                                 column.getIsVisible() &&
@@ -96,6 +108,11 @@ function DataTableViewOptions<TData>({
                                         className="flex"
                                     >
                                         <Button
+                                            id={
+                                                idPrefix
+                                                    ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-move-up`
+                                                    : undefined
+                                            }
                                             type="button"
                                             variant="ghost"
                                             size="icon-xs"
@@ -113,6 +130,11 @@ function DataTableViewOptions<TData>({
                                             <ArrowUpIcon aria-hidden="true" />
                                         </Button>
                                         <Button
+                                            id={
+                                                idPrefix
+                                                    ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-move-down`
+                                                    : undefined
+                                            }
                                             type="button"
                                             variant="ghost"
                                             size="icon-xs"
@@ -134,6 +156,11 @@ function DataTableViewOptions<TData>({
                                         {column.getCanPin() ? (
                                             <>
                                                 <Button
+                                                    id={
+                                                        idPrefix
+                                                            ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-pin-left`
+                                                            : undefined
+                                                    }
                                                     type="button"
                                                     variant={
                                                         pinned === "left"
@@ -152,6 +179,11 @@ function DataTableViewOptions<TData>({
                                                     <PanelLeftIcon aria-hidden="true" />
                                                 </Button>
                                                 <Button
+                                                    id={
+                                                        idPrefix
+                                                            ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-pin-right`
+                                                            : undefined
+                                                    }
                                                     type="button"
                                                     variant={
                                                         pinned === "right"
@@ -171,6 +203,11 @@ function DataTableViewOptions<TData>({
                                                 </Button>
                                                 {pinned ? (
                                                     <Button
+                                                        id={
+                                                            idPrefix
+                                                                ? `${idPrefix}-column-${toAutomationIdSegment(column.id)}-pin-clear`
+                                                                : undefined
+                                                        }
                                                         type="button"
                                                         variant="ghost"
                                                         size="icon-xs"
@@ -224,12 +261,16 @@ function DataTablePagination<TData>({
     table,
     pageSizeOptions,
     layout = "flush",
+    idPrefix,
 }: {
     table: TanStackTable<TData>
     pageSizeOptions: readonly number[]
     layout?: DataTableLayout
+    idPrefix?: string
 }) {
-    const pageSizeId = useId()
+    const pageSizeId = idPrefix
+        ? `${idPrefix}-page-size`
+        : "data-table-page-size"
     const { pageIndex, pageSize } = table.getState().pagination
     const pageCount = table.getPageCount()
     const rowCount = table.getRowCount()
@@ -247,10 +288,7 @@ function DataTablePagination<TData>({
             )}
         >
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
-                <label
-                    htmlFor={pageSizeId}
-                    className="flex items-center gap-2"
-                >
+                <label htmlFor={pageSizeId} className="flex items-center gap-2">
                     <OptionCombobox
                         id={pageSizeId}
                         size="sm"
@@ -299,6 +337,7 @@ function DataTablePagination<TData>({
                         className="flex items-center gap-1"
                     >
                         <Button
+                            id={idPrefix ? `${idPrefix}-first-page` : undefined}
                             type="button"
                             variant="outline"
                             size="icon-sm"
@@ -309,6 +348,7 @@ function DataTablePagination<TData>({
                             <ChevronsLeftIcon aria-hidden="true" />
                         </Button>
                         <Button
+                            id={idPrefix ? `${idPrefix}-prev-page` : undefined}
                             type="button"
                             variant="outline"
                             size="icon-sm"
@@ -319,6 +359,7 @@ function DataTablePagination<TData>({
                             <ChevronLeftIcon aria-hidden="true" />
                         </Button>
                         <Button
+                            id={idPrefix ? `${idPrefix}-next-page` : undefined}
                             type="button"
                             variant="outline"
                             size="icon-sm"
@@ -329,6 +370,7 @@ function DataTablePagination<TData>({
                             <ChevronRightIcon aria-hidden="true" />
                         </Button>
                         <Button
+                            id={idPrefix ? `${idPrefix}-last-page` : undefined}
                             type="button"
                             variant="outline"
                             size="icon-sm"

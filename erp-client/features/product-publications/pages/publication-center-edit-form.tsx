@@ -3,10 +3,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-    DocumentSection,
-    OptionCombobox,
-} from "@/components/business"
+import { DocumentSection, OptionCombobox } from "@/components/business"
 import type { SessionEdit } from "@/features/product-publications/lib/publish-form"
 import {
     MEDIA_ROLE_LABEL,
@@ -16,6 +13,8 @@ import type {
     ProductPublicationView,
     SaleStatus,
 } from "@/features/product-publications/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import type { PublicationCenterFormApi } from "./publication-center-session"
 
 export function PublicationCenterEditForm({
@@ -54,44 +53,76 @@ export function PublicationCenterEditForm({
                     </AlertDescription>
                 </Alert>
                 <form.AppField name="name">
-                    {(field) => <field.TextField label="展示名称" required />}
+                    {(field) => (
+                        <field.TextField
+                            id="publication-center-edit-name"
+                            label="展示名称"
+                            required
+                        />
+                    )}
                 </form.AppField>
                 <form.AppField name="specification">
-                    {(field) => <field.TextField label="规格" required />}
+                    {(field) => (
+                        <field.TextField
+                            id="publication-center-edit-specification"
+                            label="规格"
+                            required
+                        />
+                    )}
                 </form.AppField>
                 <form.AppField name="salesDescription">
                     {(field) => (
-                        <field.TextareaField label="商城销售说明" rows={3} required />
+                        <field.TextareaField
+                            id="publication-center-edit-sales-description"
+                            label="商城销售说明"
+                            rows={3}
+                            required
+                        />
                     )}
                 </form.AppField>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <form.AppField name="salesPriceGross">
                         {(field) => (
-                            <field.TextField label="含税销售价" required />
+                            <field.TextField
+                                id="publication-center-edit-sales-price-gross"
+                                label="含税销售价"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="salesTaxRate">
-                        {(field) => <field.TextField label="销项税率" required />}
+                        {(field) => (
+                            <field.TextField
+                                id="publication-center-edit-sales-tax-rate"
+                                label="销项税率"
+                                required
+                            />
+                        )}
                     </form.AppField>
                     <form.AppField name="minimumPurchaseQuantity">
                         {(field) => (
-                            <field.TextField label="最小购买量（运营确认）" required />
+                            <field.TextField
+                                id="publication-center-edit-minimum-purchase-quantity"
+                                label="最小购买量（运营确认）"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="saleStatus">
                         {(field) => (
                             <div className="space-y-1.5">
-                                <Label htmlFor="saleStatus">
+                                <Label htmlFor="publication-center-edit-sale-status">
                                     商城销售状态
                                     <span className="text-destructive">*</span>
                                 </Label>
                                 <OptionCombobox
-                                    id="saleStatus"
+                                    id="publication-center-edit-sale-status"
                                     value={field.state.value}
                                     onValueChange={(v) =>
                                         field.handleChange(
                                             (v ??
-                                                field.state.value) as SaleStatus,
+                                                field.state
+                                                    .value) as SaleStatus,
                                         )
                                     }
                                     options={[
@@ -126,40 +157,72 @@ export function PublicationCenterEditForm({
                 <div className="grid gap-3 sm:grid-cols-2">
                     <form.AppField name="skuRevisionId">
                         {(field) => (
-                            <field.TextField label="SKU 修订编号" required />
+                            <field.TextField
+                                id="publication-center-edit-sku-revision-id"
+                                label="SKU 修订编号"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="categoryId">
                         {(field) => (
-                            <field.TextField label="商城类目编号" required />
+                            <field.TextField
+                                id="publication-center-edit-category-id"
+                                label="商城类目编号"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="supplierOfferingRevisionId">
                         {(field) => (
-                            <field.TextField label="唯一固定供给修订编号" required />
+                            <field.TextField
+                                id="publication-center-edit-supplier-offering-revision-id"
+                                label="唯一固定供给修订编号"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="baseUnitCode">
                         {(field) => (
-                            <field.TextField label="基础单位代码" required />
+                            <field.TextField
+                                id="publication-center-edit-base-unit-code"
+                                label="基础单位代码"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="salesRegionText">
                         {(field) => (
-                            <field.TextField label="可销售区域（顿号/逗号分隔）" required />
+                            <field.TextField
+                                id="publication-center-edit-sales-region-text"
+                                label="可销售区域（顿号/逗号分隔）"
+                                required
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="productCapabilitiesText">
                         {(field) => (
-                            <field.TextField label="商品能力（顿号/逗号分隔）" />
+                            <field.TextField
+                                id="publication-center-edit-product-capabilities-text"
+                                label="商品能力（顿号/逗号分隔）"
+                            />
                         )}
                     </form.AppField>
                     <form.AppField name="validFrom">
-                        {(field) => <field.TextField label="生效时间" required />}
+                        {(field) => (
+                            <field.TextField
+                                id="publication-center-edit-valid-from"
+                                label="生效时间"
+                                required
+                            />
+                        )}
                     </form.AppField>
                     <form.AppField name="validTo">
                         {(field) => (
-                            <field.TextField label="失效时间（可空）" />
+                            <field.TextField
+                                id="publication-center-edit-valid-to"
+                                label="失效时间（可空）"
+                            />
                         )}
                     </form.AppField>
                 </div>
@@ -174,11 +237,13 @@ export function PublicationCenterEditForm({
                                 {MEDIA_ROLE_LABEL[media.mediaRole]} · 顺序{" "}
                                 {media.sortNo}
                             </div>
-                            <form.AppField
-                                name={`media[${index}].altText`}
-                            >
+                            <form.AppField name={`media[${index}].altText`}>
                                 {(field) => (
-                                    <field.TextField label="图片说明" required />
+                                    <field.TextField
+                                        id={`publication-center-edit-media-${toAutomationIdSegment(media.fileAssetId)}-alt-text`}
+                                        label="图片说明"
+                                        required
+                                    />
                                 )}
                             </form.AppField>
                         </div>
@@ -192,11 +257,13 @@ export function PublicationCenterEditForm({
                 <div className="flex flex-wrap gap-2">
                     <form.AppForm>
                         <form.SubmitButton
+                            id="publication-center-edit-submit"
                             label="核对并提交发布"
                             disabled={publishBlocked}
                         />
                     </form.AppForm>
                     <Button
+                        id="publication-center-edit-discard"
                         type="button"
                         variant="outline"
                         onClick={onDiscard}

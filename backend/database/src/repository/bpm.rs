@@ -189,6 +189,13 @@ pub struct ApprovalInstanceSummary {
     pub updated_at: u64,
 }
 
+/// 最高定义业务版本查询使用的最小持久化投影。
+#[derive(Debug, Deserialize)]
+struct LatestDefinitionVersionProjection {
+    /// 已持久化的定义业务版本。
+    definition_version: u32,
+}
+
 /// CAS 替换写入所需的集合、过滤条件与待写入实体。
 struct CasReplaceSpec<'a, T> {
     collection: &'a str,
@@ -365,6 +372,38 @@ impl<'a> BpmWorkflowRepository<'a> {
         self.definitions()
             .find_one(published_kind_filter(process_kind), executor)
             .await
+    }
+
+    /// 读取同一流程种类未删除定义的最高持久化业务版本。
+    ///
+    /// # 参数
+    /// * `process_kind` - 需要读取版本事实的流程种类
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按业务版本倒序命中的首个版本；没有历史定义时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或投影反序列化失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 查询只投影版本字段并限制一条，不分配或递增版本，且必须保留软删除过滤。
+    pub async fn latest_definition_version(
+        &self,
+        process_kind: ProcessKind,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let options = latest_definition_version_options();
+        let rows = mongo_ops::find_many(
+            &self
+                .db
+                .collection::<LatestDefinitionVersionProjection>(DEFINITIONS),
+            definition_versions_filter(process_kind),
+            options,
+            executor,
+        )
+        .await?;
+        Ok(latest_definition_version_from_rows(rows))
     }
 
     /// 列出同一流程种类的历史定义版本，按业务版本倒序且有上限。
@@ -1203,6 +1242,44 @@ fn definition_versions_sort() -> Document {
     doc! { "definition_version": -1 }
 }
 
+/// 构建最高定义业务版本查询的限制与最小投影。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回按业务版本降序、限制一条且只读取版本字段的 MongoDB 查询选项。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键业务约束
+/// 过滤条件由调用点单独提供；本选项不得读取完整定义或分配下一版本。
+fn latest_definition_version_options() -> FindOptions {
+    FindOptions::builder()
+        .sort(definition_versions_sort())
+        .limit(1)
+        .projection(doc! { "definition_version": 1, "_id": 0 })
+        .build()
+}
+
+/// 从已按最高版本查询返回的投影行中读取首个业务版本。
+///
+/// # 参数
+/// * `rows` - MongoDB 按查询选项返回的零或一条版本投影
+///
+/// # 返回
+/// 有结果时返回首条业务版本；无历史定义时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键业务约束
+/// 不在内存重新排序或选择最大值，保持 Repository 查询契约单一。
+fn latest_definition_version_from_rows(rows: Vec<LatestDefinitionVersionProjection>) -> Option<u32> {
+    rows.into_iter().next().map(|row| row.definition_version)
+}
+
 /// 将定义历史请求页大小夹紧到 `[1, MAX_DEFINITION_VERSIONS]`。
 ///
 /// # 参数
@@ -1755,14 +1832,16 @@ mod tests {
         approval_task_cas_filter, assign_document_no_filter, cancellable_execution_end_filter,
         cancellation_subject_filter, cancelled_instance_projection, clamp_limit,
         classify_assign_document_no_miss, classify_cas_miss, current_execution_filter,
-        definition_child_filter, definition_graph_transition_limit, execution_end_filter,
-        execution_history_filter, execution_history_limit, instance_advance_filter, instance_insert_document,
-        instance_list_filter_doc, instance_list_scope_empty, instance_list_sort, instance_summary_projection,
-        instance_text_query_or, latest_subject_filter, merge_documents, non_terminal_subject_filter,
-        previous_version, receipt_key_filter, require_cas_applied, ApprovalInstanceListCursor,
-        ApprovalInstanceListFilter, ApprovalInstanceListProjection, ApprovalInstanceListView,
-        ApprovalInstanceTextQuery, AssignDocumentNoOutcome, CasWriteOutcome, MAX_DEFINITION_GRAPH_DOCS,
-        MAX_EXECUTION_HISTORY, MAX_INSTANCE_PAGE,
+        definition_child_filter, definition_graph_transition_limit, definition_versions_filter,
+        execution_end_filter, execution_history_filter, execution_history_limit, instance_advance_filter,
+        instance_insert_document, instance_list_filter_doc, instance_list_scope_empty, instance_list_sort,
+        instance_summary_projection, instance_text_query_or, latest_definition_version_from_rows,
+        latest_definition_version_options, latest_subject_filter, merge_documents,
+        non_terminal_subject_filter, previous_version, receipt_key_filter, require_cas_applied,
+        ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
+        ApprovalInstanceListView, ApprovalInstanceTextQuery, AssignDocumentNoOutcome, CasWriteOutcome,
+        LatestDefinitionVersionProjection, MAX_DEFINITION_GRAPH_DOCS, MAX_EXECUTION_HISTORY,
+        MAX_INSTANCE_PAGE,
     };
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
@@ -1793,6 +1872,41 @@ mod tests {
         let mut base = BaseModel::new("doc-1".to_string());
         base.version = version;
         LockProbe { base, status_ok }
+    }
+
+    /// 验证最高定义版本查询保留未删除过滤、降序、单条限制和最小投影。
+    ///
+    /// 测试只断言构造出的过滤与选项，不连接 MongoDB；任一查询约束漂移时失败。
+    #[test]
+    fn latest_definition_version_query_is_minimal_and_bounded() {
+        assert_eq!(
+            definition_versions_filter(ProcessKind::SalesOrder),
+            doc! {
+                "process_kind": "sales_order",
+                "deleted_at": 0_i64,
+            }
+        );
+        let options = latest_definition_version_options();
+        assert_eq!(options.sort, Some(doc! { "definition_version": -1 }));
+        assert_eq!(options.limit, Some(1));
+        assert_eq!(
+            options.projection,
+            Some(doc! { "definition_version": 1, "_id": 0 })
+        );
+    }
+
+    /// 验证最高版本投影读取首条记录，并在没有历史定义时返回空边界。
+    ///
+    /// 测试覆盖命中与空历史两条纯映射路径，不执行数据库访问。
+    #[test]
+    fn latest_definition_version_projection_handles_hit_and_empty_history() {
+        assert_eq!(latest_definition_version_from_rows(Vec::new()), None);
+        assert_eq!(
+            latest_definition_version_from_rows(vec![LatestDefinitionVersionProjection {
+                definition_version: 7,
+            }]),
+            Some(7)
+        );
     }
 
     #[test]

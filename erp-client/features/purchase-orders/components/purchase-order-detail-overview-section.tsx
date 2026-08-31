@@ -47,6 +47,7 @@ export function PurchaseOrderDetailOverviewSection({
                     <DescriptionTerm>来源销售单</DescriptionTerm>
                     <DescriptionDetails>
                         <Link
+                            id={`procurement-orders-detail-overview-sales-order-${order.identity.purchaseOrderId}`}
                             href={`/sales/orders/${order.header.salesOrderId}`}
                             className="num text-primary underline-offset-2 hover:underline"
                         >
@@ -58,6 +59,7 @@ export function PurchaseOrderDetailOverviewSection({
                     <DescriptionTerm>同销售单采购单</DescriptionTerm>
                     <DescriptionDetails>
                         <Link
+                            id={`procurement-orders-detail-overview-related-${order.identity.purchaseOrderId}`}
                             href={`/procurement/orders?salesOrderId=${encodeURIComponent(order.header.salesOrderId)}`}
                             className="text-primary underline-offset-2 hover:underline"
                         >
@@ -138,7 +140,12 @@ export function PurchaseOrderDetailOverviewSection({
                                 <Button
                                     type="button"
                                     size="sm"
-                                    render={<Link href={w12PayHref} />}
+                                    render={
+                                        <Link
+                                            id={`procurement-orders-detail-overview-pay-${order.identity.purchaseOrderId}`}
+                                            href={w12PayHref}
+                                        />
+                                    }
                                 >
                                     去供应商往来
                                 </Button>

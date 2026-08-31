@@ -52,16 +52,28 @@ function Drawer({
     )
 }
 
-function DrawerTrigger({ ...props }: DrawerPrimitive.Trigger.Props) {
-    return <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props} />
+function DrawerTrigger({
+    id,
+    ...props
+}: DrawerPrimitive.Trigger.Props & { id?: string }) {
+    return (
+        <DrawerPrimitive.Trigger
+            id={id}
+            data-slot="drawer-trigger"
+            {...props}
+        />
+    )
 }
 
 function DrawerPortal({ ...props }: DrawerPrimitive.Portal.Props) {
     return <DrawerPrimitive.Portal data-slot="drawer-portal" {...props} />
 }
 
-function DrawerClose({ ...props }: DrawerPrimitive.Close.Props) {
-    return <DrawerPrimitive.Close data-slot="drawer-close" {...props} />
+function DrawerClose({
+    id,
+    ...props
+}: DrawerPrimitive.Close.Props & { id?: string }) {
+    return <DrawerPrimitive.Close id={id} data-slot="drawer-close" {...props} />
 }
 
 function DrawerOverlay({

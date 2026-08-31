@@ -19,7 +19,12 @@ export function ListToolbarCount({
                 {label ? `${label} · ${rowCount} 条` : `共 ${rowCount} 条`}
             </span>
             {hasActiveFilters ? (
-                <Button type="button" variant="ghost" onClick={onClear}>
+                <Button
+                    id="master-data-list-toolbar-clear-filters"
+                    type="button"
+                    variant="ghost"
+                    onClick={onClear}
+                >
                     清除筛选
                 </Button>
             ) : null}

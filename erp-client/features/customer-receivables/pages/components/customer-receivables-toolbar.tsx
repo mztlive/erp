@@ -24,6 +24,7 @@ import {
     type ReceivableReviewStatusFilter,
     type ReceivableStatusFilter,
 } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -129,6 +130,7 @@ export function CustomerReceivablesToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="customer-receivables-toolbar-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -141,6 +143,7 @@ export function CustomerReceivablesToolbar({
                 }
                 filters={
                     <Button
+                        id="customer-receivables-toolbar-more-filters"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -177,6 +180,7 @@ export function CustomerReceivablesToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`customer-receivables-applied-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -185,6 +189,7 @@ export function CustomerReceivablesToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="customer-receivables-toolbar-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -206,6 +211,7 @@ export function CustomerReceivablesToolbar({
                                                 往来主体
                                             </span>
                                             <ReceivableCounterpartySearchCombobox
+                                                id="customer-receivables-toolbar-counterparty"
                                                 className="w-full"
                                                 value={
                                                     counterpartyPartyIdDraft ??
@@ -225,18 +231,21 @@ export function CustomerReceivablesToolbar({
                                     {receivableView ? (
                                         <>
                                             <FixedOptionRadioFilter
+                                                id="customer-receivables-toolbar-due-filter"
                                                 label="到期"
                                                 value={dueDraft}
                                                 onValueChange={setDueDraft}
                                                 options={DUE_RADIO_OPTIONS}
                                             />
                                             <FixedOptionRadioFilter
+                                                id="customer-receivables-toolbar-status-filter"
                                                 label="状态"
                                                 value={statusDraft}
                                                 onValueChange={setStatusDraft}
                                                 options={STATUS_RADIO_OPTIONS}
                                             />
                                             <FixedOptionRadioFilter
+                                                id="customer-receivables-toolbar-review-status-filter"
                                                 label="复核状态"
                                                 value={reviewStatusDraft}
                                                 onValueChange={
@@ -254,13 +263,17 @@ export function CustomerReceivablesToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="customer-receivables-toolbar-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="customer-receivables-toolbar-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

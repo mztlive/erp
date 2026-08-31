@@ -95,7 +95,7 @@ export function CustomerAssignmentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="customers-assignment-dialog-close">
                 <DialogHeader>
                     <DialogTitle>
                         {ending ? "结束协作归属" : "调整客户归属"}
@@ -161,6 +161,7 @@ export function CustomerAssignmentDialog({
                                         >
                                             <FieldLabel>销售人员</FieldLabel>
                                             <OwnerCombobox
+                                                id="customers-assignment-dialog-owner"
                                                 owners={owners.data ?? []}
                                                 value={
                                                     field.state.value ||
@@ -285,6 +286,7 @@ export function CustomerAssignmentDialog({
                         name="reason"
                         children={(field) => (
                             <field.TextareaField
+                                id="customers-assignment-dialog-reason"
                                 label="调整原因"
                                 required
                                 disabled={mutation.isPending}
@@ -299,6 +301,7 @@ export function CustomerAssignmentDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id="customers-assignment-dialog-cancel"
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
@@ -308,6 +311,7 @@ export function CustomerAssignmentDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="customers-assignment-dialog-submit"
                                 label={ending ? "确认结束" : "确认调整"}
                                 disabled={mutation.isPending}
                             />

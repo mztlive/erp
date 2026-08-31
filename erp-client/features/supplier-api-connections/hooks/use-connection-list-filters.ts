@@ -88,10 +88,7 @@ export function parseConnectionAppliedFilters(
 ): ConnectionAppliedFilters {
     const q = urlState.q?.trim() || undefined
     const status = parseStatus(urlState.status)
-    const health = parseMulti(
-        urlState.health,
-        HEALTH_VALUES,
-    ) as HealthResult[]
+    const health = parseMulti(urlState.health, HEALTH_VALUES) as HealthResult[]
     const capability = (
         Object.keys(CAPABILITY_LABEL) as readonly string[]
     ).includes(urlState.capability?.trim() ?? "")
@@ -130,32 +127,30 @@ export function useConnectionListFilters(
     const hasFilters = Boolean(applied.q || hasStructuredFilters)
 
     const [searchDraft, setSearchDraft] = React.useState(applied.q ?? "")
-    const [statusDraft, setStatusDraft] = React.useState<ConnectionStatusFilter>(
-        applied.status ?? "all",
-    )
+    const [statusDraft, setStatusDraft] =
+        React.useState<ConnectionStatusFilter>(applied.status ?? "all")
     const [healthDraft, setHealthDraft] = React.useState<string[]>(
         applied.health,
     )
     const [capabilityDraft, setCapabilityDraft] = React.useState<string>(
         applied.capability ?? "",
     )
-    const [catalogFreshnessDraft, setCatalogFreshnessDraft] =
-        React.useState<string[]>(applied.catalogFreshness)
+    const [catalogFreshnessDraft, setCatalogFreshnessDraft] = React.useState<
+        string[]
+    >(applied.catalogFreshness)
     const [supplierIdDraft, setSupplierIdDraft] = React.useState<string | null>(
         applied.supplierId ?? null,
     )
     /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
-    const [filterPanelOpen, setFilterPanelOpen] = React.useState(
-        hasStructuredFilters,
-    )
+    const [filterPanelOpen, setFilterPanelOpen] =
+        React.useState(hasStructuredFilters)
 
     /** 一次提交关键词与全部结构化筛选草稿；成功后收起面板（§8.1）。 */
     const applyFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || undefined,
             status: statusDraft === "all" ? undefined : statusDraft,
-            health:
-                healthDraft.length > 0 ? healthDraft.join(",") : undefined,
+            health: healthDraft.length > 0 ? healthDraft.join(",") : undefined,
             capability: capabilityDraft || undefined,
             catalogFreshness:
                 catalogFreshnessDraft.length > 0

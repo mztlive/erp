@@ -10,6 +10,7 @@ import type {
     AllocationSessionView,
     AllocationTarget,
 } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function SessionPool({
     session,
@@ -23,7 +24,7 @@ export function SessionPool({
     onAdd: (target: AllocationTarget) => void
 }) {
     return (
-        <section className="space-y-3 rounded-2xl border bg-card p-4">
+        <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
             <h3 className="text-sm font-semibold">
                 同主体待核销池
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -64,11 +65,10 @@ export function SessionPool({
                                     </div>
                                 </div>
                                 {selected ? (
-                                    <Badge variant="success">
-                                        已加入
-                                    </Badge>
+                                    <Badge variant="success">已加入</Badge>
                                 ) : (
                                     <Button
+                                        id={`customer-receivables-session-pool-${toAutomationIdSegment(t.targetId)}-add`}
                                         type="button"
                                         size="sm"
                                         variant="outline"

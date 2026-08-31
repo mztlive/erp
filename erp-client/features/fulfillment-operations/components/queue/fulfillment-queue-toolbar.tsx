@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -23,6 +19,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     DUE_FILTER_OPTIONS,
     GATE_FILTER_OPTIONS,
@@ -160,7 +157,9 @@ export function FulfillmentQueueToolbar({
             ) {
                 return
             }
-            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+            if (
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
+            ) {
                 return
             }
             event.preventDefault()
@@ -244,16 +243,18 @@ export function FulfillmentQueueToolbar({
 
     const hasActiveFilters = Boolean(
         q ||
-            (type && type !== "all") ||
-            warehouseId ||
-            due ||
-            gate ||
-            salesOrderId ||
-            purchaseOrderId,
+        (type && type !== "all") ||
+        warehouseId ||
+        due ||
+        gate ||
+        salesOrderId ||
+        purchaseOrderId,
     )
 
     /** 全部已生效条件都以 chip 显性展示，来源锁定参数也不例外。 */
-    const appliedChips = React.useMemo<readonly FulfillmentAppliedChip[]>(() => {
+    const appliedChips = React.useMemo<
+        readonly FulfillmentAppliedChip[]
+    >(() => {
         const chips: FulfillmentAppliedChip[] = []
         if (q) chips.push({ key: "q", label: `搜索：${q}` })
         if (typeLabel) chips.push({ key: "type", label: `类型：${typeLabel}` })
@@ -263,9 +264,13 @@ export function FulfillmentQueueToolbar({
                 label: `仓库：${warehouseLabel ?? "已定位"}`,
             })
         }
-        if (due) chips.push({ key: "due", label: `到期：${DUE_CHIP_LABELS[due]}` })
+        if (due)
+            chips.push({ key: "due", label: `到期：${DUE_CHIP_LABELS[due]}` })
         if (gate) {
-            chips.push({ key: "gate", label: `货款：${GATE_CHIP_LABELS[gate]}` })
+            chips.push({
+                key: "gate",
+                label: `货款：${GATE_CHIP_LABELS[gate]}`,
+            })
         }
         if (salesOrderId) {
             chips.push({
@@ -310,6 +315,7 @@ export function FulfillmentQueueToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="fulfillment-operations-queue-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -319,11 +325,11 @@ export function FulfillmentQueueToolbar({
                             aria-label="搜索履约单据"
                         />
                         {/* 面板展开时隐藏尾部提交箭头，只留面板底部唯一主按钮 */}
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="fulfillment-operations-queue-filters-trigger"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -360,6 +366,7 @@ export function FulfillmentQueueToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`fulfillment-operations-queue-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -368,6 +375,7 @@ export function FulfillmentQueueToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="fulfillment-operations-queue-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -384,12 +392,14 @@ export function FulfillmentQueueToolbar({
                                     aria-label="履约单据更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="fulfillment-operations-queue-due-filter"
                                         label="到期"
                                         value={dueDraft}
                                         onValueChange={setDueDraft}
                                         options={DUE_RADIO_FILTER_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="fulfillment-operations-queue-gate-filter"
                                         label="货款情况"
                                         value={gateDraft}
                                         onValueChange={setGateDraft}
@@ -401,9 +411,11 @@ export function FulfillmentQueueToolbar({
                                                 仓库
                                             </span>
                                             <WarehouseSearchCombobox
+                                                id="fulfillment-operations-queue-warehouse-filter"
                                                 className="w-full"
                                                 value={
-                                                    warehouseIdDraft ?? undefined
+                                                    warehouseIdDraft ??
+                                                    undefined
                                                 }
                                                 onValueChange={(id) =>
                                                     setWarehouseIdDraft(
@@ -421,13 +433,17 @@ export function FulfillmentQueueToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="fulfillment-operations-queue-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="fulfillment-operations-queue-apply-filters"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"
@@ -445,13 +461,13 @@ export function FulfillmentQueueToolbar({
                     showAutoNext ? (
                         <div className="flex items-center gap-2">
                             <Label
-                                htmlFor="ff-auto-next"
+                                htmlFor="fulfillment-operations-queue-auto-next"
                                 className="text-muted-foreground"
                             >
                                 自动下一项
                             </Label>
                             <Switch
-                                id="ff-auto-next"
+                                id="fulfillment-operations-queue-auto-next"
                                 checked={autoNext}
                                 onCheckedChange={onAutoNextChange}
                             />

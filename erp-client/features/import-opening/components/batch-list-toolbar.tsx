@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +22,7 @@ import {
     type ImportBatchStatus,
     type ImportObjectCode,
 } from "@/features/import-opening/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -100,6 +97,7 @@ export function BatchListToolbar({
 }) {
     const panelId = React.useId()
     const hasChips = hasActiveFilters && appliedChips.length > 0
+    const toolbarIdPrefix = "operations-import-batches-toolbar"
 
     return (
         <form
@@ -115,6 +113,7 @@ export function BatchListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id={`${toolbarIdPrefix}-search`}
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -123,18 +122,16 @@ export function BatchListToolbar({
                             placeholder="批次号（精确/前缀匹配）"
                             aria-label="搜索批次"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id={`${toolbarIdPrefix}-filter-trigger`}
                         type="button"
                         variant="outline"
                         aria-expanded={batchFilterPanelOpen}
                         aria-controls={panelId}
-                        onClick={() =>
-                            setBatchFilterPanelOpen((open) => !open)
-                        }
+                        onClick={() => setBatchFilterPanelOpen((open) => !open)}
                     >
                         <FilterIcon
                             data-icon="inline-start"
@@ -166,6 +163,7 @@ export function BatchListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`${toolbarIdPrefix}-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -174,6 +172,7 @@ export function BatchListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id={`${toolbarIdPrefix}-clear-all`}
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -195,6 +194,7 @@ export function BatchListToolbar({
                                                 对象集合
                                             </span>
                                             <OptionCombobox
+                                                id={`${toolbarIdPrefix}-object-type`}
                                                 className="w-full"
                                                 value={objectTypeDraft}
                                                 onValueChange={(value) =>
@@ -215,6 +215,7 @@ export function BatchListToolbar({
                                                 批次状态
                                             </span>
                                             <OptionCombobox
+                                                id={`${toolbarIdPrefix}-status`}
                                                 className="w-full"
                                                 value={statusDraft}
                                                 onValueChange={(value) =>
@@ -237,13 +238,17 @@ export function BatchListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id={`${toolbarIdPrefix}-reset-filters`}
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id={`${toolbarIdPrefix}-apply-filters`}
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

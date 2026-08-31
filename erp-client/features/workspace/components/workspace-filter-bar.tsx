@@ -3,6 +3,8 @@
 import type { ComponentProps } from "react"
 import { ChevronDownIcon, SearchIcon } from "lucide-react"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -97,6 +99,7 @@ export function WorkspaceQueueScopeNav({
             {visibleMetrics.map((metric) => (
                 <WorkspaceTextNavButton
                     key={metric.key}
+                    id={`workspace-queue-scope-${toAutomationIdSegment(metric.key)}`}
                     active={metric.key === activeMetric}
                     aria-label={`${metric.label} ${metric.count} 项`}
                     onClick={() => onMetricClick(metric.key)}
@@ -140,6 +143,7 @@ export function WorkspaceFamilyNav({
                 return (
                     <WorkspaceTextNavButton
                         key={value}
+                        id={`workspace-family-nav-${toAutomationIdSegment(value)}`}
                         active={familyValue === value}
                         aria-label={
                             count == null
@@ -202,6 +206,7 @@ export function WorkspaceQueueToolbar({
                     <SearchIcon aria-hidden="true" />
                 </InputGroupAddon>
                 <InputGroupInput
+                    id="workspace-queue-toolbar-search-input"
                     value={searchDraft}
                     onChange={(event) =>
                         onSearchDraftChange(event.target.value)
@@ -216,8 +221,10 @@ export function WorkspaceQueueToolbar({
                     >
                         <DropdownMenu>
                             <DropdownMenuTrigger
+                                id="workspace-queue-toolbar-sort-trigger"
                                 render={
                                     <InputGroupButton
+                                        id="workspace-queue-toolbar-sort-trigger"
                                         variant="ghost"
                                         size="xs"
                                         aria-label={`排序：${sortLabel}`}
@@ -245,6 +252,7 @@ export function WorkspaceQueueToolbar({
                                         {SORT_OPTIONS.map((option) => (
                                             <DropdownMenuRadioItem
                                                 key={option.value}
+                                                id={`workspace-queue-toolbar-sort-option-${toAutomationIdSegment(option.value)}`}
                                                 value={option.value}
                                             >
                                                 {option.label}

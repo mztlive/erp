@@ -40,6 +40,7 @@ export function CategoryObjectPage({
 
     return (
         <ObjectCenterView
+            idPrefix="master-data-category-object-view"
             data={query.data}
             baseHref={`${listHref}/${query.data.stableId}`}
             section={section}

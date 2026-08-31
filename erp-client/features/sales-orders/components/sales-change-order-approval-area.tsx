@@ -68,6 +68,7 @@ export function SalesChangeOrderApprovalArea({
                 />
                 {documentId ? (
                     <ApprovalActionBar
+                        id="sales-orders-change-approval-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={SALES_CHANGE_ORDER_DOCUMENT_TYPE}
@@ -99,6 +100,7 @@ export function SalesChangeOrderApprovalArea({
                 compact
             />
             <ApprovalActionBar
+                id="sales-orders-change-approval-bar"
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

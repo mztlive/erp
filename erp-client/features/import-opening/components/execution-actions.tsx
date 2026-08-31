@@ -65,7 +65,10 @@ function CancelPendingDialog({
                 if (!open && !pending) onCancel()
             }}
         >
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                className="sm:max-w-lg"
+                closeButtonId="operations-import-batch-detail-execution-cancel-dialog-close"
+            >
                 <DialogHeader>
                     <DialogTitle>取消尚未应用项</DialogTitle>
                     <DialogDescription>
@@ -83,6 +86,7 @@ function CancelPendingDialog({
                         name="reasonCode"
                         children={(field) => (
                             <field.SelectField
+                                id="operations-import-batch-detail-execution-cancel-reason"
                                 label="取消原因"
                                 options={CANCEL_PENDING_REASON_OPTIONS}
                                 allowClear={false}
@@ -94,6 +98,7 @@ function CancelPendingDialog({
                         name="comment"
                         children={(field) => (
                             <field.TextareaField
+                                id="operations-import-batch-detail-execution-cancel-comment"
                                 label="操作说明（可选）"
                                 rows={4}
                                 placeholder="补充取消范围或业务窗口信息"
@@ -104,6 +109,7 @@ function CancelPendingDialog({
                         <DialogClose
                             render={
                                 <Button
+                                    id="operations-import-batch-detail-execution-cancel-close"
                                     type="button"
                                     variant="outline"
                                     disabled={pending}
@@ -114,6 +120,7 @@ function CancelPendingDialog({
                         </DialogClose>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="operations-import-batch-detail-execution-cancel-submit"
                                 label="确认取消未应用项"
                                 pendingLabel="正在取消"
                                 disabled={pending}
@@ -168,6 +175,7 @@ export function ImportExecutionActions({
                 <div className="flex flex-wrap gap-2">
                     {canStart ? (
                         <Button
+                            id="operations-import-batch-detail-execution-start-apply"
                             type="button"
                             size="sm"
                             disabled={isExecuting}
@@ -178,6 +186,7 @@ export function ImportExecutionActions({
                     ) : null}
                     {canCancel ? (
                         <Button
+                            id="operations-import-batch-detail-execution-cancel-pending"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -189,6 +198,7 @@ export function ImportExecutionActions({
                     ) : null}
                     {canRetry ? (
                         <Button
+                            id="operations-import-batch-detail-execution-retry-failed"
                             type="button"
                             size="sm"
                             disabled={isExecuting}
@@ -202,6 +212,7 @@ export function ImportExecutionActions({
 
             {confirming === "START_APPLY" ? (
                 <FormalActionConfirmDialog
+                    id="operations-import-batch-detail-execution-start-apply"
                     open
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)
@@ -220,6 +231,7 @@ export function ImportExecutionActions({
 
             {confirming === "RETRY_FAILED" ? (
                 <FormalActionConfirmDialog
+                    id="operations-import-batch-detail-execution-retry-failed"
                     open
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)

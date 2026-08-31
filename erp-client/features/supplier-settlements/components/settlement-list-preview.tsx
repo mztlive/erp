@@ -25,14 +25,13 @@ export function SettlementListPreviewSheet({
 }) {
     return (
         <QuickPreviewSheet
+            id="supplier-settlements-list-preview-sheet"
             open={open}
             onOpenChange={onOpenChange}
             size="detail"
             title={row?.statementNo ?? "结算预览"}
             description={
-                row
-                    ? `${row.supplierName} · ${row.periodLabel}`
-                    : undefined
+                row ? `${row.supplierName} · ${row.periodLabel}` : undefined
             }
         >
             {row ? (
@@ -92,6 +91,7 @@ export function SettlementListPreviewSheet({
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="supplier-settlements-list-preview-open"
                             type="button"
                             onClick={() => onOpen(row.statementId)}
                         >
@@ -99,6 +99,7 @@ export function SettlementListPreviewSheet({
                         </Button>
                         {row.unresolvedDifferenceCount > 0 ? (
                             <Button
+                                id="supplier-settlements-list-preview-open-differences"
                                 type="button"
                                 variant="secondary"
                                 onClick={() =>
@@ -124,6 +125,7 @@ export function SettlementListPreviewSheet({
                         未找到预览行，可能已被移出当前筛选范围。
                     </p>
                     <Button
+                        id="supplier-settlements-list-preview-close"
                         type="button"
                         size="sm"
                         variant="outline"

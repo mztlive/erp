@@ -4,12 +4,14 @@ import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentati
 import { compareDecimal } from "@/lib/fixed-decimal"
 
 export function MoneyCell({
+    id,
     value,
     negativeAsText = true,
     href,
     onClick,
     ariaLabel,
 }: {
+    id?: string
     value: string | undefined
     negativeAsText?: boolean
     href?: string
@@ -41,6 +43,7 @@ export function MoneyCell({
     if (onClick) {
         return (
             <button
+                id={id}
                 type="button"
                 className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={onClick}
@@ -52,6 +55,7 @@ export function MoneyCell({
     if (href) {
         return (
             <Link
+                id={id}
                 href={href}
                 className="underline-offset-2 hover:underline"
                 target="_blank"

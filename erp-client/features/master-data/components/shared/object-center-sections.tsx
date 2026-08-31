@@ -60,8 +60,7 @@ export function ObjectCenterOverviewSection({
                     .filter(
                         (field) =>
                             !data.sensitiveFields.some(
-                                (sensitive) =>
-                                    sensitive.label === field.label,
+                                (sensitive) => sensitive.label === field.label,
                             ),
                     )
                     .map((field) => (
@@ -136,6 +135,7 @@ export function ObjectCenterOverviewSection({
                         </span>
                     </p>
                     <Button
+                        id="master-data-shared-object-center-sections-button-1"
                         size="sm"
                         variant="secondary"
                         className="rounded-lg shadow-none"
@@ -228,9 +228,7 @@ export function ObjectCenterRelationsSection({
                     >
                         <span>{item.contextLabel}</span>
                         <Badge
-                            variant={
-                                item.eligible ? "success" : "destructive"
-                            }
+                            variant={item.eligible ? "success" : "destructive"}
                         >
                             {item.eligible
                                 ? masterDataCopy.eligible

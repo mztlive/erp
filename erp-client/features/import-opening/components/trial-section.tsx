@@ -45,6 +45,7 @@ export function TrialSection({
                 <div className="space-y-1">
                     <Label className="text-xs">错误码</Label>
                     <OptionCombobox
+                        id="operations-import-batch-detail-trial-filter-issue-code"
                         value={urlState.issueCode ?? "all"}
                         onValueChange={(v) => {
                             if (v == null) return
@@ -75,6 +76,7 @@ export function TrialSection({
                 <div className="space-y-1">
                     <Label className="text-xs">对象</Label>
                     <OptionCombobox
+                        id="operations-import-batch-detail-trial-filter-object-type"
                         value={urlState.issueObjectType ?? "all"}
                         onValueChange={(v) => {
                             if (v == null) return
@@ -101,6 +103,7 @@ export function TrialSection({
                 <div className="space-y-1">
                     <Label className="text-xs">处理状态</Label>
                     <OptionCombobox
+                        id="operations-import-batch-detail-trial-filter-row-status"
                         value={urlState.rowStatus ?? "all"}
                         onValueChange={(v) => {
                             if (v == null) return
@@ -129,6 +132,7 @@ export function TrialSection({
                     />
                 </div>
                 <Button
+                    id="operations-import-batch-detail-trial-clear-filters"
                     type="button"
                     size="sm"
                     variant="ghost"
@@ -175,6 +179,7 @@ export function TrialSection({
             </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Button
+                    id="operations-import-batch-detail-trial-prev-page"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -194,6 +199,7 @@ export function TrialSection({
                     页
                 </span>
                 <Button
+                    id="operations-import-batch-detail-trial-next-page"
                     type="button"
                     size="sm"
                     variant="outline"

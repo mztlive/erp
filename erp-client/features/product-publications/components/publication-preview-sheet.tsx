@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SafetyPausePanel } from "@/features/product-publications/components/safety-pause-panel"
 import { usePublicationDetailQuery } from "@/features/product-publications/hooks/queries"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function PublicationPreviewSheet({
     previewId,
@@ -20,6 +21,7 @@ export function PublicationPreviewSheet({
 
     return (
         <QuickPreviewSheet
+            id="publication-preview-sheet"
             open={previewId != null}
             onOpenChange={(open) => {
                 if (!open) onClose()
@@ -122,6 +124,7 @@ export function PublicationPreviewSheet({
                         </>
                     ) : null}
                     <Button
+                        id={`publication-preview-sheet-detail-${toAutomationIdSegment(previewRow.identity.publicationId)}`}
                         type="button"
                         className="w-full"
                         render={

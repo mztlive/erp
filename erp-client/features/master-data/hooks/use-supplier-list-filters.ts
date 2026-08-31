@@ -64,11 +64,13 @@ export function useSupplierListFilters(
             ),
         [supplierQualificationTypesParam],
     )
-    const supplierQualificationHealth = SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.find(
-        (option) =>
-            option.value !== "all" &&
-            option.value === searchParams.get("supplierQualificationHealth"),
-    )?.value as SupplierQualificationHealth | undefined
+    const supplierQualificationHealth =
+        SUPPLIER_QUALIFICATION_HEALTH_OPTIONS.find(
+            (option) =>
+                option.value !== "all" &&
+                option.value ===
+                    searchParams.get("supplierQualificationHealth"),
+        )?.value as SupplierQualificationHealth | undefined
     const metricKey = searchParams.get("metricKey") ?? "all"
     const hasStructuredSupplierFilters = Boolean(
         lifecycleStatus !== "all" ||

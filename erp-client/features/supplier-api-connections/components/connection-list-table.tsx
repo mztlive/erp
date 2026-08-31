@@ -57,6 +57,7 @@ export function ConnectionListTable({
                 description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
                 action={
                     <Button
+                        id="supplier-api-connections-list-clear-filters"
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
@@ -77,7 +78,11 @@ export function ConnectionListTable({
                 description="当前环境还没有连接身份。有权限时可新建连接。"
                 action={
                     data?.hasModulePermission ? (
-                        <Button type="button" onClick={onCreate}>
+                        <Button
+                            id="supplier-api-connections-list-empty-create"
+                            type="button"
+                            onClick={onCreate}
+                        >
                             新建连接
                         </Button>
                     ) : null
@@ -87,6 +92,7 @@ export function ConnectionListTable({
     }
     return (
         <DataTable
+            id="supplier-api-connections-list-table"
             data={data?.items ?? []}
             columns={columns}
             getRowId={(row) => row.connectionId}

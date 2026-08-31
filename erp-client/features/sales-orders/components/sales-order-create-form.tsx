@@ -367,16 +367,19 @@ export function SalesOrderCreateForm({
                 </div>
             </form>
 
-            <ContractUploadDialog
-                open={uploadOpen}
-                onOpenChange={setUploadOpen}
-                initialCustomerId={initialCustomerId}
-                onSuccess={(result) => {
-                    void handleUploadSuccess(result)
-                }}
-            />
+            <div id="sales-orders-create-contract-upload">
+                <ContractUploadDialog
+                    open={uploadOpen}
+                    onOpenChange={setUploadOpen}
+                    initialCustomerId={initialCustomerId}
+                    onSuccess={(result) => {
+                        void handleUploadSuccess(result)
+                    }}
+                />
+            </div>
 
             <DiscardConfirmDialog
+                id="sales-orders-create-switch-nature"
                 open={pendingNature != null}
                 onOpenChange={(open) => {
                     if (!open) setPendingNature(null)

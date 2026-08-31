@@ -60,6 +60,7 @@ export function WorkItemProcessPanel({
             {workItem ? (
                 <div className="space-y-2">
                     <SequentialProcessBar
+                        id="supplier-order-center-process-bar"
                         current={1}
                         total={1}
                         responsibilityStatus={responsibilityStatus}
@@ -241,6 +242,7 @@ export function ResultPanel({
             actions={
                 <div className="flex flex-wrap gap-2">
                     <Button
+                        id="supplier-order-center-result-close"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -251,6 +253,7 @@ export function ResultPanel({
                     {order.fulfillmentStatus === "COMPLETED" ||
                     costs.settlementId ? (
                         <Button
+                            id="supplier-order-center-result-open-settlement"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -268,6 +271,7 @@ export function ResultPanel({
                         </Button>
                     ) : null}
                     <Button
+                        id="supplier-order-center-result-open-mall"
                         type="button"
                         size="sm"
                         variant="outline"

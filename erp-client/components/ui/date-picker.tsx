@@ -193,19 +193,25 @@ function DatePicker({
 }
 
 function DateRangePicker({
+    id,
     value,
     onValueChange,
     placeholder = "选择日期范围",
     disabled,
     disabledDates,
     className,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
 }: {
+    id?: string
     value?: DateRangeValue
     onValueChange?: (value?: DateRangeValue) => void
     placeholder?: string
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
+    "aria-invalid"?: boolean
+    "aria-describedby"?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const selected: CalendarDateRange | undefined = value
@@ -226,11 +232,14 @@ function DateRangePicker({
                 <PopoverTrigger
                     render={
                         <Button
+                            id={id}
                             type="button"
                             variant="outline"
                             size="lg"
                             className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
                             disabled={disabled}
+                            aria-invalid={ariaInvalid}
+                            aria-describedby={ariaDescribedby}
                             aria-label={label}
                         />
                     }
@@ -250,6 +259,7 @@ function DateRangePicker({
                 </PopoverTrigger>
                 {value?.from ? (
                     <Button
+                        id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
                         size="icon-lg"
@@ -263,6 +273,7 @@ function DateRangePicker({
             </div>
             <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
+                    idPrefix={id ? `${id}-calendar` : undefined}
                     mode="range"
                     selected={selected}
                     disabled={disabledDates}
@@ -396,6 +407,7 @@ function DateTimePicker({
                         aria-hidden="true"
                     />
                     <Input
+                        id={id ? `${id}-time` : undefined}
                         type="time"
                         step={60}
                         value={normalizeTimeValue(value?.time)}
@@ -411,6 +423,7 @@ function DateTimePicker({
                         </span>
                     ) : null}
                     <Button
+                        id={id ? `${id}-done` : undefined}
                         type="button"
                         size="sm"
                         onClick={() => setOpen(false)}
@@ -602,6 +615,7 @@ function DateTimeRangePicker({
                 </PopoverTrigger>
                 {clearable && value?.from ? (
                     <Button
+                        id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
                         size="icon-lg"
@@ -615,6 +629,7 @@ function DateTimeRangePicker({
             </div>
             <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
+                    idPrefix={id ? `${id}-calendar` : undefined}
                     mode="range"
                     selected={selected}
                     disabled={disabledDates}
@@ -652,6 +667,7 @@ function DateTimeRangePicker({
                             aria-hidden="true"
                         />
                         <Input
+                            id={id ? `${id}-from-time` : undefined}
                             type="time"
                             step={60}
                             value={normalizeTimeValue(value?.from?.time)}
@@ -675,6 +691,7 @@ function DateTimeRangePicker({
                             aria-hidden="true"
                         />
                         <Input
+                            id={id ? `${id}-to-time` : undefined}
                             type="time"
                             step={60}
                             value={normalizeTimeValue(value?.to?.time)}
@@ -698,6 +715,7 @@ function DateTimeRangePicker({
                         </p>
                     ) : null}
                     <Button
+                        id={id ? `${id}-done` : undefined}
                         type="button"
                         size="sm"
                         className="sm:col-span-2"

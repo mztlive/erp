@@ -70,6 +70,7 @@ export function SupplierOrdersListTable({
             toolbar={toolbar}
             table={
                 <DataTable
+                    id="supplier-orders-list-table"
                     data={rows}
                     columns={columns}
                     getRowId={(row) => row.orderId}
@@ -82,6 +83,7 @@ export function SupplierOrdersListTable({
                                 error={error}
                                 action={
                                     <Button
+                                        id="supplier-orders-list-table-error-retry"
                                         type="button"
                                         size="sm"
                                         onClick={onRetry}
@@ -95,9 +97,7 @@ export function SupplierOrdersListTable({
                     emptyState={
                         !loading && rows.length === 0 ? (
                             <BusinessEmptyState
-                                kind={
-                                    hasActiveFilters ? "filter" : "no-data"
-                                }
+                                kind={hasActiveFilters ? "filter" : "no-data"}
                                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                                 title={
                                     hasActiveFilters
@@ -112,6 +112,7 @@ export function SupplierOrdersListTable({
                                 action={
                                     hasActiveFilters ? (
                                         <Button
+                                            id="supplier-orders-list-table-empty-clear"
                                             type="button"
                                             size="sm"
                                             variant="secondary"
@@ -122,6 +123,7 @@ export function SupplierOrdersListTable({
                                         </Button>
                                     ) : (
                                         <Button
+                                            id="supplier-orders-list-table-empty-open-commerce"
                                             type="button"
                                             size="sm"
                                             variant="secondary"

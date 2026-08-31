@@ -7,6 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import type {
     BusinessTag,
@@ -51,6 +52,7 @@ export function useCustomerQualityColumns({
                             <div className="flex flex-wrap items-center gap-2">
                                 {canW03 ? (
                                     <Button
+                                        id={`customers-quality-detail-row-${toAutomationIdSegment(r.customerId)}-open`}
                                         type="button"
                                         variant="link"
                                         size="xs"
@@ -94,6 +96,7 @@ export function useCustomerQualityColumns({
                     <div className="flex flex-wrap gap-1">
                         {row.original.tags.map((t) => (
                             <button
+                                id={`customers-quality-detail-row-${toAutomationIdSegment(row.original.customerId)}-tag-${toAutomationIdSegment(t.type)}-${toAutomationIdSegment(t.code)}`}
                                 key={`${t.type}-${t.code}`}
                                 type="button"
                                 className="inline-flex"
@@ -137,6 +140,7 @@ export function useCustomerQualityColumns({
                         return content
                     return (
                         <Link
+                            id={`customers-quality-detail-row-${toAutomationIdSegment(r.customerId)}-sales-orders`}
                             data-customer-id={r.customerId}
                             data-focus-metric="salesGrossAmount"
                             href={salesOrdersHref(
@@ -232,6 +236,7 @@ export function useCustomerQualityColumns({
                     if (!canW16 || !data) return content
                     return (
                         <Link
+                            id={`customers-quality-detail-row-${toAutomationIdSegment(r.customerId)}-profit-loss`}
                             data-customer-id={r.customerId}
                             data-focus-metric="actualProfitLossNet"
                             href={profitLossHref(
@@ -276,6 +281,7 @@ export function useCustomerQualityColumns({
                             </div>
                             {canW11 && data && r.overdueGross != null ? (
                                 <Button
+                                    id={`customers-quality-detail-row-${toAutomationIdSegment(r.customerId)}-overdue`}
                                     type="button"
                                     variant="link"
                                     size="xs"

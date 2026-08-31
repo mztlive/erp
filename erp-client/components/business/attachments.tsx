@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/attachment"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Spinner } from "@/components/ui/spinner"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 type DocumentAttachmentState =
@@ -58,6 +59,8 @@ interface DocumentAttachmentListProps extends Omit<
      * 行为是下载/打开文件而不是在线查看时，传「下载」保持文案与实际一致。
      */
     openLabel?: string
+    id?: string
+    idPrefix?: string
 }
 
 function DocumentAttachmentList({
@@ -68,6 +71,8 @@ function DocumentAttachmentList({
     requiredMissing = false,
     title = "附件",
     openLabel = "查看",
+    id,
+    idPrefix,
     className,
     ...props
 }: DocumentAttachmentListProps) {
@@ -75,9 +80,11 @@ function DocumentAttachmentList({
         (attachment) => attachment.state === "error",
     ).length
     const submissionBlocked = requiredMissing || failedCount > 0
+    const baseId = idPrefix ?? id ?? "document-attachment"
 
     return (
         <section
+            id={baseId}
             data-slot="document-attachment-list"
             className={cn("space-y-4", className)}
             {...props}
@@ -123,6 +130,7 @@ function DocumentAttachmentList({
                                 {attachment.onOpen &&
                                 attachment.state === "done" ? (
                                     <AttachmentAction
+                                        id={`${baseId}-${toAutomationIdSegment(attachment.id)}-open`}
                                         type="button"
                                         onClick={attachment.onOpen}
                                         aria-label={`${openLabel} ${attachment.name}`}
@@ -133,6 +141,7 @@ function DocumentAttachmentList({
                                 {attachment.onRetry &&
                                 attachment.state === "error" ? (
                                     <AttachmentAction
+                                        id={`${baseId}-${toAutomationIdSegment(attachment.id)}-retry`}
                                         type="button"
                                         onClick={attachment.onRetry}
                                         aria-label={`重试上传 ${attachment.name}`}
@@ -142,6 +151,7 @@ function DocumentAttachmentList({
                                 ) : null}
                                 {attachment.onRemove ? (
                                     <AttachmentAction
+                                        id={`${baseId}-${toAutomationIdSegment(attachment.id)}-remove`}
                                         type="button"
                                         variant="destructive"
                                         onClick={attachment.onRemove}
@@ -160,6 +170,7 @@ function DocumentAttachmentList({
 
             {onFilesSelected ? (
                 <FileUpload
+                    idPrefix={`${baseId}-upload`}
                     onFilesSelected={onFilesSelected}
                     accept={accept}
                     disabled={uploadDisabled}

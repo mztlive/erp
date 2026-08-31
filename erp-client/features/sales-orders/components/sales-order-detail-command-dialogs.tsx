@@ -52,6 +52,7 @@ export function SalesOrderDetailSecondaryActions({
                 onResult={onApprovalResult}
             />
             <Button
+                id="sales-orders-detail-start-change"
                 type="button"
                 size="sm"
                 variant="outline"
@@ -134,10 +135,14 @@ export function SalesOrderDetailCommandDialogs({
                     </p>
                 ) : null}
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={pending}>
+                    <AlertDialogCancel
+                        id="sales-orders-detail-change-cancel"
+                        disabled={pending}
+                    >
                         取消
                     </AlertDialogCancel>
                     <AlertDialogAction
+                        id="sales-orders-detail-change-confirm"
                         type="button"
                         disabled={pending}
                         onClick={() => void handleConfirm()}

@@ -80,8 +80,7 @@ export function useBatchListFilters({
     const applyBatchFilters = React.useCallback(() => {
         patchUrl({
             q: qDraft.trim() || undefined,
-            objectType:
-                objectTypeDraft === "all" ? undefined : objectTypeDraft,
+            objectType: objectTypeDraft === "all" ? undefined : objectTypeDraft,
             status: statusDraft === "all" ? undefined : statusDraft,
             page: 1,
         })

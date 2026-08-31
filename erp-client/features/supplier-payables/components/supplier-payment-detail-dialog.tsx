@@ -40,7 +40,10 @@ export function SupplierPaymentDetailDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex h-[min(42rem,calc(100vh-2rem))] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+            <DialogContent
+                closeButtonId="supplier-payables-payment-detail-close"
+                className="flex h-[min(42rem,calc(100vh-2rem))] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+            >
                 <DialogHeader className="shrink-0 px-6 pt-6 pr-14 pb-4">
                     <div className="flex flex-wrap items-center gap-2">
                         <DialogTitle className="text-lg">付款详情</DialogTitle>
@@ -74,6 +77,7 @@ export function SupplierPaymentDetailDialog({
                                 )}
                             </p>
                             <Button
+                                id="supplier-payables-payment-detail-retry"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -90,6 +94,7 @@ export function SupplierPaymentDetailDialog({
                 </div>
                 <DialogFooter className="shrink-0 border-t px-6 py-4">
                     <Button
+                        id="supplier-payables-payment-detail-cancel"
                         type="button"
                         variant="outline"
                         onClick={() => onOpenChange(false)}

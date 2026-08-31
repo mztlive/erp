@@ -41,7 +41,9 @@ export function useExecutionProjectionSearch(q: string): {
                 return
             }
             // 弹层 / 抽屉打开时不抢焦点
-            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+            if (
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
+            ) {
                 return
             }
             event.preventDefault()

@@ -69,9 +69,11 @@ export function DecisionPanel({
             <CardContent className="space-y-3 pt-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                        <Label htmlFor="ev-doc">凭证编号</Label>
+                        <Label htmlFor="card-contracts-funds-review-decision-ev-doc">
+                            凭证编号
+                        </Label>
                         <Input
-                            id="ev-doc"
+                            id="card-contracts-funds-review-decision-ev-doc"
                             value={evidenceDocId}
                             disabled={task.workItem.workItemStatus !== "OPEN"}
                             onChange={(e) => {
@@ -81,9 +83,11 @@ export function DecisionPanel({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="ev-ref">证据说明</Label>
+                        <Label htmlFor="card-contracts-funds-review-decision-ev-ref">
+                            证据说明
+                        </Label>
                         <Input
-                            id="ev-ref"
+                            id="card-contracts-funds-review-decision-ev-ref"
                             value={evidenceRef}
                             disabled={task.workItem.workItemStatus !== "OPEN"}
                             onChange={(e) => {
@@ -99,9 +103,11 @@ export function DecisionPanel({
                     </p>
                 ) : null}
                 <div className="space-y-1.5">
-                    <Label htmlFor="ev-comment">备注</Label>
+                    <Label htmlFor="card-contracts-funds-review-decision-comment">
+                        备注
+                    </Label>
                     <Textarea
-                        id="ev-comment"
+                        id="card-contracts-funds-review-decision-comment"
                         value={comment}
                         disabled={task.workItem.workItemStatus !== "OPEN"}
                         onChange={(e) => {
@@ -118,6 +124,7 @@ export function DecisionPanel({
                     ) : null}
                     {canConfirmZero ? (
                         <Button
+                            id="card-contracts-funds-review-decision-zero"
                             type="button"
                             variant="secondary"
                             disabled={formalPending || !evidenceOk}
@@ -133,6 +140,7 @@ export function DecisionPanel({
                         </Button>
                     ) : null}
                     <Button
+                        id="card-contracts-funds-review-decision-approve"
                         type="button"
                         disabled={
                             formalPending ||
@@ -149,6 +157,7 @@ export function DecisionPanel({
                         复核通过
                     </Button>
                     <Button
+                        id="card-contracts-funds-review-decision-reject"
                         type="button"
                         variant="destructive"
                         disabled={

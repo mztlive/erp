@@ -15,11 +15,13 @@ export function ListSearchField({
     value,
     onChange,
     placeholder,
+    id = "master-data-list-search-input",
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
     value: string
     onChange: (value: string) => void
     placeholder: string
+    id?: string
 }) {
     return (
         <InputGroup>
@@ -27,6 +29,7 @@ export function ListSearchField({
                 <SearchIcon aria-hidden="true" />
             </InputGroupAddon>
             <InputGroupInput
+                id={id}
                 ref={searchInputRef}
                 value={value}
                 onChange={(event) => onChange(event.target.value)}

@@ -22,11 +22,10 @@ export function SalesOrderReturnAlert({
             <AlertTitle>销售单票款入口</AlertTitle>
             <AlertDescription className="flex flex-wrap items-center gap-2">
                 已携带来源页签返回上下文
-                {salesOrderId
-                    ? ` · 销售单 ${salesOrderNo ?? ""}`
-                    : ""}
+                {salesOrderId ? ` · 销售单 ${salesOrderNo ?? ""}` : ""}
                 。核销完成后可回到销售单。
                 <Button
+                    id="customer-receivables-return-alert-back"
                     type="button"
                     size="sm"
                     variant="outline"

@@ -1,18 +1,18 @@
 [workspace]
 members = [
-    "apps/cli",
-    "apps/web-api",
-    "crates/bpm",
-    "crates/entity-macros",     # 过程宏项目
-    "crates/entity-core",
-    "crates/permission-macros",
-    "crates/storage",
-    "crates/id-generator",
-    "crates/test-support",
-    "database",
-    "entities",
-    "services",
-    "config",
+  "apps/cli",
+  "apps/web-api",
+  "crates/bpm",
+  "crates/entity-macros", # 过程宏项目
+  "crates/entity-core",
+  "crates/permission-macros",
+  "crates/storage",
+  "crates/id-generator",
+  "crates/test-support",
+  "database",
+  "entities",
+  "services",
+  "config",
 ]
 resolver = "2"
 
@@ -45,10 +45,10 @@ thiserror = "2.0.20"
 
 # 数据库
 mongodb = { version = "3.8.1", default-features = false, features = [
-    "bson-3",
-    "compat-3-3-0",
-    "dns-resolver",
-    "rustls-tls",
+  "bson-3",
+  "compat-3-3-0",
+  "dns-resolver",
+  "rustls-tls",
 ] }
 bson = { version = "3.1.0", features = ["serde"] }
 
@@ -64,10 +64,10 @@ validator = { version = "0.21.0", features = ["derive"] }
 # 日志和追踪
 opentelemetry = { version = "0.32.0", default-features = false, features = ["trace"] }
 opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
-    "grpc-tonic",
-    "tls-ring",
-    "tls-roots",
-    "trace",
+  "grpc-tonic",
+  "tls-ring",
+  "tls-roots",
+  "trace",
 ] }
 opentelemetry_sdk = { version = "0.32.1", default-features = false, features = ["trace"] }
 tracing = "0.1.44"

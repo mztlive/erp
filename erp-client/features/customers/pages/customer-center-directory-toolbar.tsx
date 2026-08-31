@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -29,6 +25,7 @@ import type {
     CustomerFilterKey,
 } from "@/features/customers/hooks/use-customer-center-directory-state"
 import type { CustomerScope } from "@/features/customers/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -96,6 +93,7 @@ export function CustomerCenterDirectoryToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="customers-directory-search"
                             ref={searchInputRef}
                             data-slot="customer-search"
                             value={searchDraft}
@@ -105,7 +103,6 @@ export function CustomerCenterDirectoryToolbar({
                             placeholder="客户名称、编号或信用代码"
                             aria-label="搜索客户"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
@@ -116,17 +113,15 @@ export function CustomerCenterDirectoryToolbar({
                             className="flex h-control max-w-full items-stretch overflow-x-auto rounded-lg border bg-muted/40 p-0.5 [&_[data-slot=button]]:h-full [&_[data-slot=button]]:min-h-0"
                         >
                             {SCOPE_ORDER.filter(
-                                (key) =>
-                                    key !== "all_authorized" || canReadAll,
+                                (key) => key !== "all_authorized" || canReadAll,
                             ).map((key) => {
                                 const active = scope === key
                                 return (
                                     <Button
+                                        id={`customers-directory-scope-${toAutomationIdSegment(key)}`}
                                         key={key}
                                         type="button"
-                                        variant={
-                                            active ? "secondary" : "ghost"
-                                        }
+                                        variant={active ? "secondary" : "ghost"}
                                         className={
                                             active
                                                 ? "bg-card shadow-xs"
@@ -141,6 +136,7 @@ export function CustomerCenterDirectoryToolbar({
                             })}
                         </div>
                         <Button
+                            id="customers-directory-more-filters-trigger"
                             type="button"
                             variant="outline"
                             aria-expanded={panelOpen}
@@ -177,6 +173,7 @@ export function CustomerCenterDirectoryToolbar({
                                     </span>
                                     {appliedChips.map((chip) => (
                                         <FilterChip
+                                            id={`customers-directory-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             key={chip.key}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
@@ -186,6 +183,7 @@ export function CustomerCenterDirectoryToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="customers-directory-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -202,6 +200,7 @@ export function CustomerCenterDirectoryToolbar({
                                     aria-label="客户目录筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="customers-directory-status"
                                         label="状态"
                                         value={statusDraft}
                                         onValueChange={setStatusDraft}
@@ -213,13 +212,17 @@ export function CustomerCenterDirectoryToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="customers-directory-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="customers-directory-apply-filters"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

@@ -86,7 +86,11 @@ export function CustomerReceivablesTable({
                             "unallocated",
                         ] as const
                     ).map((v) => (
-                        <TabsTrigger key={v} value={v}>
+                        <TabsTrigger
+                            key={v}
+                            value={v}
+                            id={`customer-receivables-view-${v}`}
+                        >
                             {VIEW_LABEL[v]}
                         </TabsTrigger>
                     ))}
@@ -123,7 +127,17 @@ export function CustomerReceivablesTable({
                         <BusinessFailureState
                             title="客户往来加载失败"
                             error={error}
-                            onRetry={onRetry}
+                            action={
+                                <Button
+                                    id="customer-receivables-list-retry"
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={onRetry}
+                                >
+                                    重试
+                                </Button>
+                            }
                         />
                     ) : isPending && !data ? (
                         <div className="h-64 animate-pulse rounded-xl bg-muted" />
@@ -158,6 +172,7 @@ export function CustomerReceivablesTable({
                                     />
                                 ) : (
                                     <DataTable
+                                        id="customer-receivables-unallocated-receipts"
                                         data={[...data.unallocated.receipts]}
                                         columns={receiptColumns}
                                         getRowId={(r) => r.receiptId}
@@ -197,6 +212,7 @@ export function CustomerReceivablesTable({
                                     />
                                 ) : (
                                     <DataTable
+                                        id="customer-receivables-unallocated-invoices"
                                         data={[...data.unallocated.invoices]}
                                         columns={invoiceColumns}
                                         getRowId={(r) => r.invoiceId}
@@ -221,6 +237,7 @@ export function CustomerReceivablesTable({
                                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                                 action={
                                     <Button
+                                        id="customer-receivables-empty-clear-filters"
                                         type="button"
                                         variant="secondary"
                                         className="rounded-lg shadow-none"
@@ -240,6 +257,7 @@ export function CustomerReceivablesTable({
                         )
                     ) : view === "receivable" && data ? (
                         <DataTable
+                            id="customer-receivables-list-receivable"
                             data={[...data.receivables]}
                             columns={receivableColumns}
                             getRowId={(r) => r.accountId}
@@ -254,6 +272,7 @@ export function CustomerReceivablesTable({
                         />
                     ) : view === "receipt" && data ? (
                         <DataTable
+                            id="customer-receivables-list-receipt"
                             data={[...data.receipts]}
                             columns={receiptColumns}
                             getRowId={(r) => r.receiptId}
@@ -268,6 +287,7 @@ export function CustomerReceivablesTable({
                         />
                     ) : view === "sales_invoice" && data ? (
                         <DataTable
+                            id="customer-receivables-list-invoice"
                             data={[...data.invoices]}
                             columns={invoiceColumns}
                             getRowId={(r) => r.invoiceId}

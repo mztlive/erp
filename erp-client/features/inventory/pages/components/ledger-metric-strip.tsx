@@ -33,6 +33,7 @@ export function LedgerMetricStrip({
             view 与 availability 两个参数；与工具栏「可用状态」下拉共享 availability 参数
             天然同步；Tabs（view）与指标条同源 URL，保持一致。 */}
             <MetricFilterItem
+                id="inventory-ledger-metric-combos"
                 label="库存组合"
                 value={metrics.balanceDimensionCount}
                 detail="仓库+SKU 组合数"
@@ -42,6 +43,7 @@ export function LedgerMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="inventory-ledger-metric-reserved"
                 label="有效预占组合"
                 value={metrics.reservedDimensionCount}
                 detail="有有效预占"
@@ -51,6 +53,7 @@ export function LedgerMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="inventory-ledger-metric-zero"
                 label="零可用组合"
                 value={metrics.zeroAvailableDimensionCount}
                 detail="可用数量为 0"
@@ -60,6 +63,7 @@ export function LedgerMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="inventory-ledger-metric-pending"
                 label="待处理调整"
                 value={metrics.pendingAdjustmentCount}
                 detail="处理中"

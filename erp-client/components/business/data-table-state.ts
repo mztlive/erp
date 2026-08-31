@@ -1,5 +1,9 @@
 import * as React from "react"
-import { functionalUpdate, type OnChangeFn, type Updater } from "@tanstack/react-table"
+import {
+    functionalUpdate,
+    type OnChangeFn,
+    type Updater,
+} from "@tanstack/react-table"
 
 type ControlledTableStateProps<T> = {
     value?: T

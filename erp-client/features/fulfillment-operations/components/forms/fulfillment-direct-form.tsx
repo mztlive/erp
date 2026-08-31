@@ -9,6 +9,7 @@ import {
     displayText,
     lineItemTitle,
 } from "@/features/fulfillment-operations/lib/readable-label"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     FulfillmentDraft,
     FulfillmentOperation,
@@ -44,12 +45,12 @@ export function FulfillmentDirectForm({
                 </header>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                        <Label htmlFor="direct-carrier">
+                        <Label htmlFor="fulfillment-operations-direct-form-carrier">
                             承运方
                             <span className="text-destructive">*</span>
                         </Label>
                         <OptionCombobox
-                            id="direct-carrier"
+                            id="fulfillment-operations-direct-form-carrier"
                             value={draft.carrier || null}
                             onValueChange={(value) =>
                                 onChange({
@@ -65,12 +66,12 @@ export function FulfillmentDirectForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="direct-tracking">
+                        <Label htmlFor="fulfillment-operations-direct-form-tracking-no">
                             物流单号
                             <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                            id="direct-tracking"
+                            id="fulfillment-operations-direct-form-tracking-no"
                             value={draft.trackingNo}
                             disabled={disabled}
                             placeholder="请输入物流单号"
@@ -83,9 +84,11 @@ export function FulfillmentDirectForm({
                         />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="direct-at">发货时间</Label>
+                        <Label htmlFor="fulfillment-operations-direct-form-shipped-at">
+                            发货时间
+                        </Label>
                         <DateTimeLocalPicker
-                            id="direct-at"
+                            id="fulfillment-operations-direct-form-shipped-at"
                             value={draft.shippedAt || undefined}
                             disabled={disabled}
                             showTimeZone={false}
@@ -123,11 +126,13 @@ export function FulfillmentDirectForm({
                                 ) : null}
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor={`direct-qty-${i}`}>
+                                <Label
+                                    htmlFor={`fulfillment-operations-direct-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
+                                >
                                     本次发货数量
                                 </Label>
                                 <Input
-                                    id={`direct-qty-${i}`}
+                                    id={`fulfillment-operations-direct-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
                                     className="num"
                                     inputMode="decimal"
                                     value={line.quantity}

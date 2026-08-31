@@ -10,14 +10,10 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { goToWorkspaceLabel } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 import { MEDIA_ROLE_LABEL } from "@/features/product-publications/types"
@@ -83,10 +79,7 @@ export function PublicationCenterContentSections({
                     <CardContent className="space-y-2 pt-4 text-sm">
                         <div>
                             供应商{" "}
-                            {
-                                data.selectedRevision.fixedOffering
-                                    .supplierName
-                            }
+                            {data.selectedRevision.fixedOffering.supplierName}
                         </div>
                         <div>
                             可供状态{" "}
@@ -121,6 +114,7 @@ export function PublicationCenterContentSections({
                 action={
                     isViewingHistoricalRevision ? (
                         <Button
+                            id="publication-center-sections-clear-revision"
                             type="button"
                             size="xs"
                             variant="outline"
@@ -158,6 +152,7 @@ export function PublicationCenterContentSections({
                                 data.selectedRevision.revisionId,
                             action: (
                                 <Button
+                                    id={`publication-center-sections-revision-${toAutomationIdSegment(r.revisionId)}-view`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
@@ -188,8 +183,7 @@ export function PublicationCenterContentSections({
                                         className={cn(
                                             "rounded-lg p-3 text-sm ring-1",
                                             d.revisionId ===
-                                                data.selectedRevision
-                                                    .revisionId
+                                                data.selectedRevision.revisionId
                                                 ? "bg-primary/5 ring-primary/40"
                                                 : "bg-muted/40 ring-transparent",
                                         )}
@@ -210,6 +204,7 @@ export function PublicationCenterContentSections({
                                             </div>
                                             {d.status === "FAILED" ? (
                                                 <Button
+                                                    id={`publication-center-sections-delivery-${toAutomationIdSegment(d.deliveryId)}-retry`}
                                                     type="button"
                                                     size="xs"
                                                     variant="outline"
@@ -231,6 +226,7 @@ export function PublicationCenterContentSections({
                                             ) : null}
                                             {d.status === "HANDOFF" ? (
                                                 <Button
+                                                    id={`publication-center-sections-delivery-${toAutomationIdSegment(d.deliveryId)}-workspace`}
                                                     type="button"
                                                     size="xs"
                                                     variant="outline"
@@ -240,9 +236,7 @@ export function PublicationCenterContentSections({
                                                         />
                                                     }
                                                 >
-                                                    {goToWorkspaceLabel(
-                                                        "W29",
-                                                    )}
+                                                    {goToWorkspaceLabel("W29")}
                                                 </Button>
                                             ) : null}
                                         </div>
@@ -324,10 +318,7 @@ export function PublicationCenterContentSections({
                         />
                         <div className="pt-2 text-xs">
                             供给{" "}
-                            {
-                                data.selectedRevision.fixedOffering
-                                    .supplierName
-                            }
+                            {data.selectedRevision.fixedOffering.supplierName}
                         </div>
                     </CardContent>
                 </Card>

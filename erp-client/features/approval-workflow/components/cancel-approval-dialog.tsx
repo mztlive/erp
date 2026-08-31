@@ -38,6 +38,7 @@ export function CancelApprovalDialog({
     expectedTaskVersion,
     emergency = false,
     onApplied,
+    id = "governance-approval-cancel-dialog",
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -52,6 +53,7 @@ export function CancelApprovalDialog({
     expectedTaskVersion?: string
     emergency?: boolean
     onApplied?: (view: ApprovalCommandView) => void
+    id?: string
 }) {
     const cancelApproval = useCancelApprovalMutation()
     const cancelBlocked = useCancelBlockedMutation(instanceId)
@@ -127,7 +129,7 @@ export function CancelApprovalDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
@@ -152,6 +154,7 @@ export function CancelApprovalDialog({
                         name="reason"
                         children={(field) => (
                             <field.TextareaField
+                                id={`${id}-reason`}
                                 label="原因"
                                 required
                                 disabled={pending}
@@ -165,6 +168,7 @@ export function CancelApprovalDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id={`${id}-cancel`}
                             type="button"
                             variant="outline"
                             disabled={pending}
@@ -174,6 +178,7 @@ export function CancelApprovalDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id={`${id}-submit`}
                                 label={
                                     mode === "withdraw"
                                         ? "确认撤回"

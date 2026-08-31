@@ -5,7 +5,10 @@ import { ExternalLinkIcon, ShieldAlertIcon } from "lucide-react"
 
 import { MaintenanceBanner } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import type { MallSyncPageView, MallSyncViewName } from "@/features/mall-sync/types"
+import type {
+    MallSyncPageView,
+    MallSyncViewName,
+} from "@/features/mall-sync/types"
 import { DIRECTION_LABEL, STAGE_LABEL } from "@/features/mall-sync/types"
 import { formatDateTime } from "@/lib/datetime"
 import { workspaceLabel } from "@/lib/ui-text"
@@ -68,23 +71,36 @@ export function MallSyncOwnershipBanner({
             {sealed && (
                 <div className="flex flex-wrap gap-2 text-sm">
                     <Button
+                        id="mall-sync-ownership-w23"
                         variant="link"
                         size="sm"
-                        render={<Link href="/commerce/execution-projections" />}
+                        render={
+                            <Link
+                                id="mall-sync-ownership-w23-link"
+                                href="/commerce/execution-projections"
+                            />
+                        }
                     >
                         {workspaceLabel("W23")}
                         <ExternalLinkIcon className="size-3.5" />
                     </Button>
                     <Button
+                        id="mall-sync-ownership-w29"
                         variant="link"
                         size="sm"
-                        render={<Link href="/governance/integration-errors" />}
+                        render={
+                            <Link
+                                id="mall-sync-ownership-w29-link"
+                                href="/governance/integration-errors"
+                            />
+                        }
                     >
                         {workspaceLabel("W29")}
                         <ExternalLinkIcon className="size-3.5" />
                     </Button>
                     {sealed && view !== "history" ? (
                         <Button
+                            id="mall-sync-ownership-history"
                             type="button"
                             variant="secondary"
                             size="sm"

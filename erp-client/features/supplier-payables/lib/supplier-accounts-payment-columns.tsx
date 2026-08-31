@@ -6,6 +6,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     PaymentRow,
     ReverseTarget,
@@ -83,6 +84,7 @@ export function buildPaymentColumns(input: {
                 return (
                     <div className="flex flex-col items-start gap-1">
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-reversal-${toAutomationIdSegment(latest.reversalId)}-open`}
                             type="button"
                             size="xs"
                             variant="ghost"
@@ -145,6 +147,7 @@ export function buildPaymentColumns(input: {
                 <div className="flex flex-wrap justify-end gap-1">
                     {row.original.allowedActions.includes("VIEW_DETAIL") ? (
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-view`}
                             type="button"
                             size="xs"
                             variant="outline"
@@ -157,6 +160,7 @@ export function buildPaymentColumns(input: {
                     ) : null}
                     {row.original.allowedActions.includes("REVERSE") ? (
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-reverse`}
                             type="button"
                             size="xs"
                             variant="outline"
@@ -174,6 +178,7 @@ export function buildPaymentColumns(input: {
                     {row.original.allowedActions.includes("REFUND") &&
                     setRefundRequest ? (
                         <Button
+                            id={`supplier-payables-table-row-${toAutomationIdSegment(row.original.paymentId)}-refund`}
                             type="button"
                             size="xs"
                             variant="outline"

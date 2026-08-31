@@ -5,9 +5,9 @@ use entities::card_instance::{MallCardInstance, MallConsumptionCutover};
 use entities::common::time::Instant;
 use entities::ids::{MallOrderId, MallOrderItemId};
 use entities::mall_order::{
-    AttributionStatus, CostBasis, DataSource, FactType, FulfillmentChain, MallConsumptionCostAssessment,
-    MallConsumptionEntry, MallItemFundingAllocation, MallOrder, MallOrderFact, MallOrderItem,
-    MallPaymentSource, PaymentSourceType,
+    AttributionStatus, CostBasis, DataSource, FactType, FulfillmentChain, FundingAmountResult,
+    FundingConservation, FundingOrderAmounts, MallConsumptionCostAssessment, MallConsumptionEntry,
+    MallItemFundingAllocation, MallOrder, MallOrderFact, MallOrderItem, MallPaymentSource, PaymentSourceType,
 };
 use entities::money::Amount;
 use std::str::FromStr;
@@ -68,6 +68,9 @@ struct MallOrderDetailGraph {
 impl MallOrderService {
     /// 分页查询商城订单列表（W25 列表页）。
     ///
+    /// # 用途
+    /// 校验查询、读取订单页，并仅为当前页订单装配事实、支付与成本摘要。
+    ///
     /// # 参数
     /// * `params` - 查询参数（`q`/`mall_id`/`external_order_no`/`customer_id`/
     ///   `fulfillment_chain`/`attribution_status`/`paid_at_from`/`paid_at_to` 扁平筛选）
@@ -78,6 +81,9 @@ impl MallOrderService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键约束
+    /// 事实摘要复用既有商城范围查询；业务分组、页内匹配和视图计算仍留在 Service。
     pub async fn mall_order_list(&self, params: &MallOrderListParams) -> Result<PageView<MallOrderListRow>> {
         params.validate()?;
         let query = params.normalized()?;
@@ -105,7 +111,7 @@ impl MallOrderService {
             .search_orders(&filter, &mut NoTransaction)
             .await?;
         // 行级聚合字段（事实摘要/支付构成/成本分项）按页内订单批量补齐：
-        // 事实按（商城, 订单号）分组、支付来源按订单、消费事实沿支付来源取。
+        // 事实按商城范围读取后按（商城, 订单号）分组、支付来源按订单、消费事实沿支付来源取。
         let fact_map = self.facts_grouped_by_order(&filter.mall_id).await?;
         let mut rows = Vec::with_capacity(page.items.len());
         for row in page.items {
@@ -249,6 +255,9 @@ impl MallOrderService {
 impl MallOrderService {
     /// 构建列表行视图（事实摘要/支付构成/成本分项聚合）。
     ///
+    /// # 用途
+    /// 将订单投影与页内关联事实、支付来源和成本评估装配为公开列表行。
+    ///
     /// # 参数
     /// * `row` - 订单投影行（已按列表投影字段提取）
     /// * `fact_map` - （商城, 订单号）→ 事实摘要映射
@@ -258,6 +267,9 @@ impl MallOrderService {
     ///
     /// # 错误
     /// 数据库查询失败时返回 `RepositoryError`。
+    ///
+    /// # 关键约束
+    /// 事实重复记录参与计数；最新数据来源按 `occurred_at` 后再按稳定事实 ID 取最大值。
     async fn build_list_row(&self, row: OrderListRow, fact_map: &OrderFactMap) -> Result<MallOrderListRow> {
         let order_id: MallOrderId = row.id.clone().into();
         let sources = self
@@ -273,7 +285,8 @@ impl MallOrderService {
             .unwrap_or_default();
         let facts = facts
             .into_iter()
-            .map(|(fact_type, occurred_at, data_source)| OrderFactSummary {
+            .map(|(id, fact_type, occurred_at, data_source)| OrderFactSummary {
+                id,
                 fact_type,
                 occurred_at,
                 data_source,
@@ -313,11 +326,7 @@ impl MallOrderService {
                 });
             }
         }
-        let data_source = facts
-            .iter()
-            .max_by_key(|fact| fact.occurred_at)
-            .map(|fact| fact.data_source)
-            .unwrap_or(DataSource::Realtime);
+        let data_source = latest_data_source(&facts);
 
         let mut breakdown: Vec<CostBasisBreakdownItemView> = Vec::new();
         let mut distinct_bases: Vec<CostBasis> = Vec::new();
@@ -556,7 +565,10 @@ impl MallOrderService {
         }
     }
 
-    /// 计算分摊矩阵守恒校验（§6.17 行/列守恒 + 订单总额）。
+    /// 映射分摊矩阵守恒校验（§6.17 行/列守恒 + 订单总额）。
+    ///
+    /// # 用途
+    /// 调用实体层纯评估器，并仅负责转换为 W25 详情响应形状。
     ///
     /// # 参数
     /// * `order` - 订单实体
@@ -565,7 +577,13 @@ impl MallOrderService {
     /// * `allocations` - 分摊记录
     ///
     /// # 返回
-    /// 返回守恒校验视图。
+    /// 返回保持既有字段、字符串金额与输入顺序的守恒校验视图。
+    ///
+    /// # 错误
+    /// 不返回错误；详情需要展示有效与差异结果，而不是拒绝读取。
+    ///
+    /// # 关键约束
+    /// 金额折叠和精确比较只由 [`FundingConservation`] 实现，Service 不复制规则。
     fn build_conservation(
         &self,
         order: &MallOrder,
@@ -573,54 +591,57 @@ impl MallOrderService {
         sources: &[MallPaymentSource],
         allocations: &[MallItemFundingAllocation],
     ) -> ConservationView {
-        let zero = Amount::from_str("0.00").expect("零常量可解析");
-        let item_rows = items
-            .iter()
-            .map(|item| {
-                let actual = allocations
-                    .iter()
-                    .filter(|allocation| allocation.mall_order_item_id.as_ref() == item.base.id)
-                    .fold(zero, |acc, allocation| {
-                        acc.checked_add(allocation.allocated_payment_amount)
-                    });
-                ConservationResultRow {
-                    id: item.base.id.clone(),
-                    expected: item.paid_amount.to_string(),
-                    actual: actual.to_string(),
-                    valid: actual.to_decimal() == item.paid_amount.to_decimal(),
-                }
-            })
-            .collect();
-        let source_columns = sources
-            .iter()
-            .map(|source| {
-                let actual = allocations
-                    .iter()
-                    .filter(|allocation| allocation.mall_payment_source_id.as_ref() == source.base.id)
-                    .fold(zero, |acc, allocation| {
-                        acc.checked_add(allocation.allocated_payment_amount)
-                    });
-                ConservationResultRow {
-                    id: source.base.id.clone(),
-                    expected: source.amount.to_string(),
-                    actual: actual.to_string(),
-                    valid: actual.to_decimal() == source.amount.to_decimal(),
-                }
-            })
-            .collect();
-        let actual_paid = allocations.iter().fold(zero, |acc, allocation| {
-            acc.checked_add(allocation.allocated_payment_amount)
-        });
-        ConservationView {
-            item_row_results: item_rows,
-            source_column_results: source_columns,
-            order_total: ConservationResultRow {
-                id: order.base.id.clone(),
-                expected: order.paid_amount.to_string(),
-                actual: actual_paid.to_string(),
-                valid: actual_paid.to_decimal() == order.paid_amount.to_decimal(),
+        let result = FundingConservation::evaluate(
+            FundingOrderAmounts {
+                gross: order.gross_amount,
+                discount: order.discount_amount,
+                paid: order.paid_amount,
             },
+            items,
+            sources,
+            allocations,
+        );
+        let item_row_results = result
+            .item_rows
+            .into_iter()
+            .map(|row| conservation_result_row(row.item_id.to_string(), row.amount))
+            .collect();
+        let source_column_results = result
+            .source_columns
+            .into_iter()
+            .map(|column| conservation_result_row(column.source_id.to_string(), column.amount))
+            .collect();
+        ConservationView {
+            item_row_results,
+            source_column_results,
+            order_total: conservation_result_row(order.base.id.clone(), result.order_paid),
         }
+    }
+}
+
+/// 将实体层金额守恒结果转换为详情响应行。
+///
+/// # 用途
+/// 统一商品行、来源列与订单总额的字符串金额和有效标识映射。
+///
+/// # 参数
+/// * `id` - 校验对象的稳定 ID
+/// * `amount` - 实体层期望金额与实际金额结果
+///
+/// # 返回
+/// 返回保持既有序列化字段的守恒响应行。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 只做展示转换，不重新计算、舍入或改变实体层有效性判断。
+fn conservation_result_row(id: String, amount: FundingAmountResult) -> ConservationResultRow {
+    ConservationResultRow {
+        id,
+        expected: amount.expected.to_string(),
+        actual: amount.actual.to_string(),
+        valid: amount.is_valid(),
     }
 }
 
@@ -723,7 +744,7 @@ impl AssessmentAmountString for MallConsumptionCostAssessment {
 
 /// （商城, 订单号）→ 事实摘要列表的映射类型（列表行聚合用）。
 pub(super) type OrderFactMap =
-    std::collections::HashMap<(String, String), Vec<(FactType, Instant, DataSource)>>;
+    std::collections::HashMap<(String, String), Vec<(String, FactType, Instant, DataSource)>>;
 
 /// 商城订单列表投影行（Service 内私有，避免依赖仓储私有子树类型名）。
 #[derive(Debug, Clone)]
@@ -747,12 +768,75 @@ struct OrderListRow {
 }
 
 /// 事实摘要（列表行聚合用）。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct OrderFactSummary {
+    /// 稳定事实 ID（并列发生时间的最新来源判定键）。
+    id: String,
     /// 事实类型。
     fact_type: FactType,
     /// 发生时间。
     occurred_at: Instant,
     /// 数据来源。
     data_source: DataSource,
+}
+
+/// 选择订单列表展示使用的最新事实数据来源。
+///
+/// # 用途
+/// 保持最新来源计算在 Service，并为相同发生时间提供稳定事实 ID 并列规则。
+///
+/// # 参数
+/// * `facts` - 当前订单的事实摘要，允许重复类型与相同发生时间
+///
+/// # 返回
+/// 返回最大 `(occurred_at, id)` 对应的数据来源；无事实时返回实时来源。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 不去重事实；事实 ID 按字典序升序比较，最大 ID 赢得相同发生时间的并列。
+fn latest_data_source(facts: &[OrderFactSummary]) -> DataSource {
+    facts
+        .iter()
+        .max_by(|left, right| {
+            left.occurred_at
+                .cmp(&right.occurred_at)
+                .then_with(|| left.id.cmp(&right.id))
+        })
+        .map(|fact| fact.data_source)
+        .unwrap_or(DataSource::Realtime)
+}
+
+#[cfg(test)]
+mod tests {
+    use entities::common::time::Instant;
+    use entities::mall_order::{DataSource, FactType};
+
+    use super::{latest_data_source, OrderFactSummary};
+
+    /// 最新来源先按发生时间，再按稳定事实 ID 处理同秒并列；空集合保持实时默认值。
+    ///
+    /// 测试覆盖同秒并列和空输入，不访问 Repository；选择规则漂移时失败。
+    #[test]
+    fn latest_data_source_uses_stable_id_for_equal_timestamps() {
+        let occurred_at = Instant::from_unix_secs(1_700_000_000);
+        let facts = vec![
+            OrderFactSummary {
+                id: "fact-1".to_string(),
+                fact_type: FactType::PaymentSucceeded,
+                occurred_at,
+                data_source: DataSource::HistoryBackfill,
+            },
+            OrderFactSummary {
+                id: "fact-2".to_string(),
+                fact_type: FactType::RefundSucceeded,
+                occurred_at,
+                data_source: DataSource::Realtime,
+            },
+        ];
+
+        assert_eq!(latest_data_source(&facts), DataSource::Realtime);
+        assert_eq!(latest_data_source(&[]), DataSource::Realtime);
+    }
 }

@@ -4,6 +4,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
@@ -32,12 +33,15 @@ function SelectTrigger({
     className,
     size = "default",
     children,
+    id,
     ...props
 }: SelectPrimitive.Trigger.Props & {
     size?: "sm" | "default"
+    id?: string
 }) {
     return (
         <SelectPrimitive.Trigger
+            id={id}
             data-slot="select-trigger"
             data-size={size}
             className={cn(
@@ -114,10 +118,27 @@ function SelectLabel({
 function SelectItem({
     className,
     children,
+    id,
+    idPrefix,
     ...props
-}: SelectPrimitive.Item.Props) {
+}: SelectPrimitive.Item.Props & { id?: string; idPrefix?: string }) {
+    const itemValue = (props as { value?: unknown }).value
+    const segment =
+        typeof itemValue === "string" && itemValue
+            ? toAutomationIdSegment(itemValue)
+            : undefined
+    const autoId =
+        id ??
+        (segment
+            ? idPrefix
+                ? `${idPrefix}-option-${segment}`
+                : `select-option-${segment}`
+            : undefined)
     return (
         <SelectPrimitive.Item
+            {...(autoId
+                ? ({ id: autoId } as unknown as Record<string, unknown>)
+                : {})}
             data-slot="select-item"
             className={cn(
                 "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-xl py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",

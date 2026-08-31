@@ -12,15 +12,18 @@ import { Button } from "@/components/ui/button"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { CategoryTreeNode } from "@/features/master-data/lib/category-tree-model"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 function CategoryTreeRow({
+    prefix,
     node,
     expanded,
     selectedId,
     onToggle,
     onSelect,
 }: {
+    prefix: string
     node: CategoryTreeNode
     expanded: ReadonlySet<string>
     selectedId: string | null
@@ -38,6 +41,7 @@ function CategoryTreeRow({
     return (
         <li>
             <div
+                id={`${prefix}-row-${toAutomationIdSegment(node.item.stableId)}`}
                 role="treeitem"
                 aria-expanded={hasChildren ? isOpen : undefined}
                 aria-selected={selected}
@@ -66,6 +70,7 @@ function CategoryTreeRow({
             >
                 {hasChildren ? (
                     <button
+                        id={`${prefix}-row-${toAutomationIdSegment(node.item.stableId)}-toggle`}
                         type="button"
                         className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-background"
                         aria-label={isOpen ? "收起" : "展开"}
@@ -106,6 +111,7 @@ function CategoryTreeRow({
                     {node.children.map((child) => (
                         <CategoryTreeRow
                             key={child.item.stableId}
+                            prefix={prefix}
                             node={child}
                             expanded={expanded}
                             selectedId={selectedId}
@@ -121,6 +127,7 @@ function CategoryTreeRow({
 
 /** 左侧树滚动区：树 / 筛选空态 / 首次新建空态。 */
 export function CategoryTreeList({
+    idPrefix,
     forest,
     expanded,
     selectedId,
@@ -130,6 +137,7 @@ export function CategoryTreeList({
     onClearFilters,
     onOpenCreateRoot,
 }: {
+    idPrefix?: string
     forest: readonly CategoryTreeNode[]
     expanded: ReadonlySet<string>
     selectedId: string | null
@@ -139,6 +147,7 @@ export function CategoryTreeList({
     onClearFilters: () => void
     onOpenCreateRoot: () => void
 }) {
+    const prefix = idPrefix ?? "master-data-category-tree-list"
     return (
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {forest.length === 0 ? (
@@ -151,6 +160,7 @@ export function CategoryTreeList({
                             {masterDataCopy.categoryTreeNoMatchDesc}
                         </p>
                         <Button
+                            id={`${prefix}-clear-filters`}
                             type="button"
                             size="sm"
                             variant="secondary"
@@ -166,14 +176,12 @@ export function CategoryTreeList({
                             {masterDataCopy.categoryTreeEmpty}
                         </p>
                         <Button
+                            id={`${prefix}-create-root`}
                             type="button"
                             size="sm"
                             onClick={onOpenCreateRoot}
                         >
-                            <PlusIcon
-                                data-icon="inline-start"
-                                aria-hidden
-                            />
+                            <PlusIcon data-icon="inline-start" aria-hidden />
                             {masterDataCopy.categoryAddRoot}
                         </Button>
                     </div>
@@ -183,6 +191,7 @@ export function CategoryTreeList({
                     {forest.map((node) => (
                         <CategoryTreeRow
                             key={node.item.stableId}
+                            prefix={prefix}
                             node={node}
                             expanded={expanded}
                             selectedId={selectedId}

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { toFixedSku } from "@/features/master-data/lib/product-fixed-sku"
 import type {
     ProductFields,
@@ -42,6 +43,7 @@ function SkuSupplierCell({
     supplierCountsError,
     onRegisterSupply,
 }: SkuSupplierCellProps) {
+    const skuSegment = toAutomationIdSegment(sku.skuId || sku.skuNo || name)
     return (
         <td className="px-3 py-3">
             <div className="space-y-1.5">
@@ -80,6 +82,7 @@ function SkuSupplierCell({
                             </div>
                             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
                                 <Button
+                                    id={`master-data-product-sku-${skuSegment}-add-supply`}
                                     type="button"
                                     variant="outline"
                                     size="sm"
@@ -93,6 +96,7 @@ function SkuSupplierCell({
                                     添加供给
                                 </Button>
                                 <Link
+                                    id={`master-data-product-sku-${skuSegment}-view-supplies`}
                                     className="text-xs text-primary hover:underline"
                                     href={`/procurement/supplier-offerings?skuId=${encodeURIComponent(sku.skuId)}&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
                                 >

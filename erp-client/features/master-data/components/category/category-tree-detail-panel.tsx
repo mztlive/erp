@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 
 /** 右侧分类详情：路径、版本与维护操作。 */
 export function CategoryTreeDetailPanel({
+    idPrefix,
     selected,
     selectedId,
     selectedPath,
@@ -25,6 +26,7 @@ export function CategoryTreeDetailPanel({
     onReviseTarget,
     onDisableTarget,
 }: {
+    idPrefix?: string
     selected: MasterDataListItem | null
     selectedId: string | null
     selectedPath: string | undefined
@@ -34,6 +36,7 @@ export function CategoryTreeDetailPanel({
     onReviseTarget: (item: MasterDataListItem) => void
     onDisableTarget: (item: MasterDataListItem) => void
 }) {
+    const prefix = idPrefix ?? "master-data-category-tree-detail-panel"
     return (
         <section
             className={cn(surfacePanelClassName, "flex min-h-0 flex-col")}
@@ -49,6 +52,7 @@ export function CategoryTreeDetailPanel({
                             当前选中的分类不在筛选结果中。
                         </p>
                         <Button
+                            id={`${prefix}-clear-filters`}
                             type="button"
                             size="sm"
                             variant="secondary"
@@ -125,8 +129,7 @@ export function CategoryTreeDetailPanel({
                                 <dd className="font-medium">
                                     {selected.productKind ??
                                         selected.keyFacts.find(
-                                            (f) =>
-                                                f.label === "适用商品类型",
+                                            (f) => f.label === "适用商品类型",
                                         )?.value ??
                                         "—"}
                                 </dd>
@@ -134,6 +137,7 @@ export function CategoryTreeDetailPanel({
                         </dl>
                         <div className="flex flex-wrap gap-2 border-t border-grid pt-3">
                             <Button
+                                id={`${prefix}-open-detail`}
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -160,6 +164,7 @@ export function CategoryTreeDetailPanel({
                                 className="inline-flex"
                             >
                                 <Button
+                                    id={`${prefix}-create-child`}
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -192,6 +197,7 @@ export function CategoryTreeDetailPanel({
                                 className="inline-flex"
                             >
                                 <Button
+                                    id={`${prefix}-revise`}
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -220,6 +226,7 @@ export function CategoryTreeDetailPanel({
                                 className="inline-flex"
                             >
                                 <Button
+                                    id={`${prefix}-disable`}
                                     type="button"
                                     size="sm"
                                     variant="outline"

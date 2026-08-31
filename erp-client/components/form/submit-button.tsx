@@ -17,8 +17,9 @@ export function SubmitButton({
     pendingLabel = "提交中…",
     children,
     disabled,
+    id,
     ...props
-}: SubmitButtonProps) {
+}: SubmitButtonProps & { id?: string }) {
     const form = useFormContext()
 
     return (
@@ -27,6 +28,7 @@ export function SubmitButton({
         >
             {([canSubmit, isSubmitting]) => (
                 <Button
+                    id={id ?? "form-submit"}
                     type="submit"
                     disabled={disabled || !canSubmit || isSubmitting}
                     {...props}

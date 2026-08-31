@@ -7,6 +7,7 @@ import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ConnectionListItem } from "@/features/supplier-api-connections/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { freshnessText } from "@/lib/ui-text"
 
 export function useConnectionListColumns(
@@ -24,6 +25,7 @@ export function useConnectionListColumns(
                     return (
                         <div className="min-w-0 py-0.5">
                             <Button
+                                id={`supplier-api-connections-list-row-${toAutomationIdSegment(r.connectionId)}-open-code`}
                                 type="button"
                                 variant="link"
                                 size="xs"
@@ -157,6 +159,7 @@ export function useConnectionListColumns(
                 enableSorting: false,
                 cell: ({ row }) => (
                     <Button
+                        id={`supplier-api-connections-list-row-${toAutomationIdSegment(row.original.connectionId)}-open`}
                         type="button"
                         size="sm"
                         variant="outline"

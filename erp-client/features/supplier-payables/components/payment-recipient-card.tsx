@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/description-list"
 import { useRevealPaymentRecipientMutation } from "@/features/supplier-payables/hooks/queries"
 import type { PaymentRecipient } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type PaymentRecipientRevealProps = Readonly<{
@@ -51,6 +52,7 @@ export function PaymentRecipientFields({
                 <DescriptionTerm>收款账号</DescriptionTerm>
                 <DescriptionDetails>
                     <SensitiveValue
+                        id={`supplier-payables-payment-recipient-${toAutomationIdSegment(payableAccountId)}-account`}
                         label="收款账号"
                         maskedValue={recipient.accountNumberMasked}
                         onReveal={async () => {
@@ -75,10 +77,19 @@ export function PaymentRecipientFields({
     )
 }
 
-export function PaymentRecipientHeading({ className }: { className?: string }) {
+export function PaymentRecipientHeading({
+    className,
+    payableAccountId,
+}: {
+    className?: string
+    payableAccountId?: string
+}) {
+    const titleId = payableAccountId
+        ? `supplier-payables-payment-recipient-${toAutomationIdSegment(payableAccountId)}-title`
+        : "supplier-payables-payment-recipient-title"
     return (
         <div className={className}>
-            <h3 id="payment-recipient-title" className="text-sm font-semibold">
+            <h3 id={titleId} className="text-sm font-semibold">
                 收款信息
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -95,12 +106,13 @@ export function PaymentRecipientCard({
     expectedTaskVersion,
     recipient,
 }: PaymentRecipientRevealProps) {
+    const titleId = `supplier-payables-payment-recipient-${toAutomationIdSegment(payableAccountId)}-title`
     return (
         <section
             className={cn(surfacePanelClassName, "space-y-4 p-4")}
-            aria-labelledby="payment-recipient-title"
+            aria-labelledby={titleId}
         >
-            <PaymentRecipientHeading />
+            <PaymentRecipientHeading payableAccountId={payableAccountId} />
             <PaymentRecipientFields
                 payableAccountId={payableAccountId}
                 workItemId={workItemId}

@@ -21,6 +21,7 @@ export function AuditSection({ conn }: { conn: ConnectionCenterView }) {
             <p className="text-sm text-muted-foreground">
                 配置变更与业务确认均保留审计记录 ·{" "}
                 <Link
+                    id="supplier-api-connections-audit-open"
                     href={`/system/access-audit?objectId=${conn.connectionId}`}
                     className="text-primary underline-offset-2 hover:underline"
                 >
@@ -63,6 +64,7 @@ export function AuditSection({ conn }: { conn: ConnectionCenterView }) {
             </ul>
             {conn.auditEvents.length > 10 ? (
                 <Button
+                    id="supplier-api-connections-audit-toggle-more"
                     type="button"
                     size="sm"
                     variant="ghost"

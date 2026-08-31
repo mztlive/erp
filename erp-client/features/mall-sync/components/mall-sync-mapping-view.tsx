@@ -53,7 +53,7 @@ function MallSyncMappingView({
     embedded = false,
 }: MallSyncMappingViewProps) {
     return (
-        <div className="space-y-4">
+        <div className={embedded ? undefined : "space-y-4"}>
             {data?.emptyReason === "NO_TASKS" ||
             data?.emptyReason === "FILTER_NO_RESULT" ? (
                 <BusinessEmptyState
@@ -79,7 +79,7 @@ function MallSyncMappingView({
             <div
                 className={
                     embedded
-                        ? "grid gap-4"
+                        ? "grid gap-0"
                         : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"
                 }
             >
@@ -89,6 +89,7 @@ function MallSyncMappingView({
                         description="映射状态与重新归集状态分列；责任未配置时不可执行。"
                         table={
                             <DataTable
+                                id="mall-sync-mapping-table"
                                 data={data?.mappingTasks ?? []}
                                 columns={mappingColumns}
                                 getRowId={(r) => r.mappingTaskId}

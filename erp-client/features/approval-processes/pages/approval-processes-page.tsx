@@ -98,6 +98,7 @@ export function ApprovalProcessesPage() {
                     description="地址中的筛选参数无法识别，请清除后重新筛选。"
                     action={
                         <Button
+                            id="governance-approval-processes-catalog-invalid-clear"
                             type="button"
                             onClick={() =>
                                 router.replace("/system/approval-processes")
@@ -159,6 +160,7 @@ export function ApprovalProcessesPage() {
                     <ListToolbar
                         search={
                             <Input
+                                id="governance-approval-processes-catalog-search"
                                 aria-label="搜索单据类型"
                                 value={searchDraft}
                                 placeholder="搜索单据类型"
@@ -170,6 +172,7 @@ export function ApprovalProcessesPage() {
                         filters={
                             <>
                                 <OptionCombobox
+                                    id="governance-approval-processes-catalog-policy"
                                     aria-label="审批政策"
                                     options={[...POLICY_OPTIONS]}
                                     value={urlState.policy}
@@ -187,6 +190,7 @@ export function ApprovalProcessesPage() {
                                     }
                                 />
                                 <OptionCombobox
+                                    id="governance-approval-processes-catalog-status"
                                     aria-label="配置状态"
                                     options={[...STATUS_OPTIONS]}
                                     value={urlState.status}
@@ -211,6 +215,7 @@ export function ApprovalProcessesPage() {
                         actions={
                             <>
                                 <Button
+                                    id="governance-approval-processes-catalog-clear"
                                     type="button"
                                     variant="outline"
                                     onClick={() =>
@@ -225,6 +230,7 @@ export function ApprovalProcessesPage() {
                                     清除筛选
                                 </Button>
                                 <Button
+                                    id="governance-approval-processes-catalog-search-submit"
                                     type="button"
                                     onClick={() =>
                                         replaceState({
@@ -254,6 +260,7 @@ export function ApprovalProcessesPage() {
                             )}
                             action={
                                 <Button
+                                    id="governance-approval-processes-catalog-retry"
                                     type="button"
                                     onClick={() => void catalogQuery.refetch()}
                                 >
@@ -266,6 +273,7 @@ export function ApprovalProcessesPage() {
                             kind="filter"
                             action={
                                 <Button
+                                    id="governance-approval-processes-catalog-empty-clear"
                                     type="button"
                                     variant="outline"
                                     onClick={() =>
@@ -283,6 +291,7 @@ export function ApprovalProcessesPage() {
                         />
                     ) : (
                         <ProcessCatalog
+                            id="governance-approval-processes-catalog"
                             items={filtered}
                             permissions={permissions}
                             onCreateDraft={setDraftTarget}
@@ -296,6 +305,7 @@ export function ApprovalProcessesPage() {
                 }
             />
             <CreateDraftDialog
+                id="governance-approval-processes-catalog-create-draft-dialog"
                 item={draftTarget}
                 open={Boolean(draftTarget)}
                 onOpenChange={(open) => {

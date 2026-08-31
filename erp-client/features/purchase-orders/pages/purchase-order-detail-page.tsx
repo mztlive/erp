@@ -180,15 +180,30 @@ export function PurchaseOrderDetailPage({
                 <BusinessFailureState
                     title="详情加载失败"
                     error={query.error}
-                    onRetry={() => void query.refetch()}
                     action={
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            render={<Link href="/procurement/orders" />}
-                        >
-                            返回列表
-                        </Button>
+                        <>
+                            <Button
+                                id="procurement-orders-detail-retry"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void query.refetch()}
+                            >
+                                重试
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                render={
+                                    <Link
+                                        id="procurement-orders-detail-back-from-error"
+                                        href="/procurement/orders"
+                                    />
+                                }
+                            >
+                                返回列表
+                            </Button>
+                        </>
                     }
                 />
             </PageScaffold>
@@ -211,7 +226,12 @@ export function PurchaseOrderDetailPage({
                         <Button
                             variant="secondary"
                             className="rounded-lg shadow-none"
-                            render={<Link href="/procurement/orders" />}
+                            render={
+                                <Link
+                                    id="procurement-orders-detail-missing-back"
+                                    href="/procurement/orders"
+                                />
+                            }
                         >
                             返回列表
                         </Button>

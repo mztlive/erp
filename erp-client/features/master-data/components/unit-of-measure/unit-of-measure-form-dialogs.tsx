@@ -66,9 +66,13 @@ function emptyUnitForm(): UnitFormValues {
 export function UnitOfMeasureCreateDialog({
     open,
     onOpenChange,
+    id,
+    idPrefix,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
+    id?: string
+    idPrefix?: string
 }) {
     const mutation = useCreateMasterDataMutation()
     const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
@@ -112,6 +116,8 @@ export function UnitOfMeasureCreateDialog({
 
     return (
         <UnitFormDialogFrame
+            id={id}
+            idPrefix={idPrefix}
             open={open}
             onOpenChange={onOpenChange}
             title={masterDataCopy.createTitle("计量单位")}
@@ -132,10 +138,14 @@ export function UnitOfMeasureReviseDialog({
     open,
     onOpenChange,
     target,
+    id,
+    idPrefix,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     target: RevisionTarget | null
+    id?: string
+    idPrefix?: string
 }) {
     const mutation = useCreateRevisionMutation()
     const ids = revisionTargetIds(target)
@@ -193,6 +203,8 @@ export function UnitOfMeasureReviseDialog({
 
     return (
         <UnitFormDialogFrame
+            id={id}
+            idPrefix={idPrefix}
             open={open}
             onOpenChange={onOpenChange}
             title={masterDataCopy.reviseTitle}
@@ -220,6 +232,8 @@ export function UnitOfMeasureReviseDialog({
 }
 
 function UnitFormDialogFrame({
+    id,
+    idPrefix,
     open,
     onOpenChange,
     title,
@@ -233,6 +247,8 @@ function UnitFormDialogFrame({
     codeReadOnly,
     onReset,
 }: {
+    id?: string
+    idPrefix?: string
     open: boolean
     onOpenChange: (open: boolean) => void
     title: string
@@ -246,15 +262,18 @@ function UnitFormDialogFrame({
                     label: string
                     disabled?: boolean
                     required?: boolean
+                    id?: string
                 }>
                 TextareaField: React.ComponentType<{
                     label: string
                     required?: boolean
+                    id?: string
                 }>
                 SelectField: React.ComponentType<{
                     label: string
                     options: readonly { value: string; label: string }[]
                     required?: boolean
+                    id?: string
                 }>
             }) => React.ReactNode
         }>
@@ -270,6 +289,7 @@ function UnitFormDialogFrame({
     codeReadOnly: boolean
     onReset?: () => void
 }) {
+    const baseId = idPrefix ?? id ?? "master-data-unit-of-measure-form-dialog"
     const requestClose = (next: boolean) => {
         if (next) {
             onOpenChange(true)
@@ -285,7 +305,10 @@ function UnitFormDialogFrame({
 
     return (
         <Dialog open={open} onOpenChange={requestClose}>
-            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
+            <DialogContent
+                closeButtonId={`${baseId}-close`}
+                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
@@ -309,13 +332,18 @@ function UnitFormDialogFrame({
                             <form.AppField
                                 name="name"
                                 children={(field) => (
-                                    <field.TextField label="名称" required />
+                                    <field.TextField
+                                        id={`${baseId}-name`}
+                                        label="名称"
+                                        required
+                                    />
                                 )}
                             />
                             <form.AppField
                                 name="code"
                                 children={(field) => (
                                     <field.TextField
+                                        id={`${baseId}-code`}
                                         label={masterDataCopy.fUnitCode}
                                         disabled={codeReadOnly}
                                         required
@@ -326,6 +354,7 @@ function UnitFormDialogFrame({
                                 name="symbol"
                                 children={(field) => (
                                     <field.TextField
+                                        id={`${baseId}-symbol`}
                                         label={masterDataCopy.fUnitSymbol}
                                         required
                                     />
@@ -335,6 +364,7 @@ function UnitFormDialogFrame({
                                 name="quantityScale"
                                 children={(field) => (
                                     <field.SelectField
+                                        id={`${baseId}-quantity-scale`}
                                         label={masterDataCopy.fQuantityScale}
                                         options={QUANTITY_SCALE_OPTIONS.map(
                                             (option) => ({
@@ -350,6 +380,7 @@ function UnitFormDialogFrame({
                                 name="changeReason"
                                 children={(field) => (
                                     <field.TextareaField
+                                        id={`${baseId}-change-reason`}
                                         label={masterDataCopy.fieldChangeReason}
                                         required
                                     />
@@ -357,6 +388,7 @@ function UnitFormDialogFrame({
                             />
                             <DialogFooter>
                                 <DialogClose
+                                    id={`${baseId}-cancel`}
                                     render={
                                         <Button
                                             type="button"
@@ -367,7 +399,11 @@ function UnitFormDialogFrame({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button type="submit" disabled={pending}>
+                                <Button
+                                    id={`${baseId}-submit`}
+                                    type="submit"
+                                    disabled={pending}
+                                >
                                     {pending ? "提交中…" : submitLabel}
                                 </Button>
                             </DialogFooter>
@@ -376,6 +412,7 @@ function UnitFormDialogFrame({
                 </DialogScrollBody>
             </DialogContent>
             <DiscardConfirmDialog
+                id={`${baseId}-discard`}
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
                 title="放弃本次填写？"

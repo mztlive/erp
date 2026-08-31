@@ -21,30 +21,35 @@ export function PublicationMetricStrip({
     return (
         <MetricStrip>
             <MetricFilterItem
+                id="publication-metrics-pending-publish"
                 label="待发布"
                 value={metrics?.pendingPublish ?? "—"}
                 active={metric === "pending_publish"}
                 onClick={() => onToggle("pending_publish")}
             />
             <MetricFilterItem
+                id="publication-metrics-pending-confirm"
                 label="待商城确认"
                 value={metrics?.pendingConfirm ?? "—"}
                 active={metric === "pending_confirm"}
                 onClick={() => onToggle("pending_confirm")}
             />
             <MetricFilterItem
+                id="publication-metrics-failed-handoff"
                 label="失败/转人工"
                 value={metrics?.failedOrHandoff ?? "—"}
                 active={metric === "failed_handoff"}
                 onClick={() => onToggle("failed_handoff")}
             />
             <MetricFilterItem
+                id="publication-metrics-mall-live"
                 label="商城已生效"
                 value={metrics?.mallLive ?? "—"}
                 active={metric === "mall_live"}
                 onClick={() => onToggle("mall_live")}
             />
             <MetricFilterItem
+                id="publication-metrics-paused"
                 label="已暂停"
                 value={metrics?.paused ?? "—"}
                 active={metric === "paused"}

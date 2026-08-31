@@ -64,6 +64,7 @@ export function SellableItemsListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-sellable-items-list-export",
                     actionKey: "export",
                     label: "导出当前结果",
                     icon: DownloadIcon,
@@ -90,6 +91,7 @@ export function SellableItemsListPage() {
                 description={state.sellableTableDescription}
                 toolbar={
                     <SellableListToolbar
+                        idPrefix="master-data-sellable-items-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -148,6 +150,7 @@ export function SellableItemsListPage() {
                 }
                 table={
                     <DataTable
+                        id="master-data-sellable-items-list-table"
                         // 全量结果交给表格：排序必须作用于整份结果，不能只排当前页
                         data={state.rows}
                         columns={columns}
@@ -175,8 +178,18 @@ export function SellableItemsListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() =>
-                                        void state.listQuery.refetch()
+                                    action={
+                                        <Button
+                                            id="master-data-sellable-items-list-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                void state.listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
                                 />
                             ) : undefined
@@ -201,6 +214,7 @@ export function SellableItemsListPage() {
                                     action={
                                         hasActiveFilters ? (
                                             <Button
+                                                id="master-data-sellable-items-list-empty-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -224,6 +238,7 @@ export function SellableItemsListPage() {
                 }
             />
             <SellablePreviewSheet
+                idPrefix="master-data-sellable-items-preview"
                 previewRow={state.previewRow}
                 lastFocusedRowId={lastFocusedRowId}
                 onClose={() => state.setPreviewId(null)}

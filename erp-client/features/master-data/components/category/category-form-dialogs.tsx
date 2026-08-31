@@ -78,6 +78,7 @@ export function CategoryCreateDialog({
 
     return (
         <CategoryFormDialogFrame
+            idPrefix="master-data-category-create-dialog"
             open={open}
             onOpenChange={onOpenChange}
             title={masterDataCopy.createTitle("商品分类")}
@@ -155,6 +156,7 @@ export function CategoryReviseDialog({
 
     return (
         <CategoryFormDialogFrame
+            idPrefix="master-data-category-revise-dialog"
             open={open}
             onOpenChange={onOpenChange}
             title={masterDataCopy.reviseTitle}

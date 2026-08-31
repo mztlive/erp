@@ -70,7 +70,7 @@ export function ReceivableActionDialogs({
                 open={partyPickerOpen}
                 onOpenChange={onPartyPickerOpenChange}
             >
-                <DialogContent>
+                <DialogContent closeButtonId="customer-receivables-party-picker-dialog-close">
                     <DialogHeader>
                         <DialogTitle>
                             {partyPickerMode === "receipt"
@@ -83,8 +83,11 @@ export function ReceivableActionDialogs({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-2">
-                        <Label htmlFor="pick-party">往来主体</Label>
+                        <Label htmlFor="customer-receivables-party-picker-input">
+                            往来主体
+                        </Label>
                         <ReceivableCounterpartySearchCombobox
+                            id="customer-receivables-party-picker-input"
                             value={selectedPartyId || undefined}
                             onValueChange={(partyId) =>
                                 onSelectedPartyIdChange(partyId ?? "")
@@ -97,6 +100,7 @@ export function ReceivableActionDialogs({
                     </div>
                     <DialogFooter>
                         <Button
+                            id="customer-receivables-party-picker-cancel"
                             type="button"
                             variant="outline"
                             disabled={createPending}
@@ -105,6 +109,7 @@ export function ReceivableActionDialogs({
                             取消
                         </Button>
                         <Button
+                            id="customer-receivables-party-picker-confirm"
                             type="button"
                             disabled={!selectedPartyId || createPending}
                             onClick={() =>
@@ -133,7 +138,7 @@ export function ReceivableActionDialogs({
                 open={reverseRequest != null}
                 onOpenChange={onReverseOpenChange}
             >
-                <DialogContent>
+                <DialogContent closeButtonId="customer-receivables-reverse-dialog-close">
                     <DialogHeader>
                         <DialogTitle>
                             {reverseRequest?.kind === "red_invoice"
@@ -155,9 +160,11 @@ export function ReceivableActionDialogs({
                     <div className="space-y-3">
                         {reverseRequest?.kind === "red_invoice" ? (
                             <div className="space-y-1.5">
-                                <Label htmlFor="rev-amount">红票金额</Label>
+                                <Label htmlFor="customer-receivables-reverse-amount">
+                                    红票金额
+                                </Label>
                                 <Input
-                                    id="rev-amount"
+                                    id="customer-receivables-reverse-amount"
                                     className="num"
                                     inputMode="decimal"
                                     value={reverseAmount}
@@ -190,9 +197,11 @@ export function ReceivableActionDialogs({
                             </p>
                         )}
                         <div className="space-y-1.5">
-                            <Label htmlFor="rev-reason">原因说明</Label>
+                            <Label htmlFor="customer-receivables-reverse-reason">
+                                原因说明
+                            </Label>
                             <Textarea
-                                id="rev-reason"
+                                id="customer-receivables-reverse-reason"
                                 value={reverseReason}
                                 onChange={(event) =>
                                     onReverseReasonChange(event.target.value)
@@ -203,6 +212,7 @@ export function ReceivableActionDialogs({
                     </div>
                     <DialogFooter>
                         <Button
+                            id="customer-receivables-reverse-cancel"
                             type="button"
                             variant="outline"
                             disabled={reversePending}
@@ -211,6 +221,7 @@ export function ReceivableActionDialogs({
                             取消
                         </Button>
                         <Button
+                            id="customer-receivables-reverse-confirm"
                             type="button"
                             disabled={
                                 reversePending ||

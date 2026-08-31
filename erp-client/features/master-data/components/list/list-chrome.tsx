@@ -6,14 +6,18 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { MASTER_DATA_RESOURCES } from "@/features/master-data/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ResourceNav({
     resource,
     navRef,
+    idPrefix,
 }: {
     resource: string
     navRef?: React.RefObject<HTMLElement | null>
+    idPrefix?: string
 }) {
+    const prefix = idPrefix ?? "master-data-list-chrome-nav"
     return (
         <nav
             ref={navRef}
@@ -24,6 +28,7 @@ function ResourceNav({
                 const selected = item.key === resource
                 return (
                     <Button
+                        id={`${prefix}-${toAutomationIdSegment(item.key)}`}
                         key={item.key}
                         size="sm"
                         aria-current={selected ? "page" : undefined}

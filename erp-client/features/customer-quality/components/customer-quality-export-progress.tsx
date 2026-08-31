@@ -28,8 +28,8 @@ export function CustomerQualityExportProgress({
             label="客户经营质量导出"
             description={
                 <>
-                    期间 {job.period.from} ~ {job.period.to}
-                    。{job.filterSummary}。数据更新时间{" "}
+                    期间 {job.period.from} ~ {job.period.to}。
+                    {job.filterSummary}。数据更新时间{" "}
                     <span className="num">
                         {formatSourceWatermark(job.projectionWatermark)}
                     </span>

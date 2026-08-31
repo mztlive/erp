@@ -46,6 +46,7 @@ export function CenterHeader({
                 variant="object-chrome"
                 actions={
                     <Button
+                        id="supplier-api-connections-center-back"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -120,6 +121,7 @@ export function CenterHeader({
                     <div className="flex flex-wrap gap-2">
                         {canRunHealth || healthBlocker ? (
                             <Button
+                                id="supplier-api-connections-center-run-health"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -136,6 +138,7 @@ export function CenterHeader({
                         ) : null}
                         {canEnable || enableBlocker ? (
                             <Button
+                                id="supplier-api-connections-center-enable"
                                 type="button"
                                 size="sm"
                                 disabled={!canEnable || enablePending}
@@ -147,6 +150,7 @@ export function CenterHeader({
                         ) : null}
                         {canDisable || disableBlocker ? (
                             <Button
+                                id="supplier-api-connections-center-disable"
                                 type="button"
                                 size="sm"
                                 variant="destructive"

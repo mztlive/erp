@@ -132,6 +132,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 variant="object-chrome"
                                 actions={
                                     <Button
+                                        id="master-data-product-detail-back-list"
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -152,6 +153,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 onSubmit={handleSubmit}
                             >
                                 <ProductDetailHeader
+                                    idPrefix="master-data-product-detail-header"
                                     isCreate={isCreate}
                                     data={data}
                                     title={title}
@@ -225,6 +227,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         <div className="p-4 md:p-5">
                                             {activeSection === "basic" ? (
                                                 <ProductBasicSection
+                                                    idPrefix="master-data-product-detail-basic"
                                                     isCreate={isCreate}
                                                     canRevise={canRevise}
                                                     name={name}
@@ -249,6 +252,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
 
                                             {activeSection === "media" ? (
                                                 <ProductMediaSection
+                                                    idPrefix="master-data-product-detail-media"
                                                     canRevise={canRevise}
                                                     fields={fields}
                                                     setFields={setFields}
@@ -260,6 +264,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
 
                                             {activeSection === "sku" ? (
                                                 <ProductSkuSection
+                                                    idPrefix="master-data-product-detail-sku"
                                                     isCreate={isCreate}
                                                     canRevise={canRevise}
                                                     name={name}
@@ -325,6 +330,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
 
                                             {activeSection === "effective" ? (
                                                 <ProductEffectiveSection
+                                                    idPrefix="master-data-product-detail-effective"
                                                     isCreate={isCreate}
                                                     canRevise={canRevise}
                                                     effectiveFrom={

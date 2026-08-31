@@ -122,6 +122,7 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                     <CardDescription>
                         连接级能力声明不等于每个商品可用 ·{" "}
                         <Link
+                            id="supplier-api-connections-overview-offerings"
                             href="/procurement/supplier-offerings"
                             className="text-primary underline-offset-2 hover:underline"
                         >
@@ -129,6 +130,7 @@ export function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
                         </Link>
                         {" · "}
                         <Link
+                            id="supplier-api-connections-overview-publications"
                             href="/commerce/publications"
                             className="text-primary underline-offset-2 hover:underline"
                         >

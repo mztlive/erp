@@ -1,7 +1,4 @@
-import {
-    OptionCombobox,
-    surfacePanelClassName,
-} from "@/components/business"
+import { OptionCombobox, surfacePanelClassName } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -76,9 +73,11 @@ export function CardBusinessFilterBar({
         <Card size="sm" className={surfacePanelClassName}>
             <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-preset">期间快捷</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-period-preset">
+                        期间快捷
+                    </Label>
                     <OptionCombobox
-                        id="w28-preset"
+                        id="card-contracts-analytics-filter-bar-period-preset"
                         value={periodPresetValue}
                         onValueChange={(v) => {
                             if (!v) return
@@ -98,25 +97,33 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-filter-from">从</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-from">
+                        从
+                    </Label>
                     <DatePicker
+                        id="card-contracts-analytics-filter-bar-from"
                         className="w-[10.5rem]"
                         value={from || undefined}
                         onValueChange={(next) => onFromChange(next ?? "")}
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-filter-to">至</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-to">
+                        至
+                    </Label>
                     <DatePicker
+                        id="card-contracts-analytics-filter-bar-to"
                         className="w-[10.5rem]"
                         value={to || undefined}
                         onValueChange={(next) => onToChange(next ?? "")}
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-filter-basis">日期口径</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-date-basis">
+                        日期口径
+                    </Label>
                     <OptionCombobox
-                        id="w28-filter-basis"
+                        id="card-contracts-analytics-filter-bar-date-basis"
                         value={dateBasis}
                         onValueChange={onDateBasisChange}
                         options={dateBasisOptions}
@@ -128,8 +135,11 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-customer">客户</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-customer">
+                        客户
+                    </Label>
                     <CustomerSearchCombobox
+                        id="card-contracts-analytics-filter-bar-customer"
                         value={customerId}
                         onValueChange={onCustomerChange}
                         purpose="filter"
@@ -141,8 +151,11 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-so">销售单</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-sales-order">
+                        销售单
+                    </Label>
                     <SalesOrderSearchCombobox
+                        id="card-contracts-analytics-filter-bar-sales-order"
                         value={salesOrderId}
                         onValueChange={onSalesOrderChange}
                         purpose="filter"
@@ -151,9 +164,11 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-costBasis">成本口径</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-cost-basis">
+                        成本口径
+                    </Label>
                     <OptionCombobox
-                        id="w28-costBasis"
+                        id="card-contracts-analytics-filter-bar-cost-basis"
                         value={costBasisValue}
                         onValueChange={onCostBasisChange}
                         options={[
@@ -174,9 +189,11 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-expiry">履约期限</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-expiry">
+                        履约期限
+                    </Label>
                     <OptionCombobox
-                        id="w28-expiry"
+                        id="card-contracts-analytics-filter-bar-expiry"
                         value={expiryState}
                         onValueChange={onExpiryChange}
                         options={[
@@ -192,9 +209,11 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-coverage">覆盖口径</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-coverage">
+                        覆盖口径
+                    </Label>
                     <OptionCombobox
-                        id="w28-coverage"
+                        id="card-contracts-analytics-filter-bar-coverage"
                         value={coverage}
                         onValueChange={onCoverageChange}
                         options={[
@@ -216,9 +235,11 @@ export function CardBusinessFilterBar({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="w28-dimension">分析视角</Label>
+                    <Label htmlFor="card-contracts-analytics-filter-bar-dimension">
+                        分析视角
+                    </Label>
                     <OptionCombobox
-                        id="w28-dimension"
+                        id="card-contracts-analytics-filter-bar-dimension"
                         value={dimension}
                         onValueChange={onDimensionChange}
                         options={(
@@ -238,6 +259,7 @@ export function CardBusinessFilterBar({
                 </div>
                 {hasActiveFilters && (
                     <Button
+                        id="card-contracts-analytics-filter-bar-clear"
                         type="button"
                         size="sm"
                         variant="ghost"

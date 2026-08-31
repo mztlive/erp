@@ -115,6 +115,7 @@ export function ContractsTablePanel({
                                     <SearchIcon aria-hidden="true" />
                                 </InputGroupAddon>
                                 <InputGroupInput
+                                    id="card-contracts-list-search"
                                     ref={searchInputRef}
                                     value={searchDraft}
                                     onChange={(event) => {
@@ -123,11 +124,11 @@ export function ContractsTablePanel({
                                     placeholder="合同号、客户、结算主体、负责人"
                                     aria-label="搜索合同"
                                 />
-                                
                             </InputGroup>
                         }
                         filters={
                             <Button
+                                id="card-contracts-list-more-filters-trigger"
                                 type="button"
                                 variant="outline"
                                 aria-expanded={panelOpen}
@@ -164,6 +165,7 @@ export function ContractsTablePanel({
                                             {appliedChips.map((chip) => (
                                                 <FilterChip
                                                     key={chip.key}
+                                                    id={`card-contracts-list-filter-chip-${chip.key}`}
                                                     label={chip.label}
                                                     clearLabel={`移除${chip.label}`}
                                                     onClear={() =>
@@ -172,6 +174,7 @@ export function ContractsTablePanel({
                                                 />
                                             ))}
                                             <Button
+                                                id="card-contracts-list-clear-all"
                                                 type="button"
                                                 variant="ghost"
                                                 size="xs"
@@ -193,6 +196,7 @@ export function ContractsTablePanel({
                                                         结算主体
                                                     </span>
                                                     <OptionCombobox
+                                                        id="card-contracts-list-filter-settlement-party"
                                                         className="w-full"
                                                         value={
                                                             settlementPartyIdDraft
@@ -213,6 +217,7 @@ export function ContractsTablePanel({
                                                         负责人
                                                     </span>
                                                     <OptionCombobox
+                                                        id="card-contracts-list-filter-owner"
                                                         className="w-full"
                                                         value={ownerDraft}
                                                         aria-label="负责人"
@@ -231,13 +236,19 @@ export function ContractsTablePanel({
                                                 </p>
                                                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                                     <Button
+                                                        id="card-contracts-list-reset-more"
                                                         type="button"
                                                         variant="ghost"
-                                                        onClick={resetMoreFilters}
+                                                        onClick={
+                                                            resetMoreFilters
+                                                        }
                                                     >
                                                         重置更多条件
                                                     </Button>
-                                                    <Button type="submit">
+                                                    <Button
+                                                        id="card-contracts-list-apply-filters"
+                                                        type="submit"
+                                                    >
                                                         <SearchIcon
                                                             data-icon="inline-start"
                                                             aria-hidden="true"
@@ -257,6 +268,7 @@ export function ContractsTablePanel({
             table={
                 isError ? (
                     <BusinessFailureState
+                        id="card-contracts-list-failure"
                         title="合同列表加载失败"
                         error={error}
                         onRetry={onRetry}
@@ -273,6 +285,7 @@ export function ContractsTablePanel({
                         action={
                             isFiltered ? (
                                 <Button
+                                    id="card-contracts-list-empty-clear"
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -282,6 +295,7 @@ export function ContractsTablePanel({
                                 </Button>
                             ) : (
                                 <Button
+                                    id="card-contracts-list-empty-upload"
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -298,6 +312,7 @@ export function ContractsTablePanel({
                     />
                 ) : (
                     <DataTable<ContractListRow>
+                        id="card-contracts-list-table"
                         data={pageRows}
                         columns={columns}
                         getRowId={(row) => row.contractId}

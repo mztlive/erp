@@ -52,13 +52,17 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                     action={
                         detailQuery.isError ? (
                             <Button
+                                id="master-data-supplier-detail-retry"
                                 type="button"
                                 onClick={() => void detailQuery.refetch()}
                             >
                                 重试
                             </Button>
                         ) : (
-                            <Button render={<Link href={listHref} />}>
+                            <Button
+                                id="master-data-supplier-detail-back-list"
+                                render={<Link href={listHref} />}
+                            >
                                 {masterDataCopy.actionBackList}
                             </Button>
                         )
@@ -68,5 +72,10 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         )
     }
 
-    return <SupplierEditorForm editor={editor} />
+    return (
+        <SupplierEditorForm
+            idPrefix="master-data-supplier-detail-form"
+            editor={editor}
+        />
+    )
 }

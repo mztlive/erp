@@ -101,6 +101,7 @@ export const SupplierOfferingsPage = () => {
                     <div className="flex items-center gap-2">
                         {state.taskMode ? (
                             <Button
+                                id="supplier-offerings-page-back-workspace"
                                 type="button"
                                 variant="outline"
                                 render={
@@ -119,6 +120,7 @@ export const SupplierOfferingsPage = () => {
                             </Button>
                         ) : state.urlState.returnTo ? (
                             <Button
+                                id="supplier-offerings-page-back-product"
                                 type="button"
                                 variant="outline"
                                 render={<Link href={state.urlState.returnTo} />}
@@ -128,6 +130,7 @@ export const SupplierOfferingsPage = () => {
                         ) : null}
                         {!state.taskMode ? (
                             <Button
+                                id="supplier-offerings-page-create"
                                 type="button"
                                 onClick={() => setCreateOpen(true)}
                             >

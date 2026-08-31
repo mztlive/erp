@@ -184,6 +184,7 @@ export function ProductPublicationsListPage() {
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
                         <Button
+                            id="publication-list-refresh"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -193,6 +194,7 @@ export function ProductPublicationsListPage() {
                             刷新
                         </Button>
                         <Button
+                            id="publication-list-create"
                             type="button"
                             size="sm"
                             disabled
@@ -250,16 +252,12 @@ export function ProductPublicationsListPage() {
                         resetMoreFilters={filters.resetMoreFilters}
                         mallDraft={filters.mallDraft}
                         setMallDraft={filters.setMallDraft}
-                        publicationStatusDraft={
-                            filters.publicationStatusDraft
-                        }
+                        publicationStatusDraft={filters.publicationStatusDraft}
                         setPublicationStatusDraft={
                             filters.setPublicationStatusDraft
                         }
                         deliveryStatusDraft={filters.deliveryStatusDraft}
-                        setDeliveryStatusDraft={
-                            filters.setDeliveryStatusDraft
-                        }
+                        setDeliveryStatusDraft={filters.setDeliveryStatusDraft}
                     />
                 }
                 table={

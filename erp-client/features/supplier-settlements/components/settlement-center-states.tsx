@@ -33,7 +33,13 @@ function SettlementCenterError({
 }) {
     return (
         <PageScaffold>
-            <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+            <Button
+                id="supplier-settlements-center-error-back"
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+            >
                 <ArrowLeftIcon className="size-4" />
                 返回列表
             </Button>
@@ -41,7 +47,11 @@ function SettlementCenterError({
                 title="结算单加载失败"
                 error={error}
                 action={
-                    <Button type="button" onClick={onRetry}>
+                    <Button
+                        id="supplier-settlements-center-error-retry"
+                        type="button"
+                        onClick={onRetry}
+                    >
                         重试
                     </Button>
                 }
@@ -53,7 +63,13 @@ function SettlementCenterError({
 function SettlementCenterEmpty({ onBack }: { onBack: () => void }) {
     return (
         <PageScaffold>
-            <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+            <Button
+                id="supplier-settlements-center-empty-back"
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+            >
                 <ArrowLeftIcon className="size-4" />
                 返回列表
             </Button>

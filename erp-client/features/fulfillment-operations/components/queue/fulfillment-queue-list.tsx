@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
 import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
 import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
@@ -63,6 +64,7 @@ export function FulfillmentQueueList({
                 {operations.map((item, index) => (
                     <button
                         key={item.operationId}
+                        id={`fulfillment-operations-queue-item-${toAutomationIdSegment(item.operationId)}`}
                         type="button"
                         ref={(el) => {
                             if (el) itemRefs.current.set(item.operationId, el)
@@ -135,6 +137,7 @@ export function FulfillmentQueueList({
             {totalPages > 1 ? (
                 <CardFooter className="justify-between gap-2 border-t">
                     <Button
+                        id="fulfillment-operations-queue-prev-page"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -150,6 +153,7 @@ export function FulfillmentQueueList({
                         第 {page} / {totalPages} 页
                     </span>
                     <Button
+                        id="fulfillment-operations-queue-next-page"
                         type="button"
                         variant="outline"
                         size="sm"

@@ -80,6 +80,7 @@ export function PurchaseOrderDetailFulfillmentSection({
                         type="button"
                         render={
                             <Link
+                                id={`procurement-orders-detail-fulfillment-go-${order.identity.purchaseOrderId}`}
                                 href={fulfillmentTasksHref(
                                     order.identity.purchaseOrderId,
                                 )}
@@ -90,7 +91,11 @@ export function PurchaseOrderDetailFulfillmentSection({
                     </Button>
                 ) : (
                     <div className="space-y-1">
-                        <Button type="button" disabled>
+                        <Button
+                            id={`procurement-orders-detail-fulfillment-disabled-${order.identity.purchaseOrderId}`}
+                            type="button"
+                            disabled
+                        >
                             履约入口未开放
                         </Button>
                         <p className="text-xs text-muted-foreground">
@@ -103,7 +108,12 @@ export function PurchaseOrderDetailFulfillmentSection({
                     <Button
                         type="button"
                         variant="outline"
-                        render={<Link href={w12PayHref} />}
+                        render={
+                            <Link
+                                id={`procurement-orders-detail-fulfillment-pay-${order.identity.purchaseOrderId}`}
+                                href={w12PayHref}
+                            />
+                        }
                     >
                         去供应商往来
                     </Button>
@@ -128,7 +138,12 @@ export function PurchaseOrderDetailFulfillmentSection({
                             <Button
                                 type="button"
                                 size="sm"
-                                render={<Link href={w12PayHref} />}
+                                render={
+                                    <Link
+                                        id={`procurement-orders-detail-gate-pay-${order.identity.purchaseOrderId}`}
+                                        href={w12PayHref}
+                                    />
+                                }
                             >
                                 去供应商往来
                             </Button>

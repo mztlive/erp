@@ -71,20 +71,20 @@ paths:
         动作级权限 `approval_process:read`。返回合同 §4.3 全部 20 个 `DocumentType` 的政策、
         当前版本和配置状态。不得包含节点图或审批人详情。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+        - $ref: "#/components/parameters/TraceId"
       responses:
-        '200':
+        "200":
           description: 目录行。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionCatalogSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionCatalogSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-processes/{document_type}/versions:
     get:
@@ -95,23 +95,23 @@ paths:
         动作级权限 `approval_process:read`。读取 `PROCESS_REQUIRED` 类型的版本列表时，
         还必须具备该类型定义管理权或运行管理权。`NO_APPROVAL` 无定义详情。无权或不适用时不得泄露存在性。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DocumentTypePath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DocumentTypePath"
       responses:
-        '200':
+        "200":
           description: 版本摘要列表。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionVersionListSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionVersionListSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-processes/{document_type}/eligible-assignees:
     get:
@@ -123,10 +123,10 @@ paths:
         只执行定义期静态过滤；该候选列表不得用于运行期改变审批责任人。
         `limit` 默认 20、最大 50。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DocumentTypePath'
-        - $ref: '#/components/parameters/Search'
-        - $ref: '#/components/parameters/Cursor'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DocumentTypePath"
+        - $ref: "#/components/parameters/Search"
+        - $ref: "#/components/parameters/Cursor"
         - name: limit
           in: query
           schema:
@@ -135,22 +135,22 @@ paths:
             maximum: 50
             default: 20
       responses:
-        '200':
+        "200":
           description: 定义期候选人。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AssigneeCandidateListSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/AssigneeCandidateListSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-process-definitions/drafts:
     post:
@@ -163,30 +163,30 @@ paths:
         不得提交源定义 ID。选择 `CURRENT_PUBLISHED` 但当前无发布定义时返回
         `APPROVAL_DRAFT_SOURCE_NOT_AVAILABLE`。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+        - $ref: "#/components/parameters/TraceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateDefinitionDraftRequest'
+              $ref: "#/components/schemas/CreateDefinitionDraftRequest"
       responses:
-        '200':
+        "200":
           description: 新建草稿详情。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionDetailSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionDetailSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-process-definitions/{id}:
     get:
@@ -197,23 +197,23 @@ paths:
         动作级权限 `approval_process:read`。读取 `PROCESS_REQUIRED` 类型详情时还必须具备
         该类型定义管理权或运行管理权。无权或不存在时不得泄露存在性。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DefinitionIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DefinitionIdPath"
       responses:
-        '200':
+        "200":
           description: 定义详情。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionDetailSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionDetailSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-process-definitions/{id}/nodes:
     put:
@@ -226,35 +226,35 @@ paths:
         编辑已有节点只接受本定义内 `node_id`。不得接受连线、入口、角色、候选池、脚本、
         处理器、业务动作、状态或 `node_purpose`。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DefinitionIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DefinitionIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReplaceNodesRequest'
+              $ref: "#/components/schemas/ReplaceNodesRequest"
       responses:
-        '200':
+        "200":
           description: 替换后的草稿详情。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionDetailSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionDetailSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-process-definitions/{id}/publish:
     post:
@@ -266,35 +266,35 @@ paths:
         请求只允许定义锁版本字符串和幂等键。发布只校验账户有效、静态审批权限、
         可静态判断的岗位分离和图不变式，不得声称完成实例级 DataScope 校验。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DefinitionIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DefinitionIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DefinitionLockRequest'
+              $ref: "#/components/schemas/DefinitionLockRequest"
       responses:
-        '200':
+        "200":
           description: 已发布定义详情。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionDetailSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionDetailSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-process-definitions/{id}/retire:
     post:
@@ -305,35 +305,35 @@ paths:
         动作级权限 `approval_process:retire`，并再校验该类型定义管理权。
         退役只阻止新单据绑定，不得改写已运行实例。请求只允许定义锁版本字符串和幂等键。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DefinitionIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DefinitionIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DefinitionLockRequest'
+              $ref: "#/components/schemas/DefinitionLockRequest"
       responses:
-        '200':
+        "200":
           description: 已退役定义详情。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DefinitionDetailSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/DefinitionDetailSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-decisions:
     post:
@@ -348,34 +348,34 @@ paths:
         next assignee、业务 action 和 actor 字段。
         人员失效时必须先提交 BLOCKED 事实，再映射为 409 `APPROVAL_INSTANCE_BLOCKED`，不得回滚阻塞状态。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+        - $ref: "#/components/parameters/TraceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SubmitDecisionRequest'
+              $ref: "#/components/schemas/SubmitDecisionRequest"
       responses:
-        '200':
+        "200":
           description: 最新实例摘要；幂等回读同样使用 2xx。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApprovalCommandSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/ApprovalCommandSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-instances:
     get:
@@ -397,27 +397,27 @@ paths:
         `managed`=`updated_at desc, instance_id desc`；
         `blocked`=`blocked_at desc, instance_id desc`。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+        - $ref: "#/components/parameters/TraceId"
         - name: view
           in: query
           required: true
           schema:
-            $ref: '#/components/schemas/InstanceListView'
+            $ref: "#/components/schemas/InstanceListView"
         - name: document_type
           in: query
           schema:
-            $ref: '#/components/schemas/DocumentType'
+            $ref: "#/components/schemas/DocumentType"
         - name: status
           in: query
           schema:
-            $ref: '#/components/schemas/InstanceStatus'
+            $ref: "#/components/schemas/InstanceStatus"
         - name: q
           in: query
           description: 按单据编号、对象 ID、当前节点名或当前审批人做字面量包含匹配。
           schema:
             type: string
             maxLength: 128
-        - $ref: '#/components/parameters/Cursor'
+        - $ref: "#/components/parameters/Cursor"
         - name: limit
           in: query
           schema:
@@ -426,20 +426,20 @@ paths:
             maximum: 100
             default: 20
       responses:
-        '200':
+        "200":
           description: 游标分页实例摘要。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstanceListSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/InstanceListSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-instances/{id}:
     get:
@@ -450,23 +450,23 @@ paths:
         动作级权限 `approval_instance:read`。查看审批实例不隐含查看全部业务字段。
         详情最多返回最近 20 条执行摘要并携带 `history_next_cursor`。无权时不得泄露存在性。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/InstanceIdPath"
       responses:
-        '200':
+        "200":
           description: 实例详情。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstanceDetailSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/InstanceDetailSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-instances/{id}/history:
     get:
@@ -477,9 +477,9 @@ paths:
         动作级权限 `approval_instance:read`。默认 50、最大 100。
         排序固定 `round_no asc, execution_no asc, id asc`。只返回新运行模型，不得读取旧实例或旧步骤。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
-        - $ref: '#/components/parameters/Cursor'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/InstanceIdPath"
+        - $ref: "#/components/parameters/Cursor"
         - name: limit
           in: query
           schema:
@@ -488,22 +488,22 @@ paths:
             maximum: 100
             default: 50
       responses:
-        '200':
+        "200":
           description: 历史执行页。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstanceHistorySuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/InstanceHistorySuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-instances/{id}/recovery-options:
     get:
@@ -515,23 +515,23 @@ paths:
         人员失效只允许原审批人重新合格后恢复；非人员一致性 blocker 只允许受阻取消。
         审批运行时不提供转交或改派。无权时不得泄露实例存在性。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/InstanceIdPath"
       responses:
-        '200':
+        "200":
           description: 唯一合法恢复动作。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RecoveryOptionsSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/RecoveryOptionsSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-instances/{id}/resume-current-approver:
     post:
@@ -543,35 +543,35 @@ paths:
         请求只允许实例/执行/分派版本、可空已关闭任务版本和幂等键。
         不得接受目标用户、决定、节点或恢复动作枚举。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/InstanceIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ResumeApproverRequest'
+              $ref: "#/components/schemas/ResumeApproverRequest"
       responses:
-        '200':
+        "200":
           description: 恢复后的最新实例摘要。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApprovalCommandSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/ApprovalCommandSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/approval-instances/{id}/cancel-blocked:
     post:
@@ -584,35 +584,35 @@ paths:
         必须执行政策绑定的同一 `cancel_action`。不得接受新定义、修复值、下一节点或目标用户。
         人员失效 blocker 必须拒绝。政策缺少必需动作属于 `APPROVAL_POLICY_NOT_REGISTERED`/500。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/InstanceIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/InstanceIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CancelBlockedRequest'
+              $ref: "#/components/schemas/CancelBlockedRequest"
       responses:
-        '200':
+        "200":
           description: 受阻取消后的最新实例摘要。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApprovalCommandSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/ApprovalCommandSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/business-documents/{document_type}/{id}/approval-definition/upgrade:
     post:
@@ -624,8 +624,8 @@ paths:
         单据对象读取权和 DataScope。请求只允许原因、单据版本、绑定版本和幂等键。
         目标定义固定取当前发布版本，不得由客户端提交 definition ID。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/DocumentTypePath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/DocumentTypePath"
         - name: id
           in: path
           required: true
@@ -637,28 +637,28 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpgradeBindingRequest'
+              $ref: "#/components/schemas/UpgradeBindingRequest"
       responses:
-        '200':
+        "200":
           description: 升级后的绑定与单据摘要。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApprovalCommandSuccessEnvelope'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/PolicyNotRegistered'
+                $ref: "#/components/schemas/ApprovalCommandSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/PolicyNotRegistered"
 
   /admin/work-items:
     get:
@@ -671,22 +671,22 @@ paths:
         `PERSONAL_APPROVAL` 必须对应 `DocumentApproval`。任何 `OPEN` 任务的 `owner_user_id` 必填。
         前端不得根据历史责任模式或卡券类型推断路由。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+        - $ref: "#/components/parameters/TraceId"
       responses:
-        '200':
+        "200":
           description: 带责任类型的待办页。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkItemPageSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/WorkItemPageSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /admin/work-items/stats:
     get:
@@ -695,22 +695,22 @@ paths:
       summary: 查询与列表同一授权快照的待办统计
       description: 动作级权限 `work_item:list`。不得由前端对已加载条目求和。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
+        - $ref: "#/components/parameters/TraceId"
       responses:
-        '200':
+        "200":
           description: 统计快照。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkItemStatsSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/WorkItemStatsSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /admin/work-items/{id}:
     get:
@@ -719,23 +719,23 @@ paths:
       summary: 查询单条待办安全投影
       description: 动作级权限 `work_item:detail`。无权时不得泄露存在性。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/WorkItemIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/WorkItemIdPath"
       responses:
-        '200':
+        "200":
           description: 带责任类型的任务投影。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkItemSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/WorkItemSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /admin/work-items/{id}/reassign:
     post:
@@ -747,33 +747,33 @@ paths:
         `WorkItemType::DocumentApproval` 或带 `approval_node_execution_id` 的任务必须返回
         `APPROVAL_GENERIC_WORK_ITEM_MUTATION_FORBIDDEN`。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/WorkItemIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/WorkItemIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReassignWorkItemRequest'
+              $ref: "#/components/schemas/ReassignWorkItemRequest"
       responses:
-        '200':
+        "200":
           description: 责任已更新的同一任务。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkItemSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/WorkItemSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /admin/work-items/{id}/close:
     post:
@@ -783,33 +783,33 @@ paths:
       description: |
         动作级权限 `work_item:close`。仅供非审批任务使用。审批任务必须失败关闭。
       parameters:
-        - $ref: '#/components/parameters/TraceId'
-        - $ref: '#/components/parameters/WorkItemIdPath'
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/WorkItemIdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CloseWorkItemRequest'
+              $ref: "#/components/schemas/CloseWorkItemRequest"
       responses:
-        '200':
+        "200":
           description: 已关闭任务的只读事实。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkItemSuccessEnvelope'
-        '401':
-          $ref: '#/components/responses/Unauthenticated'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/WorkItemSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
 components:
   securitySchemes:
@@ -832,7 +832,7 @@ components:
       in: path
       required: true
       schema:
-        $ref: '#/components/schemas/DocumentType'
+        $ref: "#/components/schemas/DocumentType"
     DefinitionIdPath:
       name: id
       in: path
@@ -872,7 +872,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
           example:
             status: 401
             errorMessage: 登录状态已失效，请重新登录
@@ -884,7 +884,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
           example:
             status: 403
             errorMessage: 当前账号没有执行此操作的权限
@@ -896,7 +896,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
           example:
             status: 404
             errorMessage: 资源不存在
@@ -908,7 +908,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
           example:
             status: 400
             errorMessage: 审批任务期望版本必须是正整数字符串
@@ -920,13 +920,13 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
     Conflict:
       description: 稳定冲突。必须包含 code 与 data.correlation_id。
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ConflictEnvelope'
+            $ref: "#/components/schemas/ConflictEnvelope"
     PolicyNotRegistered:
       description: |
         部署不变量失败。`APPROVAL_POLICY_NOT_REGISTERED` 必须为 500 并触发 readiness 失败，
@@ -934,7 +934,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
           example:
             status: 500
             errorMessage: 系统内部错误
@@ -946,7 +946,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
+            $ref: "#/components/schemas/ErrorEnvelope"
           example:
             status: 500
             errorMessage: 系统内部错误
@@ -956,7 +956,7 @@ components:
   schemas:
     VersionString:
       type: string
-      pattern: '^[1-9][0-9]*$'
+      pattern: "^[1-9][0-9]*$"
       description: 十进制正整数字符串。禁止 JS 不安全整数。
     IdempotencyKey:
       type: string
@@ -1021,14 +1021,14 @@ components:
       required: [document_type, name, draft_source, idempotency_key]
       properties:
         document_type:
-          $ref: '#/components/schemas/DocumentType'
+          $ref: "#/components/schemas/DocumentType"
         name:
           type: string
           minLength: 1
         draft_source:
-          $ref: '#/components/schemas/DraftSource'
+          $ref: "#/components/schemas/DraftSource"
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     DefinitionNodeRequest:
       type: object
       additionalProperties: false
@@ -1053,20 +1053,20 @@ components:
       required: [expected_definition_lock_version, nodes]
       properties:
         expected_definition_lock_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         nodes:
           type: array
           items:
-            $ref: '#/components/schemas/DefinitionNodeRequest'
+            $ref: "#/components/schemas/DefinitionNodeRequest"
     DefinitionLockRequest:
       type: object
       additionalProperties: false
       required: [expected_definition_lock_version, idempotency_key]
       properties:
         expected_definition_lock_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     SubmitDecisionRequest:
       type: object
       additionalProperties: false
@@ -1076,15 +1076,15 @@ components:
           type: string
           minLength: 1
         decision:
-          $ref: '#/components/schemas/DecisionValue'
+          $ref: "#/components/schemas/DecisionValue"
         reason:
           type: string
           nullable: true
           description: REJECT 时必须为非空字符串。
         expected_task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     ResumeApproverRequest:
       type: object
       additionalProperties: false
@@ -1095,15 +1095,15 @@ components:
         - idempotency_key
       properties:
         expected_instance_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         expected_execution_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         expected_assignment_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         expected_closed_task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     CancelBlockedRequest:
       type: object
       additionalProperties: false
@@ -1117,13 +1117,13 @@ components:
           type: string
           minLength: 1
         expected_instance_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         expected_execution_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         expected_task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     UpgradeBindingRequest:
       type: object
       additionalProperties: false
@@ -1137,18 +1137,18 @@ components:
           type: string
           minLength: 1
         expected_document_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         expected_approval_binding_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     ReassignWorkItemRequest:
       type: object
       additionalProperties: false
       required: [expected_task_version, target_user_id, reason, idempotency_key]
       properties:
         expected_task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         target_user_id:
           type: string
           minLength: 1
@@ -1156,14 +1156,14 @@ components:
           type: string
           minLength: 1
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     CloseWorkItemRequest:
       type: object
       additionalProperties: false
       required: [expected_task_version, reason_code, idempotency_key]
       properties:
         expected_task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         reason_code:
           type: string
           minLength: 1
@@ -1173,7 +1173,7 @@ components:
           type: string
           minLength: 1
         idempotency_key:
-          $ref: '#/components/schemas/IdempotencyKey'
+          $ref: "#/components/schemas/IdempotencyKey"
     DefinitionCatalogItem:
       type: object
       required:
@@ -1184,11 +1184,11 @@ components:
         - allowed_actions
       properties:
         document_type:
-          $ref: '#/components/schemas/DocumentType'
+          $ref: "#/components/schemas/DocumentType"
         document_type_label:
           type: string
         approval_requirement:
-          $ref: '#/components/schemas/ApprovalRequirement'
+          $ref: "#/components/schemas/ApprovalRequirement"
         published_version:
           type: integer
           minimum: 1
@@ -1198,11 +1198,11 @@ components:
           minimum: 1
           nullable: true
         configuration_status:
-          $ref: '#/components/schemas/DefinitionConfigurationStatus'
+          $ref: "#/components/schemas/DefinitionConfigurationStatus"
         allowed_actions:
           type: array
           items:
-            $ref: '#/components/schemas/DefinitionAllowedAction'
+            $ref: "#/components/schemas/DefinitionAllowedAction"
     DefinitionVersionItem:
       type: object
       required: [definition_id, definition_version, status, name, definition_lock_version]
@@ -1217,7 +1217,7 @@ components:
         name:
           type: string
         definition_lock_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
     DefinitionNodeView:
       type: object
       required:
@@ -1265,7 +1265,7 @@ components:
         definition_id:
           type: string
         document_type:
-          $ref: '#/components/schemas/DocumentType'
+          $ref: "#/components/schemas/DocumentType"
         document_type_label:
           type: string
         name:
@@ -1278,11 +1278,11 @@ components:
         entry_node_key:
           type: string
         definition_lock_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         nodes:
           type: array
           items:
-            $ref: '#/components/schemas/DefinitionNodeView'
+            $ref: "#/components/schemas/DefinitionNodeView"
         created_by:
           type: string
         published_by:
@@ -1314,7 +1314,7 @@ components:
         work_item_id:
           type: string
         task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         owner_user_id:
           type: string
     ApprovalCommandView:
@@ -1328,7 +1328,7 @@ components:
         instance_id:
           type: string
         instance_status:
-          $ref: '#/components/schemas/InstanceStatus'
+          $ref: "#/components/schemas/InstanceStatus"
         current_round_no:
           type: integer
           minimum: 1
@@ -1354,9 +1354,9 @@ components:
           type: object
           nullable: true
           allOf:
-            - $ref: '#/components/schemas/OpenTaskSummary'
+            - $ref: "#/components/schemas/OpenTaskSummary"
         outcome:
-          $ref: '#/components/schemas/CommandOutcome'
+          $ref: "#/components/schemas/CommandOutcome"
     InstanceListItem:
       type: object
       required: [instance_id, status, current_round_no]
@@ -1364,7 +1364,7 @@ components:
         instance_id:
           type: string
         status:
-          $ref: '#/components/schemas/InstanceStatus'
+          $ref: "#/components/schemas/InstanceStatus"
         current_round_no:
           type: integer
           minimum: 1
@@ -1383,7 +1383,7 @@ components:
         document_type:
           type: string
           allOf:
-            - $ref: '#/components/schemas/DocumentType'
+            - $ref: "#/components/schemas/DocumentType"
           nullable: true
         document_id:
           type: string
@@ -1409,7 +1409,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/InstanceListItem'
+            $ref: "#/components/schemas/InstanceListItem"
         total:
           type: integer
           format: int64
@@ -1442,12 +1442,12 @@ components:
       required: [instance, recent_executions]
       properties:
         instance:
-          $ref: '#/components/schemas/InstanceListItem'
+          $ref: "#/components/schemas/InstanceListItem"
         recent_executions:
           type: array
           maxItems: 20
           items:
-            $ref: '#/components/schemas/ExecutionSummary'
+            $ref: "#/components/schemas/ExecutionSummary"
         history_next_cursor:
           type: string
           nullable: true
@@ -1458,7 +1458,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/ExecutionSummary'
+            $ref: "#/components/schemas/ExecutionSummary"
         next_cursor:
           type: string
           nullable: true
@@ -1471,7 +1471,7 @@ components:
         actions:
           type: array
           items:
-            $ref: '#/components/schemas/RecoveryAction'
+            $ref: "#/components/schemas/RecoveryAction"
     WorkItemView:
       type: object
       required:
@@ -1487,7 +1487,7 @@ components:
         work_item_type:
           type: string
         responsibility_kind:
-          $ref: '#/components/schemas/ResponsibilityKind'
+          $ref: "#/components/schemas/ResponsibilityKind"
         approval_node_execution_id:
           type: string
           nullable: true
@@ -1497,7 +1497,7 @@ components:
         destination_workspace_id:
           type: string
         task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         allowed_actions:
           type: array
           items:
@@ -1509,7 +1509,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/WorkItemView'
+            $ref: "#/components/schemas/WorkItemView"
         total:
           type: integer
           format: int64
@@ -1542,94 +1542,94 @@ components:
           nullable: true
     DefinitionCatalogSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
               type: array
               items:
-                $ref: '#/components/schemas/DefinitionCatalogItem'
+                $ref: "#/components/schemas/DefinitionCatalogItem"
     DefinitionVersionListSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
               type: array
               items:
-                $ref: '#/components/schemas/DefinitionVersionItem'
+                $ref: "#/components/schemas/DefinitionVersionItem"
     DefinitionDetailSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/DefinitionDetailView'
+              $ref: "#/components/schemas/DefinitionDetailView"
     AssigneeCandidateListSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
               type: array
               items:
-                $ref: '#/components/schemas/AssigneeCandidate'
+                $ref: "#/components/schemas/AssigneeCandidate"
     ApprovalCommandSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/ApprovalCommandView'
+              $ref: "#/components/schemas/ApprovalCommandView"
     InstanceListSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/InstanceListPage'
+              $ref: "#/components/schemas/InstanceListPage"
     InstanceDetailSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/InstanceDetailView'
+              $ref: "#/components/schemas/InstanceDetailView"
     InstanceHistorySuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/InstanceHistoryPage'
+              $ref: "#/components/schemas/InstanceHistoryPage"
     RecoveryOptionsSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/RecoveryOptionsView'
+              $ref: "#/components/schemas/RecoveryOptionsView"
     WorkItemSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/WorkItemView'
+              $ref: "#/components/schemas/WorkItemView"
     WorkItemPageSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/WorkItemPage'
+              $ref: "#/components/schemas/WorkItemPage"
     WorkItemStatsSuccessEnvelope:
       allOf:
-        - $ref: '#/components/schemas/SuccessEnvelopeBase'
+        - $ref: "#/components/schemas/SuccessEnvelopeBase"
         - type: object
           properties:
             data:
-              $ref: '#/components/schemas/WorkItemStats'
+              $ref: "#/components/schemas/WorkItemStats"
     ErrorEnvelope:
       type: object
       required: [status, errorMessage, success]
@@ -1654,11 +1654,11 @@ components:
         correlation_id:
           type: string
         latest_instance_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         latest_task_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
         latest_definition_lock_version:
-          $ref: '#/components/schemas/VersionString'
+          $ref: "#/components/schemas/VersionString"
     ConflictEnvelope:
       type: object
       required: [status, errorMessage, code, data, success]
@@ -1693,7 +1693,7 @@ components:
             - WORK_ITEM_RESPONSIBILITY_CONFLICT
             - CONFLICT
         data:
-          $ref: '#/components/schemas/ConflictData'
+          $ref: "#/components/schemas/ConflictData"
         success:
           type: boolean
           enum: [false]

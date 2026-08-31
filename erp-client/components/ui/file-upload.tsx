@@ -49,7 +49,10 @@ function FileUpload({
     previewSelectedImage = false,
     selectedImageFile,
     onPreviewRemove,
+    idPrefix,
     className,
+    "aria-describedby": ariaDescribedby,
+    "aria-invalid": ariaInvalid,
 }: {
     onFilesSelected: (files: File[]) => void
     accept?: string
@@ -66,7 +69,10 @@ function FileUpload({
     selectedImageFile?: File | null
     /** 移除已上传或待上传预览；调用方负责同步清空表单值。 */
     onPreviewRemove?: () => void
+    idPrefix?: string
     className?: string
+    "aria-describedby"?: string
+    "aria-invalid"?: boolean | string
 }) {
     const inputRef = React.useRef<HTMLInputElement>(null)
     const [dragging, setDragging] = React.useState(false)
@@ -141,6 +147,7 @@ function FileUpload({
     return (
         <>
             <div
+                id={idPrefix ? `${idPrefix}-dropzone` : undefined}
                 data-slot="file-upload"
                 data-dragging={dragging || undefined}
                 className={cn(
@@ -175,12 +182,15 @@ function FileUpload({
                 }}
             >
                 <input
+                    id={idPrefix ? `${idPrefix}-input` : undefined}
                     ref={inputRef}
                     className="sr-only"
                     type="file"
                     accept={accept}
                     multiple={multiple}
                     disabled={disabled}
+                    aria-describedby={ariaDescribedby}
+                    aria-invalid={ariaInvalid as boolean | undefined}
                     onChange={(event) => {
                         selectFiles(event.target.files)
                         event.target.value = ""
@@ -193,6 +203,7 @@ function FileUpload({
                 {activePreview ? (
                     <>
                         <button
+                            id={idPrefix ? `${idPrefix}-preview` : undefined}
                             type="button"
                             className={cn(
                                 "group relative flex w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -243,6 +254,7 @@ function FileUpload({
                         </span>
                         {localPreview || onPreviewRemove ? (
                             <Button
+                                id={idPrefix ? `${idPrefix}-remove` : undefined}
                                 type="button"
                                 variant="secondary"
                                 size="icon-xs"
@@ -308,6 +320,7 @@ function FileUpload({
                             </div>
                         </div>
                         <Button
+                            id={idPrefix ? `${idPrefix}-select` : undefined}
                             type="button"
                             variant="outline"
                             size={
@@ -347,7 +360,12 @@ function FileUpload({
 
             {activePreview?.src ? (
                 <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-                    <DialogContent className="gap-4 p-4 sm:max-w-4xl">
+                    <DialogContent
+                        closeButtonId={
+                            idPrefix ? `${idPrefix}-preview-close` : undefined
+                        }
+                        className="gap-4 p-4 sm:max-w-4xl"
+                    >
                         <DialogHeader className="pr-10">
                             <DialogTitle>{activePreview.name}</DialogTitle>
                             <DialogDescription>

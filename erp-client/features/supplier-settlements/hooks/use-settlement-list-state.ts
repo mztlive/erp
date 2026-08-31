@@ -72,9 +72,7 @@ export function useSettlementListState(
             supplierId: supplierIdDraft ?? undefined,
             status: joinSettlementStatusParam(statusDraft) ?? undefined,
             differenceType:
-                differenceTypeDraft === "all"
-                    ? undefined
-                    : differenceTypeDraft,
+                differenceTypeDraft === "all" ? undefined : differenceTypeDraft,
             periodFrom: periodFromDraft.trim() || undefined,
             periodTo: periodToDraft.trim() || undefined,
             page: 1,

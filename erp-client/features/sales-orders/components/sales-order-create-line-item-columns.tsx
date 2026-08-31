@@ -17,6 +17,7 @@ import type {
     SalesOrderDraftLineInput,
 } from "@/features/sales-orders/types"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export const PROCUREMENT_OWNER_UNRESOLVED_MESSAGE =
     "暂未确定采购负责人，请联系管理员维护采购责任规则"
@@ -78,21 +79,26 @@ export function buildSalesOrderCreateLineItemColumns(
                       id: "serviceRegion",
                       header: "服务区域",
                       renderValue: ({ item }) => item.serviceRegion || "—",
-                      renderEditor: ({ rowIndex }) => (
-                          <div className="min-w-32">
-                              <form.AppField
-                                  name={`lineItems[${rowIndex}].serviceRegion`}
-                              >
-                                  {(field) => (
-                                      <field.TextField
-                                          label="服务区域"
-                                          hideLabel
-                                          placeholder="选填"
-                                      />
-                                  )}
-                              </form.AppField>
-                          </div>
-                      ),
+                      renderEditor: ({ rowIndex }) => {
+                          const lineKey = values.lineItems[rowIndex]?.rowKey
+                          if (!lineKey) return null
+                          return (
+                              <div className="min-w-32">
+                                  <form.AppField
+                                      name={`lineItems[${rowIndex}].serviceRegion`}
+                                  >
+                                      {(field) => (
+                                          <field.TextField
+                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-service-region`}
+                                              label="服务区域"
+                                              hideLabel
+                                              placeholder="选填"
+                                          />
+                                      )}
+                                  </form.AppField>
+                              </div>
+                          )
+                      },
                   },
                   {
                       id: "procurementOwner",
@@ -123,6 +129,8 @@ export function buildSalesOrderCreateLineItemColumns(
             renderValue: ({ item }) => `${item.quantity} ${item.unit}`,
             renderEditor: ({ rowIndex }) => {
                 const line = values.lineItems[rowIndex]
+                const lineKey = line?.rowKey
+                if (!lineKey) return null
                 const unitLocked =
                     nature === "card_voucher" || Boolean(line?.sku?.trim())
                 return (
@@ -133,6 +141,7 @@ export function buildSalesOrderCreateLineItemColumns(
                             >
                                 {(field) => (
                                     <field.TextField
+                                        id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-quantity`}
                                         label="数量"
                                         hideLabel
                                         type="number"
@@ -167,18 +176,25 @@ export function buildSalesOrderCreateLineItemColumns(
             numeric: true,
             align: "end",
             renderValue: ({ item }) => item.unitPriceGross,
-            renderEditor: ({ rowIndex }) => (
-                <form.AppField name={`lineItems[${rowIndex}].unitPriceGross`}>
-                    {(field) => (
-                        <field.TextField
-                            label="含税单价"
-                            hideLabel
-                            type="number"
-                            inputClassName="num min-w-24 text-right"
-                        />
-                    )}
-                </form.AppField>
-            ),
+            renderEditor: ({ rowIndex }) => {
+                const lineKey = values.lineItems[rowIndex]?.rowKey
+                if (!lineKey) return null
+                return (
+                    <form.AppField
+                        name={`lineItems[${rowIndex}].unitPriceGross`}
+                    >
+                        {(field) => (
+                            <field.TextField
+                                id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-unit-price`}
+                                label="含税单价"
+                                hideLabel
+                                type="number"
+                                inputClassName="num min-w-24 text-right"
+                            />
+                        )}
+                    </form.AppField>
+                )
+            },
         },
         ...(nature === "card_voucher"
             ? ([
@@ -188,24 +204,29 @@ export function buildSalesOrderCreateLineItemColumns(
                       numeric: true,
                       align: "end",
                       renderValue: ({ item }) => item.faceValue || "—",
-                      renderEditor: ({ rowIndex }) => (
-                          <div className="min-w-20">
-                              <form.AppField
-                                  name={`lineItems[${rowIndex}].faceValue`}
-                              >
-                                  {(field) => (
-                                      <field.TextField
-                                          label="面值"
-                                          hideLabel
-                                          type="number"
-                                          placeholder="0.00"
-                                          className="gap-0"
-                                          inputClassName="num min-w-20 text-right"
-                                      />
-                                  )}
-                              </form.AppField>
-                          </div>
-                      ),
+                      renderEditor: ({ rowIndex }) => {
+                          const lineKey = values.lineItems[rowIndex]?.rowKey
+                          if (!lineKey) return null
+                          return (
+                              <div className="min-w-20">
+                                  <form.AppField
+                                      name={`lineItems[${rowIndex}].faceValue`}
+                                  >
+                                      {(field) => (
+                                          <field.TextField
+                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-face-value`}
+                                              label="面值"
+                                              hideLabel
+                                              type="number"
+                                              placeholder="0.00"
+                                              className="gap-0"
+                                              inputClassName="num min-w-20 text-right"
+                                          />
+                                      )}
+                                  </form.AppField>
+                              </div>
+                          )
+                      },
                   },
                   {
                       id: "gift",
@@ -245,24 +266,29 @@ export function buildSalesOrderCreateLineItemColumns(
                       id: "cardForm",
                       header: "卡形态",
                       renderValue: ({ item }) => item.cardForm || "—",
-                      renderEditor: ({ rowIndex }) => (
-                          <div className="min-w-24">
-                              <form.AppField
-                                  name={`lineItems[${rowIndex}].cardForm`}
-                              >
-                                  {(field) => (
-                                      <field.SelectField
-                                          label="卡形态"
-                                          hideLabel
-                                          options={CARD_FORM_OPTIONS}
-                                          allowClear={false}
-                                          className="gap-0"
-                                          inputClassName="w-full"
-                                      />
-                                  )}
-                              </form.AppField>
-                          </div>
-                      ),
+                      renderEditor: ({ rowIndex }) => {
+                          const lineKey = values.lineItems[rowIndex]?.rowKey
+                          if (!lineKey) return null
+                          return (
+                              <div className="min-w-24">
+                                  <form.AppField
+                                      name={`lineItems[${rowIndex}].cardForm`}
+                                  >
+                                      {(field) => (
+                                          <field.SelectField
+                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-card-form`}
+                                              label="卡形态"
+                                              hideLabel
+                                              options={CARD_FORM_OPTIONS}
+                                              allowClear={false}
+                                              className="gap-0"
+                                              inputClassName="w-full"
+                                          />
+                                      )}
+                                  </form.AppField>
+                              </div>
+                          )
+                      },
                   },
               ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
             : ([
@@ -270,20 +296,25 @@ export function buildSalesOrderCreateLineItemColumns(
                       id: "fulfillment",
                       header: "承诺交付日",
                       renderValue: ({ item }) => item.dueDate || "—",
-                      renderEditor: ({ rowIndex }) => (
-                          <div className="min-w-32">
-                              <form.AppField
-                                  name={`lineItems[${rowIndex}].dueDate`}
-                              >
-                                  {(field) => (
-                                      <field.DateField
-                                          label="承诺交付日"
-                                          hideLabel
-                                      />
-                                  )}
-                              </form.AppField>
-                          </div>
-                      ),
+                      renderEditor: ({ rowIndex }) => {
+                          const lineKey = values.lineItems[rowIndex]?.rowKey
+                          if (!lineKey) return null
+                          return (
+                              <div className="min-w-32">
+                                  <form.AppField
+                                      name={`lineItems[${rowIndex}].dueDate`}
+                                  >
+                                      {(field) => (
+                                          <field.DateField
+                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-due-date`}
+                                              label="承诺交付日"
+                                              hideLabel
+                                          />
+                                      )}
+                                  </form.AppField>
+                              </div>
+                          )
+                      },
                   },
               ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])),
         {

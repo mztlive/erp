@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sidebar"
 import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
 import { isNavItemActive } from "@/lib/nav-active"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     filterNavGroupsByPermissions,
@@ -75,6 +76,7 @@ export function WorkspaceSidebarAccount() {
             <SidebarMenuItem>
                 <DropdownMenu>
                     <DropdownMenuTrigger
+                        id="workspace-sidebar-account-trigger"
                         render={
                             <SidebarMenuButton
                                 size="lg"
@@ -122,6 +124,7 @@ export function WorkspaceSidebarAccount() {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
+                            id="workspace-sidebar-account-logout"
                             variant="destructive"
                             onClick={() =>
                                 logoutAndRedirect(router, queryClient)
@@ -229,6 +232,7 @@ export function WorkspaceSidebarNav() {
                                         key={`${group.label}-${item.href}`}
                                     >
                                         <SidebarMenuButton
+                                            id={`workspace-sidebar-nav-${toAutomationIdSegment(item.href)}`}
                                             isActive={isActive}
                                             tooltip={item.label}
                                             render={<Link href={item.href} />}

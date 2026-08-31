@@ -2,11 +2,21 @@
 
 import * as React from "react"
 import { useQueryClient, type QueryClient } from "@tanstack/react-query"
+import { usePathname, useSearchParams } from "next/navigation"
+import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
-import { MoneyValue } from "@/components/business"
+import {
+    MoneyValue,
+    workspaceTaskSurfacePadClassName,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { allocationSessionMatchesIdentity } from "@/features/supplier-payables/lib/allocation-session-identity"
 import { cents } from "@/features/supplier-payables/lib/allocation-model"
 import { SupplierAllocationWorkspace } from "@/features/supplier-payables/components/allocation-workspace"
@@ -23,7 +33,10 @@ import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
+import { workspaceReadActionLabel } from "@/features/workspace/api/work-item-meta"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 
 import type { WorkspaceWorkItem } from "../types"
 import {
@@ -31,6 +44,11 @@ import {
     workspacePaymentMatchesPayable,
 } from "../lib/workspace-payment"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import {
+    WorkspaceDocumentPaperDialog,
+    type WorkspacePaperTarget,
+} from "./workspace-document-paper-dialog"
+import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 
 type WorkspacePaymentTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -53,13 +71,28 @@ export function WorkspacePaymentTask({
         workspacePaymentMatchesPayable(descriptor, payable),
     )
     const executionAuthorized = item.allowedActions.includes("PROCESS")
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
+    const [paper, setPaper] = React.useState<WorkspacePaperTarget | null>(null)
+    const purchaseOrderId = descriptor?.purchaseOrderId
+    const purchaseOrderHref = purchaseOrderId
+        ? purchaseOrderOpenHref(purchaseOrderId, returnTo)
+        : undefined
+    const purchaseOrderNo = payable?.sourceDocumentNo
+    const readPurchaseLabel = workspaceReadActionLabel("purchase_order")
 
     return (
         <section
             className="flex h-full min-h-0 flex-col"
             aria-label="当前付款任务"
         >
-            <header className="flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5">
+            <header
+                className={cn(
+                    workspaceTaskSurfacePadClassName,
+                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
+                )}
+            >
                 <div className="flex min-w-0 flex-col gap-2">
                     <WorkspaceDocumentBadge item={item} />
                     <h2 className="text-xl font-semibold tracking-tight">
@@ -78,7 +111,38 @@ export function WorkspacePaymentTask({
                                     taxBasis="gross"
                                 />
                             </span>
-                            <span>采购单 {payable.sourceDocumentNo}</span>
+                            <span className="inline-flex min-w-0 items-center gap-1">
+                                <span>采购单</span>
+                                <span className="num text-foreground">
+                                    {payable.sourceDocumentNo}
+                                </span>
+                                {purchaseOrderId ? (
+                                    <IconActionButton
+                                        id={`workspace-payment-preview-po-${toAutomationIdSegment(item.workItemId)}`}
+                                        label={readPurchaseLabel}
+                                        testId={`work-item-read-purchase-order-${item.workItemId}`}
+                                        onClick={() =>
+                                            setPaper({
+                                                kind: "purchase_order",
+                                                objectId: purchaseOrderId,
+                                                title: purchaseOrderNo,
+                                            })
+                                        }
+                                    >
+                                        <FileTextIcon aria-hidden="true" />
+                                    </IconActionButton>
+                                ) : null}
+                                {purchaseOrderHref ? (
+                                    <IconActionButton
+                                        id={`workspace-payment-open-po-${toAutomationIdSegment(item.workItemId)}`}
+                                        label="打开采购单"
+                                        testId={`work-item-open-purchase-order-${item.workItemId}`}
+                                        href={purchaseOrderHref}
+                                    >
+                                        <ArrowUpRightIcon aria-hidden="true" />
+                                    </IconActionButton>
+                                ) : null}
+                            </span>
                             {payable.dueDate ? (
                                 <span>
                                     {payable.dueStateLabel} · {payable.dueDate}
@@ -87,9 +151,10 @@ export function WorkspacePaymentTask({
                         </div>
                     ) : null}
                 </div>
+                <WorkspaceTaskHeaderActions item={item} />
             </header>
 
-            <div className="min-h-0 flex-1 overflow-auto py-4">
+            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
                 {!descriptor ? (
                     <Alert variant="destructive">
                         <AlertTitle>任务责任与付款对象不一致</AlertTitle>
@@ -98,7 +163,12 @@ export function WorkspacePaymentTask({
                         </AlertDescription>
                     </Alert>
                 ) : payableQuery.isPending ? (
-                    <div className="grid gap-4">
+                    <div
+                        className={cn(
+                            workspaceTaskSurfacePadClassName,
+                            "grid gap-4 py-5",
+                        )}
+                    >
                         <div className="h-40 animate-pulse rounded-lg bg-muted" />
                         <div className="h-40 animate-pulse rounded-lg bg-muted" />
                     </div>
@@ -113,6 +183,7 @@ export function WorkspacePaymentTask({
                                 )}
                             </span>
                             <Button
+                                id={`workspace-payment-payable-retry-${toAutomationIdSegment(item.workItemId)}`}
                                 type="button"
                                 variant="outline"
                                 size="sm"
@@ -158,6 +229,13 @@ export function WorkspacePaymentTask({
                     />
                 )}
             </div>
+            <WorkspaceDocumentPaperDialog
+                target={paper}
+                open={Boolean(paper)}
+                onOpenChange={(open) => {
+                    if (!open) setPaper(null)
+                }}
+            />
         </section>
     )
 }
@@ -243,6 +321,7 @@ function WorkspacePaymentSession({
                         )}
                     </span>
                     <Button
+                        id={`workspace-payment-session-retry-${toAutomationIdSegment(item.workItemId)}`}
                         type="button"
                         variant="outline"
                         size="sm"
@@ -318,6 +397,69 @@ function WorkspacePaymentSession({
                 void startNextPaymentAttempt()
             }}
         />
+    )
+}
+
+function purchaseOrderOpenHref(
+    purchaseOrderId: string,
+    returnTo?: string,
+): string {
+    const path = `/procurement/orders/${encodeURIComponent(purchaseOrderId)}`
+    if (!returnTo?.trim()) return path
+    return `${path}?${new URLSearchParams({
+        from: "workspace",
+        returnTo: returnTo.trim(),
+    }).toString()}`
+}
+
+function IconActionButton({
+    id,
+    label,
+    testId,
+    href,
+    onClick,
+    children,
+}: {
+    id: string
+    label: string
+    testId: string
+    href?: string
+    onClick?: () => void
+    children: React.ReactNode
+}) {
+    return (
+        <Tooltip>
+            <TooltipTrigger
+                id={id}
+                render={
+                    href ? (
+                        <a
+                            id={id}
+                            href={href}
+                            aria-label={label}
+                            data-testid={testId}
+                            className={buttonVariants({
+                                variant: "ghost",
+                                size: "icon-sm",
+                            })}
+                        />
+                    ) : (
+                        <Button
+                            id={id}
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={label}
+                            data-testid={testId}
+                            onClick={onClick}
+                        />
+                    )
+                }
+            >
+                {children}
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
     )
 }
 

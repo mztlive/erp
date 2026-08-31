@@ -37,8 +37,9 @@ import {
 } from "@/features/admin/hooks/queries"
 import {
     PERMISSION_BY_CODE,
-    summarizePermissions,
+    permissionGroupSegment,
     selectedItemsByGroup,
+    summarizePermissions,
 } from "@/features/admin/lib/permission-catalog"
 import type { AdminRole } from "@/features/admin/types"
 import { cn } from "@/lib/utils"
@@ -101,6 +102,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
                     title="角色信息加载失败"
                     action={
                         <Button
+                            id="governance-admin-role-form-retry"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -124,6 +126,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
                     description="该角色不存在或已被删除，可返回角色列表重新选择。"
                     action={
                         <Button
+                            id="governance-admin-role-form-back"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -185,12 +188,8 @@ function RoleForm({
     const { initialSelected, preservedCodes } = React.useMemo(() => {
         const all = role?.permissions ?? []
         return {
-            initialSelected: all.filter((code) =>
-                PERMISSION_BY_CODE.has(code),
-            ),
-            preservedCodes: all.filter(
-                (code) => !PERMISSION_BY_CODE.has(code),
-            ),
+            initialSelected: all.filter((code) => PERMISSION_BY_CODE.has(code)),
+            preservedCodes: all.filter((code) => !PERMISSION_BY_CODE.has(code)),
         }
     }, [role])
     const hasWildcard = preservedCodes.includes(WILDCARD_CODE)
@@ -244,6 +243,7 @@ function RoleForm({
                 }
                 actions={
                     <Button
+                        id="governance-admin-role-form-back"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -273,6 +273,7 @@ function RoleForm({
                                 name="name"
                                 children={(field) => (
                                     <field.TextField
+                                        id="governance-admin-role-form-name"
                                         label="角色名称"
                                         required
                                         placeholder="如：销售经理"
@@ -328,6 +329,7 @@ function RoleForm({
                                     >
                                         <FieldLabel>权限</FieldLabel>
                                         <PermissionOptionsPanel
+                                            id="governance-admin-role-form-permissions"
                                             selected={selected}
                                             onChange={(next) => {
                                                 field.handleChange(next)
@@ -389,6 +391,7 @@ function RoleForm({
                         >
                             <form.AppForm>
                                 <form.SubmitButton
+                                    id="governance-admin-role-form-submit"
                                     label={isEdit ? "保存" : "创建"}
                                 />
                             </form.AppForm>
@@ -425,6 +428,7 @@ function CopyFromRole({
             <div className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-sm">复制现有角色的权限</span>
                 <OptionCombobox
+                    id="governance-admin-role-form-copy-source"
                     className="w-56"
                     value={sourceId}
                     onValueChange={setSourceId}
@@ -438,14 +442,13 @@ function CopyFromRole({
                 />
             </div>
             <Button
+                id="governance-admin-role-form-copy"
                 type="button"
                 variant="outline"
                 disabled={disabled || !source || copyable.length === 0}
                 onClick={() => onCopy(copyable)}
                 title={
-                    currentCount > 0
-                        ? "复制会覆盖当前已勾选的权限"
-                        : undefined
+                    currentCount > 0 ? "复制会覆盖当前已勾选的权限" : undefined
                 }
             >
                 <CopyIcon data-icon="inline-start" aria-hidden="true" />
@@ -486,7 +489,10 @@ function SelectionReview({
 
     return (
         <Collapsible className={cn(surfaceInsetClassName, "overflow-hidden")}>
-            <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/40">
+            <CollapsibleTrigger
+                id="governance-admin-role-form-selection-toggle"
+                className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/40"
+            >
                 <span className="font-medium text-foreground">已选摘要</span>
                 <span className="text-muted-foreground">
                     共 <span className="num">{selected.length}</span> 项 ·{" "}
@@ -513,6 +519,7 @@ function SelectionReview({
                                     {group.items.length}
                                 </span>
                                 <button
+                                    id={`governance-admin-role-form-remove-${permissionGroupSegment(group.name)}`}
                                     type="button"
                                     className="text-muted-foreground hover:text-destructive"
                                     aria-label={`移除 ${group.name} 的全部权限`}
@@ -589,13 +596,14 @@ function StickyFormBar({
                 ) : null}
                 {isEdit && boundAccounts !== null && boundAccounts > 0 ? (
                     <span>
-                        保存后影响{" "}
-                        <span className="num">{boundAccounts}</span> 个账号
+                        保存后影响 <span className="num">{boundAccounts}</span>{" "}
+                        个账号
                     </span>
                 ) : null}
             </div>
             <div className="flex items-center gap-2">
                 <Button
+                    id="governance-admin-role-form-cancel"
                     type="button"
                     variant="ghost"
                     disabled={pending}

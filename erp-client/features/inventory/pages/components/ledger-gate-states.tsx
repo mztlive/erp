@@ -1,6 +1,11 @@
 "use client"
 
-import { BusinessEmptyState, BusinessFailureState, PageHeader, PageScaffold } from "@/components/business"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    PageHeader,
+    PageScaffold,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 
 export function InventoryLedgerLoading() {
@@ -37,7 +42,11 @@ export function InventoryLedgerPermissionRevoked({
                 title="权限已收回"
                 description="当前账号的库存台账访问权限已被收回。余额、流水、导出结果与展开来源均不可见。"
                 action={
-                    <Button type="button" onClick={onRetry}>
+                    <Button
+                        id="inventory-ledger-permission-retry"
+                        type="button"
+                        onClick={onRetry}
+                    >
                         重新检查权限
                     </Button>
                 }

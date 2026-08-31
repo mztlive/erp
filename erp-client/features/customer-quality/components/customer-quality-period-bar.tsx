@@ -49,8 +49,9 @@ export function CustomerQualityPeriodBar({
             className="flex flex-wrap items-end gap-3"
         >
             <div className="space-y-1.5">
-                <Label htmlFor="cq-period-from">期间起</Label>
+                <Label htmlFor="customers-quality-period-from">期间起</Label>
                 <DatePicker
+                    id="customers-quality-period-from"
                     className="w-[10.5rem]"
                     value={resolvedFrom || undefined}
                     onValueChange={(next) => {
@@ -64,8 +65,9 @@ export function CustomerQualityPeriodBar({
                 />
             </div>
             <div className="space-y-1.5">
-                <Label htmlFor="cq-period-to">期间止</Label>
+                <Label htmlFor="customers-quality-period-to">期间止</Label>
                 <DatePicker
+                    id="customers-quality-period-to"
                     className="w-[10.5rem]"
                     value={resolvedTo || undefined}
                     onValueChange={(next) => {
@@ -89,9 +91,9 @@ export function CustomerQualityPeriodBar({
             ) : null}
             {presets?.length ? (
                 <div className="space-y-1.5">
-                    <Label htmlFor="cq-preset">快捷期间</Label>
+                    <Label htmlFor="customers-quality-preset">快捷期间</Label>
                     <OptionCombobox
-                        id="cq-preset"
+                        id="customers-quality-preset"
                         value={periodPreset ?? ""}
                         onValueChange={(v) => {
                             onPresetSelect(v ?? "")
@@ -111,9 +113,9 @@ export function CustomerQualityPeriodBar({
                 </div>
             ) : null}
             <div className="space-y-1.5">
-                <Label htmlFor="cq-sort">排序</Label>
+                <Label htmlFor="customers-quality-sort">排序</Label>
                 <OptionCombobox
-                    id="cq-sort"
+                    id="customers-quality-sort"
                     value={sort}
                     onValueChange={(v) => {
                         patchUrl({ sort: v ?? sort })

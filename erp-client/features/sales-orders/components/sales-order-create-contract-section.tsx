@@ -54,6 +54,7 @@ export function SalesOrderCreateContractSection({
                             <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">
                                     <ContractSearchCombobox
+                                        id="sales-orders-create-contract"
                                         value={field.state.value || undefined}
                                         onValueChange={(id) => {
                                             const next = id ?? ""
@@ -69,6 +70,7 @@ export function SalesOrderCreateContractSection({
                                     />
                                 </div>
                                 <Button
+                                    id="sales-orders-create-contract-upload"
                                     type="button"
                                     variant="outline"
                                     size="icon"

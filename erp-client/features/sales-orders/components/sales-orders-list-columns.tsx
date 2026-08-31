@@ -18,6 +18,7 @@ import {
     stageOwnerDisplay,
 } from "@/features/sales-orders/lib/labels"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type SalesOrdersListColumnsContext = {
     downloadingContractId: string | null
@@ -40,6 +41,7 @@ export function buildSalesOrdersListColumns(
                     <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2">
                             <Button
+                                id={`sales-orders-list-row-${toAutomationIdSegment(row.original.id)}-open`}
                                 variant="link"
                                 size="xs"
                                 className="num px-0"
@@ -95,6 +97,7 @@ export function buildSalesOrdersListColumns(
                     <div className="min-w-0 space-y-1">
                         {order.contractId ? (
                             <Button
+                                id={`sales-orders-list-row-${toAutomationIdSegment(order.id)}-download-contract`}
                                 type="button"
                                 variant="link"
                                 size="xs"

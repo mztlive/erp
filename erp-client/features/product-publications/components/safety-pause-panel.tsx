@@ -12,6 +12,7 @@ import {
     WORK_ITEM_TYPE_LABEL,
 } from "@/features/product-publications/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { goToWorkspaceLabel } from "@/lib/ui-text"
 
 /**
@@ -75,6 +76,7 @@ export function SafetyPausePanel({
                             不显示受影响发布、提交时间与后续任务；请按原任务号查询。
                         </p>
                         <Button
+                            id={`publication-safety-pause-workspace-${toAutomationIdSegment(pause.originalIdempotencyKey)}`}
                             type="button"
                             size="sm"
                             variant="outline"
@@ -181,6 +183,7 @@ export function SafetyPausePanel({
                                 任务仅用于核对来源与准备候选证据，不能选定替代供给或发起恢复发布。
                             </p>
                             <Button
+                                id={`publication-safety-pause-offering-${toAutomationIdSegment(followUpWorkItem.workItemId)}`}
                                 type="button"
                                 size="sm"
                                 variant="outline"

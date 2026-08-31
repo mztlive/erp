@@ -1,13 +1,13 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
-import { FilterChip, FixedOptionRadioFilter, ListToolbar } from "@/components/business"
+import {
+    FilterChip,
+    FixedOptionRadioFilter,
+    ListToolbar,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,7 @@ import {
     CompanySkuSearchCombobox,
     SupplierSearchCombobox,
 } from "@/features/entity-selectors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     AvailabilityStatusFilter,
     OfferingSourceFilter,
@@ -133,6 +134,7 @@ export function SupplierOfferingsToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="supplier-offerings-toolbar-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -141,11 +143,11 @@ export function SupplierOfferingsToolbar({
                             placeholder="供应商订货编码"
                             aria-label="搜索供给"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="supplier-offerings-toolbar-filter-toggle"
                         type="button"
                         variant="outline"
                         aria-expanded={filterPanelOpen}
@@ -184,6 +186,7 @@ export function SupplierOfferingsToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`supplier-offerings-toolbar-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -192,6 +195,7 @@ export function SupplierOfferingsToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="supplier-offerings-toolbar-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -208,18 +212,21 @@ export function SupplierOfferingsToolbar({
                                     aria-label="供应商供给更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        idPrefix="supplier-offerings-toolbar-filter-status"
                                         label="关系状态"
                                         value={statusDraft}
                                         onValueChange={onStatusDraftChange}
                                         options={OFFERING_STATUS_FILTER_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        idPrefix="supplier-offerings-toolbar-filter-source-type"
                                         label="登记来源"
                                         value={sourceTypeDraft}
                                         onValueChange={onSourceTypeDraftChange}
                                         options={SOURCE_TYPE_FILTER_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        idPrefix="supplier-offerings-toolbar-filter-availability"
                                         label="当前可供"
                                         value={availabilityStatusDraft}
                                         onValueChange={
@@ -236,6 +243,7 @@ export function SupplierOfferingsToolbar({
                                                     公司 SKU
                                                 </span>
                                                 <CompanySkuSearchCombobox
+                                                    id="supplier-offerings-toolbar-sku-select"
                                                     value={
                                                         skuIdDraft ?? undefined
                                                     }
@@ -255,6 +263,7 @@ export function SupplierOfferingsToolbar({
                                                 SKU 编号
                                             </span>
                                             <Input
+                                                id="supplier-offerings-toolbar-sku-no"
                                                 className="w-full"
                                                 value={skuNoDraft}
                                                 onChange={(event) =>
@@ -272,6 +281,7 @@ export function SupplierOfferingsToolbar({
                                                 SPU 编号
                                             </span>
                                             <Input
+                                                id="supplier-offerings-toolbar-product-no"
                                                 className="w-full"
                                                 value={productNoDraft}
                                                 onChange={(event) =>
@@ -289,6 +299,7 @@ export function SupplierOfferingsToolbar({
                                                 供应商
                                             </span>
                                             <SupplierSearchCombobox
+                                                id="supplier-offerings-toolbar-supplier-select"
                                                 value={
                                                     supplierIdDraft ?? undefined
                                                 }
@@ -309,13 +320,17 @@ export function SupplierOfferingsToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="supplier-offerings-toolbar-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={onResetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="supplier-offerings-toolbar-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

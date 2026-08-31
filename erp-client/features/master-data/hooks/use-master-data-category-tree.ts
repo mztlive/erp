@@ -105,22 +105,21 @@ export function useMasterDataCategoryTree(
     const filterActive = q.trim() !== "" || lifecycleStatus !== "all"
 
     /** 所有已生效条件均可从 chip 单独撤销。 */
-    const appliedChips = React.useMemo<readonly CategoryTreeAppliedChip[]>(
-        () => {
-            const chips: CategoryTreeAppliedChip[] = []
-            if (q.trim()) {
-                chips.push({ key: "q", label: `搜索：${q.trim()}` })
-            }
-            if (lifecycleStatus !== "all") {
-                chips.push({
-                    key: "lifecycleStatus",
-                    label: `启停：${lifecycleFilterLabel(lifecycleStatus)}`,
-                })
-            }
-            return chips
-        },
-        [lifecycleStatus, q],
-    )
+    const appliedChips = React.useMemo<
+        readonly CategoryTreeAppliedChip[]
+    >(() => {
+        const chips: CategoryTreeAppliedChip[] = []
+        if (q.trim()) {
+            chips.push({ key: "q", label: `搜索：${q.trim()}` })
+        }
+        if (lifecycleStatus !== "all") {
+            chips.push({
+                key: "lifecycleStatus",
+                label: `启停：${lifecycleFilterLabel(lifecycleStatus)}`,
+            })
+        }
+        return chips
+    }, [lifecycleStatus, q])
 
     const toggle = React.useCallback((id: string) => {
         setExpanded((prev) => {
@@ -186,10 +185,7 @@ export function useMasterDataCategoryTree(
             `分类=${masterDataCopy.categoryTreeTitle}`,
         )
         downloadCsv(csv, `基础资料-商品分类`)
-        const datePart = new Date()
-            .toISOString()
-            .slice(0, 10)
-            .replace(/-/g, "")
+        const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "")
         setExportMeta({
             jobId: `导出-${datePart}-${String(Date.now() % 100000).padStart(5, "0")}`,
             rowCount: rows.length,

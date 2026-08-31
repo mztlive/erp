@@ -45,6 +45,7 @@ export function SupplierOrderCenterHeader({
                 actions={
                     from === "mall-order" && sourceId ? (
                         <Button
+                            id="supplier-order-center-header-back-mall"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -59,6 +60,7 @@ export function SupplierOrderCenterHeader({
                         </Button>
                     ) : (
                         <Button
+                            id="supplier-order-center-header-back-list"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -102,6 +104,7 @@ export function SupplierOrderCenterHeader({
                 primaryAction={
                     isResultUnknown ? (
                         <GuardedBusinessAction
+                            id="supplier-order-center-header-query-result"
                             type="button"
                             size="sm"
                             disabled={!canQuery || queryPending}
@@ -122,6 +125,7 @@ export function SupplierOrderCenterHeader({
                     <div className="flex flex-wrap gap-2">
                         {isResultUnknown ? (
                             <GuardedBusinessAction
+                                id="supplier-order-center-header-replay"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -141,6 +145,7 @@ export function SupplierOrderCenterHeader({
                         ) : null}
                         {allowedActions.includes("ESCALATE_W29") ? (
                             <Button
+                                id="supplier-order-center-header-escalate"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -153,6 +158,7 @@ export function SupplierOrderCenterHeader({
                             </Button>
                         ) : null}
                         <Button
+                            id="supplier-order-center-header-mall-link"
                             type="button"
                             size="sm"
                             variant="ghost"

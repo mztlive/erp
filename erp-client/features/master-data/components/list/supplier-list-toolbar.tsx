@@ -29,6 +29,7 @@ import type { SupplierQualificationHealth } from "@/features/master-data/types"
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 export function SupplierListToolbar({
+    idPrefix,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -50,6 +51,7 @@ export function SupplierListToolbar({
     supplierQualificationTypesDraft,
     setSupplierQualificationTypesDraft,
 }: {
+    idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -73,6 +75,7 @@ export function SupplierListToolbar({
     supplierQualificationTypesDraft: string[]
     setSupplierQualificationTypesDraft: SetState<string[]>
 }) {
+    const prefix = idPrefix ?? "master-data-list-supplier-list-toolbar"
     const panelId = React.useId()
     const hasChips = hasActiveFilters && appliedChips.length > 0
 
@@ -86,6 +89,7 @@ export function SupplierListToolbar({
             <ListToolbar
                 search={
                     <ListSearchField
+                        id={`${prefix}-search-input`}
                         searchInputRef={searchInputRef}
                         value={searchDraft}
                         onChange={setSearchDraft}
@@ -94,6 +98,7 @@ export function SupplierListToolbar({
                 }
                 filters={
                     <Button
+                        id={`${prefix}-filter-trigger`}
                         type="button"
                         variant="outline"
                         aria-expanded={supplierFilterPanelOpen}
@@ -140,6 +145,7 @@ export function SupplierListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id={`${prefix}-clear-filters`}
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -160,7 +166,9 @@ export function SupplierListToolbar({
                                         value={lifecycleStatusDraft}
                                         onValueChange={setLifecycleStatusDraft}
                                         options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                                        aria-label={masterDataCopy.filterLifecycleAria}
+                                        aria-label={
+                                            masterDataCopy.filterLifecycleAria
+                                        }
                                     />
                                     <FixedOptionRadioFilter
                                         label="资质状态"
@@ -168,13 +176,17 @@ export function SupplierListToolbar({
                                         onValueChange={
                                             setSupplierQualificationHealthDraft
                                         }
-                                        options={SUPPLIER_QUALIFICATION_HEALTH_OPTIONS}
+                                        options={
+                                            SUPPLIER_QUALIFICATION_HEALTH_OPTIONS
+                                        }
                                         aria-label="资质状态"
                                     />
                                     <FixedOptionCheckboxFilter
                                         label="供应能力"
                                         value={supplierCapabilityCodesDraft}
-                                        onValueChange={setSupplierCapabilityCodesDraft}
+                                        onValueChange={
+                                            setSupplierCapabilityCodesDraft
+                                        }
                                         options={SUPPLIER_CAPABILITY_OPTIONS}
                                         aria-label="供应能力，可多选"
                                     />
@@ -184,7 +196,9 @@ export function SupplierListToolbar({
                                         onValueChange={
                                             setSupplierQualificationTypesDraft
                                         }
-                                        options={SUPPLIER_QUALIFICATION_TYPE_OPTIONS}
+                                        options={
+                                            SUPPLIER_QUALIFICATION_TYPE_OPTIONS
+                                        }
                                         aria-label="资质类型，可多选"
                                     />
                                     <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -193,13 +207,17 @@ export function SupplierListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id={`${prefix}-reset`}
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id={`${prefix}-apply`}
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

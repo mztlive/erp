@@ -3,7 +3,11 @@
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
-import { DocumentSection, DocumentSummary, MoneyValue } from "@/components/business"
+import {
+    DocumentSection,
+    DocumentSummary,
+    MoneyValue,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,6 +18,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import type { MallConsumptionOrderView } from "@/features/mall-consumption-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     SUPPLIER_CANCEL_LABEL,
     SUPPLIER_REFUND_LABEL,
@@ -40,11 +45,13 @@ export function SupplierSection({ view }: { view: MallConsumptionOrderView }) {
                         {view.workItemIds[0] ? (
                             <div className="mt-2">
                                 <Button
+                                    id={`mall-consumption-order-center-supplier-workitem-${toAutomationIdSegment(view.workItemIds[0])}`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
                                     render={
                                         <Link
+                                            id={`mall-consumption-order-center-supplier-workitem-${toAutomationIdSegment(view.workItemIds[0])}-link`}
                                             href={`/governance/integration-errors?resolveWorkItemId=${view.workItemIds[0]}&queueContextId=queue:W29:mine:all`}
                                         />
                                     }
@@ -162,11 +169,13 @@ export function SupplierSection({ view }: { view: MallConsumptionOrderView }) {
                                     />
                                 ) : null}
                                 <Button
+                                    id={`mall-consumption-order-center-supplier-${toAutomationIdSegment(so.supplierFulfillmentOrderId)}-open`}
                                     type="button"
                                     size="sm"
                                     variant="outline"
                                     render={
                                         <Link
+                                            id={`mall-consumption-order-center-supplier-${toAutomationIdSegment(so.supplierFulfillmentOrderId)}-open-link`}
                                             href={`/supplier-api/orders?supplierOrderId=${so.supplierFulfillmentOrderId}&from=W25&mallOrderId=${view.identity.mallOrderId}`}
                                         />
                                     }

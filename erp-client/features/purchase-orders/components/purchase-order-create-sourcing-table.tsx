@@ -22,6 +22,7 @@ import {
     type SourcingSalesOrder,
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
 import { FULFILLMENT_RESPONSIBILITY_LABEL } from "@/features/purchase-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 
 export type PurchaseOrderCreateSourcingTableProps = {
@@ -47,7 +48,7 @@ export function PurchaseOrderCreateSourcingTable({
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-12">本单</TableHead>
-                        <TableHead>销售项目</TableHead>
+                        <TableHead className="min-w-56">销售项目</TableHead>
                         <TableHead data-align="end">销售数量</TableHead>
                         <TableHead data-align="end">已覆盖</TableHead>
                         <TableHead data-align="end">剩余数量</TableHead>
@@ -84,10 +85,10 @@ export function PurchaseOrderCreateSourcingTable({
                                         {(field) => (
                                             <label
                                                 className="inline-flex min-h-10 cursor-pointer items-center justify-center"
-                                                htmlFor={`purchase-sourcing-selected-${input.rowKey}`}
+                                                htmlFor={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-select`}
                                             >
                                                 <Checkbox
-                                                    id={`purchase-sourcing-selected-${input.rowKey}`}
+                                                    id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-select`}
                                                     checked={
                                                         field.state.value ===
                                                         true
@@ -106,13 +107,12 @@ export function PurchaseOrderCreateSourcingTable({
                                         )}
                                     </form.AppField>
                                 </TableCell>
-                                <TableCell className="max-w-[16rem] whitespace-normal">
+                                <TableCell className="min-w-56 max-w-72 whitespace-normal">
                                     <div className="font-medium text-foreground">
                                         {product.itemName}
                                     </div>
                                     <div className="mt-0.5 text-xs text-muted-foreground">
                                         {[
-                                            product.itemSku,
                                             product.salesAllocationLabel,
                                             product.deliveryDeadline
                                                 ? `承诺最晚 ${product.deliveryDeadline}`
@@ -146,6 +146,7 @@ export function PurchaseOrderCreateSourcingTable({
                                     >
                                         {(field) => (
                                             <field.SelectField
+                                                id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-sourcing-option`}
                                                 label={`履约方案，${product.itemName}`}
                                                 hideLabel
                                                 allowClear={
@@ -215,6 +216,7 @@ export function PurchaseOrderCreateSourcingTable({
                                     <SourcingTargetWarehouseField
                                         form={form}
                                         index={index}
+                                        rowKey={input.rowKey}
                                         order={order}
                                         salesOrderLineId={
                                             input.salesOrderLineId
@@ -227,6 +229,7 @@ export function PurchaseOrderCreateSourcingTable({
                                     >
                                         {(field) => (
                                             <field.TextField
+                                                id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-quantity`}
                                                 label="本次分配数量"
                                                 hideLabel
                                                 type="number"
@@ -249,6 +252,7 @@ export function PurchaseOrderCreateSourcingTable({
                                     <SourcingExpectedDeliveryField
                                         form={form}
                                         index={index}
+                                        rowKey={input.rowKey}
                                         order={order}
                                         salesOrderLineId={
                                             input.salesOrderLineId
@@ -258,6 +262,7 @@ export function PurchaseOrderCreateSourcingTable({
                                 <TableCell>
                                     <div className="flex items-center gap-1">
                                         <Button
+                                            id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-split-add`}
                                             type="button"
                                             size="icon-sm"
                                             variant="ghost"
@@ -272,6 +277,7 @@ export function PurchaseOrderCreateSourcingTable({
                                             <PlusIcon />
                                         </Button>
                                         <Button
+                                            id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-split-remove`}
                                             type="button"
                                             size="icon-sm"
                                             variant="ghost"
@@ -299,11 +305,13 @@ export function PurchaseOrderCreateSourcingTable({
 function SourcingTargetWarehouseField({
     form,
     index,
+    rowKey,
     order,
     salesOrderLineId,
 }: {
     form: PurchaseOrderCreateFormApi
     index: number
+    rowKey: string
     order: SourcingSalesOrder
     salesOrderLineId: string
 }) {
@@ -335,6 +343,7 @@ function SourcingTargetWarehouseField({
                             return (
                                 <div className="space-y-1">
                                     <WarehouseSearchCombobox
+                                        id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-warehouse`}
                                         value={field.state.value || undefined}
                                         onValueChange={(warehouseId) =>
                                             field.handleChange(
@@ -376,11 +385,13 @@ function SourcingTargetWarehouseField({
 function SourcingExpectedDeliveryField({
     form,
     index,
+    rowKey,
     order,
     salesOrderLineId,
 }: {
     form: PurchaseOrderCreateFormApi
     index: number
+    rowKey: string
     order: SourcingSalesOrder
     salesOrderLineId: string
 }) {
@@ -405,7 +416,11 @@ function SourcingExpectedDeliveryField({
                         name={`lines[${index}].expectedDeliveryDate`}
                     >
                         {(field) => (
-                            <field.DateField label="预计交付日" hideLabel />
+                            <field.DateField
+                                id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-delivery-date`}
+                                label="预计交付日"
+                                hideLabel
+                            />
                         )}
                     </form.AppField>
                 )

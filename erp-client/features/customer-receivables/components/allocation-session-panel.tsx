@@ -23,6 +23,7 @@ import { CustomerReceiptSubmitConfirmDialog } from "@/features/customer-receivab
 import { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
 import { money } from "@/features/customer-receivables/lib/allocation-math"
 import { customerReceiptApprovalPhase } from "@/features/customer-receivables/lib/customer-receipt-approval"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     AllocationSessionView,
     PostAllocationResult,
@@ -129,6 +130,7 @@ export function AllocationSessionPanel({
                         <>
                             {result.pendingKey ? (
                                 <Button
+                                    id="customer-receivables-session-result-resolve"
                                     type="button"
                                     size="sm"
                                     onClick={() => void resolveUnknown()}
@@ -148,6 +150,7 @@ export function AllocationSessionPanel({
                             ) : null}
                             {result.returnTo ? (
                                 <Button
+                                    id="customer-receivables-session-result-return"
                                     type="button"
                                     size="sm"
                                     render={<Link href={result.returnTo} />}
@@ -156,6 +159,7 @@ export function AllocationSessionPanel({
                                 </Button>
                             ) : null}
                             <Button
+                                id="customer-receivables-session-result-close"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -203,6 +207,7 @@ export function AllocationSessionPanel({
             </div>
 
             <AllocationWorkspace
+                id="customer-receivables-session-allocations"
                 title="本次分配"
                 description="拟分配金额仅供参考，以提交后结果为准。"
                 summary={{
@@ -279,6 +284,7 @@ export function AllocationSessionPanel({
                         renderEditor: ({ item }) => (
                             <div className="flex items-center justify-end gap-1">
                                 <Input
+                                    id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-amount`}
                                     className="num text-right"
                                     value={item.amount}
                                     inputMode="decimal"
@@ -291,6 +297,7 @@ export function AllocationSessionPanel({
                                     }
                                 />
                                 <Button
+                                    id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-fill`}
                                     type="button"
                                     size="xs"
                                     variant="ghost"
@@ -314,6 +321,7 @@ export function AllocationSessionPanel({
                 actions={
                     <>
                         <Button
+                            id="customer-receivables-session-save-draft"
                             type="button"
                             variant="outline"
                             disabled={
@@ -340,6 +348,7 @@ export function AllocationSessionPanel({
                             {saveMutation.isPending ? "保存中…" : "保存草稿"}
                         </Button>
                         <Button
+                            id="customer-receivables-session-submit"
                             type="button"
                             disabled={
                                 !canOperate ||
@@ -369,6 +378,7 @@ export function AllocationSessionPanel({
 
             {/* 离开前未保存草稿确认 */}
             <DiscardConfirmDialog
+                id="customer-receivables-session-discard-dialog"
                 open={leaveConfirmOpen}
                 onOpenChange={setLeaveConfirmOpen}
                 title="本次核销尚未保存草稿，确定离开？"
@@ -392,6 +402,7 @@ export function AllocationSessionPanel({
 
             {isReceipt ? (
                 <CustomerReceiptSubmitConfirmDialog
+                    id="customer-receivables-session-receipt-confirm-dialog"
                     open={confirmOpen}
                     pending={postMutation.isPending}
                     approval={receiptApproval}
@@ -400,6 +411,7 @@ export function AllocationSessionPanel({
                 />
             ) : (
                 <FormalActionConfirmDialog
+                    id="customer-receivables-session-invoice-confirm-dialog"
                     open={confirmOpen}
                     onOpenChange={setConfirmOpen}
                     title="确认登记销项发票并分配"

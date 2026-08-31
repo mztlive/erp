@@ -1,6 +1,7 @@
 # 仓库指南
 
 ## 架构概览
+
 - HTTP Handler -> Service -> Repository -> MongoDB，遵循类 DDD 分层：Handler 只做协议适配，Service 负责编排，Repository 屏蔽持久化细节。
 - `crates/bpm` 是纯流程领域与状态引擎：拥有流程定义、节点、连线、运行实例、节点执行、实例审批人和命令收据，以及图规则与状态计算。禁止依赖或引用 `entities`、`database`、`services`、`apps/web-api`、`config`、`mongodb`、`axum`、`id-generator`、权限宏或通知客户端。
 - `entities` 是 ERP 业务实体及 BPM 集成引用（单据绑定、业务对象快照、WorkItem、通知 outbox）。目标审批流程模型不得放在 `entities/src/approval`。
@@ -11,6 +12,7 @@
 - 配置统一走 `config::SafeConfig`（CLI 参数 + 可选 Nacos 热更新），Web API 日志/Tracing 位于 `apps/web-api/src/core/tracing`。
 
 ## 项目结构与归属
+
 - `apps/web-api`：Axum HTTP API。Handlers 位于 `src/core/handler/{auth,admin}` 及 `handler/upload.rs`；路由注册在 `src/core/routes/{public,admin,account}.rs`；统一返回 `ApiResponse`。管理员路由固定走 JWT + RBAC 中间件。
 - `apps/cli`：运维命令行。提供 `init-admin`（创建或修复超级管理员）和 `reset-password`（只改已有管理员密码）。只依赖 `services` / `database` / `config`，禁止依赖 `web-api`。
 - `services`：领域服务编排层，按域分目录（如 `iam`、`consumer`、`audit`）。`services::approval` 只做政策/授权/事务/副作用适配，不得实现流程状态机。新增领域需提供 `dto.rs`；如果只有一个 service 文件，代码直接写在 `mod.rs` 中；如果有多个 service 文件，再创建独立 `service.rs` 文件。业务规则优先放在实体/值对象中。
@@ -23,6 +25,7 @@
 - `logs`：仅在显式设置 `LOG_TO_FILE=true` 时使用的本地文件日志目录。
 
 ## 新功能开发流程（后端）
+
 1. **建模**：在 `entities` 中创建/扩展实体与值对象，封装不变式与验证。
 2. **仓储层**：在 `database/src/repository` 新增仓库，实现实体读写与聚合；通过 `DatabaseExt` 暴露。
 3. **服务层**：在 `services/src/<domain>` 添加 `dto.rs`；编排流程，不得绕过仓库层。
@@ -33,6 +36,7 @@
 8. **回归**：执行 `cargo test --workspace`，确保变更无回归。
 
 ## 编码约定
+
 - Rust 格式遵循 rustfmt（最大宽度 110）；模块 snake_case，类型 CamelCase，常量大写蛇形。
 - **分支表达约定**：
   - 固定模式匹配且分支语义清晰时可以使用 `match`。
@@ -61,6 +65,7 @@
 - 上传文件必须通过 `AppState` 注入的 `storage::S3Storage` 写入配置的 S3 bucket；公开 URL 必须由 `public_base_url`、`key_prefix` 与对象键生成。
 
 ## 类型内聚与下沉编码要求
+
 - **核心原则**：凡是“不依赖数据库/外部 I/O 的业务规则”，优先封装到 `entities`（实体/值对象）或 DTO 自身，不得长期滞留在 `services` 私有 helper 中。
 - **Service 的职责边界**：Service 仅负责流程编排、事务边界、仓储调用、跨聚合协作；不得承载可复用的不变式实现。
 - **必须下沉到类型的方法类别**：
@@ -85,6 +90,7 @@
   - 变更后必须通过：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
 
 ## 性能优化约定（社区最佳实践）
+
 - **先度量后优化**：在改性能前先用 `tracing`/指标/基准确认热点；优先解决高频路径与大对象分配。
 - **减少不必要分配**：热点路径优先借用 `&str`/`&T`，仅在需要所有权时 `clone`；能用 `Cow`/`Arc` 共享就不要拷贝。
 - **避免中间容器**：能用迭代器直接 `collect` 就不要多次 `map`+`collect`；已知大小用 `Vec::with_capacity`。
@@ -93,6 +99,7 @@
 - **并发与阻塞隔离**：CPU 密集或阻塞 I/O 使用 `spawn_blocking`，避免阻塞 async runtime。
 
 ## 事务使用约定
+
 - 事务边界由 Service 控制；Repository 不管理事务，只按调用方传入的执行器决定本次操作是否加入事务。
 - Repository 的每个方法都接收 `executor: &mut dyn Executor`（`database::Executor`），不再提供 `_with_session` 重复方法。
 - **单集合操作原则**：仅涉及单个集合的 CRUD（无需跨集合保证原子性）时，不需要事务，传入 `&mut NoTransaction`。
@@ -101,6 +108,7 @@
 - 多步骤写入的 Repository 与 policy 方法（如角色绑定替换、角色规则删除）必须收到事务执行器，注释中已注明该约束。
 
 ## 构建、运行与工具
+
 - 初始化配置：`cp config.toml.example config.toml`，填写 `app`、`database` 与 `s3`。
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
 - CLI：`cargo run -p cli -- init-admin --account admin --name "System Admin"`；`cargo run -p cli -- reset-password --account admin`。密码优先 `--password`，其次环境变量 `ERP_ADMIN_PASSWORD`，否则交互输入。
@@ -109,6 +117,7 @@
 - Docker：`./manage.sh start|status|logs` 封装 `docker compose`；仅按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写入 S3。
 
 ## 测试期望
+
 - 单元测试内联（`mod tests`），覆盖新的业务规则与边界。
 - 集成测试放在各 crate 的 `tests/` 目录。
 - 每个功能改动至少包含一个 happy-path 测试；路由/行为变更需更新 HTTP 层测试。
@@ -116,40 +125,48 @@
 - 上传/临时产物不纳入版本控制，提交前清理大体积日志。
 
 ## CI 与质量门禁
+
 - CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace`、`./scripts/check-bpm-boundaries.sh`。
 - 任何生成文件（如权限定义）必须在 CI 中校验未漂移。
 
 ## API 契约与兼容性
+
 - 新增字段默认向后兼容，禁止无迁移地删除或重命名线上字段。
 - 错误响应使用统一结构与稳定错误语义；新增错误场景应在接口文档中说明。
 - 外部接口变更需在 PR 描述列出影响范围、回滚策略和兼容窗口。
 
 ## 安全基线
+
 - 日志中不得输出明文密码、token、验证码、身份证号等敏感信息。
 - 上传接口必须校验文件大小、扩展名和 MIME；对象键必须是安全相对路径，并限制在配置的 `key_prefix` 下。
 - 权限失败和关键数据修改必须记录审计日志。
 - 对高频敏感接口（登录、验证码、上传）应具备限流能力或预留限流扩展点。
 
 ## 数据治理（MongoDB）
+
 - 新增查询必须评估索引需求，避免线上 N+1 与全表扫描。
 - 唯一约束通过唯一索引保证，不仅依赖应用层校验。
 - 需要过期清理的数据应使用 TTL 索引或明确归档任务。
 - 变更集合字段时，需提供迁移脚本与回滚预案（尤其索引变更）。
 
 ## 外部依赖容错
+
 - 外部 HTTP 调用应统一设置超时、重试上限和错误分类。
 - 涉及资金/状态机变更的操作必须具备幂等键或去重机制。
 - 依赖失败需降级到可观测错误，并记录上下文（account/request_id）。
 
 ## 领域模型定义原则
+
 领域模型（Entity）是业务逻辑的核心，定义时应遵循以下原则：
 
 ### 1. 结构设计原则
+
 - **基础字段**：所有实体必须包含 `BaseModel`（通过 `#[serde(flatten)]` 扁平化），包含 `id`、`version`、`created_at`、`updated_at`、`deleted_at`。
 - **ID 类型**：优先使用 newtype 包装（如 `ProjectId`、`RoleId`）。
 - **数据传递**：创建/更新操作使用独立的 `Data` 结构，不包含系统字段，便于参数传递和验证。
 
 ### 2. 验证与规范化原则
+
 - **构造函数验证**：`new()` 方法必须进行完整的数据验证和规范化，包括：
   - 必填字段非空验证（使用 `non_empty_trimmed`）
   - 字符串长度限制（定义常量如 `NAME_MAX_LEN`）
@@ -159,6 +176,7 @@
 - **验证函数**：复杂验证逻辑提取为私有函数（如 `ensure_list_size`、`ensure_unique_platforms`），提高可读性和可测试性。
 
 ### 3. 树形结构设计原则
+
 - **层级表示**：使用 `parent_id: Option<IdType>` 表示父子关系，`None` 表示根节点。
 - **内部编号**：为支持高效层级查询，使用 `internal_code: String` 字段存储路径编码：
   - 根节点：直接使用自身ID（如 `"001"`）
@@ -168,15 +186,18 @@
 - **层级操作**：移动节点等操作需要更新整个子树 `internal_code`，应在 Service 层通过事务保证一致性。
 
 ### 4. 序列化与持久化原则
+
 - **派生宏**：实体必须派生 `#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]`。
 - **扁平化**：`BaseModel` 使用 `#[serde(flatten)]` 扁平化到实体中；持久化映射与当前 Mongo 模型保持一致。
 
 ### 5. 方法设计原则
+
 - **不变式封装**：业务规则和不变式应封装在实体方法中（如 `is_root()`、`can_be_operated_by()`），而非暴露给外部判断。
 - **辅助方法**：提供便捷查询方法（如 `role_ids()`、`is_root()`），避免外部代码重复实现。
 - **文档注释**：所有公共方法必须包含多行文档注释，说明参数、返回值和可能错误。
 
 ### 6. 测试原则
+
 - **单元测试**：在实体文件内通过 `#[cfg(test)] mod tests` 编写单元测试，覆盖：
   - 创建和更新验证逻辑
   - 边界条件（空值、超长字符串、无效数据）
@@ -184,10 +205,11 @@
 - **测试数据**：使用 `BaseModel::fake()` 或构造最小化测试数据，避免依赖外部资源。
 
 ### 7. 示例参考
+
 参考 `entities/src/account_core.rs` 与 `entities/src/role.rs` 作为标准实现：
+
 - `AccountCore`：字段规范化、状态与凭证更新规则
 - `Role`：字段规范化、系统角色约束和启停规则
-
 
 # 前端管理台页面开发最佳实践指南
 
@@ -203,11 +225,14 @@
 - **公共导出方法必须使用 JSDoc**：建议描述参数、返回值与异常/错误处理。
 
 示例：
+
 ```ts
 /**
  * 发起 API 请求并返回 ResultAsync。
  */
-export const apiRequestResult = <T>(endpoint: string, options: RequestInit = {}) => { /* ... */ };
+export const apiRequestResult = <T>(endpoint: string, options: RequestInit = {}) => {
+  /* ... */
+};
 ```
 
 ### 0.2 函数声明风格
@@ -216,8 +241,11 @@ export const apiRequestResult = <T>(endpoint: string, options: RequestInit = {})
 - **避免 function 声明**：除非有明确的 this 绑定需求（本项目一般不需要）
 
 示例：
+
 ```ts
-export const buildRequestConfig = (options: RequestInit): RequestInit => { /* ... */ };
+export const buildRequestConfig = (options: RequestInit): RequestInit => {
+  /* ... */
+};
 ```
 
 ## 1. Hook 与 UI 分离原则
@@ -250,23 +278,25 @@ export const buildRequestConfig = (options: RequestInit): RequestInit => { /* ..
 
 ### 1.2 分离标准
 
-| 应放入 Hook 的逻辑 | 应留在组件的逻辑 |
-|-------------------|-----------------|
-| `useQuery` / `useMutation` 封装 | JSX 结构 |
-| 可复用的状态逻辑 | 页面特有的 UI 状态 (如 `isDialogOpen`) |
-| 通用错误处理 | UI 协调逻辑 (如成功后关闭弹窗) |
-| 通用工具函数 | 简单的派生计算 |
+| 应放入 Hook 的逻辑              | 应留在组件的逻辑                       |
+| ------------------------------- | -------------------------------------- |
+| `useQuery` / `useMutation` 封装 | JSX 结构                               |
+| 可复用的状态逻辑                | 页面特有的 UI 状态 (如 `isDialogOpen`) |
+| 通用错误处理                    | UI 协调逻辑 (如成功后关闭弹窗)         |
+| 通用工具函数                    | 简单的派生计算                         |
 
 ### 1.3 判断是否需要抽取 Hook
 
 **核心问题：这段逻辑是否可复用？**
 
 应该抽取为 Hook：
+
 - ✅ API 调用逻辑（Query/Mutation）— 几乎总是需要复用
 - ✅ 错误处理、Toast 提示逻辑 — 全局统一
 - ✅ 通用的表单验证逻辑
 
 不应该抽取为 Hook：
+
 - ❌ 页面特有的 UI 状态（弹窗开关、当前编辑项）
 - ❌ 页面特有的筛选/分页状态（除非多个页面共享相同筛选逻辑）
 - ❌ UI 协调逻辑（成功后关闭弹窗、失败后显示错误）
@@ -295,6 +325,7 @@ src/hooks/
 **核心原则：Hook 是领域驱动的，不是页面驱动的。**
 
 不推荐创建 `useProductPage` 这类页面级 Hook，原因：
+
 1. **无法复用**：与特定页面绑定的 Hook 失去了抽象的价值
 2. **混淆职责**：容易把 UI 协调逻辑（如"成功后关闭弹窗"）混入 Hook
 3. **过度抽象**：如果一个 Hook 只服务于一个页面，不如直接写在组件中
@@ -306,6 +337,7 @@ src/hooks/
 **职责**：封装 `useQuery`，提供数据获取能力。
 
 **粒度原则**：
+
 - 一个 Query Hook 对应一个 API 端点或一类紧密关联的查询
 - 支持参数化查询（筛选、分页）
 - 返回 TanStack Query 的完整状态
@@ -313,24 +345,26 @@ src/hooks/
 ```tsx
 // ✅ 好的示例：职责单一，支持参数
 export function useProducts(params: ProductListParams) {
-    return useQuery({
-        queryKey: ['products', params],
-        queryFn: () => productApi.getProductList(params),
-        placeholderData: keepPreviousData,
-    });
+  return useQuery({
+    queryKey: ["products", params],
+    queryFn: () => productApi.getProductList(params),
+    placeholderData: keepPreviousData,
+  });
 }
 
 // ✅ 好的示例：关联查询可以组合
 export function useRoleOptions() {
-    return useQuery({
-        queryKey: ['roles', 'options'],
-        queryFn: roleApi.getAssignableRoles,
-        staleTime: 5 * 60 * 1000, // 选项类数据可以缓存更久
-    });
+  return useQuery({
+    queryKey: ["roles", "options"],
+    queryFn: roleApi.getAssignableRoles,
+    staleTime: 5 * 60 * 1000, // 选项类数据可以缓存更久
+  });
 }
 
 // ❌ 避免：在 Query Hook 中混入 Mutation 逻辑
-export function useProductsWithMutations() { /* 违反单一职责 */ }
+export function useProductsWithMutations() {
+  /* 违反单一职责 */
+}
 ```
 
 #### B. Mutation Hook（数据变更）
@@ -338,6 +372,7 @@ export function useProductsWithMutations() { /* 违反单一职责 */ }
 **职责**：封装相关的 `useMutation` 操作，统一处理成功/失败回调。
 
 **粒度原则**：
+
 - 将同一领域的 CRUD 操作聚合到一个 Hook
 - 内部处理 `invalidateQueries` 和 Toast 提示
 - 返回稳定的 `mutate` 函数引用和 `isPending` 状态
@@ -345,46 +380,46 @@ export function useProductsWithMutations() { /* 违反单一职责 */ }
 ```tsx
 // ✅ 好的示例：聚合 CRUD，返回稳定引用
 export function useProductOperations() {
-    const queryClient = useQueryClient();
-    const { handleError, handleSuccess } = useErrorHandler();
+  const queryClient = useQueryClient();
+  const { handleError, handleSuccess } = useErrorHandler();
 
-    const createMutation = useMutation({
-        mutationFn: productApi.createProduct,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品创建成功');
-        },
-        onError: handleError,
-    });
+  const createMutation = useMutation({
+    mutationFn: productApi.createProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品创建成功");
+    },
+    onError: handleError,
+  });
 
-    const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
-            productApi.updateProduct(id, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品更新成功');
-        },
-        onError: handleError,
-    });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
+      productApi.updateProduct(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品更新成功");
+    },
+    onError: handleError,
+  });
 
-    const deleteMutation = useMutation({
-        mutationFn: productApi.deleteProduct,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品删除成功');
-        },
-        onError: handleError,
-    });
+  const deleteMutation = useMutation({
+    mutationFn: productApi.deleteProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品删除成功");
+    },
+    onError: handleError,
+  });
 
-    // ✅ 返回稳定的函数引用，而非整个 mutation 对象
-    return {
-        createProduct: createMutation.mutate,
-        updateProduct: updateMutation.mutate,
-        deleteProduct: deleteMutation.mutate,
-        isCreating: createMutation.isPending,
-        isUpdating: updateMutation.isPending,
-        isDeleting: deleteMutation.isPending,
-    };
+  // ✅ 返回稳定的函数引用，而非整个 mutation 对象
+  return {
+    createProduct: createMutation.mutate,
+    updateProduct: updateMutation.mutate,
+    deleteProduct: deleteMutation.mutate,
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+  };
 }
 ```
 
@@ -420,18 +455,18 @@ export default function ProductsPage() {
     // 领域 Hook
     const { data: products } = useProducts(params);
     const { createProduct, isCreating } = useProductOperations();
-    
+
     // UI 状态：直接写在组件中
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-    
+
     // UI 协调逻辑：直接写在组件中
     const handleCreate = (data: CreateProductRequest) => {
         createProduct(data, {
             onSuccess: () => setIsDialogOpen(false), // UI 行为
         });
     };
-    
+
     return (/* JSX */);
 }
 
@@ -448,13 +483,13 @@ export function useProductPage() {
 
 ### 3.1 命名约定
 
-| Hook 类型 | 命名模式 | 示例 |
-|----------|---------|------|
-| Query（单条） | `use{Entity}` | `useProduct(id)` |
-| Query（列表） | `use{Entities}` | `useProducts(params)` |
-| Query（选项） | `use{Entity}Options` | `useRoleOptions()` |
-| Mutation | `use{Entity}Operations` | `useProductOperations()` |
-| 通用工具 | `use{Action}` | `useErrorHandler()` |
+| Hook 类型     | 命名模式                | 示例                     |
+| ------------- | ----------------------- | ------------------------ |
+| Query（单条） | `use{Entity}`           | `useProduct(id)`         |
+| Query（列表） | `use{Entities}`         | `useProducts(params)`    |
+| Query（选项） | `use{Entity}Options`    | `useRoleOptions()`       |
+| Mutation      | `use{Entity}Operations` | `useProductOperations()` |
+| 通用工具      | `use{Action}`           | `useErrorHandler()`      |
 
 ### 3.2 返回值命名约定
 
@@ -464,10 +499,10 @@ const { data, isPending, isFetching, error } = useProducts(params);
 
 // Mutation Hook 返回值：动词 + 状态
 const {
-    createProduct,    // mutate 函数用动词
-    isCreating,        // isPending 用 is + 动名词
-    updateProduct,
-    isUpdating,
+  createProduct, // mutate 函数用动词
+  isCreating, // isPending 用 is + 动名词
+  updateProduct,
+  isUpdating,
 } = useProductOperations();
 ```
 
@@ -488,7 +523,7 @@ const {
 | +---------------------------------------------------+ |
 | | Filter Card (筛选区域)                             | |
 | | [ Filter Inputs (Grid Layout) ]                  ｜ ｜
-| | [ Status Filters ] 
+| | [ Status Filters ]
 | | ------------------------------------------------- | |
 | |                         [ Search & Reset Actions ]| |
 | +---------------------------------------------------+ |
@@ -506,25 +541,25 @@ const {
 ### 4.2 详细规范
 
 1.  **页头 (Page Header)**:
-    *   左侧：页面标题 (H1) 和简短描述 (text-muted-foreground)。
-    *   右侧：主要的新增/创建操作按钮（如“新建商品”）。
+    - 左侧：页面标题 (H1) 和简短描述 (text-muted-foreground)。
+    - 右侧：主要的新增/创建操作按钮（如“新建商品”）。
 
 2.  **筛选卡片 (Filter Card)**:
-    *   **容器**: 独立的 `Card` 组件。
-    *   **表单区域**: 使用 CSS Grid 布局 (`grid-cols-4`) 排列筛选控件（输入框、选择器、滑块等），确保对齐整齐。
-    *   状态/类型筛选（如 `HorizontalRadioGroup`）位于分隔线下方左侧。
-    *   **分隔线**: 使用 `border-t` 分隔主要筛选条件和辅助操作。
-    *   **操作区域**:
-        *   **搜索/重置按钮**位于分隔线下方**右侧** (`flex justify-end`)。
-    *   **交互原则**: 所有的筛选输入应绑定到本地 state (`filterDraft`)，只有点击“搜索”或“重置”按钮时，才将状态同步到查询 state (`appliedFilters`) 并触发 API 请求。
+    - **容器**: 独立的 `Card` 组件。
+    - **表单区域**: 使用 CSS Grid 布局 (`grid-cols-4`) 排列筛选控件（输入框、选择器、滑块等），确保对齐整齐。
+    - 状态/类型筛选（如 `HorizontalRadioGroup`）位于分隔线下方左侧。
+    - **分隔线**: 使用 `border-t` 分隔主要筛选条件和辅助操作。
+    - **操作区域**:
+      - **搜索/重置按钮**位于分隔线下方**右侧** (`flex justify-end`)。
+    - **交互原则**: 所有的筛选输入应绑定到本地 state (`filterDraft`)，只有点击“搜索”或“重置”按钮时，才将状态同步到查询 state (`appliedFilters`) 并触发 API 请求。
 
 3.  **表格卡片 (Table Card)**:
-    *   **容器**: 独立的 `Card` 组件。
-    *   **卡片头 (Card Header)**:
-        *   左侧：卡片标题（如“商品列表”）。
-        *   右侧：**批量操作按钮组**。
-        *   **批量按钮状态**: 默认 `disabled`，仅当表格中有选中行时高亮可用。
-    *   **表格内容**: 包含 `DataTable` 和分页控件。
+    - **容器**: 独立的 `Card` 组件。
+    - **卡片头 (Card Header)**:
+      - 左侧：卡片标题（如“商品列表”）。
+      - 右侧：**批量操作按钮组**。
+      - **批量按钮状态**: 默认 `disabled`，仅当表格中有选中行时高亮可用。
+    - **表格内容**: 包含 `DataTable` 和分页控件。
 
 ## 5. 代码结构与组件职责
 
@@ -532,10 +567,10 @@ const {
 
 为了保持页面组件 (`page.tsx`) 的整洁，应将复杂逻辑和子组件剥离：
 
-*   **`page.tsx`**: 负责页面整体布局、状态管理 (State)、数据获取 (Query) 和 变更操作 (Mutation)。
-*   **`components/data-table/`**: 通用的表格组件逻辑（已封装）。
-*   **`components/xxx-dialog.tsx`**: 所有的弹窗组件（新建、编辑、删除、批量删除等）应独立封装，通过 props 接收 `open`, `onOpenChange` 和 `onSubmit`。
-*   **`types/xxx.ts`**: 定义完整的 TypeScript 类型接口。
+- **`page.tsx`**: 负责页面整体布局、状态管理 (State)、数据获取 (Query) 和 变更操作 (Mutation)。
+- **`components/data-table/`**: 通用的表格组件逻辑（已封装）。
+- **`components/xxx-dialog.tsx`**: 所有的弹窗组件（新建、编辑、删除、批量删除等）应独立封装，通过 props 接收 `open`, `onOpenChange` 和 `onSubmit`。
+- **`types/xxx.ts`**: 定义完整的 TypeScript 类型接口。
 
 ### 5.2 TanStack Query 与 Mutation 最佳实践
 
@@ -586,17 +621,17 @@ const {
 ## 6. 功能交互规范
 
 1.  **筛选触发**:
-    *   输入框输入不应立即触发搜索（避免防抖带来的延迟感或无效请求）。
-    *   必须通过显式的“搜索”按钮触发查询。
+    - 输入框输入不应立即触发搜索（避免防抖带来的延迟感或无效请求）。
+    - 必须通过显式的“搜索”按钮触发查询。
 
 2.  **批量操作**:
-    *   表格首列应为 Checkbox 选择列。
-    *   批量操作按钮（如上架、删除）应常驻显示，但根据 `selectedRows.length` 自动切换 `disabled` 状态。
-    *   批量操作需通过 `Promise.all` 并发执行单条 API，操作完成后一次性刷新列表 (`invalidateQueries`) 并清空选择。
+    - 表格首列应为 Checkbox 选择列。
+    - 批量操作按钮（如上架、删除）应常驻显示，但根据 `selectedRows.length` 自动切换 `disabled` 状态。
+    - 批量操作需通过 `Promise.all` 并发执行单条 API，操作完成后一次性刷新列表 (`invalidateQueries`) 并清空选择。
 
 3.  **反馈提示**:
-    *   所有 Mutation 操作（提交、删除）期间，按钮应显示 Loading 状态并禁用。
-    *   操作完成后应自动关闭弹窗并刷新列表数据。
+    - 所有 Mutation 操作（提交、删除）期间，按钮应显示 Loading 状态并禁用。
+    - 操作完成后应自动关闭弹窗并刷新列表数据。
 
 ---
 
@@ -608,13 +643,13 @@ const {
 // ❌ 反模式：Query 和 Mutation 直接写在组件中
 export default function ProductsPage() {
     const queryClient = useQueryClient();
-    
+
     // ❌ Query 直接定义，无法复用
     const { data } = useQuery({
         queryKey: ['products', params],
         queryFn: () => productApi.getProductList(params),
     });
-    
+
     // ❌ Mutation 直接定义，错误处理逻辑重复
     const { mutate: createProduct } = useMutation({
         mutationFn: productApi.createProduct,
@@ -627,16 +662,17 @@ export default function ProductsPage() {
             toast.error(error.message);
         },
     });
-    
+
     // ❌ 更多 Mutation，相似代码重复...
     const { mutate: updateProduct } = useMutation({...});
     const { mutate: deleteProduct } = useMutation({...});
-    
+
     return (/* JSX */);
 }
 ```
 
 **问题**：
+
 - Query/Mutation 逻辑无法跨组件复用
 - 错误处理、成功提示等逻辑重复
 - 难以统一修改（如更改 Toast 样式）
@@ -655,7 +691,7 @@ export function useProducts(params: ProductListParams) {
 export function useProductOperations() {
     const queryClient = useQueryClient();
     const { handleError, handleSuccess } = useErrorHandler(); // 统一错误处理
-    
+
     const createMutation = useMutation({
         mutationFn: productApi.createProduct,
         onSuccess: () => {
@@ -664,9 +700,9 @@ export function useProductOperations() {
         },
         onError: handleError,
     });
-    
+
     // ... 其他 mutations
-    
+
     return {
         createProduct: createMutation.mutate,
         isCreating: createMutation.isPending,
@@ -679,17 +715,17 @@ export default function ProductsPage() {
     // 领域 Hook
     const { data } = useProducts(params);
     const { createProduct, isCreating } = useProductOperations();
-    
+
     // UI 状态留在组件中
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    
+
     // UI 协调逻辑留在组件中
     const handleCreate = (data: CreateProductRequest) => {
         createProduct(data, {
             onSuccess: () => setIsDialogOpen(false),
         });
     };
-    
+
     return (/* JSX */);
 }
 ```
@@ -723,16 +759,16 @@ const columns = useMemo(() => [
 ```tsx
 // ❌ 反模式：Hook 中直接控制 UI
 export function useProductOperations() {
-    const [dialogOpen, setDialogOpen] = useState(false); // ❌ UI 状态不应在这里
-    
-    const createMutation = useMutation({
-        onSuccess: () => {
-            setDialogOpen(false); // ❌ 硬编码 UI 行为
-            toast.success('创建成功');
-        },
-    });
-    
-    return { dialogOpen, setDialogOpen, createProduct: createMutation.mutate };
+  const [dialogOpen, setDialogOpen] = useState(false); // ❌ UI 状态不应在这里
+
+  const createMutation = useMutation({
+    onSuccess: () => {
+      setDialogOpen(false); // ❌ 硬编码 UI 行为
+      toast.success("创建成功");
+    },
+  });
+
+  return { dialogOpen, setDialogOpen, createProduct: createMutation.mutate };
 }
 ```
 
@@ -741,27 +777,27 @@ export function useProductOperations() {
 ```tsx
 // ✅ 修复：Hook 只处理数据，UI 行为由调用方决定
 export function useProductOperations() {
-    const createMutation = useMutation({
-        mutationFn: productApi.createProduct,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品创建成功');
-        },
-        onError: handleError,
-    });
-    
-    return { 
-        createProduct: createMutation.mutate,  // 调用方可以传入 onSuccess 覆盖
-        isCreating: createMutation.isPending,
-    };
+  const createMutation = useMutation({
+    mutationFn: productApi.createProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品创建成功");
+    },
+    onError: handleError,
+  });
+
+  return {
+    createProduct: createMutation.mutate, // 调用方可以传入 onSuccess 覆盖
+    isCreating: createMutation.isPending,
+  };
 }
 
 // 调用方控制 UI 行为
 const { createProduct } = useProductOperations();
 const handleCreate = (data) => {
-    createProduct(data, {
-        onSuccess: () => setDialogOpen(false), // ✅ UI 行为在组件层控制
-    });
+  createProduct(data, {
+    onSuccess: () => setDialogOpen(false), // ✅ UI 行为在组件层控制
+  });
 };
 ```
 
@@ -770,13 +806,13 @@ const handleCreate = (data) => {
 ```tsx
 // ❌ 反模式：一个状态一个 Hook
 export function useProductName() {
-    const [name, setName] = useState('');
-    return { name, setName };
+  const [name, setName] = useState("");
+  return { name, setName };
 }
 
 export function useProductEmail() {
-    const [email, setEmail] = useState('');
-    return { email, setEmail };
+  const [email, setEmail] = useState("");
+  return { email, setEmail };
 }
 
 // 使用时需要调用 10+ 个 Hook
@@ -790,18 +826,18 @@ const { email, setEmail } = useProductEmail();
 ```tsx
 // ✅ 修复：关联状态聚合为一个 Hook
 export function useProductFilters() {
-    const [filters, setFilters] = useState({
-        name: '',
-        email: '',
-        category: '',
-        status: 'all',
-    });
-    
-    const updateFilter = useCallback((field, value) => {
-        setFilters(prev => ({ ...prev, [field]: value }));
-    }, []);
-    
-    return { filters, updateFilter, resetFilters };
+  const [filters, setFilters] = useState({
+    name: "",
+    email: "",
+    category: "",
+    status: "all",
+  });
+
+  const updateFilter = useCallback((field, value) => {
+    setFilters((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  return { filters, updateFilter, resetFilters };
 }
 ```
 
@@ -862,22 +898,22 @@ import { useErrorHandler } from "./use-error-handler";
  * 获取商品分页列表
  */
 export function useProducts(params: ProductListParams) {
-    return useQuery({
-        queryKey: ['products', params],
-        queryFn: () => productApi.getProductList(params),
-        placeholderData: keepPreviousData,
-    });
+  return useQuery({
+    queryKey: ["products", params],
+    queryFn: () => productApi.getProductList(params),
+    placeholderData: keepPreviousData,
+  });
 }
 
 /**
  * 获取单个商品详情
  */
 export function useProduct(id: string | null) {
-    return useQuery({
-        queryKey: ['product', id],
-        queryFn: () => productApi.getProduct(id!),
-        enabled: !!id,
-    });
+  return useQuery({
+    queryKey: ["product", id],
+    queryFn: () => productApi.getProduct(id!),
+    enabled: !!id,
+  });
 }
 
 // ========== Mutation Hooks ==========
@@ -886,45 +922,45 @@ export function useProduct(id: string | null) {
  * 商品 CRUD 操作
  */
 export function useProductOperations() {
-    const queryClient = useQueryClient();
-    const { handleError, handleSuccess } = useErrorHandler();
+  const queryClient = useQueryClient();
+  const { handleError, handleSuccess } = useErrorHandler();
 
-    const createMutation = useMutation({
-        mutationFn: productApi.createProduct,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品创建成功');
-        },
-        onError: handleError,
-    });
+  const createMutation = useMutation({
+    mutationFn: productApi.createProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品创建成功");
+    },
+    onError: handleError,
+  });
 
-    const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
-            productApi.updateProduct(id, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品更新成功');
-        },
-        onError: handleError,
-    });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
+      productApi.updateProduct(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品更新成功");
+    },
+    onError: handleError,
+  });
 
-    const deleteMutation = useMutation({
-        mutationFn: productApi.deleteProduct,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            handleSuccess('商品删除成功');
-        },
-        onError: handleError,
-    });
+  const deleteMutation = useMutation({
+    mutationFn: productApi.deleteProduct,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      handleSuccess("商品删除成功");
+    },
+    onError: handleError,
+  });
 
-    return {
-        createProduct: createMutation.mutate,
-        updateProduct: updateMutation.mutate,
-        deleteProduct: deleteMutation.mutate,
-        isCreating: createMutation.isPending,
-        isUpdating: updateMutation.isPending,
-        isDeleting: deleteMutation.isPending,
-    };
+  return {
+    createProduct: createMutation.mutate,
+    updateProduct: updateMutation.mutate,
+    deleteProduct: deleteMutation.mutate,
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+  };
 }
 ```
 
@@ -935,27 +971,32 @@ export function useProductOperations() {
 开发新页面时，对照以下清单检查：
 
 ### Hook 设计
+
 - [ ] API 调用（Query/Mutation）是否封装为领域 Hook？
 - [ ] Mutation Hook 是否返回稳定的 `mutate` 函数而非整个对象？
 - [ ] Hook 是否与 UI 无关、可跨页面复用？
 - [ ] Hook 命名是否符合 `use{Entity}` / `use{Entity}Operations` 规范？
 
 ### 组件职责
+
 - [ ] UI 状态（弹窗开关等）是否留在组件中？
 - [ ] UI 协调逻辑（成功后关闭弹窗）是否留在组件中？
 - [ ] 是否避免了创建页面级 Hook（如 `useXxxPage`）？
 
 ### 性能优化
+
 - [ ] `useMemo` 依赖项是否只包含原始值？
 - [ ] 传递给子组件的函数是否用 `useCallback` 包裹？
 - [ ] 高频渲染组件是否用 `React.memo` 包裹？
 - [ ] 表格列定义是否用 `useMemo` 缓存？
 
 ### 代码组织
+
 - [ ] 弹窗组件是否独立封装？
 - [ ] 类型定义是否在 `types/` 目录？
 
 ### 交互规范
+
 - [ ] 筛选是否通过显式按钮触发？
 - [ ] 批量操作按钮是否根据选中状态禁用？
 - [ ] Mutation 期间是否显示 Loading 状态？
@@ -983,24 +1024,19 @@ export function useProductOperations() {
 ### 10.3 统一错误类型（建议结构）
 
 ```ts
-type ApiErrorKind =
-    | "Network"
-    | "Http"
-    | "Auth"
-    | "Parse"
-    | "Validation"
-    | "Unknown";
+type ApiErrorKind = "Network" | "Http" | "Auth" | "Parse" | "Validation" | "Unknown";
 
 export interface ApiError {
-    kind: ApiErrorKind;
-    message: string;
-    status?: number;
-    responseData?: unknown;
-    cause?: unknown;
+  kind: ApiErrorKind;
+  message: string;
+  status?: number;
+  responseData?: unknown;
+  cause?: unknown;
 }
 ```
 
 映射规则建议：
+
 - `fetch` 失败 -> `Network`
 - HTTP 非 2xx -> `Http`（包含 `status` 与 `responseData`）
 - 应用层 `status=401` -> `Auth`
@@ -1011,20 +1047,24 @@ export interface ApiError {
 ### 10.4 分层约定
 
 **lib/api/base.ts**
+
 - 提供 `apiRequestResult`：返回 `ResultAsync<ApiResponse<T>, ApiError>`。
 - 旧的 `apiRequest` 可保留一段时间，仅用于历史代码。
 
-**lib/api/*.ts**
+**lib/api/\*.ts**
+
 - 对外只暴露 `ResultAsync<T, ApiError>`（例如 `login(): ResultAsync<AuthResponse, ApiError>`）。
 - 内部统一 `map` 解包 `response.data`。
 
 **hooks（React Query 边界）**
+
 - Query/Mutation 中 **使用辅助函数将 `ResultAsync` 转成 throw**：
   - 成功时 `return data`
   - 失败时 `throw ApiError`
 - `onError` 继续交给 `useErrorHandler` 统一提示。
 
 **components**
+
 - 非 React Query 的调用路径，直接用 `match`/`mapErr` 控制 UI 行为。
 
 ### 10.5 与 TanStack Query 的推荐姿势
@@ -1098,13 +1138,13 @@ erp-client/lib/query-client.ts
 
 一个子阶段只能修改自己 owns 列表内的文件，新增文件也必须落在 owns 前缀内（conventions.md 第 1 节）：
 
-| 层 | owns |
-| --- | --- |
-| P1 实体 | `backend/entities/src/<domain>/**` |
-| P2 仓储 | `backend/database/src/repository/<domain>.rs`、`repository/extensions/<domain>.rs`、`indexes/<domain>.rs`（**不含** IT） |
-| P3 服务与接口 | `backend/services/src/<domain>/**`、`core/handler/<domain>/**`、`core/routes/<domain>.rs`（**不含** IT） |
-| P4 前端 | `erp-client/features/<feature>/**` 与该批次页面路由目录 |
-| P6 后端集成测试 | `database/tests/<domain>_repository.rs`、`web-api/tests/<domain>_api.rs` 及 `invariants/**`、`concurrency/**` 等 |
+| 层              | owns                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| P1 实体         | `backend/entities/src/<domain>/**`                                                                                       |
+| P2 仓储         | `backend/database/src/repository/<domain>.rs`、`repository/extensions/<domain>.rs`、`indexes/<domain>.rs`（**不含** IT） |
+| P3 服务与接口   | `backend/services/src/<domain>/**`、`core/handler/<domain>/**`、`core/routes/<domain>.rs`（**不含** IT）                 |
+| P4 前端         | `erp-client/features/<feature>/**` 与该批次页面路由目录                                                                  |
+| P6 后端集成测试 | `database/tests/<domain>_repository.rs`、`web-api/tests/<domain>_api.rs` 及 `invariants/**`、`concurrency/**` 等         |
 
 ### 两段式测试约定
 

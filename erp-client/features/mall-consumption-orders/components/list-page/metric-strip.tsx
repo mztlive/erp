@@ -6,12 +6,15 @@ import {
     type MallConsumptionOrderMetric,
     type MallConsumptionOrderMetricKey,
 } from "@/features/mall-consumption-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 const METRIC_ITEMS: ReadonlyArray<{
     key: MallConsumptionOrderMetricKey
     label: string
 }> = (
-    Object.keys(MALL_CONSUMPTION_METRIC_LABELS) as MallConsumptionOrderMetricKey[]
+    Object.keys(
+        MALL_CONSUMPTION_METRIC_LABELS,
+    ) as MallConsumptionOrderMetricKey[]
 ).map((key) => ({ key, label: MALL_CONSUMPTION_METRIC_LABELS[key] }))
 
 type Props = {
@@ -35,6 +38,7 @@ export function ConsumptionMetricStrip({
             {METRIC_ITEMS.map((item) => (
                 <MetricFilterItem
                     key={item.key}
+                    id={`mall-consumption-orders-metric-${toAutomationIdSegment(item.key)}`}
                     label={item.label}
                     value={valueOf(item.key)}
                     active={activeMetric === item.key}

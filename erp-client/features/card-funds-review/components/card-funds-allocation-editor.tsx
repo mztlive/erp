@@ -25,8 +25,11 @@ import type {
     InvoiceDraft,
     ReceiptDraft,
 } from "@/features/card-funds-review/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { subtractFixed } from "@/lib/fixed-decimal"
 import { formatMoney } from "../lib/presentation"
+
+let nextDraftAllocationLineId = 1
 
 export function CardFundsAllocationEditor({
     allocationMode,
@@ -82,11 +85,11 @@ export function CardFundsAllocationEditor({
                             {allocationMode === "receipt" ? (
                                 <>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="rcpt-no">
+                                        <Label htmlFor="card-contracts-funds-review-allocation-receipt-no">
                                             回款单号
                                         </Label>
                                         <Input
-                                            id="rcpt-no"
+                                            id="card-contracts-funds-review-allocation-receipt-no"
                                             value={receiptForm.receiptNo}
                                             onChange={(e) =>
                                                 setReceiptForm((f) => ({
@@ -98,11 +101,11 @@ export function CardFundsAllocationEditor({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="rcpt-amt">
+                                        <Label htmlFor="card-contracts-funds-review-allocation-receipt-amount">
                                             含税金额
                                         </Label>
                                         <Input
-                                            id="rcpt-amt"
+                                            id="card-contracts-funds-review-allocation-receipt-amount"
                                             className="num"
                                             value={receiptForm.grossAmount}
                                             onChange={(e) => {
@@ -129,10 +132,11 @@ export function CardFundsAllocationEditor({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="rcpt-at">
+                                        <Label htmlFor="card-contracts-funds-review-allocation-receipt-date">
                                             到账日期
                                         </Label>
                                         <DatePicker
+                                            id="card-contracts-funds-review-allocation-receipt-date"
                                             value={
                                                 receiptForm.receivedAt ||
                                                 undefined
@@ -149,9 +153,11 @@ export function CardFundsAllocationEditor({
                             ) : (
                                 <>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="inv-no">发票号码</Label>
+                                        <Label htmlFor="card-contracts-funds-review-allocation-invoice-no">
+                                            发票号码
+                                        </Label>
                                         <Input
-                                            id="inv-no"
+                                            id="card-contracts-funds-review-allocation-invoice-no"
                                             value={invoiceForm.invoiceNo}
                                             onChange={(e) =>
                                                 setInvoiceForm((f) => ({
@@ -162,11 +168,11 @@ export function CardFundsAllocationEditor({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="inv-amt">
+                                        <Label htmlFor="card-contracts-funds-review-allocation-invoice-amount">
                                             含税金额
                                         </Label>
                                         <Input
-                                            id="inv-amt"
+                                            id="card-contracts-funds-review-allocation-invoice-amount"
                                             className="num"
                                             value={invoiceForm.grossAmount}
                                             onChange={(e) => {
@@ -193,8 +199,11 @@ export function CardFundsAllocationEditor({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="inv-at">开票日期</Label>
+                                        <Label htmlFor="card-contracts-funds-review-allocation-invoice-date">
+                                            开票日期
+                                        </Label>
                                         <DatePicker
+                                            id="card-contracts-funds-review-allocation-invoice-date"
                                             value={
                                                 invoiceForm.issuedAt ||
                                                 undefined
@@ -213,6 +222,7 @@ export function CardFundsAllocationEditor({
                     </Card>
 
                     <AllocationWorkspace
+                        id="card-contracts-funds-review-allocation-workspace"
                         title="多对多分配"
                         description="分配合计须等于本次单据含税金额；登记不覆盖已有金额，差额以提交后系统结果为准。"
                         summary={{
@@ -247,6 +257,7 @@ export function CardFundsAllocationEditor({
                                     formatMoney(item.amount),
                                 renderEditor: ({ item, rowIndex }) => (
                                     <Input
+                                        id={`card-contracts-funds-review-allocation-row-${toAutomationIdSegment(item.lineId)}-amount`}
                                         className="num"
                                         value={item.amount}
                                         onChange={(e) => {
@@ -271,7 +282,7 @@ export function CardFundsAllocationEditor({
                             setAllocLines((lines) => [
                                 ...lines,
                                 {
-                                    lineId: `al_${Date.now().toString(36)}`,
+                                    lineId: `al-draft-${nextDraftAllocationLineId++}`,
                                     targetAccountId: task.account.id,
                                     targetLabel: `${task.salesOrder.orderNo} · 本应收`,
                                     amount: "0.00",
@@ -288,6 +299,7 @@ export function CardFundsAllocationEditor({
                         actions={
                             <>
                                 <Button
+                                    id="card-contracts-funds-review-allocation-cancel"
                                     type="button"
                                     variant="outline"
                                     disabled={receiptPending || invoicePending}
@@ -296,6 +308,7 @@ export function CardFundsAllocationEditor({
                                     取消
                                 </Button>
                                 <Button
+                                    id="card-contracts-funds-review-allocation-submit"
                                     type="button"
                                     disabled={receiptPending || invoicePending}
                                     onClick={() => {

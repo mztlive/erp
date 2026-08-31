@@ -14,6 +14,7 @@ import {
     ComboboxItem,
     ComboboxList,
 } from "@/components/ui/combobox"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 /** 通用可搜索选项；用于枚举、筛选与轻量业务列表。 */
@@ -44,6 +45,7 @@ export type OptionComboboxProps = {
     id?: string
     "aria-label"?: string
     "aria-invalid"?: boolean
+    "aria-describedby"?: string
     className?: string
     /** 输入框外层 InputGroup 的 className（宽度等） */
     inputClassName?: string
@@ -82,6 +84,7 @@ export function OptionCombobox({
     id,
     "aria-label": ariaLabel,
     "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedBy,
     className,
     inputClassName,
     size = "default",
@@ -127,8 +130,11 @@ export function OptionCombobox({
             >
                 <ComboboxInput
                     id={id}
+                    triggerId={id ? `${id}-trigger` : undefined}
+                    clearId={id ? `${id}-clear` : undefined}
                     aria-label={ariaLabel}
                     aria-invalid={ariaInvalid || undefined}
+                    aria-describedby={ariaDescribedBy}
                     aria-busy={loading || undefined}
                     placeholder={searchPlaceholder ?? placeholder}
                     showClear={allowClear && !disabled}
@@ -149,6 +155,11 @@ export function OptionCombobox({
                         {items.map((item) => (
                             <ComboboxItem
                                 key={item.value}
+                                id={
+                                    id
+                                        ? `${id}-option-${toAutomationIdSegment(item.value)}`
+                                        : undefined
+                                }
                                 value={item}
                                 disabled={item.disabled}
                                 className="w-max min-w-full"

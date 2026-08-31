@@ -43,7 +43,7 @@ export function ReverseDialog({
                 onCancel()
             }}
         >
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-payables-reverse-dialog-close">
                 <DialogHeader>
                     <DialogTitle>
                         {target.kind === "payment" ? "付款冲正" : "进项红票"}
@@ -54,8 +54,11 @@ export function ReverseDialog({
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1">
-                        <Label>原因</Label>
+                        <Label htmlFor="supplier-payables-reverse-dialog-reason">
+                            原因
+                        </Label>
                         <Textarea
+                            id="supplier-payables-reverse-dialog-reason"
                             value={reason}
                             onChange={(e) => onReasonChange(e.target.value)}
                             placeholder="至少 2 个字"
@@ -63,9 +66,12 @@ export function ReverseDialog({
                     </div>
                     {target.kind === "invoice" ? (
                         <div className="space-y-1">
-                            <Label>红票号码</Label>
+                            <Label htmlFor="supplier-payables-reverse-dialog-red-invoice-no">
+                                红票号码
+                            </Label>
                             <InputGroup>
                                 <InputGroupInput
+                                    id="supplier-payables-reverse-dialog-red-invoice-no"
                                     value={redInvoiceNo}
                                     onChange={(e) =>
                                         onRedInvoiceNoChange(e.target.value)
@@ -85,6 +91,7 @@ export function ReverseDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id="supplier-payables-reverse-dialog-cancel"
                         type="button"
                         variant="outline"
                         disabled={submitting}
@@ -93,6 +100,7 @@ export function ReverseDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-payables-reverse-dialog-confirm"
                         type="button"
                         disabled={
                             reason.trim().length < 2 ||
@@ -103,7 +111,10 @@ export function ReverseDialog({
                         onClick={onSubmit}
                     >
                         {submitting ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : null}
                         {submitting ? "提交中…" : "确认追加反向记录"}
                     </Button>

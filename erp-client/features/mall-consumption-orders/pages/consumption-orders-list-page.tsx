@@ -118,6 +118,7 @@ export function ConsumptionOrdersListPage() {
                         actions={[
                             {
                                 actionKey: "refresh",
+                                id: "mall-consumption-orders-list-refresh",
                                 label: "刷新",
                                 icon: RefreshCwIcon,
                                 variant: "ghost",
@@ -127,6 +128,7 @@ export function ConsumptionOrdersListPage() {
                             },
                             {
                                 actionKey: "export",
+                                id: "mall-consumption-orders-list-export",
                                 label: exportMutation.isPending
                                     ? "导出中…"
                                     : "导出",

@@ -82,7 +82,12 @@ export function PurchaseOrderDetailPayableSection({
                     type="button"
                     variant="outline"
                     disabled={!canPay}
-                    render={<Link href={w12PayHref} />}
+                    render={
+                        <Link
+                            id={`procurement-orders-detail-payable-go-${order.identity.purchaseOrderId}`}
+                            href={w12PayHref}
+                        />
+                    }
                 >
                     去供应商往来
                 </Button>

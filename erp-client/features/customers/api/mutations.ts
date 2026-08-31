@@ -167,7 +167,9 @@ export async function revealCustomerSensitiveField(
 ): Promise<string> {
     const result = await apiPost<{ value: string }>(
         "/admin/customer-sensitive-fields/reveal",
-        { reveal_token: revealToken },
+        {
+            reveal_token: revealToken,
+        },
     )
     return result.value
 }

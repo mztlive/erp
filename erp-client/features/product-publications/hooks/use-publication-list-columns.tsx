@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { ProductPublicationRow } from "@/features/product-publications/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function usePublicationListColumns(onPreview: (id: string) => void) {
     return React.useMemo<ColumnDef<ProductPublicationRow>[]>(
@@ -182,6 +183,7 @@ export function usePublicationListColumns(onPreview: (id: string) => void) {
                 cell: ({ row }) => (
                     <div className="flex justify-end gap-1">
                         <Button
+                            id={`publication-list-row-${toAutomationIdSegment(row.original.publicationId)}-preview`}
                             type="button"
                             variant="ghost"
                             size="xs"
@@ -192,6 +194,7 @@ export function usePublicationListColumns(onPreview: (id: string) => void) {
                             预览
                         </Button>
                         <Button
+                            id={`publication-list-row-${toAutomationIdSegment(row.original.publicationId)}-open`}
                             type="button"
                             variant="outline"
                             size="xs"

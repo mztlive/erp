@@ -55,6 +55,7 @@ export function ProfitLossPageHeader({
                     actions={[
                         {
                             actionKey: "refresh",
+                            id: "actual-profit-loss-header-refresh",
                             label: "刷新",
                             icon: RefreshCwIcon,
                             variant: "ghost",
@@ -67,6 +68,7 @@ export function ProfitLossPageHeader({
                         },
                         {
                             actionKey: "export",
+                            id: "actual-profit-loss-header-export",
                             label: exportPending ? "导出中…" : "导出",
                             icon: exportPending
                                 ? LoaderCircleIcon

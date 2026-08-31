@@ -33,6 +33,7 @@ export function RetireDialog({
     onOpenChange,
     onConflict,
     onRetired,
+    id = "governance-approval-processes-retire-dialog",
 }: {
     detail: DefinitionDetailView
     lockVersion: string
@@ -40,6 +41,7 @@ export function RetireDialog({
     onOpenChange: (open: boolean) => void
     onConflict: () => void
     onRetired: () => void
+    id?: string
 }) {
     const retire = useRetireDefinitionMutation()
     const [error, setError] = React.useState<string | null>(null)
@@ -73,7 +75,7 @@ export function RetireDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>退役审批流程</DialogTitle>
                     <DialogDescription>
@@ -96,6 +98,7 @@ export function RetireDialog({
                 ) : null}
                 <DialogFooter>
                     <Button
+                        id={`${id}-cancel`}
                         type="button"
                         variant="outline"
                         disabled={retire.isPending}
@@ -104,6 +107,7 @@ export function RetireDialog({
                         取消
                     </Button>
                     <Button
+                        id={`${id}-confirm`}
                         type="button"
                         variant="destructive"
                         disabled={retire.isPending}

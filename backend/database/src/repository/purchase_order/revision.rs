@@ -5,7 +5,8 @@
 
 use entities::ids::{PurchaseOrderId, PurchaseOrderRevisionId};
 use entities::purchase_order::{PurchaseOrderRevision, PurchaseOrderRevisionLine};
-use mongodb::bson::doc;
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 
 use super::common::in_filter;
@@ -86,6 +87,9 @@ impl<'a> PurchaseOrderRepository<'a> {
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
+    ///
+    /// # 关键约束
+    /// 查询必须排除软删除行，与通用 `Repository::find_many` 的活动行语义一致。
     pub async fn list_revision_lines(
         &self,
         revision_id: &PurchaseOrderRevisionId,
@@ -98,11 +102,31 @@ impl<'a> PurchaseOrderRepository<'a> {
             &self
                 .db
                 .collection::<PurchaseOrderRevisionLine>(PURCHASE_ORDER_REVISION_LINES),
-            doc! { "purchase_order_revision_id": revision_id.to_string() },
+            revision_lines_filter(revision_id),
             options,
             executor,
         )
         .await
+    }
+}
+
+/// 构建单个采购生效版本的活动明细过滤条件。
+///
+/// # 参数
+/// * `revision_id` - 采购生效版本稳定身份
+///
+/// # 返回
+/// 返回同时限定版本身份和未删除时间戳的 MongoDB 查询文档。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 专用单版本查询必须与通用 Repository 的软删除过滤语义保持一致。
+fn revision_lines_filter(revision_id: &PurchaseOrderRevisionId) -> Document {
+    doc! {
+        "purchase_order_revision_id": revision_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     }
 }
 
@@ -138,5 +162,27 @@ impl<'a> Repository<'a, PurchaseOrderRevisionLine> {
             executor,
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use entities::ids::PurchaseOrderRevisionId;
+    use mongodb::bson::doc;
+
+    use super::revision_lines_filter;
+
+    /// 验证单版本明细查询保留版本条件并排除软删除行。
+    ///
+    /// 测试直接断言过滤文档，不连接 MongoDB；任一活动行条件缺失时失败。
+    #[test]
+    fn revision_lines_filter_targets_active_rows() {
+        assert_eq!(
+            revision_lines_filter(&PurchaseOrderRevisionId::new("revision-1")),
+            doc! {
+                "purchase_order_revision_id": "revision-1",
+                "deleted_at": 0_i64,
+            }
+        );
     }
 }

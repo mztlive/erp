@@ -14,6 +14,7 @@ import {
     ENVIRONMENT_LABEL,
     PIPELINE_STAGE_LABEL,
 } from "@/features/import-opening/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 export function useBatchListColumns({
@@ -28,6 +29,7 @@ export function useBatchListColumns({
                 header: "批次号",
                 cell: ({ row }) => (
                     <Button
+                        id={`operations-import-batches-row-${toAutomationIdSegment(row.original.batchId)}-open`}
                         variant="link"
                         className="h-auto p-0 font-mono text-sm"
                         onClick={() => onOpenBatch(row.original.batchId)}

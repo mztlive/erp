@@ -4,7 +4,10 @@ import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { derivePrimaryCostBasis } from "@/features/mall-consumption-orders/lib/preview-cost-basis"
 import type { MallConsumptionOrderView } from "@/features/mall-consumption-orders/types"
-import { COST_BASIS_LABEL, COST_BASIS_TONE } from "@/features/mall-consumption-orders/types"
+import {
+    COST_BASIS_LABEL,
+    COST_BASIS_TONE,
+} from "@/features/mall-consumption-orders/types"
 import { SectionTitle } from "./section-title"
 
 type Props = {
@@ -54,12 +57,14 @@ export function CostSection({ view }: Props) {
                                 </div>
                                 <div className="mt-0.5 flex flex-wrap gap-x-3 text-muted-foreground">
                                     <span>
-                                        消费金额 <MoneyValue value={entry.amount} />
+                                        消费金额{" "}
+                                        <MoneyValue value={entry.amount} />
                                     </span>
                                     <span>
                                         成本金额（含税）{" "}
                                         {ca.costBasis === "NONE" ||
-                                        view.fieldPermissions.cost === "masked" ? (
+                                        view.fieldPermissions.cost ===
+                                            "masked" ? (
                                             <MoneyValue
                                                 value={null}
                                                 unavailableReason={
@@ -71,7 +76,9 @@ export function CostSection({ view }: Props) {
                                                 }
                                             />
                                         ) : (
-                                            <MoneyValue value={ca.grossAmount} />
+                                            <MoneyValue
+                                                value={ca.grossAmount}
+                                            />
                                         )}
                                     </span>
                                 </div>

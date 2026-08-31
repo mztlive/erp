@@ -79,12 +79,14 @@ export function PurchaseOrdersListPage() {
                                 mobileVisibility: "hide",
                                 disabled: ctrl.total === 0,
                                 onClick: () => void ctrl.exportCsv(),
+                                id: "procurement-orders-list-export",
                             },
                             {
                                 actionKey: "create",
                                 label: "新建采购单",
                                 icon: PlusIcon,
                                 onClick: ctrl.openCreatePage,
+                                id: "procurement-orders-list-create",
                             },
                         ]}
                     />
@@ -105,6 +107,7 @@ export function PurchaseOrdersListPage() {
                     reference={ctrl.actionResult.reference}
                     actions={
                         <Button
+                            id="procurement-orders-list-result-close"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -138,6 +141,7 @@ export function PurchaseOrdersListPage() {
                 }
                 table={
                     <DataTable
+                        id="procurement-orders-list-table"
                         data={ctrl.pageRows}
                         columns={columns}
                         getRowId={(row) => row.purchaseOrderId}
@@ -171,8 +175,18 @@ export function PurchaseOrdersListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={ctrl.listQuery.error}
-                                    onRetry={() =>
-                                        void ctrl.listQuery.refetch()
+                                    action={
+                                        <Button
+                                            id="procurement-orders-list-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                void ctrl.listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
                                 />
                             ) : undefined
@@ -199,6 +213,7 @@ export function PurchaseOrdersListPage() {
                                     action={
                                         filters.hasActiveFilters ? (
                                             <Button
+                                                id="procurement-orders-list-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -211,6 +226,7 @@ export function PurchaseOrdersListPage() {
                                             </Button>
                                         ) : (
                                             <Button
+                                                id="procurement-orders-list-empty-create"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

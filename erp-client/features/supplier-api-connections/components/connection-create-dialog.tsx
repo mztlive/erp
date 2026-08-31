@@ -75,6 +75,7 @@ export function ConnectionCreateDialog({
                               ...mapped,
                               actions: (
                                   <Button
+                                      id="supplier-api-connections-create-success-open"
                                       type="button"
                                       size="sm"
                                       onClick={() =>
@@ -95,7 +96,7 @@ export function ConnectionCreateDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-api-connections-create-close">
                 <DialogHeader>
                     <DialogTitle>新建连接身份</DialogTitle>
                     <DialogDescription>
@@ -113,6 +114,7 @@ export function ConnectionCreateDialog({
                         name="connectionCode"
                         children={(field) => (
                             <field.TextField
+                                id="supplier-api-connections-create-connection-code"
                                 label="连接代码"
                                 required
                                 placeholder="CONN-XXX-PROD"
@@ -130,10 +132,14 @@ export function ConnectionCreateDialog({
                             )
                             return (
                                 <Field data-invalid={isInvalid || undefined}>
-                                    <FieldLabel htmlFor="create-supplierId">
-                                        供应商<span className="text-destructive">*</span>
+                                    <FieldLabel htmlFor="supplier-api-connections-create-supplier">
+                                        供应商
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
                                     </FieldLabel>
                                     <SupplierSearchCombobox
+                                        id="supplier-api-connections-create-supplier"
                                         value={field.state.value || undefined}
                                         onValueChange={(id) => {
                                             field.handleChange(id ?? "")
@@ -157,8 +163,12 @@ export function ConnectionCreateDialog({
                         name="environment"
                         children={(field) => (
                             <div className="space-y-1.5">
-                                <Label>环境<span className="text-destructive">*</span></Label>
+                                <Label htmlFor="supplier-api-connections-create-environment">
+                                    环境
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <OptionCombobox
+                                    id="supplier-api-connections-create-environment"
                                     value={field.state.value}
                                     onValueChange={(v) => {
                                         if (v)
@@ -192,6 +202,7 @@ export function ConnectionCreateDialog({
                     />
                     <DialogFooter>
                         <Button
+                            id="supplier-api-connections-create-cancel"
                             type="button"
                             variant="ghost"
                             disabled={createMutation.isPending}
@@ -201,6 +212,7 @@ export function ConnectionCreateDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-api-connections-create-submit"
                                 label="创建"
                                 disabled={createMutation.isPending}
                             />

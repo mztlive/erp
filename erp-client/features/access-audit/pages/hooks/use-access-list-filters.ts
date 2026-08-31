@@ -60,9 +60,7 @@ export type AccessAppliedFilters = {
 type AccessListFiltersInput = {
     view: AccessView
     /** 筛选写 URL 的统一出口：replace + scroll:false + 回第 1 页。 */
-    patchFilterUrl: (
-        patch: Record<string, string | null | undefined>,
-    ) => void
+    patchFilterUrl: (patch: Record<string, string | null | undefined>) => void
     searchInputRef: React.RefObject<HTMLInputElement | null>
 }
 
@@ -87,12 +85,12 @@ function hasStructuredFilters(
     if (view !== "audit") return false
     return Boolean(
         applied.from ||
-            applied.to ||
-            applied.action ||
-            applied.result ||
-            applied.actorId ||
-            applied.traceId ||
-            applied.objectId,
+        applied.to ||
+        applied.action ||
+        applied.result ||
+        applied.actorId ||
+        applied.traceId ||
+        applied.objectId,
     )
 }
 

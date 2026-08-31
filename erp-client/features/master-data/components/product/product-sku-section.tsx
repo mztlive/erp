@@ -16,6 +16,7 @@ import type {
 import type { FixedSku } from "@/features/supplier-offerings/types"
 
 type ProductSkuSectionProps = {
+    idPrefix?: string
     isCreate: boolean
     canRevise: boolean
     name: string
@@ -44,6 +45,7 @@ type ProductSkuSectionProps = {
 }
 
 function ProductSkuSection({
+    idPrefix,
     isCreate,
     canRevise,
     name,
@@ -67,9 +69,11 @@ function ProductSkuSection({
     onRegisterSupply,
     stableId,
 }: ProductSkuSectionProps) {
+    const prefix = idPrefix ?? "master-data-product-sku"
     return (
         <div id="product-section-sku" className="min-w-0 max-w-full space-y-8">
             <ProductSpecDraftsEditor
+                idPrefix={`${prefix}-spec`}
                 canRevise={canRevise}
                 specDrafts={specDrafts}
                 skuCount={fields.skus.length}

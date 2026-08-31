@@ -10,6 +10,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     Card,
     CardContent,
@@ -58,6 +59,7 @@ export function MallSyncReconciliationView({
                             description="比较完整商业数据标识，只产生差异与任务，不直接覆盖记录。"
                             table={
                                 <DataTable
+                                    id="mall-sync-reconciliation-table"
                                     data={data.reconciliation.differences}
                                     columns={diffColumns}
                                     getRowId={(r) => r.differenceId}
@@ -76,7 +78,10 @@ export function MallSyncReconciliationView({
                                     {data.selectedDifference.externalOrderNo}
                                 </CardTitle>
                                 <CardDescription>
-                                    {data.selectedDifference.differenceTypeLabel}
+                                    {
+                                        data.selectedDifference
+                                            .differenceTypeLabel
+                                    }
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-2 text-sm">
@@ -89,11 +94,15 @@ export function MallSyncReconciliationView({
                                 {data.selectedDifference.erpSalesOrderNo ? (
                                     <p>
                                         ERP 销售单{" "}
-                                        {data.selectedDifference.erpSalesOrderNo}
+                                        {
+                                            data.selectedDifference
+                                                .erpSalesOrderNo
+                                        }
                                     </p>
                                 ) : null}
                                 {firstPhase ? (
                                     <Button
+                                        id={`mall-sync-reconciliation-${toAutomationIdSegment(data.selectedDifference.differenceId)}-pull`}
                                         type="button"
                                         size="sm"
                                         variant="secondary"

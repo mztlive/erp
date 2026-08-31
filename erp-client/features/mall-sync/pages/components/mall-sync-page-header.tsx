@@ -51,6 +51,7 @@ export function MallSyncPageHeader({
             actions={
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
+                        id="mall-sync-header-incremental"
                         type="button"
                         variant="secondary"
                         size="sm"
@@ -62,6 +63,7 @@ export function MallSyncPageHeader({
                         立即增量
                     </Button>
                     <Button
+                        id="mall-sync-header-pull"
                         type="button"
                         size="sm"
                         disabled={!canManualSync}
@@ -71,6 +73,7 @@ export function MallSyncPageHeader({
                         按单补拉
                     </Button>
                     <Button
+                        id="mall-sync-header-refresh"
                         type="button"
                         variant="ghost"
                         size="sm"

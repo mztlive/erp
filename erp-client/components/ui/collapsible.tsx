@@ -6,9 +6,13 @@ function Collapsible({ ...props }: CollapsiblePrimitive.Root.Props) {
     return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
 }
 
-function CollapsibleTrigger({ ...props }: CollapsiblePrimitive.Trigger.Props) {
+function CollapsibleTrigger({
+    id,
+    ...props
+}: CollapsiblePrimitive.Trigger.Props & { id?: string }) {
     return (
         <CollapsiblePrimitive.Trigger
+            id={id}
             data-slot="collapsible-trigger"
             {...props}
         />

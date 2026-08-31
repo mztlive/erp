@@ -205,17 +205,17 @@ export function useConsumptionOrdersUrlState() {
 
     const hasActiveFilters = Boolean(
         parsed.qParam ||
-            parsed.mallId !== "all" ||
-            parsed.occurredFrom ||
-            parsed.occurredTo ||
-            parsed.factTypes.length > 0 ||
-            parsed.fulfillmentChain !== "all" ||
-            parsed.attributionStatus !== "all" ||
-            parsed.supplierStatuses.length > 0 ||
-            parsed.paymentSource !== "all" ||
-            parsed.costBasis !== "all" ||
-            parsed.dataSources.length > 0 ||
-            parsed.metric !== "all",
+        parsed.mallId !== "all" ||
+        parsed.occurredFrom ||
+        parsed.occurredTo ||
+        parsed.factTypes.length > 0 ||
+        parsed.fulfillmentChain !== "all" ||
+        parsed.attributionStatus !== "all" ||
+        parsed.supplierStatuses.length > 0 ||
+        parsed.paymentSource !== "all" ||
+        parsed.costBasis !== "all" ||
+        parsed.dataSources.length > 0 ||
+        parsed.metric !== "all",
     )
 
     const listReturnHref = React.useMemo(() => {

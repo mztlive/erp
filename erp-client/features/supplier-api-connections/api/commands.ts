@@ -284,7 +284,6 @@ export async function enableConnection(input: {
     })
     return commandOutcome(result, input.idempotencyKey, {
         title: "连接已启用",
-        message:
-            "连接已启用，采购业务确认、连接健康和关联影响均已重新核对。",
+        message: "连接已启用，采购业务确认、连接健康和关联影响均已重新核对。",
     })
 }

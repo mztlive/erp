@@ -5,15 +5,15 @@ P1 各域实施者按下方判定表选用，**不得自行复制字段结构或
 
 ## 何时用哪个基元
 
-| 对象性质 | 基元 | 说明 |
-| --- | --- | --- |
-| 稳定基础资料 / 可编辑草稿（客户、供应商、商品、SKU、仓库、来源系统…） | `StableBase<Status>` | `status`、`current_revision_id`、`created_by`、`updated_by`；与 `BaseModel` 组合使用 |
-| 不可变修订（`party_revision`、`product_revision`、`sku_revision`、`contract_revision`…） | `RevisionBase` | `revision_no`（从 1 递增）；修订正文在域内自己的修订表中 |
-| 正式事实（库存流水、收付款、发票、商城事实、成本、退款、纠错…） | `FactBase` | `fact_no`、`occurred_at`、`recorded_at`、`recorded_by`、`source_type`、`source_reference`、`reason_code`、`reason_text`；事实不可变，纠错用反向事实 |
-| 事实来源标注 | `SourceType` | `erp` / `mall_sync` / `history_backfill` / `supplier_callback` / `manual_import`；展示用 `label()` |
-| 业务自然日（到期日、结算期间） | `BusinessDate` | 无时区语义；serde 为 `YYYY-MM-DD` 字符串 |
-| 业务时间 / 记录时间（`occurred_at`、`recorded_at`） | `Instant` | UTC 统一时基；serde 为秒级 i64 时间戳，展示层转业务时区 |
-| 固定状态机 | `DocumentState` trait | 域内枚举实现 `allowed_next()`；迁移一律走 `ensure_transition`；邻接矩阵固化，禁止运行时扩展（数据模型 4.6、13.3） |
+| 对象性质                                                                                 | 基元                  | 说明                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 稳定基础资料 / 可编辑草稿（客户、供应商、商品、SKU、仓库、来源系统…）                    | `StableBase<Status>`  | `status`、`current_revision_id`、`created_by`、`updated_by`；与 `BaseModel` 组合使用                                                                |
+| 不可变修订（`party_revision`、`product_revision`、`sku_revision`、`contract_revision`…） | `RevisionBase`        | `revision_no`（从 1 递增）；修订正文在域内自己的修订表中                                                                                            |
+| 正式事实（库存流水、收付款、发票、商城事实、成本、退款、纠错…）                          | `FactBase`            | `fact_no`、`occurred_at`、`recorded_at`、`recorded_by`、`source_type`、`source_reference`、`reason_code`、`reason_text`；事实不可变，纠错用反向事实 |
+| 事实来源标注                                                                             | `SourceType`          | `erp` / `mall_sync` / `history_backfill` / `supplier_callback` / `manual_import`；展示用 `label()`                                                  |
+| 业务自然日（到期日、结算期间）                                                           | `BusinessDate`        | 无时区语义；serde 为 `YYYY-MM-DD` 字符串                                                                                                            |
+| 业务时间 / 记录时间（`occurred_at`、`recorded_at`）                                      | `Instant`             | UTC 统一时基；serde 为秒级 i64 时间戳，展示层转业务时区                                                                                             |
+| 固定状态机                                                                               | `DocumentState` trait | 域内枚举实现 `allowed_next()`；迁移一律走 `ensure_transition`；邻接矩阵固化，禁止运行时扩展（数据模型 4.6、13.3）                                   |
 
 ## 与 `BaseModel` 的关系
 

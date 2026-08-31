@@ -1,9 +1,6 @@
 "use client"
 
-import {
-    DocumentSection,
-    surfaceInsetClassName,
-} from "@/components/business"
+import { DocumentSection, surfaceInsetClassName } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { CONTRACT_AUDIT_ACTION_LABEL } from "@/features/contracts/types"

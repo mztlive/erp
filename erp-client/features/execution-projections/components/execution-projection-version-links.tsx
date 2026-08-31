@@ -3,6 +3,7 @@
 import { DocumentSection, RevisionTimeline } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ExecutionProjectionView } from "@/features/execution-projections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type ReplaceParams = (patch: Record<string, string | null | undefined>) => void
 
@@ -52,6 +53,7 @@ export function ExecutionProjectionVersionLinks({
                     ),
                     action: (
                         <Button
+                            id={`execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}-revision-${toAutomationIdSegment(link.projectionRevisionId)}-view`}
                             type="button"
                             size="xs"
                             variant="outline"

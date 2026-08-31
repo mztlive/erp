@@ -39,6 +39,7 @@ export function MallSyncSnapshotsView({
                 description="仅白名单商业字段。不含玩法、卡号、卡密、绑定手机、连接或密钥。"
                 table={
                     <DataTable
+                        id="mall-sync-snapshots-table"
                         data={data?.snapshots ?? []}
                         columns={snapshotColumns}
                         getRowId={(r) => r.snapshotId}

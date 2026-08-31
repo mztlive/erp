@@ -41,7 +41,10 @@ export function CustomerCreateDialog({
                     onOpenChange(next)
                 }}
             >
-                <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
+                <DialogContent
+                    closeButtonId="customers-create-dialog-close"
+                    className="max-h-[88vh] overflow-y-auto sm:max-w-3xl"
+                >
                     <DialogHeader>
                         <DialogTitle>新建客户</DialogTitle>
                         <DialogDescription>
@@ -70,6 +73,7 @@ export function CustomerCreateDialog({
             </Dialog>
 
             <DiscardConfirmDialog
+                id="customers-create-dialog-discard"
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
                 onConfirm={() => {

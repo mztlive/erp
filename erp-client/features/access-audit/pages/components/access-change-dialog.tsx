@@ -28,9 +28,7 @@ import type {
 } from "@/features/access-audit/types"
 
 /** 影响预览内嵌表单实例类型：与变更流程 hook 中的 useAppForm 结果保持一致。 */
-export type ChangeReasonFormApi = ReturnType<
-    typeof useAccessChangeFlow
->["form"]
+export type ChangeReasonFormApi = ReturnType<typeof useAccessChangeFlow>["form"]
 
 type AccessChangeDialogProps = {
     open: boolean
@@ -61,7 +59,10 @@ function AccessChangeDialog({
                 onOpenChange(nextOpen)
             }}
         >
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogContent
+                className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+                closeButtonId="operations-access-change-dialog-close"
+            >
                 <DialogHeader>
                     <DialogTitle>授权变更影响预览</DialogTitle>
                     <DialogDescription>
@@ -75,9 +76,7 @@ function AccessChangeDialog({
                             title={impact.actionLabel}
                             description={impact.changeSummary}
                             filterSummary={`主体：${impact.subjectLabel}`}
-                            selectionScope={
-                                impact.affectedWorkSurfaceSummary
-                            }
+                            selectionScope={impact.affectedWorkSurfaceSummary}
                             estimated={impact.affectedSubjectCount}
                             processable={
                                 impact.submissionBlocker
@@ -156,18 +155,20 @@ function AccessChangeDialog({
                             >
                                 <div className="space-y-1.5">
                                     <Label htmlFor="w19-reason">
-                                        变更原因<span className="text-destructive">*</span>
+                                        变更原因
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
                                     </Label>
                                     <form.AppField
                                         name="reasonCode"
                                         children={(field) => (
                                             <OptionCombobox
-                                                id="w19-reason"
+                                                id="operations-access-change-dialog-reason"
                                                 value={field.state.value}
                                                 onValueChange={(v) =>
                                                     field.handleChange(
-                                                        v ??
-                                                            field.state.value,
+                                                        v ?? field.state.value,
                                                     )
                                                 }
                                                 options={[
@@ -193,14 +194,14 @@ function AccessChangeDialog({
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="w19-comment">
+                                    <Label htmlFor="operations-access-change-dialog-comment">
                                         说明（可选，勿填密钥）
                                     </Label>
                                     <form.AppField
                                         name="comment"
                                         children={(field) => (
                                             <Textarea
-                                                id="w19-comment"
+                                                id="operations-access-change-dialog-comment"
                                                 value={field.state.value ?? ""}
                                                 onChange={(e) =>
                                                     field.handleChange(
@@ -218,6 +219,7 @@ function AccessChangeDialog({
                                 </p>
                                 <DialogFooter>
                                     <Button
+                                        id="operations-access-change-dialog-cancel"
                                         type="button"
                                         variant="ghost"
                                         disabled={isSubmitting}
@@ -226,6 +228,7 @@ function AccessChangeDialog({
                                         取消
                                     </Button>
                                     <Button
+                                        id="operations-access-change-dialog-confirm"
                                         type="submit"
                                         disabled={isSubmitting}
                                         variant={
@@ -242,6 +245,7 @@ function AccessChangeDialog({
                         ) : (
                             <DialogFooter>
                                 <Button
+                                    id="operations-access-change-dialog-close-blocked"
                                     type="button"
                                     variant="ghost"
                                     onClick={() => {

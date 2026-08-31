@@ -48,7 +48,11 @@ export function SupplierSection({ view }: Props) {
                             <div className="mt-0.5 flex flex-wrap gap-x-3 text-muted-foreground">
                                 <span>
                                     履约{" "}
-                                    {SUPPLIER_STATUS_LABEL[so.fulfillmentStatus]}
+                                    {
+                                        SUPPLIER_STATUS_LABEL[
+                                            so.fulfillmentStatus
+                                        ]
+                                    }
                                 </span>
                                 <span>
                                     取消{" "}

@@ -50,14 +50,19 @@ export function ReferenceBindDialog({
         kind === "credential"
             ? conn.safeReferences.credential
             : conn.safeReferences.endpoint
-    const inputId = kind === "credential" ? "opaque-ref" : "endpoint-ref"
+    const inputId =
+        kind === "credential"
+            ? "supplier-api-connections-reference-bind-credential-input"
+            : "supplier-api-connections-reference-bind-endpoint-input"
     const errorFallback =
         kind === "credential"
             ? "无法取得密钥管理引用列表，请重试后再选择。"
             : "无法取得地址配置引用列表，请重试后再选择。"
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent
+                closeButtonId={`supplier-api-connections-reference-bind-${kind}-close`}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {isProd
@@ -106,6 +111,7 @@ export function ReferenceBindDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id={`supplier-api-connections-reference-bind-${kind}-cancel`}
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -114,14 +120,21 @@ export function ReferenceBindDialog({
                         取消
                     </Button>
                     <Button
+                        id={`supplier-api-connections-reference-bind-${kind}-confirm`}
                         type="button"
                         disabled={!allowed || !value || pending}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : (
-                            <KeyRoundIcon className="size-4" aria-hidden="true" />
+                            <KeyRoundIcon
+                                className="size-4"
+                                aria-hidden="true"
+                            />
                         )}
                         {pending
                             ? "绑定中…"

@@ -9,6 +9,7 @@ import type {
 
 export type ContactRow = {
     existingId?: string
+    draftId?: string
     name: string
     title: string
     phone: string
@@ -19,6 +20,7 @@ export type ContactRow = {
 
 export type AddressRow = {
     existingId?: string
+    draftId?: string
     addressType: string
     contactName: string
     address: string
@@ -27,6 +29,7 @@ export type AddressRow = {
 
 export type BankAccountRow = {
     existingId?: string
+    draftId?: string
     accountName: string
     bankName: string
     branchName: string
@@ -77,11 +80,21 @@ export function newIdempotencyKey(prefix: string): string {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+let customerFormDraftSequence = 0
+
+export function createCustomerFormDraftId(prefix: string): string {
+    customerFormDraftSequence += 1
+    return `${prefix}-${customerFormDraftSequence}`
+}
+
 /**
  * 编辑态敏感字段：后端不回传明文/reveal token，预填留空，避免把掩码写回。
  * 有 token 时也仅作占位（reveal 接口未落地）。
  */
-export function editableValue(token: string | undefined, masked: string): string {
+export function editableValue(
+    token: string | undefined,
+    masked: string,
+): string {
     if (token) return ""
     if (!masked || masked === "—" || masked.includes("*")) return ""
     return masked

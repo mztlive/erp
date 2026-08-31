@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import { emptyEditorNode } from "../draft-nodes"
 import { REJECT_RESTART_COPY } from "../labels"
 import type { DocumentType, EditorNode, EligibleAssignee } from "../types"
@@ -26,11 +28,13 @@ export function NodeListEditor({
     nodes,
     readOnly,
     onChange,
+    id = "governance-approval-processes-detail-editor-nodes",
 }: {
     documentType: DocumentType
     nodes: EditorNode[]
     readOnly: boolean
     onChange: (nodes: EditorNode[]) => void
+    id?: string
 }) {
     const move = (index: number, offset: number) => {
         const target = index + offset
@@ -63,6 +67,7 @@ export function NodeListEditor({
             <ol className="flex flex-col">
                 {nodes.map((node, index) => {
                     const showConnector = index < nodes.length - 1 || !readOnly
+                    const nodeSegment = toAutomationIdSegment(node.client_id)
                     return (
                         <li
                             key={node.client_id}
@@ -103,6 +108,7 @@ export function NodeListEditor({
                                     </p>
                                     <div className="flex flex-wrap gap-1">
                                         <Button
+                                            id={`${id}-node-${nodeSegment}-move-up`}
                                             type="button"
                                             size="xs"
                                             variant="ghost"
@@ -113,6 +119,7 @@ export function NodeListEditor({
                                             上移
                                         </Button>
                                         <Button
+                                            id={`${id}-node-${nodeSegment}-move-down`}
                                             type="button"
                                             size="xs"
                                             variant="ghost"
@@ -126,6 +133,7 @@ export function NodeListEditor({
                                             下移
                                         </Button>
                                         <Button
+                                            id={`${id}-node-${nodeSegment}-remove`}
                                             type="button"
                                             size="xs"
                                             variant="ghost"
@@ -147,12 +155,15 @@ export function NodeListEditor({
                                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                                     <div className="flex flex-col gap-1.5">
                                         <Label
-                                            htmlFor={`${node.client_id}-name`}
+                                            htmlFor={`${id}-node-${nodeSegment}-name`}
                                         >
-                                            节点名称<span className="text-destructive">*</span>
+                                            节点名称
+                                            <span className="text-destructive">
+                                                *
+                                            </span>
                                         </Label>
                                         <Input
-                                            id={`${node.client_id}-name`}
+                                            id={`${id}-node-${nodeSegment}-name`}
                                             value={node.node_name}
                                             disabled={readOnly}
                                             placeholder="例如：财务复核"
@@ -165,8 +176,16 @@ export function NodeListEditor({
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <Label>审批人<span className="text-destructive">*</span></Label>
+                                        <Label
+                                            htmlFor={`${id}-node-${nodeSegment}-assignee-trigger`}
+                                        >
+                                            审批人
+                                            <span className="text-destructive">
+                                                *
+                                            </span>
+                                        </Label>
                                         <AssigneeCombobox
+                                            id={`${id}-node-${nodeSegment}-assignee`}
                                             documentType={documentType}
                                             value={node.assignee_user_id}
                                             selectedName={node.assignee_name}
@@ -199,6 +218,7 @@ export function NodeListEditor({
                             </span>
                         </div>
                         <Button
+                            id={`${id}-add-node`}
                             type="button"
                             variant="secondary"
                             disabled={readOnly}

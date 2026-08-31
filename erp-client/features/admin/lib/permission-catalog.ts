@@ -10,6 +10,7 @@
  */
 
 import { PERMISSION_GROUPS } from "@/lib/permissions.generated"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 权限编码对应的后端接口；同一权限可覆盖多个接口。 */
 export type PermissionEndpoint = {
@@ -334,6 +335,16 @@ export const BUSINESS_GROUPS: readonly PermissionGroupOption[] =
 export const SYSTEM_GROUPS: readonly PermissionGroupOption[] =
     PERMISSION_CATALOG.filter((group) => isSystemGroup(group.name))
 
+/**
+ * 权限组稳定自动化 id 片段：以目录中首个权限的 resource 为稳定英文键，
+ * 避免中文组名经 toAutomationIdSegment 清洗后全部坍缩为 item 导致重复。
+ */
+export function permissionGroupSegment(name: string): string {
+    const group = PERMISSION_CATALOG.find((entry) => entry.name === name)
+    const raw = group?.items[0]?.resource ?? group?.items[0]?.code ?? name
+    return toAutomationIdSegment(raw)
+}
+
 /** 权限编码 → 目录条目。 */
 export const PERMISSION_BY_CODE: ReadonlyMap<string, PermissionItemOption> =
     new Map(
@@ -361,7 +372,10 @@ const RESOURCE_LABELS: ReadonlyMap<string, string> = (() => {
     const labels = new Map<string, string>()
     for (const [resource, permissions] of byResource) {
         const override = RESOURCE_LABEL_OVERRIDES[resource]
-        labels.set(resource, override ?? deriveResourceLabel(permissions) ?? resource)
+        labels.set(
+            resource,
+            override ?? deriveResourceLabel(permissions) ?? resource,
+        )
     }
     return labels
 })()
@@ -384,7 +398,9 @@ export function permissionLabel(code: string): string {
     if (!resource || !action) return code
     const label = RESOURCE_LABELS.get(resource)
     if (!label) return code
-    return action === "*" ? `${label} · 全部动作` : `${label} · ${actionLabel(action)}`
+    return action === "*"
+        ? `${label} · 全部动作`
+        : `${label} · ${actionLabel(action)}`
 }
 
 /** 矩阵一行：一个业务对象在本组内的全部动作。 */

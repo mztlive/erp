@@ -2,7 +2,10 @@
 
 import Link from "next/link"
 
-import { CostCoverageNotice, surfacePanelClassName } from "@/components/business"
+import {
+    CostCoverageNotice,
+    surfacePanelClassName,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -74,6 +77,7 @@ export function CustomerQualityCoveragePanels({
                                 <AlertDescription className="flex flex-wrap items-center gap-2">
                                     应收余额、逾期金额等指标标记为部分可靠。可切换「仅已复核」或前往卡券票款复核。
                                     <Button
+                                        id="customers-quality-show-reviewed-only"
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -82,6 +86,7 @@ export function CustomerQualityCoveragePanels({
                                         仅看已复核
                                     </Button>
                                     <Button
+                                        id="customers-quality-open-card-review"
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -122,8 +127,7 @@ export function CustomerQualityCoveragePanels({
                             <span className="num">
                                 {coverage.costCoverageRate}
                             </span>
-                            。缺失成本不显示为
-                            0，利润须与覆盖率同屏解读。
+                            。缺失成本不显示为 0，利润须与覆盖率同屏解读。
                         </>
                     }
                 />
@@ -135,6 +139,7 @@ export function CustomerQualityCoveragePanels({
                     <AlertDescription>
                         卡券实际经营结果请前往卡券经营分析；本页不显示卡券实际盈亏，卡券收入仍计入规模与回款分析。
                         <Button
+                            id="customers-quality-open-card-business"
                             type="button"
                             size="sm"
                             variant="outline"

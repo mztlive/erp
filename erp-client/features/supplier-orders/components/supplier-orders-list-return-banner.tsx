@@ -22,6 +22,7 @@ export function SupplierOrdersListReturnBanner({
                 从关联页面进来的。返回时会回到原来的位置。
             </span>
             <Button
+                id="supplier-orders-list-return-back"
                 type="button"
                 size="sm"
                 variant="secondary"

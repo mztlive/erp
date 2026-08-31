@@ -33,6 +33,7 @@ import type {
     ImportConfirmationView,
 } from "@/features/import-opening/types"
 import { CONFIRMATION_SCOPE_LABEL } from "@/features/import-opening/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 const RETURN_REASON_OPTIONS = [
@@ -71,7 +72,10 @@ function ReturnForFixDialog({
                 if (!open && !pending) onCancel()
             }}
         >
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                className="sm:max-w-lg"
+                closeButtonId="operations-import-batch-detail-confirm-return-dialog-close"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         退回{CONFIRMATION_SCOPE_LABEL[confirmation.scope]}修复
@@ -91,6 +95,7 @@ function ReturnForFixDialog({
                         name="reasonCode"
                         children={(field) => (
                             <field.SelectField
+                                id="operations-import-batch-detail-confirm-return-reason"
                                 label="退回原因"
                                 options={RETURN_REASON_OPTIONS}
                                 allowClear={false}
@@ -102,6 +107,7 @@ function ReturnForFixDialog({
                         name="comment"
                         children={(field) => (
                             <field.TextareaField
+                                id="operations-import-batch-detail-confirm-return-comment"
                                 label="修复说明"
                                 rows={4}
                                 placeholder="说明需要修复的数据、口径或依据"
@@ -113,6 +119,7 @@ function ReturnForFixDialog({
                         <DialogClose
                             render={
                                 <Button
+                                    id="operations-import-batch-detail-confirm-return-cancel"
                                     type="button"
                                     variant="outline"
                                     disabled={pending}
@@ -123,6 +130,7 @@ function ReturnForFixDialog({
                         </DialogClose>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="operations-import-batch-detail-confirm-return-submit"
                                 label="确认退回修复"
                                 pendingLabel="正在提交"
                                 disabled={pending}
@@ -249,6 +257,7 @@ export function ConfirmSection({
                                     {canConfirm ? (
                                         <>
                                             <Button
+                                                id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirmation.confirmationId)}-confirm`}
                                                 type="button"
                                                 size="sm"
                                                 disabled={isCompleting}
@@ -259,6 +268,7 @@ export function ConfirmSection({
                                                 确认本范围
                                             </Button>
                                             <Button
+                                                id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirmation.confirmationId)}-return`}
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
@@ -300,6 +310,7 @@ export function ConfirmSection({
 
             {confirming ? (
                 <FormalActionConfirmDialog
+                    id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirming.confirmationId)}-dialog`}
                     open
                     onOpenChange={(open) => {
                         if (!open) setConfirming(undefined)

@@ -5,6 +5,7 @@ import {
     SequentialProcessBar,
     surfaceInsetClassName,
     surfacePanelClassName,
+    workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,7 @@ import {
     SECTIONS,
     type SettlementSection,
 } from "@/features/supplier-settlements/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
@@ -100,7 +102,9 @@ function SettlementCenter({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0" : undefined}
+            className={
+                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+            }
         >
             <SettlementCenterDocumentHeader
                 statement={st}
@@ -111,6 +115,7 @@ function SettlementCenter({
                 onBack={onBack}
                 onRefresh={actions.onRefresh}
                 onSubmitReview={() => actions.setSubmitOpen(true)}
+                embedded={embedded}
             />
 
             {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
@@ -118,6 +123,7 @@ function SettlementCenter({
             {detail.workItem ? (
                 <div className="space-y-2">
                     <SequentialProcessBar
+                        id="supplier-settlements-center-process-bar"
                         current={1}
                         total={1}
                         responsibilityStatus={actions.responsibilityStatus}
@@ -132,6 +138,7 @@ function SettlementCenter({
                     {actions.responsibilityStatus === "assigned_to_me" &&
                     actions.allowed.has("REJECT") ? (
                         <Button
+                            id="supplier-settlements-center-reject-trigger"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -196,7 +203,11 @@ function SettlementCenter({
                         className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-grid bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
                     >
                         {SECTIONS.map((s) => (
-                            <TabsTrigger key={s} value={s}>
+                            <TabsTrigger
+                                key={s}
+                                value={s}
+                                id={`supplier-settlements-center-tab-${toAutomationIdSegment(s)}`}
+                            >
                                 {SECTION_LABEL[s]}
                                 {s === "differences" &&
                                 detail.differenceSummary.blocking > 0

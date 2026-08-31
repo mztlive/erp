@@ -24,6 +24,7 @@ type DateFieldProps = {
     disabledDates?: Matcher | Matcher[]
     className?: string
     inputClassName?: string
+    id?: string
 }
 
 /**
@@ -41,12 +42,14 @@ export function DateField({
     disabledDates,
     className,
     inputClassName,
+    id,
 }: DateFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
-    const descriptionId = `${field.name}-description`
-    const errorId = `${field.name}-error`
+    const resolvedId = id ?? field.name
+    const descriptionId = `${resolvedId}-description`
+    const errorId = `${resolvedId}-error`
     const describedBy = [
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
@@ -57,14 +60,14 @@ export function DateField({
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
             <FieldLabel
-                htmlFor={field.name}
+                htmlFor={resolvedId}
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <DatePicker
-                id={field.name}
+                id={resolvedId}
                 value={field.state.value || undefined}
                 onValueChange={(next) => {
                     field.handleChange(next ?? "")
@@ -101,6 +104,7 @@ type DateTimeFieldProps = {
     disabledDates?: Matcher | Matcher[]
     className?: string
     inputClassName?: string
+    id?: string
 }
 
 /**
@@ -120,12 +124,14 @@ export function DateTimeField({
     disabledDates,
     className,
     inputClassName,
+    id,
 }: DateTimeFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
-    const descriptionId = `${field.name}-description`
-    const errorId = `${field.name}-error`
+    const resolvedId = id ?? field.name
+    const descriptionId = `${resolvedId}-description`
+    const errorId = `${resolvedId}-error`
     const describedBy = [
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
@@ -136,14 +142,14 @@ export function DateTimeField({
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
             <FieldLabel
-                htmlFor={field.name}
+                htmlFor={resolvedId}
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <DateTimeLocalPicker
-                id={field.name}
+                id={resolvedId}
                 value={field.state.value || undefined}
                 onValueChange={(next) => {
                     field.handleChange(next ?? "")

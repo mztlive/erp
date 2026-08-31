@@ -8,8 +8,7 @@ const variantClasses = {
     "view-loading": { summary: "h-28", table: "h-72" },
 } as const
 
-export type CustomerQualityPageSkeletonVariant =
-    keyof typeof variantClasses
+export type CustomerQualityPageSkeletonVariant = keyof typeof variantClasses
 
 export function CustomerQualityPageSkeleton({
     variant,

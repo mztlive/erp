@@ -110,7 +110,14 @@ function useAccessChangeFlow({
         } catch (err) {
             setActionError(getErrorMessage(err, "提交失败，请稍后重试"))
         }
-    }, [pendingCommand, impact, form, submitMutation, applyOutcome, setActionError])
+    }, [
+        pendingCommand,
+        impact,
+        form,
+        submitMutation,
+        applyOutcome,
+        setActionError,
+    ])
 
     return {
         form,

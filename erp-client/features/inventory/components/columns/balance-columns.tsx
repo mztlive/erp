@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatQty } from "@/features/inventory/components/presentation"
 import type { StockBalanceRow } from "@/features/inventory/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 export type BalanceColumnsInput = {
@@ -72,10 +73,7 @@ export function buildBalanceColumns({
                 numeric: true,
             },
             cell: ({ row }) =>
-                formatQty(
-                    row.original.reservedQuantity,
-                    row.original.baseUnit,
-                ),
+                formatQty(row.original.reservedQuantity, row.original.baseUnit),
         },
         {
             id: "available",
@@ -149,6 +147,7 @@ export function buildBalanceColumns({
                 return (
                     <div className="flex justify-end gap-1">
                         <Button
+                            id={`inventory-ledger-balance-row-${toAutomationIdSegment(row.original.balanceId)}-view`}
                             type="button"
                             variant="ghost"
                             size="xs"
@@ -158,21 +157,18 @@ export function buildBalanceColumns({
                                     el,
                                 )
                             }}
-                            onClick={() =>
-                                openDetail(row.original.balanceId)
-                            }
+                            onClick={() => openDetail(row.original.balanceId)}
                         >
                             查看
                         </Button>
                         <Button
+                            id={`inventory-ledger-balance-row-${toAutomationIdSegment(row.original.balanceId)}-adjust`}
                             type="button"
                             variant="outline"
                             size="xs"
                             disabled={!canAdjust || isCreating}
                             title={blocker?.message}
-                            onClick={() =>
-                                void startAdjustment(row.original)
-                            }
+                            onClick={() => void startAdjustment(row.original)}
                         >
                             {isCreating ? (
                                 <LoaderCircleIcon

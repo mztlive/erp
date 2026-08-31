@@ -3,7 +3,10 @@
 import type { ProductCategoryDto } from "@/features/master-data/api/contracts"
 import { mapCategoryRow } from "@/features/master-data/api/list-mappers"
 import { fetchAllPages } from "@/features/master-data/api/lists"
-import { productKindLabel, tsToIso } from "@/features/master-data/api/presentation"
+import {
+    productKindLabel,
+    tsToIso,
+} from "@/features/master-data/api/presentation"
 import type { MasterDataCenterView } from "@/features/master-data/types"
 import { baseCenter } from "./base"
 

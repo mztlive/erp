@@ -12,6 +12,7 @@ import { useSupplierPaymentQuery } from "@/features/supplier-payables/hooks/quer
 import { paymentPreviewHref } from "@/features/supplier-payables/lib/related-documents"
 import { paymentReversalApprovalPhase } from "@/features/supplier-payables/lib/payment-reversal-approval"
 import type { PaymentReversalRow } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 /**
@@ -97,6 +98,7 @@ export function PaymentReversalDetailBody({
                 ) : null}
                 <div>
                     <Button
+                        id={`supplier-payables-reversal-detail-${toAutomationIdSegment(row.reversalId)}-open-original`}
                         type="button"
                         size="xs"
                         variant="outline"

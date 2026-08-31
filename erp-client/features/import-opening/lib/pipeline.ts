@@ -14,7 +14,9 @@ export const PIPELINE_ORDER: ImportPipelineStage[] = [
     "RESULT",
 ]
 
-export function buildStageStates(current: ImportPipelineStage): ImportStageStates {
+export function buildStageStates(
+    current: ImportPipelineStage,
+): ImportStageStates {
     const currentIdx = PIPELINE_ORDER.indexOf(current)
     const states: {
         [K in ImportStageKey]: {

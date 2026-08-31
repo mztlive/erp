@@ -38,6 +38,7 @@ export function CenterPageErrorState({
                 action={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="mall-consumption-order-center-error-retry"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -46,9 +47,15 @@ export function CenterPageErrorState({
                             重试
                         </Button>
                         <Button
+                            id="mall-consumption-order-center-error-back"
                             type="button"
                             variant="outline"
-                            render={<Link href={backToListHref} />}
+                            render={
+                                <Link
+                                    id="mall-consumption-order-center-error-back-link"
+                                    href={backToListHref}
+                                />
+                            }
                         >
                             返回列表
                         </Button>
@@ -68,10 +75,16 @@ export function CenterPageEmptyState() {
                 description="该消费订单不存在或当前账号无权访问。"
                 action={
                     <Button
+                        id="mall-consumption-order-center-empty-back"
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
-                        render={<Link href="/commerce/consumption-orders" />}
+                        render={
+                            <Link
+                                id="mall-consumption-order-center-empty-back-link"
+                                href="/commerce/consumption-orders"
+                            />
+                        }
                     >
                         返回列表
                     </Button>

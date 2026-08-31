@@ -23,9 +23,9 @@ export const PUBLICATION_DELIVERY_STATUS_RADIO_FILTER_OPTIONS: ReadonlyArray<{
 }> = [
     { value: "all", label: "全部" },
     ...(
-        Object.keys(
-            PUBLICATION_DELIVERY_STATUS_FILTER_LABELS,
-        ) as Array<Exclude<PublicationDeliveryStatusSelection, "all">>
+        Object.keys(PUBLICATION_DELIVERY_STATUS_FILTER_LABELS) as Array<
+            Exclude<PublicationDeliveryStatusSelection, "all">
+        >
     ).map((value) => ({
         value,
         label: PUBLICATION_DELIVERY_STATUS_FILTER_LABELS[value],

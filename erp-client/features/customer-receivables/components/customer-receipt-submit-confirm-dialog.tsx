@@ -15,15 +15,20 @@ export function CustomerReceiptSubmitConfirmDialog({
     approval,
     onOpenChange,
     onConfirm,
+    id = "customer-receivables-session-receipt-confirm-dialog",
+    idPrefix,
 }: {
     open: boolean
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
     onConfirm: () => void
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <FormalActionConfirmDialog
+            id={idPrefix ?? id}
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="提交回款"

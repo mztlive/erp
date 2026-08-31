@@ -15,7 +15,9 @@ export function useSlashSearchHotkey(
             ) {
                 return
             }
-            if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+            if (
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
+            ) {
                 return
             }
             event.preventDefault()

@@ -59,6 +59,7 @@ export function SecuritySection({
                         />
                         {canBindEndpoint || endpointBlocker ? (
                             <Button
+                                id="supplier-api-connections-security-bind-endpoint"
                                 type="button"
                                 size="sm"
                                 disabled={!canBindEndpoint}
@@ -88,6 +89,7 @@ export function SecuritySection({
                         />
                         {canBindCredential || credentialBlocker ? (
                             <Button
+                                id="supplier-api-connections-security-bind-credential"
                                 type="button"
                                 size="sm"
                                 disabled={!canBindCredential}

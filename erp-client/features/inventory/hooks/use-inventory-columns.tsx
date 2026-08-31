@@ -31,20 +31,14 @@ function useInventoryColumns({
         [openDetail, startAdjustment, isCreating, isPhoneNarrow, rowFocusRef],
     )
 
-    const movementColumns = React.useMemo(
-        () => buildMovementColumns(),
-        [],
-    )
+    const movementColumns = React.useMemo(() => buildMovementColumns(), [])
 
     const reservationColumns = React.useMemo(
         () => buildReservationColumns(),
         [],
     )
 
-    const adjustmentColumns = React.useMemo(
-        () => buildAdjustmentColumns(),
-        [],
-    )
+    const adjustmentColumns = React.useMemo(() => buildAdjustmentColumns(), [])
 
     return {
         adjustmentColumns,

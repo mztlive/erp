@@ -74,6 +74,7 @@ export function PurchaseOrderCancelApprovalButton({
     return (
         <>
             <Button
+                id={`procurement-orders-detail-cancel-approval-trigger-${order.identity.purchaseOrderId}`}
                 type="button"
                 size="sm"
                 variant="outline"
@@ -100,13 +101,13 @@ export function PurchaseOrderCancelApprovalButton({
                     </AlertDialogHeader>
                     <div className="space-y-2">
                         <label
-                            htmlFor={`purchase-order-cancel-reason-${order.identity.purchaseOrderId}`}
+                            htmlFor={`procurement-orders-detail-cancel-reason-${order.identity.purchaseOrderId}`}
                             className="text-sm font-medium"
                         >
                             撤回原因
                         </label>
                         <Textarea
-                            id={`purchase-order-cancel-reason-${order.identity.purchaseOrderId}`}
+                            id={`procurement-orders-detail-cancel-reason-${order.identity.purchaseOrderId}`}
                             value={reason}
                             onChange={(event) => setReason(event.target.value)}
                             placeholder="请输入撤回原因"
@@ -123,10 +124,14 @@ export function PurchaseOrderCancelApprovalButton({
                         ) : null}
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={cancelMutation.isPending}>
+                        <AlertDialogCancel
+                            id={`procurement-orders-detail-cancel-approval-cancel-${order.identity.purchaseOrderId}`}
+                            disabled={cancelMutation.isPending}
+                        >
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
+                            id={`procurement-orders-detail-cancel-approval-confirm-${order.identity.purchaseOrderId}`}
                             disabled={
                                 cancelMutation.isPending || !reason.trim()
                             }

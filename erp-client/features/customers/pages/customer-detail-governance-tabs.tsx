@@ -22,6 +22,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     CustomerAssignmentView,
     CustomerCenterView,
@@ -44,6 +45,7 @@ export function CustomerDetailQualityTab({
                 description="数据由系统汇总；标签以系统返回为准。"
                 action={
                     <Button
+                        id="customers-detail-quality-open"
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -63,6 +65,7 @@ export function CustomerDetailQualityTab({
                     errorKind="projection"
                     retryAction={
                         <Button
+                            id="customers-detail-quality-retry"
                             type="button"
                             size="sm"
                             onClick={() => void refetch()}
@@ -80,7 +83,8 @@ export function CustomerDetailQualityTab({
                                     {
                                         id: "scale",
                                         label: "规模标签",
-                                        value: customer.qualitySummary.scaleLabel,
+                                        value: customer.qualitySummary
+                                            .scaleLabel,
                                     },
                                     {
                                         id: "profit",
@@ -149,6 +153,7 @@ export function CustomerDetailAuditTab({
                 action={
                     can(customer, "MANAGE_ASSIGNMENTS") ? (
                         <Button
+                            id="customers-detail-audit-manage-assignments"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -165,6 +170,7 @@ export function CustomerDetailAuditTab({
                         description="归属审计分区失败。"
                         action={
                             <Button
+                                id="customers-detail-audit-retry"
                                 type="button"
                                 size="sm"
                                 onClick={() => void refetch()}
@@ -226,6 +232,7 @@ export function CustomerDetailAuditTab({
                                                     "MANAGE_ASSIGNMENTS",
                                                 ) ? (
                                                     <Button
+                                                        id={`customers-detail-audit-${toAutomationIdSegment(a.id)}-end-collaboration`}
                                                         type="button"
                                                         size="xs"
                                                         variant="ghost"

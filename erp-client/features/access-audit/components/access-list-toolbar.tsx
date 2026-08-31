@@ -23,6 +23,7 @@ import type {
     AccessFilterDraft,
     AccessFilterKey,
 } from "@/features/access-audit/pages/hooks/use-access-list-filters"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type AccessAppliedChip = Readonly<{
     key: AccessFilterKey
@@ -92,6 +93,11 @@ function AccessListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id={
+                                isAudit
+                                    ? "operations-audit-toolbar-search"
+                                    : "operations-access-toolbar-search"
+                            }
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -111,6 +117,7 @@ function AccessListToolbar({
                 filters={
                     isAudit ? (
                         <Button
+                            id="operations-audit-toolbar-filter-trigger"
                             type="button"
                             variant="outline"
                             aria-expanded={panelOpen}
@@ -148,6 +155,7 @@ function AccessListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`${isAudit ? "operations-audit-toolbar" : "operations-access-toolbar"}-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -156,6 +164,11 @@ function AccessListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id={
+                                            isAudit
+                                                ? "operations-audit-toolbar-clear-all"
+                                                : "operations-access-toolbar-clear-all"
+                                        }
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -172,6 +185,7 @@ function AccessListToolbar({
                                     aria-label="审计查询更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="operations-audit-toolbar-filter-result"
                                         label="结果"
                                         value={draft.result}
                                         onValueChange={(value) =>
@@ -185,6 +199,7 @@ function AccessListToolbar({
                                                 时间范围
                                             </span>
                                             <DateRangePicker
+                                                id="operations-audit-toolbar-date-range"
                                                 className="w-full"
                                                 value={{
                                                     from: draft.from,
@@ -208,6 +223,7 @@ function AccessListToolbar({
                                                 动作
                                             </span>
                                             <OptionCombobox
+                                                id="operations-audit-toolbar-action"
                                                 className="w-full"
                                                 value={
                                                     draft.action === "all"
@@ -230,6 +246,7 @@ function AccessListToolbar({
                                                 操作者
                                             </span>
                                             <Input
+                                                id="operations-audit-toolbar-actor"
                                                 className="w-full"
                                                 value={draft.actorId}
                                                 onChange={(event) =>
@@ -248,6 +265,7 @@ function AccessListToolbar({
                                                 请求追踪号
                                             </span>
                                             <Input
+                                                id="operations-audit-toolbar-trace"
                                                 className="w-full"
                                                 value={draft.traceId}
                                                 onChange={(event) =>
@@ -266,6 +284,7 @@ function AccessListToolbar({
                                                 对象编号
                                             </span>
                                             <Input
+                                                id="operations-audit-toolbar-object"
                                                 className="w-full"
                                                 value={draft.objectId}
                                                 onChange={(event) =>
@@ -295,13 +314,17 @@ function AccessListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="operations-audit-toolbar-reset-filters"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="operations-audit-toolbar-apply-filters"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

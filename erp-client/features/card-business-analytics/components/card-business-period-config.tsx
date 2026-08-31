@@ -44,23 +44,31 @@ export function CardBusinessPeriodConfig({
             <CardContent className="flex flex-col gap-4 pt-4">
                 <div className="grid gap-3 sm:grid-cols-3">
                     <div className="space-y-1.5">
-                        <Label htmlFor="w28-from">开始日期</Label>
+                        <Label htmlFor="card-contracts-analytics-period-config-from">
+                            开始日期
+                        </Label>
                         <DatePicker
+                            id="card-contracts-analytics-period-config-from"
                             value={explicitFrom || undefined}
                             onValueChange={(next) => onFromChange(next ?? "")}
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="w28-to">结束日期</Label>
+                        <Label htmlFor="card-contracts-analytics-period-config-to">
+                            结束日期
+                        </Label>
                         <DatePicker
+                            id="card-contracts-analytics-period-config-to"
                             value={explicitTo || undefined}
                             onValueChange={(next) => onToChange(next ?? "")}
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="w28-dateBasis">日期口径</Label>
+                        <Label htmlFor="card-contracts-analytics-period-config-date-basis">
+                            日期口径
+                        </Label>
                         <OptionCombobox
-                            id="w28-dateBasis"
+                            id="card-contracts-analytics-period-config-date-basis"
                             value={explicitDateBasis}
                             onValueChange={(v) =>
                                 onDateBasisChange(
@@ -78,6 +86,7 @@ export function CardBusinessPeriodConfig({
                 </div>
                 <div className="flex flex-col gap-2">
                     <Button
+                        id="card-contracts-analytics-period-config-apply"
                         type="button"
                         disabled={
                             !explicitFrom ||
@@ -90,9 +99,7 @@ export function CardBusinessPeriodConfig({
                     >
                         开始分析
                     </Button>
-                    {explicitFrom &&
-                    explicitTo &&
-                    explicitFrom > explicitTo ? (
+                    {explicitFrom && explicitTo && explicitFrom > explicitTo ? (
                         <p className="text-xs text-destructive">
                             开始日期不能晚于结束日期，请调整后提交。
                         </p>

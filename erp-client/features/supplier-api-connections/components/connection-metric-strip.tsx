@@ -17,6 +17,7 @@ export function ConnectionMetricStrip({
     return (
         <MetricStrip columns={5} aria-label="连接指标筛选">
             <MetricFilterItem
+                id="supplier-api-connections-metric-enabled"
                 label="已启用"
                 value={data?.metrics.enabled ?? 0}
                 active={urlState.status === "ENABLED"}
@@ -31,6 +32,7 @@ export function ConnectionMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="supplier-api-connections-metric-faulted"
                 label="故障"
                 value={data?.metrics.faulted ?? 0}
                 active={urlState.status === "FAULTED"}
@@ -45,6 +47,7 @@ export function ConnectionMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="supplier-api-connections-metric-pending"
                 label="待配置"
                 value={data?.metrics.pendingConfig ?? 0}
                 active={urlState.status === "PENDING_CONFIG"}
@@ -59,6 +62,7 @@ export function ConnectionMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="supplier-api-connections-metric-health"
                 label="健康异常"
                 value={data?.metrics.healthAbnormal ?? 0}
                 active={Boolean(urlState.health)}
@@ -72,6 +76,7 @@ export function ConnectionMetricStrip({
                 }
             />
             <MetricFilterItem
+                id="supplier-api-connections-metric-catalog"
                 label="目录陈旧"
                 value={data?.metrics.catalogStale ?? 0}
                 active={Boolean(urlState.catalogFreshness)}

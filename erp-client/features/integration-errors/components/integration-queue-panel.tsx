@@ -12,6 +12,7 @@ import {
 import { integrationStatusTone } from "../lib/presentation"
 import type { IntegrationResolutionItemView } from "../types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 type IntegrationQueuePanelProps = Readonly<{
@@ -42,6 +43,7 @@ export function IntegrationQueuePanel({
                     return (
                         <div
                             key={item.identity.id}
+                            id={`integration-queue-item-${toAutomationIdSegment(item.identity.id)}`}
                             role="button"
                             tabIndex={0}
                             className={cn(
@@ -95,6 +97,7 @@ export function IntegrationQueuePanel({
                                             {item.classification.severityLabel}
                                         </Badge>
                                         <Link
+                                            id={`integration-queue-item-${toAutomationIdSegment(item.identity.id)}-detail`}
                                             href={detailHref}
                                             className="text-xs text-primary underline-offset-2 hover:underline"
                                         >

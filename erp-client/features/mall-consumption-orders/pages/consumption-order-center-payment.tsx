@@ -196,11 +196,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
     )
 }
 
-export function PaymentSection({
-    view,
-}: {
-    view: MallConsumptionOrderView
-}) {
+export function PaymentSection({ view }: { view: MallConsumptionOrderView }) {
     return (
         <DocumentSection
             title="支付与分摊"
@@ -209,14 +205,10 @@ export function PaymentSection({
             <div className="mb-4 flex flex-wrap gap-2">
                 {view.paymentSources.map((s) => (
                     <Badge key={s.paymentSourceId} variant="secondary">
-                        {s.sourceType === "CARD"
-                            ? "卡券"
-                            : "微信"}{" "}
+                        {s.sourceType === "CARD" ? "卡券" : "微信"}{" "}
                         {s.sourceReference}
-                        {s.sourceType === "CARD"
-                            ? " · 非卡号"
-                            : ""}{" "}
-                        · ¥{s.amount}
+                        {s.sourceType === "CARD" ? " · 非卡号" : ""} · ¥
+                        {s.amount}
                     </Badge>
                 ))}
             </div>

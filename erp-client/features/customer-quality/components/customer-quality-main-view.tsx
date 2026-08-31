@@ -1,7 +1,11 @@
 "use client"
 
 import * as React from "react"
-import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
+import type {
+    ColumnDef,
+    PaginationState,
+    SortingState,
+} from "@tanstack/react-table"
 
 import {
     BusinessEmptyState,
@@ -238,7 +242,9 @@ export function CustomerQualityMainView({
                 </>
             )}
 
-            {exportJob ? <CustomerQualityExportProgress job={exportJob} /> : null}
+            {exportJob ? (
+                <CustomerQualityExportProgress job={exportJob} />
+            ) : null}
 
             <BusinessTagDialog
                 tag={tagDialog}

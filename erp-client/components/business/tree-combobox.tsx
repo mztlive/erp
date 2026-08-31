@@ -11,6 +11,7 @@ import {
     ComboboxItem,
     ComboboxList,
 } from "@/components/ui/combobox"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,9 @@ export type TreeComboboxProps = {
     loading?: boolean
     disabled?: boolean
     required?: boolean
+    id?: string
+    "aria-invalid"?: boolean
+    "aria-describedby"?: string
     className?: string
     /** 初始展开的节点 ID；缺省时全部展开。 */
     defaultExpandedIds?: readonly string[]
@@ -139,14 +143,18 @@ export function TreeCombobox({
     loading = false,
     disabled = false,
     required = false,
+    id,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedBy,
     className,
     defaultExpandedIds,
     onOpenChange,
 }: TreeComboboxProps) {
     const [query, setQuery] = React.useState("")
-    const [expandedIds, setExpandedIds] = React.useState<ReadonlySet<string> | null>(
-        () => (defaultExpandedIds ? new Set(defaultExpandedIds) : null),
-    )
+    const [expandedIds, setExpandedIds] =
+        React.useState<ReadonlySet<string> | null>(() =>
+            defaultExpandedIds ? new Set(defaultExpandedIds) : null,
+        )
 
     const parentIds = React.useMemo(() => collectParentIds(nodes), [nodes])
     const expanded = expandedIds ?? parentIds
@@ -235,7 +243,12 @@ export function TreeCombobox({
         >
             <div data-slot="tree-combobox" className={cn("min-w-0", className)}>
                 <ComboboxInput
+                    id={id}
+                    triggerId={id ? `${id}-trigger` : undefined}
+                    clearId={id ? `${id}-clear` : undefined}
                     aria-label={label}
+                    aria-invalid={ariaInvalid || undefined}
+                    aria-describedby={ariaDescribedBy}
                     aria-busy={loading}
                     placeholder={placeholder}
                     showClear
@@ -253,6 +266,11 @@ export function TreeCombobox({
                             return (
                                 <ComboboxItem
                                     key={node.id}
+                                    id={
+                                        id
+                                            ? `${id}-option-${toAutomationIdSegment(node.id)}`
+                                            : undefined
+                                    }
                                     value={node}
                                     style={{
                                         paddingLeft: `${0.5 + depth * 1.1}rem`,
@@ -279,6 +297,11 @@ export function TreeCombobox({
                                     <div className="flex min-w-0 flex-1 items-center gap-1.5">
                                         {hasChildren ? (
                                             <button
+                                                id={
+                                                    id
+                                                        ? `${id}-node-${toAutomationIdSegment(node.id)}-toggle`
+                                                        : undefined
+                                                }
                                                 type="button"
                                                 aria-label={
                                                     isOpen ? "收起" : "展开"

@@ -42,9 +42,7 @@ export function usePermissionPanel(selected: readonly string[]) {
     }, [visibleGroups, activeGroup])
 
     /** 分组进度按完整目录统计，不随搜索变化，避免「已选数」跟着筛选跳。 */
-    const progressByGroup = React.useMemo<
-        readonly PermissionGroupProgress[]
-    >(
+    const progressByGroup = React.useMemo<readonly PermissionGroupProgress[]>(
         () =>
             tabGroups.map((group) => ({
                 name: group.name,

@@ -62,6 +62,7 @@ export function CustomerCenterDirectoryTable({
                 action={
                     canCreate ? (
                         <Button
+                            id="customers-directory-empty-create"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -81,6 +82,7 @@ export function CustomerCenterDirectoryTable({
                 action={
                     hasActiveFilters ? (
                         <Button
+                            id="customers-directory-empty-clear-filters"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -94,6 +96,7 @@ export function CustomerCenterDirectoryTable({
         )
     ) : (
         <DataTable
+            id="customers-directory-table"
             data={[...items]}
             columns={columns}
             getRowId={(row) => row.id}

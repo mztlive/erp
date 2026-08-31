@@ -25,7 +25,14 @@ import { useSupplierSaveFlow } from "@/features/master-data/hooks/use-supplier-s
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { cn } from "@/lib/utils"
 
-export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
+export function SupplierEditorForm({
+    idPrefix,
+    editor,
+}: {
+    idPrefix?: string
+    editor: SupplierEditor
+}) {
+    const prefix = idPrefix ?? "master-data-supplier-detail-form"
     const {
         isCreate,
         router,
@@ -63,7 +70,7 @@ export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
     } = editor
     const canEdit = isCreate ? canCreate : canRevise
 
-    const formId = "supplier-detail-form"
+    const formId = `${prefix}-form`
 
     const {
         values,
@@ -87,6 +94,7 @@ export function SupplierEditorForm({ editor }: { editor: SupplierEditor }) {
                 variant="object-chrome"
                 actions={
                     <Button
+                        id={`${prefix}-back-list`}
                         type="button"
                         size="sm"
                         variant="outline"

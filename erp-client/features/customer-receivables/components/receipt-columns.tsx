@@ -4,6 +4,7 @@ import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ReceiptRow } from "@/features/customer-receivables/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { ColumnActions } from "./column-types"
 
 export function createReceiptColumns({
@@ -91,6 +92,7 @@ export function createReceiptColumns({
             cell: ({ row }) => (
                 <div className="flex flex-wrap justify-end gap-1">
                     <Button
+                        id={`customer-receivables-receipt-row-${toAutomationIdSegment(row.original.receiptId)}-preview`}
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -107,6 +109,7 @@ export function createReceiptColumns({
                         "CONTINUE_ALLOCATE",
                     ) ? (
                         <Button
+                            id={`customer-receivables-receipt-row-${toAutomationIdSegment(row.original.receiptId)}-continue-allocate`}
                             type="button"
                             size="sm"
                             variant="outline"

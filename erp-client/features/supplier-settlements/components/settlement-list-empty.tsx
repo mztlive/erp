@@ -24,6 +24,7 @@ export function SettlementListEmptyState({
                     description="没有记录符合当前筛选条件，可清除筛选后重试。"
                     action={
                         <Button
+                            id="supplier-settlements-list-empty-clear"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -41,7 +42,11 @@ export function SettlementListEmptyState({
                     description="可选择供应商与期间后重查，或新建结算草稿。"
                     action={
                         canCreate ? (
-                            <Button type="button" onClick={onCreateDraft}>
+                            <Button
+                                id="supplier-settlements-list-empty-create"
+                                type="button"
+                                onClick={onCreateDraft}
+                            >
                                 新建结算草稿
                             </Button>
                         ) : null

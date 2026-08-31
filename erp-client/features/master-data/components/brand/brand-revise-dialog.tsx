@@ -119,6 +119,7 @@ export function BrandReviseDialog({
 
     return (
         <BrandFormDialogFrame
+            idPrefix="master-data-brand-revise-dialog"
             open={open}
             onOpenChange={onOpenChange}
             title={masterDataCopy.reviseTitle}

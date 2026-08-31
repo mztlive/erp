@@ -5,16 +5,16 @@
 
 ## 模块与职责
 
-| 模块 | 当前职责 |
-| --- | --- |
+| 模块              | 当前职责                                                          |
+| ----------------- | ----------------------------------------------------------------- |
 | `account_core.rs` | `AccountCore`、后台 `AccountKind`/`AccountStatus`、账号资料规范化 |
-| `role.rs` | `Role` 展示信息、启停和系统角色删除规则 |
-| `rbac.rs` | `RoleId`、`RoleIdSet`、`Permission` 值对象 |
-| `auth/` | `LoginAccount`、`Secret`、`PasswordVerification` |
-| `audit_log.rs` | `AuditLog` 与创建数据 |
-| `field_update.rs` | `FieldUpdate<T>` 对“未提供、显式清空、设置值”三态更新建模 |
-| `validation.rs` | 被多个领域类型共享的字符串、邮箱和电话规范化 |
-| `errors.rs` | 领域校验与业务规则错误 |
+| `role.rs`         | `Role` 展示信息、启停和系统角色删除规则                           |
+| `rbac.rs`         | `RoleId`、`RoleIdSet`、`Permission` 值对象                        |
+| `auth/`           | `LoginAccount`、`Secret`、`PasswordVerification`                  |
+| `audit_log.rs`    | `AuditLog` 与创建数据                                             |
+| `field_update.rs` | `FieldUpdate<T>` 对“未提供、显式清空、设置值”三态更新建模         |
+| `validation.rs`   | 被多个领域类型共享的字符串、邮箱和电话规范化                      |
+| `errors.rs`       | 领域校验与业务规则错误                                            |
 
 ## 建模约定
 

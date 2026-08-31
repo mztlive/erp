@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     costBasisLabel,
     factSummaryLabel,
@@ -123,6 +124,7 @@ export function buildConsumptionOrderColumns(
                 if (row.original.supplierOrderSummary.total > 0) {
                     return (
                         <Link
+                            id={`mall-consumption-orders-list-row-${toAutomationIdSegment(row.original.mallOrderId)}-supplier-link`}
                             href={`/supplier-api/orders?q=${encodeURIComponent(row.original.externalOrderNo)}&view=all&from=W25&mallOrderId=${encodeURIComponent(row.original.mallOrderId)}&returnTo=${encodeURIComponent(listReturnHref)}`}
                             className="text-sm text-primary underline-offset-2 hover:underline"
                             aria-label={`查看供应商子订单 ${label}`}
@@ -189,11 +191,13 @@ export function buildConsumptionOrderColumns(
             cell: ({ row }) => (
                 <div className="flex justify-end gap-1">
                     <Button
+                        id={`mall-consumption-orders-list-row-${toAutomationIdSegment(row.original.mallOrderId)}-open`}
                         type="button"
                         variant="outline"
                         size="xs"
                         render={
                             <Link
+                                id={`mall-consumption-orders-list-row-${toAutomationIdSegment(row.original.mallOrderId)}-open-link`}
                                 href={`/commerce/consumption-orders/${row.original.mallOrderId}?section=overview&returnTo=${encodeURIComponent(listReturnHref)}`}
                             />
                         }
@@ -203,11 +207,13 @@ export function buildConsumptionOrderColumns(
                     {row.original.allowedActions.includes("OPEN_W29") &&
                     row.original.workItemId ? (
                         <Button
+                            id={`mall-consumption-orders-list-row-${toAutomationIdSegment(row.original.mallOrderId)}-exception`}
                             type="button"
                             variant="ghost"
                             size="xs"
                             render={
                                 <Link
+                                    id={`mall-consumption-orders-list-row-${toAutomationIdSegment(row.original.mallOrderId)}-exception-link`}
                                     href={`/governance/integration-errors?resolveWorkItemId=${row.original.workItemId}&queueContextId=queue:W29:mine:all`}
                                 />
                             }

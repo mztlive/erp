@@ -15,6 +15,7 @@ export function IntegrationDetailNav({
     return (
         <div className="flex flex-wrap gap-2">
             <Button
+                id="integration-detail-nav-back"
                 type="button"
                 size="sm"
                 variant="ghost"
@@ -27,6 +28,7 @@ export function IntegrationDetailNav({
                 返回队列
             </Button>
             <Button
+                id="integration-detail-nav-refresh"
                 type="button"
                 size="sm"
                 variant="ghost"

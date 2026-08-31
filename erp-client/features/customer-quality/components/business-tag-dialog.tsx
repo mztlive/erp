@@ -22,7 +22,7 @@ export function BusinessTagDialog({
 }) {
     return (
         <Dialog open={tag != null} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="customers-quality-tag-dialog-close">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <InfoIcon className="size-4" aria-hidden="true" />

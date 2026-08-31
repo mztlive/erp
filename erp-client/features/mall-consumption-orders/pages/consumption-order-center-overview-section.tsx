@@ -1,6 +1,10 @@
 "use client"
 
-import { DocumentSection, DocumentSummary, MoneyValue } from "@/components/business"
+import {
+    DocumentSection,
+    DocumentSummary,
+    MoneyValue,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { MallConsumptionOrderView } from "@/features/mall-consumption-orders/types"
 import { FULFILLMENT_CHAIN_LABEL } from "@/features/mall-consumption-orders/types"
@@ -75,9 +79,7 @@ export function OverviewSection({ view }: { view: MallConsumptionOrderView }) {
                         {
                             id: "f-82950",
                             label: "优惠",
-                            value: (
-                                <MoneyValue value={view.amounts.discount} />
-                            ),
+                            value: <MoneyValue value={view.amounts.discount} />,
                         },
                         {
                             id: "f-38831",

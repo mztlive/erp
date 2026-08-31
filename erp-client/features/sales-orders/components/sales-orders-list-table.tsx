@@ -71,6 +71,7 @@ export function SalesOrdersListTable(props: {
     if (isError) {
         return (
             <BusinessFailureState
+                id="sales-orders-list-retry"
                 title="销售单列表加载失败"
                 error={error}
                 onRetry={onRetry}
@@ -91,6 +92,7 @@ export function SalesOrdersListTable(props: {
                 action={
                     filtersActive ? (
                         <Button
+                            id="sales-orders-list-empty-clear"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -100,6 +102,7 @@ export function SalesOrdersListTable(props: {
                         </Button>
                     ) : (
                         <Button
+                            id="sales-orders-list-empty-create"
                             type="button"
                             size="sm"
                             render={<Link href="/sales/orders?mode=create" />}
@@ -118,6 +121,7 @@ export function SalesOrdersListTable(props: {
 
     return (
         <DataTable
+            id="sales-orders-list-table"
             data={items}
             columns={columns}
             getRowId={(row) => row.id}

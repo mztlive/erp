@@ -62,6 +62,7 @@ export function PurchaseOrderDetailDialogs({
     return (
         <>
             <PurchaseOrderSubmitConfirmDialog
+                idPrefix="procurement-orders-detail-submit-confirm"
                 open={submitConfirmOpen}
                 pending={submitPending || savePending}
                 approval={order.approval}
@@ -70,6 +71,7 @@ export function PurchaseOrderDetailDialogs({
             />
 
             <FormalActionConfirmDialog
+                idPrefix="procurement-orders-detail-void-confirm"
                 open={voidConfirmOpen}
                 onOpenChange={onVoidConfirmOpenChange}
                 title="作废采购草稿"
@@ -91,6 +93,7 @@ export function PurchaseOrderDetailDialogs({
             />
 
             <FormalActionConfirmDialog
+                idPrefix="procurement-orders-detail-change-confirm"
                 open={changeConfirmOpen}
                 onOpenChange={onChangeConfirmOpenChange}
                 title="发起采购变更"
@@ -114,7 +117,10 @@ export function PurchaseOrderDetailDialogs({
             />
 
             <Dialog open={leaveGuardOpen} onOpenChange={onLeaveGuardOpenChange}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent
+                    className="sm:max-w-md"
+                    closeButtonId="procurement-orders-detail-leave-guard-close"
+                >
                     <DialogHeader>
                         <DialogTitle>有未保存的修改</DialogTitle>
                         <DialogDescription>
@@ -123,11 +129,18 @@ export function PurchaseOrderDetailDialogs({
                     </DialogHeader>
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    id="procurement-orders-detail-leave-continue"
+                                    type="button"
+                                    variant="outline"
+                                />
+                            }
                         >
                             继续编辑
                         </DialogClose>
                         <Button
+                            id="procurement-orders-detail-leave-save"
                             type="button"
                             variant="outline"
                             disabled={savePending}
@@ -143,6 +156,7 @@ export function PurchaseOrderDetailDialogs({
                             {savePending ? "保存中…" : "保存并离开"}
                         </Button>
                         <Button
+                            id="procurement-orders-detail-leave-discard"
                             type="button"
                             variant="destructive"
                             disabled={savePending}

@@ -17,6 +17,7 @@ import type {
 } from "@/features/purchase-orders/hooks/use-purchase-orders-list-filters"
 import type { PurchaseOrderStatusFilter } from "@/features/purchase-orders/types"
 import { PO_STATUS_FILTER_LABEL } from "@/features/purchase-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /** 状态枚举 ≥5：面板内用 Combobox，禁止长 Toggle 横排。 */
 const PO_STATUS_FILTER_OPTIONS = (
@@ -62,7 +63,7 @@ export function PurchaseOrdersListToolbar({
     resetMoreFilters,
     clearAllFilters,
 }: PurchaseOrdersListToolbarProps) {
-    const panelId = React.useId()
+    const panelId = "procurement-orders-list-filters-panel"
     const hasChips = hasActiveFilters && appliedChips.length > 0
 
     return (
@@ -79,6 +80,7 @@ export function PurchaseOrdersListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="procurement-orders-list-search"
                             ref={searchInputRef}
                             data-slot="po-list-search"
                             value={searchDraft}
@@ -92,6 +94,7 @@ export function PurchaseOrdersListToolbar({
                 }
                 filters={
                     <Button
+                        id="procurement-orders-list-filters-trigger"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -128,6 +131,7 @@ export function PurchaseOrdersListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`procurement-orders-list-filter-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -136,6 +140,7 @@ export function PurchaseOrdersListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="procurement-orders-list-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -157,6 +162,7 @@ export function PurchaseOrdersListToolbar({
                                                 主状态
                                             </span>
                                             <OptionCombobox
+                                                id="procurement-orders-list-status-filter"
                                                 className="w-full"
                                                 value={
                                                     statusDraft === "all"
@@ -183,13 +189,17 @@ export function PurchaseOrdersListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="procurement-orders-list-reset-filters"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="procurement-orders-list-apply-filters"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

@@ -54,6 +54,7 @@ export function ResultSection({
                     retryAction={
                         batch.repairBatchId ? (
                             <Button
+                                id="operations-import-batch-detail-result-open-repair"
                                 type="button"
                                 size="sm"
                                 onClick={() =>

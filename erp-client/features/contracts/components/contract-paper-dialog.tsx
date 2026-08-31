@@ -59,6 +59,7 @@ export function ContractPaperDialog({
                     </p>
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="card-contracts-paper-dialog-close"
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
@@ -66,6 +67,7 @@ export function ContractPaperDialog({
                             关闭
                         </Button>
                         <Button
+                            id="card-contracts-paper-dialog-print"
                             type="button"
                             onClick={() => {
                                 window.print()

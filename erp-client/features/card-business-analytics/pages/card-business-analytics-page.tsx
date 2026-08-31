@@ -126,6 +126,7 @@ export function CardBusinessAnalyticsPage() {
                     title="日期口径配置加载失败"
                     action={
                         <Button
+                            id="card-contracts-analytics-basis-retry"
                             type="button"
                             onClick={() => void basisQuery.refetch()}
                         >
@@ -184,6 +185,7 @@ export function CardBusinessAnalyticsPage() {
                         actions={[
                             {
                                 actionKey: "basis",
+                                id: "card-contracts-analytics-header-basis",
                                 label: "口径说明",
                                 icon: InfoIcon,
                                 variant: "outline",
@@ -191,6 +193,7 @@ export function CardBusinessAnalyticsPage() {
                             },
                             {
                                 actionKey: "refresh",
+                                id: "card-contracts-analytics-header-refresh",
                                 label: refreshing ? "刷新中" : "刷新",
                                 icon: RefreshCwIcon,
                                 variant: "ghost",
@@ -203,6 +206,7 @@ export function CardBusinessAnalyticsPage() {
                             },
                             {
                                 actionKey: "export",
+                                id: "card-contracts-analytics-header-export",
                                 label: "导出",
                                 icon: DownloadIcon,
                                 disabled: !data?.fieldPermissions.canExport,
@@ -277,6 +281,7 @@ export function CardBusinessAnalyticsPage() {
                     title="卡券经营数据加载失败"
                     action={
                         <Button
+                            id="card-contracts-analytics-view-retry"
                             type="button"
                             onClick={() => void viewQuery.refetch()}
                         >

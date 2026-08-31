@@ -41,13 +41,15 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
 
 function BreadcrumbLink({
     className,
+    id,
     render,
     ...props
-}: useRender.ComponentProps<"a">) {
+}: useRender.ComponentProps<"a"> & { id?: string }) {
     return useRender({
         defaultTagName: "a",
         props: mergeProps<"a">(
             {
+                id,
                 className: cn(
                     "transition-colors hover:text-foreground",
                     className,

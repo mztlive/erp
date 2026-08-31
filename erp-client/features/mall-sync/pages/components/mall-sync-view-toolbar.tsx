@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -29,6 +25,7 @@ import type {
     MallSyncFilterKey,
     MallSyncMappingTypeDraft,
 } from "@/features/mall-sync/pages/hooks/use-mall-sync-url-state"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -99,7 +96,11 @@ export function MallSyncViewToolbar({
                     className="w-full justify-start overflow-x-auto"
                 >
                     {VIEWS.map((v) => (
-                        <TabsTrigger key={v} value={v}>
+                        <TabsTrigger
+                            key={v}
+                            id={`mall-sync-view-${toAutomationIdSegment(v)}`}
+                            value={v}
+                        >
                             {VIEW_LABEL[v]}
                         </TabsTrigger>
                     ))}
@@ -119,6 +120,7 @@ export function MallSyncViewToolbar({
                                 <SearchIcon aria-hidden="true" />
                             </InputGroupAddon>
                             <InputGroupInput
+                                id="mall-sync-toolbar-search"
                                 ref={searchInputRef}
                                 placeholder={
                                     view === "snapshots" || view === "mapping"
@@ -128,17 +130,15 @@ export function MallSyncViewToolbar({
                                           : "搜索仅对来源数据、同步任务与映射任务生效"
                                 }
                                 value={searchDraft}
-                                onChange={(e) =>
-                                    setSearchDraft(e.target.value)
-                                }
+                                onChange={(e) => setSearchDraft(e.target.value)}
                                 aria-label="搜索"
                             />
-                            
                         </InputGroup>
                     }
                     filters={
                         view === "mapping" ? (
                             <Button
+                                id="mall-sync-toolbar-more-toggle"
                                 type="button"
                                 variant="outline"
                                 aria-expanded={panelOpen}
@@ -176,6 +176,7 @@ export function MallSyncViewToolbar({
                                         {appliedChips.map((chip) => (
                                             <FilterChip
                                                 key={chip.key}
+                                                id={`mall-sync-toolbar-chip-${toAutomationIdSegment(chip.key)}`}
                                                 label={chip.label}
                                                 clearLabel={`移除${chip.label}`}
                                                 onClear={() =>
@@ -184,6 +185,7 @@ export function MallSyncViewToolbar({
                                             />
                                         ))}
                                         <Button
+                                            id="mall-sync-toolbar-clear-all"
                                             type="button"
                                             variant="ghost"
                                             size="xs"
@@ -206,6 +208,7 @@ export function MallSyncViewToolbar({
                                                         映射类型
                                                     </span>
                                                     <OptionCombobox
+                                                        id="mall-sync-toolbar-mapping-type"
                                                         className="w-full"
                                                         value={mappingTypeDraft}
                                                         onValueChange={(
@@ -232,13 +235,17 @@ export function MallSyncViewToolbar({
                                             </p>
                                             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                                 <Button
+                                                    id="mall-sync-toolbar-reset-more"
                                                     type="button"
                                                     variant="ghost"
                                                     onClick={resetMoreFilters}
                                                 >
                                                     重置更多条件
                                                 </Button>
-                                                <Button type="submit">
+                                                <Button
+                                                    id="mall-sync-toolbar-apply"
+                                                    type="submit"
+                                                >
                                                     <SearchIcon
                                                         data-icon="inline-start"
                                                         aria-hidden="true"

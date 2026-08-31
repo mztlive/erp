@@ -9,6 +9,7 @@ import {
     COVERAGE_STATE_UI,
     type ProfitLossRow,
 } from "@/features/actual-profit-loss/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
  * 盈亏明细列定义。openCostDetail / rowFocusRef 由页面持有（下钻与焦点恢复状态），
@@ -34,6 +35,7 @@ export function buildProfitLossColumns(options: {
                     <div className="flex flex-col gap-0.5">
                         {href ? (
                             <Link
+                                id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-sales-order`}
                                 href={href}
                                 className="font-medium text-primary underline-offset-2 hover:underline"
                                 ref={(el) => {
@@ -116,6 +118,7 @@ export function buildProfitLossColumns(options: {
                 }
                 return (
                     <MoneyCell
+                        id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-procurement-cost`}
                         value={r.actualProcurementCostNet}
                         negativeAsText={false}
                         onClick={
@@ -155,6 +158,7 @@ export function buildProfitLossColumns(options: {
                 }
                 return (
                     <MoneyCell
+                        id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-fulfillment-cost`}
                         value={r.actualFulfillmentCostNet}
                         negativeAsText={false}
                         onClick={
@@ -214,7 +218,13 @@ export function buildProfitLossColumns(options: {
                 const href = r.objectId
                     ? `/sales/orders/${encodeURIComponent(r.objectId)}`
                     : undefined
-                return <MoneyCell value={r.actualProfitLossNet} href={href} />
+                return (
+                    <MoneyCell
+                        id={`actual-profit-loss-row-${toAutomationIdSegment(r.rowId)}-profit-loss`}
+                        value={r.actualProfitLossNet}
+                        href={href}
+                    />
+                )
             },
         },
         {

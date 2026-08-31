@@ -95,8 +95,7 @@ export function WorkTaskItem({
     ...props
 }: WorkTaskItemProps) {
     const compact = density === "compact"
-    const dueText =
-        typeof dueAt === "string" ? dueAt.trim() : dueAt
+    const dueText = typeof dueAt === "string" ? dueAt.trim() : dueAt
     const hasDue =
         Boolean(dueDateTime) ||
         (typeof dueText === "string"
@@ -131,7 +130,9 @@ export function WorkTaskItem({
                     {counterparty ? <span>{counterparty}</span> : null}
                 </ItemDescription>
                 {contentSummary ? (
-                    <p className="text-xs text-muted-foreground">{contentSummary}</p>
+                    <p className="text-xs text-muted-foreground">
+                        {contentSummary}
+                    </p>
                 ) : null}
 
                 {compact ? (

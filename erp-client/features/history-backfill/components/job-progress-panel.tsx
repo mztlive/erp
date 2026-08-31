@@ -63,10 +63,10 @@ export function JobProgressPanel({ job }: { job: HistoryBackfillJobCore }) {
                 description={
                     <>
                         后台执行，不伪装同步完成。已处理{" "}
-                        {job.progress.processedCount.toLocaleString("zh-CN")}{" "}
-                        · 新增{" "}
-                        {job.progress.insertedCount.toLocaleString("zh-CN")}{" "}
-                        · 去重{" "}
+                        {job.progress.processedCount.toLocaleString("zh-CN")} ·
+                        新增{" "}
+                        {job.progress.insertedCount.toLocaleString("zh-CN")} ·
+                        去重{" "}
                         {job.progress.deduplicatedCount.toLocaleString("zh-CN")}{" "}
                         · 待归集{" "}
                         {job.progress.unattributedCount.toLocaleString("zh-CN")}{" "}

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/card"
 import { MappingCandidateList } from "@/features/mall-sync/components/mapping-candidate-list"
 import type { MappingTaskView } from "@/features/mall-sync/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 type MappingTaskPanelProps = {
@@ -60,7 +61,7 @@ export function MappingTaskPanel({
     showBack = true,
 }: MappingTaskPanelProps) {
     return (
-        <div className="space-y-3">
+        <div className={showBack ? "space-y-3" : undefined}>
             <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader className="space-y-2 border-b border-grid">
                     <div className="flex flex-wrap items-center gap-2">
@@ -252,6 +253,7 @@ export function MappingTaskPanel({
                                 <p className="text-sm">
                                     已形成{" "}
                                     <Link
+                                        id={`mall-sync-mapping-${toAutomationIdSegment(mappingTask.mappingTaskId)}-sales-order-link`}
                                         className="text-primary hover:underline"
                                         href={`/sales/orders/${mappingTask.reapplyOperation.salesOrderId}`}
                                     >
@@ -268,6 +270,7 @@ export function MappingTaskPanel({
                             ) : (
                                 <div className="flex flex-wrap gap-2">
                                     <Button
+                                        id={`mall-sync-mapping-${toAutomationIdSegment(mappingTask.mappingTaskId)}-reapply`}
                                         type="button"
                                         size="sm"
                                         disabled={reapplyPending}
@@ -287,6 +290,7 @@ export function MappingTaskPanel({
                                     {mappingTask.reapplyOperation?.status ===
                                     "UNKNOWN" ? (
                                         <Button
+                                            id={`mall-sync-mapping-${toAutomationIdSegment(mappingTask.mappingTaskId)}-resolve-unknown`}
                                             type="button"
                                             size="sm"
                                             variant="secondary"

@@ -13,7 +13,11 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { money, statusVariant } from "@/features/supplier-offerings/lib/presentation"
+import {
+    money,
+    statusVariant,
+} from "@/features/supplier-offerings/lib/presentation"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 import {
     AVAILABILITY_STATUS_LABELS,
@@ -76,6 +80,7 @@ export function SupplierOfferingsTable({
                 action={
                     hasFilters ? (
                         <Button
+                            id="supplier-offerings-table-clear-filters"
                             type="button"
                             variant="secondary"
                             size="sm"
@@ -86,6 +91,7 @@ export function SupplierOfferingsTable({
                         </Button>
                     ) : !taskMode ? (
                         <Button
+                            id="supplier-offerings-table-create"
                             type="button"
                             size="sm"
                             onClick={onCreateOffering}
@@ -117,8 +123,7 @@ export function SupplierOfferingsTable({
                     <TableRow
                         key={item.id}
                         className={
-                            taskMode &&
-                            item.id === taskBusinessObjectId
+                            taskMode && item.id === taskBusinessObjectId
                                 ? "bg-destructive/5"
                                 : undefined
                         }
@@ -152,17 +157,14 @@ export function SupplierOfferingsTable({
                         </TableCell>
                         <TableCell>
                             <div>
-                                代发{" "}
-                                {money(item.dropship_supply_price_gross)}
+                                代发 {money(item.dropship_supply_price_gross)}
                             </div>
                             <div className="mt-1 text-xs text-muted-foreground">
                                 集采 {money(item.bulk_supply_price_gross)}
                             </div>
                         </TableCell>
                         <TableCell>
-                            <div>
-                                {item.bulk_minimum_order_quantity ?? "—"}
-                            </div>
+                            <div>{item.bulk_minimum_order_quantity ?? "—"}</div>
                             <div className="mt-1 max-w-48 truncate text-xs text-muted-foreground">
                                 {item.supply_region.join("、") || "—"}
                             </div>
@@ -207,6 +209,7 @@ export function SupplierOfferingsTable({
                             ) : (
                                 <div className="flex gap-1">
                                     <Button
+                                        id={`supplier-offerings-table-row-${toAutomationIdSegment(item.id)}-update-availability`}
                                         type="button"
                                         size="sm"
                                         variant="ghost"
@@ -221,6 +224,7 @@ export function SupplierOfferingsTable({
                                         更新可供
                                     </Button>
                                     <Button
+                                        id={`supplier-offerings-table-row-${toAutomationIdSegment(item.id)}-revise`}
                                         type="button"
                                         size="sm"
                                         variant="ghost"

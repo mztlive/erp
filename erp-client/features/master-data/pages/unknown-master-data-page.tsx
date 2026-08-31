@@ -11,7 +11,7 @@ export function UnknownMasterDataPage() {
                 title={masterDataCopy.unknownResourceTitle}
                 description={masterDataCopy.unknownResourceDesc()}
             />
-            <ResourceNav resource="" />
+            <ResourceNav resource="" idPrefix="master-data-unknown-nav" />
         </PageScaffold>
     )
 }

@@ -10,6 +10,7 @@ import {
     MetricFilterItem,
     MetricStrip,
     PageScaffold,
+    workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -32,6 +33,7 @@ import {
 } from "@/features/mall-sync/pages/components/mall-sync-sync-dialogs"
 import { MallSyncSourceFixDialog } from "@/features/mall-sync/pages/components/mall-sync-mapping-dialogs"
 import { MallSyncConfirmMappingForm } from "@/features/mall-sync/pages/components/mall-sync-confirm-mapping-form"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { MAPPING_TYPE_LABEL } from "@/features/mall-sync/types"
 
 export function MallSyncPage({
@@ -148,7 +150,9 @@ export function MallSyncPage({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0" : undefined}
+            className={
+                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+            }
         >
             {!embedded ? (
                 <MallSyncPageHeader
@@ -208,6 +212,7 @@ export function MallSyncPage({
                         {(context?.metrics ?? []).map((m) => (
                             <MetricFilterItem
                                 key={m.key}
+                                id={`mall-sync-metric-${toAutomationIdSegment(m.key)}`}
                                 label={m.label}
                                 value={
                                     m.count != null ? m.count : (m.value ?? "—")
@@ -282,6 +287,7 @@ export function MallSyncPage({
                                 page.mappingTask?.reapplyOperation?.status ===
                                     "UNKNOWN" ? (
                                     <Button
+                                        id="mall-sync-result-resolve-unknown"
                                         type="button"
                                         size="sm"
                                         onClick={() =>

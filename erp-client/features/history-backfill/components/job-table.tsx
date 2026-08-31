@@ -2,11 +2,7 @@
 
 import * as React from "react"
 import type { UseQueryResult } from "@tanstack/react-query"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -29,6 +25,7 @@ import { useJobListFilters } from "@/features/history-backfill/hooks/use-job-lis
 import { useTablePagination } from "@/features/history-backfill/hooks/use-table-pagination"
 import type { HistoryBackfillUrlState } from "@/features/history-backfill/lib/url-state"
 import type { HistoryBackfillListView } from "@/features/history-backfill/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function JobTable({
     listQuery,
@@ -86,6 +83,7 @@ export function JobTable({
                                     <SearchIcon aria-hidden="true" />
                                 </InputGroupAddon>
                                 <InputGroupInput
+                                    id="operations-history-backfill-list-toolbar-search"
                                     ref={filters.searchInputRef}
                                     value={filters.searchDraft}
                                     onChange={(event) =>
@@ -96,11 +94,11 @@ export function JobTable({
                                     placeholder="任务号 / 商城 / 报告号"
                                     aria-label="搜索回填任务"
                                 />
-                                
                             </InputGroup>
                         }
                         filters={
                             <Button
+                                id="operations-history-backfill-list-toolbar-filter-trigger"
                                 type="button"
                                 variant="outline"
                                 aria-expanded={filters.panelOpen}
@@ -136,19 +134,23 @@ export function JobTable({
                                             <span className="text-xs text-muted-foreground">
                                                 已筛选
                                             </span>
-                                            {filters.appliedChips.map((chip) => (
-                                                <FilterChip
-                                                    key={chip.key}
-                                                    label={chip.label}
-                                                    clearLabel={`移除${chip.label}`}
-                                                    onClear={() =>
-                                                        filters.removeFilter(
-                                                            chip.key,
-                                                        )
-                                                    }
-                                                />
-                                            ))}
+                                            {filters.appliedChips.map(
+                                                (chip) => (
+                                                    <FilterChip
+                                                        key={chip.key}
+                                                        id={`operations-history-backfill-list-toolbar-filter-chip-${toAutomationIdSegment(chip.key)}`}
+                                                        label={chip.label}
+                                                        clearLabel={`移除${chip.label}`}
+                                                        onClear={() =>
+                                                            filters.removeFilter(
+                                                                chip.key,
+                                                            )
+                                                        }
+                                                    />
+                                                ),
+                                            )}
                                             <Button
+                                                id="operations-history-backfill-list-toolbar-clear-all"
                                                 type="button"
                                                 variant="ghost"
                                                 size="xs"
@@ -187,8 +189,7 @@ export function JobTable({
                                                 filters.reportReviewStatusDraft
                                             }
                                             setReportReviewStatusDraft={
-                                                filters
-                                                    .setReportReviewStatusDraft
+                                                filters.setReportReviewStatusDraft
                                             }
                                             resetMoreFilters={
                                                 filters.resetMoreFilters
@@ -203,6 +204,7 @@ export function JobTable({
             }
             table={
                 <DataTable
+                    id="operations-history-backfill-list-table"
                     data={[...(data?.rows ?? [])]}
                     columns={columns}
                     getRowId={(row) => row.id}
@@ -218,7 +220,17 @@ export function JobTable({
                         listLoadFailed ? (
                             <BusinessFailureState
                                 error={listQuery.error}
-                                onRetry={() => void listQuery.refetch()}
+                                action={
+                                    <Button
+                                        id="operations-history-backfill-list-retry"
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void listQuery.refetch()}
+                                    >
+                                        重试
+                                    </Button>
+                                }
                             />
                         ) : undefined
                     }
@@ -244,13 +256,12 @@ export function JobTable({
                                 action={
                                     filters.hasActiveFilters ? (
                                         <Button
+                                            id="operations-history-backfill-list-table-clear-filters"
                                             type="button"
                                             variant="secondary"
                                             size="sm"
                                             className="rounded-lg shadow-none"
-                                            onClick={
-                                                filters.clearAllFilters
-                                            }
+                                            onClick={filters.clearAllFilters}
                                         >
                                             清除筛选
                                         </Button>

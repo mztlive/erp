@@ -15,6 +15,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { revealCustomerSensitiveField } from "@/features/customers/hooks/queries"
 import type { CustomerCenterView } from "@/features/customers/types"
@@ -39,6 +40,7 @@ export function CustomerDetailContactSections({
                         description="联系分区失败；主体身份仍保留。"
                         action={
                             <Button
+                                id="customers-detail-contacts-retry"
                                 type="button"
                                 size="sm"
                                 onClick={() => void refetch()}
@@ -93,9 +95,10 @@ export function CustomerDetailContactSections({
                                             <div className="mt-2 space-y-1 text-muted-foreground">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span>手机</span>
-                                                    {c.fieldVisibility
-                                                        .phone === "masked" ? (
+                                                    {c.fieldVisibility.phone ===
+                                                    "masked" ? (
                                                         <SensitiveValue
+                                                            id={`customers-detail-contact-${toAutomationIdSegment(c.id)}-phone`}
                                                             label={`${c.name}手机`}
                                                             maskedValue={
                                                                 c.phoneMasked
@@ -136,9 +139,7 @@ export function CustomerDetailContactSections({
                             className="shadow-none ring-1 ring-foreground/[0.04]"
                         >
                             <CardHeader className="border-b border-grid">
-                                <CardTitle className="text-sm">
-                                    地址
-                                </CardTitle>
+                                <CardTitle className="text-sm">地址</CardTitle>
                                 <CardDescription>
                                     履约地址按权限打码
                                 </CardDescription>
@@ -171,6 +172,7 @@ export function CustomerDetailContactSections({
                                                 {a.fieldVisibility.address ===
                                                 "masked" ? (
                                                     <SensitiveValue
+                                                        id={`customers-detail-address-${toAutomationIdSegment(a.id)}-address`}
                                                         label={a.addressType}
                                                         maskedValue={
                                                             a.addressMasked
@@ -220,14 +222,13 @@ export function CustomerDetailContactSections({
                                 >
                                     <span>{b.accountName}</span>
                                     {b.isDefault ? (
-                                        <Badge variant="secondary">
-                                            默认
-                                        </Badge>
+                                        <Badge variant="secondary">默认</Badge>
                                     ) : null}
                                     <span className="text-muted-foreground">
                                         {b.bankName}
                                     </span>
                                     <SensitiveValue
+                                        id={`customers-detail-bank-${toAutomationIdSegment(b.id)}-account`}
                                         label="银行账号"
                                         maskedValue={b.accountMasked}
                                         onReveal={

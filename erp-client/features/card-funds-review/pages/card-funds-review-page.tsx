@@ -7,6 +7,7 @@ import {
     BusinessFailureState,
     PageHeader,
     PageScaffold,
+    workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -197,10 +198,13 @@ export function CardFundsReviewPage({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <PageHeader title="卡券票款复核" />
                 <BusinessFailureState
+                    id="card-contracts-funds-review-queue"
                     error={queueQuery.error}
                     onRetry={() => void queueQuery.refetch()}
                 />
@@ -211,7 +215,9 @@ export function CardFundsReviewPage({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0" : undefined}
+            className={
+                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+            }
         >
             {!embedded ? <ReviewPageHeader context={context} /> : null}
 
@@ -263,6 +269,7 @@ export function CardFundsReviewPage({
                 <>
                     {!embedded ? (
                         <QueueNavBar
+                            idPrefix="card-contracts-funds-review-queue-nav"
                             current={context?.position ?? currentIndex + 1}
                             total={context?.total ?? tasks.length}
                             responsibilityStatus={responsibilityStatus}
@@ -296,8 +303,18 @@ export function CardFundsReviewPage({
                         <TaskActionUnavailableAlert task={task} />
                     ) : null}
 
-                    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,64fr)_minmax(17rem,36fr)]">
-                        <div className="min-w-0 space-y-4">
+                    <div
+                        className={
+                            embedded
+                                ? "grid min-w-0 gap-0"
+                                : "grid min-w-0 gap-4 xl:grid-cols-[minmax(0,64fr)_minmax(17rem,36fr)]"
+                        }
+                    >
+                        <div
+                            className={
+                                embedded ? "min-w-0" : "min-w-0 space-y-4"
+                            }
+                        >
                             <TaskDetailCard
                                 task={task}
                                 headingRef={headingRef}
@@ -360,7 +377,13 @@ export function CardFundsReviewPage({
                             />
                         </div>
 
-                        <aside className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start">
+                        <aside
+                            className={
+                                embedded
+                                    ? "min-w-0"
+                                    : "min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start"
+                            }
+                        >
                             <ReviewChainPanel task={task} />
 
                             <EvidenceNavPanel

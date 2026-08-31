@@ -139,6 +139,7 @@ export function ExecutionHistory({
     loadingMore = false,
     onLoadMore,
     compact = false,
+    id = "governance-approval-execution-history",
 }: {
     items: readonly ApprovalHistoryItem[]
     hasMore?: boolean
@@ -146,6 +147,7 @@ export function ExecutionHistory({
     onLoadMore?: () => void
     /** 对象中心 tab 内使用：标题与概览 text-sm 对齐。 */
     compact?: boolean
+    id?: string
 }) {
     const rounds = groupByRound(items)
 
@@ -181,6 +183,7 @@ export function ExecutionHistory({
                 )}
                 {hasMore && onLoadMore ? (
                     <Button
+                        id={`${id}-load-more`}
                         type="button"
                         variant="outline"
                         size="sm"

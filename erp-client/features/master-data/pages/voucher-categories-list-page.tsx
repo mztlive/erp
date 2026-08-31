@@ -42,6 +42,7 @@ export function VoucherCategoriesListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-voucher-categories-list-export",
                     actionKey: "export",
                     label: masterDataCopy.actionExport,
                     icon: DownloadIcon,
@@ -51,6 +52,7 @@ export function VoucherCategoriesListPage() {
                     onClick: state.onExport,
                 },
                 {
+                    id: "master-data-voucher-categories-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     mobileVisibility: "hide",
@@ -82,6 +84,7 @@ export function VoucherCategoriesListPage() {
                 description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
+                        idPrefix="master-data-voucher-categories-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -110,6 +113,7 @@ export function VoucherCategoriesListPage() {
                 }
                 table={
                     <DictionaryListTable
+                        id="master-data-voucher-categories-list-table"
                         rows={state.rows}
                         pageRows={state.pageRows}
                         columns={columns}
@@ -126,6 +130,7 @@ export function VoucherCategoriesListPage() {
                         emptyAction={
                             state.canCreate ? (
                                 <Button
+                                    id="master-data-voucher-categories-list-empty-create"
                                     type="button"
                                     variant="secondary"
                                     size="sm"
@@ -148,10 +153,12 @@ export function VoucherCategoriesListPage() {
                 }
             />
             <VoucherCategoryFormDialog
+                idPrefix="master-data-voucher-categories-list-create-dialog"
                 open={state.createOpen}
                 onOpenChange={state.setCreateOpen}
             />
             <VoucherCategoryFormDialog
+                idPrefix="master-data-voucher-categories-list-revise-dialog"
                 open={state.reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setReviseTarget(null)

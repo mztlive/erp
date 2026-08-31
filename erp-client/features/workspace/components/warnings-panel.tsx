@@ -16,6 +16,7 @@ import {
 import { buildWarningHref } from "@/features/workspace/lib/destination"
 import type { TodayWorkspaceView } from "@/features/workspace/types"
 import { goToWorkspaceLabel } from "@/lib/ui-text"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function WarningsPanel({
     warnings,
@@ -54,11 +55,13 @@ export function WarningsPanel({
                             <AlertDescription className="flex flex-col gap-2">
                                 <span>{warning.description}</span>
                                 <Button
+                                    id={`workspace-warning-${toAutomationIdSegment(warning.warningId)}-open`}
                                     size="xs"
                                     variant="outline"
                                     className="w-fit"
                                     render={
                                         <Link
+                                            id={`workspace-warning-${toAutomationIdSegment(warning.warningId)}-open`}
                                             href={buildWarningHref(warning)}
                                         />
                                     }

@@ -3,7 +3,10 @@
  * receipt-columns / invoice-columns）。本文件仅做公共出口，保持既有导入路径不变。
  */
 
-export type { ColumnActions, CustomerAccountPreviewTarget } from "./column-types"
+export type {
+    ColumnActions,
+    CustomerAccountPreviewTarget,
+} from "./column-types"
 export { createReceivableColumns } from "./receivable-columns"
 export { createReceiptColumns } from "./receipt-columns"
 export { createInvoiceColumns } from "./invoice-columns"

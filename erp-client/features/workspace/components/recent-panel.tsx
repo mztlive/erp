@@ -13,6 +13,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import type { TodayWorkspaceView } from "@/features/workspace/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function RecentPanel({
     recent,
@@ -35,9 +36,15 @@ export function RecentPanel({
                         {recent.map((item) => (
                             <Button
                                 key={item.id}
+                                id={`workspace-recent-${toAutomationIdSegment(item.id)}`}
                                 variant="ghost"
                                 className="w-full justify-between"
-                                render={<Link href={item.href} />}
+                                render={
+                                    <Link
+                                        id={`workspace-recent-${toAutomationIdSegment(item.id)}`}
+                                        href={item.href}
+                                    />
+                                }
                             >
                                 <span className="truncate">{item.label}</span>
                                 <ArrowRightIcon aria-hidden="true" />

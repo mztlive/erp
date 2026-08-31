@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -23,6 +19,7 @@ import {
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     SupplierOrdersAppliedChip,
     SupplierOrdersFilterKey,
@@ -133,7 +130,11 @@ export function SupplierOrdersListToolbar({
                         aria-label="列表视图"
                     >
                         {(Object.keys(VIEW_LABEL) as ListView[]).map((v) => (
-                            <ToggleGroupItem key={v} value={v}>
+                            <ToggleGroupItem
+                                key={v}
+                                value={v}
+                                id={`supplier-orders-list-view-${toAutomationIdSegment(v)}`}
+                            >
                                 {VIEW_LABEL[v]}
                             </ToggleGroupItem>
                         ))}
@@ -145,6 +146,7 @@ export function SupplierOrdersListToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="supplier-orders-list-search-input"
                             ref={searchInputRef}
                             data-slot="sfo-list-search"
                             value={searchDraft}
@@ -154,11 +156,11 @@ export function SupplierOrdersListToolbar({
                             placeholder="供应商订单号、商城订单、外部单号"
                             aria-label="搜索供应商订单"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="supplier-orders-list-filter-toggle"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -195,6 +197,7 @@ export function SupplierOrdersListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`supplier-orders-list-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -203,6 +206,7 @@ export function SupplierOrdersListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="supplier-orders-list-filter-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -224,13 +228,16 @@ export function SupplierOrdersListToolbar({
                                                 供应商
                                             </span>
                                             <SupplierSearchCombobox
+                                                id="supplier-orders-list-filter-supplier"
                                                 className="w-full"
                                                 purpose="filter"
                                                 value={
                                                     supplierIdDraft ?? undefined
                                                 }
                                                 onValueChange={(id) =>
-                                                    setSupplierIdDraft(id ?? null)
+                                                    setSupplierIdDraft(
+                                                        id ?? null,
+                                                    )
                                                 }
                                                 placeholder="全部供应商"
                                             />
@@ -240,6 +247,7 @@ export function SupplierOrdersListToolbar({
                                                 履约状态
                                             </span>
                                             <MultiOptionCombobox
+                                                id="supplier-orders-list-filter-fulfillment"
                                                 className="w-full"
                                                 value={fulfillmentStatusesDraft}
                                                 onValueChange={(values) =>
@@ -250,7 +258,9 @@ export function SupplierOrdersListToolbar({
                                                 options={FULFILLMENT_STATUSES.map(
                                                     (s) => ({
                                                         value: s,
-                                                        label: FULFILLMENT_STATUS_LABEL[s],
+                                                        label: FULFILLMENT_STATUS_LABEL[
+                                                            s
+                                                        ],
                                                     }),
                                                 )}
                                                 aria-label="履约状态"
@@ -262,6 +272,7 @@ export function SupplierOrdersListToolbar({
                                                 取消状态
                                             </span>
                                             <OptionCombobox
+                                                id="supplier-orders-list-filter-cancel"
                                                 className="w-full"
                                                 value={
                                                     cancelStatusesDraft[0] ?? ""
@@ -278,7 +289,9 @@ export function SupplierOrdersListToolbar({
                                                 options={CANCEL_STATUSES.map(
                                                     (s) => ({
                                                         value: s,
-                                                        label: CANCEL_STATUS_LABEL[s],
+                                                        label: CANCEL_STATUS_LABEL[
+                                                            s
+                                                        ],
                                                     }),
                                                 )}
                                                 aria-label="取消状态"
@@ -290,6 +303,7 @@ export function SupplierOrdersListToolbar({
                                                 退款状态
                                             </span>
                                             <OptionCombobox
+                                                id="supplier-orders-list-filter-refund"
                                                 className="w-full"
                                                 value={
                                                     refundStatusesDraft[0] ?? ""
@@ -306,7 +320,9 @@ export function SupplierOrdersListToolbar({
                                                 options={REFUND_STATUSES.map(
                                                     (s) => ({
                                                         value: s,
-                                                        label: REFUND_STATUS_LABEL[s],
+                                                        label: REFUND_STATUS_LABEL[
+                                                            s
+                                                        ],
                                                     }),
                                                 )}
                                                 aria-label="退款状态"
@@ -319,6 +335,7 @@ export function SupplierOrdersListToolbar({
                                             </span>
                                             <div className="flex items-center gap-1.5">
                                                 <DatePicker
+                                                    id="supplier-orders-list-filter-paid-from"
                                                     className="w-0 min-w-0 flex-1"
                                                     value={
                                                         paidFromDraft ||
@@ -344,6 +361,7 @@ export function SupplierOrdersListToolbar({
                                                     至
                                                 </span>
                                                 <DatePicker
+                                                    id="supplier-orders-list-filter-paid-to"
                                                     className="w-0 min-w-0 flex-1"
                                                     value={
                                                         paidToDraft || undefined
@@ -382,13 +400,17 @@ export function SupplierOrdersListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="supplier-orders-list-filter-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={onResetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="supplier-orders-list-filter-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

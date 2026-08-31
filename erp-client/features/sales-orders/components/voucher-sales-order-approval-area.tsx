@@ -68,6 +68,7 @@ export function VoucherSalesOrderApprovalArea({
                 />
                 {documentId ? (
                     <ApprovalActionBar
+                        id="sales-orders-voucher-approval-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={VOUCHER_SALES_ORDER_DOCUMENT_TYPE}
@@ -100,6 +101,7 @@ export function VoucherSalesOrderApprovalArea({
                 compact
             />
             <ApprovalActionBar
+                id="sales-orders-voucher-approval-bar"
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

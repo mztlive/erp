@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { CollaborationConsumptionPanel } from "@/features/execution-projections/components/collaboration-consumption-panel"
 import { CollaborationProjectionPanel } from "@/features/execution-projections/components/collaboration-projection-panel"
 import { useSalesOrderCollaborationQuery } from "@/features/execution-projections/hooks/queries"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -67,11 +68,13 @@ export function SalesOrderCollaborationCard({
                 </Alert>
                 <div className="mt-3">
                     <Button
+                        id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-query-by-no`}
                         type="button"
                         size="sm"
                         variant="outline"
                         render={
                             <Link
+                                id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-query-by-no`}
                                 href={`/commerce/execution-projections?q=${encodeURIComponent(salesOrderNo)}`}
                             />
                         }
@@ -91,10 +94,16 @@ export function SalesOrderCollaborationCard({
                 <div className="flex flex-wrap gap-2">
                     {data.historyHref ? (
                         <Button
+                            id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-history`}
                             type="button"
                             size="sm"
                             variant="outline"
-                            render={<Link href={data.historyHref} />}
+                            render={
+                                <Link
+                                    id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-history`}
+                                    href={data.historyHref}
+                                />
+                            }
                         >
                             <HistoryIcon
                                 data-icon="inline-start"
@@ -105,10 +114,16 @@ export function SalesOrderCollaborationCard({
                     ) : null}
                     {data.w23Href ? (
                         <Button
+                            id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-w23`}
                             type="button"
                             size="sm"
                             variant="outline"
-                            render={<Link href={data.w23Href} />}
+                            render={
+                                <Link
+                                    id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-w23`}
+                                    href={data.w23Href}
+                                />
+                            }
                         >
                             <ExternalLinkIcon
                                 data-icon="inline-start"

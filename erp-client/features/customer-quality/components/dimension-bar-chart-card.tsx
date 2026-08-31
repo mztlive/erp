@@ -19,6 +19,7 @@ import {
     ChartTooltipContent,
     type ChartConfig,
 } from "@/components/ui/chart"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CustomerQualityView } from "../types"
 
 const chartConfig = {
@@ -121,6 +122,7 @@ export function DimensionBarChartCard({
                                 <Bar dataKey="value" radius={4}>
                                     {items.map((item) => (
                                         <Cell
+                                            id={`customers-quality-chart-${toAutomationIdSegment(dimensionKey)}-${toAutomationIdSegment(item.code)}-bar`}
                                             key={item.code}
                                             cursor="pointer"
                                             fill={
@@ -175,6 +177,7 @@ export function DimensionBarChartCard({
                                             >
                                                 <td className="py-1.5 pr-3">
                                                     <Button
+                                                        id={`customers-quality-chart-${toAutomationIdSegment(dimensionKey)}-${toAutomationIdSegment(item.code)}-filter`}
                                                         type="button"
                                                         size="xs"
                                                         variant={

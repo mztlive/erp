@@ -67,7 +67,10 @@ export function UpdateAvailabilityDialog({
 
     return (
         <Dialog open onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                closeButtonId="supplier-offerings-dialog-availability-close"
+                className="sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>更新当前可供情况</DialogTitle>
                     <DialogDescription>
@@ -90,8 +93,12 @@ export function UpdateAvailabilityDialog({
                     <form.AppField name="availabilityStatus">
                         {(field) => (
                             <div className="space-y-1.5">
-                                <Label>可供状态<span className="text-destructive">*</span></Label>
+                                <Label>
+                                    可供状态
+                                    <span className="text-destructive">*</span>
+                                </Label>
                                 <OptionCombobox
+                                    id="supplier-offerings-dialog-availability-status"
                                     value={field.state.value}
                                     onValueChange={(value) =>
                                         field.handleChange(
@@ -113,18 +120,26 @@ export function UpdateAvailabilityDialog({
                     <form.AppField name="availableQuantity">
                         {(field) => (
                             <field.TextField
+                                id="supplier-offerings-dialog-availability-quantity"
                                 label="当前可供数量"
                                 description="留空表示供应商未提供数量上限"
                             />
                         )}
                     </form.AppField>
                     <form.AppField name="changeReason">
-                        {(field) => <field.TextField label="变更原因" required />}
+                        {(field) => (
+                            <field.TextField
+                                id="supplier-offerings-dialog-availability-reason"
+                                label="变更原因"
+                                required
+                            />
+                        )}
                     </form.AppField>
                     <DialogFooter>
                         <DialogClose
                             render={
                                 <Button
+                                    id="supplier-offerings-dialog-availability-cancel"
                                     type="button"
                                     variant="outline"
                                     disabled={mutation.isPending}
@@ -135,6 +150,7 @@ export function UpdateAvailabilityDialog({
                         </DialogClose>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-offerings-dialog-availability-submit"
                                 label="保存可供情况"
                                 disabled={mutation.isPending}
                             />

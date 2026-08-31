@@ -25,17 +25,26 @@ import {
     mapOrderReceivableAccounts,
     type OrderReceivableDocument,
 } from "@/features/sales-orders/lib/sales-order-receivable"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 function PreviewButton({
+    id,
     onClick,
     label = "查看",
 }: {
+    id?: string
     onClick: () => void
     label?: string
 }) {
     return (
-        <Button type="button" size="sm" variant="secondary" onClick={onClick}>
+        <Button
+            id={id}
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onClick}
+        >
             {label}
         </Button>
     )
@@ -130,6 +139,7 @@ export function ReceivablePanel({
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                         <Button
+                            id="sales-orders-detail-receivable-register-invoice"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -144,6 +154,7 @@ export function ReceivablePanel({
                             登记销项发票
                         </Button>
                         <Button
+                            id="sales-orders-detail-receivable-register-receipt"
                             type="button"
                             size="sm"
                             disabled={
@@ -207,6 +218,7 @@ export function ReceivablePanel({
 
             {listQuery.isError ? (
                 <BusinessFailureState
+                    id="sales-orders-detail-receivable-retry"
                     title="本单票款加载失败"
                     error={listQuery.error}
                     onRetry={() => {
@@ -250,6 +262,7 @@ export function ReceivablePanel({
                                     ...toRelatedDocument(document),
                                     openAction: (
                                         <PreviewButton
+                                            id={`sales-orders-detail-receivable-${toAutomationIdSegment(document.id)}-preview`}
                                             onClick={() =>
                                                 openPreview({
                                                     kind: "receivable",
@@ -276,6 +289,7 @@ export function ReceivablePanel({
                                 ...toRelatedDocument(document),
                                 openAction: (
                                     <PreviewButton
+                                        id={`sales-orders-detail-receipt-${toAutomationIdSegment(document.id)}-preview`}
                                         onClick={() =>
                                             openPreview({
                                                 kind: "receipt",
@@ -301,6 +315,7 @@ export function ReceivablePanel({
                                 ...toRelatedDocument(document),
                                 openAction: (
                                     <PreviewButton
+                                        id={`sales-orders-detail-invoice-${toAutomationIdSegment(document.id)}-preview`}
                                         onClick={() =>
                                             openPreview({
                                                 kind: "invoice",
@@ -319,6 +334,7 @@ export function ReceivablePanel({
             <p className="text-xs text-muted-foreground">
                 退款、冲正、跨单核销和待核销池在财务工作台。
                 <Button
+                    id="sales-orders-detail-open-customer-accounts"
                     type="button"
                     size="xs"
                     variant="link"

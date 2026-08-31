@@ -16,6 +16,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import type { AcceptanceFormApi } from "@/features/sales-orders/hooks/use-acceptance-form"
 import type { AcceptanceSelectionApi } from "@/features/sales-orders/hooks/use-acceptance-selection"
@@ -81,6 +82,7 @@ export function AcceptanceRegisterDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                closeButtonId="sales-orders-acceptance-register-close"
                 className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
                 showCloseButton={!postPending}
             >
@@ -121,6 +123,7 @@ export function AcceptanceRegisterDialog({
                             <form.AppField name="acceptedAt">
                                 {(field) => (
                                     <field.DateTimeField
+                                        id="sales-orders-acceptance-accepted-at"
                                         label="客户验收时间"
                                         required
                                         disabled={!canPost}
@@ -177,6 +180,7 @@ export function AcceptanceRegisterDialog({
                             <form.AppField name="comment">
                                 {(field) => (
                                     <field.TextareaField
+                                        id="sales-orders-acceptance-comment"
                                         label="内部备注"
                                         placeholder="可不填"
                                         rows={2}
@@ -211,6 +215,7 @@ export function AcceptanceRegisterDialog({
                     </p>
                     <div className="flex flex-wrap justify-end gap-2">
                         <Button
+                            id="sales-orders-acceptance-register-cancel"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -220,6 +225,7 @@ export function AcceptanceRegisterDialog({
                             取消
                         </Button>
                         <Button
+                            id="sales-orders-acceptance-register-submit"
                             type="submit"
                             form="acceptance-form"
                             size="sm"
@@ -293,6 +299,7 @@ function BatchRow({
                 </div>
                 {draft ? (
                     <Button
+                        id={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-skip`}
                         type="button"
                         variant="ghost"
                         size="xs"
@@ -312,6 +319,7 @@ function BatchRow({
                     return (
                         <Button
                             key={option}
+                            id={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-result-${toAutomationIdSegment(option)}`}
                             type="button"
                             size="sm"
                             variant={selected ? "default" : "outline"}
@@ -347,12 +355,12 @@ function BatchRow({
                 <div className="mt-3 flex flex-wrap items-end gap-3">
                     <Field className="w-28">
                         <FieldLabel
-                            htmlFor={`batch-qty-${fact.fulfillmentLineId}`}
+                            htmlFor={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-qty`}
                         >
                             本次数量
                         </FieldLabel>
                         <Input
-                            id={`batch-qty-${fact.fulfillmentLineId}`}
+                            id={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-qty`}
                             className="num"
                             inputMode="decimal"
                             value={draft.qty}
@@ -367,12 +375,12 @@ function BatchRow({
                     {result !== "PASS" ? (
                         <Field className="w-28">
                             <FieldLabel
-                                htmlFor={`batch-exc-${fact.fulfillmentLineId}`}
+                                htmlFor={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-exception-qty`}
                             >
                                 {result === "SHORT" ? "短少数量" : "拒收数量"}
                             </FieldLabel>
                             <Input
-                                id={`batch-exc-${fact.fulfillmentLineId}`}
+                                id={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-exception-qty`}
                                 className="num"
                                 inputMode="decimal"
                                 value={draft.exceptionQty}
@@ -396,12 +404,12 @@ function BatchRow({
                 <div className="mt-3 space-y-2">
                     <Field>
                         <FieldLabel
-                            htmlFor={`batch-reason-${fact.fulfillmentLineId}`}
+                            htmlFor={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-reason`}
                         >
                             客户反馈
                         </FieldLabel>
                         <Textarea
-                            id={`batch-reason-${fact.fulfillmentLineId}`}
+                            id={`sales-orders-acceptance-batch-${toAutomationIdSegment(fact.fulfillmentLineId)}-reason`}
                             rows={2}
                             value={draft.reason}
                             disabled={!canPost}

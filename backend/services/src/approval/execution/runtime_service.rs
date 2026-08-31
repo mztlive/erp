@@ -687,10 +687,20 @@ impl ApprovalRuntimeService {
         Ok(assignee.current_assignee_participant_id.as_str().to_string())
     }
 
-    /// 原审批人重新合格后恢复。
+    /// 在原审批人重新合格后恢复当前受阻执行。
+    ///
+    /// # 参数
+    /// * `actor` - 当前认证且具备恢复权限的审计主体
+    /// * `command` - 实例、执行、审批人和已关闭任务的期望版本及幂等键
+    ///
+    /// # 返回
+    /// 返回恢复后的审批命令视图；幂等回放返回已持久化视图。
     ///
     /// # 错误
-    /// 实例不存在或当前 blocker 不允许恢复。
+    /// 主体不一致、实例缺失、权限不足、版本冲突、快照不一致或事务写入失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 冻结快照必须精确匹配单据类型、主体 ID 和提交版本，事务边界仍由 Service 持有。
     pub async fn resume_current_approver(
         &self,
         actor: &AuditActor,
@@ -775,12 +785,13 @@ impl ApprovalRuntimeService {
             .await?
             .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
         let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
-        if snapshot.document_type != document_type
-            || snapshot.business_object_id != instance.subject.subject_id()
-            || snapshot.subject_version != instance.subject_version
-        {
-            return Err(Error::ConflictError("审批实例与冻结业务快照不一致".to_string()));
-        }
+        snapshot
+            .ensure_matches_runtime_subject(
+                document_type,
+                instance.subject.subject_id(),
+                instance.subject_version,
+            )
+            .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
         let recovery_scope = approval_recovery_scope(&self.db, &self.rbac, actor).await?;
         if !recovery_scope.covers(&snapshot.payload.responsible_org_id) {
             return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
@@ -887,10 +898,20 @@ impl ApprovalRuntimeService {
         Ok(view)
     }
 
-    /// 取消非人员一致性 blocker。
+    /// 取消允许人工终止的非人员一致性受阻实例。
+    ///
+    /// # 参数
+    /// * `actor` - 当前认证且具备恢复权限的审计主体
+    /// * `command` - 受阻实例、执行和任务期望版本、取消原因及幂等键
+    ///
+    /// # 返回
+    /// 返回取消后的审批命令视图；幂等回放返回已持久化视图。
     ///
     /// # 错误
-    /// 人员失效 blocker 必须拒绝。
+    /// 人员失效 blocker、权限不足、版本冲突、快照不一致或事务写入失败时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 仅允许无开放任务的受阻端口取消，冻结快照三项主体引用必须全部精确匹配。
     pub async fn cancel_blocked(
         &self,
         actor: &AuditActor,
@@ -973,12 +994,13 @@ impl ApprovalRuntimeService {
             .await?;
 
         let document_type = document_type_from_subject_kind(instance.subject.subject_kind())?;
-        if snapshot.document_type != document_type
-            || snapshot.business_object_id != instance.subject.subject_id()
-            || snapshot.subject_version != instance.subject_version
-        {
-            return Err(Error::ConflictError("审批实例与冻结业务快照不一致".to_string()));
-        }
+        snapshot
+            .ensure_matches_runtime_subject(
+                document_type,
+                instance.subject.subject_id(),
+                instance.subject_version,
+            )
+            .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
         let spec = adapter_spec_of(document_type)?;
         let graph = self
             .db
@@ -1468,13 +1490,21 @@ fn require_cas_applied<T>(outcome: database::repository::bpm::CasWriteOutcome<T>
     }
 }
 
-/// 解析单据类型稳定码。
+/// 解析实例列表筛选中的单据类型稳定码。
+///
+/// # 参数
+/// * `code` - 调用方提供的单据类型稳定代码
+///
+/// # 返回
+/// 精确命中登记代码时返回对应单据类型。
+///
+/// # 错误
+/// 未登记代码返回原有校验错误文本。
+///
+/// # 关键业务约束
+/// Service 不裁剪、不接受别名，也不维护第二份代码注册表。
 fn parse_document_type(code: &str) -> Result<DocumentType> {
-    crate::approval::policy::ALL_DOCUMENT_TYPES
-        .iter()
-        .copied()
-        .find(|item| item.as_str() == code)
-        .ok_or_else(|| Error::ValidationError(format!("未登记单据类型: {code}")))
+    DocumentType::try_from_code(code).map_err(|_| Error::ValidationError(format!("未登记单据类型: {code}")))
 }
 
 /// 构造实例列表的授权过滤与稳定游标。

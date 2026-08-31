@@ -9,10 +9,7 @@
  */
 
 export type { MallSyncQueryInput } from "./fetch-page"
-export {
-    fetchMallSyncPage,
-    resolveMallSourceSystemId,
-} from "./fetch-page"
+export { fetchMallSyncPage, resolveMallSourceSystemId } from "./fetch-page"
 export {
     retryFailedJob,
     triggerManualIncremental,

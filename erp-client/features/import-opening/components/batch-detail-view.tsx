@@ -10,6 +10,7 @@ import {
     PageHeader,
     PageScaffold,
     surfacePanelClassName,
+    workspaceEmbeddedScaffoldClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -96,7 +97,9 @@ export function BatchDetailView({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
                 <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -109,12 +112,24 @@ export function BatchDetailView({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <BusinessFailureState
                     title="批次加载失败"
                     error={detailQuery.error}
-                    onRetry={() => void detailQuery.refetch()}
+                    action={
+                        <Button
+                            id="operations-import-batch-detail-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void detailQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    }
                 />
             </PageScaffold>
         )
@@ -124,7 +139,9 @@ export function BatchDetailView({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <BusinessEmptyState
                     kind="no-data"
@@ -133,6 +150,7 @@ export function BatchDetailView({
                     className="rounded-lg border-0 bg-transparent shadow-none ring-0"
                     action={
                         <Button
+                            id="operations-import-batch-detail-empty-back"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -164,13 +182,16 @@ export function BatchDetailView({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0" : undefined}
+            className={
+                embedded ? workspaceEmbeddedScaffoldClassName : undefined
+            }
         >
             {!embedded ? (
                 <PageHeader
                     variant="object-chrome"
                     actions={
                         <Button
+                            id="operations-import-batch-detail-back"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -303,7 +324,11 @@ export function BatchDetailView({
                 >
                     <TabsList className="flex h-auto flex-wrap">
                         {SECTION_TABS.map((tab) => (
-                            <TabsTrigger key={tab.id} value={tab.id}>
+                            <TabsTrigger
+                                key={tab.id}
+                                id={`operations-import-batch-detail-section-${tab.id}-trigger`}
+                                value={tab.id}
+                            >
                                 {tab.label}
                             </TabsTrigger>
                         ))}

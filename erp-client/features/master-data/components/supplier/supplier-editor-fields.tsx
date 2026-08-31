@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { SUPPLIER_CAPABILITY_OPTIONS } from "@/features/master-data/lib/resource-fields"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 const CAPABILITY_SEPARATOR = "、"
@@ -111,6 +112,7 @@ export function SensitiveEditableField({
                         {maskedValue || "****"}
                     </code>
                     <Button
+                        id={`${id}-reveal`}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -181,6 +183,7 @@ export function CapabilityCheckboxGroup({
                     className="flex items-center gap-2 text-sm leading-none"
                 >
                     <Checkbox
+                        id={`master-data-supplier-capability-${toAutomationIdSegment(option)}`}
                         checked={selected.includes(option)}
                         disabled={disabled}
                         onCheckedChange={(checked) =>

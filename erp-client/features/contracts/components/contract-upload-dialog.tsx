@@ -104,7 +104,10 @@ export function ContractUploadDialog({
                                     <form.AppField
                                         name="pdfFile"
                                         children={(field) => (
-                                            <field.PdfUploadField label="合同电子档" />
+                                            <field.PdfUploadField
+                                                id="card-contracts-upload-pdf"
+                                                label="合同电子档"
+                                            />
                                         )}
                                     />
                                 </div>
@@ -113,7 +116,10 @@ export function ContractUploadDialog({
                                     <form.AppField
                                         name="contractNo"
                                         children={(field) => (
-                                            <field.TextField label="合同编号" />
+                                            <field.TextField
+                                                id="card-contracts-upload-contract-no"
+                                                label="合同编号"
+                                            />
                                         )}
                                     />
                                     <form.AppField
@@ -131,10 +137,14 @@ export function ContractUploadDialog({
                                                         isInvalid || undefined
                                                     }
                                                 >
-                                                    <FieldLabel htmlFor="upload-customerId">
-                                                        客户<span className="text-destructive">*</span>
+                                                    <FieldLabel htmlFor="card-contracts-upload-customer">
+                                                        客户
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <CustomerSearchCombobox
+                                                        id="card-contracts-upload-customer"
                                                         value={
                                                             field.state.value ||
                                                             undefined
@@ -184,10 +194,14 @@ export function ContractUploadDialog({
                                                         isInvalid || undefined
                                                     }
                                                 >
-                                                    <FieldLabel htmlFor="upload-settlementPartyId">
-                                                        结算主体<span className="text-destructive">*</span>
+                                                    <FieldLabel htmlFor="card-contracts-upload-settlement-party">
+                                                        结算主体
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
                                                     </FieldLabel>
                                                     <SettlementPartySearchCombobox
+                                                        id="card-contracts-upload-settlement-party"
                                                         value={
                                                             field.state.value ||
                                                             undefined
@@ -225,6 +239,7 @@ export function ContractUploadDialog({
                                         name="paymentTerms"
                                         children={(field) => (
                                             <field.SelectField
+                                                id="card-contracts-upload-payment-terms"
                                                 label="付款条件"
                                                 options={PAYMENT_TERM_OPTIONS}
                                                 description="用于销售单快速带出；完整条款以 PDF 为准。"
@@ -239,19 +254,28 @@ export function ContractUploadDialog({
                                 <form.AppField
                                     name="signedAt"
                                     children={(field) => (
-                                        <field.DateField label="签订日期" />
+                                        <field.DateField
+                                            id="card-contracts-upload-signed-at"
+                                            label="签订日期"
+                                        />
                                     )}
                                 />
                                 <form.AppField
                                     name="validFrom"
                                     children={(field) => (
-                                        <field.DateField label="有效期起" />
+                                        <field.DateField
+                                            id="card-contracts-upload-valid-from"
+                                            label="有效期起"
+                                        />
                                     )}
                                 />
                                 <form.AppField
                                     name="validTo"
                                     children={(field) => (
-                                        <field.DateField label="有效期止" />
+                                        <field.DateField
+                                            id="card-contracts-upload-valid-to"
+                                            label="有效期止"
+                                        />
                                     )}
                                 />
                             </div>
@@ -259,13 +283,18 @@ export function ContractUploadDialog({
                         <DialogFooter className="shrink-0 border-t px-6 py-4">
                             <DialogClose
                                 render={
-                                    <Button type="button" variant="outline" />
+                                    <Button
+                                        id="card-contracts-upload-cancel"
+                                        type="button"
+                                        variant="outline"
+                                    />
                                 }
                             >
                                 取消
                             </DialogClose>
                             <form.AppForm>
                                 <form.SubmitButton
+                                    id="card-contracts-upload-submit"
                                     label={
                                         uploadMutation.isPending
                                             ? "上传中…"

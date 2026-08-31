@@ -13,6 +13,7 @@ import type { MasterDataListItem } from "@/features/master-data/types"
 
 /** 字典/仓库列表共用表格：列固定、错误态、筛选空态与新建空态。 */
 export function DictionaryListTable({
+    id,
     rows,
     pageRows,
     columns,
@@ -30,6 +31,7 @@ export function DictionaryListTable({
     onRowPreview,
     onRowOpen,
 }: {
+    id?: string
     rows: readonly MasterDataListItem[]
     pageRows: MasterDataListItem[]
     columns: ColumnDef<MasterDataListItem>[]
@@ -47,8 +49,10 @@ export function DictionaryListTable({
     onRowPreview: (row: MasterDataListItem) => void
     onRowOpen: (row: MasterDataListItem) => void
 }) {
+    const tableId = id ?? "master-data-list-dictionary-list-table-table"
     return (
         <DataTable
+            id={tableId}
             data={pageRows}
             columns={columns}
             getRowId={(row) => row.stableId}
@@ -80,6 +84,7 @@ export function DictionaryListTable({
                         action={
                             hasActiveFilters ? (
                                 <Button
+                                    id={`${tableId}-clear-filters`}
                                     type="button"
                                     variant="secondary"
                                     size="sm"

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card"
 import type { ProfitLossPeriodBasisConfig } from "@/features/actual-profit-loss/types"
 import { W16_FORMULA_HINT } from "@/features/actual-profit-loss/lib/url-state"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function AnalysisBlockedPanel({
     basisConfig,
@@ -22,9 +23,7 @@ export function AnalysisBlockedPanel({
             <Alert variant="destructive">
                 <AlertTitle>期间归属口径尚未配置</AlertTitle>
                 <AlertDescription className="space-y-3">
-                    <p>
-                        尚未设置默认归属口径，请选择上方任一口径后开始分析。
-                    </p>
+                    <p>尚未设置默认归属口径，请选择上方任一口径后开始分析。</p>
                     <p className="text-xs text-muted-foreground">
                         公式说明：{W16_FORMULA_HINT}
                     </p>
@@ -32,6 +31,7 @@ export function AnalysisBlockedPanel({
                         {basisConfig.allowedPeriodBases.map((opt) => (
                             <li key={opt.code}>
                                 <button
+                                    id={`actual-profit-loss-blocked-basis-${toAutomationIdSegment(opt.code)}`}
                                     type="button"
                                     className="font-medium text-primary underline-offset-2 hover:underline"
                                     onClick={() => onSelectBasis(opt.code)}

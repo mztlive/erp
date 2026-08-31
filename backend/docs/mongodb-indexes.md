@@ -10,13 +10,13 @@ Web API 启动时会调用 `database::ensure_indexes`，创建账号、角色、
 
 ```javascript
 db.accounts.aggregate([
-    { $group: { _id: "$id", count: { $sum: 1 } } },
-    { $match: { count: { $gt: 1 } } },
-])
+  { $group: { _id: "$id", count: { $sum: 1 } } },
+  { $match: { count: { $gt: 1 } } },
+]);
 db.accounts.aggregate([
-    { $group: { _id: "$account", count: { $sum: 1 } } },
-    { $match: { count: { $gt: 1 } } },
-])
+  { $group: { _id: "$account", count: { $sum: 1 } } },
+  { $match: { count: { $gt: 1 } } },
+]);
 ```
 
 对 `roles` 和 `audit_logs` 检查 `id`。发现重复值
@@ -48,10 +48,10 @@ Casbin 的 `values.0` 与 `values.1` 查询索引分别支撑角色权限和主�
 自动创建的 `_id_` 索引。
 
 ```javascript
-db.accounts.dropIndex("uk_accounts_id")
-db.accounts.dropIndex("uk_accounts_account")
-db.roles.dropIndex("uk_roles_id")
-db.audit_logs.dropIndex("uk_audit_logs_id")
+db.accounts.dropIndex("uk_accounts_id");
+db.accounts.dropIndex("uk_accounts_account");
+db.roles.dropIndex("uk_roles_id");
+db.audit_logs.dropIndex("uk_audit_logs_id");
 ```
 
 查询辅助索引可以保留；它们不改变写入合同。若要一并回滚，索引名称以

@@ -128,6 +128,7 @@ function EffectiveAccessBody({ query }: EffectiveAccessBodyProps) {
                 error={query.error}
                 action={
                     <Button
+                        id="operations-access-effective-access-retry"
                         type="button"
                         size="sm"
                         onClick={() => void query.refetch()}

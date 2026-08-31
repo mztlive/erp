@@ -11,6 +11,7 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SalesOrdersAppliedChip } from "@/features/sales-orders/hooks/use-sales-orders-list-chips"
 import type { SalesOrderSummaryFilter } from "@/features/sales-orders/lib/filter-orders"
 import type { SalesOrdersUrlState } from "@/features/sales-orders/lib/url-state"
@@ -70,6 +71,7 @@ export function SalesOrdersListFilterBar(props: {
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="sales-orders-list-filter-search"
                             data-slot="so-list-search"
                             value={searchDraft}
                             onChange={(event) => {
@@ -92,6 +94,7 @@ export function SalesOrdersListFilterBar(props: {
                                 return (
                                     <Button
                                         key={option.value}
+                                        id={`sales-orders-list-filter-summary-${toAutomationIdSegment(option.value)}`}
                                         type="button"
                                         variant={active ? "secondary" : "ghost"}
                                         className={
@@ -110,6 +113,7 @@ export function SalesOrdersListFilterBar(props: {
                             })}
                         </div>
                         <Button
+                            id="sales-orders-list-filter-more-toggle"
                             type="button"
                             variant="outline"
                             aria-expanded={filterPanelOpen}
@@ -147,12 +151,14 @@ export function SalesOrdersListFilterBar(props: {
                                     {chips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`sales-orders-list-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={chip.clearLabel}
                                             onClear={chip.onClear}
                                         />
                                     ))}
                                     <Button
+                                        id="sales-orders-list-filter-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"

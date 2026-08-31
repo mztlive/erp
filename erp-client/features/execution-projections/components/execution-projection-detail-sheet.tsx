@@ -23,6 +23,7 @@ import { ExecutionProjectionDiffPanel } from "@/features/execution-projections/c
 import { ExecutionProjectionOverviewSummary } from "@/features/execution-projections/components/execution-projection-overview-summary"
 import { ExecutionProjectionVersionLinks } from "@/features/execution-projections/components/execution-projection-version-links"
 import { WhitelistContentGrid } from "@/features/execution-projections/components/whitelist-content-grid"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     ExecutionProjectionRow,
     ExecutionProjectionView,
@@ -60,6 +61,7 @@ export function ExecutionProjectionDetailSheet({
 
     return (
         <QuickPreviewSheet
+            id="execution-projections-detail-sheet"
             open={open}
             onOpenChange={(next) => {
                 if (!next) onOpenChange(false)
@@ -84,7 +86,20 @@ export function ExecutionProjectionDetailSheet({
             {isPending ? (
                 <div className="h-48 animate-pulse rounded-lg bg-muted" />
             ) : isError ? (
-                <BusinessFailureState error={error} onRetry={onRetry} />
+                <BusinessFailureState
+                    error={error}
+                    action={
+                        <Button
+                            id="execution-projections-detail-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={onRetry}
+                        >
+                            重试
+                        </Button>
+                    }
+                />
             ) : !detail ? (
                 <BusinessEmptyState
                     kind="no-data"
@@ -137,6 +152,7 @@ export function ExecutionProjectionDetailSheet({
                         primaryAction={
                             detail.allowedActions.includes("QUERY_RESULT") ? (
                                 <Button
+                                    id={`execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}-query`}
                                     type="button"
                                     size="sm"
                                     disabled={commandPending}
@@ -217,11 +233,36 @@ export function ExecutionProjectionDetailSheet({
 
                     <Tabs value={objectTab} onValueChange={setObjectTab}>
                         <TabsList>
-                            <TabsTrigger value="overview">概览</TabsTrigger>
-                            <TabsTrigger value="content">执行内容</TabsTrigger>
-                            <TabsTrigger value="history">发送历史</TabsTrigger>
-                            <TabsTrigger value="versions">版本对应</TabsTrigger>
-                            <TabsTrigger value="diff">差异与错误</TabsTrigger>
+                            <TabsTrigger
+                                id="execution-projections-detail-tab-overview"
+                                value="overview"
+                            >
+                                概览
+                            </TabsTrigger>
+                            <TabsTrigger
+                                id="execution-projections-detail-tab-content"
+                                value="content"
+                            >
+                                执行内容
+                            </TabsTrigger>
+                            <TabsTrigger
+                                id="execution-projections-detail-tab-history"
+                                value="history"
+                            >
+                                发送历史
+                            </TabsTrigger>
+                            <TabsTrigger
+                                id="execution-projections-detail-tab-versions"
+                                value="versions"
+                            >
+                                版本对应
+                            </TabsTrigger>
+                            <TabsTrigger
+                                id="execution-projections-detail-tab-diff"
+                                value="diff"
+                            >
+                                差异与错误
+                            </TabsTrigger>
                         </TabsList>
                     </Tabs>
 

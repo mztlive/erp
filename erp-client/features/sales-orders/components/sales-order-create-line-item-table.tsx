@@ -45,6 +45,7 @@ export function SalesOrderCreateLineItemTable({
                 return (
                     <>
                         <EditableLineItemTable
+                            id="sales-orders-create-line-items"
                             items={values.lineItems}
                             columns={columns}
                             getRowId={(item) => item.rowKey}

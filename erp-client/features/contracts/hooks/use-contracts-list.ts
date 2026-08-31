@@ -35,9 +35,7 @@ export type ContractAppliedChip = Readonly<{
  * Applied 在 URL（唯一事实源），Draft 本地受控不触发请求，UI 态（面板展开）本地保存。
  * 关键词与「更多筛选」草稿经显式提交（Enter / 应用全部筛选）一次性写 URL 并回第 1 页。
  */
-export function useContractsList(
-    rows: readonly ContractListRow[] | undefined,
-) {
+export function useContractsList(rows: readonly ContractListRow[] | undefined) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -66,8 +64,9 @@ export function useContractsList(
 
     // Draft：本地受控，变化不请求
     const [searchDraft, setSearchDraft] = React.useState(q ?? "")
-    const [settlementPartyIdDraft, setSettlementPartyIdDraft] =
-        React.useState<string | null>(settlementPartyId ?? null)
+    const [settlementPartyIdDraft, setSettlementPartyIdDraft] = React.useState<
+        string | null
+    >(settlementPartyId ?? null)
     const [ownerDraft, setOwnerDraft] = React.useState<string | null>(
         owner ?? null,
     )
@@ -241,9 +240,8 @@ export function useContractsList(
     )
     const selectedSettlementPartyLabel = React.useMemo(
         () =>
-            allRows.find(
-                (r) => r.settlementParty.partyId === settlementPartyId,
-            )?.settlementParty.displayName ?? "未知",
+            allRows.find((r) => r.settlementParty.partyId === settlementPartyId)
+                ?.settlementParty.displayName ?? "未知",
         [allRows, settlementPartyId],
     )
 
@@ -259,7 +257,10 @@ export function useContractsList(
             })
         }
         if (customerId) {
-            chips.push({ key: "customerId", label: `客户：${lockedCustomerLabel}` })
+            chips.push({
+                key: "customerId",
+                label: `客户：${lockedCustomerLabel}`,
+            })
         }
         if (settlementPartyId) {
             chips.push({

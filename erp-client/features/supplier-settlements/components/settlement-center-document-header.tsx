@@ -20,6 +20,7 @@ function SettlementCenterDocumentHeader({
     onBack,
     onRefresh,
     onSubmitReview,
+    embedded = false,
 }: {
     statement: SettlementDetailView["statement"]
     immutableFactsAsOf: string
@@ -29,24 +30,28 @@ function SettlementCenterDocumentHeader({
     onBack: () => void
     onRefresh: () => void
     onSubmitReview: () => void
+    embedded?: boolean
 }) {
     const st = statement
     return (
         <>
-            <PageHeader
-                variant="object-chrome"
-                actions={
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={onBack}
-                    >
-                        <ArrowLeftIcon className="size-4" />
-                        返回列表
-                    </Button>
-                }
-            />
+            {embedded ? null : (
+                <PageHeader
+                    variant="object-chrome"
+                    actions={
+                        <Button
+                            id="supplier-settlements-center-back"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={onBack}
+                        >
+                            <ArrowLeftIcon className="size-4" />
+                            返回列表
+                        </Button>
+                    }
+                />
+            )}
             <DocumentHeader
                 density="compact"
                 title={`${st.supplierName} · ${st.periodLabel}`}
@@ -82,6 +87,7 @@ function SettlementCenterDocumentHeader({
                     <div className="flex flex-wrap gap-2">
                         {allowed.has("REFRESH_TRIAL") ? (
                             <Button
+                                id="supplier-settlements-center-refresh"
                                 type="button"
                                 variant="outline"
                                 size="sm"
@@ -94,6 +100,7 @@ function SettlementCenterDocumentHeader({
                         ) : null}
                         {allowed.has("SUBMIT_REVIEW") ? (
                             <Button
+                                id="supplier-settlements-center-submit-review"
                                 type="button"
                                 size="sm"
                                 onClick={onSubmitReview}
@@ -103,6 +110,7 @@ function SettlementCenterDocumentHeader({
                             </Button>
                         ) : submitBlocker ? (
                             <GuardedBusinessAction
+                                id="supplier-settlements-center-submit-review-disabled"
                                 type="button"
                                 size="sm"
                                 disabled

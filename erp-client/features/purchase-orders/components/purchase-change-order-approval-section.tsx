@@ -157,11 +157,16 @@ export function PurchaseChangeOrderApprovalSection({
                 }
             />
             {canSubmit ? (
-                <Button type="button" onClick={() => setSubmitOpen(true)}>
+                <Button
+                    id={`procurement-orders-change-submit-${changeOrder.id}`}
+                    type="button"
+                    onClick={() => setSubmitOpen(true)}
+                >
                     提交改单
                 </Button>
             ) : null}
             <PurchaseChangeOrderSubmitConfirmDialog
+                idPrefix="procurement-orders-change-submit-confirm"
                 open={submitOpen}
                 pending={submitMutation.isPending}
                 approval={changeOrder.approval}

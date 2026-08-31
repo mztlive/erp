@@ -20,9 +20,11 @@ import { useAdminMutations } from "@/features/admin/hooks/queries"
 export function DeleteAdminDialog({
     account,
     onOpenChange,
+    id = "governance-admin-delete-account-dialog",
 }: {
     account: { id: string; account: string }
     onOpenChange: (open: boolean) => void
+    id?: string
 }) {
     const { deleteAdmin, isDeleting } = useAdminMutations()
     const [error, setError] = React.useState<string | null>(null)
@@ -45,10 +47,14 @@ export function DeleteAdminDialog({
                     </Alert>
                 ) : null}
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>
+                    <AlertDialogCancel
+                        id={`${id}-cancel`}
+                        disabled={isDeleting}
+                    >
                         取消
                     </AlertDialogCancel>
                     <AlertDialogAction
+                        id={`${id}-confirm`}
                         variant="destructive"
                         disabled={isDeleting}
                         onClick={async () => {

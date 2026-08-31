@@ -45,6 +45,7 @@ export function SuppliersListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-suppliers-list-export",
                     actionKey: "export",
                     label: masterDataCopy.actionExport,
                     icon: DownloadIcon,
@@ -54,6 +55,7 @@ export function SuppliersListPage() {
                     onClick: state.onExport,
                 },
                 {
+                    id: "master-data-suppliers-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     mobileVisibility: "hide",
@@ -67,6 +69,7 @@ export function SuppliersListPage() {
             ]}
             metrics={
                 <LifecycleMetricStrip
+                    idPrefix="master-data-suppliers-list-metrics"
                     metrics={state.syncedMetrics}
                     metricKey={filters.metricKey}
                     ariaLabel="供应商与资质指标"
@@ -93,6 +96,7 @@ export function SuppliersListPage() {
                 description={state.listTableDescription}
                 toolbar={
                     <SupplierListToolbar
+                        idPrefix="master-data-suppliers-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -137,6 +141,7 @@ export function SuppliersListPage() {
                 }
                 table={
                     <DataTable
+                        id="master-data-suppliers-list-table"
                         data={state.pageRows}
                         columns={columns}
                         getRowId={(row) => row.stableId}
@@ -153,8 +158,18 @@ export function SuppliersListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() =>
-                                        void state.listQuery.refetch()
+                                    action={
+                                        <Button
+                                            id="master-data-suppliers-list-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                void state.listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
                                 />
                             ) : undefined
@@ -179,6 +194,7 @@ export function SuppliersListPage() {
                                     action={
                                         hasActiveFilters ? (
                                             <Button
+                                                id="master-data-suppliers-list-empty-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -191,6 +207,7 @@ export function SuppliersListPage() {
                                             </Button>
                                         ) : state.canCreate ? (
                                             <Button
+                                                id="master-data-suppliers-list-empty-create"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

@@ -113,6 +113,7 @@ export function LedgerTableFrame({
                 <div className="flex items-center gap-1.5 text-sm">
                     <span className="sr-only">排序</span>
                     <OptionCombobox
+                        id="inventory-ledger-sort"
                         className="w-40"
                         value={sortValue}
                         onValueChange={(value) =>
@@ -149,6 +150,7 @@ export function LedgerTableFrame({
                     />
                 ) : view === "balance" ? (
                     <LedgerDataTable
+                        id="inventory-ledger-balance-table"
                         data={pageRows as StockBalanceRow[]}
                         loading={loading}
                         columns={balanceColumns}
@@ -165,6 +167,7 @@ export function LedgerTableFrame({
                     />
                 ) : view === "movement" ? (
                     <LedgerDataTable
+                        id="inventory-ledger-movement-table"
                         data={pageRows as StockMovementRow[]}
                         loading={loading}
                         columns={movementColumns}
@@ -176,6 +179,7 @@ export function LedgerTableFrame({
                     />
                 ) : view === "reservation" ? (
                     <LedgerDataTable
+                        id="inventory-ledger-reservation-table"
                         data={pageRows as StockReservationRow[]}
                         loading={loading}
                         columns={reservationColumns}
@@ -190,6 +194,7 @@ export function LedgerTableFrame({
                     />
                 ) : (
                     <LedgerDataTable
+                        id="inventory-ledger-adjustment-table"
                         data={pageRows as StockAdjustmentRow[]}
                         loading={loading}
                         columns={adjustmentColumns}

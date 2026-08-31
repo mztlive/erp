@@ -50,6 +50,8 @@ type GuardedBusinessActionProps = Omit<
     reason?: string
     nextResponsible?: string
     shortcut?: string
+    id?: string
+    idPrefix?: string
 }
 
 /**
@@ -61,8 +63,11 @@ function GuardedBusinessAction({
     nextResponsible,
     shortcut,
     children,
+    id,
+    idPrefix,
     ...buttonProps
 }: GuardedBusinessActionProps) {
+    const baseId = idPrefix ?? id
     const hasExplanation = Boolean(
         disabled || reason || nextResponsible || shortcut,
     )
@@ -70,7 +75,11 @@ function GuardedBusinessAction({
         reason ?? (disabled ? "当前状态不允许执行此操作" : undefined)
 
     if (!hasExplanation) {
-        return <Button {...buttonProps}>{children}</Button>
+        return (
+            <Button id={baseId} {...buttonProps}>
+                {children}
+            </Button>
+        )
     }
 
     const content = (
@@ -104,12 +113,14 @@ function GuardedBusinessAction({
                             />
                         }
                     >
-                        <Button disabled {...buttonProps}>
+                        <Button id={baseId} disabled {...buttonProps}>
                             {children}
                         </Button>
                     </TooltipTrigger>
                 ) : (
-                    <TooltipTrigger render={<Button {...buttonProps} />}>
+                    <TooltipTrigger
+                        render={<Button id={baseId} {...buttonProps} />}
+                    >
                         {children}
                     </TooltipTrigger>
                 )}
@@ -312,6 +323,8 @@ type BusinessFailureStateProps = {
     /** 快捷重试回调；渲染「重试」按钮（与 action 二选一，action 优先）。 */
     onRetry?: () => void
     retryLabel?: string
+    id?: string
+    idPrefix?: string
     className?: string
 }
 
@@ -326,6 +339,8 @@ function BusinessFailureState({
     action,
     onRetry,
     retryLabel = "重试",
+    id,
+    idPrefix,
     className,
 }: BusinessFailureStateProps) {
     const presentation =
@@ -335,10 +350,21 @@ function BusinessFailureState({
     const Icon = preset.icon
     const resolvedErrorCode = errorCode ?? presentation?.code
 
+    const retryId = idPrefix
+        ? `${idPrefix}-retry`
+        : id
+          ? `${id}-retry`
+          : undefined
     const resolvedAction =
         action ??
         (onRetry && (presentation?.retryable ?? true) ? (
-            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            <Button
+                id={retryId}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+            >
                 {retryLabel}
             </Button>
         ) : null)
@@ -415,6 +441,8 @@ type AsyncSectionStateProps = {
     error?: React.ReactNode
     errorKind?: BusinessFailureKind
     retryAction?: React.ReactNode
+    id?: string
+    idPrefix?: string
     className?: string
 }
 
@@ -441,6 +469,8 @@ function AsyncSectionState({
     error,
     errorKind = "system",
     retryAction,
+    id,
+    idPrefix,
     className,
 }: AsyncSectionStateProps) {
     const hasChildren = React.Children.count(children) > 0
@@ -476,6 +506,8 @@ function AsyncSectionState({
                     kind={errorKind}
                     description={error}
                     action={retryAction}
+                    id={id}
+                    idPrefix={idPrefix}
                 />
             ) : null}
 

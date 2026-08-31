@@ -15,6 +15,7 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from "@/components/ui/input-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import type {
     AllocationTrack,
@@ -157,6 +158,7 @@ export function SupplierAccountsToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="supplier-payables-toolbar-search"
                             ref={searchInputRef}
                             placeholder="供应商、采购单、结算单、付款单、发票号"
                             value={searchInput}
@@ -169,6 +171,7 @@ export function SupplierAccountsToolbar({
                 }
                 filters={
                     <Button
+                        id="supplier-payables-toolbar-filter-toggle"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -205,6 +208,7 @@ export function SupplierAccountsToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`supplier-payables-toolbar-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -213,6 +217,7 @@ export function SupplierAccountsToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="supplier-payables-toolbar-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -233,6 +238,7 @@ export function SupplierAccountsToolbar({
                                             供应商
                                         </span>
                                         <SupplierSearchCombobox
+                                            id="supplier-payables-toolbar-supplier-filter"
                                             className="w-full"
                                             value={supplierDraft ?? undefined}
                                             onValueChange={(id) =>
@@ -246,6 +252,7 @@ export function SupplierAccountsToolbar({
                                     {view === "payable" ? (
                                         <>
                                             <FixedOptionRadioFilter
+                                                idPrefix="supplier-payables-toolbar-filter-source-type"
                                                 label="来源类型"
                                                 value={sourceTypeDraft}
                                                 onValueChange={
@@ -254,18 +261,21 @@ export function SupplierAccountsToolbar({
                                                 options={SOURCE_TYPE_OPTIONS}
                                             />
                                             <FixedOptionRadioFilter
+                                                idPrefix="supplier-payables-toolbar-filter-status"
                                                 label="状态"
                                                 value={statusDraft}
                                                 onValueChange={setStatusDraft}
                                                 options={STATUS_OPTIONS}
                                             />
                                             <FixedOptionRadioFilter
+                                                idPrefix="supplier-payables-toolbar-filter-due"
                                                 label="到期"
                                                 value={dueDraft}
                                                 onValueChange={setDueDraft}
                                                 options={DUE_OPTIONS}
                                             />
                                             <FixedOptionRadioFilter
+                                                idPrefix="supplier-payables-toolbar-filter-payment-gate"
                                                 label="先款条件"
                                                 value={paymentGateDraft}
                                                 onValueChange={
@@ -277,6 +287,7 @@ export function SupplierAccountsToolbar({
                                     ) : null}
                                     {view === "unallocated" ? (
                                         <FixedOptionRadioFilter
+                                            idPrefix="supplier-payables-toolbar-filter-track"
                                             label="轨道"
                                             value={trackDraft}
                                             onValueChange={setTrackDraft}
@@ -289,13 +300,17 @@ export function SupplierAccountsToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="supplier-payables-toolbar-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="supplier-payables-toolbar-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

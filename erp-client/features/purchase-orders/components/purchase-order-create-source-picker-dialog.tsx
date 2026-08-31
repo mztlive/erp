@@ -65,7 +65,10 @@ export function PurchaseOrderCreateSourcePickerDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+            <DialogContent
+                className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
+                closeButtonId="procurement-orders-create-source-picker-close"
+            >
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <DialogTitle>选择来源销售单</DialogTitle>
                     <DialogDescription>
@@ -102,6 +105,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
 
                 <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
                     <Button
+                        id="procurement-orders-create-source-picker-cancel"
                         type="button"
                         variant="outline"
                         onClick={() => onOpenChange(false)}
@@ -109,6 +113,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
                         取消
                     </Button>
                     <Button
+                        id="procurement-orders-create-source-picker-confirm"
                         type="button"
                         data-testid="purchase-create-source-confirm"
                         disabled={!draftOrder}

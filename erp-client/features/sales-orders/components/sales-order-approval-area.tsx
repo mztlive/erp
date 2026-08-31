@@ -68,6 +68,7 @@ export function SalesOrderApprovalArea({
                 />
                 {documentId ? (
                     <ApprovalActionBar
+                        id="sales-orders-detail-approval-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={SALES_ORDER_DOCUMENT_TYPE}
@@ -100,6 +101,7 @@ export function SalesOrderApprovalArea({
                 compact
             />
             <ApprovalActionBar
+                id="sales-orders-detail-approval-bar"
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

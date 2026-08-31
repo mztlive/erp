@@ -31,7 +31,10 @@ export function RunHealthCheckDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent
+                closeButtonId="supplier-api-connections-health-check-close"
+                className="sm:max-w-md"
+            >
                 <DialogHeader>
                     <DialogTitle>执行健康检查</DialogTitle>
                     <DialogDescription>
@@ -43,6 +46,7 @@ export function RunHealthCheckDialog({
                 </DialogHeader>
                 <DialogFooter>
                     <Button
+                        id="supplier-api-connections-health-check-cancel"
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -51,14 +55,21 @@ export function RunHealthCheckDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-api-connections-health-check-confirm"
                         type="button"
                         disabled={!canRunHealth || pending}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : (
-                            <RefreshCwIcon className="size-4" aria-hidden="true" />
+                            <RefreshCwIcon
+                                className="size-4"
+                                aria-hidden="true"
+                            />
                         )}
                         {pending ? "执行中…" : "确认执行"}
                     </Button>

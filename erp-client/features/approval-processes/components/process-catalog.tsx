@@ -13,6 +13,8 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import {
     approvalRequirementLabel,
     configurationStatusLabel,
@@ -31,11 +33,13 @@ export function ProcessCatalog({
     permissions,
     onCreateDraft,
     onContinueDraft,
+    id = "governance-approval-processes-catalog",
 }: {
     items: readonly DefinitionCatalogItem[]
     permissions: readonly string[] | undefined
     onCreateDraft: (item: DefinitionCatalogItem) => void
     onContinueDraft: (item: DefinitionCatalogItem) => void
+    id?: string
 }) {
     return (
         <Table>
@@ -56,6 +60,7 @@ export function ProcessCatalog({
                         item.configuration_status === "MISSING_CONFIGURATION"
                     const noWrite = item.approval_requirement === "NO_APPROVAL"
                     const actions = visibleActions(item, permissions)
+                    const rowSegment = toAutomationIdSegment(item.document_type)
                     return (
                         <TableRow
                             key={item.document_type}
@@ -70,6 +75,7 @@ export function ProcessCatalog({
                                     )
                                 ) : (
                                     <Link
+                                        id={`${id}-row-${rowSegment}-open`}
                                         className="underline-offset-4 hover:underline"
                                         href={`/system/approval-processes/${item.document_type}`}
                                     >
@@ -117,6 +123,7 @@ export function ProcessCatalog({
                                     <div className="flex justify-end gap-2">
                                         {actions.includes("REPLACE_NODES") ? (
                                             <Button
+                                                id={`${id}-row-${rowSegment}-continue`}
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
@@ -129,6 +136,7 @@ export function ProcessCatalog({
                                         ) : null}
                                         {actions.includes("CREATE_DRAFT") ? (
                                             <Button
+                                                id={`${id}-row-${rowSegment}-create-draft`}
                                                 type="button"
                                                 size="sm"
                                                 onClick={() =>
@@ -143,11 +151,13 @@ export function ProcessCatalog({
                                         {!actions.includes("CREATE_DRAFT") &&
                                         !actions.includes("REPLACE_NODES") ? (
                                             <Button
+                                                id={`${id}-row-${rowSegment}-view`}
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
                                                 render={
                                                     <Link
+                                                        id={`${id}-row-${rowSegment}-view-link`}
                                                         href={`/system/approval-processes/${item.document_type}`}
                                                     />
                                                 }

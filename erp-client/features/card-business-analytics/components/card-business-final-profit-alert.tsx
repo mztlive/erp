@@ -22,6 +22,7 @@ export function CardBusinessFinalProfitAlert({
                     当前同屏展示「当前经营贡献」与「未履约余额」。若需最终盈亏视角，可将日期口径切换为履约到期日并筛选已到期范围。
                 </span>
                 <Button
+                    id="card-contracts-analytics-final-profit-switch-expiry"
                     type="button"
                     size="sm"
                     variant="outline"

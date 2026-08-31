@@ -25,6 +25,7 @@ import {
     canCreatePurchaseFromSalesOrder,
     purchaseOrdersWorkspaceHref,
 } from "@/features/sales-orders/lib/sales-order-detail-model"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
@@ -40,16 +41,19 @@ const PURCHASE_STATUS_SUMMARY_ORDER: readonly PurchaseOrderStatus[] = [
 ]
 
 function PreviewButton({
+    id,
     onClick,
     disabled,
     disabledReason,
 }: {
+    id?: string
     onClick: () => void
     disabled?: boolean
     disabledReason?: string
 }) {
     return (
         <Button
+            id={id}
             type="button"
             size="sm"
             variant="secondary"
@@ -130,6 +134,7 @@ export function PurchasePanel({
                     {createPurchase ? (
                         createGate.enabled ? (
                             <Button
+                                id="sales-orders-detail-purchase-create"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -147,6 +152,7 @@ export function PurchasePanel({
                             </Button>
                         ) : (
                             <Button
+                                id="sales-orders-detail-purchase-create"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -177,6 +183,7 @@ export function PurchasePanel({
                 />
             ) : listQuery.isError ? (
                 <BusinessFailureState
+                    id="sales-orders-detail-purchase-retry"
                     title="本单采购单加载失败"
                     error={listQuery.error}
                     onRetry={() => {
@@ -320,6 +327,7 @@ function toRelatedPurchaseDocument(
         owner: row.ownerName,
         openAction: (
             <PreviewButton
+                id={`sales-orders-detail-purchase-${toAutomationIdSegment(row.purchaseOrderId)}-preview`}
                 disabled={!options.canPreview}
                 disabledReason={options.previewReason}
                 onClick={options.onPreview}

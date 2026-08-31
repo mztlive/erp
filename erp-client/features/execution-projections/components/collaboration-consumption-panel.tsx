@@ -7,6 +7,7 @@ import { MoneyValue, surfaceInsetClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useSalesOrderConsumptionSummaryQuery } from "@/features/mall-consumption-orders/queries"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api/errors"
 
 /** 协同子区底部：商城侧消费情况（仅供查阅，不影响结案）。 */
@@ -99,11 +100,13 @@ export function CollaborationConsumptionPanel({
                     ；本单结案仍看交付与回款是否完成。
                 </p>
                 <Button
+                    id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-consumption-orders`}
                     type="button"
                     size="sm"
                     variant="outline"
                     render={
                         <Link
+                            id={`execution-collaboration-${toAutomationIdSegment(salesOrderId)}-consumption-orders`}
                             href={`/commerce/consumption-orders?from=W05&salesOrderId=${encodeURIComponent(salesOrderId)}&q=${encodeURIComponent(salesOrderNo)}`}
                         />
                     }

@@ -59,7 +59,10 @@ export const publishSchema = z.object({
     ),
     categoryId: z.string().trim().min(1, "请填写商城类目编号"),
     skuRevisionId: z.string().trim().min(1, "请填写 SKU 修订编号"),
-    supplierOfferingRevisionId: z.string().trim().min(1, "请选择固定供给修订编号"),
+    supplierOfferingRevisionId: z
+        .string()
+        .trim()
+        .min(1, "请选择固定供给修订编号"),
     baseUnitCode: z.string().trim().min(1, "请填写基础单位代码"),
     salesRegionText: z.string().trim().min(1, "请填写可销售区域"),
     productCapabilitiesText: z.string(),

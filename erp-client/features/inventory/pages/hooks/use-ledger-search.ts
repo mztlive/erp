@@ -45,9 +45,7 @@ export function useLedgerSearch({ qParam }: LedgerSearchInput) {
                 return
             }
             if (
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"]',
-                )
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
             ) {
                 return
             }

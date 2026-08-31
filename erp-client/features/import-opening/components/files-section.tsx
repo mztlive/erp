@@ -16,6 +16,7 @@ import { Fact } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
 import { RETENTION_LABEL } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { versionText } from "@/lib/ui-text"
 
 function formatBytes(n: number) {
@@ -123,6 +124,7 @@ export function FilesSection({ batch }: { batch: ImportBatchView }) {
                                     {formatBytes(a.byteSize)}
                                 </div>
                                 <Button
+                                    id={`operations-import-batch-detail-files-asset-${toAutomationIdSegment(a.assetId)}-preview`}
                                     type="button"
                                     size="sm"
                                     variant="outline"

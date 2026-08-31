@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import type { MappingTaskView } from "@/features/mall-sync/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 type MappingCandidateListProps = {
@@ -24,10 +25,9 @@ export function MappingCandidateList({
                 {candidates.map((c) => (
                     <li key={c.objectId}>
                         <button
+                            id={`mall-sync-candidate-${toAutomationIdSegment(c.objectId)}`}
                             type="button"
-                            disabled={
-                                c.eligibility !== "ELIGIBLE" || disabled
-                            }
+                            disabled={c.eligibility !== "ELIGIBLE" || disabled}
                             onClick={() => onSelectCandidate(c.objectId)}
                             className={cn(
                                 "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",

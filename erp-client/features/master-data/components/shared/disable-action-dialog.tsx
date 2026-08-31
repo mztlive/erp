@@ -120,7 +120,10 @@ export function DisableActionDialog({
 
     return (
         <Dialog open={open} onOpenChange={requestClose}>
-            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
+            <DialogContent
+                closeButtonId="master-data-shared-disable-close"
+                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>{masterDataCopy.disableTitle}</DialogTitle>
                     <DialogDescription>
@@ -180,6 +183,7 @@ export function DisableActionDialog({
                             ]}
                             actions={
                                 <Button
+                                    id="master-data-shared-disable-action-dialog-button-1"
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -211,7 +215,7 @@ export function DisableActionDialog({
                                 name="effectiveFrom"
                                 children={(field) => (
                                     <DateField
-                                        id="dis-ef-from"
+                                        id="master-data-shared-disable-effective-from-picker"
                                         label={masterDataCopy.fieldDisableAt}
                                         field={field}
                                         required
@@ -222,6 +226,7 @@ export function DisableActionDialog({
                                 name="changeReason"
                                 children={(field) => (
                                     <field.TextareaField
+                                        id="master-data-shared-disable-reason"
                                         label={
                                             masterDataCopy.fieldDisableReason
                                         }
@@ -233,6 +238,7 @@ export function DisableActionDialog({
                                 <DialogClose
                                     render={
                                         <Button
+                                            id="master-data-shared-disable-action-dialog-button-2"
                                             type="button"
                                             variant="outline"
                                         />
@@ -320,9 +326,7 @@ export function UnitOfMeasureDisableDialog(
         "resource"
     >,
 ) {
-    return (
-        <FixedResourceDisableDialog resource="unit-of-measures" {...props} />
-    )
+    return <FixedResourceDisableDialog resource="unit-of-measures" {...props} />
 }
 
 export function CategoryDisableDialog(

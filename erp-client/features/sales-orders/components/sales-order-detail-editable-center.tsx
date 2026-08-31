@@ -10,6 +10,7 @@ import {
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { SalesOrderCreateForm } from "@/features/sales-orders/components/sales-order-create-form"
 import { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-panels"
@@ -60,6 +61,7 @@ export function SalesOrderEditableCenter({
                         actions={[
                             {
                                 actionKey: "back",
+                                id: "sales-orders-detail-editable-back",
                                 label: backLabel,
                                 icon: ArrowLeftIcon,
                                 variant: "outline",
@@ -82,9 +84,19 @@ export function SalesOrderEditableCenter({
                 <BusinessFailureState
                     title="可编辑内容加载失败"
                     error={resumeQuery.error}
-                    onRetry={() => {
-                        void resumeQuery.refetch()
-                    }}
+                    action={
+                        <Button
+                            id="sales-orders-detail-editable-center-resume-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                void resumeQuery.refetch()
+                            }}
+                        >
+                            重试
+                        </Button>
+                    }
                 />
             ) : (
                 <SalesOrderCreateForm

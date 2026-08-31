@@ -47,9 +47,11 @@ export function PeriodBasisPanel({
             </CardHeader>
             <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="space-y-1.5">
-                    <Label htmlFor="period-preset">期间快捷</Label>
+                    <Label htmlFor="actual-profit-loss-period-preset">
+                        期间快捷
+                    </Label>
                     <OptionCombobox
-                        id="period-preset"
+                        id="actual-profit-loss-period-preset"
                         value={presetRaw}
                         onValueChange={(v) => {
                             if (!v) return
@@ -76,8 +78,9 @@ export function PeriodBasisPanel({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="period-from">从</Label>
+                    <Label htmlFor="actual-profit-loss-period-from">从</Label>
                     <DatePicker
+                        id="actual-profit-loss-period-from"
                         className="w-[10.5rem]"
                         value={from || undefined}
                         onValueChange={(next) => {
@@ -90,8 +93,9 @@ export function PeriodBasisPanel({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="period-to">至</Label>
+                    <Label htmlFor="actual-profit-loss-period-to">至</Label>
                     <DatePicker
+                        id="actual-profit-loss-period-to"
                         className="w-[10.5rem]"
                         value={to || undefined}
                         onValueChange={(next) => {
@@ -110,9 +114,11 @@ export function PeriodBasisPanel({
                     </p>
                 </div>
                 <div className="min-w-[16rem] flex-1 space-y-1.5">
-                    <Label htmlFor="period-basis">期间归属口径</Label>
+                    <Label htmlFor="actual-profit-loss-period-basis">
+                        期间归属口径
+                    </Label>
                     <OptionCombobox
-                        id="period-basis"
+                        id="actual-profit-loss-period-basis"
                         value={periodBasis || ""}
                         onValueChange={(v) => {
                             patchUrl({ periodBasis: v || null, page: null })

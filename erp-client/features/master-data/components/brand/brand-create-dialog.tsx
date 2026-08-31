@@ -101,6 +101,7 @@ export function BrandCreateDialog({
 
     return (
         <BrandFormDialogFrame
+            idPrefix="master-data-brand-create-dialog"
             open={open}
             onOpenChange={onOpenChange}
             title={masterDataCopy.createTitle("品牌")}

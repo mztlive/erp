@@ -20,6 +20,8 @@ export function QueueNavBar({
     onBack,
     onApprove,
     onMissingEvidence,
+    id,
+    idPrefix,
 }: {
     current: number
     total: number
@@ -31,9 +33,13 @@ export function QueueNavBar({
     onBack: () => void
     onApprove: (advance: boolean) => void
     onMissingEvidence: () => void
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <SequentialProcessBar
+            id={id}
+            idPrefix={idPrefix ?? "card-contracts-funds-review-queue-nav"}
             current={current}
             total={total}
             responsibilityStatus={responsibilityStatus}

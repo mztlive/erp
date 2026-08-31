@@ -6,17 +6,50 @@ import type {
     FulfillmentOperation,
 } from "@/features/fulfillment-operations/types"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 /**
  * 切到下一条时把光标放在「第一个真的要动手填的框」上。
  * 入库的数量是带出来的，聚焦后全选即可直接改写；
  * 仓发/直发的物流单号是空的；服务先选成功或失败。
  */
 export const FIRST_INPUT_ID: Record<FulfillmentOperationType, string> = {
-    RECEIPT: "receipt-recv-0",
-    WAREHOUSE_SHIP: "ship-carrier",
-    SUPPLIER_DIRECT: "direct-tracking",
-    ELECTRONIC: "el-qty-0",
-    SERVICE: "svc-result",
+    RECEIPT: "fulfillment-operations-receipt-form-received-quantity-0",
+    WAREHOUSE_SHIP: "fulfillment-operations-ship-form-carrier",
+    SUPPLIER_DIRECT: "fulfillment-operations-direct-form-tracking-no",
+    ELECTRONIC: "fulfillment-operations-electronic-form-quantity-0",
+    SERVICE: "fulfillment-operations-service-form-result",
+}
+
+export function getFirstInputId(operation: FulfillmentOperation): string {
+    switch (operation.operationType) {
+        case "RECEIPT": {
+            const first = operation.lines[0] as
+                | { purchaseRevisionLineId?: string }
+                | undefined
+            const segment = first?.purchaseRevisionLineId
+                ? toAutomationIdSegment(first.purchaseRevisionLineId)
+                : "0"
+            return `fulfillment-operations-receipt-form-received-quantity-${segment}`
+        }
+        case "WAREHOUSE_SHIP":
+            return "fulfillment-operations-ship-form-carrier"
+        case "SUPPLIER_DIRECT":
+            return "fulfillment-operations-direct-form-tracking-no"
+        case "ELECTRONIC": {
+            const first = operation.lines[0] as
+                | { salesOrderLineId?: string }
+                | undefined
+            const segment = first?.salesOrderLineId
+                ? toAutomationIdSegment(first.salesOrderLineId)
+                : "0"
+            return `fulfillment-operations-electronic-form-quantity-${segment}`
+        }
+        case "SERVICE":
+            return "fulfillment-operations-service-form-result"
+        default:
+            return FIRST_INPUT_ID[operation.operationType] ?? ""
+    }
 }
 import { FulfillmentDirectForm } from "./fulfillment-direct-form"
 import { FulfillmentElectronicForm } from "./fulfillment-electronic-form"

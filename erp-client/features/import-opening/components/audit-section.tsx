@@ -45,6 +45,7 @@ export function AuditSection({ batch }: { batch: ImportBatchView }) {
                 ) : null}
                 <div className="sm:col-span-2">
                     <Button
+                        id="operations-import-batch-detail-audit-view"
                         size="sm"
                         variant="outline"
                         render={

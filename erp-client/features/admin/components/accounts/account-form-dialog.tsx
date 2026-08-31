@@ -79,11 +79,13 @@ export function AccountFormDialog({
     account,
     roleOptions,
     onOpenChange,
+    id = "governance-admin-account-dialog",
 }: {
     mode: "create" | "edit"
     account: AccountDraft | null
     roleOptions: readonly { id: string; name: string }[]
     onOpenChange: (open: boolean) => void
+    id?: string
 }) {
     const { createAdmin, updateAdmin, isCreating, isUpdating } =
         useAdminMutations()
@@ -130,7 +132,10 @@ export function AccountFormDialog({
 
     return (
         <Dialog open onOpenChange={(open) => !open && onOpenChange(false)}>
-            <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                className="max-h-[88vh] overflow-y-auto sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {isEdit ? "编辑账号" : "新建账号"}
@@ -153,6 +158,7 @@ export function AccountFormDialog({
                             <Field data-disabled>
                                 <FieldLabel>账号</FieldLabel>
                                 <Input
+                                    id={`${id}-account-readonly`}
                                     value={account?.account ?? ""}
                                     disabled
                                     readOnly
@@ -163,6 +169,7 @@ export function AccountFormDialog({
                                 name="account"
                                 children={(field) => (
                                     <field.TextField
+                                        id={`${id}-account`}
                                         label="账号"
                                         required
                                         placeholder="登录账号，3-32 个字符"
@@ -175,6 +182,7 @@ export function AccountFormDialog({
                             name="name"
                             children={(field) => (
                                 <field.TextField
+                                    id={`${id}-name`}
                                     label="姓名"
                                     required
                                     placeholder="管理员姓名"
@@ -185,6 +193,7 @@ export function AccountFormDialog({
                             name="password"
                             children={(field) => (
                                 <field.TextField
+                                    id={`${id}-password`}
                                     label={isEdit ? "新密码" : "密码"}
                                     required
                                     type="password"
@@ -210,17 +219,23 @@ export function AccountFormDialog({
                                     <Field
                                         data-invalid={isInvalid || undefined}
                                     >
-                                        <FieldLabel>角色<span className="text-destructive">*</span></FieldLabel>
+                                        <FieldLabel>
+                                            角色
+                                            <span className="text-destructive">
+                                                *
+                                            </span>
+                                        </FieldLabel>
                                         <RoleOptionsPanel
+                                            id={`${id}-roles`}
                                             options={roleOptions}
                                             selected={selected}
                                             invalid={isInvalid}
-                                            onToggle={(id, checked) => {
+                                            onToggle={(roleId, checked) => {
                                                 const next = checked
-                                                    ? [...selected, id]
+                                                    ? [...selected, roleId]
                                                     : selected.filter(
                                                           (value) =>
-                                                              value !== id,
+                                                              value !== roleId,
                                                       )
                                                 field.handleChange(next)
                                                 form.validateField(
@@ -245,6 +260,7 @@ export function AccountFormDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id={`${id}-cancel`}
                             type="button"
                             variant="outline"
                             disabled={pending}
@@ -254,6 +270,7 @@ export function AccountFormDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id={`${id}-submit`}
                                 label={isEdit ? "保存" : "创建"}
                             />
                         </form.AppForm>

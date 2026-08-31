@@ -35,6 +35,7 @@ export function BrandFormDialogFrame({
     onReset,
     logoPreviewUrl,
     onLogoFiles,
+    idPrefix,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -47,10 +48,12 @@ export function BrandFormDialogFrame({
                 TextField: React.ComponentType<{
                     label: string
                     required?: boolean
+                    id?: string
                 }>
                 TextareaField: React.ComponentType<{
                     label: string
                     required?: boolean
+                    id?: string
                 }>
                 handleChange: (value: string) => void
                 state: { value: string }
@@ -68,7 +71,9 @@ export function BrandFormDialogFrame({
     onReset?: () => void
     logoPreviewUrl: string
     onLogoFiles: (files: File[]) => void
+    idPrefix?: string
 }) {
+    const prefix = idPrefix ?? "master-data-brand-form-dialog"
     const requestClose = (next: boolean) => {
         if (next) {
             onOpenChange(true)
@@ -84,7 +89,10 @@ export function BrandFormDialogFrame({
 
     return (
         <Dialog open={open} onOpenChange={requestClose}>
-            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
+            <DialogContent
+                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+                closeButtonId={`${prefix}-close`}
+            >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
@@ -109,7 +117,11 @@ export function BrandFormDialogFrame({
                                 <form.AppField
                                     name="name"
                                     children={(field) => (
-                                        <field.TextField label="名称" required />
+                                        <field.TextField
+                                            label="名称"
+                                            id={`${prefix}-name`}
+                                            required
+                                        />
                                     )}
                                 />
                                 <form.AppField
@@ -117,6 +129,7 @@ export function BrandFormDialogFrame({
                                     children={(field) => (
                                         <field.TextField
                                             label={masterDataCopy.fBrandCode}
+                                            id={`${prefix}-code`}
                                             required
                                         />
                                     )}
@@ -126,6 +139,7 @@ export function BrandFormDialogFrame({
                                 name="logo"
                                 children={(field) => (
                                     <MediaSingleField
+                                        id={`${prefix}-logo`}
                                         label={masterDataCopy.fBrandLogo}
                                         hint={masterDataCopy.brandLogoHint}
                                         value={field.state.value}
@@ -142,6 +156,7 @@ export function BrandFormDialogFrame({
                                 children={(field) => (
                                     <field.TextareaField
                                         label={masterDataCopy.fieldChangeReason}
+                                        id={`${prefix}-change-reason`}
                                         required
                                     />
                                 )}
@@ -150,6 +165,7 @@ export function BrandFormDialogFrame({
                                 <DialogClose
                                     render={
                                         <Button
+                                            id={`${prefix}-cancel`}
                                             type="button"
                                             variant="outline"
                                             disabled={pending}
@@ -158,7 +174,11 @@ export function BrandFormDialogFrame({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button type="submit" disabled={pending}>
+                                <Button
+                                    id={`${prefix}-submit`}
+                                    type="submit"
+                                    disabled={pending}
+                                >
                                     {pending ? "提交中…" : submitLabel}
                                 </Button>
                             </DialogFooter>

@@ -116,7 +116,10 @@ export function RegisterSupplyForSkuDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex max-h-[88vh] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden p-5 sm:max-h-[76vh] sm:max-w-6xl">
+            <DialogContent
+                closeButtonId="supplier-offerings-dialog-register-close"
+                className="flex max-h-[88vh] w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden p-5 sm:max-h-[76vh] sm:max-w-6xl"
+            >
                 <DialogHeader className="shrink-0">
                     <DialogTitle>添加供给</DialogTitle>
                     <DialogDescription>
@@ -160,8 +163,14 @@ export function RegisterSupplyForSkuDialog({
                                         <form.AppField name="skuId">
                                             {(field) => (
                                                 <div className="space-y-1.5 sm:col-span-2">
-                                                    <Label>公司 SKU<span className="text-destructive">*</span></Label>
+                                                    <Label>
+                                                        公司 SKU
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
+                                                    </Label>
                                                     <CompanySkuSearchCombobox
+                                                        id="supplier-offerings-dialog-register-sku"
                                                         value={
                                                             field.state.value ||
                                                             undefined
@@ -183,8 +192,14 @@ export function RegisterSupplyForSkuDialog({
                                     <form.AppField name="supplierId">
                                         {(field) => (
                                             <div className="space-y-1.5 sm:col-span-2">
-                                                <Label>供应商<span className="text-destructive">*</span></Label>
+                                                <Label>
+                                                    供应商
+                                                    <span className="text-destructive">
+                                                        *
+                                                    </span>
+                                                </Label>
                                                 <SupplierSearchCombobox
+                                                    id="supplier-offerings-dialog-register-supplier"
                                                     value={
                                                         field.state.value ||
                                                         undefined
@@ -203,6 +218,7 @@ export function RegisterSupplyForSkuDialog({
                                     <form.AppField name="supplierSkuCode">
                                         {(field) => (
                                             <field.TextField
+                                                id="supplier-offerings-dialog-register-supplier-sku-code"
                                                 label="供应商 SKU 编码"
                                                 required
                                                 description="用于下单、对账和履约快照"
@@ -211,7 +227,10 @@ export function RegisterSupplyForSkuDialog({
                                     </form.AppField>
                                     <form.AppField name="supplierProductCode">
                                         {(field) => (
-                                            <field.TextField label="供应商商品编码" />
+                                            <field.TextField
+                                                id="supplier-offerings-dialog-register-supplier-product-code"
+                                                label="供应商商品编码"
+                                            />
                                         )}
                                     </form.AppField>
                                 </div>
@@ -225,22 +244,35 @@ export function RegisterSupplyForSkuDialog({
                                     <div className="grid gap-3 sm:grid-cols-2">
                                         <form.AppField name="dropshipPrice">
                                             {(field) => (
-                                                <field.TextField label="一件代发供给价（含税）" required />
+                                                <field.TextField
+                                                    id="supplier-offerings-dialog-register-dropship-price"
+                                                    label="一件代发供给价（含税）"
+                                                    required
+                                                />
                                             )}
                                         </form.AppField>
                                         <form.AppField name="bulkPrice">
                                             {(field) => (
-                                                <field.TextField label="集采供给价（含税）" required />
+                                                <field.TextField
+                                                    id="supplier-offerings-dialog-register-bulk-price"
+                                                    label="集采供给价（含税）"
+                                                    required
+                                                />
                                             )}
                                         </form.AppField>
                                         <form.AppField name="minimumQuantity">
                                             {(field) => (
-                                                <field.TextField label="集采起订量" required />
+                                                <field.TextField
+                                                    id="supplier-offerings-dialog-register-minimum-quantity"
+                                                    label="集采起订量"
+                                                    required
+                                                />
                                             )}
                                         </form.AppField>
                                         <form.AppField name="inputTaxPercentage">
                                             {(field) => (
                                                 <field.TextField
+                                                    id="supplier-offerings-dialog-register-input-tax-percentage"
                                                     label="进项税率（%）"
                                                     required
                                                     description="例如 13 表示 13%"
@@ -259,6 +291,7 @@ export function RegisterSupplyForSkuDialog({
                                             {(field) => (
                                                 <div className="sm:col-span-2">
                                                     <field.TextField
+                                                        id="supplier-offerings-dialog-register-supply-region"
                                                         label="可供区域"
                                                         required
                                                         description="多个区域使用逗号分隔"
@@ -268,12 +301,19 @@ export function RegisterSupplyForSkuDialog({
                                         </form.AppField>
                                         <form.AppField name="validFrom">
                                             {(field) => (
-                                                <field.DateField label="生效日期" required />
+                                                <field.DateField
+                                                    id="supplier-offerings-dialog-register-valid-from"
+                                                    label="生效日期"
+                                                    required
+                                                />
                                             )}
                                         </form.AppField>
                                         <form.AppField name="validTo">
                                             {(field) => (
-                                                <field.DateField label="失效日期" />
+                                                <field.DateField
+                                                    id="supplier-offerings-dialog-register-valid-to"
+                                                    label="失效日期"
+                                                />
                                             )}
                                         </form.AppField>
                                     </div>
@@ -288,17 +328,26 @@ export function RegisterSupplyForSkuDialog({
                                     <div className="grid gap-3 sm:grid-cols-2">
                                         <form.AppField name="dropshipExpress">
                                             {(field) => (
-                                                <field.TextField label="一件代发快递说明" />
+                                                <field.TextField
+                                                    id="supplier-offerings-dialog-register-dropship-express"
+                                                    label="一件代发快递说明"
+                                                />
                                             )}
                                         </form.AppField>
                                         <form.AppField name="freightAmount">
                                             {(field) => (
-                                                <field.TextField label="运费" />
+                                                <field.TextField
+                                                    id="supplier-offerings-dialog-register-freight-amount"
+                                                    label="运费"
+                                                />
                                             )}
                                         </form.AppField>
                                         <form.AppField name="serviceFeeAmount">
                                             {(field) => (
-                                                <field.TextField label="服务费" />
+                                                <field.TextField
+                                                    id="supplier-offerings-dialog-register-service-fee-amount"
+                                                    label="服务费"
+                                                />
                                             )}
                                         </form.AppField>
                                     </div>
@@ -313,9 +362,13 @@ export function RegisterSupplyForSkuDialog({
                                             {(field) => (
                                                 <div className="space-y-1.5">
                                                     <Label>
-                                                        初始可供状态<span className="text-destructive">*</span>
+                                                        初始可供状态
+                                                        <span className="text-destructive">
+                                                            *
+                                                        </span>
                                                     </Label>
                                                     <OptionCombobox
+                                                        id="supplier-offerings-dialog-register-availability-status"
                                                         value={
                                                             field.state.value
                                                         }
@@ -346,6 +399,7 @@ export function RegisterSupplyForSkuDialog({
                                         <form.AppField name="availableQuantity">
                                             {(field) => (
                                                 <field.TextField
+                                                    id="supplier-offerings-dialog-register-available-quantity"
                                                     label="当前可供数量"
                                                     description="留空表示供应商未提供数量上限"
                                                 />
@@ -354,7 +408,11 @@ export function RegisterSupplyForSkuDialog({
                                         <form.AppField name="changeReason">
                                             {(field) => (
                                                 <div className="sm:col-span-2">
-                                                    <field.TextField label="登记原因" required />
+                                                    <field.TextField
+                                                        id="supplier-offerings-dialog-register-change-reason"
+                                                        label="登记原因"
+                                                        required
+                                                    />
                                                 </div>
                                             )}
                                         </form.AppField>
@@ -368,6 +426,7 @@ export function RegisterSupplyForSkuDialog({
                         <DialogClose
                             render={
                                 <Button
+                                    id="supplier-offerings-dialog-register-cancel"
                                     type="button"
                                     variant="outline"
                                     disabled={mutation.isPending}
@@ -378,6 +437,7 @@ export function RegisterSupplyForSkuDialog({
                         </DialogClose>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-offerings-dialog-register-submit"
                                 label="保存供给"
                                 disabled={mutation.isPending}
                             />

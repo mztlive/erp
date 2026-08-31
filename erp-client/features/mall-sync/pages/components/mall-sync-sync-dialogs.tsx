@@ -65,19 +65,30 @@ export function MallSyncIncrementalDialog({
                         <form.AppField
                             name="reason"
                             children={(field) => (
-                                <field.TextField label="触发理由" required />
+                                <field.TextField
+                                    id="mall-sync-incremental-reason"
+                                    label="触发理由"
+                                    required
+                                />
                             )}
                         />
                         <DialogFooter>
                             <DialogClose
                                 render={
-                                    <Button type="button" variant="outline" />
+                                    <Button
+                                        id="mall-sync-incremental-cancel"
+                                        type="button"
+                                        variant="outline"
+                                    />
                                 }
                             >
                                 取消
                             </DialogClose>
                             <form.AppForm>
-                                <form.SubmitButton label="创建增量任务" />
+                                <form.SubmitButton
+                                    id="mall-sync-incremental-confirm"
+                                    label="创建增量任务"
+                                />
                             </form.AppForm>
                         </DialogFooter>
                     </form>
@@ -136,25 +147,40 @@ export function MallSyncPullDialog({
                         <form.AppField
                             name="externalOrderNo"
                             children={(field) => (
-                                <field.TextField label="商城销售单号" required />
+                                <field.TextField
+                                    id="mall-sync-pull-external-order-no"
+                                    label="商城销售单号"
+                                    required
+                                />
                             )}
                         />
                         <form.AppField
                             name="reason"
                             children={(field) => (
-                                <field.TextField label="补拉理由" required />
+                                <field.TextField
+                                    id="mall-sync-pull-reason"
+                                    label="补拉理由"
+                                    required
+                                />
                             )}
                         />
                         <DialogFooter>
                             <DialogClose
                                 render={
-                                    <Button type="button" variant="outline" />
+                                    <Button
+                                        id="mall-sync-pull-cancel"
+                                        type="button"
+                                        variant="outline"
+                                    />
                                 }
                             >
                                 取消
                             </DialogClose>
                             <form.AppForm>
-                                <form.SubmitButton label="创建补拉任务" />
+                                <form.SubmitButton
+                                    id="mall-sync-pull-confirm"
+                                    label="创建补拉任务"
+                                />
                             </form.AppForm>
                         </DialogFooter>
                     </form>

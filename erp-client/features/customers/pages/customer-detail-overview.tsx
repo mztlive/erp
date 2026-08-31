@@ -58,7 +58,9 @@ export function CustomerDetailMetrics({
             <MetricItem
                 density="compact"
                 label="应收余额"
-                value={<MoneyValue value={customer.metrics.receivableBalance} />}
+                value={
+                    <MoneyValue value={customer.metrics.receivableBalance} />
+                }
                 detail="客户往来汇总"
                 detailMode="tooltip"
             />
@@ -139,6 +141,7 @@ export function CustomerDetailOverviewTab({
                         action={
                             !editBlocked ? (
                                 <Button
+                                    id="customers-detail-overview-edit"
                                     type="button"
                                     size="sm"
                                     variant="outline"
@@ -159,6 +162,7 @@ export function CustomerDetailOverviewTab({
                                 description="主体分区加载失败。"
                                 action={
                                     <Button
+                                        id="customers-detail-overview-retry"
                                         type="button"
                                         size="sm"
                                         onClick={() => void refetch()}
@@ -174,14 +178,15 @@ export function CustomerDetailOverviewTab({
                                     {
                                         id: "legalName",
                                         label: "法定名称",
-                                        value: customer.currentRevision.legalName,
+                                        value: customer.currentRevision
+                                            .legalName,
                                     },
                                     {
                                         id: "shortName",
                                         label: "客户简称",
                                         value:
-                                            customer.currentRevision.shortName ??
-                                            "—",
+                                            customer.currentRevision
+                                                .shortName ?? "—",
                                     },
                                     {
                                         id: "credit",

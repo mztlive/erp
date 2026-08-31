@@ -62,6 +62,7 @@ export function JobDetailHeader({
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="operations-history-backfill-detail-back"
                             type="button"
                             variant="ghost"
                             size="sm"
@@ -71,6 +72,7 @@ export function JobDetailHeader({
                             返回任务列表
                         </Button>
                         <Button
+                            id="operations-history-backfill-detail-refresh"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -142,6 +144,7 @@ export function JobDetailHeader({
                     <>
                         {canValidate ? (
                             <Button
+                                id="operations-history-backfill-detail-validate-source"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -153,6 +156,7 @@ export function JobDetailHeader({
                         ) : null}
                         {canStart ? (
                             <Button
+                                id="operations-history-backfill-detail-start"
                                 type="button"
                                 size="sm"
                                 disabled={pending}
@@ -163,6 +167,7 @@ export function JobDetailHeader({
                         ) : null}
                         {canResume ? (
                             <Button
+                                id="operations-history-backfill-detail-resume"
                                 type="button"
                                 size="sm"
                                 disabled={pending}
@@ -173,6 +178,7 @@ export function JobDetailHeader({
                         ) : null}
                         {canConfirmReport ? (
                             <Button
+                                id="operations-history-backfill-detail-confirm-report"
                                 type="button"
                                 size="sm"
                                 disabled={pending}
@@ -183,6 +189,7 @@ export function JobDetailHeader({
                         ) : null}
                         {report ? (
                             <Button
+                                id="operations-history-backfill-detail-header-download-report"
                                 type="button"
                                 size="sm"
                                 variant="outline"

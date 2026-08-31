@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     Tooltip,
     TooltipContent,
@@ -212,6 +213,8 @@ interface BusinessObjectRefProps extends Omit<
     status?: BusinessStatus
     onOpen?: () => void
     openLabel?: string
+    id?: string
+    idPrefix?: string
 }
 
 /** 显示稳定业务对象引用；打开行为由调用方提供，不内置路由。 */
@@ -222,12 +225,19 @@ function BusinessObjectRef({
     status,
     onOpen,
     openLabel = `打开 ${stableNumber}`,
+    id,
+    idPrefix,
     className,
     ...props
 }: BusinessObjectRefProps) {
+    const baseId = idPrefix ?? id
+    const openId = baseId
+        ? `${baseId}-open`
+        : `business-object-ref-${toAutomationIdSegment(stableNumber)}-open`
     return (
         <div
             data-slot="business-object-ref"
+            id={baseId}
             className={cn("flex min-w-0 flex-col gap-1", className)}
             {...props}
         >
@@ -235,6 +245,7 @@ function BusinessObjectRef({
                 <Badge variant="secondary">{objectType}</Badge>
                 {onOpen ? (
                     <Button
+                        id={openId}
                         type="button"
                         variant="link"
                         size="xs"

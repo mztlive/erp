@@ -107,9 +107,7 @@ export function useCardBusinessPageState(
 
     /** Q2：默认未配置且用户尚未显式选择完整 from/to/dateBasis */
     const analysisBlocked =
-        basisIsSuccess &&
-        !basisConfig?.configuredDateBasis &&
-        !periodComplete
+        basisIsSuccess && !basisConfig?.configuredDateBasis && !periodComplete
 
     const analysisReady = periodComplete && !analysisBlocked
 
@@ -242,6 +240,4 @@ export function useCardBusinessPageState(
     }
 }
 
-export type CardBusinessPageState = ReturnType<
-    typeof useCardBusinessPageState
->
+export type CardBusinessPageState = ReturnType<typeof useCardBusinessPageState>

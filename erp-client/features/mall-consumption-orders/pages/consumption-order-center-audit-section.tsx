@@ -6,6 +6,7 @@ import { DocumentSection, DocumentSummary } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { MallConsumptionOrderView } from "@/features/mall-consumption-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -74,9 +75,7 @@ export function AuditSection({ view }: { view: MallConsumptionOrderView }) {
             <div className="mt-4 space-y-2">
                 <p className="text-sm font-medium">动作阻断</p>
                 {view.actionBlockers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        无额外阻断
-                    </p>
+                    <p className="text-sm text-muted-foreground">无额外阻断</p>
                 ) : (
                     <ul className="space-y-2">
                         {view.actionBlockers.map((b) => (
@@ -104,11 +103,13 @@ export function AuditSection({ view }: { view: MallConsumptionOrderView }) {
                     {view.workItemIds[0] ? (
                         <div className="mt-2">
                             <Button
+                                id={`mall-consumption-order-center-audit-workitem-${toAutomationIdSegment(view.workItemIds[0])}`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
                                 render={
                                     <Link
+                                        id={`mall-consumption-order-center-audit-workitem-${toAutomationIdSegment(view.workItemIds[0])}-link`}
                                         href={`/governance/integration-errors?resolveWorkItemId=${view.workItemIds[0]}&queueContextId=queue:W29:mine:all`}
                                     />
                                 }

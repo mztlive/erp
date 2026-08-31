@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -23,6 +19,7 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { MallSearchCombobox } from "@/features/entity-selectors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     ATTRIBUTION_STATUS_OPTIONS,
     COST_BASIS_OPTIONS,
@@ -94,6 +91,7 @@ export function ConsumptionOrderFilterBar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="mall-consumption-orders-filter-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -102,11 +100,11 @@ export function ConsumptionOrderFilterBar({
                             placeholder="商城单号、客户、ERP 编号"
                             aria-label="搜索消费订单"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="mall-consumption-orders-filter-more-toggle"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -143,6 +141,7 @@ export function ConsumptionOrderFilterBar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`mall-consumption-orders-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -151,6 +150,7 @@ export function ConsumptionOrderFilterBar({
                                         />
                                     ))}
                                     <Button
+                                        id="mall-consumption-orders-filter-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -238,6 +238,7 @@ export function ConsumptionOrderFilterBar({
                                                 来源商城
                                             </span>
                                             <MallSearchCombobox
+                                                id="mall-consumption-orders-filter-mall"
                                                 purpose="filter"
                                                 className="w-full"
                                                 value={
@@ -247,7 +248,8 @@ export function ConsumptionOrderFilterBar({
                                                     setFilterDraft(
                                                         (current) => ({
                                                             ...current,
-                                                            mallId: mallId ?? "",
+                                                            mallId:
+                                                                mallId ?? "",
                                                         }),
                                                     )
                                                 }
@@ -260,6 +262,7 @@ export function ConsumptionOrderFilterBar({
                                                 供应商状态
                                             </span>
                                             <MultiOptionCombobox
+                                                id="mall-consumption-orders-filter-supplier-status"
                                                 className="w-full"
                                                 value={
                                                     filterDraft.supplierStatuses
@@ -287,6 +290,7 @@ export function ConsumptionOrderFilterBar({
                                                 记录发生时间
                                             </span>
                                             <DateRangePicker
+                                                id="mall-consumption-orders-filter-occurred"
                                                 className="w-full"
                                                 value={
                                                     filterDraft.occurredFrom ||
@@ -323,13 +327,17 @@ export function ConsumptionOrderFilterBar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="mall-consumption-orders-filter-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={onResetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="mall-consumption-orders-filter-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

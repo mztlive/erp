@@ -86,7 +86,10 @@ export function PurchaseOrderCreatePreviewDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+            <DialogContent
+                className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
+                closeButtonId="procurement-orders-create-preview-close"
+            >
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <DialogTitle>预览供给分配</DialogTitle>
                     <DialogDescription>
@@ -159,6 +162,7 @@ export function PurchaseOrderCreatePreviewDialog({
 
                 <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
                     <Button
+                        id="procurement-orders-create-preview-cancel"
                         type="button"
                         variant="outline"
                         onClick={() => onOpenChange(false)}
@@ -166,6 +170,7 @@ export function PurchaseOrderCreatePreviewDialog({
                         返回编辑
                     </Button>
                     <Button
+                        id="procurement-orders-create-preview-confirm"
                         type="button"
                         data-testid="purchase-create-from-basis"
                         disabled={

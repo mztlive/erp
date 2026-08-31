@@ -14,6 +14,7 @@ import {
     displayText,
     lineItemTitle,
 } from "@/features/fulfillment-operations/lib/readable-label"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
  * 采购入库表单。PurchaseReceipt 为 NO_APPROVAL，只收集仓、时间与到货数量，
@@ -40,8 +41,11 @@ export function FulfillmentReceiptForm({
             <h3 className="text-sm font-semibold">入库作业</h3>
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                    <Label>入库仓</Label>
+                    <Label htmlFor="fulfillment-operations-receipt-form-warehouse">
+                        入库仓
+                    </Label>
                     <Input
+                        id="fulfillment-operations-receipt-form-warehouse"
                         value={
                             displayText(draft.warehouseLabel) || "待核对仓库"
                         }
@@ -50,8 +54,11 @@ export function FulfillmentReceiptForm({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="receipt-at">入库时间</Label>
+                    <Label htmlFor="fulfillment-operations-receipt-form-occurred-at">
+                        入库时间
+                    </Label>
                     <DateTimeLocalPicker
+                        id="fulfillment-operations-receipt-form-occurred-at"
                         value={draft.occurredAt || undefined}
                         disabled={disabled}
                         showTimeZone={false}
@@ -80,11 +87,13 @@ export function FulfillmentReceiptForm({
                         </p>
                         <div className="grid gap-3 sm:grid-cols-3">
                             <div className="space-y-1.5">
-                                <Label htmlFor={`receipt-recv-${i}`}>
+                                <Label
+                                    htmlFor={`fulfillment-operations-receipt-form-received-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
+                                >
                                     到货数量
                                 </Label>
                                 <Input
-                                    id={`receipt-recv-${i}`}
+                                    id={`fulfillment-operations-receipt-form-received-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                                     className="num"
                                     inputMode="decimal"
                                     value={line.receivedQuantity}
@@ -105,14 +114,16 @@ export function FulfillmentReceiptForm({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor={`receipt-qual-${i}`}>
+                                <Label
+                                    htmlFor={`fulfillment-operations-receipt-form-qualified-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
+                                >
                                     合格数量
                                     <span className="ml-1 font-normal text-muted-foreground">
                                         自动算
                                     </span>
                                 </Label>
                                 <Input
-                                    id={`receipt-qual-${i}`}
+                                    id={`fulfillment-operations-receipt-form-qualified-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                                     className="num"
                                     inputMode="decimal"
                                     value={line.qualifiedQuantity}
@@ -133,11 +144,13 @@ export function FulfillmentReceiptForm({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor={`receipt-rej-${i}`}>
+                                <Label
+                                    htmlFor={`fulfillment-operations-receipt-form-rejected-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
+                                >
                                     不合格数量
                                 </Label>
                                 <Input
-                                    id={`receipt-rej-${i}`}
+                                    id={`fulfillment-operations-receipt-form-rejected-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                                     className="num"
                                     inputMode="decimal"
                                     value={line.rejectedQuantity}
@@ -159,9 +172,13 @@ export function FulfillmentReceiptForm({
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor={`receipt-qr-${i}`}>质量结果</Label>
+                            <Label
+                                htmlFor={`fulfillment-operations-receipt-form-quality-result-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
+                            >
+                                质量结果
+                            </Label>
                             <OptionCombobox
-                                id={`receipt-qr-${i}`}
+                                id={`fulfillment-operations-receipt-form-quality-result-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                                 value={line.qualityResult || null}
                                 disabled={disabled}
                                 options={QUALITY_RESULT_OPTIONS}

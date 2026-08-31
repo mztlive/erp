@@ -50,6 +50,7 @@ export function ActualProfitLossPage() {
                     title="期间归属口径配置读取失败"
                     action={
                         <Button
+                            id="actual-profit-loss-basis-retry"
                             type="button"
                             onClick={() => void page.basisQuery.refetch()}
                         >

@@ -26,14 +26,17 @@ export function CompanySkuSearchCombobox({
 }: CompanySkuSearchComboboxProps) {
     const search = useSearchInput()
     const query = useCompanySkuSelectorQuery({ query: search.input, purpose })
-    const { rows, loading, emptyLabel: resolvedEmptyLabel } =
-        useRemoteSearchCombobox({
-            list: query,
-            selectedItem,
-            idOf: (item) => item.productId,
-            emptyLabel,
-            fallbackError: "公司 SKU 加载失败，请重试",
-        })
+    const {
+        rows,
+        loading,
+        emptyLabel: resolvedEmptyLabel,
+    } = useRemoteSearchCombobox({
+        list: query,
+        selectedItem,
+        idOf: (item) => item.productId,
+        emptyLabel,
+        fallbackError: "公司 SKU 加载失败，请重试",
+    })
     return (
         <ProductCombobox
             {...props}

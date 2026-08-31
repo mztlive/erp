@@ -57,18 +57,18 @@
 
 ### 2.3 领域职责
 
-| 对象 | 唯一职责 | 禁止职责 |
-| --- | --- | --- |
-| `approval_process_definition` | 保存某个 `DocumentType` 的不可变审批流程版本 | 保存具体单据或运行状态 |
-| `approval_node_definition` | 保存定义版本内的人工审批节点和指定审批人 | 保存审批结果或改变运行时审批人 |
-| `approval_transition_definition` | 保存节点在事件发生后的唯一流向 | 执行业务领域动作 |
-| 业务单据 | 冻结创建时绑定的流程定义版本 | 临时增减节点、换人或选择下一节点 |
-| `approval_process_instance` | 保存单据审批运行状态、当前轮次和当前节点执行 | 代替业务单据保存正式业务状态 |
-| `approval_node_execution` | 保存节点每次进入、处理和结束的不可变运行历史 | 承担队列查询责任 |
-| `approval_instance_assignee` | 冻结实例内各节点的当前有效审批人 | 改变定义结构或节点顺序 |
-| `work_item` | 表达当前节点由哪个具体用户处理 | 决定流程路由或独立完成业务动作 |
-| 强类型领域命令 | 校验并形成单据正式业务结果 | 自行创建流程节点或审批任务 |
-| `workflow_action` | 保存面向单据的追加式动作审计 | 作为流程状态源 |
+| 对象                             | 唯一职责                                     | 禁止职责                         |
+| -------------------------------- | -------------------------------------------- | -------------------------------- |
+| `approval_process_definition`    | 保存某个 `DocumentType` 的不可变审批流程版本 | 保存具体单据或运行状态           |
+| `approval_node_definition`       | 保存定义版本内的人工审批节点和指定审批人     | 保存审批结果或改变运行时审批人   |
+| `approval_transition_definition` | 保存节点在事件发生后的唯一流向               | 执行业务领域动作                 |
+| 业务单据                         | 冻结创建时绑定的流程定义版本                 | 临时增减节点、换人或选择下一节点 |
+| `approval_process_instance`      | 保存单据审批运行状态、当前轮次和当前节点执行 | 代替业务单据保存正式业务状态     |
+| `approval_node_execution`        | 保存节点每次进入、处理和结束的不可变运行历史 | 承担队列查询责任                 |
+| `approval_instance_assignee`     | 冻结实例内各节点的当前有效审批人             | 改变定义结构或节点顺序           |
+| `work_item`                      | 表达当前节点由哪个具体用户处理               | 决定流程路由或独立完成业务动作   |
+| 强类型领域命令                   | 校验并形成单据正式业务结果                   | 自行创建流程节点或审批任务       |
+| `workflow_action`                | 保存面向单据的追加式动作审计                 | 作为流程状态源                   |
 
 ### 2.4 分层与依赖方向（已签署）
 
@@ -135,22 +135,22 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 每个 `DocumentType` 必须注册唯一审批政策。审批政策至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `document_type` | 固定 `DocumentType` 枚举值 |
-| `approval_requirement` | `NO_APPROVAL` 或 `PROCESS_REQUIRED` |
-| `definition_admin_permission` | 创建、编辑和发布该类型流程所需的类型级权限 |
-| `runtime_admin_permission` | 管理视图、应急撤回、恢复原审批人和受阻取消所需的类型级权限 |
-| `approver_eligibility_policy` | 校验指定用户能否审批该类单据的强类型策略 |
-| `separation_of_duties_policy` | 提交人、经办人和审批人之间的岗位分离规则 |
-| `required_node_purposes` | 发布时必须恰好满足的 ERP 节点用途集合；无必备用途时为空 |
-| `subject_version_source` | 冻结提交版本的权威字段，见第 4.4 节 |
-| `subject_snapshot_fields` | 启动时冻结的有界业务快照字段，见第 4.4 节 |
-| `work_item_owner_role` | 审批任务 `owner_role` 的唯一稳定取值 |
-| `owner_organization_source` | 审批任务 `owner_organization_id` 的责任组织来源字段 |
-| `start_action` | 单据提交并启动流程前执行的强类型领域动作 |
-| `final_approve_action` | 最终通过时执行的唯一强类型领域动作 |
-| `cancel_action` | 审批最终通过前撤回到可修正草稿的强类型领域动作 |
+| 字段                          | 约束                                                       |
+| ----------------------------- | ---------------------------------------------------------- |
+| `document_type`               | 固定 `DocumentType` 枚举值                                 |
+| `approval_requirement`        | `NO_APPROVAL` 或 `PROCESS_REQUIRED`                        |
+| `definition_admin_permission` | 创建、编辑和发布该类型流程所需的类型级权限                 |
+| `runtime_admin_permission`    | 管理视图、应急撤回、恢复原审批人和受阻取消所需的类型级权限 |
+| `approver_eligibility_policy` | 校验指定用户能否审批该类单据的强类型策略                   |
+| `separation_of_duties_policy` | 提交人、经办人和审批人之间的岗位分离规则                   |
+| `required_node_purposes`      | 发布时必须恰好满足的 ERP 节点用途集合；无必备用途时为空    |
+| `subject_version_source`      | 冻结提交版本的权威字段，见第 4.4 节                        |
+| `subject_snapshot_fields`     | 启动时冻结的有界业务快照字段，见第 4.4 节                  |
+| `work_item_owner_role`        | 审批任务 `owner_role` 的唯一稳定取值                       |
+| `owner_organization_source`   | 审批任务 `owner_organization_id` 的责任组织来源字段        |
+| `start_action`                | 单据提交并启动流程前执行的强类型领域动作                   |
+| `final_approve_action`        | 最终通过时执行的唯一强类型领域动作                         |
+| `cancel_action`               | 审批最终通过前撤回到可修正草稿的强类型领域动作             |
 
 11 个 `PROCESS_REQUIRED` 类型都必须注册实际 `cancel_action`，不支持禁止撤回或另设受阻取消动作。业务撤回与管理员受阻取消共用同一个强类型动作；两者只允许取消 `RUNNING` / `BLOCKED` 实例，已经最终通过并形成业务事实的实例不可取消，原事实只能按对应冲正或变更合同处理。`NO_APPROVAL` 政策只包含 `document_type`、`approval_requirement` 和 `process_kind`，不得包含动作、资格、岗位分离、WorkItem 或取消配置，也不得注册空 Adapter。
 
@@ -171,28 +171,28 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 类型级权限命名规则固定为 `<document_type_snake_case>:approval_definition_admin` 与 `<document_type_snake_case>:approval_runtime_admin`。
 
-| `DocumentType` | 中文名 | `approval_requirement` | 类型级权限前缀 |
-| --- | --- | --- | --- |
-| `SalesOrder` | 销售单（实物及服务） | `PROCESS_REQUIRED` | `sales_order` |
-| `VoucherSalesOrder` | 卡券销售单 | `PROCESS_REQUIRED` | `voucher_sales_order` |
-| `SalesChangeOrder` | 销售变更单 | `PROCESS_REQUIRED` | `sales_change_order` |
-| `PurchaseOrder` | 采购单 | `PROCESS_REQUIRED` | `purchase_order` |
-| `PurchaseChangeOrder` | 采购变更单 | `PROCESS_REQUIRED` | `purchase_change_order` |
-| `StockAdjustment` | 库存调整单 | `PROCESS_REQUIRED` | `stock_adjustment` |
-| `CustomerReceipt` | 客户回款单 | `PROCESS_REQUIRED` | `customer_receipt` |
-| `SupplierPayment` | 供应商付款单 | `NO_APPROVAL` | 不适用 |
-| `CustomerRefund` | 客户退款单 | `PROCESS_REQUIRED` | `customer_refund` |
-| `SupplierRefund` | 供应商退款单 | `PROCESS_REQUIRED` | `supplier_refund` |
-| `ReceiptReversal` | 回款冲正单 | `PROCESS_REQUIRED` | `receipt_reversal` |
-| `PaymentReversal` | 付款冲正单 | `PROCESS_REQUIRED` | `payment_reversal` |
-| `PurchaseReceipt` | 采购收货单 | `NO_APPROVAL` | 不适用 |
-| `Delivery` | 仓发单 | `NO_APPROVAL` | 不适用 |
-| `ElectronicDelivery` | 电子交付单 | `NO_APPROVAL` | 不适用 |
-| `ServiceFulfillment` | 服务履约单 | `NO_APPROVAL` | 不适用 |
-| `CustomerAcceptance` | 客户验收单 | `NO_APPROVAL` | 不适用 |
-| `Invoice` | 发票 | `NO_APPROVAL` | 不适用 |
-| `SalesReturnCase` | 销售退货单 | `NO_APPROVAL` | 不适用 |
-| `PurchaseReturnOrder` | 采购退货单 | `NO_APPROVAL` | 不适用 |
+| `DocumentType`        | 中文名               | `approval_requirement` | 类型级权限前缀          |
+| --------------------- | -------------------- | ---------------------- | ----------------------- |
+| `SalesOrder`          | 销售单（实物及服务） | `PROCESS_REQUIRED`     | `sales_order`           |
+| `VoucherSalesOrder`   | 卡券销售单           | `PROCESS_REQUIRED`     | `voucher_sales_order`   |
+| `SalesChangeOrder`    | 销售变更单           | `PROCESS_REQUIRED`     | `sales_change_order`    |
+| `PurchaseOrder`       | 采购单               | `PROCESS_REQUIRED`     | `purchase_order`        |
+| `PurchaseChangeOrder` | 采购变更单           | `PROCESS_REQUIRED`     | `purchase_change_order` |
+| `StockAdjustment`     | 库存调整单           | `PROCESS_REQUIRED`     | `stock_adjustment`      |
+| `CustomerReceipt`     | 客户回款单           | `PROCESS_REQUIRED`     | `customer_receipt`      |
+| `SupplierPayment`     | 供应商付款单         | `NO_APPROVAL`          | 不适用                  |
+| `CustomerRefund`      | 客户退款单           | `PROCESS_REQUIRED`     | `customer_refund`       |
+| `SupplierRefund`      | 供应商退款单         | `PROCESS_REQUIRED`     | `supplier_refund`       |
+| `ReceiptReversal`     | 回款冲正单           | `PROCESS_REQUIRED`     | `receipt_reversal`      |
+| `PaymentReversal`     | 付款冲正单           | `PROCESS_REQUIRED`     | `payment_reversal`      |
+| `PurchaseReceipt`     | 采购收货单           | `NO_APPROVAL`          | 不适用                  |
+| `Delivery`            | 仓发单               | `NO_APPROVAL`          | 不适用                  |
+| `ElectronicDelivery`  | 电子交付单           | `NO_APPROVAL`          | 不适用                  |
+| `ServiceFulfillment`  | 服务履约单           | `NO_APPROVAL`          | 不适用                  |
+| `CustomerAcceptance`  | 客户验收单           | `NO_APPROVAL`          | 不适用                  |
+| `Invoice`             | 发票                 | `NO_APPROVAL`          | 不适用                  |
+| `SalesReturnCase`     | 销售退货单           | `NO_APPROVAL`          | 不适用                  |
+| `PurchaseReturnOrder` | 采购退货单           | `NO_APPROVAL`          | 不适用                  |
 
 签署规则：`PROCESS_REQUIRED` 固定为 11 个类型。`NO_APPROVAL` 固定为 9 个类型，其中 `SupplierPayment` 的付款授权来源是已经最终通过的 `PurchaseOrder`；付款执行由指定到人的 `SupplierPaymentExecution` 工作项承担，不得重复启动付款审批。其余 8 个 `NO_APPROVAL` 类型维持既有无审批合同；`SalesReturnCase`（`PENDING_WAREHOUSE_ACCEPTANCE`、`PENDING_PROCUREMENT`、`PENDING_FINANCE`）与 `PurchaseReturnOrder`（`PENDING_EXECUTION`）的人工状态属于履约与执行分工态，不属于审批复核态。
 
@@ -215,19 +215,19 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 #### 4.4.1 状态与版本
 
-| `DocumentType` | 创建状态 | 允许提交状态 | 启动后状态 | 最终通过后状态 | `subject_version` 权威来源 |
-| --- | --- | --- | --- | --- | --- |
-| `SalesOrder` | `CommercialStatus=DRAFT` / `ReviewStatus=NOT_SUBMITTED` | `DRAFT` / `NOT_SUBMITTED` | `PENDING_REVIEW` / `IN_APPROVAL` | `EFFECTIVE` / `APPROVED` | `sales_order_submission.submission_no` |
-| `VoucherSalesOrder` | `CommercialStatus=DRAFT` / `ReviewStatus=NOT_SUBMITTED` | `DRAFT` / `NOT_SUBMITTED` | `PENDING_REVIEW` / `IN_APPROVAL` | `EFFECTIVE` / `APPROVED` | `sales_order_submission.submission_no` |
-| `SalesChangeOrder` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `EFFECTIVE` | `sales_change_submission.submission_no` |
-| `PurchaseOrder` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `EFFECTIVE` | 新增 `approval_subject_version` |
-| `PurchaseChangeOrder` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `EFFECTIVE` | 新增 `approval_subject_version` |
-| `StockAdjustment` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
-| `CustomerReceipt` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
-| `CustomerRefund` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
-| `SupplierRefund` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
-| `ReceiptReversal` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
-| `PaymentReversal` | `DRAFT` | `DRAFT` | `IN_APPROVAL` | `POSTED` | 新增 `approval_subject_version` |
+| `DocumentType`        | 创建状态                                                | 允许提交状态              | 启动后状态                       | 最终通过后状态           | `subject_version` 权威来源              |
+| --------------------- | ------------------------------------------------------- | ------------------------- | -------------------------------- | ------------------------ | --------------------------------------- |
+| `SalesOrder`          | `CommercialStatus=DRAFT` / `ReviewStatus=NOT_SUBMITTED` | `DRAFT` / `NOT_SUBMITTED` | `PENDING_REVIEW` / `IN_APPROVAL` | `EFFECTIVE` / `APPROVED` | `sales_order_submission.submission_no`  |
+| `VoucherSalesOrder`   | `CommercialStatus=DRAFT` / `ReviewStatus=NOT_SUBMITTED` | `DRAFT` / `NOT_SUBMITTED` | `PENDING_REVIEW` / `IN_APPROVAL` | `EFFECTIVE` / `APPROVED` | `sales_order_submission.submission_no`  |
+| `SalesChangeOrder`    | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `EFFECTIVE`              | `sales_change_submission.submission_no` |
+| `PurchaseOrder`       | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `EFFECTIVE`              | 新增 `approval_subject_version`         |
+| `PurchaseChangeOrder` | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `EFFECTIVE`              | 新增 `approval_subject_version`         |
+| `StockAdjustment`     | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `POSTED`                 | 新增 `approval_subject_version`         |
+| `CustomerReceipt`     | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `POSTED`                 | 新增 `approval_subject_version`         |
+| `CustomerRefund`      | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `POSTED`                 | 新增 `approval_subject_version`         |
+| `SupplierRefund`      | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `POSTED`                 | 新增 `approval_subject_version`         |
+| `ReceiptReversal`     | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `POSTED`                 | 新增 `approval_subject_version`         |
+| `PaymentReversal`     | `DRAFT`                                                 | `DRAFT`                   | `IN_APPROVAL`                    | `POSTED`                 | 新增 `approval_subject_version`         |
 
 关于 `subject_version` 的固定规则：
 
@@ -258,10 +258,10 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 本系统不得创建团队业务任务。下列业务概念的目标处置固定为：
 
-| 业务概念 | 禁用 `WorkItemType` | 禁用状态 | 唯一目标处置 |
-| --- | --- | --- | --- |
-| 采购二次确认 | `ProcurementConfirmation` | `ReviewStatus::PENDING_PROCUREMENT_CONFIRMATION` | 收敛为 `SalesOrder` 已发布定义中的一个普通单人审批节点 |
-| 低毛利上级确认 | `LowMarginManagerConfirmation` | `ReviewStatus::PENDING_LOW_MARGIN_SUPERIOR` | 整体删除，不保留任何替代环节 |
+| 业务概念       | 禁用 `WorkItemType`            | 禁用状态                                         | 唯一目标处置                                           |
+| -------------- | ------------------------------ | ------------------------------------------------ | ------------------------------------------------------ |
+| 采购二次确认   | `ProcurementConfirmation`      | `ReviewStatus::PENDING_PROCUREMENT_CONFIRMATION` | 收敛为 `SalesOrder` 已发布定义中的一个普通单人审批节点 |
+| 低毛利上级确认 | `LowMarginManagerConfirmation` | `ReviewStatus::PENDING_LOW_MARGIN_SUPERIOR`      | 整体删除，不保留任何替代环节                           |
 
 **采购确认节点**
 
@@ -285,19 +285,19 @@ bpm          -> entity-core + entity-macros + 外部基础库
 
 #### 4.4.4 强类型动作与撤回合同
 
-| `DocumentType` | `on_approval_start` | `on_final_approve` | `cancel_action` | 最终副作用 |
-| --- | --- | --- | --- | --- |
-| `SalesOrder` | `SalesOrderService::start_approval_submission` | `SalesOrderService::formalize_approved_submission` | `SalesOrderService::cancel_approval_submission` | 冻结提交修订为正式版本 |
-| `VoucherSalesOrder` | `SalesOrderService::start_approval_submission` | `SalesOrderService::formalize_approved_submission` | `SalesOrderService::cancel_approval_submission` | 冻结提交修订为正式版本，并向商城发送执行投影 |
-| `SalesChangeOrder` | `SalesChangeOrderService::submit_sales_change` | `SalesChangeOrderService::apply_effective_change` | `SalesChangeOrderService::cancel_approval` | 生成生效修订并改写销售单 |
-| `PurchaseOrder` | `PurchaseOrderService::submit` | `PurchaseOrderService::formalize_approved_order` | `PurchaseOrderService::cancel_approval` | 采购单生效，允许执行 |
-| `PurchaseChangeOrder` | `PurchaseChangeService::submit_change` | `PurchaseChangeService::apply_effective_change` | `PurchaseChangeService::cancel_approval` | 改写采购单并同步履约影响 |
-| `StockAdjustment` | `InventoryService::submit_stock_adjustment` | `InventoryService::post_stock_adjustment` | `InventoryService::cancel_stock_adjustment_approval` | 库存移动过账 |
-| `CustomerReceipt` | `ReceivableService::submit_customer_receipt` | `ReceivableService::post_customer_receipt` | `ReceivableService::cancel_customer_receipt_approval` | 应收核销与资金入账 |
-| `CustomerRefund` | `ReturnsService::submit_customer_refund` | `ReturnsService::post_customer_refund` | `ReturnsService::cancel_customer_refund_approval` | 客户退款出账 |
-| `SupplierRefund` | `ReturnsService::submit_supplier_refund` | `ReturnsService::post_supplier_refund` | `ReturnsService::cancel_supplier_refund_approval` | 供应商退款入账 |
-| `ReceiptReversal` | `ReturnsService::submit_receipt_reversal` | `ReturnsService::post_receipt_reversal` | `ReturnsService::cancel_receipt_reversal_approval` | 回款冲正 |
-| `PaymentReversal` | `ReturnsService::submit_payment_reversal` | `ReturnsService::post_payment_reversal` | `ReturnsService::cancel_payment_reversal_approval` | 付款冲正 |
+| `DocumentType`        | `on_approval_start`                            | `on_final_approve`                                 | `cancel_action`                                       | 最终副作用                                   |
+| --------------------- | ---------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------- |
+| `SalesOrder`          | `SalesOrderService::start_approval_submission` | `SalesOrderService::formalize_approved_submission` | `SalesOrderService::cancel_approval_submission`       | 冻结提交修订为正式版本                       |
+| `VoucherSalesOrder`   | `SalesOrderService::start_approval_submission` | `SalesOrderService::formalize_approved_submission` | `SalesOrderService::cancel_approval_submission`       | 冻结提交修订为正式版本，并向商城发送执行投影 |
+| `SalesChangeOrder`    | `SalesChangeOrderService::submit_sales_change` | `SalesChangeOrderService::apply_effective_change`  | `SalesChangeOrderService::cancel_approval`            | 生成生效修订并改写销售单                     |
+| `PurchaseOrder`       | `PurchaseOrderService::submit`                 | `PurchaseOrderService::formalize_approved_order`   | `PurchaseOrderService::cancel_approval`               | 采购单生效，允许执行                         |
+| `PurchaseChangeOrder` | `PurchaseChangeService::submit_change`         | `PurchaseChangeService::apply_effective_change`    | `PurchaseChangeService::cancel_approval`              | 改写采购单并同步履约影响                     |
+| `StockAdjustment`     | `InventoryService::submit_stock_adjustment`    | `InventoryService::post_stock_adjustment`          | `InventoryService::cancel_stock_adjustment_approval`  | 库存移动过账                                 |
+| `CustomerReceipt`     | `ReceivableService::submit_customer_receipt`   | `ReceivableService::post_customer_receipt`         | `ReceivableService::cancel_customer_receipt_approval` | 应收核销与资金入账                           |
+| `CustomerRefund`      | `ReturnsService::submit_customer_refund`       | `ReturnsService::post_customer_refund`             | `ReturnsService::cancel_customer_refund_approval`     | 客户退款出账                                 |
+| `SupplierRefund`      | `ReturnsService::submit_supplier_refund`       | `ReturnsService::post_supplier_refund`             | `ReturnsService::cancel_supplier_refund_approval`     | 供应商退款入账                               |
+| `ReceiptReversal`     | `ReturnsService::submit_receipt_reversal`      | `ReturnsService::post_receipt_reversal`            | `ReturnsService::cancel_receipt_reversal_approval`    | 回款冲正                                     |
+| `PaymentReversal`     | `ReturnsService::submit_payment_reversal`      | `ReturnsService::post_payment_reversal`            | `ReturnsService::cancel_payment_reversal_approval`    | 付款冲正                                     |
 
 1. 11 个类型的 `cancel_action` 成功后，单据一律回到该类型的 `DRAFT` / `NOT_SUBMITTED`，`subject_version` 不回退；修改后重新提交必须递增 `subject_version` 并创建新实例；
 2. 原提交人只能在业务撤回规则和服务端 `allowed_actions` 同时允许时撤回；撤回原因一律必填。具备该类型 `approval_runtime_admin` 权限和实例 DataScope 的运行管理员可在原提交人无法处理时应急撤回，但必须走同一业务撤回端口并记录应急代办身份。管理员受阻取消只处理第 12.5 节的非人员一致性 blocker，仍执行同一 `cancel_action`，不得另设终态或动作；
@@ -345,16 +345,16 @@ line_count             行数
 
 每个请求必须同时通过 Handler 动作级权限与 Service 资源级政策门禁。第二道门禁按动作穷尽映射，不得把管理员类型级权限错误施加给普通审批人或原提交人：
 
-| 动作 | Handler 门禁 | Service 门禁 |
-| --- | --- | --- |
-| 固定类型目录读取 | `approval_process:read` | 返回第 4.3 节 20 行非敏感目录；不得包含定义节点或审批人详情 |
-| 定义版本与详情读取 | `approval_process:read` | `PROCESS_REQUIRED` 类型的 `definition_admin_permission` 或 `runtime_admin_permission`；`NO_APPROVAL` 无定义详情 |
-| 定义创建、编辑、发布、退役 | 对应 `approval_process:*` | 该类型 `definition_admin_permission` |
-| 未提交绑定升级 | `approval_instance:upgrade_binding` | 该类型 `definition_admin_permission` + 单据对象读取权 + DataScope |
-| 管理视图、恢复、受阻取消 | `approval_instance:read|resume|cancel_blocked` | 该类型 `runtime_admin_permission` + 实例对象读取权 + DataScope |
-| 审批决定 | `approval_instance:decide` | 当前开放任务责任 + 当前审批人资格 + 对象读取权 + DataScope + 岗位分离 |
-| 正常撤回 | `approval_instance:cancel` | 原提交人，或具备该类型 `runtime_admin_permission` 的应急运行管理员；两者都必须具备对象读取权、DataScope 且通过业务撤回规则 |
-| 实例与历史普通读取 | `approval_instance:read` | 本人发起、本人当前责任或业务对象读取权与 DataScope；不得因此获得管理动作 |
+| 动作                       | Handler 门禁                        | Service 门禁                                                                                                               |
+| -------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 固定类型目录读取           | `approval_process:read`             | 返回第 4.3 节 20 行非敏感目录；不得包含定义节点或审批人详情                                                                |
+| 定义版本与详情读取         | `approval_process:read`             | `PROCESS_REQUIRED` 类型的 `definition_admin_permission` 或 `runtime_admin_permission`；`NO_APPROVAL` 无定义详情            |
+| 定义创建、编辑、发布、退役 | 对应 `approval_process:*`           | 该类型 `definition_admin_permission`                                                                                       |
+| 未提交绑定升级             | `approval_instance:upgrade_binding` | 该类型 `definition_admin_permission` + 单据对象读取权 + DataScope                                                          |
+| 管理视图、恢复、受阻取消   | `approval_instance:read             | resume                                                                                                                     | cancel_blocked` | 该类型 `runtime_admin_permission` + 实例对象读取权 + DataScope |
+| 审批决定                   | `approval_instance:decide`          | 当前开放任务责任 + 当前审批人资格 + 对象读取权 + DataScope + 岗位分离                                                      |
+| 正常撤回                   | `approval_instance:cancel`          | 原提交人，或具备该类型 `runtime_admin_permission` 的应急运行管理员；两者都必须具备对象读取权、DataScope 且通过业务撤回规则 |
+| 实例与历史普通读取         | `approval_instance:read`            | 本人发起、本人当前责任或业务对象读取权与 DataScope；不得因此获得管理动作                                                   |
 
 具备动作级权限不得自动获得任一业务对象或 `DocumentType` 的管理权；普通审批责任与原提交人身份也不得反向授予定义管理或运行管理权。两类管理员权限必须进入后端权限种子、生成物和权限目录。政策缺失或应注册的类型权限缺失属于服务端部署不变量错误，固定错误码 `APPROVAL_POLICY_NOT_REGISTERED`，只允许映射为 500 并触发 readiness 失败，不得映射为 4xx。
 
@@ -364,18 +364,18 @@ line_count             行数
 
 `approval_process_definition` 至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `id` | 不可复用的定义版本主键 |
-| `document_type` | 唯一适用的固定单据类型 |
-| `definition_version` | 同一 `document_type` 内从 1 单调递增 |
-| `name` | 管理和审计名称 |
-| `status` | `DRAFT`、`PUBLISHED`、`RETIRED` |
-| `entry_node_key` | 唯一入口审批节点 |
-| `created_by` / `created_at` | 草稿创建审计 |
-| `published_by` / `published_at` | 发布审计 |
-| `retired_by` / `retired_at` | 退役审计 |
-| `definition_lock_version` | 草稿并发修改使用的持久化乐观锁版本 |
+| 字段                            | 约束                                 |
+| ------------------------------- | ------------------------------------ |
+| `id`                            | 不可复用的定义版本主键               |
+| `document_type`                 | 唯一适用的固定单据类型               |
+| `definition_version`            | 同一 `document_type` 内从 1 单调递增 |
+| `name`                          | 管理和审计名称                       |
+| `status`                        | `DRAFT`、`PUBLISHED`、`RETIRED`      |
+| `entry_node_key`                | 唯一入口审批节点                     |
+| `created_by` / `created_at`     | 草稿创建审计                         |
+| `published_by` / `published_at` | 发布审计                             |
+| `retired_by` / `retired_at`     | 退役审计                             |
+| `definition_lock_version`       | 草稿并发修改使用的持久化乐观锁版本   |
 
 必须建立：
 
@@ -388,16 +388,16 @@ line_count             行数
 
 `approval_node_definition` 至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_process_definition_id` | 所属定义版本 |
-| `node_key` | 定义版本内稳定且唯一 |
-| `node_name` | 面向用户的审批层级名称 |
-| `node_type` | 第一阶段固定为 `USER_APPROVAL` |
-| `node_purpose` | 可空的稳定用途键；BPM 仅按不透明值保存，ERP 发布政策负责解释 |
-| `display_order` | 从 1 开始连续递增，仅用于线性编辑和展示 |
-| `assignee_user_id` | 提前配置的具体审批用户，必填 |
-| `assignee_name_snapshot` | 发布时冻结的显示快照 |
+| 字段                             | 约束                                                         |
+| -------------------------------- | ------------------------------------------------------------ |
+| `approval_process_definition_id` | 所属定义版本                                                 |
+| `node_key`                       | 定义版本内稳定且唯一                                         |
+| `node_name`                      | 面向用户的审批层级名称                                       |
+| `node_type`                      | 第一阶段固定为 `USER_APPROVAL`                               |
+| `node_purpose`                   | 可空的稳定用途键；BPM 仅按不透明值保存，ERP 发布政策负责解释 |
+| `display_order`                  | 从 1 开始连续递增，仅用于线性编辑和展示                      |
+| `assignee_user_id`               | 提前配置的具体审批用户，必填                                 |
+| `assignee_name_snapshot`         | 发布时冻结的显示快照                                         |
 
 1. 不得保存责任模式字段。`assignment_mode` 与 `AssignmentMode` 枚举已随第 1 章第 7 条整体删除，节点责任只有「指定到具体用户」一种。
 2. 不得保存角色池、候选人集合、任意表达式或处理人解析脚本。
@@ -409,13 +409,13 @@ line_count             行数
 
 `approval_transition_definition` 至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_process_definition_id` | 所属定义版本 |
-| `from_node_key` | 事件来源节点 |
-| `event` | 第一阶段只允许 `APPROVE`、`REJECT` |
-| `to_node_key` | 指向下一节点时必填 |
-| `terminal_result` | 指向流程终点时固定为 `APPROVED` |
+| 字段                             | 约束                               |
+| -------------------------------- | ---------------------------------- |
+| `approval_process_definition_id` | 所属定义版本                       |
+| `from_node_key`                  | 事件来源节点                       |
+| `event`                          | 第一阶段只允许 `APPROVE`、`REJECT` |
+| `to_node_key`                    | 指向下一节点时必填                 |
+| `terminal_result`                | 指向流程终点时固定为 `APPROVED`    |
 
 必须建立 `(approval_process_definition_id, from_node_key, event)` 唯一索引，保证同一节点对同一事件只有一个出口。
 
@@ -487,11 +487,11 @@ N3 --REJECT--> N1
 
 业务单据至少保存：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_process_definition_id` | `PROCESS_REQUIRED` 单据创建时必填 |
-| `approval_definition_version` | 创建时冻结，后续不得由普通业务操作修改 |
-| `approval_definition_bound_at` | 绑定时间 |
+| 字段                             | 约束                                   |
+| -------------------------------- | -------------------------------------- |
+| `approval_process_definition_id` | `PROCESS_REQUIRED` 单据创建时必填      |
+| `approval_definition_version`    | 创建时冻结，后续不得由普通业务操作修改 |
+| `approval_definition_bound_at`   | 绑定时间                               |
 
 `PROCESS_REQUIRED` 单据创建必须在同一事务中：
 
@@ -549,18 +549,18 @@ N3 --REJECT--> N1
 
 `approval_process_instance` 至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_process_definition_id` | 从单据绑定复制，运行中不可修改 |
-| `definition_version` | 从单据绑定复制，运行中不可修改 |
-| `document_type` / `business_object_id` | 被审批单据身份 |
-| `subject_version` | 被审批的不可变提交版本 |
-| `status` | `RUNNING`、`APPROVED`、`CANCELLED`、`BLOCKED` |
-| `current_round_no` | 从 1 开始，驳回重启后递增 |
-| `current_node_execution_id` | `RUNNING` 或 `BLOCKED` 时指向当前执行 |
-| `blocker_code` / `blocked_at` | 仅 `BLOCKED` 时必填 |
-| `started_by` / `started_at` / `ended_at` | 运行审计 |
-| `instance_version` | 实例乐观锁版本 |
+| 字段                                     | 约束                                          |
+| ---------------------------------------- | --------------------------------------------- |
+| `approval_process_definition_id`         | 从单据绑定复制，运行中不可修改                |
+| `definition_version`                     | 从单据绑定复制，运行中不可修改                |
+| `document_type` / `business_object_id`   | 被审批单据身份                                |
+| `subject_version`                        | 被审批的不可变提交版本                        |
+| `status`                                 | `RUNNING`、`APPROVED`、`CANCELLED`、`BLOCKED` |
+| `current_round_no`                       | 从 1 开始，驳回重启后递增                     |
+| `current_node_execution_id`              | `RUNNING` 或 `BLOCKED` 时指向当前执行         |
+| `blocker_code` / `blocked_at`            | 仅 `BLOCKED` 时必填                           |
+| `started_by` / `started_at` / `ended_at` | 运行审计                                      |
+| `instance_version`                       | 实例乐观锁版本                                |
 
 1. `REJECTED` 不是实例终态，不得继续用于表达本合同的驳回语义。
 2. 同一单据和 `subject_version` 同时最多一个 `RUNNING` 或 `BLOCKED` 实例；定义 ID 不得进入该唯一性边界，即使绑定漂移也不得为同一业务版本启动第二条活动链。
@@ -571,14 +571,14 @@ N3 --REJECT--> N1
 
 `approval_instance_assignee` 至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_process_instance_id` / `node_key` | 实例内节点唯一身份 |
-| `definition_assignee_user_id` | 从发布定义复制，永久保留 |
-| `current_assignee_user_id` | 从发布定义复制，必须始终等于 `definition_assignee_user_id` |
-| `assignment_source` | 固定为 `DEFINITION` |
-| `changed_by` / `changed_at` / `change_reason` | 必须为空；审批运行时不得改变责任人 |
-| `assignment_version` | 恢复命令使用的乐观锁版本 |
+| 字段                                          | 约束                                                       |
+| --------------------------------------------- | ---------------------------------------------------------- |
+| `approval_process_instance_id` / `node_key`   | 实例内节点唯一身份                                         |
+| `definition_assignee_user_id`                 | 从发布定义复制，永久保留                                   |
+| `current_assignee_user_id`                    | 从发布定义复制，必须始终等于 `definition_assignee_user_id` |
+| `assignment_source`                           | 固定为 `DEFINITION`                                        |
+| `changed_by` / `changed_at` / `change_reason` | 必须为空；审批运行时不得改变责任人                         |
+| `assignment_version`                          | 恢复命令使用的乐观锁版本                                   |
 
 启动实例时必须为定义中的全部节点冻结实例审批人绑定。普通用户不能修改。
 
@@ -588,21 +588,21 @@ N3 --REJECT--> N1
 
 `approval_node_execution` 至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_process_instance_id` | 所属运行实例 |
-| `node_key` / `node_name` | 冻结节点身份和名称 |
-| `round_no` | 本次执行所属审批轮次 |
-| `execution_no` | 实例内单调递增的执行序号 |
-| `status` | `ACTIVE`、`APPROVED`、`REJECTED`、`CANCELLED`、`BLOCKED`、`SUPERSEDED` |
-| `assignment_source` | `DEFINITION` 或 `ASSIGNEE_RECOVERY` |
-| `replaces_execution_id` / `ended_reason` | 仅恢复替换链使用；`ended_reason` 固定为 `ASSIGNEE_RECOVERED` |
-| `assignee_user_id` / `assignee_name_snapshot` | 本次进入节点时冻结的实际审批人 |
-| `decision` / `decision_reason` | 正式决定及原因 |
-| `decided_by` / `decided_at` | 决定审计 |
-| `activated_at` | 节点进入时间 |
-| `blocker_code` / `blocked_at` | 仅 `BLOCKED` 时必填 |
-| `execution_version` | 执行乐观锁版本 |
+| 字段                                          | 约束                                                                   |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| `approval_process_instance_id`                | 所属运行实例                                                           |
+| `node_key` / `node_name`                      | 冻结节点身份和名称                                                     |
+| `round_no`                                    | 本次执行所属审批轮次                                                   |
+| `execution_no`                                | 实例内单调递增的执行序号                                               |
+| `status`                                      | `ACTIVE`、`APPROVED`、`REJECTED`、`CANCELLED`、`BLOCKED`、`SUPERSEDED` |
+| `assignment_source`                           | `DEFINITION` 或 `ASSIGNEE_RECOVERY`                                    |
+| `replaces_execution_id` / `ended_reason`      | 仅恢复替换链使用；`ended_reason` 固定为 `ASSIGNEE_RECOVERED`           |
+| `assignee_user_id` / `assignee_name_snapshot` | 本次进入节点时冻结的实际审批人                                         |
+| `decision` / `decision_reason`                | 正式决定及原因                                                         |
+| `decided_by` / `decided_at`                   | 决定审计                                                               |
+| `activated_at`                                | 节点进入时间                                                           |
+| `blocker_code` / `blocked_at`                 | 仅 `BLOCKED` 时必填                                                    |
+| `execution_version`                           | 执行乐观锁版本                                                         |
 
 1. 每次流程令牌进入节点必须创建新的执行记录。
 2. 不得预创建未来节点的 `WAITING` 执行记录。
@@ -732,13 +732,13 @@ N3 --REJECT--> N1
 
 阻塞原因必须结构化持久化，取值固定为下列稳定 `blocker_code`，并按恢复类别归类：
 
-| 类别 | `blocker_code` | 唯一合法恢复方式 |
-| --- | --- | --- |
-| 人员失效 | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人已重新合格时执行第 12.4 节恢复；仍失效时保持受阻并升级处置 |
-| 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED` | 只允许第 12.5 节受阻取消；禁止切换定义 |
-| 任务冲突 | `OPEN_TASK_CONFLICT` | 只允许第 12.5 节受阻取消；禁止重开或删除任务后继续 |
-| 版本损坏 | `SUBJECT_VERSION_CONFLICT` | 只允许第 12.5 节受阻取消；禁止改写冻结版本 |
-| 内部不变量 | `INTERNAL_INVARIANT_BROKEN` | 无法形成合法取消计划时保持冻结、readiness 失败并前向修复代码；不得直接改库 |
+| 类别         | `blocker_code`                                                                                                                                                                      | 唯一合法恢复方式                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 人员失效     | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人已重新合格时执行第 12.4 节恢复；仍失效时保持受阻并升级处置         |
+| 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED`                                                                                                                             | 只允许第 12.5 节受阻取消；禁止切换定义                                     |
+| 任务冲突     | `OPEN_TASK_CONFLICT`                                                                                                                                                                | 只允许第 12.5 节受阻取消；禁止重开或删除任务后继续                         |
+| 版本损坏     | `SUBJECT_VERSION_CONFLICT`                                                                                                                                                          | 只允许第 12.5 节受阻取消；禁止改写冻结版本                                 |
+| 内部不变量   | `INTERNAL_INVARIANT_BROKEN`                                                                                                                                                         | 无法形成合法取消计划时保持冻结、readiness 失败并前向修复代码；不得直接改库 |
 
 只有人员失效类别允许进入恢复判断。阻塞不得被页面解释为通过、驳回或普通待处理。不得自动回退到角色池或任意管理员。
 
@@ -786,15 +786,15 @@ owner_user_id IS NOT NULL
 
 审批任务至少包含：
 
-| 字段 | 约束 |
-| --- | --- |
-| `approval_node_execution_id` | 审批任务必填且唯一关联当前执行 |
-| `owner_user_id` | 当前具体审批人，必填 |
-| `business_object_type` / `business_object_id` | 被审批单据身份 |
-| `subject_version` | 被审批的冻结提交版本 |
-| `status` | `OPEN`、`COMPLETED`、`CLOSED` |
-| `task_version` | 独立于单据版本的乐观锁版本 |
-| `assigned_at` / `completed_at` / `completed_by` | 责任和完成审计 |
+| 字段                                            | 约束                           |
+| ----------------------------------------------- | ------------------------------ |
+| `approval_node_execution_id`                    | 审批任务必填且唯一关联当前执行 |
+| `owner_user_id`                                 | 当前具体审批人，必填           |
+| `business_object_type` / `business_object_id`   | 被审批单据身份                 |
+| `subject_version`                               | 被审批的冻结提交版本           |
+| `status`                                        | `OPEN`、`COMPLETED`、`CLOSED`  |
+| `task_version`                                  | 独立于单据版本的乐观锁版本     |
+| `assigned_at` / `completed_at` / `completed_by` | 责任和完成审计                 |
 
 1. 每个 `ACTIVE` 节点执行恰好一个 `OPEN` 审批任务。
 2. 每个 `OPEN` 审批任务必须明确属于一个具体用户。
@@ -815,16 +815,16 @@ owner_user_id IS NOT NULL
 
 审批任务与 `work_item` 的映射固定如下：
 
-| 字段 | 唯一取值 |
-| --- | --- |
-| `work_item_type` | 新增枚举值 `DocumentApproval` |
-| `approval_node_execution_id` | 审批任务唯一关联字段，必填；替换旧 `approval_step_instance_id` |
-| `owner_user_id` | 当前实例审批人，必填 |
-| `assignment_mode` | 字段与 `AssignmentMode` 枚举整体删除，全系统只有指定到人一种责任 |
-| `assignment_source` | 新增枚举值 `ApprovalRuntime` |
-| `owner_role` | 第 4.4.5 节签署的 `<prefix>_approver` |
-| `owner_organization_id` | `subject_snapshot.responsible_org_id` |
-| route family | 复用**已存在**的 `WorkItemFamily::Approval`（`services/src/work_item/dto.rs`），只把 `DocumentApproval` 穷尽映射进该 family，不得新增第二个审批 family；详情路由由 `DocumentType + business_object_id` 决定 |
+| 字段                         | 唯一取值                                                                                                                                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `work_item_type`             | 新增枚举值 `DocumentApproval`                                                                                                                                                                               |
+| `approval_node_execution_id` | 审批任务唯一关联字段，必填；替换旧 `approval_step_instance_id`                                                                                                                                              |
+| `owner_user_id`              | 当前实例审批人，必填                                                                                                                                                                                        |
+| `assignment_mode`            | 字段与 `AssignmentMode` 枚举整体删除，全系统只有指定到人一种责任                                                                                                                                            |
+| `assignment_source`          | 新增枚举值 `ApprovalRuntime`                                                                                                                                                                                |
+| `owner_role`                 | 第 4.4.5 节签署的 `<prefix>_approver`                                                                                                                                                                       |
+| `owner_organization_id`      | `subject_snapshot.responsible_org_id`                                                                                                                                                                       |
+| route family                 | 复用**已存在**的 `WorkItemFamily::Approval`（`services/src/work_item/dto.rs`），只把 `DocumentApproval` 穷尽映射进该 family，不得新增第二个审批 family；详情路由由 `DocumentType + business_object_id` 决定 |
 
 固定规则：
 
@@ -951,13 +951,13 @@ approval_instance:upgrade_binding
 
 管理页面必须以固定单据类型为目录展示：
 
-| 单据类型 | 审批政策 | 当前版本 | 配置状态 |
-| --- | --- | --- | --- |
-| 销售单（实物及服务） | 必须审批 | v3 | 已发布 |
-| 卡券销售单 | 必须审批 | v2 | 已发布 |
-| 采购单 | 必须审批 | v2 | 已发布 |
-| 发票 | 无需审批 | — | 不适用 |
-| 库存调整单 | 必须审批 | — | 配置缺失 |
+| 单据类型             | 审批政策 | 当前版本 | 配置状态 |
+| -------------------- | -------- | -------- | -------- |
+| 销售单（实物及服务） | 必须审批 | v3       | 已发布   |
+| 卡券销售单           | 必须审批 | v2       | 已发布   |
+| 采购单               | 必须审批 | v2       | 已发布   |
+| 发票                 | 无需审批 | —        | 不适用   |
+| 库存调整单           | 必须审批 | —        | 配置缺失 |
 
 目录必须逐行列出第 4.3 节全部 20 个固定类型，`NO_APPROVAL` 行固定显示「无需审批 / 不适用」且不提供任何写入口。`PROCESS_REQUIRED` 但无已发布定义时必须显示为「配置缺失」阻断状态，不得显示为「无需审批」。
 
@@ -1016,13 +1016,13 @@ approval_instance:upgrade_binding
 
 原「W01 今日工作台」与「W02 统一待办队列」合并为**唯一一个页面**：
 
-| 项 | 固定值 |
-| --- | --- |
-| 页面 | W01 · 我的工作台 |
-| 路由 | `/workspace` |
-| 布局 | 列表 + 详情主从，页内连续处理 |
-| 废止页面 | W02；已废止并注明能力并入 W01 |
-| 旧路由 | `/workspace/tasks` 永久重定向到 `/workspace`，不保留第二个待办入口 |
+| 项       | 固定值                                                             |
+| -------- | ------------------------------------------------------------------ |
+| 页面     | W01 · 我的工作台                                                   |
+| 路由     | `/workspace`                                                       |
+| 布局     | 列表 + 详情主从，页内连续处理                                      |
+| 废止页面 | W02；已废止并注明能力并入 W01                                      |
+| 旧路由   | `/workspace/tasks` 永久重定向到 `/workspace`，不保留第二个待办入口 |
 
 TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍为 `/workspace`。顶栏待办角标只指向本页面。
 
@@ -1048,7 +1048,7 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 
 1. **口径胶囊**是筛选器，不是跳转入口，也不是经营 KPI 卡。点击写入 URL 查询参数并筛选左列，不打开第二个页面；
 2. **左列**是唯一待办列表，承接原 W02 的全部查询、排序、分页和连续处理能力，条目跨领域混排并按类型页签收敛；全页只渲染一份列表；
-3. **右侧详情**必须先展示统一任务上下文，再展示当前选中任务的单据摘要、审批上下文或强类型业务事实；统一任务上下文至少包含任务类型、状态、优先级、责任角色、责任人、责任组织、进入时间、截止时间、到达原因、未处理影响、下一动作与阻塞原因；
+3. **右侧详情**通过作业面标题栏、打开原单据图标旁的问号入口提供统一任务上下文，不得再单独占一块说明区；点开后至少包含任务类型、状态、优先级、责任角色、责任人、责任组织、进入时间、截止时间、到达原因、未处理影响、下一动作与阻塞原因。作业面从单据摘要、审批上下文或强类型业务事实开始；
 4. **处理动作必须在详情内完成**：审批任务在详情内提交通过或驳回；非审批任务必须在详情内嵌入已登记的强类型业务作业面并提交正式领域命令。成功完成当前责任后必须刷新服务端队列并自动选中下一条，实现连续处理；
 5. 工作台不得提供通用完成表单或仅靠「打开单据」才能完成的主路径。打开原业务单据只允许作为补充查阅入口，不得替代工作台原地处理；
 6. 详情区不得提供批量通过、批量驳回或批量转交；
@@ -1082,17 +1082,17 @@ TaskTabs 身份仍固定为 `workspace:today:{userId}`，登录默认着陆仍�
 
 事务内只允许追加通知 outbox，不得在事务内调用外部通知服务。投递由独立 worker 在事务外完成。
 
-| 事件 | 收件人 | 去重键 |
-| --- | --- | --- |
-| 审批已启动 | 提交人 + 第一节点当前审批人 | `started:<instance_id>` |
-| 进入节点 | 该节点当前审批人 | `entered:<execution_id>` |
-| 节点通过 | 提交人 | `approved:<execution_id>` |
-| 节点驳回 | 提交人 | `rejected:<execution_id>` |
-| 实例受阻 | 提交人 + 该 `DocumentType` 具备 `approval_runtime_admin` 的用户 | `blocked:<execution_id>` |
-| 原审批人已恢复 | 新执行审批人 + 提交人 | `resumed:<execution_id>` |
-| 正常取消 | 取消时的当前审批人 + 提交人；应急撤回时再加执行管理员 | `cancelled:<instance_id>:<round_no>` |
-| 受阻取消 | 提交人 + 执行取消的运行管理员 | `blocked_cancelled:<instance_id>` |
-| 最终通过 | 提交人 | `completed:<instance_id>` |
+| 事件           | 收件人                                                          | 去重键                               |
+| -------------- | --------------------------------------------------------------- | ------------------------------------ |
+| 审批已启动     | 提交人 + 第一节点当前审批人                                     | `started:<instance_id>`              |
+| 进入节点       | 该节点当前审批人                                                | `entered:<execution_id>`             |
+| 节点通过       | 提交人                                                          | `approved:<execution_id>`            |
+| 节点驳回       | 提交人                                                          | `rejected:<execution_id>`            |
+| 实例受阻       | 提交人 + 该 `DocumentType` 具备 `approval_runtime_admin` 的用户 | `blocked:<execution_id>`             |
+| 原审批人已恢复 | 新执行审批人 + 提交人                                           | `resumed:<execution_id>`             |
+| 正常取消       | 取消时的当前审批人 + 提交人；应急撤回时再加执行管理员           | `cancelled:<instance_id>:<round_no>` |
+| 受阻取消       | 提交人 + 执行取消的运行管理员                                   | `blocked_cancelled:<instance_id>`    |
+| 最终通过       | 提交人                                                          | `completed:<instance_id>`            |
 
 固定投递策略：
 

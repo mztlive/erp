@@ -26,6 +26,7 @@ type UnitOption = {
 }
 
 type ProductBasicSectionProps = {
+    idPrefix?: string
     isCreate: boolean
     canRevise: boolean
     name: string
@@ -40,6 +41,7 @@ type ProductBasicSectionProps = {
 }
 
 function ProductBasicSection({
+    idPrefix,
     isCreate,
     canRevise,
     name,
@@ -52,6 +54,7 @@ function ProductBasicSection({
     categoryLoading,
     brandLoading,
 }: ProductBasicSectionProps) {
+    const prefix = idPrefix ?? "master-data-product-basic"
     return (
         <ProductSectionFrame
             id="product-section-basic"
@@ -65,9 +68,9 @@ function ProductBasicSection({
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                    <Label htmlFor="product-no">商品编号</Label>
+                    <Label htmlFor={`${prefix}-product-no`}>商品编号</Label>
                     <Input
-                        id="product-no"
+                        id={`${prefix}-product-no`}
                         value={fields.productNo}
                         disabled={!isCreate}
                         onChange={(event) =>
@@ -85,18 +88,18 @@ function ProductBasicSection({
                     ) : null}
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="product-name">名称</Label>
+                    <Label htmlFor={`${prefix}-name`}>名称</Label>
                     <Input
-                        id="product-name"
+                        id={`${prefix}-name`}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="商品名称（SPU）"
                     />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="product-description">商品描述</Label>
+                    <Label htmlFor={`${prefix}-description`}>商品描述</Label>
                     <Textarea
-                        id="product-description"
+                        id={`${prefix}-description`}
                         value={fields.description ?? ""}
                         onChange={(event) =>
                             setFields((previous) => ({
@@ -112,6 +115,7 @@ function ProductBasicSection({
                     <Label>商品类型</Label>
                     {isCreate ? (
                         <OptionCombobox
+                            id={`${prefix}-kind-combobox`}
                             value={fields.productKind || null}
                             onValueChange={(value) =>
                                 setFields((previous) => ({
@@ -141,6 +145,7 @@ function ProductBasicSection({
                 <div className="space-y-1.5">
                     <Label>{masterDataCopy.fBaseUnit}</Label>
                     <OptionCombobox
+                        id={`${prefix}-unit-combobox`}
                         value={fields.baseUnitId || null}
                         onValueChange={(id) => {
                             const unit = unitOptions?.find(
@@ -169,6 +174,7 @@ function ProductBasicSection({
                 <div className="space-y-1.5">
                     <Label>{masterDataCopy.fCategory}</Label>
                     <CategoryCombobox
+                        id={`${prefix}-category-combobox`}
                         categories={categoryOptions}
                         value={fields.categoryId || undefined}
                         onValueChange={(id) => {
@@ -190,6 +196,7 @@ function ProductBasicSection({
                 <div className="space-y-1.5">
                     <Label>{masterDataCopy.fBrand}</Label>
                     <BrandCombobox
+                        id={`${prefix}-brand-combobox`}
                         brands={brandOptions}
                         value={fields.brandId || undefined}
                         onValueChange={(id) => {

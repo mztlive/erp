@@ -186,9 +186,7 @@ export function useExecutionProjectionFilters() {
         setSourceDraft,
         panelOpen,
         setPanelOpen,
-        hasStructuredFilters: hasStructuredExecutionProjectionFilters(
-            urlState,
-        ),
+        hasStructuredFilters: hasStructuredExecutionProjectionFilters(urlState),
         applyFilters,
         clearAllFilters,
         resetMoreFilters,

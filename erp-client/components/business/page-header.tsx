@@ -37,6 +37,10 @@ export type PageHeaderProps = Omit<
      * object-chrome：对象中心导航条（可选 metadata/返回），不渲染 h1 工作面名。
      */
     variant?: PageHeaderVariant
+    /**
+     * 标题行与右侧动作的垂直对齐。缺省：compact 居中，default 顶对齐。
+     */
+    titleRowAlign?: "start" | "center"
 }
 
 const metaSlotClassName =
@@ -50,11 +54,13 @@ function PageHeader({
     actions,
     density = "compact",
     variant = "page",
+    titleRowAlign,
     className,
     ...props
 }: PageHeaderProps) {
     const objectChrome = variant === "object-chrome"
     const compact = objectChrome || density === "compact"
+    const rowAlign = titleRowAlign ?? (compact ? "center" : "start")
     const showTitleBlock =
         !objectChrome &&
         (title != null ||
@@ -90,7 +96,9 @@ function PageHeader({
                 <div
                     className={cn(
                         "flex flex-col gap-3 lg:flex-row",
-                        compact ? "lg:items-center" : "lg:items-start",
+                        rowAlign === "center"
+                            ? "lg:items-center"
+                            : "lg:items-start",
                     )}
                 >
                     <div className="min-w-0 flex-1">

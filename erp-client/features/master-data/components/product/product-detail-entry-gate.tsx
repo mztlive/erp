@@ -70,13 +70,17 @@ function ProductDetailEntryGate({
                     action={
                         detailQuery.isError ? (
                             <Button
+                                id="master-data-product-product-detail-entry-gate-button-1"
                                 type="button"
                                 onClick={() => void detailQuery.refetch()}
                             >
                                 重试
                             </Button>
                         ) : (
-                            <Button render={<Link href={listHref} />}>
+                            <Button
+                                id="master-data-product-product-detail-entry-gate-button-2"
+                                render={<Link href={listHref} />}
+                            >
                                 {masterDataCopy.actionBackList}
                             </Button>
                         )
@@ -118,7 +122,10 @@ function ProductDetailEntryGate({
                     kind="permission"
                     description="当前账号没有创建商品的权限，请联系管理员或有权限的同事。"
                     action={
-                        <Button render={<Link href={listHref} />}>
+                        <Button
+                            id="master-data-product-product-detail-entry-gate-button-3"
+                            render={<Link href={listHref} />}
+                        >
                             返回列表
                         </Button>
                     }

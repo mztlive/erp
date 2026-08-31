@@ -30,16 +30,25 @@ export function IntegrationPageFailure({
     description,
     error,
     onRetry,
+    id,
+    idPrefix,
 }: {
     title: string
     description: string
     error: Error | null
     onRetry: () => void
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <PageScaffold>
             <PageHeader title={title} description={description} />
-            <BusinessFailureState error={error} onRetry={onRetry} />
+            <BusinessFailureState
+                id={id}
+                idPrefix={idPrefix ?? "integration-page-failure"}
+                error={error}
+                onRetry={onRetry}
+            />
         </PageScaffold>
     )
 }
@@ -55,10 +64,7 @@ export function IntegrationNotFound({
 }) {
     return (
         <PageScaffold>
-            <PageHeader
-                title="接口错误与对账中心"
-                description="未找到该任务"
-            />
+            <PageHeader title="接口错误与对账中心" description="未找到该任务" />
             <BusinessEmptyState
                 kind="no-data"
                 title="未找到该任务或差异"
@@ -67,6 +73,7 @@ export function IntegrationNotFound({
                 action={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="integration-detail-not-found-retry"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -75,6 +82,7 @@ export function IntegrationNotFound({
                             重试
                         </Button>
                         <Button
+                            id="integration-detail-not-found-back"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"

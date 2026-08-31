@@ -55,6 +55,7 @@ export function WarehousesListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-warehouses-list-export",
                     actionKey: "export",
                     label: masterDataCopy.actionExport,
                     icon: DownloadIcon,
@@ -64,6 +65,7 @@ export function WarehousesListPage() {
                     onClick: state.onExport,
                 },
                 {
+                    id: "master-data-warehouses-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreateClosed,
                     mobileVisibility: "hide",
@@ -74,6 +76,7 @@ export function WarehousesListPage() {
             ]}
             metrics={
                 <LifecycleMetricStrip
+                    idPrefix="master-data-warehouses-list-metrics"
                     metrics={state.syncedMetrics}
                     metricKey={filters.metricKey}
                     ariaLabel="仓库指标筛选"
@@ -100,6 +103,7 @@ export function WarehousesListPage() {
                 description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
+                        idPrefix="master-data-warehouses-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -128,6 +132,7 @@ export function WarehousesListPage() {
                 }
                 table={
                     <DictionaryListTable
+                        id="master-data-warehouses-list-table"
                         rows={state.rows}
                         pageRows={state.pageRows}
                         columns={columns}

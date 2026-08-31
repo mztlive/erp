@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type FixedOptionRadioFilterOption<Value extends string = string> =
@@ -20,6 +21,8 @@ export type FixedOptionRadioFilterProps<Value extends string = string> = {
     disabled?: boolean
     "aria-label"?: string
     className?: string
+    id?: string
+    idPrefix?: string
 }
 
 /**
@@ -36,8 +39,11 @@ export function FixedOptionRadioFilter<Value extends string>({
     disabled = false,
     "aria-label": ariaLabel,
     className,
+    id,
+    idPrefix,
 }: FixedOptionRadioFilterProps<Value>) {
     const labelId = React.useId()
+    const baseId = idPrefix ?? id
 
     return (
         <div
@@ -70,6 +76,11 @@ export function FixedOptionRadioFilter<Value extends string>({
                         )}
                     >
                         <RadioGroupItem
+                            id={
+                                baseId
+                                    ? `${baseId}-option-${toAutomationIdSegment(option.value)}`
+                                    : undefined
+                            }
                             value={option.value}
                             disabled={option.disabled}
                             aria-label={option.label}

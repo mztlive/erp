@@ -34,6 +34,7 @@ type SelectFieldProps = {
     inputClassName?: string
     allowClear?: boolean
     onValueChange?: (value: string) => void
+    id?: string
 }
 
 /**
@@ -55,12 +56,14 @@ export function SelectField({
     inputClassName,
     allowClear = true,
     onValueChange,
+    id,
 }: SelectFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
-    const descriptionId = `${field.name}-description`
-    const errorId = `${field.name}-error`
+    const resolvedId = id ?? field.name
+    const descriptionId = `${resolvedId}-description`
+    const errorId = `${resolvedId}-error`
     const describedBy = [
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
@@ -71,16 +74,14 @@ export function SelectField({
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
             <FieldLabel
-                htmlFor={field.name}
+                htmlFor={resolvedId}
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
-                {required ? (
-                    <span className="text-destructive">*</span>
-                ) : null}
+                {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <OptionCombobox
-                id={field.name}
+                id={resolvedId}
                 options={options}
                 value={field.state.value || null}
                 disabled={disabled}

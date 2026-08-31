@@ -58,6 +58,7 @@ export function OverviewSection({
                     </MetricStrip>
                     <div className="mt-4 flex flex-wrap gap-2">
                         <Button
+                            id="operations-import-batch-detail-overview-view-trial"
                             type="button"
                             size="sm"
                             variant="secondary"
@@ -66,6 +67,7 @@ export function OverviewSection({
                             查看问题明细
                         </Button>
                         <Button
+                            id="operations-import-batch-detail-overview-view-confirm"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -101,6 +103,7 @@ export function OverviewSection({
                     {batch.sourceObjectSet.includes("CARD_OPENING_AR") ||
                     batch.sourceObjectSet.includes("CARD_SALES_ORDER") ? (
                         <Button
+                            id="operations-import-batch-detail-overview-card-funds-review"
                             size="sm"
                             variant="outline"
                             render={<Link href="/finance/card-funds-review" />}
@@ -111,6 +114,7 @@ export function OverviewSection({
                     ) : null}
                     {batch.sourceObjectSet.includes("OPENING_STOCK") ? (
                         <Button
+                            id="operations-import-batch-detail-overview-inventory-link"
                             size="sm"
                             variant="outline"
                             render={<Link href="/inventory?view=balance" />}

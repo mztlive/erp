@@ -44,7 +44,9 @@ const PROCESSING_STATUS_FILTER_OPTIONS: ReadonlyArray<{
 }> = [
     { value: "all", label: "全部处理状态" },
     ...(
-        Object.keys(PROCESSING_STATUS_LABEL) as HistoryBackfillProcessingStatus[]
+        Object.keys(
+            PROCESSING_STATUS_LABEL,
+        ) as HistoryBackfillProcessingStatus[]
     ).map((status) => ({
         value: status,
         label: PROCESSING_STATUS_LABEL[status],
@@ -106,12 +108,14 @@ function JobListFilterPanel({
             aria-label="历史回填任务更多筛选条件"
         >
             <FixedOptionRadioFilter
+                id="operations-history-backfill-list-filter-environment"
                 label="环境"
                 value={environmentDraft}
                 onValueChange={setEnvironmentDraft}
                 options={ENVIRONMENT_FILTER_OPTIONS}
             />
             <FixedOptionRadioFilter
+                id="operations-history-backfill-list-filter-basis"
                 label="成本口径"
                 value={basisDraft}
                 onValueChange={setBasisDraft}
@@ -121,6 +125,7 @@ function JobListFilterPanel({
                 <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                     <span className="text-muted-foreground">商城</span>
                     <MallSearchCombobox
+                        id="operations-history-backfill-list-filter-mall"
                         className="w-full"
                         value={mallIdDraft}
                         onValueChange={(v) => setMallIdDraft(v ?? null)}
@@ -131,6 +136,7 @@ function JobListFilterPanel({
                 <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                     <span className="text-muted-foreground">处理状态</span>
                     <OptionCombobox
+                        id="operations-history-backfill-list-filter-processing-status"
                         className="w-full"
                         value={processingStatusDraft}
                         aria-label="处理状态"
@@ -148,6 +154,7 @@ function JobListFilterPanel({
                 <div className="flex min-w-0 flex-col gap-1.5 text-sm">
                     <span className="text-muted-foreground">报告确认</span>
                     <OptionCombobox
+                        id="operations-history-backfill-list-filter-report-review"
                         className="w-full"
                         value={reportReviewStatusDraft}
                         aria-label="报告确认"
@@ -169,13 +176,17 @@ function JobListFilterPanel({
                 </p>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <Button
+                        id="operations-history-backfill-list-filter-reset"
                         type="button"
                         variant="ghost"
                         onClick={resetMoreFilters}
                     >
                         重置更多条件
                     </Button>
-                    <Button type="submit">
+                    <Button
+                        id="operations-history-backfill-list-filter-apply"
+                        type="submit"
+                    >
                         <SearchIcon
                             data-icon="inline-start"
                             aria-hidden="true"

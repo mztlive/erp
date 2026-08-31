@@ -44,7 +44,7 @@ function SettlementResolveDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-settlements-resolve-close">
                 <DialogHeader>
                     <DialogTitle>登记差异处理结论</DialogTitle>
                     <DialogDescription>
@@ -53,8 +53,11 @@ function SettlementResolveDialog({
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1.5">
-                        <Label>受控结论</Label>
+                        <Label htmlFor="supplier-settlements-resolve-resolution">
+                            受控结论
+                        </Label>
                         <OptionCombobox
+                            id="supplier-settlements-resolve-resolution"
                             value={resolution}
                             onValueChange={(v) => {
                                 if (v)
@@ -74,8 +77,11 @@ function SettlementResolveDialog({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>原因码</Label>
+                        <Label htmlFor="supplier-settlements-resolve-reason">
+                            原因码
+                        </Label>
                         <OptionCombobox
+                            id="supplier-settlements-resolve-reason"
                             value={reasonCode}
                             onValueChange={(v) => {
                                 if (v) onReasonCodeChange(v)
@@ -104,6 +110,7 @@ function SettlementResolveDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id="supplier-settlements-resolve-cancel"
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -112,12 +119,16 @@ function SettlementResolveDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-settlements-resolve-confirm"
                         type="button"
                         disabled={pending}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : null}
                         {pending ? "提交中…" : "提交结论"}
                     </Button>
@@ -148,7 +159,7 @@ function SettlementEvidenceDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-settlements-evidence-close">
                 <DialogHeader>
                     <DialogTitle>追加采购协同证据</DialogTitle>
                     <DialogDescription>
@@ -156,18 +167,22 @@ function SettlementEvidenceDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-1.5">
-                    <Label htmlFor="ev-reference">正式证据引用</Label>
+                    <Label htmlFor="supplier-settlements-evidence-reference">
+                        正式证据引用
+                    </Label>
                     <Input
-                        id="ev-reference"
+                        id="supplier-settlements-evidence-reference"
                         value={referenceId}
                         onChange={(e) => onReferenceIdChange(e.target.value)}
                         placeholder="例如 ticket://T-123 或 attachment://..."
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="ev-comment">业务说明</Label>
+                    <Label htmlFor="supplier-settlements-evidence-comment">
+                        业务说明
+                    </Label>
                     <Textarea
-                        id="ev-comment"
+                        id="supplier-settlements-evidence-comment"
                         value={comment}
                         onChange={(e) => onCommentChange(e.target.value)}
                         rows={3}
@@ -175,6 +190,7 @@ function SettlementEvidenceDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id="supplier-settlements-evidence-cancel"
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -183,12 +199,16 @@ function SettlementEvidenceDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-settlements-evidence-confirm"
                         type="button"
                         disabled={pending || !referenceId.trim()}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : null}
                         {pending ? "保存中…" : "保存证据"}
                     </Button>
@@ -215,7 +235,7 @@ function SettlementRejectDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-settlements-reject-close">
                 <DialogHeader>
                     <DialogTitle>驳回复核</DialogTitle>
                     <DialogDescription>
@@ -223,8 +243,11 @@ function SettlementRejectDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-1.5">
-                    <Label>原因码</Label>
+                    <Label htmlFor="supplier-settlements-reject-reason">
+                        原因码
+                    </Label>
                     <OptionCombobox
+                        id="supplier-settlements-reject-reason"
                         value={reasonCode || null}
                         onValueChange={(v) => onReasonCodeChange(v ?? "")}
                         options={[
@@ -245,6 +268,7 @@ function SettlementRejectDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id="supplier-settlements-reject-cancel"
                         type="button"
                         variant="ghost"
                         disabled={pending}
@@ -253,12 +277,16 @@ function SettlementRejectDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-settlements-reject-confirm"
                         type="button"
                         disabled={!reasonCode || pending}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : null}
                         {pending ? "提交中…" : "确认驳回"}
                     </Button>
@@ -287,6 +315,7 @@ function SettlementSubmitReviewDialog({
 }) {
     return (
         <FormalActionConfirmDialog
+            id="supplier-settlements-dialog-submit-review"
             open={open}
             onOpenChange={onOpenChange}
             title="提交复核"
@@ -305,11 +334,11 @@ function SettlementSubmitReviewDialog({
             effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
             formContent={
                 <div className="space-y-1.5">
-                    <Label htmlFor="settlement-reviewer-user-id">
+                    <Label htmlFor="supplier-settlements-submit-reviewer-input">
                         复核人用户 ID
                     </Label>
                     <Input
-                        id="settlement-reviewer-user-id"
+                        id="supplier-settlements-submit-reviewer-input"
                         value={reviewerUserId}
                         disabled={pending}
                         onChange={(event) =>
@@ -346,6 +375,7 @@ function SettlementConfirmSettlementDialog({
 }) {
     return (
         <FormalActionConfirmDialog
+            id="supplier-settlements-dialog-confirm-settlement"
             open={open}
             onOpenChange={onOpenChange}
             title="确认结算（不可逆）"

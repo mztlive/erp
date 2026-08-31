@@ -41,6 +41,7 @@ function resolveSection(section?: string | null): MasterDataSectionId {
 }
 
 export function ObjectCenterView({
+    idPrefix,
     data,
     baseHref,
     section,
@@ -49,6 +50,7 @@ export function ObjectCenterView({
     onDisable,
     dialogs,
 }: {
+    idPrefix?: string
     data: MasterDataCenterView
     baseHref: string
     section?: string
@@ -57,6 +59,7 @@ export function ObjectCenterView({
     onDisable: () => void
     dialogs: React.ReactNode
 }) {
+    const prefix = idPrefix ?? "master-data-shared-object-center-view"
     const accountQuery = useAccountProfileQuery()
     const activeSection = resolveSection(section)
     const canRevise = data.allowedActions.includes("CREATE_REVISION")
@@ -85,6 +88,7 @@ export function ObjectCenterView({
                     <PageActions
                         actions={[
                             {
+                                id: `${prefix}-back`,
                                 actionKey: "back",
                                 label: masterDataCopy.actionBackList,
                                 icon: ArrowLeftIcon,
@@ -144,6 +148,7 @@ export function ObjectCenterView({
                         className="inline-flex"
                     >
                         <Button
+                            id={`${prefix}-revise`}
                             type="button"
                             size="sm"
                             disabled={!canRevise}
@@ -165,6 +170,7 @@ export function ObjectCenterView({
                         className="inline-flex"
                     >
                         <Button
+                            id={`${prefix}-disable`}
                             type="button"
                             size="sm"
                             variant="outline"
@@ -202,6 +208,7 @@ export function ObjectCenterView({
                     const selected = item.id === activeSection
                     return (
                         <Button
+                            id={`${prefix}-nav-${item.id}`}
                             key={item.id}
                             size="sm"
                             variant="ghost"
@@ -236,6 +243,7 @@ export function ObjectCenterView({
 }
 
 export function ObjectCenterQueryState({
+    idPrefix,
     title,
     listHref,
     isPending,
@@ -244,6 +252,7 @@ export function ObjectCenterQueryState({
     onRetry,
     missing,
 }: {
+    idPrefix?: string
     title: string
     listHref: string
     isPending: boolean
@@ -252,6 +261,7 @@ export function ObjectCenterQueryState({
     onRetry: () => void
     missing: boolean
 }) {
+    const prefix = idPrefix ?? "master-data-shared-object-center-view"
     if (isPending) {
         return (
             <PageScaffold>
@@ -273,7 +283,11 @@ export function ObjectCenterQueryState({
                 <BusinessFailureState
                     error={error}
                     action={
-                        <Button type="button" onClick={onRetry}>
+                        <Button
+                            id={`${prefix}-retry`}
+                            type="button"
+                            onClick={onRetry}
+                        >
                             重试
                         </Button>
                     }
@@ -288,7 +302,10 @@ export function ObjectCenterQueryState({
                     title={masterDataCopy.centerMissingTitle}
                     description={masterDataCopy.centerMissingDesc}
                     actions={
-                        <Button render={<Link href={listHref} />}>
+                        <Button
+                            id={`${prefix}-back-list`}
+                            render={<Link href={listHref} />}
+                        >
                             {masterDataCopy.actionBackList}
                         </Button>
                     }

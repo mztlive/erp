@@ -37,7 +37,10 @@ export function SupplierSaveReasonDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent
+                closeButtonId="master-data-supplier-save-reason-close"
+                className="sm:max-w-md"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {isCreate ? "确认创建" : "确认保存"}
@@ -74,6 +77,7 @@ export function SupplierSaveReasonDialog({
                     <DialogClose
                         render={
                             <Button
+                                id="master-data-supplier-supplier-save-reason-dialog-button-1"
                                 type="button"
                                 variant="outline"
                                 disabled={pending}
@@ -83,6 +87,7 @@ export function SupplierSaveReasonDialog({
                         取消
                     </DialogClose>
                     <Button
+                        id="master-data-supplier-supplier-save-reason-dialog-button-2"
                         type="button"
                         disabled={pending}
                         onClick={onConfirm}

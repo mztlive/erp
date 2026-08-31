@@ -104,6 +104,7 @@ export function PurchaseOrderDetailHeader({
                                         requestLeave(() =>
                                             router.push("/procurement/orders"),
                                         ),
+                                    id: "procurement-orders-detail-back",
                                 },
                                 ...(canPay
                                     ? [
@@ -113,6 +114,7 @@ export function PurchaseOrderDetailHeader({
                                               variant: "outline" as const,
                                               onClick: () =>
                                                   router.push(w12PayHref),
+                                              id: "procurement-orders-detail-pay",
                                           },
                                           {
                                               actionKey: "settle",
@@ -120,6 +122,7 @@ export function PurchaseOrderDetailHeader({
                                               variant: "outline" as const,
                                               onClick: () =>
                                                   router.push(w27SettleHref),
+                                              id: "procurement-orders-detail-settle",
                                           },
                                       ]
                                     : []),
@@ -136,6 +139,7 @@ export function PurchaseOrderDetailHeader({
                                                               .purchaseOrderId,
                                                       ),
                                                   ),
+                                              id: "procurement-orders-detail-fulfill",
                                           },
                                       ]
                                     : []),
@@ -150,6 +154,7 @@ export function PurchaseOrderDetailHeader({
                                                   router.push(
                                                       `${baseHref}?mode=edit`,
                                                   ),
+                                              id: "procurement-orders-detail-edit",
                                           },
                                       ]
                                     : []),
@@ -160,6 +165,7 @@ export function PurchaseOrderDetailHeader({
                                               label: "提交审批",
                                               icon: SendIcon,
                                               onClick: () => onRequestSubmit(),
+                                              id: "procurement-orders-detail-submit",
                                           },
                                       ]
                                     : []),
@@ -171,6 +177,7 @@ export function PurchaseOrderDetailHeader({
                                               icon: Trash2Icon,
                                               variant: "destructive" as const,
                                               onClick: () => onRequestVoid(),
+                                              id: "procurement-orders-detail-void",
                                           },
                                       ]
                                     : []),
@@ -181,6 +188,7 @@ export function PurchaseOrderDetailHeader({
                                               label: "发起采购变更",
                                               variant: "outline" as const,
                                               onClick: () => onRequestChange(),
+                                              id: "procurement-orders-detail-change",
                                           },
                                       ]
                                     : []),
@@ -203,6 +211,7 @@ export function PurchaseOrderDetailHeader({
                     facts={result.facts}
                     actions={
                         <Button
+                            id="procurement-orders-detail-result-close"
                             type="button"
                             variant="outline"
                             size="sm"

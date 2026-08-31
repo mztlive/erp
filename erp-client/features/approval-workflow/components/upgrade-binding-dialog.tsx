@@ -32,6 +32,7 @@ export function UpgradeBindingDialog({
     documentId,
     definition,
     onApplied,
+    id = "governance-approval-upgrade-dialog",
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -39,6 +40,7 @@ export function UpgradeBindingDialog({
     documentId: string
     definition: ApprovalDefinitionBinding
     onApplied?: (view: DocumentApprovalView) => void
+    id?: string
 }) {
     const upgrade = useUpgradeBindingMutation()
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
@@ -103,7 +105,10 @@ export function UpgradeBindingDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                className="sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>更新审批流程版本</DialogTitle>
                     <DialogDescription>
@@ -126,6 +131,7 @@ export function UpgradeBindingDialog({
                         name="reason"
                         children={(field) => (
                             <field.TextareaField
+                                id={`${id}-reason`}
                                 label="更新原因"
                                 required
                                 disabled={upgrade.isPending}
@@ -139,6 +145,7 @@ export function UpgradeBindingDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id={`${id}-cancel`}
                             type="button"
                             variant="outline"
                             disabled={upgrade.isPending}
@@ -148,6 +155,7 @@ export function UpgradeBindingDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id={`${id}-submit`}
                                 label="确认更新"
                                 disabled={upgrade.isPending}
                             />

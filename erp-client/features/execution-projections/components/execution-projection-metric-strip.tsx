@@ -5,6 +5,7 @@ import type {
     ExecutionProjectionMetric,
     ExecutionProjectionMetricKey,
 } from "@/features/execution-projections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type ReplaceParams = (patch: Record<string, string | null | undefined>) => void
 
@@ -22,6 +23,7 @@ export function ExecutionProjectionMetricStrip({
             {metrics.map((m) => (
                 <MetricFilterItem
                     key={m.key}
+                    id={`execution-projections-metric-${toAutomationIdSegment(m.key)}`}
                     label={m.label}
                     value={m.value}
                     detail={m.detail}

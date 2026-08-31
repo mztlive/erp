@@ -43,6 +43,7 @@ export function CustomerReceivablesMetrics({
     return (
         <MetricStrip columns={4} aria-label="客户往来指标">
             <MetricFilterItem
+                id="customer-receivables-metrics-open"
                 label="开放应收"
                 value={<MoneyValue value={metrics.openReceivableTotal} />}
                 detail={
@@ -60,6 +61,7 @@ export function CustomerReceivablesMetrics({
                 }}
             />
             <MetricFilterItem
+                id="customer-receivables-metrics-overdue"
                 label="已逾期应收"
                 value={<MoneyValue value={metrics.overdueReceivableTotal} />}
                 detail="需催收"
@@ -79,6 +81,7 @@ export function CustomerReceivablesMetrics({
                 }}
             />
             <MetricFilterItem
+                id="customer-receivables-metrics-unallocated-receipt"
                 label="待分配回款"
                 value={<MoneyValue value={metrics.unallocatedReceiptTotal} />}
                 detail="已到账"
@@ -97,6 +100,7 @@ export function CustomerReceivablesMetrics({
                 }}
             />
             <MetricFilterItem
+                id="customer-receivables-metrics-unallocated-invoice"
                 label="待分配销项发票"
                 value={<MoneyValue value={metrics.unallocatedInvoiceTotal} />}
                 detail={

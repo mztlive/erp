@@ -47,6 +47,147 @@ impl AllocationAction {
     }
 }
 
+/// W13 卡券票款登记的单行账户分配输入。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardFundsRegistrationAllocationInput {
+    /// 目标应收往来子账。
+    pub target_account_id: crate::ids::ReceivableAccountId,
+    /// 本行含税分配金额。
+    pub amount: Amount,
+}
+
+/// W13 卡券票款登记分配集合的领域校验错误。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum CardFundsRegistrationAllocationsError {
+    /// 任一分配未指向当前任务账户，或账户 ID 不是规范形式。
+    #[error("卡券票款登记只能分配到当前任务应收账户")]
+    TargetAccountMismatch,
+    /// 任一分配金额不是严格正数。
+    #[error("分配金额必须大于零")]
+    NonPositiveAmount,
+    /// 全部分配之和不等于本次登记金额。
+    #[error("票款分配合计必须等于本次登记金额")]
+    TotalMismatch,
+}
+
+/// 已规范化且满足 W13 单账户与金额守恒不变量的分配集合。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardFundsRegistrationAllocations {
+    lines: Vec<CardFundsRegistrationAllocationInput>,
+    total: Amount,
+}
+
+impl CardFundsRegistrationAllocations {
+    /// 规范化并校验 W13 卡券票款登记分配集合。
+    ///
+    /// 所有目标账户必须是无首尾空白的同一任务账户，每行金额必须严格为正，
+    /// 且行金额合计必须精确等于登记含税金额；不执行任何数据库读取。
+    ///
+    /// # 参数
+    /// * `target_account_id` - 当前任务绑定的唯一应收子账
+    /// * `expected_total` - 本次回款或发票登记的含税总额
+    /// * `lines` - 从服务 DTO 转换后的账户分配输入
+    ///
+    /// # 返回
+    /// 返回保存规范账户 ID、原行顺序和原登记金额表示的已验证值对象。
+    ///
+    /// # 错误
+    /// 账户不一致或非规范时返回 `TargetAccountMismatch`；金额非正时返回
+    /// `NonPositiveAmount`；合计不守恒时返回 `TotalMismatch`。
+    ///
+    /// # 约束
+    /// 不去重或重排输入，不放宽带空白账户 ID 的拒绝行为，并在数值守恒后
+    /// 保留 `expected_total` 的原始小数位表示，避免重算改变序列化结果。
+    pub fn new(
+        target_account_id: crate::ids::ReceivableAccountId,
+        expected_total: Amount,
+        lines: Vec<CardFundsRegistrationAllocationInput>,
+    ) -> std::result::Result<Self, CardFundsRegistrationAllocationsError> {
+        let target_account_id = canonical_registration_account_id(&target_account_id)
+            .ok_or(CardFundsRegistrationAllocationsError::TargetAccountMismatch)?;
+        let zero = expected_total.checked_sub(expected_total);
+        let mut allocated_total = zero;
+        let mut normalized_lines = Vec::with_capacity(lines.len());
+        for line in lines {
+            let line_account_id = canonical_registration_account_id(&line.target_account_id)
+                .ok_or(CardFundsRegistrationAllocationsError::TargetAccountMismatch)?;
+            if line_account_id != target_account_id {
+                return Err(CardFundsRegistrationAllocationsError::TargetAccountMismatch);
+            }
+            if line.amount <= zero {
+                return Err(CardFundsRegistrationAllocationsError::NonPositiveAmount);
+            }
+            allocated_total = allocated_total.checked_add(line.amount);
+            normalized_lines.push(CardFundsRegistrationAllocationInput {
+                target_account_id: line_account_id,
+                amount: line.amount,
+            });
+        }
+        if allocated_total != expected_total {
+            return Err(CardFundsRegistrationAllocationsError::TotalMismatch);
+        }
+        Ok(Self {
+            lines: normalized_lines,
+            total: expected_total,
+        })
+    }
+
+    /// 返回保持请求顺序的已验证分配行。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回由值对象持有的规范化分配行切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 约束
+    /// 调用方只能读取，不能绕过构造校验修改集合内容。
+    pub fn as_slice(&self) -> &[CardFundsRegistrationAllocationInput] {
+        &self.lines
+    }
+
+    /// 返回构造时验证通过的登记总额。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与已验证分配数值相等、且保留调用方小数位表示的登记含税金额。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # 约束
+    /// 该值直接保留构造参数 `expected_total`，不以分配求和结果替换其小数位表示。
+    pub fn total(&self) -> Amount {
+        self.total
+    }
+}
+
+/// 将 W13 分配账户 ID 收窄为无首尾空白的规范值。
+///
+/// # 参数
+/// * `account_id` - 待校验的透明账户 ID
+///
+/// # 返回
+/// 非空且已处于 trim 后形式时返回重建的规范 ID，否则返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 不接受并静默修复带空白输入，以保持既有服务拒绝行为。
+fn canonical_registration_account_id(
+    account_id: &crate::ids::ReceivableAccountId,
+) -> Option<crate::ids::ReceivableAccountId> {
+    let normalized = account_id.as_ref().trim();
+    (!normalized.is_empty() && normalized == account_id.as_ref())
+        .then(|| crate::ids::ReceivableAccountId::new(normalized))
+}
+
 /// 回款核销分配创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReceiptAllocationData {
@@ -185,6 +326,115 @@ pub(crate) fn validate_action_reference<T: AllocationIdRef>(
 mod tests {
     use super::*;
     use std::str::FromStr;
+
+    /// 构建值对象测试使用的最小 W13 分配输入。
+    ///
+    /// 参数指定账户与金额字符串，返回可直接参与构造的输入；金额解析失败时
+    /// 测试会 panic，且辅助函数不执行任何外部 I/O。
+    fn registration_line(account_id: &str, amount: &str) -> CardFundsRegistrationAllocationInput {
+        CardFundsRegistrationAllocationInput {
+            target_account_id: crate::ids::ReceivableAccountId::new(account_id),
+            amount: Amount::from_str(amount).unwrap(),
+        }
+    }
+
+    /// 验证正常多行输入保持顺序、账户规范形式和精确金额守恒。
+    ///
+    /// 无参数且返回单元值；构造或断言失败时测试会 panic，并固定同一账户
+    /// 多行合计必须精确等于登记总额的领域约束。
+    #[test]
+    fn card_funds_registration_allocations_accept_valid_lines() {
+        let allocations = CardFundsRegistrationAllocations::new(
+            crate::ids::ReceivableAccountId::new("ra-1"),
+            Amount::from_str("100.00").unwrap(),
+            vec![
+                registration_line("ra-1", "40.00"),
+                registration_line("ra-1", "60.00"),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(allocations.as_slice().len(), 2);
+        assert_eq!(allocations.as_slice()[0].target_account_id.as_ref(), "ra-1");
+        assert_eq!(allocations.total(), Amount::from_str("100.00").unwrap());
+    }
+
+    /// 验证混合小数位输入通过数值守恒后保留登记总额的原始表示。
+    ///
+    /// 测试固定登记额 `10` 与分配额 `10.00`，直接断言两者各自序列化尺度。
+    #[test]
+    fn card_funds_registration_allocations_preserve_expected_total_scale() {
+        let allocations = CardFundsRegistrationAllocations::new(
+            crate::ids::ReceivableAccountId::new("ra-1"),
+            Amount::from_str("10").unwrap(),
+            vec![registration_line("ra-1", "10.00")],
+        )
+        .unwrap();
+
+        assert_eq!(allocations.total().to_string(), "10");
+        assert_eq!(allocations.as_slice()[0].amount.to_string(), "10.00");
+    }
+
+    /// 验证跨账户和带空白账户 ID 都按既有单账户错误拒绝。
+    ///
+    /// 无参数且返回单元值；错误分类不匹配时测试会 panic，且测试明确约束
+    /// 构造器不得通过 trim 放宽服务原有的账户匹配行为。
+    #[test]
+    fn card_funds_registration_allocations_reject_wrong_or_noncanonical_account() {
+        for account_id in ["ra-2", " ra-1 "] {
+            let error = CardFundsRegistrationAllocations::new(
+                crate::ids::ReceivableAccountId::new("ra-1"),
+                Amount::from_str("10.00").unwrap(),
+                vec![registration_line(account_id, "10.00")],
+            )
+            .unwrap_err();
+            assert_eq!(
+                error,
+                CardFundsRegistrationAllocationsError::TargetAccountMismatch
+            );
+        }
+    }
+
+    /// 验证零数、负数和不守恒合计分别触发稳定领域错误。
+    ///
+    /// 无参数且返回单元值；错误分类不匹配时测试会 panic，并覆盖严格正数
+    /// 与精确总额两个失败约束而不依赖数据库。
+    #[test]
+    fn card_funds_registration_allocations_reject_amount_failures() {
+        for amount in ["0.00", "-0.01"] {
+            let error = CardFundsRegistrationAllocations::new(
+                crate::ids::ReceivableAccountId::new("ra-1"),
+                Amount::from_str("10.00").unwrap(),
+                vec![registration_line("ra-1", amount)],
+            )
+            .unwrap_err();
+            assert_eq!(error, CardFundsRegistrationAllocationsError::NonPositiveAmount);
+        }
+
+        let error = CardFundsRegistrationAllocations::new(
+            crate::ids::ReceivableAccountId::new("ra-1"),
+            Amount::from_str("10.00").unwrap(),
+            vec![registration_line("ra-1", "9.99")],
+        )
+        .unwrap_err();
+        assert_eq!(error, CardFundsRegistrationAllocationsError::TotalMismatch);
+    }
+
+    /// 验证最小分币金额作为严格正数边界可以完成守恒构造。
+    ///
+    /// 无参数且返回单元值；构造失败时测试会 panic，并固定 `0.01` 是 Amount
+    /// 精度下可接受的最小正分配边界。
+    #[test]
+    fn card_funds_registration_allocations_accept_cent_boundary() {
+        let allocations = CardFundsRegistrationAllocations::new(
+            crate::ids::ReceivableAccountId::new("ra-1"),
+            Amount::from_str("0.01").unwrap(),
+            vec![registration_line("ra-1", "0.01")],
+        )
+        .unwrap();
+
+        assert_eq!(allocations.total(), Amount::from_str("0.01").unwrap());
+    }
 
     fn data() -> ReceiptAllocationData {
         ReceiptAllocationData {

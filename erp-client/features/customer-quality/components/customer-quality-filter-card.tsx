@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
-import { FilterChip, FixedOptionRadioFilter, ListToolbar } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
+import {
+    FilterChip,
+    FixedOptionRadioFilter,
+    ListToolbar,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -97,6 +99,7 @@ export function CustomerQualityFilterCard({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="customers-quality-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -105,11 +108,11 @@ export function CustomerQualityFilterCard({
                             placeholder="客户编号 / 名称"
                             aria-label="搜索客户"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="customers-quality-more-filters-trigger"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -145,6 +148,7 @@ export function CustomerQualityFilterCard({
                                     </span>
                                     {appliedChips.map((chip) => (
                                         <FilterChip
+                                            id={`customers-quality-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             key={chip.key}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
@@ -154,6 +158,7 @@ export function CustomerQualityFilterCard({
                                         />
                                     ))}
                                     <Button
+                                        id="customers-quality-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -170,12 +175,14 @@ export function CustomerQualityFilterCard({
                                     aria-label="客户经营质量更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="customers-quality-funds-review"
                                         label="票款口径"
                                         value={fundsReviewDraft}
                                         onValueChange={setFundsReviewDraft}
                                         options={FUNDS_REVIEW_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="customers-quality-business-type"
                                         label="业务性质"
                                         value={businessTypeDraft}
                                         onValueChange={setBusinessTypeDraft}
@@ -187,13 +194,17 @@ export function CustomerQualityFilterCard({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="customers-quality-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={onResetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="customers-quality-apply-filters"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

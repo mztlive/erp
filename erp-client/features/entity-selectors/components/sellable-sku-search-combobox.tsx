@@ -33,14 +33,17 @@ export function SellableSkuSearchCombobox({
         productKind,
         excludeProductKind,
     })
-    const { rows, loading, emptyLabel: resolvedEmptyLabel } =
-        useRemoteSearchCombobox({
-            list: query,
-            selectedItem,
-            idOf: (item) => item.productId,
-            emptyLabel,
-            fallbackError: "商品加载失败，请重试",
-        })
+    const {
+        rows,
+        loading,
+        emptyLabel: resolvedEmptyLabel,
+    } = useRemoteSearchCombobox({
+        list: query,
+        selectedItem,
+        idOf: (item) => item.productId,
+        emptyLabel,
+        fallbackError: "商品加载失败，请重试",
+    })
     return (
         <ProductCombobox
             {...props}

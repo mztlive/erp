@@ -17,6 +17,8 @@ import type {
 import type { DataTableLayout } from "@/components/business/data-table-layout"
 
 export type DataTableProps<TData> = {
+    id?: string
+    idPrefix?: string
     data: TData[]
     columns: ColumnDef<TData, unknown>[]
     /** 必须使用 ERP 稳定 ID；业务单号和外部单号不能作为行身份。 */

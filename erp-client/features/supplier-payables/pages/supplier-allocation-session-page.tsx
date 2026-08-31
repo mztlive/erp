@@ -136,6 +136,7 @@ export function SupplierAllocationSessionPage({
                     actions={[
                         {
                             actionKey: "back",
+                            id: "supplier-payables-session-page-back",
                             label: "返回列表",
                             icon: ArrowLeftIcon,
                             variant: "outline",
@@ -143,6 +144,7 @@ export function SupplierAllocationSessionPage({
                         },
                         {
                             actionKey: "save-draft",
+                            id: "supplier-payables-session-page-save-draft",
                             label: "保存草稿",
                             icon: SaveIcon,
                             variant: "outline",
@@ -175,15 +177,25 @@ export function SupplierAllocationSessionPage({
                 <BusinessFailureState
                     title="无法开始本次核销"
                     error={sessionQuery.error}
-                    onRetry={() => void sessionQuery.refetch()}
                     action={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            返回列表
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                id="supplier-payables-session-page-retry"
+                                type="button"
+                                variant="outline"
+                                onClick={() => void sessionQuery.refetch()}
+                            >
+                                重试
+                            </Button>
+                            <Button
+                                id="supplier-payables-session-page-back"
+                                type="button"
+                                variant="outline"
+                                onClick={onClose}
+                            >
+                                返回列表
+                            </Button>
+                        </div>
                     }
                 />
             </PageScaffold>
@@ -200,6 +212,7 @@ export function SupplierAllocationSessionPage({
                     description="请返回列表重新选择供应商往来。"
                     action={
                         <Button
+                            id="supplier-payables-session-page-empty-back"
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -245,6 +258,7 @@ export function SupplierAllocationSessionPage({
                     }
                     action={
                         <Button
+                            id="supplier-payables-session-page-scope-back"
                             type="button"
                             variant="outline"
                             onClick={onClose}

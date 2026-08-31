@@ -13,11 +13,7 @@ import {
     mapBackendResolutionEvidencePolicy,
 } from "./wire"
 import type { BackendDifference } from "./backend-types"
-import {
-    ageLabel,
-    mapFormalWorkItem,
-    tsToIso,
-} from "./shared-mappers"
+import { ageLabel, mapFormalWorkItem, tsToIso } from "./shared-mappers"
 
 export function mapDifference(
     diff: BackendDifference,

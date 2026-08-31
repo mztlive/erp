@@ -316,16 +316,22 @@ impl MallOrderService {
         .expect("ACTUAL 评估内容已校验")
     }
 
-    /// 分页加载指定商城的全部关键事实并按（商城, 订单号）分组。
+    /// 分页加载指定商城的关键事实并按（商城, 订单号）分组。
+    ///
+    /// # 用途
+    /// 复用既有商城范围查询，将事实投影组织为列表行摘要输入。
     ///
     /// # 参数
-    /// * `mall_id` - 商城筛选（`None` 表示全部商城）
+    /// * `mall_id` - 商城筛选；`None` 表示全部商城
     ///
     /// # 返回
-    /// 返回 `(mall_id, external_order_no)` → 事实摘要 `(类型, 发生时间, 来源)` 映射。
+    /// 返回订单键到 `(事实 ID, 类型, 发生时间, 来源)` 列表的映射。
     ///
     /// # 错误
     /// 数据库查询失败时返回 `RepositoryError`。
+    ///
+    /// # 关键约束
+    /// 不去重事实；稳定事实 ID 保留给 Service 处理最新来源的同秒并列。
     pub(super) async fn facts_grouped_by_order(&self, mall_id: &Option<String>) -> Result<OrderFactMap> {
         let mut grouped = std::collections::HashMap::new();
         let mut page = 1u64;
@@ -350,9 +356,9 @@ impl MallOrderService {
             }
             for row in result.items {
                 grouped
-                    .entry((row.mall_id.clone(), row.external_order_no.clone()))
+                    .entry((row.mall_id, row.external_order_no))
                     .or_insert_with(Vec::new)
-                    .push((row.fact_type, row.occurred_at, row.data_source));
+                    .push((row.id, row.fact_type, row.occurred_at, row.data_source));
             }
             if (result.total as u64) <= page * 100 {
                 break;

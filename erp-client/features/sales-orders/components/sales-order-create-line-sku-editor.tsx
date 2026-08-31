@@ -9,6 +9,7 @@ import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sal
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
 import { VoucherCategorySearchCombobox } from "@/features/sales-orders/components/voucher-category-search-combobox"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type SalesOrderCreateLineSkuEditorProps = {
     form: SalesOrderCreateFormApi
@@ -27,6 +28,8 @@ export function SalesOrderCreateLineSkuEditor({
     onPickSku,
 }: SalesOrderCreateLineSkuEditorProps) {
     const nameFieldName = `lineItems[${rowIndex}].name` as const
+    const lineKey = values.lineItems[rowIndex]?.rowKey
+    if (!lineKey) return null
 
     return nature === "card_voucher" ? (
         <div className="min-w-52">
@@ -39,6 +42,7 @@ export function SalesOrderCreateLineSkuEditor({
                     return (
                         <Field data-invalid={isInvalid || undefined}>
                             <VoucherCategorySearchCombobox
+                                id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-category`}
                                 value={field.state.value || undefined}
                                 onValueChange={(id) => {
                                     // 提交 voucher_category_sku_id 用 SKU 稳定 id
@@ -101,6 +105,7 @@ export function SalesOrderCreateLineSkuEditor({
                     return (
                         <Field data-invalid={isInvalid || undefined}>
                             <Button
+                                id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-pick-sku`}
                                 type="button"
                                 variant="outline"
                                 className="w-full justify-start"

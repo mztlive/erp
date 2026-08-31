@@ -1,6 +1,7 @@
 "use client"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { VIEW_LABEL } from "@/features/inventory/types"
 import type { InventoryView } from "@/features/inventory/types"
 
@@ -26,7 +27,11 @@ export function LedgerViewTabs({ view, onViewChange }: LedgerViewTabsProps) {
                         "adjustment",
                     ] as const
                 ).map((v) => (
-                    <TabsTrigger key={v} value={v}>
+                    <TabsTrigger
+                        key={v}
+                        id={`inventory-ledger-view-${toAutomationIdSegment(v)}`}
+                        value={v}
+                    >
                         {VIEW_LABEL[v]}
                     </TabsTrigger>
                 ))}

@@ -54,6 +54,7 @@ export function QueueFilterToolbar({
                     ).map((opt) => (
                         <button
                             key={opt.value}
+                            id={`card-contracts-funds-review-filter-scope-${opt.value}`}
                             type="button"
                             aria-pressed={scope === opt.value}
                             onClick={() =>
@@ -93,6 +94,7 @@ export function QueueFilterToolbar({
                     ).map((opt) => (
                         <button
                             key={opt.value}
+                            id={`card-contracts-funds-review-filter-type-${opt.value}`}
                             type="button"
                             aria-pressed={type === opt.value}
                             onClick={() =>
@@ -126,6 +128,7 @@ export function QueueFilterToolbar({
                     ).map((opt) => (
                         <button
                             key={opt.value}
+                            id={`card-contracts-funds-review-filter-due-${opt.value}`}
                             type="button"
                             aria-pressed={due === opt.value}
                             onClick={() =>
@@ -159,6 +162,7 @@ export function QueueFilterToolbar({
                     ).map((opt) => (
                         <button
                             key={opt.value}
+                            id={`card-contracts-funds-review-filter-status-${opt.value}`}
                             type="button"
                             aria-pressed={status === opt.value}
                             onClick={() =>
@@ -190,6 +194,7 @@ export function QueueFilterToolbar({
                             <SearchIcon className="size-4" aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="card-contracts-funds-review-filter-search"
                             value={searchInput}
                             onChange={(e) =>
                                 onSearchInputChange(e.target.value)
@@ -202,13 +207,13 @@ export function QueueFilterToolbar({
                 actions={
                     <div className="flex items-center gap-2">
                         <Label
-                            htmlFor="auto-next"
+                            htmlFor="card-contracts-funds-review-filter-auto-next"
                             className="text-muted-foreground"
                         >
                             自动下一项
                         </Label>
                         <Switch
-                            id="auto-next"
+                            id="card-contracts-funds-review-filter-auto-next"
                             checked={autoNext}
                             onCheckedChange={setAutoNext}
                         />

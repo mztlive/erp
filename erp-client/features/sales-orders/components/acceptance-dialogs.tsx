@@ -43,6 +43,7 @@ export function AcceptanceDialogs({
     return (
         <>
             <FormalActionConfirmDialog
+                id="sales-orders-acceptance-confirm"
                 open={confirmOpen}
                 onOpenChange={onConfirmOpenChange}
                 title="确认客户验收"
@@ -73,6 +74,7 @@ export function AcceptanceDialogs({
             />
 
             <FormalActionConfirmDialog
+                id="sales-orders-acceptance-reverse"
                 open={Boolean(reverseTarget)}
                 onOpenChange={onReverseOpenChange}
                 title="确认冲正误录验收"
@@ -89,8 +91,14 @@ export function AcceptanceDialogs({
                 nextDepartment="销售"
                 description={
                     <div className="space-y-2">
-                        <span>请填写冲正理由，便于以后核对：</span>
+                        <label
+                            htmlFor="sales-orders-acceptance-reverse-reason"
+                            className="text-sm font-medium"
+                        >
+                            请填写冲正理由，便于以后核对：
+                        </label>
                         <Textarea
+                            id="sales-orders-acceptance-reverse-reason"
                             aria-label="冲正理由"
                             rows={3}
                             value={reverseReason}
@@ -105,6 +113,7 @@ export function AcceptanceDialogs({
             />
 
             <DiscardConfirmDialog
+                id="sales-orders-acceptance-exit-discard"
                 open={exitDiscardOpen}
                 onOpenChange={onExitDiscardOpenChange}
                 title="放弃本次验收登记？"

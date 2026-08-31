@@ -8,6 +8,7 @@ import {
     FACT_TYPE_TONE,
     PROCESSING_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -22,6 +23,7 @@ function FactCard({
 }) {
     return (
         <button
+            id={`mall-consumption-order-center-fact-${toAutomationIdSegment(fact.factId)}`}
             type="button"
             onClick={onSelect}
             className={cn(

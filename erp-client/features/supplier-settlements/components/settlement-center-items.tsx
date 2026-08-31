@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { MoneyValue, surfaceInsetClassName } from "@/components/business"
 import {
     Card,
@@ -57,6 +58,7 @@ function SettlementCenterItems({
                             >
                                 <td className="px-2 py-2">
                                     <Link
+                                        id={`supplier-settlements-items-row-${toAutomationIdSegment(it.itemId)}-supplier-order`}
                                         href={`/supplier-api/orders?q=${encodeURIComponent(it.supplierOrderNo)}`}
                                         className="num font-medium text-primary underline-offset-2 hover:underline"
                                     >
@@ -66,6 +68,7 @@ function SettlementCenterItems({
                                 <td className="px-2 py-2">
                                     {it.purchaseNo ? (
                                         <Link
+                                            id={`supplier-settlements-items-row-${toAutomationIdSegment(it.itemId)}-purchase`}
                                             href={
                                                 it.purchaseOrderId
                                                     ? `/procurement/orders/${it.purchaseOrderId}?returnTo=${encodeURIComponent(`/supplier-api/settlements/${statementId}`)}`

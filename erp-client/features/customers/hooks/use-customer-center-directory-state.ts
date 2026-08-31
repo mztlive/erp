@@ -282,9 +282,7 @@ export function useCustomerCenterSearchShortcut() {
                 return
             }
             if (
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"]',
-                )
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
             ) {
                 return
             }

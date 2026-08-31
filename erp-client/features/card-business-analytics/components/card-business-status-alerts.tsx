@@ -7,10 +7,7 @@ import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { downloadCardBusinessCsv } from "../lib/export-csv"
-import type {
-    CardBusinessAnalyticsView,
-    CardBusinessExportJob,
-} from "../types"
+import type { CardBusinessAnalyticsView, CardBusinessExportJob } from "../types"
 
 export interface CardBusinessStatusAlertsProps {
     data: CardBusinessAnalyticsView
@@ -68,13 +65,18 @@ export function CardBusinessStatusAlerts({
                     <AlertDescription>
                         经营记录未被修改；展示上次成功数据。可前往接口错误中心查看数据异常。
                         <Button
+                            id="card-contracts-analytics-status-open-w29"
                             type="button"
                             size="sm"
                             variant="ghost"
                             className="ml-2"
                             render={
                                 <Link
-                                    href={data.governanceLinks.integrationErrorsHref}
+                                    id="card-contracts-analytics-status-open-w29-link"
+                                    href={
+                                        data.governanceLinks
+                                            .integrationErrorsHref
+                                    }
                                 />
                             }
                         >
@@ -121,9 +123,9 @@ export function CardBusinessStatusAlerts({
                             口径/筛选：
                             {exportJob.watermark.filterSummary}
                             <span className="mt-1 block">
-                                覆盖率{" "}
-                                {exportJob.watermark.coverageRate ?? "—"} ·
-                                数据{" "}
+                                覆盖率 {exportJob.watermark.coverageRate ??
+                                    "—"}{" "}
+                                · 数据{" "}
                                 {formatDateTime(
                                     exportJob.watermark.projectionUpdatedAt,
                                     "full",
@@ -142,6 +144,7 @@ export function CardBusinessStatusAlerts({
                                 <span className="mt-1 block font-medium">
                                     导出文件：{exportJob.downloadLabel}
                                     <Button
+                                        id="card-contracts-analytics-status-download-csv"
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -161,6 +164,7 @@ export function CardBusinessStatusAlerts({
                     }
                     action={
                         <Button
+                            id="card-contracts-analytics-status-export-close"
                             type="button"
                             size="sm"
                             variant="ghost"

@@ -24,7 +24,10 @@ const BUSINESS_TYPE_LABELS: Record<BusinessTypeFilter, string> = {
     GOODS_SERVICE: "非卡券",
 }
 
-function hasStructuredFilters(fundsReview: FundsReviewFilter, businessType?: BusinessTypeFilter) {
+function hasStructuredFilters(
+    fundsReview: FundsReviewFilter,
+    businessType?: BusinessTypeFilter,
+) {
     return fundsReview === "reviewed_only" || businessType != null
 }
 
@@ -68,8 +71,7 @@ export function useCustomerQualityFilters({
     const applyFilters = React.useCallback(() => {
         patchUrl({
             q: searchDraft.trim() || null,
-            fundsReview:
-                fundsReviewDraft === "all" ? null : "reviewed_only",
+            fundsReview: fundsReviewDraft === "all" ? null : "reviewed_only",
             businessType:
                 businessTypeDraft === "all" ? null : businessTypeDraft,
         })
@@ -130,34 +132,33 @@ export function useCustomerQualityFilters({
         setBusinessTypeDraft(businessType ?? "all")
     }, [businessType, fundsReview])
 
-    const appliedChips = React.useMemo<readonly CustomerQualityAppliedChip[]>(
-        () => {
-            const chips: CustomerQualityAppliedChip[] = []
-            if (qParam.trim()) {
-                chips.push({ key: "q", label: `搜索：${qParam.trim()}` })
-            }
-            if (fundsReview === "reviewed_only") {
-                chips.push({
-                    key: "fundsReview",
-                    label: "票款口径：仅已复核卡券票款",
-                })
-            }
-            if (businessType) {
-                chips.push({
-                    key: "businessType",
-                    label: `业务性质：${BUSINESS_TYPE_LABELS[businessType]}`,
-                })
-            }
-            if (customerId) {
-                chips.push({
-                    key: "customerId",
-                    label: `客户：${customerName ?? "已定位客户"}`,
-                })
-            }
-            return chips
-        },
-        [businessType, customerId, customerName, fundsReview, qParam],
-    )
+    const appliedChips = React.useMemo<
+        readonly CustomerQualityAppliedChip[]
+    >(() => {
+        const chips: CustomerQualityAppliedChip[] = []
+        if (qParam.trim()) {
+            chips.push({ key: "q", label: `搜索：${qParam.trim()}` })
+        }
+        if (fundsReview === "reviewed_only") {
+            chips.push({
+                key: "fundsReview",
+                label: "票款口径：仅已复核卡券票款",
+            })
+        }
+        if (businessType) {
+            chips.push({
+                key: "businessType",
+                label: `业务性质：${BUSINESS_TYPE_LABELS[businessType]}`,
+            })
+        }
+        if (customerId) {
+            chips.push({
+                key: "customerId",
+                label: `客户：${customerName ?? "已定位客户"}`,
+            })
+        }
+        return chips
+    }, [businessType, customerId, customerName, fundsReview, qParam])
 
     return {
         searchDraft,

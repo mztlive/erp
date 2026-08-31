@@ -19,6 +19,7 @@
 pub mod consumption_entry;
 pub mod cost_assessment;
 pub mod funding_allocation;
+pub mod funding_conservation;
 pub mod order;
 pub mod order_fact;
 pub mod order_item;
@@ -33,6 +34,7 @@ pub use crate::ids::{
 pub use consumption_entry::*;
 pub use cost_assessment::*;
 pub use funding_allocation::*;
+pub use funding_conservation::*;
 pub use order::*;
 pub use order_fact::*;
 pub use order_item::*;

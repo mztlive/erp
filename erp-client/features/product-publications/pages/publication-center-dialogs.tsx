@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FormalActionConfirmDialog } from "@/components/business"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SessionEdit } from "@/features/product-publications/lib/publish-form"
 import { SALE_STATUS_LABEL } from "@/features/product-publications/types"
 import type { ProductPublicationView } from "@/features/product-publications/types"
@@ -54,6 +55,7 @@ export function PublicationCenterDialogs({
     return (
         <>
             <FormalActionConfirmDialog
+                id="publication-center-dialog-publish"
                 open={confirmOpen}
                 onOpenChange={onConfirmOpenChange}
                 actionLabel="提交发布"
@@ -85,6 +87,7 @@ export function PublicationCenterDialogs({
             />
 
             <FormalActionConfirmDialog
+                id="publication-center-dialog-pause"
                 open={pauseOpen}
                 onOpenChange={onPauseOpenChange}
                 actionLabel="人工暂停"
@@ -128,6 +131,7 @@ export function PublicationCenterDialogs({
                             ].map((quick) => (
                                 <Button
                                     key={quick}
+                                    id={`publication-center-dialog-pause-quick-${toAutomationIdSegment(quick)}`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
@@ -138,6 +142,7 @@ export function PublicationCenterDialogs({
                             ))}
                         </div>
                         <Textarea
+                            id="publication-center-dialog-pause-reason"
                             value={pauseReason}
                             onChange={(e) =>
                                 onPauseReasonChange(
@@ -156,11 +161,13 @@ export function PublicationCenterDialogs({
                     </div>
                     <AlertDialogFooter>
                         <AlertDialogCancel
+                            id="publication-center-dialog-pause-cancel"
                             onClick={() => onPauseReasonOpenChange(false)}
                         >
                             取消
                         </AlertDialogCancel>
                         <AlertDialogAction
+                            id="publication-center-dialog-pause-next"
                             disabled={!pauseReason.trim()}
                             onClick={() => {
                                 onPauseReasonOpenChange(false)

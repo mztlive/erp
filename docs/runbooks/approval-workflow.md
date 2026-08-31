@@ -27,18 +27,18 @@
 
 必须持续观察下列指标。任一越过阈值必须按本手册处置，不得静默忽略。
 
-| 指标 | 完成条件 / 告警 | 责任 |
-| --- | --- | --- |
-| `BLOCKED` 实例数量 | 任一环境出现新增 `BLOCKED` 必须告警；共享开发环境连续存在超过 30 分钟必须升级 | 运行管理员 |
-| 单个实例最长 `BLOCKED` 持续时间 | 人员失效超过 4 小时仍未恢复必须升级；结构性 blocker 出现即升级 | 运行管理员 |
-| 按 `blocker_code` 分类计数 | 分类必须与合同 §12.2 一致；未知码视为 `INTERNAL_INVARIANT_BROKEN` | 运行管理员 |
-| 决定/恢复/受阻取消 P99 延迟 | 超过 3 秒必须检查 CAS 冲突率与仓储 | 值班 |
-| `409` 版本/幂等冲突率 | 同一实例 5 分钟内超过 10 次必须检查重复提交或时钟/重试 | 值班 |
-| outbox backlog | 待投递超过 50 条必须告警 | 通知值班 |
-| outbox oldest age | 超过当前退避档上限加 10 分钟必须告警 | 通知值班 |
-| outbox retry / dead letter | 任一消息进入 dead letter 必须告警，不得静默丢弃 | 通知值班 |
-| readiness | `APPROVAL_POLICY_NOT_REGISTERED` 必须使 readiness 失败并停止发布定义 | 值班 |
-| ACTIVE 执行与 OPEN 任务一致性 | 任一违反第 4 节断言必须立即停写该实例并升级 | 运行管理员 |
+| 指标                            | 完成条件 / 告警                                                               | 责任       |
+| ------------------------------- | ----------------------------------------------------------------------------- | ---------- |
+| `BLOCKED` 实例数量              | 任一环境出现新增 `BLOCKED` 必须告警；共享开发环境连续存在超过 30 分钟必须升级 | 运行管理员 |
+| 单个实例最长 `BLOCKED` 持续时间 | 人员失效超过 4 小时仍未恢复必须升级；结构性 blocker 出现即升级                | 运行管理员 |
+| 按 `blocker_code` 分类计数      | 分类必须与合同 §12.2 一致；未知码视为 `INTERNAL_INVARIANT_BROKEN`             | 运行管理员 |
+| 决定/恢复/受阻取消 P99 延迟     | 超过 3 秒必须检查 CAS 冲突率与仓储                                            | 值班       |
+| `409` 版本/幂等冲突率           | 同一实例 5 分钟内超过 10 次必须检查重复提交或时钟/重试                        | 值班       |
+| outbox backlog                  | 待投递超过 50 条必须告警                                                      | 通知值班   |
+| outbox oldest age               | 超过当前退避档上限加 10 分钟必须告警                                          | 通知值班   |
+| outbox retry / dead letter      | 任一消息进入 dead letter 必须告警，不得静默丢弃                               | 通知值班   |
+| readiness                       | `APPROVAL_POLICY_NOT_REGISTERED` 必须使 readiness 失败并停止发布定义          | 值班       |
+| ACTIVE 执行与 OPEN 任务一致性   | 任一违反第 4 节断言必须立即停写该实例并升级                                   | 运行管理员 |
 
 ## 3. BLOCKED 排查
 
@@ -53,13 +53,13 @@
 
 必须先读取 `recovery-options`，只允许执行其返回的动作：
 
-| 类别 | `blocker_code` | 唯一合法动作 |
-| --- | --- | --- |
-| 人员失效 | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人重新合格后只允许 `resume-current-approver`；仍失效则保持受阻并升级处置 |
-| 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED` | 只允许 `cancel-blocked` |
-| 任务冲突 | `OPEN_TASK_CONFLICT` | 只允许 `cancel-blocked` |
-| 版本损坏 | `SUBJECT_VERSION_CONFLICT` | 只允许 `cancel-blocked` |
-| 内部不变量 | `INTERNAL_INVARIANT_BROKEN` | 保持冻结、readiness 失败并前向修复代码 |
+| 类别         | `blocker_code`                                                                                                                                                                      | 唯一合法动作                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 人员失效     | `APPROVER_ACCOUNT_INACTIVE`、`APPROVER_EMPLOYMENT_INVALID`、`APPROVER_NOT_ELIGIBLE`、`APPROVER_OUT_OF_DATA_SCOPE`、`APPROVER_CANNOT_READ_SUBJECT`、`SEPARATION_OF_DUTIES_VIOLATION` | 原审批人重新合格后只允许 `resume-current-approver`；仍失效则保持受阻并升级处置 |
+| 图或关联损坏 | `DEFINITION_GRAPH_CORRUPTED`、`INSTANCE_LINK_CORRUPTED`                                                                                                                             | 只允许 `cancel-blocked`                                                        |
+| 任务冲突     | `OPEN_TASK_CONFLICT`                                                                                                                                                                | 只允许 `cancel-blocked`                                                        |
+| 版本损坏     | `SUBJECT_VERSION_CONFLICT`                                                                                                                                                          | 只允许 `cancel-blocked`                                                        |
+| 内部不变量   | `INTERNAL_INVARIANT_BROKEN`                                                                                                                                                         | 保持冻结、readiness 失败并前向修复代码                                         |
 
 ### 3.3 动作与完成条件
 
@@ -89,13 +89,13 @@
 
 ### 5.1 判定
 
-| 现象 | 稳定码 | 处置 |
-| --- | --- | --- |
-| 任务/实例/执行/定义锁版本过期 | `APPROVAL_*_VERSION_CONFLICT` | 读取 409 回读版本，由用户显式重提同一意图 |
-| 同幂等键不同 payload | `APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT` | 停止自动重放；新意图必须使用新幂等键 |
-| 同幂等键同 payload 且仍有权 | 2xx `IDEMPOTENT_REPLAY` | 展示最新摘要，不得提示「重复请求」 |
-| 人员失效已提交阻塞 | `APPROVAL_INSTANCE_BLOCKED` | 按第 3 节处置；不得重试决定 |
-| 未接入类型 | `APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER` | 不得回退旧路径 |
+| 现象                          | 稳定码                                  | 处置                                      |
+| ----------------------------- | --------------------------------------- | ----------------------------------------- |
+| 任务/实例/执行/定义锁版本过期 | `APPROVAL_*_VERSION_CONFLICT`           | 读取 409 回读版本，由用户显式重提同一意图 |
+| 同幂等键不同 payload          | `APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT` | 停止自动重放；新意图必须使用新幂等键      |
+| 同幂等键同 payload 且仍有权   | 2xx `IDEMPOTENT_REPLAY`                 | 展示最新摘要，不得提示「重复请求」        |
+| 人员失效已提交阻塞            | `APPROVAL_INSTANCE_BLOCKED`             | 按第 3 节处置；不得重试决定               |
+| 未接入类型                    | `APPROVAL_DOCUMENT_TYPE_NOT_CUT_OVER`   | 不得回退旧路径                            |
 
 ### 5.2 延迟
 
@@ -105,13 +105,13 @@
 
 事务内只允许追加 outbox。投递由独立 worker 在事务外完成。去重、收件人与模板以合同 §16.5 为准。
 
-| 观察项 | 必须动作 |
-| --- | --- |
-| backlog 增长 | 检查 worker 是否运行、租约是否过期未接管、外部发送接口是否超时 |
+| 观察项                    | 必须动作                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| backlog 增长              | 检查 worker 是否运行、租约是否过期未接管、外部发送接口是否超时                          |
 | oldest age 超过当前退避档 | 第 1—5 次失败后的退避必须为 1 分钟、5 分钟、15 分钟、1 小时、6 小时；不得手工改重试计数 |
-| retry 耗尽 | 第 6 次失败必须进入 dead letter 并告警 |
-| dead letter | 核对去重键与模板参数后，仅允许修复发送依赖并前向重放该去重键；不得删除死信伪装成功 |
-| 租约残留 | 仅允许等待租约到期由其他实例接管；不得手工改 worker ID 抢锁 |
+| retry 耗尽                | 第 6 次失败必须进入 dead letter 并告警                                                  |
+| dead letter               | 核对去重键与模板参数后，仅允许修复发送依赖并前向重放该去重键；不得删除死信伪装成功      |
+| 租约残留                  | 仅允许等待租约到期由其他实例接管；不得手工改 worker ID 抢锁                             |
 
 模板参数只允许单据类型中文名、业务编号、当前节点名称、当前审批人显示名、轮次号和驳回原因摘要。不得包含 Token、金额明细或完整单据。
 

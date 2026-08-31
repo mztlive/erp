@@ -73,6 +73,7 @@ export function ContractDetailPage({
             <PageScaffold>
                 <PageHeader title="合同" />
                 <BusinessFailureState
+                    id="card-contracts-detail-failure"
                     title="合同加载失败"
                     error={query.error}
                     onRetry={() => {
@@ -90,7 +91,10 @@ export function ContractDetailPage({
                     title="合同不存在"
                     description="未找到这份合同。可能编号有误，或当前角色无权查看。"
                     actions={
-                        <Button render={<Link href="/sales/contracts" />}>
+                        <Button
+                            id="card-contracts-detail-notfound-back"
+                            render={<Link href="/sales/contracts" />}
+                        >
                             返回列表
                         </Button>
                     }
@@ -108,6 +112,7 @@ export function ContractDetailPage({
                         actions={[
                             {
                                 actionKey: "back",
+                                id: "card-contracts-detail-header-back",
                                 label: "返回列表",
                                 variant: "outline",
                                 render: <Link href="/sales/contracts" />,

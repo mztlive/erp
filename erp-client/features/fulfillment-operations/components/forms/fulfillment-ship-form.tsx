@@ -9,6 +9,7 @@ import {
     displayText,
     lineItemTitle,
 } from "@/features/fulfillment-operations/lib/readable-label"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     FulfillmentDraft,
     FulfillmentOperation,
@@ -41,8 +42,11 @@ export function FulfillmentShipForm({
                 <div className="grid gap-4 sm:grid-cols-2">
                     {displayText(draft.warehouseLabel) ? (
                         <div className="space-y-1.5">
-                            <Label>发货仓</Label>
+                            <Label htmlFor="fulfillment-operations-ship-form-warehouse">
+                                发货仓
+                            </Label>
                             <Input
+                                id="fulfillment-operations-ship-form-warehouse"
                                 value={displayText(draft.warehouseLabel)}
                                 disabled
                                 readOnly
@@ -50,12 +54,12 @@ export function FulfillmentShipForm({
                         </div>
                     ) : null}
                     <div className="space-y-1.5">
-                        <Label htmlFor="ship-carrier">
+                        <Label htmlFor="fulfillment-operations-ship-form-carrier">
                             承运方
                             <span className="text-destructive">*</span>
                         </Label>
                         <OptionCombobox
-                            id="ship-carrier"
+                            id="fulfillment-operations-ship-form-carrier"
                             value={draft.carrier || null}
                             onValueChange={(value) =>
                                 onChange({
@@ -71,12 +75,12 @@ export function FulfillmentShipForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="ship-tracking">
+                        <Label htmlFor="fulfillment-operations-ship-form-tracking-no">
                             物流单号
                             <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                            id="ship-tracking"
+                            id="fulfillment-operations-ship-form-tracking-no"
                             value={draft.trackingNo}
                             disabled={disabled}
                             placeholder="请输入物流单号"
@@ -89,9 +93,11 @@ export function FulfillmentShipForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="ship-at">发货时间</Label>
+                        <Label htmlFor="fulfillment-operations-ship-form-shipped-at">
+                            发货时间
+                        </Label>
                         <DateTimeLocalPicker
-                            id="ship-at"
+                            id="fulfillment-operations-ship-form-shipped-at"
                             value={draft.shippedAt || undefined}
                             disabled={disabled}
                             showTimeZone={false}
@@ -133,11 +139,13 @@ export function FulfillmentShipForm({
                                 ) : null}
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor={`ship-qty-${i}`}>
+                                <Label
+                                    htmlFor={`fulfillment-operations-ship-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
+                                >
                                     本次发货数量
                                 </Label>
                                 <Input
-                                    id={`ship-qty-${i}`}
+                                    id={`fulfillment-operations-ship-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
                                     className="num"
                                     inputMode="decimal"
                                     value={line.quantity}

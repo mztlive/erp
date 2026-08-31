@@ -145,6 +145,7 @@ export function WarehouseReviseDialog({
         },
     })
 
+    // oxlint-disable-next-line react/set-state-in-effect -- reset form when dialog opens with new target
     React.useEffect(() => {
         if (!open) return
         form.reset({
@@ -199,6 +200,7 @@ export function WarehouseReviseDialog({
                             <form.AppField name="inboundUserId">
                                 {(field) => (
                                     <field.SelectField
+                                        id="master-data-warehouse-handler-inbound-combobox"
                                         label="入库经办人"
                                         options={inboundOptions}
                                         placeholder="选择具备入库确认权限的账号"
@@ -213,6 +215,7 @@ export function WarehouseReviseDialog({
                             <form.AppField name="outboundUserId">
                                 {(field) => (
                                     <field.SelectField
+                                        id="master-data-warehouse-handler-outbound-combobox"
                                         label="仓发经办人"
                                         options={outboundOptions}
                                         placeholder="选择具备发货确认权限的账号"
@@ -228,7 +231,11 @@ export function WarehouseReviseDialog({
                         <DialogFooter>
                             <DialogClose
                                 render={
-                                    <Button type="button" variant="outline" />
+                                    <Button
+                                        id="master-data-warehouse-handler-cancel"
+                                        type="button"
+                                        variant="outline"
+                                    />
                                 }
                             >
                                 取消
@@ -244,6 +251,7 @@ export function WarehouseReviseDialog({
                                 {([inboundUserId, outboundUserId]) => (
                                     <form.AppForm>
                                         <form.SubmitButton
+                                            id="master-data-warehouse-handler-save"
                                             label="保存配置"
                                             pendingLabel="保存中…"
                                             disabled={

@@ -3,6 +3,7 @@
 Rust template that ships an Axum-based Web API and Mongo-backed repositories. Authentication, RBAC, account management, and file upload are wired end to end.
 
 ## What’s Included
+
 - **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
 - **Ops CLI (`apps/cli`)**: Initialize the super admin or reset an existing admin password without depending on `web-api`.
 - **Mongo repositories (`database/`)**: Generic `Repository<T>` with soft-delete, paging, and transaction helpers, plus typed accessors via `DatabaseExt`.
@@ -10,6 +11,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.
 
 ## Project Layout
+
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
 - `apps/cli/` – Operator CLI for `init-admin` and `reset-password`.
 - `services/` – Business orchestration grouped by active domains such as accounts, auditing, and IAM.
@@ -20,6 +22,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 - `config.toml.example` – Minimal local configuration template.
 
 ## API Surface (current)
+
 - **Public**
   - `GET /health`
   - `POST /login` – Back-office login, returns JWT.
@@ -34,6 +37,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 - **Response shape**: All handlers return `ApiResponse { status, errorMessage, data, success }`.
 
 ## Configuration
+
 1. Copy the sample and fill required fields:
    ```bash
    cp config.toml.example config.toml
@@ -55,6 +59,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
    ```
 
 ## Run Locally
+
 1. Prerequisites: Rust toolchain (edition 2021, rustfmt/clippy), MongoDB instance.
 2. Start the API:
    ```bash
@@ -72,6 +77,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
    ```
 
 ## Development Checklist
+
 - Format and lint: `cargo fmt --all` and `cargo clippy --workspace --all-targets --all-features`.
 - Tests: `cargo test --workspace` (service and entity tests live inline); add a happy-path test for every functional change.
 - Docker: `docker-compose.yml` builds the local Web API; production uses
@@ -79,12 +85,14 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
   See `DEPLOY.md` for local build, Jenkins parameters, deployment, and rollback.
 
 ## Extending the Template
+
 - Add new domains under `services/src/<domain>/` with a `dto.rs` and only the modules required by real use cases; expose protocol adapters under `apps/web-api/src/core/handler/{admin,auth}` or the dedicated shared handler file such as `upload.rs`.
 - Reuse service-layer DTOs in handlers instead of duplicating request structs; prefer thin wrappers only when HTTP validation differs.
 - Use `database::Repository` via `DatabaseExt` for all persistence, and keep business rules inside entities/value objects.
 - Add external-provider abstractions only when a real integration has at least one caller.
 
 ## Notes
+
 - Tracing writes to stdout/stderr by default so the container runtime can rotate it. Set
   `LOG_TO_FILE=true` only when file retention and rotation are managed externally.
 - Back-office JWTs include the account persistence version. Deploying this contract invalidates

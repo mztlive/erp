@@ -14,8 +14,7 @@ export const RECEIPT_REVERSAL_DOCUMENT_TYPE = "ReceiptReversal" as const
 export const RECEIPT_REVERSAL_OBJECT_TYPE = "receipt_reversal" as const
 
 /** 合同 §4.3 对 ReceiptReversal 的固定政策。 */
-export const RECEIPT_REVERSAL_APPROVAL_REQUIREMENT =
-    "PROCESS_REQUIRED" as const
+export const RECEIPT_REVERSAL_APPROVAL_REQUIREMENT = "PROCESS_REQUIRED" as const
 
 export type ReceiptReversalApprovalPhase = "draft" | "confirm" | "runtime"
 
@@ -32,9 +31,8 @@ const UNSUBMITTED_STATUS_CODES = new Set([
  * @param status 服务端状态码；缺省视为未提交。
  * @returns 未提交为 true。
  */
-export const isUnsubmittedReceiptReversalStatus = (
-    status?: string,
-): boolean => !status || UNSUBMITTED_STATUS_CODES.has(status)
+export const isUnsubmittedReceiptReversalStatus = (status?: string): boolean =>
+    !status || UNSUBMITTED_STATUS_CODES.has(status)
 
 /**
  * 把回款冲正业务状态映射为用户可见中文，不上屏枚举原值。

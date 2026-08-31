@@ -129,7 +129,9 @@ export function ContractsListPage() {
                 }}
                 onOpenUpload={() => setUploadOpen(true)}
                 onPreview={setPreviewId}
-                highlightedContractId={actions.highlightedContractId ?? undefined}
+                highlightedContractId={
+                    actions.highlightedContractId ?? undefined
+                }
             />
 
             <ContractPreviewSheet

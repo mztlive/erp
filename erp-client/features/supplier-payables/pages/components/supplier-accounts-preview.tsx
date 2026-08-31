@@ -90,6 +90,7 @@ export function SupplierAccountsPreview({
             Boolean(onRequestReversalSubmit)
         return (
             <QuickPreviewSheet
+                idPrefix="supplier-payables-preview-reversal"
                 open
                 onOpenChange={(open) => {
                     if (!open) onClose()
@@ -99,7 +100,11 @@ export function SupplierAccountsPreview({
                 description="付款冲正记录与审批信息"
                 footer={
                     canSubmitDraft ? (
-                        <Button type="button" onClick={onRequestReversalSubmit}>
+                        <Button
+                            id="supplier-payables-preview-reversal-submit"
+                            type="button"
+                            onClick={onRequestReversalSubmit}
+                        >
                             提交审批
                         </Button>
                     ) : null
@@ -124,6 +129,7 @@ export function SupplierAccountsPreview({
                             )}
                         </p>
                         <Button
+                            id="supplier-payables-preview-reversal-retry"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -151,6 +157,7 @@ export function SupplierAccountsPreview({
             Boolean(onRequestRefundSubmit)
         return (
             <QuickPreviewSheet
+                idPrefix="supplier-payables-preview-refund"
                 open
                 onOpenChange={(open) => {
                     if (!open) onClose()
@@ -160,7 +167,11 @@ export function SupplierAccountsPreview({
                 description="供应商退款记录与审批信息"
                 footer={
                     canSubmitDraft ? (
-                        <Button type="button" onClick={onRequestRefundSubmit}>
+                        <Button
+                            id="supplier-payables-preview-refund-submit"
+                            type="button"
+                            onClick={onRequestRefundSubmit}
+                        >
                             提交审批
                         </Button>
                     ) : null
@@ -185,6 +196,7 @@ export function SupplierAccountsPreview({
                             )}
                         </p>
                         <Button
+                            id="supplier-payables-preview-refund-retry"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -230,6 +242,7 @@ export function SupplierAccountsPreview({
 
     return (
         <QuickPreviewSheet
+            idPrefix="supplier-payables-preview-payable"
             open={Boolean(previewPayableId)}
             onOpenChange={(open) => {
                 if (!open) onClose()
@@ -264,6 +277,7 @@ export function SupplierAccountsPreview({
                 payable ? (
                     <>
                         <Button
+                            id="supplier-payables-preview-close"
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -272,6 +286,7 @@ export function SupplierAccountsPreview({
                         </Button>
                         {payable.sourceHref ? (
                             <Button
+                                id="supplier-payables-preview-open-source"
                                 type="button"
                                 variant="outline"
                                 render={<Link href={payable.sourceHref} />}
@@ -282,6 +297,7 @@ export function SupplierAccountsPreview({
                         ) : null}
                         {showRegisterInvoice ? (
                             <Button
+                                id="supplier-payables-preview-register-invoice"
                                 type="button"
                                 variant="outline"
                                 onClick={() => {
@@ -299,6 +315,7 @@ export function SupplierAccountsPreview({
                         ) : null}
                         {canRegisterPayment ? (
                             <Button
+                                id="supplier-payables-preview-register-payment"
                                 type="button"
                                 onClick={() => {
                                     onClose()
@@ -346,6 +363,7 @@ export function SupplierAccountsPreview({
                         )}
                     </p>
                     <Button
+                        id="supplier-payables-preview-retry"
                         type="button"
                         size="sm"
                         variant="outline"

@@ -69,7 +69,10 @@ function PolicyBanner({
             data-slot="policy-banner"
             className={cn(surfaceInsetClassName, "overflow-hidden")}
         >
-            <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/40">
+            <CollapsibleTrigger
+                id={`operations-${view}-policy-banner-trigger`}
+                className="group flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/40"
+            >
                 <ShieldAlertIcon
                     className="size-3.5 shrink-0 text-warning"
                     aria-hidden="true"

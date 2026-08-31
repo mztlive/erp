@@ -402,6 +402,26 @@ impl PurchaseOrder {
             .ok_or_else(|| Error::from("采购单缺少草稿提交"))
     }
 
+    /// 校验采购单主状态是否允许最终通过动作生效。
+    ///
+    /// # 参数
+    /// * `self` - 待读取主状态的采购单聚合
+    ///
+    /// # 返回
+    /// 主状态为 `IN_APPROVAL` 时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 主状态不是审批中时返回领域错误。
+    ///
+    /// # 关键约束
+    /// 本守卫只检查生命周期状态，不检查冻结提交指针，也不修改聚合。
+    pub fn ensure_can_formalize(&self) -> Result<()> {
+        if self.stable.status != PurchaseOrderStatus::InApproval {
+            return Err(Error::from("只有审批中的采购单可以由最终通过动作生效"));
+        }
+        Ok(())
+    }
+
     /// 取得可正式化的冻结提交。
     ///
     /// # 返回
@@ -617,12 +637,16 @@ impl PurchaseOrder {
     /// # 参数
     /// * `updated_by` - 最终通过执行人
     ///
+    /// # 返回
+    /// 主状态迁移到 `EFFECTIVE` 并更新审计人后返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 状态不是审批中时返回冲突。
+    /// 状态不是审批中或状态机拒绝迁移时返回领域错误。
+    ///
+    /// # 关键约束
+    /// 复用非变更状态守卫；不检查提交指针，也不改写财务审核状态。
     pub fn formalize_approved(&mut self, updated_by: impl Into<String>) -> Result<()> {
-        if self.stable.status != PurchaseOrderStatus::InApproval {
-            return Err(Error::from("只有审批中的采购单可以由最终通过动作生效"));
-        }
+        self.ensure_can_formalize()?;
         ensure_transition(self.stable.status, PurchaseOrderStatus::Effective)?;
         self.stable.status = PurchaseOrderStatus::Effective;
         self.stable.touch(updated_by);
@@ -957,6 +981,59 @@ mod tests {
                 "admin-3",
             )
             .is_err());
+    }
+
+    /// 验证最终生效守卫只读取审批状态且不会修改聚合。
+    ///
+    /// # 参数
+    /// 无；测试使用本模块采购单夹具。
+    ///
+    /// # 返回
+    /// 无；全部断言通过即测试成功。
+    ///
+    /// # 错误
+    /// 守卫意外检查提交指针或修改聚合时测试失败。
+    ///
+    /// # 关键约束
+    /// `IN_APPROVAL` 且缺少提交指针仍通过这个状态专用守卫。
+    #[test]
+    fn ensure_can_formalize_is_state_only_and_non_mutating() {
+        let mut order = new_order();
+        order.start_approval("sub-1", "admin-1").unwrap();
+        order.current_submission_id = None;
+        let before = order.clone();
+
+        order.ensure_can_formalize().unwrap();
+
+        assert_eq!(order, before);
+        assert!(order.submission_id_for_formalization().is_err());
+    }
+
+    /// 验证最终生效守卫拒绝审批中之外的生命周期状态。
+    ///
+    /// # 参数
+    /// 无；测试覆盖草稿和已生效采购单。
+    ///
+    /// # 返回
+    /// 无；全部断言通过即测试成功。
+    ///
+    /// # 错误
+    /// 非审批中状态被接受或错误文本漂移时测试失败。
+    ///
+    /// # 关键约束
+    /// 守卫必须保持最终通过动作既有的领域错误文本。
+    #[test]
+    fn ensure_can_formalize_rejects_non_approval_states() {
+        let draft_error = new_order().ensure_can_formalize().unwrap_err();
+        assert_eq!(
+            draft_error.to_string(),
+            "只有审批中的采购单可以由最终通过动作生效"
+        );
+
+        let mut effective = new_order();
+        effective.start_approval("sub-1", "admin-1").unwrap();
+        effective.formalize_approved("fin-1").unwrap();
+        assert!(effective.ensure_can_formalize().is_err());
     }
 
     #[test]

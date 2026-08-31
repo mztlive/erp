@@ -7,6 +7,7 @@ import { ExternalLinkIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatQty } from "@/features/inventory/components/presentation"
 import type { StockMovementRow } from "@/features/inventory/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
@@ -87,6 +88,7 @@ export function buildMovementColumns(): ColumnDef<StockMovementRow>[] {
             cell: ({ row }) =>
                 row.original.sourceHref ? (
                     <Button
+                        id={`inventory-ledger-movement-row-${toAutomationIdSegment(row.original.movementId)}-source`}
                         type="button"
                         variant="link"
                         size="xs"

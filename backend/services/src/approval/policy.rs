@@ -16,29 +16,8 @@ pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_
 /// 定义期校验指定审批人的静态审批权限。
 pub const STATIC_APPROVE_PERMISSION: &str = "approval_instance:decide";
 
-/// 合同 §4.3 固定 20 个单据类型，顺序与政策矩阵一致。
-pub const ALL_DOCUMENT_TYPES: [DocumentType; 20] = [
-    DocumentType::SalesOrder,
-    DocumentType::VoucherSalesOrder,
-    DocumentType::SalesChangeOrder,
-    DocumentType::PurchaseOrder,
-    DocumentType::PurchaseChangeOrder,
-    DocumentType::StockAdjustment,
-    DocumentType::CustomerReceipt,
-    DocumentType::SupplierPayment,
-    DocumentType::CustomerRefund,
-    DocumentType::SupplierRefund,
-    DocumentType::ReceiptReversal,
-    DocumentType::PaymentReversal,
-    DocumentType::PurchaseReceipt,
-    DocumentType::Delivery,
-    DocumentType::ElectronicDelivery,
-    DocumentType::ServiceFulfillment,
-    DocumentType::CustomerAcceptance,
-    DocumentType::Invoice,
-    DocumentType::SalesReturnCase,
-    DocumentType::PurchaseReturnOrder,
-];
+/// 合同 §4.3 固定 20 个单据类型，复用实体层权威穷尽集合。
+pub const ALL_DOCUMENT_TYPES: [DocumentType; 20] = DocumentType::ALL;
 
 const NO_PURPOSES: &[ApprovalNodePurpose] = &[];
 

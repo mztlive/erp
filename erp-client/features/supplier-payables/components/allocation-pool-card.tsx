@@ -14,16 +14,17 @@ import {
     type AllocationSessionView,
     type AllocationTrack,
 } from "@/features/supplier-payables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type AllocationPoolCardProps = {
+    supplierId?: string
     supplierName: string
     pool: AllocationSessionView["pool"]
     track: AllocationTrack
     selected: ReadonlySet<string>
     amounts: Readonly<Record<string, string>>
     disabled: boolean
-    lockedTarget?: boolean
     onToggleItem: (
         payableAccountId: string,
         checked: boolean | "indeterminate",
@@ -36,65 +37,62 @@ export type AllocationPoolCardProps = {
 
 /** 同供应商待核销池：勾选目标并填写本次分配金额。 */
 export function AllocationPoolCard({
+    supplierId,
     supplierName,
     pool,
     track,
     selected,
     amounts,
     disabled,
-    lockedTarget = false,
     onToggleItem,
     onAmountChange,
     onToggleSelectAll,
     onFillAllSelected,
 }: AllocationPoolCardProps) {
+    const poolId = `supplier-payables-allocation-pool-${toAutomationIdSegment(supplierId ?? supplierName)}-${track}`
     return (
         <section
-            id="alloc-pool"
+            id={poolId}
             className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
-            aria-label={lockedTarget ? "本次付款对应单据" : "同供应商待核销池"}
+            aria-label="同供应商待核销池"
         >
             <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">
-                    {lockedTarget ? "本次付款对应单据" : "同供应商待核销池"}
-                </h2>
+                <h2 className="text-sm font-semibold">同供应商待核销池</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                    {lockedTarget
-                        ? `${supplierName} · 任务已锁定付款来源`
-                        : `仅 ${supplierName} · ${
-                              track === "payment" ? "开放应付" : "可收票余额"
-                          }`}
+                    {`仅 ${supplierName} · ${
+                        track === "payment" ? "开放应付" : "可收票余额"
+                    }`}
                 </p>
             </div>
-            <div className={cn("p-4", !lockedTarget && "space-y-2")}>
-                {!lockedTarget ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span>{`共 ${pool.length} 个开放目标`}</span>
-                        <div className="flex gap-1">
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                disabled={pool.length === 0 || disabled}
-                                onClick={onToggleSelectAll}
-                            >
-                                全选
-                            </Button>
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                disabled={selected.size === 0 || disabled}
-                                onClick={onFillAllSelected}
-                            >
-                                按开放余额填满
-                            </Button>
-                        </div>
+            <div className="space-y-2 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{`共 ${pool.length} 个开放目标`}</span>
+                    <div className="flex gap-1">
+                        <Button
+                            id="supplier-payables-allocation-pool-select-all"
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            disabled={pool.length === 0 || disabled}
+                            onClick={onToggleSelectAll}
+                        >
+                            全选
+                        </Button>
+                        <Button
+                            id="supplier-payables-allocation-pool-fill-all"
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            disabled={selected.size === 0 || disabled}
+                            onClick={onFillAllSelected}
+                        >
+                            按开放余额填满
+                        </Button>
                     </div>
-                ) : null}
+                </div>
                 {pool.length === 0 ? (
                     <p className="py-6 text-sm text-muted-foreground">
-                        {lockedTarget ? "未匹配到待付款单据" : "当前无开放目标"}
+                        当前无开放目标
                     </p>
                 ) : (
                     pool.map((item) => {
@@ -103,57 +101,6 @@ export function AllocationPoolCard({
                             track === "payment"
                                 ? item.openTotal
                                 : item.openInvoiceableTotal
-                        if (lockedTarget) {
-                            return (
-                                <div
-                                    key={item.payableAccountId}
-                                    className="grid gap-4 py-1 md:grid-cols-[minmax(0,1.4fr)_minmax(150px,0.45fr)_minmax(150px,0.45fr)] md:items-center"
-                                >
-                                    <div className="min-w-0 md:pr-5">
-                                        <div className="text-xs font-medium text-muted-foreground">
-                                            采购单
-                                        </div>
-                                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                            <span className="num truncate text-sm font-medium">
-                                                {item.sourceDocumentNo}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {item.dueStateLabel} ·{" "}
-                                                {item.dueDate}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="border-t border-border pt-3 md:border-l md:border-t-0 md:py-1 md:pl-5">
-                                        <div className="text-xs font-medium text-destructive">
-                                            剩余应付
-                                        </div>
-                                        <div className="mt-1 text-base font-semibold">
-                                            <MoneyValue
-                                                className="text-destructive"
-                                                value={open}
-                                                taxBasis="gross"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="border-t border-border pt-3 md:border-l md:border-t-0 md:py-1 md:pl-5">
-                                        <div className="text-xs font-medium text-success">
-                                            本次核销
-                                        </div>
-                                        <div className="mt-1 text-base font-semibold">
-                                            <MoneyValue
-                                                className="text-success"
-                                                value={
-                                                    amounts[
-                                                        item.payableAccountId
-                                                    ] ?? "0"
-                                                }
-                                                taxBasis="gross"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )
-                        }
                         return (
                             <div
                                 key={item.payableAccountId}
@@ -166,6 +113,7 @@ export function AllocationPoolCard({
                             >
                                 <div className="flex min-w-0 items-start gap-2">
                                     <Checkbox
+                                        id={`supplier-payables-allocation-pool-row-${toAutomationIdSegment(item.payableAccountId)}-select`}
                                         checked={checked}
                                         onCheckedChange={(v) =>
                                             onToggleItem(
@@ -212,7 +160,7 @@ export function AllocationPoolCard({
                                         )}
                                     >
                                         <Label
-                                            htmlFor={`amt-${item.payableAccountId}`}
+                                            htmlFor={`supplier-payables-allocation-pool-row-${toAutomationIdSegment(item.payableAccountId)}-amount`}
                                             className="text-xs whitespace-nowrap"
                                         >
                                             <span className="text-muted-foreground">
@@ -220,7 +168,7 @@ export function AllocationPoolCard({
                                             </span>
                                         </Label>
                                         <Input
-                                            id={`amt-${item.payableAccountId}`}
+                                            id={`supplier-payables-allocation-pool-row-${toAutomationIdSegment(item.payableAccountId)}-amount`}
                                             className="num h-control min-h-0"
                                             inputMode="decimal"
                                             value={

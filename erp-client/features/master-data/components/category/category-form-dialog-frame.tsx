@@ -45,6 +45,7 @@ export function CategoryFormDialogFrame({
     submitLabel,
     excludeStableId,
     onReset,
+    idPrefix,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -57,10 +58,12 @@ export function CategoryFormDialogFrame({
                 TextField: React.ComponentType<{
                     label: string
                     required?: boolean
+                    id?: string
                 }>
                 TextareaField: React.ComponentType<{
                     label: string
                     required?: boolean
+                    id?: string
                 }>
                 SelectField: React.ComponentType<{
                     label: string
@@ -68,6 +71,7 @@ export function CategoryFormDialogFrame({
                     allowClear?: boolean
                     placeholder?: string
                     required?: boolean
+                    id?: string
                 }>
                 handleChange: (value: string) => void
                 state: { value: string }
@@ -84,7 +88,9 @@ export function CategoryFormDialogFrame({
     submitLabel: string
     excludeStableId?: string
     onReset?: () => void
+    idPrefix?: string
 }) {
+    const prefix = idPrefix ?? "master-data-category-form-dialog"
     const categoryListQuery = useMasterDataListQuery({
         resource: "categories",
         lifecycleStatus: "all",
@@ -119,7 +125,10 @@ export function CategoryFormDialogFrame({
 
     return (
         <Dialog open={open} onOpenChange={requestClose}>
-            <DialogContent className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg">
+            <DialogContent
+                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+                closeButtonId={`${prefix}-close`}
+            >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
@@ -143,7 +152,11 @@ export function CategoryFormDialogFrame({
                             <form.AppField
                                 name="name"
                                 children={(field) => (
-                                    <field.TextField label="名称" required />
+                                    <field.TextField
+                                        label="名称"
+                                        id={`${prefix}-name`}
+                                        required
+                                    />
                                 )}
                             />
                             <form.AppField
@@ -151,6 +164,7 @@ export function CategoryFormDialogFrame({
                                 children={(field) => (
                                     <field.TextField
                                         label={masterDataCopy.fCategoryCode}
+                                        id={`${prefix}-code`}
                                         required
                                     />
                                 )}
@@ -163,6 +177,7 @@ export function CategoryFormDialogFrame({
                                             {masterDataCopy.fParentCategory}
                                         </Label>
                                         <CategoryCombobox
+                                            id={`${prefix}-parent`}
                                             categories={categoryParentOptions}
                                             value={
                                                 field.state.value || undefined
@@ -185,6 +200,7 @@ export function CategoryFormDialogFrame({
                                 children={(field) => (
                                     <field.SelectField
                                         label={masterDataCopy.fProductKind}
+                                        id={`${prefix}-product-kind`}
                                         options={PRODUCT_KIND_OPTIONS.map(
                                             (option) => ({
                                                 value: option,
@@ -201,6 +217,7 @@ export function CategoryFormDialogFrame({
                                 children={(field) => (
                                     <field.TextareaField
                                         label={masterDataCopy.fieldChangeReason}
+                                        id={`${prefix}-change-reason`}
                                         required
                                     />
                                 )}
@@ -209,6 +226,7 @@ export function CategoryFormDialogFrame({
                                 <DialogClose
                                     render={
                                         <Button
+                                            id={`${prefix}-cancel`}
                                             type="button"
                                             variant="outline"
                                             disabled={pending}
@@ -217,7 +235,11 @@ export function CategoryFormDialogFrame({
                                 >
                                     关闭
                                 </DialogClose>
-                                <Button type="submit" disabled={pending}>
+                                <Button
+                                    id={`${prefix}-submit`}
+                                    type="submit"
+                                    disabled={pending}
+                                >
                                     {pending ? "提交中…" : submitLabel}
                                 </Button>
                             </DialogFooter>

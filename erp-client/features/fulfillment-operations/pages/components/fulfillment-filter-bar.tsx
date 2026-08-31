@@ -3,7 +3,10 @@
 import { surfacePanelClassName } from "@/components/business"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { FulfillmentQueueToolbar } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-toolbar"
-import type { DueFilter, GateFilter } from "@/features/fulfillment-operations/lib/filters"
+import type {
+    DueFilter,
+    GateFilter,
+} from "@/features/fulfillment-operations/lib/filters"
 import type {
     FulfillmentOperation,
     FulfillmentOperationType,
@@ -13,6 +16,7 @@ import {
     SLUG_TO_TYPE,
     TYPE_SLUG,
 } from "@/features/fulfillment-operations/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type FulfillmentFilterBarProps = {
@@ -63,9 +67,7 @@ export function FulfillmentFilterBar({
         >
             <div className="flex flex-wrap items-center gap-2">
                 <ToggleGroup
-                    value={[
-                        activeTypeSlug === "all" ? "all" : activeTypeSlug,
-                    ]}
+                    value={[activeTypeSlug === "all" ? "all" : activeTypeSlug]}
                     onValueChange={(values) => {
                         const next = values[0]
                         if (!next) return
@@ -80,9 +82,18 @@ export function FulfillmentFilterBar({
                     className="w-fit flex-wrap"
                     aria-label="作业类型"
                 >
-                    <ToggleGroupItem value="all">全部</ToggleGroupItem>
+                    <ToggleGroupItem
+                        id="fulfillment-operations-filter-type-all"
+                        value="all"
+                    >
+                        全部
+                    </ToggleGroupItem>
                     {visibleTypes.map((t) => (
-                        <ToggleGroupItem key={t} value={TYPE_SLUG[t]}>
+                        <ToggleGroupItem
+                            key={t}
+                            id={`fulfillment-operations-filter-type-${toAutomationIdSegment(TYPE_SLUG[t])}`}
+                            value={TYPE_SLUG[t]}
+                        >
                             {OPERATION_TYPE_SHORT[t]}
                         </ToggleGroupItem>
                     ))}

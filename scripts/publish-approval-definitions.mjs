@@ -39,215 +39,203 @@
  * 用法: node scripts/publish-approval-definitions.mjs
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
-import { ADMIN, call, ensureDevAccounts, login } from "./dev-seed-lib.mjs"
+import { ADMIN, call, ensureDevAccounts, login } from "./dev-seed-lib.mjs";
 
 const DEFINITIONS = [
-    {
-        type: "sales_order",
-        name: "销售单审批（实物及服务）",
-        nodes: [{ node_name: "采购确认", display_order: 1, assignee: "procurement" }],
-    },
-    {
-        type: "voucher_sales_order",
-        name: "卡券销售单审批",
-        nodes: [
-            { node_name: "销售领导审批商务条件", display_order: 1, assignee: "salesLeader" },
-            { node_name: "运营确认执行可行", display_order: 2, assignee: "operations" },
-            { node_name: "财务审批应收与配赠", display_order: 3, assignee: "finance" },
-        ],
-    },
-    {
-        type: "sales_change_order",
-        name: "销售变更单审批",
-        nodes: [
-            { node_name: "采购确认履约影响", display_order: 1, assignee: "procurement" },
-            { node_name: "财务复核金额与应收", display_order: 2, assignee: "finance" },
-        ],
-    },
-    {
-        type: "purchase_order",
-        name: "采购单审批",
-        nodes: [{ node_name: "财务总监审批", display_order: 1, assignee: "finance" }],
-    },
-    {
-        type: "purchase_change_order",
-        name: "采购变更单审批",
-        nodes: [
-            { node_name: "仓储确认库存发货影响", display_order: 1, assignee: "warehouse" },
-            { node_name: "财务复核金额与应付", display_order: 2, assignee: "finance" },
-        ],
-    },
-    {
-        type: "stock_adjustment",
-        name: "库存调整单审批",
-        nodes: [{ node_name: "财务审批成本影响", display_order: 1, assignee: "finance" }],
-    },
-    {
-        type: "customer_receipt",
-        name: "客户回款单审批",
-        nodes: [{ node_name: "财务总监审批入账", display_order: 1, assignee: "finance" }],
-    },
-    {
-        type: "customer_refund",
-        name: "客户退款单审批",
-        nodes: [
-            { node_name: "销售领导确认退款依据", display_order: 1, assignee: "salesLeader" },
-            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-        ],
-    },
-    {
-        type: "supplier_refund",
-        name: "供应商退款单审批",
-        nodes: [
-            { node_name: "采购确认退款依据", display_order: 1, assignee: "procurement" },
-            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-        ],
-    },
-    {
-        type: "receipt_reversal",
-        name: "回款冲正单审批",
-        nodes: [
-            { node_name: "销售领导确认冲正依据", display_order: 1, assignee: "salesLeader" },
-            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-        ],
-    },
-    {
-        type: "payment_reversal",
-        name: "付款冲正单审批",
-        nodes: [
-            { node_name: "采购确认冲正依据", display_order: 1, assignee: "procurement" },
-            { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
-        ],
-    },
-]
+  {
+    type: "sales_order",
+    name: "销售单审批（实物及服务）",
+    nodes: [{ node_name: "采购确认", display_order: 1, assignee: "procurement" }],
+  },
+  {
+    type: "voucher_sales_order",
+    name: "卡券销售单审批",
+    nodes: [
+      { node_name: "销售领导审批商务条件", display_order: 1, assignee: "salesLeader" },
+      { node_name: "运营确认执行可行", display_order: 2, assignee: "operations" },
+      { node_name: "财务审批应收与配赠", display_order: 3, assignee: "finance" },
+    ],
+  },
+  {
+    type: "sales_change_order",
+    name: "销售变更单审批",
+    nodes: [
+      { node_name: "采购确认履约影响", display_order: 1, assignee: "procurement" },
+      { node_name: "财务复核金额与应收", display_order: 2, assignee: "finance" },
+    ],
+  },
+  {
+    type: "purchase_order",
+    name: "采购单审批",
+    nodes: [{ node_name: "财务总监审批", display_order: 1, assignee: "finance" }],
+  },
+  {
+    type: "purchase_change_order",
+    name: "采购变更单审批",
+    nodes: [
+      { node_name: "仓储确认库存发货影响", display_order: 1, assignee: "warehouse" },
+      { node_name: "财务复核金额与应付", display_order: 2, assignee: "finance" },
+    ],
+  },
+  {
+    type: "stock_adjustment",
+    name: "库存调整单审批",
+    nodes: [{ node_name: "财务审批成本影响", display_order: 1, assignee: "finance" }],
+  },
+  {
+    type: "customer_receipt",
+    name: "客户回款单审批",
+    nodes: [{ node_name: "财务总监审批入账", display_order: 1, assignee: "finance" }],
+  },
+  {
+    type: "customer_refund",
+    name: "客户退款单审批",
+    nodes: [
+      { node_name: "销售领导确认退款依据", display_order: 1, assignee: "salesLeader" },
+      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+    ],
+  },
+  {
+    type: "supplier_refund",
+    name: "供应商退款单审批",
+    nodes: [
+      { node_name: "采购确认退款依据", display_order: 1, assignee: "procurement" },
+      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+    ],
+  },
+  {
+    type: "receipt_reversal",
+    name: "回款冲正单审批",
+    nodes: [
+      { node_name: "销售领导确认冲正依据", display_order: 1, assignee: "salesLeader" },
+      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+    ],
+  },
+  {
+    type: "payment_reversal",
+    name: "付款冲正单审批",
+    nodes: [
+      { node_name: "采购确认冲正依据", display_order: 1, assignee: "procurement" },
+      { node_name: "财务总监审批", display_order: 2, assignee: "finance" },
+    ],
+  },
+];
 
 async function findDraftId(adminToken, documentType) {
-    const versions = await call(
-        "GET",
-        `/admin/approval-processes/${documentType}/versions`,
-        { token: adminToken },
-    )
-    if (!Array.isArray(versions)) return null
-    const draft = versions.find((v) => v && v.status === "DRAFT")
-    return draft ? draft.definition_id : null
+  const versions = await call("GET", `/admin/approval-processes/${documentType}/versions`, {
+    token: adminToken,
+  });
+  if (!Array.isArray(versions)) return null;
+  const draft = versions.find((v) => v && v.status === "DRAFT");
+  return draft ? draft.definition_id : null;
 }
 
 /**
  * 校验脚本定义与服务端审批政策完全一致，禁止遗漏必须审批类型或配置无需审批类型。
  */
 function ensureDefinitionsMatchCatalog(catalog) {
-    const configuredTypes = new Set(DEFINITIONS.map((definition) => definition.type))
-    if (configuredTypes.size !== DEFINITIONS.length) {
-        throw new Error("审批种子存在重复单据类型")
-    }
+  const configuredTypes = new Set(DEFINITIONS.map((definition) => definition.type));
+  if (configuredTypes.size !== DEFINITIONS.length) {
+    throw new Error("审批种子存在重复单据类型");
+  }
 
-    const requiredTypes = new Set(
-        catalog
-            .filter((row) => row.approval_requirement === "PROCESS_REQUIRED")
-            .map((row) => row.document_type),
-    )
-    const missingTypes = [...requiredTypes].filter((type) => !configuredTypes.has(type))
-    const forbiddenTypes = [...configuredTypes].filter((type) => !requiredTypes.has(type))
-    if (missingTypes.length === 0 && forbiddenTypes.length === 0) return
+  const requiredTypes = new Set(
+    catalog
+      .filter((row) => row.approval_requirement === "PROCESS_REQUIRED")
+      .map((row) => row.document_type),
+  );
+  const missingTypes = [...requiredTypes].filter((type) => !configuredTypes.has(type));
+  const forbiddenTypes = [...configuredTypes].filter((type) => !requiredTypes.has(type));
+  if (missingTypes.length === 0 && forbiddenTypes.length === 0) return;
 
-    const details = []
-    if (missingTypes.length > 0) details.push(`缺少 ${missingTypes.join("、")}`)
-    if (forbiddenTypes.length > 0) details.push(`不得配置 ${forbiddenTypes.join("、")}`)
-    throw new Error(`审批种子与服务端政策不一致：${details.join("；")}`)
+  const details = [];
+  if (missingTypes.length > 0) details.push(`缺少 ${missingTypes.join("、")}`);
+  if (forbiddenTypes.length > 0) details.push(`不得配置 ${forbiddenTypes.join("、")}`);
+  throw new Error(`审批种子与服务端政策不一致：${details.join("；")}`);
 }
 
 function resolveAssigneeId(userIds, assignee) {
-    const userId = userIds[assignee]
-    if (!userId) {
-        throw new Error(`审批人 ${assignee} 未在开发账号目录中`)
-    }
-    return userId
+  const userId = userIds[assignee];
+  if (!userId) {
+    throw new Error(`审批人 ${assignee} 未在开发账号目录中`);
+  }
+  return userId;
 }
 
 async function main() {
-    const adminToken = await login(ADMIN.account, ADMIN.password)
-    console.log("admin 登录成功")
+  const adminToken = await login(ADMIN.account, ADMIN.password);
+  console.log("admin 登录成功");
 
-    const seeded = await ensureDevAccounts(adminToken, { checkPassword: false })
-    const userIds = Object.fromEntries(Object.entries(seeded).map(([key, row]) => [key, row.id]))
-    console.log("审批人账号 id:", JSON.stringify(userIds))
+  const seeded = await ensureDevAccounts(adminToken, { checkPassword: false });
+  const userIds = Object.fromEntries(Object.entries(seeded).map(([key, row]) => [key, row.id]));
+  console.log("审批人账号 id:", JSON.stringify(userIds));
 
-    const catalog = await call("GET", "/admin/approval-processes/catalog", { token: adminToken })
-    ensureDefinitionsMatchCatalog(catalog)
-    const byType = new Map(catalog.map((row) => [row.document_type, row]))
+  const catalog = await call("GET", "/admin/approval-processes/catalog", { token: adminToken });
+  ensureDefinitionsMatchCatalog(catalog);
+  const byType = new Map(catalog.map((row) => [row.document_type, row]));
 
-    let created = 0
-    let skipped = 0
-    for (const def of DEFINITIONS) {
-        const row = byType.get(def.type)
-        if (!row) {
-            console.warn(`跳过: 目录中不存在类型 ${def.type}`)
-            continue
-        }
-        if (row.configuration_status === "PUBLISHED") {
-            console.log(`跳过: ${def.type} 已有已发布定义（版本 ${row.published_version}）`)
-            skipped += 1
-            continue
-        }
-
-        let definitionId = await findDraftId(adminToken, def.type)
-        let lockVersion
-        if (definitionId) {
-            const detail = await call(
-                "GET",
-                `/admin/approval-process-definitions/${definitionId}`,
-                { token: adminToken },
-            )
-            lockVersion = detail.definition_lock_version
-            console.log(`复用草稿: ${def.type}（${definitionId}，lock=${lockVersion}）`)
-        } else {
-            const draft = await call("POST", "/admin/approval-process-definitions/drafts", {
-                token: adminToken,
-                body: {
-                    document_type: def.type,
-                    name: def.name,
-                    draft_source: "EMPTY",
-                    idempotency_key: `dev-${def.type}-${Date.now()}`,
-                },
-            })
-            definitionId = draft.definition_id
-            lockVersion = draft.definition_lock_version
-            console.log(`新建草稿: ${def.type}（${definitionId}，lock=${lockVersion}）`)
-        }
-
-        const nodes = def.nodes.map((n) => ({
-            node_name: n.node_name,
-            display_order: n.display_order,
-            assignee_user_id: resolveAssigneeId(userIds, n.assignee),
-        }))
-        const updated = await call(
-            "PUT",
-            `/admin/approval-process-definitions/${definitionId}/nodes`,
-            {
-                token: adminToken,
-                body: { expected_definition_lock_version: String(lockVersion), nodes },
-            },
-        )
-        lockVersion = updated.definition_lock_version
-
-        await call(
-            "POST",
-            `/admin/approval-process-definitions/${definitionId}/publish`,
-            {
-                token: adminToken,
-                body: {
-                    expected_definition_lock_version: String(lockVersion),
-                    idempotency_key: `dev-${def.type}-publish-${Date.now()}`,
-                },
-            },
-        )
-        console.log(`已发布: ${def.type}（${def.nodes.map((n) => n.node_name).join(" → ")}）`)
-        created += 1
+  let created = 0;
+  let skipped = 0;
+  for (const def of DEFINITIONS) {
+    const row = byType.get(def.type);
+    if (!row) {
+      console.warn(`跳过: 目录中不存在类型 ${def.type}`);
+      continue;
     }
-    console.log(`完成: 新建 ${created} 个定义，跳过 ${skipped} 个已存在定义`)
+    if (row.configuration_status === "PUBLISHED") {
+      console.log(`跳过: ${def.type} 已有已发布定义（版本 ${row.published_version}）`);
+      skipped += 1;
+      continue;
+    }
+
+    let definitionId = await findDraftId(adminToken, def.type);
+    let lockVersion;
+    if (definitionId) {
+      const detail = await call("GET", `/admin/approval-process-definitions/${definitionId}`, {
+        token: adminToken,
+      });
+      lockVersion = detail.definition_lock_version;
+      console.log(`复用草稿: ${def.type}（${definitionId}，lock=${lockVersion}）`);
+    } else {
+      const draft = await call("POST", "/admin/approval-process-definitions/drafts", {
+        token: adminToken,
+        body: {
+          document_type: def.type,
+          name: def.name,
+          draft_source: "EMPTY",
+          idempotency_key: `dev-${def.type}-${Date.now()}`,
+        },
+      });
+      definitionId = draft.definition_id;
+      lockVersion = draft.definition_lock_version;
+      console.log(`新建草稿: ${def.type}（${definitionId}，lock=${lockVersion}）`);
+    }
+
+    const nodes = def.nodes.map((n) => ({
+      node_name: n.node_name,
+      display_order: n.display_order,
+      assignee_user_id: resolveAssigneeId(userIds, n.assignee),
+    }));
+    const updated = await call("PUT", `/admin/approval-process-definitions/${definitionId}/nodes`, {
+      token: adminToken,
+      body: { expected_definition_lock_version: String(lockVersion), nodes },
+    });
+    lockVersion = updated.definition_lock_version;
+
+    await call("POST", `/admin/approval-process-definitions/${definitionId}/publish`, {
+      token: adminToken,
+      body: {
+        expected_definition_lock_version: String(lockVersion),
+        idempotency_key: `dev-${def.type}-publish-${Date.now()}`,
+      },
+    });
+    console.log(`已发布: ${def.type}（${def.nodes.map((n) => n.node_name).join(" → ")}）`);
+    created += 1;
+  }
+  console.log(`完成: 新建 ${created} 个定义，跳过 ${skipped} 个已存在定义`);
 }
 
 main().catch((error) => {
-    console.error("发布审批定义失败:", error.message)
-    process.exit(1)
-})
+  console.error("发布审批定义失败:", error.message);
+  process.exit(1);
+});

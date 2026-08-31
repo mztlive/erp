@@ -37,14 +37,12 @@ export function JobCommandDialogs({
     reattributeOpen: boolean
     onReattributeOpenChange: (open: boolean) => void
     reattributeItemId: string | null
-    onRun: (
-        action: BackfillCommandAction,
-        itemIds?: string[],
-    ) => Promise<void>
+    onRun: (action: BackfillCommandAction, itemIds?: string[]) => Promise<void>
 }) {
     return (
         <>
             <FormalActionConfirmDialog
+                id="operations-history-backfill-detail-start"
                 open={startOpen}
                 onOpenChange={onStartOpenChange}
                 actionLabel="开始回填"
@@ -74,6 +72,7 @@ export function JobCommandDialogs({
             />
 
             <FormalActionConfirmDialog
+                id="operations-history-backfill-detail-resume"
                 open={resumeOpen}
                 onOpenChange={onResumeOpenChange}
                 actionLabel="续跑原任务"
@@ -97,6 +96,7 @@ export function JobCommandDialogs({
             />
 
             <FormalActionConfirmDialog
+                id="operations-history-backfill-detail-confirm-report"
                 open={confirmReportOpen}
                 onOpenChange={onConfirmReportOpenChange}
                 actionLabel="确认报告"
@@ -118,6 +118,7 @@ export function JobCommandDialogs({
             />
 
             <FormalActionConfirmDialog
+                id="operations-history-backfill-detail-reattribute"
                 open={reattributeOpen}
                 onOpenChange={onReattributeOpenChange}
                 actionLabel="重新归集"

@@ -13,6 +13,7 @@ import type {
     MappingTaskView,
     ReconciliationDifference,
 } from "@/features/mall-sync/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { freshnessText, versionText } from "@/lib/ui-text"
 
@@ -35,6 +36,7 @@ function useMallSyncColumns({ patchUrl, searchParams }: MallSyncColumnsInput) {
                 header: "任务号",
                 cell: ({ row }) => (
                     <button
+                        id={`mall-sync-jobs-row-${toAutomationIdSegment(row.original.jobId)}-open`}
                         type="button"
                         className="text-left text-sm font-medium text-primary hover:underline"
                         onClick={() =>
@@ -108,6 +110,7 @@ function useMallSyncColumns({ patchUrl, searchParams }: MallSyncColumnsInput) {
                 header: "商城销售单号",
                 cell: ({ row }) => (
                     <button
+                        id={`mall-sync-snapshots-row-${toAutomationIdSegment(row.original.snapshotId)}-open`}
                         type="button"
                         className="font-mono text-sm text-primary hover:underline"
                         onClick={() =>
@@ -154,6 +157,7 @@ function useMallSyncColumns({ patchUrl, searchParams }: MallSyncColumnsInput) {
                 cell: ({ row }) =>
                     row.original.appliedSalesOrderNo ? (
                         <Link
+                            id={`mall-sync-snapshots-row-${toAutomationIdSegment(row.original.snapshotId)}-sales-order`}
                             href={`/sales/orders/${row.original.appliedSalesOrderId}`}
                             className="text-sm text-primary hover:underline"
                         >
@@ -177,6 +181,7 @@ function useMallSyncColumns({ patchUrl, searchParams }: MallSyncColumnsInput) {
                 header: "来源单号",
                 cell: ({ row }) => (
                     <button
+                        id={`mall-sync-mapping-row-${toAutomationIdSegment(row.original.mappingTaskId)}-open`}
                         type="button"
                         className="font-mono text-sm text-primary hover:underline"
                         onClick={() =>
@@ -283,6 +288,7 @@ function useMallSyncColumns({ patchUrl, searchParams }: MallSyncColumnsInput) {
                 header: "来源单号",
                 cell: ({ row }) => (
                     <button
+                        id={`mall-sync-reconciliation-row-${toAutomationIdSegment(row.original.differenceId)}-open`}
                         type="button"
                         className="font-mono text-sm text-primary hover:underline"
                         onClick={() =>

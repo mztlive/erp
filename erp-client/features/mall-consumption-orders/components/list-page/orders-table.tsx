@@ -63,7 +63,9 @@ export function ConsumptionOrdersTable({
         )
     }
     if (isPending) {
-        return <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />
+        return (
+            <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />
+        )
     }
     if (isError) {
         return (
@@ -73,6 +75,7 @@ export function ConsumptionOrdersTable({
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 action={
                     <Button
+                        id="mall-consumption-orders-list-retry"
                         type="button"
                         variant="secondary"
                         size="sm"
@@ -94,6 +97,7 @@ export function ConsumptionOrdersTable({
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 action={
                     <Button
+                        id="mall-consumption-orders-list-clear-filters"
                         type="button"
                         variant="secondary"
                         size="sm"
@@ -118,6 +122,7 @@ export function ConsumptionOrdersTable({
     }
     return (
         <DataTable
+            id="mall-consumption-orders-list-table"
             data={rows}
             columns={columns}
             getRowId={(row) => row.mallOrderId}

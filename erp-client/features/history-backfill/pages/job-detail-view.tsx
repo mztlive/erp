@@ -1,6 +1,10 @@
 "use client"
 
-import { BusinessEmptyState, BusinessFailureState, PageScaffold } from "@/components/business"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    PageScaffold,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { JobDetailContent } from "@/features/history-backfill/components/job-detail-content"
 import { useHistoryBackfillDetailQuery } from "@/features/history-backfill/hooks/queries"
@@ -79,6 +83,7 @@ function JobDetailView({
                     action={
                         <div className="flex flex-wrap gap-2">
                             <Button
+                                id="operations-history-backfill-detail-empty-retry"
                                 type="button"
                                 variant="secondary"
                                 className="rounded-lg shadow-none"
@@ -87,6 +92,7 @@ function JobDetailView({
                                 重试
                             </Button>
                             <Button
+                                id="operations-history-backfill-detail-empty-back"
                                 type="button"
                                 variant="secondary"
                                 className="rounded-lg shadow-none"

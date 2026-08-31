@@ -74,10 +74,10 @@ pub async fn list_roles(State(state): State<AppState>) -> Result<Vec<RoleItem>> 
 
 ```json
 {
-    "status": 200,
-    "errorMessage": "OK",
-    "data": null,
-    "success": true
+  "status": 200,
+  "errorMessage": "OK",
+  "data": null,
+  "success": true
 }
 ```
 

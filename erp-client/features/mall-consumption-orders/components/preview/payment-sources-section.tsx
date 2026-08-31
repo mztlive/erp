@@ -27,8 +27,8 @@ export function PaymentSourcesSection({ view }: Props) {
                             className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
                         >
                             <Badge variant="secondary">
-                                {s.sourceType === "CARD" ? "卡券" : "微信"}{" "}
-                                ¥{s.amount}
+                                {s.sourceType === "CARD" ? "卡券" : "微信"} ¥
+                                {s.amount}
                                 <span className="num ml-1">
                                     {s.sourceReference}
                                 </span>
@@ -36,8 +36,14 @@ export function PaymentSourcesSection({ view }: Props) {
                             </Badge>
                             <BusinessStatusBadge
                                 context="list"
-                                label={ATTRIBUTION_STATUS_LABEL[s.attributionStatus]}
-                                tone={ATTRIBUTION_STATUS_TONE[s.attributionStatus]}
+                                label={
+                                    ATTRIBUTION_STATUS_LABEL[
+                                        s.attributionStatus
+                                    ]
+                                }
+                                tone={
+                                    ATTRIBUTION_STATUS_TONE[s.attributionStatus]
+                                }
                             />
                         </li>
                     ))}

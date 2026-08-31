@@ -13,7 +13,10 @@ import type {
     HistoryBackfillReportReviewStatus,
     ItemResult,
 } from "@/features/history-backfill/types"
-import type { BackendItem, BackendJob } from "@/features/history-backfill/api/wire"
+import type {
+    BackendItem,
+    BackendJob,
+} from "@/features/history-backfill/api/wire"
 
 export function tsToIso(secs: number | null | undefined): string {
     if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)

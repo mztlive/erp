@@ -30,6 +30,7 @@ function SettlementCenterResultPanel({
                         <div className="flex flex-wrap gap-2">
                             {result.w12Href ? (
                                 <Button
+                                    id="supplier-settlements-center-result-w12"
                                     type="button"
                                     size="sm"
                                     render={<Link href={result.w12Href} />}

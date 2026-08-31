@@ -2,10 +2,7 @@
 
 import * as React from "react"
 
-import {
-    BusinessStatusBadge,
-    DocumentSection,
-} from "@/components/business"
+import { BusinessStatusBadge, DocumentSection } from "@/components/business"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -30,7 +27,9 @@ export function AuditSection({
 }: {
     orderId: string
     detail: SupplierOrderDetailView
-    noteMutation: Parameters<typeof useSupplierOrderCenterNoteForm>[0]["noteMutation"]
+    noteMutation: Parameters<
+        typeof useSupplierOrderCenterNoteForm
+    >[0]["noteMutation"]
     setResult: React.Dispatch<
         React.SetStateAction<SupplierOrderCenterResult | null>
     >
@@ -108,16 +107,16 @@ export function AuditSection({
                     void noteForm.handleSubmit()
                 }}
             >
-                <Label htmlFor="collab-note">记录协同说明<span className="text-destructive">*</span></Label>
+                <Label htmlFor="supplier-order-center-audit-comment">
+                    记录协同说明<span className="text-destructive">*</span>
+                </Label>
                 <noteForm.AppField
                     name="comment"
                     children={(field) => (
                         <Textarea
-                            id="collab-note"
+                            id="supplier-order-center-audit-comment"
                             value={field.state.value}
-                            onChange={(e) =>
-                                field.handleChange(e.target.value)
-                            }
+                            onChange={(e) => field.handleChange(e.target.value)}
                             onBlur={field.handleBlur}
                             placeholder="不改变订单状态，仅追加审计说明"
                             rows={3}
@@ -125,7 +124,10 @@ export function AuditSection({
                     )}
                 />
                 <noteForm.AppForm>
-                    <noteForm.SubmitButton label="提交说明" />
+                    <noteForm.SubmitButton
+                        id="supplier-order-center-audit-submit"
+                        label="提交说明"
+                    />
                 </noteForm.AppForm>
             </form>
         </DocumentSection>

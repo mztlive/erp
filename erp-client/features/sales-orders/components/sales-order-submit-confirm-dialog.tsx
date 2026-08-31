@@ -36,7 +36,10 @@ export function SalesOrderSubmitConfirmDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+            <DialogContent
+                closeButtonId="sales-orders-submit-confirm-close"
+                className="flex h-[90vh] max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
+            >
                 <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -59,6 +62,7 @@ export function SalesOrderSubmitConfirmDialog({
 
                 <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
                     <Button
+                        id="sales-orders-submit-confirm-cancel"
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -67,6 +71,7 @@ export function SalesOrderSubmitConfirmDialog({
                         返回修改
                     </Button>
                     <Button
+                        id="sales-orders-submit-confirm-confirm"
                         type="button"
                         disabled={pending}
                         onClick={() => {

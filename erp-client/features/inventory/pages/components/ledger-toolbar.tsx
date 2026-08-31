@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -23,6 +19,7 @@ import {
 } from "@/components/ui/input-group"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
 import { MOVEMENT_TYPE_OPTIONS } from "@/features/inventory/lib/presentation"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     LedgerAppliedChip,
     LedgerFilterKey,
@@ -121,6 +118,7 @@ export function LedgerToolbar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="inventory-ledger-search"
                             ref={searchInputRef}
                             value={searchDraft}
                             onChange={(event) =>
@@ -129,11 +127,11 @@ export function LedgerToolbar({
                             placeholder="SKU 编码、名称、规格、仓库"
                             aria-label="搜索库存"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="inventory-ledger-filters-trigger"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -170,6 +168,7 @@ export function LedgerToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`inventory-ledger-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -178,6 +177,7 @@ export function LedgerToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="inventory-ledger-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -195,14 +195,11 @@ export function LedgerToolbar({
                                 >
                                     {view === "balance" ? (
                                         <FixedOptionRadioFilter
+                                            id="inventory-ledger-availability-filter"
                                             label="可用状态"
                                             value={availabilityDraft}
-                                            onValueChange={
-                                                setAvailabilityDraft
-                                            }
-                                            options={
-                                                AVAILABILITY_RADIO_OPTIONS
-                                            }
+                                            onValueChange={setAvailabilityDraft}
+                                            options={AVAILABILITY_RADIO_OPTIONS}
                                         />
                                     ) : null}
                                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -211,6 +208,7 @@ export function LedgerToolbar({
                                                 仓库
                                             </span>
                                             <WarehouseSearchCombobox
+                                                id="inventory-ledger-warehouse-filter"
                                                 className="w-full"
                                                 value={
                                                     warehouseIdDraft ??
@@ -233,6 +231,7 @@ export function LedgerToolbar({
                                                         流水类型
                                                     </span>
                                                     <MultiOptionCombobox
+                                                        id="inventory-ledger-movement-type-filter"
                                                         className="w-full"
                                                         value={
                                                             movementTypeDraft
@@ -253,6 +252,7 @@ export function LedgerToolbar({
                                                     </span>
                                                     <div className="flex items-center gap-1.5">
                                                         <Input
+                                                            id="inventory-ledger-occurred-from"
                                                             type="date"
                                                             className="w-0 min-w-0 flex-1"
                                                             value={
@@ -262,7 +262,9 @@ export function LedgerToolbar({
                                                                 occurredToDraft ||
                                                                 undefined
                                                             }
-                                                            onChange={(event) => {
+                                                            onChange={(
+                                                                event,
+                                                            ) => {
                                                                 setOccurredFromDraft(
                                                                     event.target
                                                                         .value,
@@ -286,6 +288,7 @@ export function LedgerToolbar({
                                                             至
                                                         </span>
                                                         <Input
+                                                            id="inventory-ledger-occurred-to"
                                                             type="date"
                                                             className="w-0 min-w-0 flex-1"
                                                             value={
@@ -295,7 +298,9 @@ export function LedgerToolbar({
                                                                 occurredFromDraft ||
                                                                 undefined
                                                             }
-                                                            onChange={(event) => {
+                                                            onChange={(
+                                                                event,
+                                                            ) => {
                                                                 setOccurredToDraft(
                                                                     event.target
                                                                         .value,
@@ -335,13 +340,17 @@ export function LedgerToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="inventory-ledger-reset-more"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="inventory-ledger-apply-filters"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

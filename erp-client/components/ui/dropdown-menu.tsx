@@ -14,9 +14,16 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
     return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
-function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
+function DropdownMenuTrigger({
+    id,
+    ...props
+}: MenuPrimitive.Trigger.Props & { id?: string }) {
     return (
-        <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
+        <MenuPrimitive.Trigger
+            id={id}
+            data-slot="dropdown-menu-trigger"
+            {...props}
+        />
     )
 }
 
@@ -82,13 +89,16 @@ function DropdownMenuItem({
     className,
     inset,
     variant = "default",
+    id,
     ...props
 }: MenuPrimitive.Item.Props & {
     inset?: boolean
     variant?: "default" | "destructive"
+    id?: string
 }) {
     return (
         <MenuPrimitive.Item
+            id={id}
             data-slot="dropdown-menu-item"
             data-inset={inset}
             data-variant={variant}
@@ -111,12 +121,15 @@ function DropdownMenuSubTrigger({
     className,
     inset,
     children,
+    id,
     ...props
 }: MenuPrimitive.SubmenuTrigger.Props & {
     inset?: boolean
+    id?: string
 }) {
     return (
         <MenuPrimitive.SubmenuTrigger
+            id={id}
             data-slot="dropdown-menu-sub-trigger"
             data-inset={inset}
             className={cn(
@@ -160,12 +173,15 @@ function DropdownMenuCheckboxItem({
     children,
     checked,
     inset,
+    id,
     ...props
 }: MenuPrimitive.CheckboxItem.Props & {
     inset?: boolean
+    id?: string
 }) {
     return (
         <MenuPrimitive.CheckboxItem
+            id={id}
             data-slot="dropdown-menu-checkbox-item"
             data-inset={inset}
             className={cn(
@@ -201,12 +217,15 @@ function DropdownMenuRadioItem({
     className,
     children,
     inset,
+    id,
     ...props
 }: MenuPrimitive.RadioItem.Props & {
     inset?: boolean
+    id?: string
 }) {
     return (
         <MenuPrimitive.RadioItem
+            id={id}
             data-slot="dropdown-menu-radio-item"
             data-inset={inset}
             className={cn(

@@ -21,6 +21,7 @@ import {
     joinMediaList,
     parseMediaList,
 } from "@/features/master-data/lib/resource-fields"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/api/errors"
 
@@ -32,6 +33,7 @@ const mediaPreviewKind = (fileName: string): "image" | "pdf" | null => {
 }
 
 export function MediaListField({
+    idPrefix,
     label,
     hint,
     value,
@@ -42,6 +44,7 @@ export function MediaListField({
     onFilesSelected,
     disabled = false,
 }: {
+    idPrefix?: string
     label: string
     hint?: string
     value: string
@@ -57,6 +60,8 @@ export function MediaListField({
     /** 禁止新增和移除文件；已登记文件仍可查看。 */
     disabled?: boolean
 }) {
+    const basePrefix =
+        idPrefix ?? `master-data-media-${toAutomationIdSegment(label)}`
     const queryClient = useQueryClient()
     const items = parseMediaList(value)
     const [preview, setPreview] = React.useState<{
@@ -153,6 +158,7 @@ export function MediaListField({
                                 className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5"
                             >
                                 <button
+                                    id={`${basePrefix}-item-${toAutomationIdSegment(name)}-preview`}
                                     type="button"
                                     className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
                                     disabled={
@@ -192,6 +198,7 @@ export function MediaListField({
                                     </span>
                                 </button>
                                 <Button
+                                    id={`${basePrefix}-item-${toAutomationIdSegment(name)}-remove`}
                                     type="button"
                                     variant="ghost"
                                     size="icon-sm"
@@ -218,6 +225,7 @@ export function MediaListField({
                 </p>
             )}
             <FileUpload
+                idPrefix={`${basePrefix}-upload`}
                 accept={accept}
                 multiple
                 disabled={disabled}
@@ -249,7 +257,10 @@ export function MediaListField({
                     if (!open) setPreview(null)
                 }}
             >
-                <DialogContent className="sm:max-w-4xl">
+                <DialogContent
+                    className="sm:max-w-4xl"
+                    closeButtonId={`${basePrefix}-preview-close`}
+                >
                     <DialogHeader>
                         <DialogTitle>{preview?.name ?? "图片预览"}</DialogTitle>
                         <DialogDescription>

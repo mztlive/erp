@@ -12,6 +12,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { AccessColumnsInput } from "@/features/access-audit/hooks/access-columns-input"
 import type { RoleRow } from "@/features/access-audit/types"
 
@@ -64,16 +65,12 @@ function useRoleColumns({
                                 </span>{" "}
                                 项
                             </span>
-                            {role.permissionGroups
-                                .slice(0, 3)
-                                .map((group) => (
-                                    <Badge key={group.name} variant="outline">
-                                        {group.name}
-                                        <span className="num">
-                                            {group.count}
-                                        </span>
-                                    </Badge>
-                                ))}
+                            {role.permissionGroups.slice(0, 3).map((group) => (
+                                <Badge key={group.name} variant="outline">
+                                    {group.name}
+                                    <span className="num">{group.count}</span>
+                                </Badge>
+                            ))}
                             {role.permissionGroups.length > 3 ? (
                                 <span className="text-xs text-muted-foreground">
                                     +{role.permissionGroups.length - 3} 个模块
@@ -113,6 +110,7 @@ function useRoleColumns({
                     return (
                         <div className="flex items-center justify-end gap-1">
                             <Button
+                                id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-edit`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -127,6 +125,7 @@ function useRoleColumns({
                             </Button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger
+                                    id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-menu-trigger`}
                                     render={
                                         <Button
                                             type="button"
@@ -143,6 +142,7 @@ function useRoleColumns({
                                     className="min-w-40"
                                 >
                                     <DropdownMenuItem
+                                        id={`operations-access-roles-row-${toAutomationIdSegment(role.id)}-delete`}
                                         variant="destructive"
                                         onClick={() =>
                                             setDeletingRole({

@@ -42,6 +42,7 @@ export function WarehouseObjectPage({
 
     return (
         <ObjectCenterView
+            idPrefix="master-data-warehouse-object-view"
             data={query.data}
             baseHref={`${listHref}/${query.data.stableId}`}
             section={section}

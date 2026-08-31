@@ -2,7 +2,10 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-import { patchUrl as patchSearchParams, type PatchUrlOptions } from "@/lib/patch-search-params"
+import {
+    patchUrl as patchSearchParams,
+    type PatchUrlOptions,
+} from "@/lib/patch-search-params"
 import { parseView } from "@/features/access-audit/lib/url-state"
 import type { AccessView } from "@/features/access-audit/types"
 
@@ -37,7 +40,12 @@ function useAccessUrlState(forcedView?: AccessView) {
     ) {
         patchSearchParams(
             // 审计查询由路由固定视图，URL 不再回填 view 参数
-            { router, pathname, searchParams, view: forcedView ? undefined : view },
+            {
+                router,
+                pathname,
+                searchParams,
+                view: forcedView ? undefined : view,
+            },
             patch,
             options,
         )

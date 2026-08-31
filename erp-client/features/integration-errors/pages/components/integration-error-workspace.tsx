@@ -71,7 +71,12 @@ export function IntegrationErrorWorkspace({
                 />
             ) : null}
 
-            <div className="flex min-w-0 flex-col gap-3">
+            <div
+                className={cn(
+                    "flex min-w-0 flex-col",
+                    focusMode ? "gap-0" : "gap-3",
+                )}
+            >
                 {item ? (
                     <>
                         <IntegrationDetailWorkflow

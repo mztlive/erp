@@ -84,7 +84,12 @@ export function SupplierAllocationWorkspace({
     if (!session) return null
 
     return (
-        <div className={cn("flex min-w-0 flex-col gap-4", embedded && "pb-4")}>
+        <div
+            className={cn(
+                "flex min-w-0 flex-col",
+                embedded ? "gap-0" : "gap-4",
+            )}
+        >
             {policy &&
             policy.state !== "AVAILABLE" &&
             !(embedded && track === "payment" && pool.length <= 1) ? (
@@ -135,23 +140,27 @@ export function SupplierAllocationWorkspace({
                     )}
                     <div
                         className={cn(
-                            "grid items-start gap-4",
-                            embedded ? "grid-cols-1" : "lg:grid-cols-2",
+                            "grid items-start",
+                            embedded
+                                ? "grid-cols-1 gap-0"
+                                : "gap-4 lg:grid-cols-2",
                         )}
                     >
-                        <AllocationPoolCard
-                            supplierName={session.supplierName}
-                            pool={pool}
-                            track={track}
-                            selected={selected}
-                            amounts={amounts}
-                            disabled={Boolean(result)}
-                            onToggleItem={toggleItem}
-                            onAmountChange={setAmountFor}
-                            onToggleSelectAll={toggleSelectAll}
-                            onFillAllSelected={fillAllSelected}
-                            lockedTarget={embedded && track === "payment"}
-                        />
+                        {embedded && track === "payment" ? null : (
+                            <AllocationPoolCard
+                                supplierId={session.supplierId}
+                                supplierName={session.supplierName}
+                                pool={pool}
+                                track={track}
+                                selected={selected}
+                                amounts={amounts}
+                                disabled={Boolean(result)}
+                                onToggleItem={toggleItem}
+                                onAmountChange={setAmountFor}
+                                onToggleSelectAll={toggleSelectAll}
+                                onFillAllSelected={fillAllSelected}
+                            />
+                        )}
                         <AllocationFactFormCard
                             track={track}
                             existingInvoiceId={session.existingInvoiceId}
@@ -164,6 +173,7 @@ export function SupplierAllocationWorkspace({
                             issues={issues}
                             canSubmit={canSubmit}
                             isSubmitting={isSubmitting}
+                            hideHeading={embedded && track === "payment"}
                             draftHint={embedded ? draftHint : undefined}
                             isSavingDraft={isSavingDraft}
                             onSaveDraft={
@@ -191,9 +201,11 @@ export function SupplierAllocationWorkspace({
                     recipient={paymentRecipient}
                     onOpenChange={setConfirmOpen}
                     onConfirm={() => void doSubmit()}
+                    idPrefix="supplier-payables-payment-submit-confirm"
                 />
             ) : (
                 <FormalActionConfirmDialog
+                    idPrefix="supplier-payables-invoice-allocate-confirm"
                     open={confirmOpen}
                     onOpenChange={setConfirmOpen}
                     actionLabel="登记进项发票并核销"

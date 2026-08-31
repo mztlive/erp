@@ -56,8 +56,11 @@ export function PeriodBlockerCard({
                 <CardContent className="flex flex-col gap-4 pt-4 sm:flex-row sm:items-end">
                     <div className="grid flex-1 gap-2 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <Label htmlFor="cq-from">开始日期</Label>
+                            <Label htmlFor="customers-quality-blocker-from">
+                                开始日期
+                            </Label>
                             <DatePicker
+                                id="customers-quality-blocker-from"
                                 value={explicitFrom || undefined}
                                 onValueChange={(next) =>
                                     onFromChange(next ?? "")
@@ -65,8 +68,11 @@ export function PeriodBlockerCard({
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="cq-to">结束日期</Label>
+                            <Label htmlFor="customers-quality-blocker-to">
+                                结束日期
+                            </Label>
                             <DatePicker
+                                id="customers-quality-blocker-to"
                                 value={explicitTo || undefined}
                                 onValueChange={(next) => onToChange(next ?? "")}
                             />
@@ -74,6 +80,7 @@ export function PeriodBlockerCard({
                     </div>
                     <div className="flex flex-col gap-2">
                         <Button
+                            id="customers-quality-blocker-apply"
                             type="button"
                             disabled={
                                 !explicitFrom ||
@@ -102,6 +109,7 @@ export function PeriodBlockerCard({
                         <div className="flex flex-wrap gap-2">
                             {periodPolicy.presets.map((p) => (
                                 <Button
+                                    id={`customers-quality-blocker-preset-${p.id}`}
                                     key={p.id}
                                     type="button"
                                     size="sm"

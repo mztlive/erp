@@ -15,15 +15,21 @@ export function PaymentReversalSubmitConfirmDialog({
     approval,
     onOpenChange,
     onConfirm,
+    id,
+    idPrefix,
 }: {
     open: boolean
     pending: boolean
     approval?: DocumentApprovalView
     onOpenChange: (open: boolean) => void
     onConfirm: () => void
+    id?: string
+    idPrefix?: string
 }) {
     return (
         <FormalActionConfirmDialog
+            id={id}
+            idPrefix={idPrefix ?? "supplier-payables-reversal-submit-confirm"}
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="提交冲正"

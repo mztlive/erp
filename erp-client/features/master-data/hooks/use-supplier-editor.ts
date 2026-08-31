@@ -153,7 +153,10 @@ export function useSupplierEditor(stableId: string) {
                 } as SupplierFields
             } catch (error) {
                 setFormError(
-                    getErrorMessage(error, "资质文件上传失败，请检查文件后重试。"),
+                    getErrorMessage(
+                        error,
+                        "资质文件上传失败，请检查文件后重试。",
+                    ),
                 )
                 return
             }

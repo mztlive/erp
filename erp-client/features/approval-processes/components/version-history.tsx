@@ -12,6 +12,8 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
+
 import {
     definitionStatusLabel,
     definitionStatusTone,
@@ -26,10 +28,12 @@ export function VersionHistory({
     versions,
     selectedVersion,
     onSelect,
+    id = "governance-approval-processes-version-history",
 }: {
     versions: readonly DefinitionVersionItem[]
     selectedVersion?: string
     onSelect: (item: DefinitionVersionItem) => void
+    id?: string
 }) {
     if (versions.length === 0) {
         return (
@@ -57,6 +61,9 @@ export function VersionHistory({
             <TableBody>
                 {versions.map((item) => {
                     const selected = item.definition_version === selectedVersion
+                    const versionSegment = toAutomationIdSegment(
+                        item.definition_version,
+                    )
                     return (
                         <TableRow
                             key={item.definition_id}
@@ -75,6 +82,7 @@ export function VersionHistory({
                             <TableCell>{item.name}</TableCell>
                             <TableCell className="text-right">
                                 <Button
+                                    id={`${id}-version-${versionSegment}-view`}
                                     type="button"
                                     size="sm"
                                     variant={selected ? "secondary" : "outline"}

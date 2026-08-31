@@ -113,6 +113,7 @@ export function CapabilitiesSection({
             {canConfigure || configureBlocker ? (
                 <div className="flex justify-end">
                     <Button
+                        id="supplier-api-connections-capabilities-configure"
                         type="button"
                         size="sm"
                         disabled={!canConfigure}
@@ -128,6 +129,7 @@ export function CapabilitiesSection({
                 description="连接级能力 × 状态 × 业务需求 × 验证；不等于商品级可用"
                 table={
                     <DataTable
+                        id="supplier-api-connections-capabilities-table"
                         data={conn.capabilities}
                         columns={columns}
                         getRowId={(r) => r.capabilityCode}

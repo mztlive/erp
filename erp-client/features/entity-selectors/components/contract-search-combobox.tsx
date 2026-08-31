@@ -51,16 +51,19 @@ export function ContractSearchCombobox({
         value,
         { enabled: scopeReady },
     )
-    const { rows, loading, emptyLabel: resolvedEmptyLabel } =
-        useRemoteSearchCombobox({
-            list: query.list,
-            selected: query.selected,
-            selectedItem,
-            idOf: (item) => item.contractId,
-            emptyLabel,
-            fallbackError: "合同加载失败，请重试",
-            extraLoading: !scopeReady,
-        })
+    const {
+        rows,
+        loading,
+        emptyLabel: resolvedEmptyLabel,
+    } = useRemoteSearchCombobox({
+        list: query.list,
+        selected: query.selected,
+        selectedItem,
+        idOf: (item) => item.contractId,
+        emptyLabel,
+        fallbackError: "合同加载失败，请重试",
+        extraLoading: !scopeReady,
+    })
     return (
         <ContractCombobox
             {...props}

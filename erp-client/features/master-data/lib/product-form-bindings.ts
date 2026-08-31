@@ -8,7 +8,10 @@ import type {
 import type { ProductInventoryPreviewSku } from "@/features/master-data/components/product/product-inventory-preview-sheet"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { ProductEditor } from "@/features/master-data/hooks/use-product-editor"
-import type { ProductFields, ProductSkuFields } from "@/features/master-data/types"
+import type {
+    ProductFields,
+    ProductSkuFields,
+} from "@/features/master-data/types"
 
 /**
  * 商品详情编辑表单的值绑定：标题、库存预览 SKU、字段/规格/价格的
@@ -90,9 +93,7 @@ export function createProductFormBindings(
     const changeReason = values.changeReason
     const specDrafts = values.specDrafts
     const activeSpecs = fields.specs.filter(
-        (spec) =>
-            spec.name.trim() &&
-            spec.values.some((value) => value.trim()),
+        (spec) => spec.name.trim() && spec.values.some((value) => value.trim()),
     )
 
     const applyBatchReferencePrices = () => {

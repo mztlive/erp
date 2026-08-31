@@ -24,6 +24,7 @@ export function CardBusinessExportSheet({
 }: CardBusinessExportSheetProps) {
     return (
         <QuickPreviewSheet
+            id="card-contracts-analytics-export-sheet"
             open={open}
             onOpenChange={onOpenChange}
             title="导出预览"
@@ -83,6 +84,7 @@ export function CardBusinessExportSheet({
                     </Alert>
                     <div className="flex justify-end gap-2">
                         <Button
+                            id="card-contracts-analytics-export-sheet-cancel"
                             type="button"
                             variant="outline"
                             disabled={isExporting}
@@ -91,6 +93,7 @@ export function CardBusinessExportSheet({
                             取消
                         </Button>
                         <Button
+                            id="card-contracts-analytics-export-sheet-confirm"
                             type="button"
                             disabled={isExporting}
                             onClick={onConfirmExport}

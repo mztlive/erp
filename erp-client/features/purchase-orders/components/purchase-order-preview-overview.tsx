@@ -53,11 +53,13 @@ export function RelatedPill({
     count,
     muted,
     href,
+    id,
 }: {
     label: string
     count: number
     muted?: boolean
     href?: string
+    id?: string
 }) {
     const content = (
         <>
@@ -76,6 +78,7 @@ export function RelatedPill({
         >
             {href ? (
                 <Link
+                    id={id}
                     href={href}
                     className="inline-flex items-center gap-1.5 hover:underline"
                 >
@@ -172,6 +175,7 @@ export function PurchaseOrderPreviewOverview({
                         label="来源销售单"
                         value={
                             <Link
+                                id={`procurement-orders-preview-sales-order-${identity.purchaseOrderId}`}
                                 href={`/sales/orders/${header.salesOrderId}`}
                                 className="num text-primary underline-offset-2 hover:underline"
                             >
@@ -251,12 +255,14 @@ export function PurchaseOrderPreviewOverview({
                 <SectionTitle>关联对象</SectionTitle>
                 <div className="flex flex-wrap items-center gap-1.5">
                     <Link
+                        id={`procurement-orders-preview-fulfillment-${identity.purchaseOrderId}`}
                         href={fulfillmentTasksHref(identity.purchaseOrderId)}
                         className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2 text-xs font-medium text-primary hover:bg-accent"
                     >
                         去交付与代发
                     </Link>
                     <RelatedPill
+                        id={`procurement-orders-preview-related-sales-${identity.purchaseOrderId}`}
                         label="销售"
                         count={1}
                         href={`/sales/orders/${header.salesOrderId}`}
@@ -267,6 +273,11 @@ export function PurchaseOrderPreviewOverview({
                         muted={order.changes.length === 0}
                     />
                     <RelatedPill
+                        id={
+                            order.payableSummary
+                                ? `procurement-orders-preview-related-payable-${identity.purchaseOrderId}`
+                                : undefined
+                        }
                         label="应付"
                         count={order.payableSummary ? 1 : 0}
                         muted={!order.payableSummary}

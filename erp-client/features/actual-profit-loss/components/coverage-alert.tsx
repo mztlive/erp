@@ -2,9 +2,7 @@ import { BusinessStatusBadge } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import type { ProfitLossView } from "@/features/actual-profit-loss/types"
-import {
-    coveragePercentNumber,
-} from "@/features/actual-profit-loss/lib/url-state"
+import { coveragePercentNumber } from "@/features/actual-profit-loss/lib/url-state"
 import {
     formatMoneyDisplay,
     PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL,
@@ -32,9 +30,7 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                 </Progress>
                 <div className="grid gap-2 text-sm sm:grid-cols-3">
                     <div>
-                        <span className="text-muted-foreground">
-                            覆盖收入{" "}
-                        </span>
+                        <span className="text-muted-foreground">覆盖收入 </span>
                         <span className="num font-medium">
                             {formatMoneyDisplay(
                                 data.coverage.coveredNetRevenue,

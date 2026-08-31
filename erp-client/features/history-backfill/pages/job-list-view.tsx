@@ -26,6 +26,7 @@ import type {
     HistoryBackfillCommandResult,
     HistoryBackfillView,
 } from "@/features/history-backfill/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { VIEW_LABEL } from "@/features/history-backfill/types"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -76,6 +77,7 @@ function JobListView({
                 }
                 actions={
                     <Button
+                        id="operations-history-backfill-list-create"
                         type="button"
                         className="max-sm:hidden"
                         onClick={() => setCreateOpen(true)}
@@ -87,6 +89,7 @@ function JobListView({
 
             <div className="flex flex-wrap items-center gap-2">
                 <Button
+                    id="operations-history-backfill-list-refresh"
                     type="button"
                     size="sm"
                     variant="ghost"
@@ -110,7 +113,11 @@ function JobListView({
                 <TabsList>
                     {(Object.keys(VIEW_LABEL) as HistoryBackfillView[]).map(
                         (v) => (
-                            <TabsTrigger key={v} value={v}>
+                            <TabsTrigger
+                                key={v}
+                                id={`operations-history-backfill-list-view-${toAutomationIdSegment(v)}-trigger`}
+                                value={v}
+                            >
                                 {VIEW_LABEL[v]}
                             </TabsTrigger>
                         ),
@@ -147,6 +154,7 @@ function JobListView({
                     <AlertTitle className="flex items-center justify-between gap-2">
                         范围与敏感边界
                         <button
+                            id="operations-history-backfill-list-scope-alert-close"
                             type="button"
                             aria-label="关闭提示"
                             className="text-muted-foreground hover:text-foreground"

@@ -191,7 +191,9 @@ export function useAdjustmentWorkflow({
                 )
                 onPreviewClose()
             } catch (err) {
-                setActionError(getErrorMessage(err, "创建调整草稿失败，请稍后重试"))
+                setActionError(
+                    getErrorMessage(err, "创建调整草稿失败，请稍后重试"),
+                )
             }
         },
         [

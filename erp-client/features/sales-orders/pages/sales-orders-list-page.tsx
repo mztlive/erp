@@ -46,7 +46,7 @@ export function SalesOrdersListPage() {
         clearFilters,
     } = useSalesOrdersListFilters(url, pushUrl)
 
-    const panelId = React.useId()
+    const panelId = "sales-orders-list-filter-panel"
 
     const items = React.useMemo(
         () => ordersQuery.data?.items ?? [],

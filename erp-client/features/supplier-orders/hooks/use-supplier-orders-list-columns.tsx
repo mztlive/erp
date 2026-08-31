@@ -7,6 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { StatusTrackSummary } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SupplierOrderListRow } from "@/features/supplier-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 export function useSupplierOrdersListColumns({
@@ -41,6 +42,7 @@ export function useSupplierOrdersListColumns({
                         }
                     >
                         <Button
+                            id={`supplier-orders-list-row-${toAutomationIdSegment(row.original.orderId)}-preview`}
                             type="button"
                             variant="link"
                             size="xs"
@@ -79,6 +81,7 @@ export function useSupplierOrdersListColumns({
                 meta: { label: "商城订单", width: "reference" },
                 cell: ({ row }) => (
                     <Link
+                        id={`supplier-orders-list-row-${toAutomationIdSegment(row.original.orderId)}-mall-link`}
                         href={`/commerce/consumption-orders?q=${encodeURIComponent(row.original.mallOrderNo)}`}
                         className="num text-sm text-primary underline-offset-2 hover:underline"
                         onClick={(e) => e.stopPropagation()}
@@ -188,6 +191,7 @@ export function useSupplierOrdersListColumns({
                     return (
                         <div className="flex flex-wrap items-center gap-1">
                             <Button
+                                id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-preview-action`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -196,6 +200,7 @@ export function useSupplierOrdersListColumns({
                                 预览
                             </Button>
                             <Button
+                                id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-open`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -210,6 +215,7 @@ export function useSupplierOrdersListColumns({
                             {r.fulfillmentStatus === "RESULT_UNKNOWN" ? (
                                 <>
                                     <Button
+                                        id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-query`}
                                         type="button"
                                         size="xs"
                                         disabled={!canQuery || queryPending}
@@ -224,6 +230,7 @@ export function useSupplierOrdersListColumns({
                                                 <>
                                                     ，可
                                                     <Link
+                                                        id={`supplier-orders-list-row-${toAutomationIdSegment(r.orderId)}-integration-errors`}
                                                         href="/governance/integration-errors"
                                                         className="text-primary underline-offset-2 hover:underline"
                                                     >

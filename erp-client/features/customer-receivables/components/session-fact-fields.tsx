@@ -24,7 +24,7 @@ export function SessionFactFields({
     locked: boolean
 }) {
     return (
-        <section className="space-y-3 rounded-2xl border bg-card p-4">
+        <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
             <h3 className="text-sm font-semibold">
                 {isReceipt ? "回款记录" : "销项发票记录"}
             </h3>
@@ -37,6 +37,7 @@ export function SessionFactFields({
                         name="receivedAt"
                         children={(field) => (
                             <field.DateTimeField
+                                id="customer-receivables-session-received-at"
                                 label="实际到账时间"
                                 disabled={locked}
                             />
@@ -46,6 +47,7 @@ export function SessionFactFields({
                         name="amount"
                         children={(field) => (
                             <field.TextField
+                                id="customer-receivables-session-amount"
                                 label={
                                     existing
                                         ? "未分配余额（可分配上限）"
@@ -59,6 +61,7 @@ export function SessionFactFields({
                         name="bankReference"
                         children={(field) => (
                             <field.TextField
+                                id="customer-receivables-session-bank-reference"
                                 label="银行流水/回单引用"
                                 disabled={locked}
                             />
@@ -71,6 +74,7 @@ export function SessionFactFields({
                         name="invoiceCode"
                         children={(field) => (
                             <field.TextField
+                                id="customer-receivables-session-invoice-code"
                                 label="发票代码"
                                 disabled={locked}
                             />
@@ -80,6 +84,7 @@ export function SessionFactFields({
                         name="invoiceNo"
                         children={(field) => (
                             <field.TextField
+                                id="customer-receivables-session-invoice-no"
                                 label="发票号码"
                                 disabled={locked}
                             />
@@ -89,6 +94,7 @@ export function SessionFactFields({
                         name="invoiceDate"
                         children={(field) => (
                             <field.DateField
+                                id="customer-receivables-session-invoice-date"
                                 label="开票日期"
                                 disabled={locked}
                             />
@@ -101,11 +107,8 @@ export function SessionFactFields({
                         name="grossAmount"
                         children={(field) => (
                             <field.TextField
-                                label={
-                                    existing
-                                        ? "未分配含税余额"
-                                        : "含税金额"
-                                }
+                                id="customer-receivables-session-gross-amount"
+                                label={existing ? "未分配含税余额" : "含税金额"}
                                 disabled={existing}
                             />
                         )}
@@ -115,6 +118,7 @@ export function SessionFactFields({
                             name="netAmount"
                             children={(field) => (
                                 <field.TextField
+                                    id="customer-receivables-session-net-amount"
                                     label="不含税"
                                     disabled={locked}
                                 />
@@ -124,6 +128,7 @@ export function SessionFactFields({
                             name="taxAmount"
                             children={(field) => (
                                 <field.TextField
+                                    id="customer-receivables-session-tax-amount"
                                     label="税额"
                                     disabled={locked}
                                 />

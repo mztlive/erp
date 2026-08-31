@@ -23,7 +23,10 @@ import {
     PRODUCT_COVERAGE_FILTER_OPTIONS,
     PRODUCT_LISTING_FILTER_OPTIONS,
 } from "@/features/master-data/lib/list-filters"
-import { lifecycleFilterLabel, revisionTimingFilterLabel } from "@/features/master-data/lib/copy"
+import {
+    lifecycleFilterLabel,
+    revisionTimingFilterLabel,
+} from "@/features/master-data/lib/copy"
 import { resourceLabel } from "@/features/master-data/lib/data"
 import type {
     MasterDataListItem,
@@ -119,10 +122,7 @@ export function useProductListState(
             productFilterOptionsQuery.data?.categories.find(
                 (option) => option.categoryId === filters.productCategoryId,
             )?.categoryName ?? filters.productCategoryId,
-        [
-            filters.productCategoryId,
-            productFilterOptionsQuery.data?.categories,
-        ],
+        [filters.productCategoryId, productFilterOptionsQuery.data?.categories],
     )
     const selectedBrandLabel = React.useMemo(
         () =>

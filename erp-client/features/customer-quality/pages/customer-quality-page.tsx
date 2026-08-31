@@ -164,13 +164,13 @@ export function CustomerQualityPage() {
 
     const hasActiveFilters = Boolean(
         qParam ||
-            fundsReview === "reviewed_only" ||
-            businessType ||
-            customerId ||
-            chartCode ||
-            scaleTag ||
-            profitTag ||
-            riskTag,
+        fundsReview === "reviewed_only" ||
+        businessType ||
+        customerId ||
+        chartCode ||
+        scaleTag ||
+        profitTag ||
+        riskTag,
     )
 
     const filterToolbar = (
@@ -206,8 +206,7 @@ export function CustomerQualityPage() {
     }
 
     // 视图查询失败且无缓存时保留筛选区与期间条，失败态只替换结果内容
-    const viewError =
-        viewQuery.isError && !data ? viewQuery.error : null
+    const viewError = viewQuery.isError && !data ? viewQuery.error : null
 
     // —— Loading shells ——
     if (
@@ -225,6 +224,7 @@ export function CustomerQualityPage() {
                     error={period.periodPolicyQuery.error}
                     action={
                         <Button
+                            id="customers-quality-period-policy-retry"
                             type="button"
                             onClick={() =>
                                 void period.periodPolicyQuery.refetch()
@@ -268,6 +268,7 @@ export function CustomerQualityPage() {
                     description="当前账号缺少经营质量模块权限。敏感明细已不展示。"
                     action={
                         <Button
+                            id="customers-quality-forbidden-back"
                             type="button"
                             variant="outline"
                             render={<Link href="/workspace" />}

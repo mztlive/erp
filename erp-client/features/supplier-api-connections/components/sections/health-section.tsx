@@ -131,6 +131,7 @@ export function HealthSection({
                 description="不展示原始密钥与敏感消息内容；结果未知单独文字说明"
                 table={
                     <DataTable
+                        id="supplier-api-connections-health-table"
                         data={records}
                         columns={columns}
                         getRowId={(r) => r.recordId}

@@ -5,6 +5,7 @@ import { RotateCcwIcon } from "lucide-react"
 import { BusinessStatusBadge, DocumentSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { formatOccurredAt } from "@/features/sales-orders/lib/acceptance-model"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     FACT_ONLY_NOTICE,
     OVERALL_RESULT_LABEL,
@@ -80,6 +81,7 @@ export function AcceptanceHistoryList({
                             !item.reversalOfAcceptanceId &&
                             canReverse ? (
                                 <Button
+                                    id={`sales-orders-acceptance-history-${toAutomationIdSegment(item.acceptanceId)}-reverse`}
                                     type="button"
                                     size="sm"
                                     variant="ghost"

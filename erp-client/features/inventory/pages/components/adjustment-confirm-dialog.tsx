@@ -21,6 +21,7 @@ export function AdjustmentConfirmDialog({
 }: AdjustmentConfirmDialogProps) {
     return (
         <FormalActionConfirmDialog
+            id="inventory-adjustment-confirm"
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="提交库存调整"

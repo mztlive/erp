@@ -44,6 +44,7 @@ export function PurchaseOrderPaperDialog({
                     <DialogClose
                         render={
                             <Button
+                                id="procurement-orders-paper-close"
                                 type="button"
                                 variant="secondary"
                                 size="icon-sm"
@@ -117,7 +118,17 @@ function PaperErrorState({
             <BusinessFailureState
                 title="采购单读取失败"
                 error={error}
-                onRetry={onRetry}
+                action={
+                    <Button
+                        id="procurement-orders-paper-retry"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onRetry}
+                    >
+                        重试
+                    </Button>
+                }
             />
         </div>
     )

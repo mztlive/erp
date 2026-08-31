@@ -1,6 +1,7 @@
 "use client"
 
-import { RefreshCwIcon } from "lucide-react"
+import * as React from "react"
+import { Maximize2Icon, Minimize2Icon, RefreshCwIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
@@ -14,6 +15,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
     Sheet,
     SheetContent,
     SheetDescription,
@@ -25,6 +31,7 @@ import {
     WorkspaceQueueToolbar,
 } from "@/features/workspace/components/workspace-filter-bar"
 import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
+import { WorkspacePaneActionsProvider } from "@/features/workspace/components/workspace-pane-actions"
 import { WorkspaceTaskDetail } from "@/features/workspace/components/workspace-task-detail"
 import { WorkspaceTaskList } from "@/features/workspace/components/workspace-task-list"
 import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
@@ -61,6 +68,20 @@ export function WorkspaceHomePage() {
         clearSearch,
         refresh,
     } = useWorkspaceHome()
+    const [detailFullscreen, setDetailFullscreen] = React.useState(false)
+
+    React.useEffect(() => {
+        if (!selected) setDetailFullscreen(false)
+    }, [selected])
+
+    React.useEffect(() => {
+        if (!detailFullscreen) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setDetailFullscreen(false)
+        }
+        window.addEventListener("keydown", onKeyDown)
+        return () => window.removeEventListener("keydown", onKeyDown)
+    }, [detailFullscreen])
 
     if ((accountProfileQuery.isPending || dashboardQuery.isPending) && !view) {
         return <WorkspaceHomeSkeleton />
@@ -73,6 +94,7 @@ export function WorkspaceHomePage() {
                     error={accountProfileQuery.error}
                     action={
                         <Button
+                            id="workspace-home-profile-retry"
                             type="button"
                             variant="outline"
                             onClick={refresh}
@@ -92,6 +114,7 @@ export function WorkspaceHomePage() {
                     error={dashboardQuery.error}
                     action={
                         <Button
+                            id="workspace-home-dashboard-retry"
                             type="button"
                             variant="outline"
                             onClick={refresh}
@@ -159,11 +182,21 @@ export function WorkspaceHomePage() {
             ? "可清除筛选后回到待我处理。"
             : "新任务到达后会出现在这里。"
     const emptyAction = startedHasQuery ? (
-        <Button type="button" variant="secondary" onClick={clearSearch}>
+        <Button
+            id="workspace-home-clear-search"
+            type="button"
+            variant="secondary"
+            onClick={clearSearch}
+        >
             清除搜索
         </Button>
     ) : hasEffectiveFilter ? (
-        <Button type="button" variant="secondary" onClick={clearFilters}>
+        <Button
+            id="workspace-home-clear-filters"
+            type="button"
+            variant="secondary"
+            onClick={clearFilters}
+        >
             回到待我处理
         </Button>
     ) : undefined
@@ -203,18 +236,27 @@ export function WorkspaceHomePage() {
         </>
     )
 
-    const detail = selected ? (
-        <WorkspaceTaskDetail
-            item={selected}
-            grantedPermissions={accountProfileQuery.data?.permissions ?? []}
-            onDecisionApplied={(commandView, workItemId) => {
-                applyDecisionAfter(
-                    workItemId,
-                    commandView.nextOpenTask?.workItemId,
-                )
-            }}
-            onTaskCompleted={applyDecisionAfter}
+    const paneActions = selected ? (
+        <WorkspaceDetailFullscreenButton
+            expanded={detailFullscreen}
+            onToggle={() => setDetailFullscreen((current) => !current)}
         />
+    ) : null
+
+    const detail = selected ? (
+        <WorkspacePaneActionsProvider actions={paneActions}>
+            <WorkspaceTaskDetail
+                item={selected}
+                grantedPermissions={accountProfileQuery.data?.permissions ?? []}
+                onDecisionApplied={(commandView, workItemId) => {
+                    applyDecisionAfter(
+                        workItemId,
+                        commandView.nextOpenTask?.workItemId,
+                    )
+                }}
+                onTaskCompleted={applyDecisionAfter}
+            />
+        </WorkspacePaneActionsProvider>
     ) : (
         <div className="flex flex-1 items-center justify-center p-8">
             <BusinessEmptyState
@@ -258,6 +300,7 @@ export function WorkspaceHomePage() {
                             actions={[
                                 {
                                     actionKey: "refresh",
+                                    id: "workspace-home-refresh",
                                     label: refreshing ? "刷新中" : "刷新",
                                     icon: RefreshCwIcon,
                                     variant: "ghost",
@@ -280,7 +323,10 @@ export function WorkspaceHomePage() {
             >
                 <section
                     data-slot="workspace-queue"
-                    className="flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0 xl:w-96"
+                    className={cn(
+                        "flex min-h-0 w-full flex-col lg:w-80 lg:shrink-0 xl:w-96",
+                        detailFullscreen && "hidden",
+                    )}
                     aria-label={filterLabel}
                 >
                     <header className="flex flex-col gap-2 border-b border-grid px-3 pt-3 pb-3">
@@ -309,11 +355,17 @@ export function WorkspaceHomePage() {
                         />
                     )}
                 </section>
-                <Separator orientation="vertical" className="hidden lg:block" />
+                <Separator
+                    orientation="vertical"
+                    className={cn(
+                        "hidden lg:block",
+                        detailFullscreen && "lg:hidden",
+                    )}
+                />
                 <section
                     data-slot="workspace-detail"
                     aria-label="任务处理"
-                    className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col lg:p-5"
+                    className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col"
                 >
                     {detail}
                 </section>
@@ -327,6 +379,7 @@ export function WorkspaceHomePage() {
                 <SheetContent
                     side="right"
                     size="detail"
+                    closeButtonId="workspace-detail-sheet-close"
                     className="w-full p-0 sm:max-w-lg"
                 >
                     <SheetTitle className="sr-only">
@@ -336,32 +389,74 @@ export function WorkspaceHomePage() {
                         当前待办的摘要与处理动作
                     </SheetDescription>
                     {selected ? (
-                        <WorkspaceTaskDetail
-                            item={selected}
-                            grantedPermissions={
-                                accountProfileQuery.data?.permissions ?? []
-                            }
-                            onDecisionApplied={(commandView, workItemId) => {
-                                applyDecisionAfter(
+                        <WorkspacePaneActionsProvider actions={paneActions}>
+                            <WorkspaceTaskDetail
+                                item={selected}
+                                grantedPermissions={
+                                    accountProfileQuery.data?.permissions ?? []
+                                }
+                                onDecisionApplied={(
+                                    commandView,
                                     workItemId,
-                                    commandView.nextOpenTask?.workItemId,
-                                )
-                                setNarrowDetailOpen(false)
-                            }}
-                            onTaskCompleted={(
-                                workItemId,
-                                preferredWorkItemId,
-                            ) => {
-                                applyDecisionAfter(
+                                ) => {
+                                    applyDecisionAfter(
+                                        workItemId,
+                                        commandView.nextOpenTask?.workItemId,
+                                    )
+                                    setNarrowDetailOpen(false)
+                                }}
+                                onTaskCompleted={(
                                     workItemId,
                                     preferredWorkItemId,
-                                )
-                                setNarrowDetailOpen(false)
-                            }}
-                        />
+                                ) => {
+                                    applyDecisionAfter(
+                                        workItemId,
+                                        preferredWorkItemId,
+                                    )
+                                    setNarrowDetailOpen(false)
+                                }}
+                            />
+                        </WorkspacePaneActionsProvider>
                     ) : null}
                 </SheetContent>
             </Sheet>
         </PageScaffold>
+    )
+}
+
+/** 右侧作业面全屏：收起左列队列，Esc 退出。 */
+function WorkspaceDetailFullscreenButton({
+    expanded,
+    onToggle,
+}: {
+    expanded: boolean
+    onToggle: () => void
+}) {
+    const label = expanded ? "退出全屏" : "全屏处理"
+    return (
+        <Tooltip>
+            <TooltipTrigger
+                id="workspace-detail-fullscreen-trigger"
+                render={
+                    <Button
+                        id="workspace-detail-fullscreen-trigger"
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={label}
+                        aria-pressed={expanded}
+                        data-testid="workspace-detail-fullscreen"
+                        onClick={onToggle}
+                    />
+                }
+            >
+                {expanded ? (
+                    <Minimize2Icon aria-hidden="true" />
+                ) : (
+                    <Maximize2Icon aria-hidden="true" />
+                )}
+            </TooltipTrigger>
+            <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
     )
 }

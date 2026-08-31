@@ -25,7 +25,8 @@ use database::{
 use entities::common::time::Instant;
 use entities::ids::{
     InboxMessageId, MallAfterSalesRequestId, MallBalanceRestorationAllocationId, MallBalanceRestorationId,
-    MallConsumptionEntryId, MallOrderFactId, MallRefundAllocationId, MallRefundId, MallRefundLineId,
+    MallConsumptionEntryId, MallOrderFactId, MallOrderId, MallRefundAllocationId, MallRefundId,
+    MallRefundLineId,
 };
 use entities::mall_after_sales::{
     AllocationAction, MallBalanceRestoration, MallBalanceRestorationAllocation,
@@ -247,6 +248,9 @@ impl MallAfterSalesService {
 
     /// 分页查询退款列表。
     ///
+    /// # 用途
+    /// 校验请求、保留作用域优先级，并将持久化分页结果映射为公开退款视图。
+    ///
     /// # 参数
     /// * `params` - 查询参数（`mall_order_id`/`after_sales_request_id` 筛选）
     ///
@@ -256,35 +260,29 @@ impl MallAfterSalesService {
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
     /// * `RepositoryError` - 数据库查询失败
+    ///
+    /// # 关键约束
+    /// 同时提供两个作用域时原订单优先；未提供作用域时不访问仓储并返回空页。
     pub async fn mall_refund_list(&self, params: &MallRefundListParams) -> Result<PageView<MallRefundView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let mut refunds = if let Some(order_id) = &query.mall_order_id {
-            self.db
-                .mall_refunds()
-                .list_by_order(order_id, &mut NoTransaction)
-                .await?
-        } else if let Some(request_id) = &query.after_sales_request_id {
-            self.db
-                .mall_refunds()
-                .list_by_after_sales_request(request_id, &mut NoTransaction)
-                .await?
-        } else {
-            Vec::new()
+        let mut refunds = match refund_scope(&query) {
+            Some(MallRefundScope::Order(order_id)) => {
+                self.db
+                    .mall_refunds()
+                    .list_by_order(&order_id, &mut NoTransaction)
+                    .await?
+            }
+            Some(MallRefundScope::AfterSalesRequest(request_id)) => {
+                self.db
+                    .mall_refunds()
+                    .list_by_after_sales_request(&request_id, &mut NoTransaction)
+                    .await?
+            }
+            None => Vec::new(),
         };
         sort_refunds(&mut refunds, query.paging.sort_by, query.paging.sort_dir);
-        let (items, total) = slice_page(refunds, query.paging, |refund| MallRefundView {
-            id: refund.base.id.clone(),
-            mall_order_fact_id: refund.mall_order_fact_id.to_string(),
-            after_sales_request_id: refund.after_sales_request_id.to_string(),
-            mall_id: refund.mall_id.clone(),
-            external_refund_no: refund.external_refund_no.clone(),
-            external_refund_version: refund.external_refund_version.clone(),
-            mall_order_id: refund.mall_order_id.to_string(),
-            refund_amount: refund.refund_amount.to_string(),
-            refunded_at: refund.refunded_at.unix_secs() as u64,
-            created_at: refund.base.created_at,
-        });
+        let (items, total) = slice_page(refunds, query.paging, mall_refund_view);
         Ok(PageView {
             items,
             total,
@@ -896,6 +894,67 @@ impl MallAfterSalesService {
     }
 }
 
+/// Service 已决定的退款查询业务作用域。
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MallRefundScope {
+    /// 按原商城订单读取退款事实。
+    Order(MallOrderId),
+    /// 按售后案件读取退款事实。
+    AfterSalesRequest(MallAfterSalesRequestId),
+}
+
+/// 选择退款列表唯一业务作用域。
+///
+/// # 参数
+/// * `query` - 已完成参数校验和排序白名单归一化的退款查询
+///
+/// # 返回
+/// 有原订单或售后案件时返回单一类型化作用域；均未提供时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 原订单始终优先，Repository 只接收已决定的单一领域 ID，不拥有优先级规则。
+fn refund_scope(query: &dto::MallRefundListQuery) -> Option<MallRefundScope> {
+    if let Some(mall_order_id) = &query.mall_order_id {
+        return Some(MallRefundScope::Order(mall_order_id.clone()));
+    }
+    query
+        .after_sales_request_id
+        .as_ref()
+        .cloned()
+        .map(MallRefundScope::AfterSalesRequest)
+}
+
+/// 将退款正式事实转换为列表响应视图。
+///
+/// # 参数
+/// * `refund` - 仓储返回的完整退款事实
+///
+/// # 返回
+/// 返回保持既有字段和金额字符串语义的退款视图。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 只做协议映射，不重新解释作用域、排序或退款金额。
+fn mall_refund_view(refund: MallRefund) -> MallRefundView {
+    MallRefundView {
+        id: refund.base.id,
+        mall_order_fact_id: refund.mall_order_fact_id.to_string(),
+        after_sales_request_id: refund.after_sales_request_id.to_string(),
+        mall_id: refund.mall_id,
+        external_refund_no: refund.external_refund_no,
+        external_refund_version: refund.external_refund_version,
+        mall_order_id: refund.mall_order_id.to_string(),
+        refund_amount: refund.refund_amount.to_string(),
+        refunded_at: refund.refunded_at.unix_secs() as u64,
+        created_at: refund.base.created_at,
+    }
+}
+
 /// 从事实实体构造接收结果视图。
 ///
 /// # 参数
@@ -912,19 +971,27 @@ fn hit_view(fact: &MallOrderFact) -> ReceivedFactView {
     }
 }
 
-/// 按白名单字段与方向对退款头排序（`refunded_at` 或 `created_at`）。
+/// 按白名单字段与方向对退款头稳定排序。
 ///
 /// # 参数
-/// * `refunds` - 待排序的退款头
-/// * `sort_by` - 已过白名单校验的排序字段
+/// * `refunds` - 待排序的退款正式事实
+/// * `sort_by` - 已过白名单校验的 `refunded_at` 或 `created_at`
 /// * `sort_dir` - 排序方向
+///
+/// # 返回
+/// 原地更新输入切片，无返回值。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 关键约束
+/// 业务时间与稳定事实 ID 使用同一方向，确保同秒事实的分页顺序确定。
 fn sort_refunds(refunds: &mut [MallRefund], sort_by: &str, sort_dir: SortDir) {
-    let ascending = matches!(sort_dir, SortDir::Asc);
     match sort_by {
         "refunded_at" => refunds.sort_by_key(|refund| (refund.refunded_at, refund.base.id.clone())),
         _ => refunds.sort_by_key(|refund| (refund.base.created_at, refund.base.id.clone())),
     }
-    if !ascending {
+    if matches!(sort_dir, SortDir::Desc) {
         refunds.reverse();
     }
 }
@@ -972,4 +1039,54 @@ where
         .map(map)
         .collect();
     (items, total)
+}
+
+#[cfg(test)]
+mod refund_scope_tests {
+    use entities::ids::{MallAfterSalesRequestId, MallOrderId};
+
+    use super::dto::{MallRefundListQuery, PageParams};
+    use super::{refund_scope, MallRefundScope, SortDir};
+
+    /// 构造退款作用域测试使用的已归一化查询。
+    ///
+    /// 参数分别提供可选订单和售后案件，返回固定第一页、默认排序的查询；
+    /// 不执行参数解析或任何外部 I/O。
+    fn query(order_id: Option<&str>, request_id: Option<&str>) -> MallRefundListQuery {
+        MallRefundListQuery {
+            mall_order_id: order_id.map(MallOrderId::new),
+            after_sales_request_id: request_id.map(MallAfterSalesRequestId::new),
+            paging: PageParams {
+                page: 1,
+                page_size: 20,
+                sort_by: "created_at",
+                sort_dir: SortDir::Desc,
+            },
+        }
+    }
+
+    /// 验证同时提供两个作用域时 Service 只选择原订单。
+    ///
+    /// 测试直接调用纯作用域选择器，不访问 Repository；优先级漂移时失败。
+    #[test]
+    fn refund_scope_prefers_order() {
+        assert_eq!(
+            refund_scope(&query(Some("order-1"), Some("request-1"))),
+            Some(MallRefundScope::Order(MallOrderId::new("order-1")))
+        );
+    }
+
+    /// 验证售后案件可独立选择，缺少两个作用域时不产生仓储查询条件。
+    ///
+    /// 测试覆盖案件命中与无作用域边界，确保空查询不会退化为全表读取。
+    #[test]
+    fn refund_scope_handles_request_and_missing_scope() {
+        assert_eq!(
+            refund_scope(&query(None, Some("request-1"))),
+            Some(MallRefundScope::AfterSalesRequest(MallAfterSalesRequestId::new(
+                "request-1",
+            )))
+        );
+        assert_eq!(refund_scope(&query(None, None)), None);
+    }
 }

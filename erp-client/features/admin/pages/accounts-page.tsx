@@ -41,6 +41,7 @@ import {
     useRolesQuery,
 } from "@/features/admin/hooks/queries"
 import type { AdminAccount } from "@/features/admin/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
@@ -70,7 +71,10 @@ export function AccountsPage() {
     } | null>(null)
 
     const roleNameById = React.useMemo(
-        () => new Map((rolesQuery.data ?? []).map((role) => [role.id, role.name])),
+        () =>
+            new Map(
+                (rolesQuery.data ?? []).map((role) => [role.id, role.name]),
+            ),
         [rolesQuery.data],
     )
 
@@ -120,7 +124,9 @@ export function AccountsPage() {
                 cell: ({ row }) => (
                     <span className="num text-xs text-muted-foreground">
                         {formatDateTime(
-                            new Date(row.original.created_at * 1000).toISOString(),
+                            new Date(
+                                row.original.created_at * 1000,
+                            ).toISOString(),
                             "full",
                         )}
                     </span>
@@ -131,9 +137,11 @@ export function AccountsPage() {
                 header: "操作",
                 cell: ({ row }) => {
                     const account = row.original
+                    const segment = toAutomationIdSegment(account.id)
                     return (
                         <div className="flex items-center justify-end gap-1">
                             <Button
+                                id={`governance-admin-accounts-row-${segment}-edit`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -153,6 +161,7 @@ export function AccountsPage() {
                             </Button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger
+                                    id={`governance-admin-accounts-row-${segment}-more`}
                                     render={
                                         <Button
                                             type="button"
@@ -169,6 +178,7 @@ export function AccountsPage() {
                                     className="min-w-40"
                                 >
                                     <DropdownMenuItem
+                                        id={`governance-admin-accounts-row-${segment}-permissions`}
                                         onClick={() =>
                                             router.push(
                                                 `/system/access-audit?view=users&subjectType=USER&subjectId=${account.id}`,
@@ -179,6 +189,7 @@ export function AccountsPage() {
                                         查看有效权限
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
+                                        id={`governance-admin-accounts-row-${segment}-delete`}
                                         variant="destructive"
                                         onClick={() =>
                                             setDeletingAccount({
@@ -208,6 +219,7 @@ export function AccountsPage() {
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
                         <Button
+                            id="governance-admin-accounts-permission-config"
                             type="button"
                             size="sm"
                             variant="outline"
@@ -220,6 +232,7 @@ export function AccountsPage() {
                             权限配置
                         </Button>
                         <Button
+                            id="governance-admin-accounts-create"
                             type="button"
                             size="sm"
                             onClick={() =>
@@ -236,7 +249,9 @@ export function AccountsPage() {
                 }
             />
 
-            <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
+            <div
+                className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
+            >
                 <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
                     <div className="min-w-[16rem] flex-1">
                         <ListToolbar
@@ -246,6 +261,7 @@ export function AccountsPage() {
                                         <SearchIcon aria-hidden="true" />
                                     </InputGroupAddon>
                                     <InputGroupInput
+                                        id="governance-admin-accounts-search"
                                         value={keyword}
                                         onChange={(event) =>
                                             setKeyword(event.target.value)
@@ -272,6 +288,7 @@ export function AccountsPage() {
                             title="账号列表加载失败"
                             action={
                                 <Button
+                                    id="governance-admin-accounts-retry"
                                     type="button"
                                     variant="secondary"
                                     className="rounded-lg shadow-none"
@@ -283,6 +300,7 @@ export function AccountsPage() {
                         />
                     ) : (
                         <DataTable
+                            id="governance-admin-accounts-table"
                             columns={columns}
                             data={rows}
                             getRowId={(row) => row.id}

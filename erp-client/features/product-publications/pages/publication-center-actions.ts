@@ -49,8 +49,7 @@ export async function performPublish(params: {
         setLastResult({
             status: "blocked",
             title: "提交被阻断",
-            description:
-                publishBlocker?.message ?? "当前状态不允许提交发布。",
+            description: publishBlocker?.message ?? "当前状态不允许提交发布。",
         })
         return
     }
@@ -186,9 +185,7 @@ export async function performPause(params: {
 export async function performRetry(params: {
     data: ProductPublicationView
     deliveryId: string
-    mutateAsync: (
-        command: RetryDeliveryCommand,
-    ) => Promise<RetryDeliveryResult>
+    mutateAsync: (command: RetryDeliveryCommand) => Promise<RetryDeliveryResult>
     setLastResult: (result: ResultState) => void
 }): Promise<void> {
     const { data, deliveryId, mutateAsync, setLastResult } = params

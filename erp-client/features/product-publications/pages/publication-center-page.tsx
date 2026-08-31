@@ -70,8 +70,13 @@ export function PublicationCenterPage({
         dirty: session.dirty,
         clearSessionEdit: () => session.setSessionEdit(null),
     })
-    const { section, revisionParam, setSection, selectRevision, clearRevision } =
-        nav
+    const {
+        section,
+        revisionParam,
+        setSection,
+        selectRevision,
+        clearRevision,
+    } = nav
 
     const detailQuery = usePublicationDetailQuery(publicationId, revisionParam)
     const publishMutation = usePublishRevisionMutation()
@@ -83,9 +88,7 @@ export function PublicationCenterPage({
     // revision 参数归一：指向不存在或已是最新的历史修订时清理 URL 残留
     React.useEffect(() => {
         if (!data || !revisionParam) return
-        const known = data.revisions.some(
-            (r) => r.revisionId === revisionParam,
-        )
+        const known = data.revisions.some((r) => r.revisionId === revisionParam)
         if (!known || revisionParam === data.latestRevisionId) {
             clearRevision()
         }
@@ -117,6 +120,7 @@ export function PublicationCenterPage({
                     error={detailQuery.error}
                     action={
                         <Button
+                            id="publication-center-retry"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -139,6 +143,7 @@ export function PublicationCenterPage({
                     description="该发布对象不存在，或当前账号无权查看。"
                     action={
                         <Button
+                            id="publication-center-not-found-back"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -177,9 +182,7 @@ export function PublicationCenterPage({
     const goBackToList = () => {
         if (
             session.dirty &&
-            !window.confirm(
-                "当前输入尚未提交，返回列表将丢失本次未提交内容。",
-            )
+            !window.confirm("当前输入尚未提交，返回列表将丢失本次未提交内容。")
         ) {
             return
         }

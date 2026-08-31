@@ -10,14 +10,17 @@ import { SellableItemPreviewPanel } from "@/features/master-data/components/list
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 export function SellablePreviewSheet({
+    idPrefix,
     previewRow,
     lastFocusedRowId,
     onClose,
 }: {
+    idPrefix?: string
     previewRow: MasterDataListItem | null
     lastFocusedRowId: { current: string | null }
     onClose: () => void
 }) {
+    const prefix = idPrefix ?? "master-data-list-sellable-preview-sheet"
     return (
         <QuickPreviewSheet
             open={previewRow != null}
@@ -64,6 +67,7 @@ export function SellablePreviewSheet({
                 previewRow?.sellableItem ? (
                     <>
                         <Button
+                            id={`${prefix}-close`}
                             type="button"
                             variant="outline"
                             onClick={onClose}
@@ -71,6 +75,7 @@ export function SellablePreviewSheet({
                             关闭
                         </Button>
                         <Button
+                            id={`${prefix}-open-product`}
                             type="button"
                             render={
                                 <Link

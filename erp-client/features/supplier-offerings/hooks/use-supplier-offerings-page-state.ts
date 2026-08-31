@@ -159,9 +159,8 @@ export function useSupplierOfferingsPageState() {
             urlState.availabilityStatus ?? "all",
         )
     /** 初始深链带结构化条件时展开；此后展开态只由用户与提交结果控制（§5.5）。 */
-    const [filterPanelOpen, setFilterPanelOpen] = React.useState(
-        hasStructuredFilters,
-    )
+    const [filterPanelOpen, setFilterPanelOpen] =
+        React.useState(hasStructuredFilters)
 
     /** 合并 URL 补丁并保留未变的导航上下文。 */
     const patchUrl = React.useCallback(

@@ -8,6 +8,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { ColumnActions } from "./column-types"
 
 /**
@@ -113,6 +114,7 @@ export function createInvoiceColumns({
             cell: ({ row }) => (
                 <div className="flex flex-wrap justify-end gap-1">
                     <Button
+                        id={`customer-receivables-invoice-row-${toAutomationIdSegment(row.original.invoiceId)}-preview`}
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -129,6 +131,7 @@ export function createInvoiceColumns({
                         "CONTINUE_ALLOCATE",
                     ) ? (
                         <Button
+                            id={`customer-receivables-invoice-row-${toAutomationIdSegment(row.original.invoiceId)}-continue-allocate`}
                             type="button"
                             size="sm"
                             variant="outline"

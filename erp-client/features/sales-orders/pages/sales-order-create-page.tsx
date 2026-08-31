@@ -62,6 +62,7 @@ export function SalesOrderCreatePage({
                         retryLabel="重新加载"
                         details={
                             <Button
+                                id="sales-orders-create-resume-back"
                                 type="button"
                                 variant="outline"
                                 render={
@@ -85,6 +86,7 @@ export function SalesOrderCreatePage({
                         description="这张草稿可能已被提交、作废，或暂时无法访问。"
                         actions={
                             <Button
+                                id="sales-orders-create-resume-back"
                                 type="button"
                                 variant="outline"
                                 render={

@@ -2,10 +2,12 @@
 
 import { useQueryClient } from "@tanstack/react-query"
 
+import { workspaceTaskSurfacePadClassName } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "@/components/ui/toast"
 import { AcceptanceWorkspace } from "@/features/sales-orders/components/acceptance-workspace"
 import { workspaceHomeKeys } from "@/features/workspace/hooks/queries"
+import { cn } from "@/lib/utils"
 
 import {
     workspaceAcceptanceDescriptor,
@@ -13,6 +15,7 @@ import {
 } from "../lib/workspace-acceptance"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 
 type WorkspaceAcceptanceTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -33,7 +36,12 @@ export function WorkspaceAcceptanceTask({
             className="flex h-full min-h-0 flex-col"
             aria-label="当前客户验收任务"
         >
-            <header className="flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5">
+            <header
+                className={cn(
+                    workspaceTaskSurfacePadClassName,
+                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
+                )}
+            >
                 <div className="flex min-w-0 flex-col gap-2">
                     <WorkspaceDocumentBadge item={item} />
                     <h2 className="text-xl font-semibold tracking-tight">
@@ -48,9 +56,10 @@ export function WorkspaceAcceptanceTask({
                             .join(" · ")}
                     </p>
                 </div>
+                <WorkspaceTaskHeaderActions item={item} />
             </header>
 
-            <div className="min-h-0 flex-1 overflow-auto py-4">
+            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
                 {!descriptor ? (
                     <Alert variant="destructive">
                         <AlertTitle>任务责任与验收对象不一致</AlertTitle>

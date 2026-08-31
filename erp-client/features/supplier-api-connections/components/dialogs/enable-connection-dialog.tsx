@@ -29,7 +29,10 @@ export function EnableConnectionDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent
+                closeButtonId="supplier-api-connections-enable-close"
+                className="sm:max-w-md"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {isProd ? "启用生产环境连接" : "启用连接"}
@@ -41,6 +44,7 @@ export function EnableConnectionDialog({
                 </DialogHeader>
                 <DialogFooter>
                     <Button
+                        id="supplier-api-connections-enable-cancel"
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -49,12 +53,16 @@ export function EnableConnectionDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-api-connections-enable-confirm"
                         type="button"
                         disabled={!canEnable || pending}
                         onClick={() => void onSubmit()}
                     >
                         {pending ? (
-                            <Spinner className="size-4 animate-spin" aria-hidden="true" />
+                            <Spinner
+                                className="size-4 animate-spin"
+                                aria-hidden="true"
+                            />
                         ) : null}
                         {pending ? "启用中…" : "确认启用"}
                     </Button>

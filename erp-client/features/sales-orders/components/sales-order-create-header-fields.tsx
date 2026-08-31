@@ -42,6 +42,7 @@ export function SalesOrderCreateHeaderFields({
             <form.AppField name="nature">
                 {(field) => (
                     <field.SelectField
+                        id="sales-orders-create-header-nature"
                         label="业务性质"
                         required
                         options={NATURE_OPTIONS}
@@ -65,6 +66,7 @@ export function SalesOrderCreateHeaderFields({
             <form.AppField name="ownerName">
                 {(field) => (
                     <field.TextField
+                        id="sales-orders-create-header-owner-name"
                         label="负责销售"
                         disabled
                         placeholder={
@@ -96,6 +98,7 @@ export function SalesOrderCreateHeaderFields({
             >
                 {(field) => (
                     <field.SelectField
+                        id="sales-orders-create-header-welfare-scene"
                         label="福利场景"
                         required
                         options={WELFARE_SCENARIO_OPTIONS}
@@ -111,6 +114,7 @@ export function SalesOrderCreateHeaderFields({
             >
                 {(field) => (
                     <field.SelectField
+                        id="sales-orders-create-header-payment-terms"
                         label="付款条件"
                         required
                         options={PAYMENT_TERM_OPTIONS}
@@ -128,7 +132,11 @@ export function SalesOrderCreateHeaderFields({
                                 }}
                             >
                                 {(field) => (
-                                    <field.DateField label="履约期限" required />
+                                    <field.DateField
+                                        id="sales-orders-create-header-fulfillment-deadline"
+                                        label="履约期限"
+                                        required
+                                    />
                                 )}
                             </form.AppField>
                             <form.AppField
@@ -153,11 +161,14 @@ export function SalesOrderCreateHeaderFields({
                                                 isInvalid || undefined
                                             }
                                         >
-                                            <FieldLabel htmlFor="targetMallId">
+                                            <FieldLabel htmlFor="sales-orders-create-header-target-mall">
                                                 目标商城
-                                                <span className="text-destructive">*</span>
+                                                <span className="text-destructive">
+                                                    *
+                                                </span>
                                             </FieldLabel>
                                             <MallSearchCombobox
+                                                id="sales-orders-create-header-target-mall"
                                                 purpose="form"
                                                 value={
                                                     field.state.value ||
@@ -187,6 +198,7 @@ export function SalesOrderCreateHeaderFields({
                             >
                                 {(field) => (
                                     <field.DateField
+                                        id="sales-orders-create-header-receivable-due-date"
                                         label="应收到期日"
                                         required
                                         description="运营通过后按此日期形成应收；该日期不能早于提交日"
@@ -208,6 +220,7 @@ export function SalesOrderCreateHeaderFields({
             >
                 {(field) => (
                     <field.TextField
+                        id="sales-orders-create-header-tax-rate"
                         label="税率（%）"
                         required
                         type="number"

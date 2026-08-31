@@ -213,6 +213,8 @@ export type ConflictResolutionDialogProps = ControllableDialogProps & {
     onReload: () => void
     onSaveCopy: () => void
     onCompare: () => void
+    id?: string
+    idPrefix?: string
 }
 
 /** 并发版本冲突的差异查看与安全处理入口。 */
@@ -229,10 +231,13 @@ function ConflictResolutionDialog({
     onReload,
     onSaveCopy,
     onCompare,
+    id,
+    idPrefix,
     open,
     defaultOpen,
     onOpenChange,
 }: ConflictResolutionDialogProps) {
+    const baseId = idPrefix ?? id ?? "workflow-conflict-dialog"
     const [resolvedOpen, setOpen] = useControllableDialog({
         open,
         defaultOpen,
@@ -243,7 +248,10 @@ function ConflictResolutionDialog({
     return (
         <Dialog open={resolvedOpen} onOpenChange={setOpen}>
             {trigger ? <DialogTrigger render={trigger} /> : null}
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent
+                closeButtonId={`${baseId}-close`}
+                className="sm:max-w-2xl"
+            >
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <TriangleAlertIcon
@@ -321,11 +329,13 @@ function ConflictResolutionDialog({
 
                 <DialogFooter>
                     <DialogClose
+                        id={`${baseId}-cancel`}
                         render={<Button variant="ghost" disabled={isPending} />}
                     >
                         取消
                     </DialogClose>
                     <Button
+                        id={`${baseId}-compare`}
                         type="button"
                         variant="outline"
                         disabled={isPending}
@@ -346,6 +356,7 @@ function ConflictResolutionDialog({
                         查看差异
                     </Button>
                     <Button
+                        id={`${baseId}-save-copy`}
                         type="button"
                         variant="secondary"
                         disabled={isPending}
@@ -366,6 +377,7 @@ function ConflictResolutionDialog({
                         保留为新草稿
                     </Button>
                     <Button
+                        id={`${baseId}-reload`}
                         type="button"
                         disabled={isPending}
                         onClick={onReload}

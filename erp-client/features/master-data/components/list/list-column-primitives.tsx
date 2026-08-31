@@ -11,6 +11,7 @@ import { DisabledActionHint } from "@/features/master-data/components/list/list-
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataListItem } from "@/features/master-data/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function stableNoColumn(): ColumnDef<MasterDataListItem> {
     return {
@@ -174,6 +175,7 @@ export function disableOnlyActionsColumn({
                 <div className="flex flex-wrap gap-1">
                     <DisabledActionHint message={disableBlocker?.message}>
                         <Button
+                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-disable`}
                             type="button"
                             size="xs"
                             variant="ghost"
@@ -213,6 +215,7 @@ export function updateOnlyActionsColumn({
                 <div className="flex flex-wrap gap-1">
                     <DisabledActionHint message={reviseBlocker?.message}>
                         <Button
+                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-revise`}
                             type="button"
                             size="xs"
                             variant="ghost"
@@ -258,6 +261,7 @@ export function fullActionsColumn({
             return (
                 <div className="flex flex-wrap gap-1">
                     <Button
+                        id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-view`}
                         type="button"
                         size="xs"
                         variant="ghost"
@@ -272,6 +276,7 @@ export function fullActionsColumn({
                     </Button>
                     <DisabledActionHint message={reviseBlocker?.message}>
                         <Button
+                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-revise`}
                             type="button"
                             size="xs"
                             variant="ghost"
@@ -290,6 +295,7 @@ export function fullActionsColumn({
                     </DisabledActionHint>
                     <DisabledActionHint message={disableBlocker?.message}>
                         <Button
+                            id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-disable`}
                             type="button"
                             size="xs"
                             variant="ghost"
@@ -335,6 +341,7 @@ export function warehouseActionsColumn({
             return (
                 <div className="flex flex-wrap gap-1">
                     <Button
+                        id={`master-data-list-row-${toAutomationIdSegment(item.stableId)}-view`}
                         type="button"
                         size="xs"
                         variant="ghost"
@@ -348,6 +355,7 @@ export function warehouseActionsColumn({
                     </Button>
                     <DisabledActionHint message={message}>
                         <Button
+                            id={`master-data-warehouse-row-${toAutomationIdSegment(item.stableId)}-handlers`}
                             type="button"
                             size="xs"
                             variant="ghost"

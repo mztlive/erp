@@ -10,6 +10,7 @@ import type { ProductEditorFormValues } from "@/features/master-data/lib/product
 import type { MasterDataCenterView } from "@/features/master-data/types"
 
 type ProductDetailHeaderProps = {
+    idPrefix?: string
     isCreate: boolean
     data: MasterDataCenterView | null | undefined
     title: string
@@ -24,6 +25,7 @@ type ProductDetailHeaderProps = {
 }
 
 function ProductDetailHeader({
+    idPrefix,
     isCreate,
     data,
     title,
@@ -36,6 +38,7 @@ function ProductDetailHeader({
     runLocalCheck,
     values,
 }: ProductDetailHeaderProps) {
+    const prefix = idPrefix ?? "master-data-product-detail-header"
     return (
         <DocumentHeader
             density="compact"
@@ -86,6 +89,7 @@ function ProductDetailHeader({
                 <>
                     {!isCreate && data ? (
                         <Button
+                            id={`${prefix}-disable`}
                             type="button"
                             size="sm"
                             variant="outline"
@@ -102,6 +106,7 @@ function ProductDetailHeader({
                         </Button>
                     ) : null}
                     <Button
+                        id={`${prefix}-check`}
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -118,6 +123,7 @@ function ProductDetailHeader({
             }
             primaryAction={
                 <Button
+                    id={`${prefix}-submit`}
                     type="submit"
                     size="sm"
                     disabled={!canRevise || pending}

@@ -23,6 +23,7 @@ export function SupplierOfferingsPagination({
             </span>
             <div className="flex items-center gap-2">
                 <Button
+                    id="supplier-offerings-pagination-prev"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -32,6 +33,7 @@ export function SupplierOfferingsPagination({
                     上一页
                 </Button>
                 <Button
+                    id="supplier-offerings-pagination-next"
                     type="button"
                     size="sm"
                     variant="outline"

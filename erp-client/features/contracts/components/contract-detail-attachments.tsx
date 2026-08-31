@@ -18,9 +18,7 @@ export function ContractDetailAttachments({
                     id: file.id,
                     name: file.name,
                     description: `${file.uploadedBy} · ${file.uploadedAt}${
-                        file.revisionNo != null
-                            ? ` · v${file.revisionNo}`
-                            : ""
+                        file.revisionNo != null ? ` · v${file.revisionNo}` : ""
                     }`,
                     state:
                         file.securityState === "done"

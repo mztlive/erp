@@ -5,10 +5,7 @@ import {
     BusinessEmptyState,
     surfacePanelClassName,
 } from "@/components/business"
-import {
-    Card,
-    CardContent,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Fact } from "@/features/import-opening/components/batch-facts"
 import type { ImportBatchView } from "@/features/import-opening/types"
 import { formatDateTime } from "@/lib/datetime"

@@ -48,6 +48,7 @@ export function UnitOfMeasuresListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-unit-of-measures-list-export",
                     actionKey: "export",
                     label: masterDataCopy.actionExport,
                     icon: DownloadIcon,
@@ -57,6 +58,7 @@ export function UnitOfMeasuresListPage() {
                     onClick: state.onExport,
                 },
                 {
+                    id: "master-data-unit-of-measures-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     mobileVisibility: "hide",
@@ -70,6 +72,7 @@ export function UnitOfMeasuresListPage() {
             ]}
             metrics={
                 <LifecycleMetricStrip
+                    idPrefix="master-data-unit-of-measures-list-metrics"
                     metrics={state.syncedMetrics}
                     metricKey={filters.metricKey}
                     ariaLabel="计量单位指标筛选"
@@ -96,6 +99,7 @@ export function UnitOfMeasuresListPage() {
                 description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
+                        idPrefix="master-data-unit-of-measures-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -124,6 +128,7 @@ export function UnitOfMeasuresListPage() {
                 }
                 table={
                     <DictionaryListTable
+                        id="master-data-unit-of-measures-list-table"
                         rows={state.rows}
                         pageRows={state.pageRows}
                         columns={columns}
@@ -140,6 +145,7 @@ export function UnitOfMeasuresListPage() {
                         emptyAction={
                             state.canCreate ? (
                                 <Button
+                                    id="master-data-unit-of-measures-list-empty-create"
                                     type="button"
                                     variant="secondary"
                                     size="sm"
@@ -162,10 +168,12 @@ export function UnitOfMeasuresListPage() {
                 }
             />
             <UnitOfMeasureCreateDialog
+                idPrefix="master-data-unit-of-measures-list-create-dialog"
                 open={state.createOpen}
                 onOpenChange={state.setCreateOpen}
             />
             <UnitOfMeasureReviseDialog
+                idPrefix="master-data-unit-of-measures-list-revise-dialog"
                 open={state.reviseTarget != null}
                 onOpenChange={(open) => {
                     if (!open) state.setReviseTarget(null)

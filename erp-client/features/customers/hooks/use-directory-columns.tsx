@@ -4,6 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 
 import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { CustomerDirectoryItem } from "@/features/customers/types"
 
 /** 客户目录列定义；排序列由 URL 状态驱动，单元格为纯展示。 */
@@ -19,6 +20,7 @@ export function useCustomerDirectoryColumns(): ColumnDef<CustomerDirectoryItem>[
                 cell: ({ row }) => (
                     <div className="min-w-0">
                         <Link
+                            id={`customers-directory-row-${toAutomationIdSegment(row.original.id)}-open`}
                             href={`/sales/customers/${row.original.id}`}
                             className="font-medium text-foreground underline-offset-4 hover:underline"
                         >

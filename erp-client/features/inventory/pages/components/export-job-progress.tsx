@@ -39,6 +39,7 @@ export function ExportJobProgress({ job, onClose }: ExportJobProgressProps) {
             }
             action={
                 <Button
+                    id="inventory-export-job-close"
                     type="button"
                     size="sm"
                     variant="ghost"

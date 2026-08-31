@@ -22,6 +22,7 @@ export function CompletedQueueEmptyState({
                 <div className="flex flex-wrap gap-2">
                     {hasActiveQueueFilters ? (
                         <Button
+                            id="card-contracts-funds-review-queue-empty-clear"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -31,6 +32,7 @@ export function CompletedQueueEmptyState({
                         </Button>
                     ) : null}
                     <Button
+                        id="card-contracts-funds-review-queue-empty-workspace"
                         variant="secondary"
                         className="rounded-lg shadow-none"
                         render={<Link href="/workspace" />}
@@ -56,6 +58,7 @@ export function FilterQueueEmptyState({
             description="当前类型/范围没有任务，可清除筛选。"
             action={
                 <Button
+                    id="card-contracts-funds-review-filter-empty-clear"
                     type="button"
                     variant="secondary"
                     className="rounded-lg shadow-none"

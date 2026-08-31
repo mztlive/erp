@@ -25,7 +25,11 @@ import {
     mapListRow,
     tsToIso,
 } from "./mapping"
-import type { BackendBackgroundJob, BackendDetail, BackendListRow } from "./wire-types"
+import type {
+    BackendBackgroundJob,
+    BackendDetail,
+    BackendListRow,
+} from "./wire-types"
 
 /**
  * 销售单协同摘要。后端 P3 未提供按 sales_order_id 聚合接口 → 返回空摘要。

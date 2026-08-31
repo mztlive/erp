@@ -8,6 +8,7 @@ import type {
     ExecutionProjectionRow,
     ExecutionProjectionView,
 } from "@/features/execution-projections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export type RowCommandRequest = {
     kind: "QUERY_RESULT" | "RETRY" | "ESCALATE"
@@ -30,14 +31,17 @@ export function ExecutionProjectionDetailSecondaryActions({
     const findRow = () =>
         rows.find((r) => r.projectionId === detail.identity.projectionId)
 
+    const base = `execution-projections-detail-${toAutomationIdSegment(detail.identity.projectionId)}`
     return (
         <>
             <Button
+                id={`${base}-open-collaboration`}
                 type="button"
                 size="sm"
                 variant="outline"
                 render={
                     <Link
+                        id={`${base}-open-collaboration`}
                         href={`/sales/orders/${detail.identity.salesOrderId}?section=collaboration`}
                     />
                 }
@@ -46,6 +50,7 @@ export function ExecutionProjectionDetailSecondaryActions({
             </Button>
             {detail.allowedActions.includes("RETRY") ? (
                 <Button
+                    id={`${base}-retry`}
                     type="button"
                     size="sm"
                     variant="outline"
@@ -68,6 +73,7 @@ export function ExecutionProjectionDetailSecondaryActions({
                 detail.allowedActions.includes("ESCALATE") &&
                 !detail.deliveries[0]?.workItemId ? (
                     <Button
+                        id={`${base}-escalate`}
                         type="button"
                         size="sm"
                         variant="outline"
@@ -86,11 +92,13 @@ export function ExecutionProjectionDetailSecondaryActions({
                     </Button>
                 ) : (
                     <Button
+                        id={`${base}-w29`}
                         type="button"
                         size="sm"
                         variant="outline"
                         render={
                             <Link
+                                id={`${base}-w29`}
                                 href={w29Href(
                                     detail.deliveries[0]?.workItemId,
                                     detail.deliveries[0]?.errorTaskId,

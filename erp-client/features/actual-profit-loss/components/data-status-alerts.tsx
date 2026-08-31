@@ -1,6 +1,4 @@
-import {
-    BackgroundJobProgress,
-} from "@/components/business"
+import { BackgroundJobProgress } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
@@ -124,6 +122,7 @@ export function DataStatusAlerts({
                     }
                     action={
                         <Button
+                            id="actual-profit-loss-export-close"
                             type="button"
                             size="sm"
                             variant="ghost"

@@ -43,6 +43,7 @@ import { useControlledTableState } from "@/components/business/data-table-state"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Spinner } from "@/components/ui/spinner"
 import { Table, TableCaption } from "@/components/ui/table"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 declare module "@tanstack/react-table" {
@@ -63,6 +64,8 @@ declare module "@tanstack/react-table" {
 }
 
 function DataTable<TData>({
+    id,
+    idPrefix,
     data,
     columns,
     getRowId,
@@ -128,6 +131,7 @@ function DataTable<TData>({
     highlightedRowId,
     className,
 }: DataTableProps<TData>) {
+    const baseId = idPrefix ?? id ?? "data-table"
     const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>())
     const tableSurfaceRef = React.useRef<HTMLDivElement>(null)
 
@@ -218,6 +222,7 @@ function DataTable<TData>({
             header: ({ table }) => (
                 <div className="flex items-center justify-center">
                     <Checkbox
+                        id={baseId ? `${baseId}-select-all` : undefined}
                         checked={table.getIsAllPageRowsSelected()}
                         indeterminate={table.getIsSomePageRowsSelected()}
                         onClick={(event) => event.stopPropagation()}
@@ -231,6 +236,11 @@ function DataTable<TData>({
             cell: ({ row }) => (
                 <div className="flex items-center justify-center">
                     <Checkbox
+                        id={
+                            baseId
+                                ? `${baseId}-row-${toAutomationIdSegment(row.id)}-select`
+                                : undefined
+                        }
                         checked={row.getIsSelected()}
                         indeterminate={row.getIsSomeSelected()}
                         disabled={!row.getCanSelect()}
@@ -252,7 +262,7 @@ function DataTable<TData>({
                 role: "selection",
             },
         }),
-        [rowLabel],
+        [rowLabel, baseId],
     )
 
     const previewColumn = React.useMemo<ColumnDef<TData, unknown>>(
@@ -378,11 +388,12 @@ function DataTable<TData>({
         Boolean(renderToolbar) ||
         (showColumnVisibility && !hostViewOptionsInFrame)
     const viewOptions = showColumnVisibility ? (
-        <DataTableViewOptions table={table} />
+        <DataTableViewOptions table={table} idPrefix={baseId} />
     ) : null
 
     return (
         <section
+            id={baseId}
             data-slot="data-table"
             data-layout={layout}
             className={cn(
@@ -444,6 +455,7 @@ function DataTable<TData>({
                         enableColumnResizing={enableColumnResizing}
                         sortingInteractive={sortingInteractive}
                         resize={resize}
+                        idPrefix={baseId}
                     />
                     <DataTableBody
                         table={table}
@@ -466,6 +478,7 @@ function DataTable<TData>({
                         highlightedRowId={highlightedRowId}
                         enableColumnResizing={enableColumnResizing}
                         columnSizing={columnSizing}
+                        idPrefix={baseId}
                     />
                 </Table>
             </div>
@@ -475,6 +488,7 @@ function DataTable<TData>({
                     table={table}
                     pageSizeOptions={pageSizeOptions}
                     layout={layout}
+                    idPrefix={baseId}
                 />
             ) : null}
         </section>

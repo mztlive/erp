@@ -10,6 +10,7 @@ import {
     displayText,
     lineItemTitle,
 } from "@/features/fulfillment-operations/lib/readable-label"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type {
     FulfillmentDraft,
     FulfillmentOperation,
@@ -69,11 +70,13 @@ export function FulfillmentServiceForm({
                                 ) : null}
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor={`svc-qty-${i}`}>
+                                <Label
+                                    htmlFor={`fulfillment-operations-service-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
+                                >
                                     本次完成数量
                                 </Label>
                                 <Input
-                                    id={`svc-qty-${i}`}
+                                    id={`fulfillment-operations-service-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
                                     className="num"
                                     inputMode="decimal"
                                     value={line.quantity}
@@ -100,12 +103,12 @@ export function FulfillmentServiceForm({
             <section className="space-y-3">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                        <Label htmlFor="svc-result">
+                        <Label htmlFor="fulfillment-operations-service-form-result">
                             履约结果
                             <span className="text-destructive">*</span>
                         </Label>
                         <OptionCombobox
-                            id="svc-result"
+                            id="fulfillment-operations-service-form-result"
                             value={draft.result || null}
                             onValueChange={(next) =>
                                 onChange({
@@ -124,12 +127,12 @@ export function FulfillmentServiceForm({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="service-start">
+                        <Label htmlFor="fulfillment-operations-service-form-service-time">
                             服务时间
                             <span className="text-destructive">*</span>
                         </Label>
                         <DateTimeRangeLocalPicker
-                            id="service-start"
+                            id="fulfillment-operations-service-form-service-time"
                             value={{
                                 from: draft.startedAt || undefined,
                                 to: draft.endedAt || undefined,
@@ -147,12 +150,12 @@ export function FulfillmentServiceForm({
                         />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                        <Label htmlFor="service-loc">
+                        <Label htmlFor="fulfillment-operations-service-form-service-location">
                             服务地点
                             <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                            id="service-loc"
+                            id="fulfillment-operations-service-form-service-location"
                             value={draft.serviceLocation}
                             disabled={disabled}
                             placeholder="客户现场或安装地址"
@@ -168,12 +171,16 @@ export function FulfillmentServiceForm({
             </section>
 
             <section className="space-y-3">
-                <div className="space-y-1.5" id="service-evidence">
-                    <Label>
+                <div
+                    className="space-y-1.5"
+                    id="fulfillment-operations-service-form-evidence"
+                >
+                    <Label htmlFor="fulfillment-operations-service-form-evidence-input">
                         图片凭证
                         <span className="text-destructive">*</span>
                     </Label>
                     <FileUpload
+                        idPrefix="fulfillment-operations-service-form-evidence"
                         accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                         multiple={false}
                         disabled={disabled}
@@ -202,12 +209,12 @@ export function FulfillmentServiceForm({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="service-note">
+                    <Label htmlFor="fulfillment-operations-service-form-completion-note">
                         完成说明
                         <span className="text-destructive">*</span>
                     </Label>
                     <Textarea
-                        id="service-note"
+                        id="fulfillment-operations-service-form-completion-note"
                         value={draft.completionNote}
                         disabled={disabled}
                         rows={3}

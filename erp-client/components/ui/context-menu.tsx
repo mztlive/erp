@@ -21,10 +21,12 @@ function ContextMenuPortal({ ...props }: ContextMenuPrimitive.Portal.Props) {
 
 function ContextMenuTrigger({
     className,
+    id,
     ...props
-}: ContextMenuPrimitive.Trigger.Props) {
+}: ContextMenuPrimitive.Trigger.Props & { id?: string }) {
     return (
         <ContextMenuPrimitive.Trigger
+            id={id}
             data-slot="context-menu-trigger"
             className={cn("select-none", className)}
             {...props}
@@ -96,13 +98,16 @@ function ContextMenuItem({
     className,
     inset,
     variant = "default",
+    id,
     ...props
 }: ContextMenuPrimitive.Item.Props & {
     inset?: boolean
     variant?: "default" | "destructive"
+    id?: string
 }) {
     return (
         <ContextMenuPrimitive.Item
+            id={id}
             data-slot="context-menu-item"
             data-inset={inset}
             data-variant={variant}
@@ -166,12 +171,15 @@ function ContextMenuCheckboxItem({
     children,
     checked,
     inset,
+    id,
     ...props
 }: ContextMenuPrimitive.CheckboxItem.Props & {
     inset?: boolean
+    id?: string
 }) {
     return (
         <ContextMenuPrimitive.CheckboxItem
+            id={id}
             data-slot="context-menu-checkbox-item"
             data-inset={inset}
             className={cn(
@@ -206,12 +214,15 @@ function ContextMenuRadioItem({
     className,
     children,
     inset,
+    id,
     ...props
 }: ContextMenuPrimitive.RadioItem.Props & {
     inset?: boolean
+    id?: string
 }) {
     return (
         <ContextMenuPrimitive.RadioItem
+            id={id}
             data-slot="context-menu-radio-item"
             data-inset={inset}
             className={cn(

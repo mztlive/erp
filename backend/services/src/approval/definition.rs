@@ -1473,7 +1473,7 @@ fn next_transition_ids(node_count: usize) -> Vec<ApprovalTransitionDefinitionId>
         .collect()
 }
 
-/// 读取并计算下一业务版本。
+/// 读取最高持久化版本并计算下一业务版本。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -1487,20 +1487,16 @@ fn next_transition_ids(node_count: usize) -> Vec<ApprovalTransitionDefinitionId>
 /// Repository 查询或 BPM 版本溢出校验失败时返回错误。
 ///
 /// # 关键业务约束
-/// Service 只聚合历史版本，递增与溢出规则由 `ApprovalProcessDefinition` 提供。
+/// Repository 只提供最高版本事实；递增、溢出与事务边界仍分别由 BPM 模型和 Service 持有。
 async fn next_definition_version(
     db: &Database,
     process_kind: bpm::ProcessKind,
     session: &mut dyn Executor,
 ) -> Result<u32> {
-    let versions = db
+    let current = db
         .bpm_workflow()
-        .list_definition_versions(process_kind, session)
-        .await?;
-    let current = versions
-        .iter()
-        .map(|item| item.definition_version)
-        .max()
+        .latest_definition_version(process_kind, session)
+        .await?
         .unwrap_or(0);
     ApprovalProcessDefinition::next_version_after(current).map_err(map_model_error)
 }

@@ -14,6 +14,7 @@ import {
     displayText,
     lineItemTitle,
 } from "@/features/fulfillment-operations/lib/readable-label"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
  * 电子交付表单。ElectronicDelivery 为 NO_APPROVAL，只收集交付对象、时间、
@@ -43,12 +44,22 @@ export function FulfillmentElectronicForm({
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                    <Label>交付对象</Label>
-                    <Input value={draft.recipientMasked} disabled readOnly />
+                    <Label htmlFor="fulfillment-operations-electronic-form-recipient">
+                        交付对象
+                    </Label>
+                    <Input
+                        id="fulfillment-operations-electronic-form-recipient"
+                        value={draft.recipientMasked}
+                        disabled
+                        readOnly
+                    />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="el-at">实际时间</Label>
+                    <Label htmlFor="fulfillment-operations-electronic-form-occurred-at">
+                        实际时间
+                    </Label>
                     <DateTimeLocalPicker
+                        id="fulfillment-operations-electronic-form-occurred-at"
                         value={draft.occurredAt || undefined}
                         disabled={disabled}
                         showTimeZone={false}
@@ -58,9 +69,11 @@ export function FulfillmentElectronicForm({
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="el-result">履约结果</Label>
+                    <Label htmlFor="fulfillment-operations-electronic-form-result">
+                        履约结果
+                    </Label>
                     <OptionCombobox
-                        id="el-result"
+                        id="fulfillment-operations-electronic-form-result"
                         value={draft.result}
                         onValueChange={(v) =>
                             onChange({
@@ -96,9 +109,13 @@ export function FulfillmentElectronicForm({
                             </p>
                         ) : null}
                         <div className="space-y-1.5">
-                            <Label htmlFor={`el-qty-${i}`}>交付数量</Label>
+                            <Label
+                                htmlFor={`fulfillment-operations-electronic-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
+                            >
+                                交付数量
+                            </Label>
                             <Input
-                                id={`el-qty-${i}`}
+                                id={`fulfillment-operations-electronic-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
                                 className="num"
                                 inputMode="decimal"
                                 value={line.quantity}

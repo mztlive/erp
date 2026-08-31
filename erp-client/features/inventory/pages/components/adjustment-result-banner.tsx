@@ -36,6 +36,7 @@ export function AdjustmentResultBanner({
                 result.pendingIdempotencyKey ? (
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="inventory-adjustment-result-resolve"
                             type="button"
                             size="sm"
                             variant="outline"

@@ -73,6 +73,7 @@ export function FulfillmentResultPanel({
                 <div className="flex flex-wrap gap-2">
                     {lastResult.status === "unknown" ? (
                         <Button
+                            id="fulfillment-operations-result-resolve-unknown"
                             type="button"
                             size="sm"
                             onClick={() => void onResolveUnknown()}
@@ -85,6 +86,7 @@ export function FulfillmentResultPanel({
                     lastResult.outcome.salesOrderId &&
                     onContinueWarehouseShip ? (
                         <Button
+                            id="fulfillment-operations-result-continue-warehouse-ship"
                             type="button"
                             size="sm"
                             onClick={() =>
@@ -101,6 +103,7 @@ export function FulfillmentResultPanel({
                     lastResult.outcome.acceptanceRequired ? (
                         onOpenAcceptance ? (
                             <Button
+                                id="fulfillment-operations-result-open-acceptance"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -111,6 +114,7 @@ export function FulfillmentResultPanel({
                             </Button>
                         ) : (
                             <Button
+                                id="fulfillment-operations-result-go-acceptance"
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -131,7 +135,12 @@ export function FulfillmentResultPanel({
                     {!showNext ||
                     lastResult.stayOnItem === false ||
                     lastResult.status === "blocked" ? null : (
-                        <Button type="button" size="sm" onClick={onNext}>
+                        <Button
+                            id="fulfillment-operations-result-next"
+                            type="button"
+                            size="sm"
+                            onClick={onNext}
+                        >
                             下一条
                         </Button>
                     )}

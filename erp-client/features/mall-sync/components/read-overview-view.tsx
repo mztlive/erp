@@ -17,6 +17,7 @@ import type {
     MallSyncPageView,
 } from "@/features/mall-sync/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PatchUrl } from "@/features/mall-sync/components/mall-sync-read-views"
 
 type MallSyncOverviewViewProps = {
@@ -97,6 +98,7 @@ export function MallSyncOverviewView({
                     {jobs.slice(0, 4).map((job) => (
                         <button
                             key={job.jobId}
+                            id={`mall-sync-overview-job-${toAutomationIdSegment(job.jobId)}`}
                             type="button"
                             className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm hover:bg-accent/50"
                             onClick={() =>

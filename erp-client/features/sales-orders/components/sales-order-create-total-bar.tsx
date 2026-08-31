@@ -112,12 +112,14 @@ export function SalesOrderCreateTotalBar({
                             actions={
                                 <form.AppForm>
                                     <form.SubmitButton
+                                        id="sales-orders-create-save-draft"
                                         variant="outline"
                                         label="保存草稿"
                                         pendingLabel="正在保存草稿…"
                                         onClick={onSaveDraftClick}
                                     />
                                     <form.SubmitButton
+                                        id="sales-orders-create-submit"
                                         data-testid="sales-order-submit"
                                         label="提交"
                                         pendingLabel="正在提交…"

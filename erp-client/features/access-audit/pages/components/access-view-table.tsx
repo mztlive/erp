@@ -18,10 +18,14 @@ import type {
     RoleRow,
     UserRow,
 } from "@/features/access-audit/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
-type ViewRows = readonly RoleRow[] | readonly UserRow[] | readonly AuditEventRow[]
+type ViewRows =
+    | readonly RoleRow[]
+    | readonly UserRow[]
+    | readonly AuditEventRow[]
 
 type AccessViewTableProps = {
     view: AccessView
@@ -107,6 +111,7 @@ function AccessViewTable({
                             {views.map((item) => (
                                 <TabsTrigger
                                     key={item}
+                                    id={`operations-access-view-${toAutomationIdSegment(item)}-trigger`}
                                     value={item}
                                     className="flex-none"
                                 >
@@ -130,6 +135,11 @@ function AccessViewTable({
                             </span>
                             {onExport ? (
                                 <Button
+                                    id={
+                                        isAudit
+                                            ? "operations-audit-export"
+                                            : "operations-access-export"
+                                    }
                                     type="button"
                                     variant="outline"
                                     disabled={exportBlocked}
@@ -163,6 +173,7 @@ function AccessViewTable({
                     />
                 ) : view === "roles" ? (
                     <DataTable
+                        id="operations-access-roles-table"
                         {...commonTableProps}
                         columns={roleColumns}
                         data={pagedRows as RoleRow[]}
@@ -175,6 +186,7 @@ function AccessViewTable({
                     />
                 ) : view === "users" ? (
                     <DataTable
+                        id="operations-access-users-table"
                         {...commonTableProps}
                         columns={userColumns}
                         data={pagedRows as UserRow[]}
@@ -187,6 +199,7 @@ function AccessViewTable({
                     />
                 ) : (
                     <DataTable
+                        id="operations-audit-events-table"
                         {...commonTableProps}
                         columns={auditColumns}
                         data={pagedRows as AuditEventRow[]}

@@ -53,6 +53,7 @@ export function ReviewResultBanner({
                 actions={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="card-contracts-funds-review-result-next"
                             type="button"
                             disabled={lastResult.status === "unknown"}
                             onClick={onNext}
@@ -61,6 +62,7 @@ export function ReviewResultBanner({
                         </Button>
                         {hasTask ? (
                             <Button
+                                id="card-contracts-funds-review-result-open-w05"
                                 type="button"
                                 variant="outline"
                                 render={<Link href={w05Href} />}

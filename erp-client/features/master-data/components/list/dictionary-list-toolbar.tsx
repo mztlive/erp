@@ -3,7 +3,11 @@
 import * as React from "react"
 import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
-import { FilterChip, FixedOptionRadioFilter, ListToolbar } from "@/components/business"
+import {
+    FilterChip,
+    FixedOptionRadioFilter,
+    ListToolbar,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ListSearchField } from "@/features/master-data/components/list/list-search-field"
@@ -20,6 +24,7 @@ import type {
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 export function DictionaryListToolbar({
+    idPrefix,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -39,6 +44,7 @@ export function DictionaryListToolbar({
     revisionTimingDraft,
     setRevisionTimingDraft,
 }: {
+    idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -58,6 +64,7 @@ export function DictionaryListToolbar({
     revisionTimingDraft: "current" | "future" | "all"
     setRevisionTimingDraft: SetState<"current" | "future" | "all">
 }) {
+    const prefix = idPrefix ?? "master-data-list-dictionary-list-toolbar"
     const panelId = React.useId()
     const hasChips = hasActiveFilters && appliedChips.length > 0
 
@@ -71,6 +78,7 @@ export function DictionaryListToolbar({
             <ListToolbar
                 search={
                     <ListSearchField
+                        id={`${prefix}-search-input`}
                         searchInputRef={searchInputRef}
                         value={searchDraft}
                         onChange={setSearchDraft}
@@ -79,6 +87,7 @@ export function DictionaryListToolbar({
                 }
                 filters={
                     <Button
+                        id={`${prefix}-filter-trigger`}
                         type="button"
                         variant="outline"
                         aria-expanded={filterPanelOpen}
@@ -123,6 +132,7 @@ export function DictionaryListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id={`${prefix}-clear-filters`}
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -143,14 +153,20 @@ export function DictionaryListToolbar({
                                         value={lifecycleStatusDraft}
                                         onValueChange={setLifecycleStatusDraft}
                                         options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                                        aria-label={masterDataCopy.filterLifecycleAria}
+                                        aria-label={
+                                            masterDataCopy.filterLifecycleAria
+                                        }
                                     />
                                     <FixedOptionRadioFilter
                                         label="版本"
                                         value={revisionTimingDraft}
                                         onValueChange={setRevisionTimingDraft}
-                                        options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
-                                        aria-label={masterDataCopy.filterVersionAria}
+                                        options={
+                                            REVISION_TIMING_RADIO_FILTER_OPTIONS
+                                        }
+                                        aria-label={
+                                            masterDataCopy.filterVersionAria
+                                        }
                                     />
                                     <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
                                         <p className="text-xs text-muted-foreground">
@@ -158,13 +174,17 @@ export function DictionaryListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id={`${prefix}-reset`}
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id={`${prefix}-apply`}
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

@@ -66,10 +66,12 @@ export function ContractDetailHeader({
             primaryAction={
                 canCreateSo ? (
                     <Button
+                        id="card-contracts-detail-header-create-sales-order"
                         type="button"
                         size="sm"
                         render={
                             <Link
+                                id="card-contracts-detail-header-create-sales-order-link"
                                 href={`/sales/orders?mode=create&customerId=${encodeURIComponent(
                                     contract.customer.id,
                                 )}&contractId=${encodeURIComponent(contract.contractId)}`}
@@ -80,6 +82,7 @@ export function ContractDetailHeader({
                     </Button>
                 ) : (
                     <Button
+                        id="card-contracts-detail-header-create-sales-order-disabled"
                         type="button"
                         size="sm"
                         variant="outline"
@@ -92,16 +95,14 @@ export function ContractDetailHeader({
             }
             secondaryActions={
                 <Button
+                    id="card-contracts-detail-header-paper-preview"
                     type="button"
                     size="sm"
                     variant="outline"
                     disabled={!canPrint}
                     onClick={onPaperOpen}
                 >
-                    <PrinterIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
+                    <PrinterIcon data-icon="inline-start" aria-hidden="true" />
                     纸质预览
                 </Button>
             }

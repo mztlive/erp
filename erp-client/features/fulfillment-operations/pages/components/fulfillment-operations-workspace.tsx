@@ -2,6 +2,7 @@
 
 import { FormalActionConfirmDialog } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { cn } from "@/lib/utils"
 import { FulfillmentQueueList } from "@/features/fulfillment-operations/components/queue/fulfillment-queue-list"
 import { confirmDescription } from "@/features/fulfillment-operations/lib/validation"
 import {
@@ -48,7 +49,12 @@ export function FulfillmentOperationsWorkspace({
     )
 
     return (
-        <div className="flex min-w-0 flex-col gap-4">
+        <div
+            className={cn(
+                "flex min-w-0 flex-col",
+                embedded || singleOperation ? "gap-0" : "gap-4",
+            )}
+        >
             {controller.lastResult ? (
                 <div
                     ref={controller.resultRef}
@@ -196,6 +202,7 @@ export function FulfillmentOperationsWorkspace({
             )}
 
             <FormalActionConfirmDialog
+                id="fulfillment-operations-workspace-confirm"
                 open={controller.confirmOpen}
                 onOpenChange={controller.setConfirmOpen}
                 title={

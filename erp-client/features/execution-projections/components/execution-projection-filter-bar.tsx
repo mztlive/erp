@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    ChevronDownIcon,
-    FilterIcon,
-    SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
 
 import {
     FilterChip,
@@ -35,6 +31,7 @@ import {
     type ProjectionSource,
     type ReconciliationStatus,
 } from "@/features/execution-projections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 const LATENCY_FILTER_OPTIONS: ReadonlyArray<
     FixedOptionRadioFilterOption<LatencyBand | "all">
@@ -66,7 +63,10 @@ const DELIVERY_STATUS_OPTIONS: readonly ComboboxOption[] = [
     { value: "all", label: "全部接收状态" },
     { value: "UNKNOWN", label: DELIVERY_STATUS_LABEL.UNKNOWN },
     { value: "FAILED", label: DELIVERY_STATUS_LABEL.FAILED },
-    { value: "ESCALATED_MANUAL", label: DELIVERY_STATUS_LABEL.ESCALATED_MANUAL },
+    {
+        value: "ESCALATED_MANUAL",
+        label: DELIVERY_STATUS_LABEL.ESCALATED_MANUAL,
+    },
     { value: "RETRYING", label: DELIVERY_STATUS_LABEL.RETRYING },
     { value: "SENDING", label: DELIVERY_STATUS_LABEL.SENDING },
     { value: "PENDING", label: DELIVERY_STATUS_LABEL.PENDING },
@@ -104,6 +104,7 @@ export function ExecutionProjectionFilterBar({
                             <SearchIcon aria-hidden="true" />
                         </InputGroupAddon>
                         <InputGroupInput
+                            id="execution-projections-filter-search"
                             ref={filters.searchInputRef}
                             value={filters.searchDraft}
                             onChange={(event) =>
@@ -112,11 +113,11 @@ export function ExecutionProjectionFilterBar({
                             placeholder="销售单号、客户"
                             aria-label="搜索执行信息"
                         />
-                        
                     </InputGroup>
                 }
                 filters={
                     <Button
+                        id="execution-projections-filter-more-trigger"
                         type="button"
                         variant="outline"
                         aria-expanded={panelOpen}
@@ -153,6 +154,7 @@ export function ExecutionProjectionFilterBar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`execution-projections-filter-chip-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -161,6 +163,7 @@ export function ExecutionProjectionFilterBar({
                                         />
                                     ))}
                                     <Button
+                                        id="execution-projections-filter-clear-all"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -177,12 +180,14 @@ export function ExecutionProjectionFilterBar({
                                     aria-label="执行信息更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="execution-projections-filter-latency"
                                         label="等待时长"
                                         value={filters.latencyDraft}
                                         onValueChange={filters.setLatencyDraft}
                                         options={LATENCY_FILTER_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="execution-projections-filter-reconciliation"
                                         label="版本核对"
                                         value={filters.reconciliationDraft}
                                         onValueChange={
@@ -191,6 +196,7 @@ export function ExecutionProjectionFilterBar({
                                         options={RECONCILIATION_FILTER_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="execution-projections-filter-source"
                                         label="数据来源"
                                         value={filters.sourceDraft}
                                         onValueChange={filters.setSourceDraft}
@@ -202,6 +208,7 @@ export function ExecutionProjectionFilterBar({
                                                 目标商城
                                             </span>
                                             <OptionCombobox
+                                                id="execution-projections-filter-mall"
                                                 className="w-full"
                                                 value={filters.mallIdDraft}
                                                 onValueChange={(value) =>
@@ -229,8 +236,11 @@ export function ExecutionProjectionFilterBar({
                                                 接收状态
                                             </span>
                                             <OptionCombobox
+                                                id="execution-projections-filter-delivery-status"
                                                 className="w-full"
-                                                value={filters.deliveryStatusDraft}
+                                                value={
+                                                    filters.deliveryStatusDraft
+                                                }
                                                 onValueChange={(value) =>
                                                     filters.setDeliveryStatusDraft(
                                                         value ?? "all",
@@ -251,6 +261,7 @@ export function ExecutionProjectionFilterBar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="execution-projections-filter-reset"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={
@@ -259,7 +270,10 @@ export function ExecutionProjectionFilterBar({
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="execution-projections-filter-apply"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

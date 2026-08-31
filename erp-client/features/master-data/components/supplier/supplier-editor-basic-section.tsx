@@ -41,26 +41,24 @@ export function SupplierEditorBasicSection({
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <FieldShell>
-                    <Label htmlFor="supplier-name">
+                    <Label htmlFor="master-data-supplier-basic-name">
                         名称<span className="text-destructive">*</span>
                     </Label>
                     <Input
-                        id="supplier-name"
+                        id="master-data-supplier-basic-name"
                         value={values.name}
-                        onChange={(e) =>
-                            setFieldValue("name", e.target.value)
-                        }
+                        onChange={(e) => setFieldValue("name", e.target.value)}
                         placeholder="供应商名称"
                         disabled={!canEdit}
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label htmlFor="supplier-company">
+                    <Label htmlFor="master-data-supplier-basic-company">
                         {masterDataCopy.fCompany}
                         <span className="text-destructive">*</span>
                     </Label>
                     <Input
-                        id="supplier-company"
+                        id="master-data-supplier-basic-company"
                         value={values.company}
                         onChange={(e) =>
                             setFieldValue("company", e.target.value)
@@ -70,11 +68,11 @@ export function SupplierEditorBasicSection({
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label htmlFor="supplier-contact-name">
+                    <Label htmlFor="master-data-supplier-basic-contact-name">
                         {masterDataCopy.fContactName}
                     </Label>
                     <Input
-                        id="supplier-contact-name"
+                        id="master-data-supplier-basic-contact-name"
                         value={values.contactName}
                         onChange={(e) =>
                             setFieldValue("contactName", e.target.value)
@@ -84,11 +82,11 @@ export function SupplierEditorBasicSection({
                     />
                 </FieldShell>
                 <FieldShell>
-                    <Label htmlFor="supplier-credit-code">
+                    <Label htmlFor="master-data-supplier-basic-credit-code">
                         {masterDataCopy.fCreditCode}
                     </Label>
                     <Input
-                        id="supplier-credit-code"
+                        id="master-data-supplier-basic-credit-code"
                         value={values.creditCode}
                         onChange={(event) =>
                             setFieldValue("creditCode", event.target.value)
@@ -100,7 +98,7 @@ export function SupplierEditorBasicSection({
                 <FieldShell>
                     <SensitiveEditableField
                         label={masterDataCopy.fContactPhone}
-                        id="supplier-contact-phone"
+                        id="master-data-supplier-basic-contact-phone"
                         value={values.contactPhone}
                         maskedValue={phoneSensitive?.maskedValue}
                         revealToken={phoneSensitive?.revealToken}
@@ -119,7 +117,7 @@ export function SupplierEditorBasicSection({
                 <FieldShell className="sm:col-span-2">
                     <SensitiveEditableField
                         label={masterDataCopy.fAddress}
-                        id="supplier-address"
+                        id="master-data-supplier-basic-address"
                         value={values.address}
                         maskedValue={addressSensitive?.maskedValue}
                         revealToken={addressSensitive?.revealToken}

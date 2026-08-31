@@ -66,6 +66,7 @@ export function CustomerQualityPageHeader({
             actions={
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
+                        id="customers-quality-refresh"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -79,6 +80,7 @@ export function CustomerQualityPageHeader({
                         {refreshing ? "刷新中" : "刷新"}
                     </Button>
                     <GuardedBusinessAction
+                        id="customers-quality-export"
                         type="button"
                         variant="outline"
                         size="sm"

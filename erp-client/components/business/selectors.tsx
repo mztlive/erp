@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 type BusinessObjectOption = {
@@ -54,6 +55,9 @@ interface BusinessObjectComboboxProps {
     loading?: boolean
     disabled?: boolean
     required?: boolean
+    id?: string
+    "aria-invalid"?: boolean
+    "aria-describedby"?: string
     className?: string
 }
 
@@ -69,6 +73,9 @@ function BusinessObjectCombobox({
     loading = false,
     disabled = false,
     required = false,
+    id,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedBy,
     className,
 }: BusinessObjectComboboxProps) {
     const selected = useStickySelected(items, value, (item) => item.id)
@@ -112,7 +119,12 @@ function BusinessObjectCombobox({
                 className={cn("min-w-0", className)}
             >
                 <ComboboxInput
+                    id={id}
+                    triggerId={id ? `${id}-trigger` : undefined}
+                    clearId={id ? `${id}-clear` : undefined}
                     aria-label={label}
+                    aria-invalid={ariaInvalid || undefined}
+                    aria-describedby={ariaDescribedBy}
                     aria-busy={loading}
                     placeholder={placeholder}
                     showClear
@@ -125,7 +137,15 @@ function BusinessObjectCombobox({
                     </ComboboxEmpty>
                     <ComboboxList>
                         {items.map((item) => (
-                            <ComboboxItem key={item.id} value={item}>
+                            <ComboboxItem
+                                key={item.id}
+                                id={
+                                    id
+                                        ? `${id}-option-${toAutomationIdSegment(item.id)}`
+                                        : undefined
+                                }
+                                value={item}
+                            >
                                 <div className="min-w-0 flex-1">
                                     <div className="flex min-w-0 items-center gap-2">
                                         <span className="truncate font-medium">
@@ -170,6 +190,7 @@ interface SavedViewPickerProps {
     onValueChange: (id?: string) => void
     placeholder?: string
     disabled?: boolean
+    id?: string
     actions?: React.ReactNode
     className?: string
 }
@@ -180,6 +201,7 @@ function SavedViewPicker({
     onValueChange,
     placeholder = "选择保存视图",
     disabled,
+    id,
     actions,
     className,
 }: SavedViewPickerProps) {
@@ -201,6 +223,7 @@ function SavedViewPicker({
             className={cn("flex items-center gap-2", className)}
         >
             <OptionCombobox
+                id={id}
                 options={options}
                 value={value ?? null}
                 onValueChange={(next) => onValueChange(next ?? undefined)}
@@ -218,6 +241,7 @@ function SavedViewPicker({
 interface AdvancedFilterSheetProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    idPrefix?: string
     title?: React.ReactNode
     description?: React.ReactNode
     summary?: React.ReactNode
@@ -230,6 +254,7 @@ interface AdvancedFilterSheetProps {
 function AdvancedFilterSheet({
     open,
     onOpenChange,
+    idPrefix,
     title = "高级筛选",
     description,
     summary,
@@ -240,7 +265,11 @@ function AdvancedFilterSheet({
 }: AdvancedFilterSheetProps) {
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" size="preview">
+            <SheetContent
+                side="right"
+                size="preview"
+                closeButtonId={idPrefix ? `${idPrefix}-close` : undefined}
+            >
                 <SheetHeader className="border-b">
                     <SheetTitle className="flex items-center gap-2">
                         <SlidersHorizontalIcon
@@ -262,10 +291,20 @@ function AdvancedFilterSheet({
                     {children}
                 </div>
                 <SheetFooter className="border-t">
-                    <Button type="button" variant="outline" onClick={onReset}>
+                    <Button
+                        id={idPrefix ? `${idPrefix}-reset` : undefined}
+                        type="button"
+                        variant="outline"
+                        onClick={onReset}
+                    >
                         重置
                     </Button>
-                    <Button type="button" onClick={onApply} disabled={applying}>
+                    <Button
+                        id={idPrefix ? `${idPrefix}-apply` : undefined}
+                        type="button"
+                        onClick={onApply}
+                        disabled={applying}
+                    >
                         {applying ? <Spinner /> : null}
                         应用筛选
                     </Button>

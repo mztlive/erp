@@ -14,6 +14,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -47,13 +48,8 @@ export function CustomerDetailPage({
     section?: string
 }) {
     const state = useCustomerDetailState(customerId, section)
-    const {
-        query,
-        customer,
-        activeSection,
-        editing,
-        handleSectionChange,
-    } = state
+    const { query, customer, activeSection, editing, handleSectionChange } =
+        state
     const [assignmentDialog, setAssignmentDialog] = React.useState<{
         target?: React.ComponentProps<typeof CustomerAssignmentDialog>["target"]
     } | null>(null)
@@ -79,6 +75,7 @@ export function CustomerDetailPage({
                     error={query.error}
                     action={
                         <Button
+                            id="customers-detail-retry"
                             type="button"
                             onClick={() => void query.refetch()}
                         >
@@ -97,7 +94,10 @@ export function CustomerDetailPage({
                     title="客户不存在或无权访问"
                     description="未找到该客户。可能编号有误，或当前角色无权访问该客户。"
                     actions={
-                        <Button render={<Link href="/sales/customers" />}>
+                        <Button
+                            id="customers-detail-not-found-back"
+                            render={<Link href="/sales/customers" />}
+                        >
                             返回客户选择
                         </Button>
                     }
@@ -126,6 +126,7 @@ export function CustomerDetailPage({
                 primaryAction={
                     <div className="flex flex-wrap items-center gap-2">
                         <GuardedBusinessAction
+                            id="customers-detail-upload-contract"
                             size="sm"
                             disabled={contractBlocked}
                             reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
@@ -142,6 +143,7 @@ export function CustomerDetailPage({
                             上传合同 PDF
                         </GuardedBusinessAction>
                         <GuardedBusinessAction
+                            id="customers-detail-create-sales-order"
                             size="sm"
                             variant="secondary"
                             disabled={salesBlocked}
@@ -200,6 +202,7 @@ export function CustomerDetailPage({
                     >
                         {SECTION_NAV.map((item) => (
                             <TabsTrigger
+                                id={`customers-detail-tab-${toAutomationIdSegment(item.id)}`}
                                 key={item.id}
                                 value={item.id}
                                 className="flex-none"
@@ -282,6 +285,7 @@ export function CustomerDetailPage({
             />
 
             <DiscardConfirmDialog
+                id="customers-detail-pending-section-discard"
                 open={state.pendingSection != null}
                 onOpenChange={(open) => {
                     if (!open) state.dismissPendingSection()

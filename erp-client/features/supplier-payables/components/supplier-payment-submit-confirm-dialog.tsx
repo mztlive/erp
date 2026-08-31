@@ -11,6 +11,8 @@ export function SupplierPaymentSubmitConfirmDialog({
     recipient,
     onOpenChange,
     onConfirm,
+    id,
+    idPrefix,
 }: {
     open: boolean
     pending: boolean
@@ -18,6 +20,8 @@ export function SupplierPaymentSubmitConfirmDialog({
     recipient?: PaymentRecipient
     onOpenChange: (open: boolean) => void
     onConfirm: () => void
+    id?: string
+    idPrefix?: string
 }) {
     const bankLabel = recipient
         ? [recipient.bankName, recipient.bankBranchName]
@@ -27,6 +31,8 @@ export function SupplierPaymentSubmitConfirmDialog({
 
     return (
         <FormalActionConfirmDialog
+            id={id}
+            idPrefix={idPrefix ?? "supplier-payables-payment-submit-confirm"}
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="付款"

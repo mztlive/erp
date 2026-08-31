@@ -37,6 +37,7 @@ import {
 import { salesOrderHref } from "@/features/fulfillment-operations/pages/lib/gate-copy"
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib/presentation"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
 
@@ -118,8 +119,9 @@ export function FulfillmentWorkSurface({
         .join(" · ")
 
     return (
-        <div className="min-w-0 space-y-3">
+        <div className={singleOperation ? "min-w-0" : "min-w-0 space-y-3"}>
             <SequentialProcessBar
+                id="fulfillment-operations-work-surface-process-bar"
                 current={position}
                 total={total}
                 responsibilityStatus={responsibilityStatus}
@@ -146,6 +148,7 @@ export function FulfillmentWorkSurface({
 
             {!singleOperation ? (
                 <button
+                    id="fulfillment-operations-work-surface-toggle-shortcuts"
                     type="button"
                     onClick={onToggleShortcuts}
                     aria-expanded={shortcutsOpen}
@@ -161,7 +164,10 @@ export function FulfillmentWorkSurface({
                 </button>
             ) : null}
 
-            <Card size="sm" className={surfacePanelClassName}>
+            <Card
+                size="sm"
+                className={singleOperation ? undefined : surfacePanelClassName}
+            >
                 {singleOperation ? null : (
                     <CardHeader className="border-b border-grid">
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -231,6 +237,7 @@ export function FulfillmentWorkSurface({
                         <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
                             {!singleOperation ? (
                                 <Button
+                                    id="fulfillment-operations-work-surface-skip"
                                     type="button"
                                     variant="ghost"
                                     disabled={formalPending}
@@ -242,6 +249,7 @@ export function FulfillmentWorkSurface({
                             ) : null}
                             {dirty ? (
                                 <Button
+                                    id="fulfillment-operations-work-surface-discard"
                                     type="button"
                                     variant="ghost"
                                     disabled={formalPending}
@@ -253,6 +261,7 @@ export function FulfillmentWorkSurface({
                             ) : null}
                             {supportsSave ? (
                                 <Button
+                                    id="fulfillment-operations-work-surface-save"
                                     type="button"
                                     variant="secondary"
                                     className="rounded-lg shadow-none"
@@ -272,6 +281,7 @@ export function FulfillmentWorkSurface({
                                 </Button>
                             ) : null}
                             <Button
+                                id="fulfillment-operations-work-surface-confirm"
                                 type="button"
                                 disabled={formalPending || !canPost}
                                 onClick={onConfirm}
@@ -306,6 +316,7 @@ export function FulfillmentWorkSurface({
                             </p>
                             {showSalesOrderLinks ? (
                                 <Button
+                                    id="fulfillment-operations-work-surface-open-sales-order"
                                     type="button"
                                     size="sm"
                                     variant="secondary"
@@ -368,6 +379,7 @@ function FulfillmentSourceContext({
                             field.href &&
                             operation.source.salesOrderId ? (
                                 <Link
+                                    id={`fulfillment-operations-work-surface-source-${toAutomationIdSegment(field.label)}`}
                                     href={field.href}
                                     className="text-primary underline-offset-4 hover:underline"
                                 >

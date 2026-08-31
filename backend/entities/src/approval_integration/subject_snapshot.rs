@@ -115,6 +115,39 @@ impl ApprovalSubjectSnapshot {
             payload,
         })
     }
+
+    /// 校验冻结快照与运行时主体的三项不可变引用完全一致。
+    ///
+    /// # 参数
+    /// * `document_type` - 运行时解析出的单据类型
+    /// * `business_object_id` - 运行时主体持有的业务对象主键
+    /// * `subject_version` - 运行时实例冻结的提交版本
+    ///
+    /// # 返回
+    /// 单据类型、业务对象主键和提交版本全部精确一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 按单据类型、业务对象主键、提交版本的固定顺序返回首个不匹配错误。
+    ///
+    /// # 关键业务约束
+    /// 三项比较均不可省略；字符串不裁剪、不折叠大小写，也不接受任何别名。
+    pub fn ensure_matches_runtime_subject(
+        &self,
+        document_type: DocumentType,
+        business_object_id: &str,
+        subject_version: u32,
+    ) -> Result<()> {
+        if self.document_type != document_type {
+            return Err(Error::from("冻结快照单据类型不匹配"));
+        }
+        if self.business_object_id != business_object_id {
+            return Err(Error::from("冻结快照业务对象ID不匹配"));
+        }
+        if self.subject_version != subject_version {
+            return Err(Error::from("冻结快照提交版本不匹配"));
+        }
+        Ok(())
+    }
 }
 
 /// 规范化快照载荷并按单据类型校验金额/数量必填范围。
@@ -278,6 +311,84 @@ mod tests {
             stock_payload(),
         )
         .is_err());
+    }
+
+    /// 验证运行时主体的三项精确引用可以匹配冻结快照。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 三项引用完全一致时测试通过。
+    ///
+    /// # 错误
+    /// 任一相等值被误判为不匹配时测试失败。
+    ///
+    /// # 关键业务约束
+    /// 正常路径必须同时比较单据类型、业务对象主键和提交版本。
+    #[test]
+    fn runtime_subject_exact_match_succeeds() {
+        let snapshot = ApprovalSubjectSnapshot::new(
+            ApprovalSubjectSnapshotId::new("snap-1"),
+            ApprovalProcessInstanceId::new("inst-1"),
+            DocumentType::StockAdjustment,
+            "adj-1",
+            1,
+            stock_payload(),
+        )
+        .unwrap();
+
+        assert!(snapshot
+            .ensure_matches_runtime_subject(DocumentType::StockAdjustment, "adj-1", 1)
+            .is_ok());
+    }
+
+    /// 验证三项主体不匹配按固定顺序失败且不做规范化。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 每类不匹配都返回对应确定错误时测试通过。
+    ///
+    /// # 错误
+    /// 任一比较被省略、顺序变化或空白输入被裁剪时测试失败。
+    ///
+    /// # 关键业务约束
+    /// 单据类型优先于主键，主键优先于版本；零版本和空白变体仍按原值比较。
+    #[test]
+    fn runtime_subject_mismatches_are_deterministic_and_strict() {
+        let snapshot = ApprovalSubjectSnapshot::new(
+            ApprovalSubjectSnapshotId::new("snap-1"),
+            ApprovalProcessInstanceId::new("inst-1"),
+            DocumentType::StockAdjustment,
+            "adj-1",
+            1,
+            stock_payload(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            snapshot
+                .ensure_matches_runtime_subject(DocumentType::SalesOrder, "other", 2)
+                .unwrap_err()
+                .to_string(),
+            "冻结快照单据类型不匹配"
+        );
+        assert_eq!(
+            snapshot
+                .ensure_matches_runtime_subject(DocumentType::StockAdjustment, " adj-1 ", 1)
+                .unwrap_err()
+                .to_string(),
+            "冻结快照业务对象ID不匹配"
+        );
+        assert_eq!(
+            snapshot
+                .ensure_matches_runtime_subject(DocumentType::StockAdjustment, "adj-1", 0)
+                .unwrap_err()
+                .to_string(),
+            "冻结快照提交版本不匹配"
+        );
     }
 
     /// BSON 往返保持有界结构。

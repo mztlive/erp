@@ -41,6 +41,7 @@ import {
     type PaymentRow,
 } from "@/features/supplier-payables/types"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 const PAYMENT_DETAIL_SECTIONS = [
@@ -101,17 +102,20 @@ export function SupplierPaymentDetailBody({
                 ) : null}
                 <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-payment-no-input"
                         label="付款单号"
                         value={row.paymentNo}
                         description="过账后不可改号"
                         mono
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-supplier-name-input"
                         label="供应商"
                         value={row.supplierName}
                         description="本付款对应的往来供应商"
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-paid-at-input"
                         label="付款时间"
                         value={formatDateTime(
                             row.paidAt,
@@ -122,6 +126,7 @@ export function SupplierPaymentDetailBody({
                         mono
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-amount-input"
                         label="付款金额"
                         value={
                             <MoneyValue value={row.amount} taxBasis="gross" />
@@ -129,6 +134,7 @@ export function SupplierPaymentDetailBody({
                         description="本单含税付款总额"
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-bank-reference-input"
                         label="银行流水号"
                         value={row.bankReferenceMasked}
                         description="用于对账的银行引用"
@@ -136,6 +142,7 @@ export function SupplierPaymentDetailBody({
                         className="sm:col-span-2"
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-allocated-total-input"
                         label="已付款"
                         value={
                             <MoneyValue
@@ -146,6 +153,7 @@ export function SupplierPaymentDetailBody({
                         description="已经付给具体应付的金额"
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-unallocated-amount-input"
                         label="未付款"
                         value={
                             <MoneyValue
@@ -246,6 +254,7 @@ function SectionTab({
 }) {
     return (
         <TabsTrigger
+            id={`supplier-payables-payment-detail-tab-${value}`}
             value={value}
             className={cn(
                 "h-10 flex-none justify-start gap-2 rounded-lg px-3 py-2 text-muted-foreground after:hidden",
@@ -292,22 +301,27 @@ function ReadOnlyField({
     description,
     className,
     mono = false,
+    id,
 }: {
     label: string
     value: React.ReactNode
     description?: string
     className?: string
     mono?: boolean
+    id?: string
 }) {
-    const id = React.useId()
+    const fallbackId = `supplier-payables-payment-detail-field-${toAutomationIdSegment(label)}-input`
+    const fieldId = id ?? fallbackId
     const isText = typeof value === "string"
 
     return (
         <Field className={className}>
-            <FieldLabel htmlFor={isText ? id : undefined}>{label}</FieldLabel>
+            <FieldLabel htmlFor={isText ? fieldId : undefined}>
+                {label}
+            </FieldLabel>
             {isText ? (
                 <Input
-                    id={id}
+                    id={fieldId}
                     readOnly
                     value={value}
                     className={cn(
@@ -377,6 +391,7 @@ function PaymentReversalHistory({ row }: { row: PaymentRow }) {
                                     )}
                                 </span>
                                 <Button
+                                    id={`supplier-payables-payment-detail-reversal-${toAutomationIdSegment(reversal.reversalId)}-open`}
                                     type="button"
                                     size="xs"
                                     variant="ghost"
@@ -427,6 +442,7 @@ function BankReceiptPreview({ row }: { row: PaymentRow }) {
     return (
         <div className="max-w-md">
             <FileUpload
+                idPrefix="supplier-payables-payment-detail-receipt-preview"
                 onFilesSelected={() => undefined}
                 multiple={false}
                 density="compact"
@@ -496,6 +512,7 @@ function RelatedDocumentActions({
     if (refItem.kind === "original-payment" && reverseOfPaymentId) {
         return (
             <Button
+                id={`supplier-payables-payment-detail-related-${toAutomationIdSegment(refItem.id)}-open-original`}
                 type="button"
                 size="xs"
                 variant="outline"
@@ -510,6 +527,7 @@ function RelatedDocumentActions({
         <div className="flex flex-wrap justify-end gap-1">
             {payableAccountId && onOpenPayable ? (
                 <Button
+                    id={`supplier-payables-payment-detail-related-${toAutomationIdSegment(refItem.id)}-open-payable`}
                     type="button"
                     size="xs"
                     variant="outline"
@@ -520,6 +538,7 @@ function RelatedDocumentActions({
             ) : null}
             {refItem.sourceHref ? (
                 <Button
+                    id={`supplier-payables-payment-detail-related-${toAutomationIdSegment(refItem.id)}-open-source`}
                     type="button"
                     size="xs"
                     variant="outline"
@@ -569,6 +588,7 @@ function AllocationLineItem({
                 </span>
                 {href ? (
                     <Button
+                        id={`supplier-payables-payment-detail-allocation-${toAutomationIdSegment(allocation.allocationId)}-open`}
                         type="button"
                         size="xs"
                         variant="outline"

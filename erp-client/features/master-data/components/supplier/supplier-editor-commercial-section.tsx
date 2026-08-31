@@ -44,6 +44,7 @@ export function SupplierEditorCommercialSection({
                     <FieldShell>
                         <Label>{masterDataCopy.fSettlement}</Label>
                         <OptionCombobox
+                            id="master-data-supplier-commercial-settlement-combobox"
                             value={values.settlement || null}
                             onValueChange={(value) => {
                                 const settlement = value ?? ""
@@ -74,6 +75,7 @@ export function SupplierEditorCommercialSection({
                     <FieldShell>
                         <Label>{masterDataCopy.fPaymentTerm}</Label>
                         <OptionCombobox
+                            id="master-data-supplier-commercial-payment-term-combobox"
                             value={values.paymentTerm || null}
                             onValueChange={(value) =>
                                 setFieldValue("paymentTerm", value ?? "")
@@ -116,6 +118,7 @@ export function SupplierEditorCommercialSection({
                     <FieldShell>
                         <Label>{masterDataCopy.fSigningEntity}</Label>
                         <SettlementPartySearchCombobox
+                            id="master-data-supplier-commercial-signing-entity-combobox"
                             value={values.signingEntity || undefined}
                             onValueChange={(value) =>
                                 setFieldValue("signingEntity", value ?? "")
@@ -127,6 +130,7 @@ export function SupplierEditorCommercialSection({
                     <FieldShell>
                         <Label>{masterDataCopy.fPaymentEntity}</Label>
                         <SettlementPartySearchCombobox
+                            id="master-data-supplier-commercial-payment-entity-combobox"
                             value={values.paymentEntity || undefined}
                             onValueChange={(value) =>
                                 setFieldValue("paymentEntity", value ?? "")
@@ -160,6 +164,7 @@ export function SupplierEditorCommercialSection({
                     <FieldShell>
                         <Label>{masterDataCopy.fSupplierRating}</Label>
                         <OptionCombobox
+                            id="master-data-supplier-commercial-rating-combobox"
                             value={values.supplierRating || null}
                             onValueChange={(v) =>
                                 setFieldValue("supplierRating", v ?? "")

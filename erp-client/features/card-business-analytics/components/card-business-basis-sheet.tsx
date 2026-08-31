@@ -19,6 +19,7 @@ export function CardBusinessBasisSheet({
 }: CardBusinessBasisSheetProps) {
     return (
         <QuickPreviewSheet
+            id="card-contracts-analytics-basis-sheet"
             open={open}
             onOpenChange={onOpenChange}
             title="卡券经营口径说明"

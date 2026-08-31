@@ -65,6 +65,7 @@ export function CustomerReceiptApprovalArea({
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
                     <ApprovalActionBar
+                        id="customer-receivables-receipt-approval-action-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={CUSTOMER_RECEIPT_DOCUMENT_TYPE}
@@ -83,6 +84,7 @@ export function CustomerReceiptApprovalArea({
         <div className="space-y-3">
             <RuntimeSummary instance={approval?.instance} />
             <ExecutionHistory
+                id="customer-receivables-receipt-approval-history"
                 items={historyItems}
                 hasMore={historyQuery.hasNextPage}
                 loadingMore={historyQuery.isFetchingNextPage}
@@ -95,6 +97,7 @@ export function CustomerReceiptApprovalArea({
                 }
             />
             <ApprovalActionBar
+                id="customer-receivables-receipt-approval-action-bar"
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

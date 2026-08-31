@@ -52,6 +52,7 @@ export function BrandsListPage() {
             exportMeta={state.exportMeta}
             actions={[
                 {
+                    id: "master-data-brands-list-export",
                     actionKey: "export",
                     label: masterDataCopy.actionExport,
                     icon: DownloadIcon,
@@ -61,6 +62,7 @@ export function BrandsListPage() {
                     onClick: state.onExport,
                 },
                 {
+                    id: "master-data-brands-list-create",
                     actionKey: "create",
                     label: masterDataCopy.actionCreate,
                     mobileVisibility: "hide",
@@ -74,6 +76,7 @@ export function BrandsListPage() {
             ]}
             metrics={
                 <LifecycleMetricStrip
+                    idPrefix="master-data-brands-list-metrics"
                     metrics={state.syncedMetrics}
                     metricKey={filters.metricKey}
                     ariaLabel="品牌指标筛选"
@@ -100,6 +103,7 @@ export function BrandsListPage() {
                 description={state.listTableDescription}
                 toolbar={
                     <DictionaryListToolbar
+                        idPrefix="master-data-brands-list-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={filters.searchDraft}
                         setSearchDraft={filters.setSearchDraft}
@@ -128,6 +132,7 @@ export function BrandsListPage() {
                 }
                 table={
                     <DataTable
+                        id="master-data-brands-list-table"
                         data={state.pageRows}
                         columns={columns}
                         getRowId={(row) => row.stableId}
@@ -144,8 +149,18 @@ export function BrandsListPage() {
                             listLoadFailed ? (
                                 <BusinessFailureState
                                     error={state.listQuery.error}
-                                    onRetry={() =>
-                                        void state.listQuery.refetch()
+                                    action={
+                                        <Button
+                                            id="master-data-brands-list-retry"
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                void state.listQuery.refetch()
+                                            }
+                                        >
+                                            重试
+                                        </Button>
                                     }
                                 />
                             ) : undefined
@@ -170,6 +185,7 @@ export function BrandsListPage() {
                                     action={
                                         hasActiveFilters ? (
                                             <Button
+                                                id="master-data-brands-list-empty-clear-filters"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"
@@ -182,6 +198,7 @@ export function BrandsListPage() {
                                             </Button>
                                         ) : state.canCreate ? (
                                             <Button
+                                                id="master-data-brands-list-empty-create"
                                                 type="button"
                                                 variant="secondary"
                                                 size="sm"

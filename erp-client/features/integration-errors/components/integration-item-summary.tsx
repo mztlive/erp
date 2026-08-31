@@ -18,6 +18,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { formatDateTime } from "@/lib/datetime"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { IntegrationResolutionItemView } from "../types"
 import { DIFFERENCE_TYPE_LABEL, FUNDS_LABEL } from "../types"
 
@@ -197,6 +198,7 @@ export function IntegrationItemSummary({
                         {item.repairLinks.map((repairLink) => (
                             <Button
                                 key={repairLink.href}
+                                id={`integration-item-summary-repair-${toAutomationIdSegment(repairLink.href)}`}
                                 type="button"
                                 size="sm"
                                 variant="outline"
@@ -210,6 +212,7 @@ export function IntegrationItemSummary({
                             </Button>
                         ))}
                         <Button
+                            id="integration-item-summary-refresh"
                             type="button"
                             size="sm"
                             variant="ghost"

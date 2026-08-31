@@ -37,6 +37,7 @@ export function IntegrationDetailWorkflow({
     return (
         <>
             <IntegrationItemProgress
+                id="integration-item-progress"
                 item={item}
                 positionIndex={positionIndex}
                 positionTotal={positionTotal}

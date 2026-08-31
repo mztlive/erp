@@ -83,8 +83,7 @@ export function useConsumptionOrdersFilters(
     const [panelOpen, setPanelOpen] = React.useState(
         hasStructuredMallConsumptionFilters(applied),
     )
-    const hasStructuredFilters =
-        hasStructuredMallConsumptionFilters(applied)
+    const hasStructuredFilters = hasStructuredMallConsumptionFilters(applied)
 
     // URL 回填：关键词草稿只跟随 q，输入框聚焦时不被覆盖。
     // 依赖只用 applied.q：ref 容器身份不稳定，进依赖会让 effect 每次渲染重跑，

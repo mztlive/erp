@@ -200,6 +200,7 @@ export function LinesTable({
 
     return (
         <DataTable
+            id={`procurement-orders-detail-lines-table-${order.identity.purchaseOrderId}`}
             data={[...lines]}
             columns={columns}
             getRowId={(row) => row.lineId}

@@ -22,6 +22,7 @@ import type {
 import { masterDataSearchPlaceholder } from "@/features/master-data/lib/copy"
 import { PRODUCT_KIND_RADIO_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
@@ -44,6 +45,7 @@ const SUPPLY_PRESET_OPTIONS: ReadonlyArray<{
 ]
 
 export function SellableListToolbar({
+    idPrefix,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -80,6 +82,7 @@ export function SellableListToolbar({
     hiddenProductKinds,
     applyHint = "将同时应用上方关键词和以下筛选条件；结果也用于导出。",
 }: {
+    idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -116,6 +119,7 @@ export function SellableListToolbar({
     hiddenProductKinds?: readonly ProductKind[]
     applyHint?: string
 }) {
+    const prefix = idPrefix ?? "master-data-list-sellable-list-toolbar"
     const panelId = React.useId()
     const priceErrorId = React.useId()
     const hasChips = hasActiveFilters && appliedChips.length > 0
@@ -130,6 +134,7 @@ export function SellableListToolbar({
             <ListToolbar
                 search={
                     <ListSearchField
+                        id={`${prefix}-search-input`}
                         searchInputRef={searchInputRef}
                         value={searchDraft}
                         onChange={setSearchDraft}
@@ -149,6 +154,7 @@ export function SellableListToolbar({
                                 const active = supplyPreset === option.value
                                 return (
                                     <Button
+                                        id={`master-data-sellable-preset-${toAutomationIdSegment(option.value)}`}
                                         key={option.value}
                                         type="button"
                                         variant={active ? "secondary" : "ghost"}
@@ -177,6 +183,7 @@ export function SellableListToolbar({
                             })}
                         </div>
                         <Button
+                            id={`${prefix}-filter-trigger`}
                             type="button"
                             variant="outline"
                             aria-expanded={sellableFilterPanelOpen}
@@ -216,6 +223,7 @@ export function SellableListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`master-data-sellable-toolbar-filter-${toAutomationIdSegment(chip.key)}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -224,6 +232,7 @@ export function SellableListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id="master-data-list-sellable-list-toolbar-button-3"
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -257,6 +266,7 @@ export function SellableListToolbar({
                                                 分类
                                             </span>
                                             <CategoryCombobox
+                                                id="master-data-list-sellable-list-toolbar-categorycombobox-1"
                                                 className="w-full"
                                                 categories={
                                                     productFilterOptionsQuery
@@ -282,6 +292,7 @@ export function SellableListToolbar({
                                                 品牌
                                             </span>
                                             <OptionCombobox
+                                                id="master-data-list-sellable-list-toolbar-optioncombobox-1"
                                                 className="w-full"
                                                 value={productBrandIdDraft}
                                                 aria-label="商品品牌"
@@ -304,6 +315,7 @@ export function SellableListToolbar({
                                                 供应商
                                             </span>
                                             <OptionCombobox
+                                                id="master-data-list-sellable-list-toolbar-optioncombobox-2"
                                                 className="w-full"
                                                 value={productSupplierIdDraft}
                                                 aria-label="供应商"
@@ -326,6 +338,7 @@ export function SellableListToolbar({
                                                 可供区域
                                             </span>
                                             <Input
+                                                id="master-data-list-sellable-list-toolbar-input-1"
                                                 className="w-full"
                                                 value={supplyRegionDraft}
                                                 onChange={(event) =>
@@ -344,6 +357,7 @@ export function SellableListToolbar({
                                             </span>
                                             <div className="flex items-center gap-1.5">
                                                 <Input
+                                                    id="master-data-list-sellable-list-toolbar-input-2"
                                                     className="w-0 min-w-0 flex-1"
                                                     value={
                                                         productSalesPriceMinDraft
@@ -373,6 +387,7 @@ export function SellableListToolbar({
                                                     至
                                                 </span>
                                                 <Input
+                                                    id="master-data-list-sellable-list-toolbar-input-3"
                                                     className="w-0 min-w-0 flex-1"
                                                     value={
                                                         productSalesPriceMaxDraft
@@ -416,13 +431,17 @@ export function SellableListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id="master-data-list-sellable-list-toolbar-button-4"
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id="master-data-list-sellable-list-toolbar-button-5"
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

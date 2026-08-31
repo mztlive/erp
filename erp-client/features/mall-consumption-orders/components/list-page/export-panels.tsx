@@ -50,6 +50,7 @@ export function ExportPreviewPanel({
             />
             <div className="flex flex-wrap gap-2">
                 <Button
+                    id="mall-consumption-orders-export-confirm"
                     type="button"
                     size="sm"
                     disabled={isPending}
@@ -67,6 +68,7 @@ export function ExportPreviewPanel({
                     {isPending ? "导出中…" : "确认导出"}
                 </Button>
                 <Button
+                    id="mall-consumption-orders-export-cancel"
                     type="button"
                     size="sm"
                     variant="outline"

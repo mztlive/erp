@@ -22,12 +22,7 @@ export type SettlementFilterKey =
 
 export type SettlementFilterState = Pick<
     SettlementsUrlState,
-    | "q"
-    | "supplierId"
-    | "status"
-    | "differenceType"
-    | "periodFrom"
-    | "periodTo"
+    "q" | "supplierId" | "status" | "differenceType" | "periodFrom" | "periodTo"
 >
 
 export const SETTLEMENT_STATUS_VALUES = Object.keys(
@@ -46,9 +41,7 @@ export const DIFF_TYPE_RADIO_OPTIONS: ReadonlyArray<{
 ]
 
 /** URL 中逗号分隔的状态值解析为合法状态数组；非法枚举值降级丢弃。 */
-export function parseSettlementStatusParam(
-    raw?: string,
-): SettlementStatus[] {
+export function parseSettlementStatusParam(raw?: string): SettlementStatus[] {
     if (!raw) return []
     return Array.from(
         new Set(
@@ -56,8 +49,7 @@ export function parseSettlementStatusParam(
                 .split(",")
                 .map((value) => value.trim())
                 .filter(
-                    (value): value is SettlementStatus =>
-                        value in STATUS_LABEL,
+                    (value): value is SettlementStatus => value in STATUS_LABEL,
                 ),
         ),
     )
@@ -77,10 +69,10 @@ export function hasStructuredSettlementFilters(
 ): boolean {
     return Boolean(
         state.supplierId ||
-            state.status ||
-            state.differenceType ||
-            state.periodFrom ||
-            state.periodTo,
+        state.status ||
+        state.differenceType ||
+        state.periodFrom ||
+        state.periodTo,
     )
 }
 

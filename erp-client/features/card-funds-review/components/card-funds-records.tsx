@@ -86,6 +86,7 @@ export function CardFundsRecords({
                 ))}
                 <div className="flex flex-wrap gap-2 pt-1">
                     <Button
+                        id="card-contracts-funds-review-records-register-receipt"
                         type="button"
                         variant="secondary"
                         size="sm"
@@ -99,6 +100,7 @@ export function CardFundsRecords({
                         登记历史回款
                     </Button>
                     <Button
+                        id="card-contracts-funds-review-records-register-invoice"
                         type="button"
                         variant="secondary"
                         size="sm"
@@ -112,6 +114,7 @@ export function CardFundsRecords({
                         登记历史发票
                     </Button>
                     <Button
+                        id="card-contracts-funds-review-records-open-w11"
                         type="button"
                         variant="outline"
                         size="sm"

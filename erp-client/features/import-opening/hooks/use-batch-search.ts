@@ -34,9 +34,7 @@ export function useBatchSearchDraft(q: string) {
                 tag === "TEXTAREA" ||
                 tag === "SELECT" ||
                 target?.isContentEditable ||
-                document.querySelector(
-                    '[role="dialog"], [data-slot="sheet"]',
-                )
+                document.querySelector('[role="dialog"], [data-slot="sheet"]')
             ) {
                 return
             }

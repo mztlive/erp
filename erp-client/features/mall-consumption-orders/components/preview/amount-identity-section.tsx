@@ -70,7 +70,10 @@ export function AmountIdentitySection({ view }: Props) {
                         id: "co-pv-gross",
                         label: "商品原价",
                         value: (
-                            <MoneyValue value={view.amounts.gross} taxBasis="gross" />
+                            <MoneyValue
+                                value={view.amounts.gross}
+                                taxBasis="gross"
+                            />
                         ),
                     },
                     {
@@ -87,7 +90,10 @@ export function AmountIdentitySection({ view }: Props) {
                         id: "co-pv-paid-amount",
                         label: "实付",
                         value: (
-                            <MoneyValue value={view.amounts.paid} taxBasis="gross" />
+                            <MoneyValue
+                                value={view.amounts.paid}
+                                taxBasis="gross"
+                            />
                         ),
                     },
                     {
@@ -103,7 +109,11 @@ export function AmountIdentitySection({ view }: Props) {
                         label: "履约判定",
                         value: (
                             <span className="text-sm">
-                                {FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain]}
+                                {
+                                    FULFILLMENT_CHAIN_LABEL[
+                                        view.fulfillment.chain
+                                    ]
+                                }
                                 <span className="mx-1 text-muted-foreground">
                                     ·
                                 </span>

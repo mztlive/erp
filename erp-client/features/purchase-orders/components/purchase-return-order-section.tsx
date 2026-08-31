@@ -5,6 +5,7 @@ import {
     BusinessStatusBadge,
     surfaceInsetClassName,
 } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { usePurchaseReturnOrdersQuery } from "@/features/purchase-orders/hooks/use-purchase-return-orders-query"
 import type { PurchaseReturnOrderRow } from "@/features/purchase-orders/types"
@@ -75,8 +76,17 @@ export function PurchaseReturnOrderRelatedSection({
                 <BusinessFailureState
                     title="采购退货暂无法加载"
                     error={query.error}
-                    onRetry={() => void query.refetch()}
-                    retryLabel="重新加载"
+                    action={
+                        <Button
+                            id="procurement-orders-detail-returns-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void query.refetch()}
+                        >
+                            重新加载
+                        </Button>
+                    }
                 />
             ) : null}
             {query.isSuccess ? (

@@ -12,12 +12,14 @@ import {
     InputGroupInput,
 } from "@/components/ui/input-group"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { usePermissionPanel } from "@/features/admin/hooks/use-permission-panel"
 import {
     PERMISSION_PANEL_TAB_LABEL,
     actionLabel,
     isDangerousAction,
+    permissionGroupSegment,
     type PermissionItemOption,
     type PermissionMatrixGroup,
 } from "@/features/admin/lib/permission-catalog"
@@ -32,6 +34,7 @@ type PermissionOptionsPanelProps = {
      */
     onChange: (next: string[]) => void
     className?: string
+    id?: string
 }
 
 /**
@@ -44,6 +47,7 @@ export function PermissionOptionsPanel({
     selected,
     onChange,
     className,
+    id = "governance-admin-permission-panel",
 }: PermissionOptionsPanelProps) {
     const {
         keyword,
@@ -93,7 +97,10 @@ export function PermissionOptionsPanel({
         for (const group of visibleGroups) {
             const node = groupRefs.current.get(group.name)
             if (!node) continue
-            if (node.offsetTop - container.offsetTop - container.scrollTop <= 8) {
+            if (
+                node.offsetTop - container.offsetTop - container.scrollTop <=
+                8
+            ) {
                 current = group.name
             }
         }
@@ -116,7 +123,11 @@ export function PermissionOptionsPanel({
                     }}
                 >
                     <TabsList variant="line" className="justify-start">
-                        <TabsTrigger value="business" className="flex-none">
+                        <TabsTrigger
+                            id={`${id}-tab-business`}
+                            value="business"
+                            className="flex-none"
+                        >
                             {PERMISSION_PANEL_TAB_LABEL.business}
                             {selectedCountByTab.business > 0 ? (
                                 <span className="num text-muted-foreground">
@@ -124,7 +135,11 @@ export function PermissionOptionsPanel({
                                 </span>
                             ) : null}
                         </TabsTrigger>
-                        <TabsTrigger value="system" className="flex-none">
+                        <TabsTrigger
+                            id={`${id}-tab-system`}
+                            value="system"
+                            className="flex-none"
+                        >
                             {PERMISSION_PANEL_TAB_LABEL.system}
                             {selectedCountByTab.system > 0 ? (
                                 <span className="num text-muted-foreground">
@@ -139,6 +154,7 @@ export function PermissionOptionsPanel({
                         <SearchIcon aria-hidden="true" />
                     </InputGroupAddon>
                     <InputGroupInput
+                        id={`${id}-search`}
                         type="search"
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
@@ -158,6 +174,7 @@ export function PermissionOptionsPanel({
                         const isActive = group.name === activeGroup
                         return (
                             <button
+                                id={`${id}-group-${permissionGroupSegment(group.name)}-nav`}
                                 key={group.name}
                                 type="button"
                                 aria-current={isActive ? "true" : undefined}
@@ -199,6 +216,7 @@ export function PermissionOptionsPanel({
                     ) : (
                         visibleGroups.map((group) => (
                             <PermissionMatrixSection
+                                id={`${id}-group-${permissionGroupSegment(group.name)}`}
                                 key={group.name}
                                 ref={(node) => {
                                     groupRefs.current.set(group.name, node)
@@ -222,6 +240,7 @@ type PermissionMatrixSectionProps = {
     selectedSet: ReadonlySet<string>
     progress?: { selected: number; total: number }
     onToggle: (codes: readonly string[], next: boolean) => void
+    id?: string
 }
 
 /** 单个权限组的矩阵：列为动作，行为业务对象。 */
@@ -231,8 +250,10 @@ function PermissionMatrixSection({
     selectedSet,
     progress,
     onToggle,
+    id,
 }: PermissionMatrixSectionProps) {
-    const baseId = React.useId()
+    const fallbackId = React.useId()
+    const baseId = id ?? fallbackId
     const groupState = checkedState(group.codes, selectedSet)
 
     return (
@@ -249,11 +270,8 @@ function PermissionMatrixSection({
                         </span>
                         {progress && progress.selected > 0 ? (
                             <Badge variant="outline">
-                                <span className="num">
-                                    {progress.selected}
-                                </span>
-                                /
-                                <span className="num">{progress.total}</span>
+                                <span className="num">{progress.selected}</span>
+                                /<span className="num">{progress.total}</span>
                             </Badge>
                         ) : null}
                     </div>
@@ -298,12 +316,10 @@ function PermissionMatrixSection({
                                         className="px-3 py-1.5 text-center align-bottom"
                                     >
                                         <button
+                                            id={`${baseId}-action-${toAutomationIdSegment(action)}-toggle`}
                                             type="button"
                                             onClick={() =>
-                                                onToggle(
-                                                    codes,
-                                                    state !== "all",
-                                                )
+                                                onToggle(codes, state !== "all")
                                             }
                                             title={`勾选或取消整列：${actionLabel(action)}`}
                                             className={cn(
@@ -322,7 +338,10 @@ function PermissionMatrixSection({
                     </thead>
                     <tbody>
                         {group.rows.map((row) => {
-                            const rowState = checkedState(row.codes, selectedSet)
+                            const rowState = checkedState(
+                                row.codes,
+                                selectedSet,
+                            )
                             return (
                                 <tr
                                     key={row.resource}
@@ -362,6 +381,7 @@ function PermissionMatrixSection({
                                         >
                                             {cell ? (
                                                 <PermissionCell
+                                                    id={`${baseId}-cell-${toAutomationIdSegment(row.resource)}-${toAutomationIdSegment(String(group.actions[index]))}`}
                                                     item={cell}
                                                     rowLabel={row.label}
                                                     checked={selectedSet.has(
@@ -399,11 +419,13 @@ function PermissionCell({
     rowLabel,
     checked,
     onCheckedChange,
+    id,
 }: {
     item: PermissionItemOption
     rowLabel: string
     checked: boolean
     onCheckedChange: (next: boolean) => void
+    id?: string
 }) {
     const endpoints = item.endpoints
         .map((endpoint) => `${endpoint.method} ${endpoint.path}`)
@@ -414,6 +436,7 @@ function PermissionCell({
             title={`${item.description}\n${endpoints}`}
         >
             <Checkbox
+                id={id}
                 checked={checked}
                 onCheckedChange={(next) => onCheckedChange(next === true)}
                 aria-label={`${rowLabel} · ${actionLabel(item.action)}`}
@@ -451,15 +474,18 @@ export function PermissionBulkActions({
     codes,
     selected,
     onChange,
+    id = "governance-admin-permission-bulk",
 }: {
     codes: readonly string[]
     selected: readonly string[]
     onChange: (next: string[]) => void
+    id?: string
 }) {
     const selectedSet = new Set(selected)
     const state = checkedState(codes, selectedSet)
     return (
         <Button
+            id={id}
             type="button"
             size="xs"
             variant="ghost"

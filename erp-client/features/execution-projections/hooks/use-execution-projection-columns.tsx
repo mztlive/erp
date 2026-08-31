@@ -14,6 +14,7 @@ import {
     SOURCE_LABEL,
     type ExecutionProjectionRow,
 } from "@/features/execution-projections/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 
 export type ProjectionRowCommandAction =
@@ -41,6 +42,7 @@ export function useExecutionProjectionColumns(options: {
                 id: "select",
                 header: ({ table }) => (
                     <Checkbox
+                        id="execution-projections-list-select-all"
                         aria-label="全选本页可选项"
                         checked={table.getIsAllPageRowsSelected()}
                         indeterminate={
@@ -54,6 +56,7 @@ export function useExecutionProjectionColumns(options: {
                 ),
                 cell: ({ row }) => (
                     <Checkbox
+                        id={`execution-projections-row-${toAutomationIdSegment(row.original.projectionId)}-select`}
                         aria-label={`选择 ${row.original.salesOrderNo}`}
                         checked={row.getIsSelected()}
                         onCheckedChange={(value) =>
@@ -196,6 +199,7 @@ export function useExecutionProjectionColumns(options: {
                             onKeyDown={(e) => e.stopPropagation()}
                         >
                             <Button
+                                id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-open`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
@@ -209,11 +213,13 @@ export function useExecutionProjectionColumns(options: {
                                 打开
                             </Button>
                             <Button
+                                id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-sales-order`}
                                 type="button"
                                 size="xs"
                                 variant="outline"
                                 render={
                                     <Link
+                                        id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-sales-order`}
                                         href={`/sales/orders/${r.salesOrderId}?section=collaboration`}
                                     />
                                 }
@@ -222,6 +228,7 @@ export function useExecutionProjectionColumns(options: {
                             </Button>
                             {canQuery ? (
                                 <Button
+                                    id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-query`}
                                     type="button"
                                     size="xs"
                                     disabled={commandPending}
@@ -238,6 +245,7 @@ export function useExecutionProjectionColumns(options: {
                             ) : null}
                             {canRetry ? (
                                 <Button
+                                    id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-retry`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
@@ -257,11 +265,13 @@ export function useExecutionProjectionColumns(options: {
                             r.reconciliationStatus === "VERSION_MISMATCH" ||
                             r.delivery.workItemId ? (
                                 <Button
+                                    id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-w29`}
                                     type="button"
                                     size="xs"
                                     variant="outline"
                                     render={
                                         <Link
+                                            id={`execution-projections-row-${toAutomationIdSegment(r.projectionId)}-w29`}
                                             href={w29Href(
                                                 r.delivery.workItemId,
                                                 r.delivery.errorTaskId,

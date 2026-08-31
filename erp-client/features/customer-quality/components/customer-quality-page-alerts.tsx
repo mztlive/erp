@@ -33,9 +33,7 @@ export function CustomerQualityPageAlerts({
                         )}
                         ；来源更新时间{" "}
                         <span className="num">
-                            {formatSourceWatermark(
-                                freshness.sourceWatermark,
-                            )}
+                            {formatSourceWatermark(freshness.sourceWatermark)}
                         </span>
                         。数据可能不是最新，可点击刷新。
                     </AlertDescription>

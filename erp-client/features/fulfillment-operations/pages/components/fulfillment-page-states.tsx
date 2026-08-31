@@ -79,7 +79,11 @@ export function FulfillmentPageStates({
             <BusinessFailureState
                 error={error}
                 action={
-                    <Button type="button" onClick={() => onRetry?.()}>
+                    <Button
+                        id="fulfillment-operations-retry"
+                        type="button"
+                        onClick={() => onRetry?.()}
+                    >
                         重新加载
                     </Button>
                 }
@@ -117,6 +121,7 @@ export function FulfillmentPageStates({
                 action={
                     embedded ? (
                         <Button
+                            id="fulfillment-operations-empty-refresh"
                             type="button"
                             variant="secondary"
                             className="rounded-lg shadow-none"
@@ -127,6 +132,7 @@ export function FulfillmentPageStates({
                     ) : (
                         <div className="flex flex-wrap gap-2">
                             <Button
+                                id="fulfillment-operations-empty-clear-filters"
                                 type="button"
                                 variant="secondary"
                                 className="rounded-lg shadow-none"
@@ -134,7 +140,10 @@ export function FulfillmentPageStates({
                             >
                                 清除全部筛选
                             </Button>
-                            <Button render={<Link href="/workspace" />}>
+                            <Button
+                                id="fulfillment-operations-empty-back-workspace"
+                                render={<Link href="/workspace" />}
+                            >
                                 回今日工作台
                             </Button>
                         </div>
@@ -155,6 +164,11 @@ export function FulfillmentPageStates({
                     .join("、")}。`}
                 action={
                     <Button
+                        id={
+                            embedded
+                                ? "fulfillment-operations-no-permission-retry"
+                                : "fulfillment-operations-no-permission-clear"
+                        }
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
@@ -181,6 +195,11 @@ export function FulfillmentPageStates({
             }
             action={
                 <Button
+                    id={
+                        embedded
+                            ? "fulfillment-operations-filter-empty-refresh"
+                            : "fulfillment-operations-filter-empty-clear"
+                    }
                     type="button"
                     variant="secondary"
                     className="rounded-lg shadow-none"

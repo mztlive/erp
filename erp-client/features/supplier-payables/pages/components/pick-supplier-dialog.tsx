@@ -35,7 +35,7 @@ export function PickSupplierDialog({
                 if (!open) onClose()
             }}
         >
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-payables-pick-supplier-close">
                 <DialogHeader>
                     <DialogTitle>
                         {track === "payment"
@@ -49,6 +49,7 @@ export function PickSupplierDialog({
                 <div className="space-y-2">
                     <Label>供应商</Label>
                     <SupplierSearchCombobox
+                        id="supplier-payables-pick-supplier-select"
                         value={supplierId || undefined}
                         onValueChange={(id) => onSupplierIdChange(id ?? "")}
                         className="w-full"
@@ -58,6 +59,7 @@ export function PickSupplierDialog({
                 </div>
                 <DialogFooter>
                     <Button
+                        id="supplier-payables-pick-supplier-cancel"
                         type="button"
                         variant="outline"
                         onClick={onClose}
@@ -65,6 +67,7 @@ export function PickSupplierDialog({
                         取消
                     </Button>
                     <Button
+                        id="supplier-payables-pick-supplier-confirm"
                         type="button"
                         disabled={!supplierId || !track}
                         onClick={() => {

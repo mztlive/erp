@@ -19,16 +19,16 @@ OpenTelemetry 用于分布式链路与墙上耗时观测；全函数 CPU 自耗�
 
 ## 3. 环境变量
 
-| 变量 | 必填条件 | 执行要求 |
-| --- | --- | --- |
-| `OTEL_SDK_DISABLED` | 否 | 默认可设为 `true`；启用导出时必须设为 `false`。 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | 启用时二选一 | Collector gRPC 根地址，例如 `http://otel-collector:4317`。 |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | 启用时二选一 | Trace 专用地址；同时配置时优先于通用地址。 |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | 启用时 | 必须为 `grpc`。 |
-| `OTEL_SERVICE_NAME` | 否 | 默认 `erp-web-api`；同一部署中的名称必须稳定。 |
-| `OTEL_RESOURCE_ATTRIBUTES` | 否 | 必须使用低基数资源属性，例如 `deployment.environment.name=production`。 |
-| `OTEL_TRACES_SAMPLER` | 否 | 生产环境按第 7 节设置。 |
-| `OTEL_TRACES_SAMPLER_ARG` | 比例采样时 | 必须为 `0.0` 至 `1.0`。 |
+| 变量                                 | 必填条件     | 执行要求                                                                |
+| ------------------------------------ | ------------ | ----------------------------------------------------------------------- |
+| `OTEL_SDK_DISABLED`                  | 否           | 默认可设为 `true`；启用导出时必须设为 `false`。                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`        | 启用时二选一 | Collector gRPC 根地址，例如 `http://otel-collector:4317`。              |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | 启用时二选一 | Trace 专用地址；同时配置时优先于通用地址。                              |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`        | 启用时       | 必须为 `grpc`。                                                         |
+| `OTEL_SERVICE_NAME`                  | 否           | 默认 `erp-web-api`；同一部署中的名称必须稳定。                          |
+| `OTEL_RESOURCE_ATTRIBUTES`           | 否           | 必须使用低基数资源属性，例如 `deployment.environment.name=production`。 |
+| `OTEL_TRACES_SAMPLER`                | 否           | 生产环境按第 7 节设置。                                                 |
+| `OTEL_TRACES_SAMPLER_ARG`            | 比例采样时   | 必须为 `0.0` 至 `1.0`。                                                 |
 
 本地启用命令：
 

@@ -35,6 +35,7 @@ import {
 } from "@/features/supplier-settlements/lib/settlement-list-filters"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 import { VIEW_LABEL } from "@/features/supplier-settlements/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 
 function SettlementList({
@@ -124,6 +125,7 @@ function SettlementList({
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
                         <Button
+                            id="supplier-settlements-list-refresh"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -138,6 +140,7 @@ function SettlementList({
                         </Button>
                         <div className="max-sm:hidden">
                             <GuardedBusinessAction
+                                id="supplier-settlements-list-create"
                                 type="button"
                                 size="sm"
                                 disabled={!canCreate}
@@ -173,6 +176,7 @@ function SettlementList({
                     actions={
                         result.w12Href ? (
                             <Button
+                                id="supplier-settlements-list-result-w12"
                                 type="button"
                                 size="sm"
                                 render={<Link href={result.w12Href} />}
@@ -213,7 +217,11 @@ function SettlementList({
                             keyof typeof VIEW_LABEL
                         >
                     ).map((k) => (
-                        <TabsTrigger key={k} value={k}>
+                        <TabsTrigger
+                            key={k}
+                            value={k}
+                            id={`supplier-settlements-list-view-${toAutomationIdSegment(k)}`}
+                        >
                             {VIEW_LABEL[k]}
                         </TabsTrigger>
                     ))}
@@ -253,9 +261,7 @@ function SettlementList({
                         statusDraft={filters.statusDraft}
                         setStatusDraft={filters.setStatusDraft}
                         differenceTypeDraft={filters.differenceTypeDraft}
-                        setDifferenceTypeDraft={
-                            filters.setDifferenceTypeDraft
-                        }
+                        setDifferenceTypeDraft={filters.setDifferenceTypeDraft}
                         periodFromDraft={filters.periodFromDraft}
                         setPeriodFromDraft={filters.setPeriodFromDraft}
                         periodToDraft={filters.periodToDraft}
@@ -266,6 +272,7 @@ function SettlementList({
                 }
                 table={
                     <DataTable
+                        id="supplier-settlements-list-table"
                         data={data?.rows ?? []}
                         columns={columns}
                         getRowId={(row) => row.statementId}
@@ -287,6 +294,7 @@ function SettlementList({
                                     error={listQuery.error}
                                     action={
                                         <Button
+                                            id="supplier-settlements-list-error-retry"
                                             type="button"
                                             onClick={() =>
                                                 void listQuery.refetch()

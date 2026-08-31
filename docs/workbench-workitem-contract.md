@@ -31,23 +31,23 @@
 
 下表是 W01 唯一允许返回的活跃任务类型。未列组合不得创建、路由或展示。
 
-| `work_item_type` | `business_object_type` | 生产时点与责任 | W01 原地作业面 | 唯一正式完成语义 |
-| --- | --- | --- | --- | --- |
-| `DOCUMENT_APPROVAL` | `sales_order`、`voucher_sales_order`、`sales_change_order`、`purchase_order`、`purchase_change_order`、`stock_adjustment`、`customer_receipt`、`customer_refund`、`supplier_refund`、`receipt_reversal`、`payment_reversal` | 审批运行时激活单人节点时，责任人为冻结的当前实例审批人 | 通用审批详情与决定栏 | `submit_decision(APPROVE\|REJECT)` 完成当前节点任务并由审批运行时推进 |
-| `PROCUREMENT_ORDER_CREATION` | `sales_order` | 销售单最终生效且存在待分配供给时，由采购责任规则解析具体采购人员 | 供给分配与采购单创建面 | 创建库存预留并对缺口创建采购单；全部分配成功后完成任务 |
-| `FULFILLMENT_OPERATION` | `purchase_receipt`、`delivery`、`electronic_delivery`、`service_fulfillment` | 对应履约草稿形成时，由履约对象责任规则解析具体人员 | 收货、仓发、电子交付或服务履约面 | 对应强类型过账或确认命令形成正式履约事实后完成任务 |
-| `CUSTOMER_ACCEPTANCE_REGISTRATION` | `sales_order` | 发货或交付形成待验数量时，由销售单负责人承担 | 客户验收登记面 | `post_customer_acceptance`；待验数量清零时完成任务，冲正重新形成待验时重建任务 |
-| `SUPPLIER_PAYMENT_EXECUTION` | `payable_account` | 采购单最终通过并形成开放应付时，由付款责任规则解析具体财务人员 | 应付核销与付款登记面 | 付款登记、核销和过账同事务执行；开放应付清零时完成任务，分次付款时保持开放 |
-| `SALES_INVOICE_EXECUTION` | `receivable_account` | 应收子账形成可开票余额时，由开票责任规则解析具体财务人员 | 销项开票登记面 | `post_invoice`；可开票余额清零时完成任务，部分开票时保持开放 |
-| `CARD_FUNDS_REVIEW` | `receivable_account` | 卡券销售首次生效并原子写入 `OpeningPending` 应收时，由 `CARD_FUNDS_REVIEW` 财务责任规则解析具体人员 | 卡券票款期初复核面 | `complete_card_funds_review` 提交期初复核决定并完成当前任务；驳回必须在同一事务创建同类型开放后继任务 |
-| `CARD_FUNDS_DELTA_REVIEW` | `receivable_account` | 已完成上一轮复核的卡券销售变更形成非零应收差额，并原子写入 `SyncDeltaPending` 时，由 `CARD_FUNDS_REVIEW` 财务责任规则解析具体人员 | 卡券票款差异复核面 | `complete_card_funds_review` 提交差异复核决定并完成当前任务；驳回必须在同一事务创建同类型开放后继任务 |
-| `SUPPLIER_SETTLEMENT_REVIEW` | `supplier_settlement_statement` | 结算单提交复核时，由结算责任规则解析具体人员 | 供应商结算复核面 | 结算确认或驳回强类型决定形成终态并完成任务 |
-| `IMPORT_BUSINESS_CONFIRMATION` | `LEGACY_IMPORT_BATCH` | 导入试算生成销售、采购、运营、仓库或财务确认范围时，按固定范围角色解析具体人员 | 导入批次范围确认面 | `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX` 完成当前范围任务 |
-| `INTEGRATION_RESULT_UNKNOWN` | `integration_error_task`、`reconciliation_difference` | 外部结果不可判定且需要人工核实时，由集成责任规则解析具体人员 | 集成异常与对账差异处理面 | W29 强类型任务决定达到终态后完成任务 |
-| `BUSINESS_EXCEPTION` | `integration_error_task`、`reconciliation_difference` | 集成业务校验或对账出现需人工处置的确定异常时，由集成责任规则解析具体人员 | 集成异常与对账差异处理面 | W29 强类型任务决定达到终态后完成任务 |
-| `INTEGRATION_RESULT_UNKNOWN` 或 `BUSINESS_EXCEPTION` | `SUPPLIER_FULFILLMENT_ORDER` | 供应商履约结果未知或确定失败时，由供应商履约责任规则解析具体人员 | 供应商履约调查面 | `complete_order_task`；必须先存在可验证终态结果与供应商动作证据 |
-| `BUSINESS_EXCEPTION` | `MASTER_MAPPING_TASK` | 商城同步无法唯一映射主数据时，由主数据责任规则解析具体人员 | 主数据候选映射确认面 | `confirm_mapping_task` 固定目标并完成任务 |
-| `BUSINESS_EXCEPTION` | `SUPPLIER_OFFERING` | 供应商停止供给并形成不可变安全暂停时，由安全暂停规则创建唯一后续任务 | 供应停止影响核对面 | `complete_supply_exception_task` 登记证据并完成核对任务；供给和发布安全暂停继续生效 |
+| `work_item_type`                                     | `business_object_type`                                                                                                                                                                                                      | 生产时点与责任                                                                                                                    | W01 原地作业面                   | 唯一正式完成语义                                                                                      |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `DOCUMENT_APPROVAL`                                  | `sales_order`、`voucher_sales_order`、`sales_change_order`、`purchase_order`、`purchase_change_order`、`stock_adjustment`、`customer_receipt`、`customer_refund`、`supplier_refund`、`receipt_reversal`、`payment_reversal` | 审批运行时激活单人节点时，责任人为冻结的当前实例审批人                                                                            | 通用审批详情与决定栏             | `submit_decision(APPROVE\|REJECT)` 完成当前节点任务并由审批运行时推进                                 |
+| `PROCUREMENT_ORDER_CREATION`                         | `sales_order`                                                                                                                                                                                                               | 销售单最终生效且存在待分配供给时，由采购责任规则解析具体采购人员                                                                  | 供给分配与采购单创建面           | 创建库存预留并对缺口创建采购单；全部分配成功后完成任务                                                |
+| `FULFILLMENT_OPERATION`                              | `purchase_receipt`、`delivery`、`electronic_delivery`、`service_fulfillment`                                                                                                                                                | 对应履约草稿形成时，由履约对象责任规则解析具体人员                                                                                | 收货、仓发、电子交付或服务履约面 | 对应强类型过账或确认命令形成正式履约事实后完成任务                                                    |
+| `CUSTOMER_ACCEPTANCE_REGISTRATION`                   | `sales_order`                                                                                                                                                                                                               | 发货或交付形成待验数量时，由销售单负责人承担                                                                                      | 客户验收登记面                   | `post_customer_acceptance`；待验数量清零时完成任务，冲正重新形成待验时重建任务                        |
+| `SUPPLIER_PAYMENT_EXECUTION`                         | `payable_account`                                                                                                                                                                                                           | 采购单最终通过并形成开放应付时，由付款责任规则解析具体财务人员                                                                    | 应付核销与付款登记面             | 付款登记、核销和过账同事务执行；开放应付清零时完成任务，分次付款时保持开放                            |
+| `SALES_INVOICE_EXECUTION`                            | `receivable_account`                                                                                                                                                                                                        | 应收子账形成可开票余额时，由开票责任规则解析具体财务人员                                                                          | 销项开票登记面                   | `post_invoice`；可开票余额清零时完成任务，部分开票时保持开放                                          |
+| `CARD_FUNDS_REVIEW`                                  | `receivable_account`                                                                                                                                                                                                        | 卡券销售首次生效并原子写入 `OpeningPending` 应收时，由 `CARD_FUNDS_REVIEW` 财务责任规则解析具体人员                               | 卡券票款期初复核面               | `complete_card_funds_review` 提交期初复核决定并完成当前任务；驳回必须在同一事务创建同类型开放后继任务 |
+| `CARD_FUNDS_DELTA_REVIEW`                            | `receivable_account`                                                                                                                                                                                                        | 已完成上一轮复核的卡券销售变更形成非零应收差额，并原子写入 `SyncDeltaPending` 时，由 `CARD_FUNDS_REVIEW` 财务责任规则解析具体人员 | 卡券票款差异复核面               | `complete_card_funds_review` 提交差异复核决定并完成当前任务；驳回必须在同一事务创建同类型开放后继任务 |
+| `SUPPLIER_SETTLEMENT_REVIEW`                         | `supplier_settlement_statement`                                                                                                                                                                                             | 结算单提交复核时，由结算责任规则解析具体人员                                                                                      | 供应商结算复核面                 | 结算确认或驳回强类型决定形成终态并完成任务                                                            |
+| `IMPORT_BUSINESS_CONFIRMATION`                       | `LEGACY_IMPORT_BATCH`                                                                                                                                                                                                       | 导入试算生成销售、采购、运营、仓库或财务确认范围时，按固定范围角色解析具体人员                                                    | 导入批次范围确认面               | `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX` 完成当前范围任务                                                  |
+| `INTEGRATION_RESULT_UNKNOWN`                         | `integration_error_task`、`reconciliation_difference`                                                                                                                                                                       | 外部结果不可判定且需要人工核实时，由集成责任规则解析具体人员                                                                      | 集成异常与对账差异处理面         | W29 强类型任务决定达到终态后完成任务                                                                  |
+| `BUSINESS_EXCEPTION`                                 | `integration_error_task`、`reconciliation_difference`                                                                                                                                                                       | 集成业务校验或对账出现需人工处置的确定异常时，由集成责任规则解析具体人员                                                          | 集成异常与对账差异处理面         | W29 强类型任务决定达到终态后完成任务                                                                  |
+| `INTEGRATION_RESULT_UNKNOWN` 或 `BUSINESS_EXCEPTION` | `SUPPLIER_FULFILLMENT_ORDER`                                                                                                                                                                                                | 供应商履约结果未知或确定失败时，由供应商履约责任规则解析具体人员                                                                  | 供应商履约调查面                 | `complete_order_task`；必须先存在可验证终态结果与供应商动作证据                                       |
+| `BUSINESS_EXCEPTION`                                 | `MASTER_MAPPING_TASK`                                                                                                                                                                                                       | 商城同步无法唯一映射主数据时，由主数据责任规则解析具体人员                                                                        | 主数据候选映射确认面             | `confirm_mapping_task` 固定目标并完成任务                                                             |
+| `BUSINESS_EXCEPTION`                                 | `SUPPLIER_OFFERING`                                                                                                                                                                                                         | 供应商停止供给并形成不可变安全暂停时，由安全暂停规则创建唯一后续任务                                                              | 供应停止影响核对面               | `complete_supply_exception_task` 登记证据并完成核对任务；供给和发布安全暂停继续生效                   |
 
 ## 4. 单据审批全覆盖
 
@@ -82,7 +82,7 @@
 
 ### 6.2 统一任务上下文
 
-每个审批和非审批任务详情顶部必须按相同顺序展示：
+每个审批和非审批任务详情必须提供统一任务上下文。默认不单独占一块说明区：在作业面标题栏、打开原单据图标旁放置问号入口，点开后按相同顺序展示：
 
 1. 任务类型、状态与优先级；
 2. 为什么到当前责任人；
@@ -92,24 +92,24 @@
 6. 进入工作台时间与截止时间；
 7. 全部当前动作阻塞原因。
 
-上述字段必须来自服务端 WorkItem 投影。前端只允许做格式化和受控文案映射，不得根据页面状态推断责任、原因或影响。
+上述字段必须来自服务端 WorkItem 投影。前端只允许做格式化和受控文案映射，不得根据页面状态推断责任、原因或影响。作业面从单据摘要或强类型业务事实开始，不得把上述字段再铺成详情顶部横条。
 
 ### 6.3 强类型业务事实
 
 原地作业面还必须按任务种类展示下列事实：
 
-| 任务族 | 必须展示的业务事实 |
-| --- | --- |
-| 审批 | 单据编号、往来方、金额、关键行、提交流程版本、当前轮次、当前节点、当前审批人、最近驳回人与原因 |
-| 供给分配 | 销售单与行、需求数量、可用供给来源、目标仓库、预计交期、将形成的库存预留和采购单 |
-| 履约与验收 | 来源销售或采购单、履约类型、往来方、行与数量、已履约/待履约或已验收/待验收数量、过账结果 |
-| 付款 | 采购来源、供应商、应付总额、开放余额、付款条件、到期日、默认收款户名、开户行、脱敏账号及账户版本 |
-| 开票与票款 | 销售来源、客户、应收或可开票余额、已开票额、复核种类、期初或差异依据及决定结果 |
-| 供应商结算 | 供应商、结算期间、汇总金额、差异、证据状态、当前可执行决定 |
-| 导入确认 | 批次、环境、批次版本、试算版本、确认范围、行数与错误摘要、返回修正原因 |
-| 集成与供应商履约异常 | 来源系统、来源事件或订单、冻结版本、最后动作、可验证外部结果、证据与终态结论 |
-| 主数据映射 | 来源快照、外部身份、候选目标、候选资格、证据说明和确认目标 |
-| 供应停止 | 供应商供给、停供来源版本、不可变安全暂停操作、受影响发布、处置证据、核对结论及“完成不解除暂停”边界 |
+| 任务族               | 必须展示的业务事实                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| 审批                 | 单据编号、往来方、金额、关键行、提交流程版本、当前轮次、当前节点、当前审批人、最近驳回人与原因     |
+| 供给分配             | 销售单与行、需求数量、可用供给来源、目标仓库、预计交期、将形成的库存预留和采购单                   |
+| 履约与验收           | 来源销售或采购单、履约类型、往来方、行与数量、已履约/待履约或已验收/待验收数量、过账结果           |
+| 付款                 | 采购来源、供应商、应付总额、开放余额、付款条件、到期日、默认收款户名、开户行、脱敏账号及账户版本   |
+| 开票与票款           | 销售来源、客户、应收或可开票余额、已开票额、复核种类、期初或差异依据及决定结果                     |
+| 供应商结算           | 供应商、结算期间、汇总金额、差异、证据状态、当前可执行决定                                         |
+| 导入确认             | 批次、环境、批次版本、试算版本、确认范围、行数与错误摘要、返回修正原因                             |
+| 集成与供应商履约异常 | 来源系统、来源事件或订单、冻结版本、最后动作、可验证外部结果、证据与终态结论                       |
+| 主数据映射           | 来源快照、外部身份、候选目标、候选资格、证据说明和确认目标                                         |
+| 供应停止             | 供应商供给、停供来源版本、不可变安全暂停操作、受影响发布、处置证据、核对结论及“完成不解除暂停”边界 |
 
 ## 7. 失败关闭与退役类型
 

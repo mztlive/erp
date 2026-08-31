@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     DocumentSection,
     GuardedBusinessAction,
@@ -93,6 +94,7 @@ export function AftersalesSection({
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     <GuardedBusinessAction
+                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-cancel`}
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -119,6 +121,7 @@ export function AftersalesSection({
                                         提交取消
                                     </GuardedBusinessAction>
                                     <GuardedBusinessAction
+                                        id={`supplier-order-center-aftersales-${toAutomationIdSegment(as.requestId)}-refund`}
                                         type="button"
                                         size="sm"
                                         variant="outline"
@@ -219,6 +222,7 @@ export function CostsSection({
                     value={
                         costs.settlementNo ? (
                             <Link
+                                id="supplier-order-center-costs-settlement-link"
                                 href={`/supplier-api/settlements?q=${encodeURIComponent(costs.settlementNo)}`}
                                 className="num text-primary underline-offset-2 hover:underline"
                             >
@@ -229,13 +233,11 @@ export function CostsSection({
                         )
                     }
                 />
-                <Item
-                    label="应付入口"
-                    value={costs.payableEntryLabel ?? "—"}
-                />
+                <Item label="应付入口" value={costs.payableEntryLabel ?? "—"} />
             </DescriptionList>
             <div className="mt-4 flex flex-wrap gap-2">
                 <Button
+                    id="supplier-order-center-costs-open-settlements"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -244,6 +246,7 @@ export function CostsSection({
                     打开 API 结算
                 </Button>
                 <Button
+                    id="supplier-order-center-costs-open-payable"
                     type="button"
                     size="sm"
                     variant="outline"

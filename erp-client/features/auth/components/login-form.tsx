@@ -67,6 +67,7 @@ export function LoginForm() {
                             name="account"
                             children={(field) => (
                                 <field.TextField
+                                    id="governance-auth-login-account"
                                     label="账号"
                                     required
                                     placeholder="请输入账号"
@@ -78,6 +79,7 @@ export function LoginForm() {
                             name="password"
                             children={(field) => (
                                 <field.TextField
+                                    id="governance-auth-login-password"
                                     label="密码"
                                     required
                                     type="password"
@@ -90,6 +92,7 @@ export function LoginForm() {
 
                     <form.AppForm>
                         <form.SubmitButton
+                            id="governance-auth-login-submit"
                             label="登录"
                             pendingLabel="登录中…"
                             size="lg"

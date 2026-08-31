@@ -15,7 +15,7 @@ use crate::errors::{Error, Result};
 use super::policy::{
     policy_of, require_process_required, ApprovalDomainAction, ApprovalSubjectSnapshotField,
     ApprovalSubjectVersionSource, DocumentApprovalPolicy, OwnerOrganizationSource,
-    ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy, WorkItemOwnerRole, ALL_DOCUMENT_TYPES,
+    ProcessRequiredApprovalPolicy, SeparationOfDutiesPolicy, WorkItemOwnerRole,
 };
 use super::process_kind::process_kind_of;
 
@@ -164,14 +164,19 @@ pub fn subject_ref_for_sales_business(
 
 /// 由 BPM 主体种类解析已登记单据类型。
 ///
+/// # 参数
+/// * `kind` - BPM 主体持有的稳定种类代码
+///
+/// # 返回
+/// 精确命中登记代码时返回对应单据类型。
+///
 /// # 错误
-/// 未登记种类失败关闭，不得回落默认类型。
+/// 未登记种类返回原有校验错误，不得回落默认类型。
+///
+/// # 关键业务约束
+/// 精确代码规则由 `DocumentType` 统一拥有；Service 仅保留错误分类与文本。
 pub fn document_type_from_subject_kind(kind: &str) -> Result<DocumentType> {
-    ALL_DOCUMENT_TYPES
-        .iter()
-        .copied()
-        .find(|document_type| document_type.as_str() == kind)
-        .ok_or_else(|| Error::ValidationError(format!("未登记单据类型: {kind}")))
+    DocumentType::try_from_code(kind).map_err(|_| Error::ValidationError(format!("未登记单据类型: {kind}")))
 }
 
 /// 全部固定单据类型均已切入目标运行时。
@@ -457,7 +462,7 @@ pub fn assignee_ids_of(graph: &DefinitionGraph) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::approval::policy::policy_of;
+    use crate::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
     use entities::access_control::DataScopeSubjectType;
 
     /// 11 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。

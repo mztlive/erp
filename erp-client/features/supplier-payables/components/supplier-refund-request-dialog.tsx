@@ -56,7 +56,7 @@ export function SupplierRefundRequestDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId="supplier-payables-refund-request-close">
                 <DialogHeader>
                     <DialogTitle>发起供应商退款</DialogTitle>
                     <DialogDescription>
@@ -85,6 +85,7 @@ export function SupplierRefundRequestDialog({
                         name="reason"
                         children={(field) => (
                             <field.TextareaField
+                                id="supplier-payables-refund-request-reason"
                                 label="原因说明"
                                 required
                                 placeholder="业务依据与说明"
@@ -100,6 +101,7 @@ export function SupplierRefundRequestDialog({
                     ) : null}
                     <DialogFooter>
                         <Button
+                            id="supplier-payables-refund-request-cancel"
                             type="button"
                             variant="outline"
                             onClick={() => onOpenChange(false)}
@@ -109,6 +111,7 @@ export function SupplierRefundRequestDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id="supplier-payables-refund-request-submit"
                                 label="下一步"
                                 disabled={pending}
                             />

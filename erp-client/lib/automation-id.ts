@@ -11,8 +11,6 @@ export function toAutomationIdSegment(value: unknown): string {
     }
 
     return (
-        normalized
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "") || "item"
+        normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "item"
     )
 }

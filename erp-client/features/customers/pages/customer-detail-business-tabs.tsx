@@ -12,13 +12,9 @@ import {
     surfaceInsetClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import type { CustomerCenterView } from "@/features/customers/types"
 
@@ -51,6 +47,7 @@ function RelatedList({
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <Link
+                                        id={`customers-detail-related-${toAutomationIdSegment(item.id)}-number`}
                                         href={item.href}
                                         className="num font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
@@ -71,6 +68,7 @@ function RelatedList({
                                 ) : null}
                             </div>
                             <Button
+                                id={`customers-detail-related-${toAutomationIdSegment(item.id)}-open`}
                                 type="button"
                                 size="sm"
                                 variant="ghost"
@@ -101,6 +99,7 @@ export function CustomerDetailRelatedTab({
                 action={
                     <div className="flex flex-wrap gap-2">
                         <Button
+                            id="customers-detail-related-view-contracts"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -113,6 +112,7 @@ export function CustomerDetailRelatedTab({
                             查看全部合同
                         </Button>
                         <Button
+                            id="customers-detail-related-view-orders"
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -133,6 +133,7 @@ export function CustomerDetailRelatedTab({
                         description="关联业务分区失败；主体与其它分区仍保留。"
                         action={
                             <Button
+                                id="customers-detail-related-retry"
                                 type="button"
                                 size="sm"
                                 onClick={() => void refetch()}
@@ -176,6 +177,7 @@ export function CustomerDetailSettlementTab({
                 description="只读应收汇总；不在此核销或开票。往来详情进入客户往来。"
                 action={
                     <Button
+                        id="customers-detail-settlement-open-accounts"
                         type="button"
                         size="sm"
                         variant="ghost"
@@ -191,6 +193,7 @@ export function CustomerDetailSettlementTab({
                         description="票款分区失败；主体身份仍保留。"
                         action={
                             <Button
+                                id="customers-detail-settlement-retry"
                                 type="button"
                                 size="sm"
                                 onClick={() => void refetch()}

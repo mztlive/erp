@@ -9,6 +9,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import {
     lifecycleSteps,
@@ -99,6 +100,7 @@ function RailNode({ step }: { step: LifecycleStep }) {
             <TooltipTrigger
                 render={
                     <button
+                        id={`sales-orders-detail-lifecycle-rail-step-${toAutomationIdSegment(step.id)}`}
                         type="button"
                         aria-label={step.label}
                         className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

@@ -51,6 +51,7 @@ export function MallSyncSourceFixDialog({
                                     <span className="text-destructive">*</span>
                                 </Label>
                                 <OptionCombobox
+                                    id="mall-sync-source-fix-reason"
                                     value={field.state.value}
                                     onValueChange={(v) => {
                                         if (v)
@@ -76,13 +77,18 @@ export function MallSyncSourceFixDialog({
                     <form.AppField
                         name="note"
                         children={(field) => (
-                            <field.TextareaField label="修复说明" required />
+                            <field.TextareaField
+                                id="mall-sync-source-fix-note"
+                                label="修复说明"
+                                required
+                            />
                         )}
                     />
                     <form.AppField
                         name="requestedEvidence"
                         children={(field) => (
                             <field.TextareaField
+                                id="mall-sync-source-fix-evidence"
                                 label="需要补充的来源证据"
                                 required
                                 placeholder="多项可用逗号或换行分隔"
@@ -91,12 +97,21 @@ export function MallSyncSourceFixDialog({
                     />
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            render={
+                                <Button
+                                    id="mall-sync-source-fix-cancel"
+                                    type="button"
+                                    variant="outline"
+                                />
+                            }
                         >
                             取消
                         </DialogClose>
                         <form.AppForm>
-                            <form.SubmitButton label="记录修复要求" />
+                            <form.SubmitButton
+                                id="mall-sync-source-fix-confirm"
+                                label="记录修复要求"
+                            />
                         </form.AppForm>
                     </DialogFooter>
                 </form>

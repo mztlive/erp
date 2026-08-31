@@ -47,6 +47,7 @@ export function ApprovalActionBar({
     hiddenActions = [],
     decisionContext,
     onDecisionApplied,
+    id = "governance-approval-action-bar",
 }: {
     allowedActions: readonly string[]
     recoveryOptions?: readonly RecoveryOption[]
@@ -70,6 +71,7 @@ export function ApprovalActionBar({
         impactSummary?: string
     }>
     onDecisionApplied?: (view: ApprovalCommandView) => void
+    id?: string
 }) {
     const [dialog, setDialog] = React.useState<DialogKind>(null)
     const hidden = new Set(hiddenActions)
@@ -94,12 +96,17 @@ export function ApprovalActionBar({
     return (
         <div className="flex flex-wrap gap-2">
             {showApprove && workItemId && expectedTaskVersion ? (
-                <Button type="button" onClick={() => setDialog("approve")}>
+                <Button
+                    id={`${id}-approve`}
+                    type="button"
+                    onClick={() => setDialog("approve")}
+                >
                     通过
                 </Button>
             ) : null}
             {showReject && workItemId && expectedTaskVersion ? (
                 <Button
+                    id={`${id}-reject`}
                     type="button"
                     variant="destructive"
                     onClick={() => setDialog("reject")}
@@ -109,10 +116,12 @@ export function ApprovalActionBar({
             ) : null}
             {showOpenDocument ? (
                 <Button
+                    id={`${id}-open-document`}
                     type="button"
                     variant="outline"
                     render={
                         <a
+                            id={`${id}-open-document-link`}
                             href={documentHref ?? undefined}
                             aria-label="打开单据"
                         />
@@ -123,6 +132,7 @@ export function ApprovalActionBar({
             ) : null}
             {showResume ? (
                 <Button
+                    id={`${id}-resume`}
                     type="button"
                     variant="outline"
                     onClick={() => setDialog("resume")}
@@ -132,6 +142,7 @@ export function ApprovalActionBar({
             ) : null}
             {showCancelBlocked ? (
                 <Button
+                    id={`${id}-cancel-blocked`}
                     type="button"
                     variant="outline"
                     onClick={() => setDialog("cancel-blocked")}
@@ -141,6 +152,7 @@ export function ApprovalActionBar({
             ) : null}
             {showWithdraw ? (
                 <Button
+                    id={`${id}-withdraw`}
                     type="button"
                     variant="outline"
                     onClick={() => setDialog("withdraw")}
@@ -150,6 +162,7 @@ export function ApprovalActionBar({
             ) : null}
             {showUpgrade ? (
                 <Button
+                    id={`${id}-upgrade`}
                     type="button"
                     variant="outline"
                     onClick={() => setDialog("upgrade")}
@@ -164,6 +177,7 @@ export function ApprovalActionBar({
             ) : null}
             {workItemId && expectedTaskVersion ? (
                 <DecisionDialog
+                    id={`${id}-decision-dialog`}
                     open={dialog === "reject" || dialog === "approve"}
                     onOpenChange={(open) => setDialog(open ? dialog : null)}
                     workItemId={workItemId}
@@ -176,6 +190,7 @@ export function ApprovalActionBar({
             ) : null}
             {instance ? (
                 <ResumeApproverDialog
+                    id={`${id}-resume-dialog`}
                     open={dialog === "resume"}
                     onOpenChange={(open) => setDialog(open ? "resume" : null)}
                     instanceId={instance.id}
@@ -187,6 +202,7 @@ export function ApprovalActionBar({
             ) : null}
             {instance ? (
                 <CancelApprovalDialog
+                    id={`${id}-cancel-dialog`}
                     open={dialog === "withdraw" || dialog === "cancel-blocked"}
                     onOpenChange={(open) => setDialog(open ? dialog : null)}
                     mode={
@@ -208,6 +224,7 @@ export function ApprovalActionBar({
             ) : null}
             {definition && documentType && documentId ? (
                 <UpgradeBindingDialog
+                    id={`${id}-upgrade-dialog`}
                     open={dialog === "upgrade"}
                     onOpenChange={(open) => setDialog(open ? "upgrade" : null)}
                     documentType={documentType}

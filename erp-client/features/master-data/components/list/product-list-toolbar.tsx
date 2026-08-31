@@ -34,6 +34,7 @@ import type {
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>
 
 export function ProductListToolbar({
+    idPrefix,
     searchInputRef,
     searchDraft,
     setSearchDraft,
@@ -70,6 +71,7 @@ export function ProductListToolbar({
     setProductSalesPriceError,
     productFilterOptionsQuery,
 }: {
+    idPrefix?: string
     searchInputRef: React.RefObject<HTMLInputElement | null>
     searchDraft: string
     setSearchDraft: SetState<string>
@@ -106,6 +108,7 @@ export function ProductListToolbar({
     setProductSalesPriceError: SetState<string | null>
     productFilterOptionsQuery: ReturnType<typeof useProductFilterOptionsQuery>
 }) {
+    const prefix = idPrefix ?? "master-data-list-product-list-toolbar"
     const panelId = React.useId()
     const priceErrorId = React.useId()
     const hasChips = hasActiveFilters && appliedChips.length > 0
@@ -120,6 +123,7 @@ export function ProductListToolbar({
             <ListToolbar
                 search={
                     <ListSearchField
+                        id={`${prefix}-search-input`}
                         searchInputRef={searchInputRef}
                         value={searchDraft}
                         onChange={setSearchDraft}
@@ -128,6 +132,7 @@ export function ProductListToolbar({
                 }
                 filters={
                     <Button
+                        id={`${prefix}-filter-trigger`}
                         type="button"
                         variant="outline"
                         aria-expanded={productFilterPanelOpen}
@@ -174,6 +179,7 @@ export function ProductListToolbar({
                                         />
                                     ))}
                                     <Button
+                                        id={`${prefix}-clear-filters`}
                                         type="button"
                                         variant="ghost"
                                         size="xs"
@@ -193,7 +199,9 @@ export function ProductListToolbar({
                                         label="类型"
                                         value={productKindDraft}
                                         onValueChange={setProductKindDraft}
-                                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS}
+                                        options={
+                                            PRODUCT_KIND_RADIO_FILTER_OPTIONS
+                                        }
                                     />
                                     <FixedOptionRadioFilter
                                         label="启停"
@@ -206,20 +214,30 @@ export function ProductListToolbar({
                                         label="版本"
                                         value={revisionTimingDraft}
                                         onValueChange={setRevisionTimingDraft}
-                                        options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
+                                        options={
+                                            REVISION_TIMING_RADIO_FILTER_OPTIONS
+                                        }
                                         aria-label="版本状态"
                                     />
                                     <FixedOptionRadioFilter
                                         label="上架"
                                         value={productListingStatusDraft}
-                                        onValueChange={setProductListingStatusDraft}
-                                        options={PRODUCT_LISTING_RADIO_FILTER_OPTIONS}
+                                        onValueChange={
+                                            setProductListingStatusDraft
+                                        }
+                                        options={
+                                            PRODUCT_LISTING_RADIO_FILTER_OPTIONS
+                                        }
                                     />
                                     <FixedOptionRadioFilter
                                         label="供给覆盖"
                                         value={productSupplyCoverageDraft}
-                                        onValueChange={setProductSupplyCoverageDraft}
-                                        options={PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS}
+                                        onValueChange={
+                                            setProductSupplyCoverageDraft
+                                        }
+                                        options={
+                                            PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS
+                                        }
                                     />
                                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                         <div className="flex min-w-0 flex-col gap-1.5 text-sm">
@@ -227,6 +245,7 @@ export function ProductListToolbar({
                                                 分类
                                             </span>
                                             <CategoryCombobox
+                                                id={`${prefix}-category`}
                                                 className="w-full"
                                                 categories={
                                                     productFilterOptionsQuery
@@ -252,6 +271,7 @@ export function ProductListToolbar({
                                                 品牌
                                             </span>
                                             <OptionCombobox
+                                                id={`${prefix}-brand`}
                                                 className="w-full"
                                                 value={productBrandIdDraft}
                                                 aria-label="商品品牌"
@@ -274,6 +294,7 @@ export function ProductListToolbar({
                                                 供应商
                                             </span>
                                             <OptionCombobox
+                                                id={`${prefix}-supplier`}
                                                 className="w-full"
                                                 value={productSupplierIdDraft}
                                                 aria-label="供应商"
@@ -297,13 +318,18 @@ export function ProductListToolbar({
                                             </span>
                                             <div className="flex items-center gap-1.5">
                                                 <Input
+                                                    id={`${prefix}-price-min`}
                                                     className="w-0 min-w-0 flex-1"
-                                                    value={productSalesPriceMinDraft}
+                                                    value={
+                                                        productSalesPriceMinDraft
+                                                    }
                                                     onChange={(event) => {
                                                         setProductSalesPriceMinDraft(
                                                             event.target.value,
                                                         )
-                                                        setProductSalesPriceError(null)
+                                                        setProductSalesPriceError(
+                                                            null,
+                                                        )
                                                     }}
                                                     inputMode="decimal"
                                                     autoComplete="off"
@@ -322,13 +348,18 @@ export function ProductListToolbar({
                                                     至
                                                 </span>
                                                 <Input
+                                                    id={`${prefix}-price-max`}
                                                     className="w-0 min-w-0 flex-1"
-                                                    value={productSalesPriceMaxDraft}
+                                                    value={
+                                                        productSalesPriceMaxDraft
+                                                    }
                                                     onChange={(event) => {
                                                         setProductSalesPriceMaxDraft(
                                                             event.target.value,
                                                         )
-                                                        setProductSalesPriceError(null)
+                                                        setProductSalesPriceError(
+                                                            null,
+                                                        )
                                                     }}
                                                     inputMode="decimal"
                                                     autoComplete="off"
@@ -361,13 +392,17 @@ export function ProductListToolbar({
                                         </p>
                                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <Button
+                                                id={`${prefix}-reset`}
                                                 type="button"
                                                 variant="ghost"
                                                 onClick={resetMoreFilters}
                                             >
                                                 重置更多条件
                                             </Button>
-                                            <Button type="submit">
+                                            <Button
+                                                id={`${prefix}-apply`}
+                                                type="submit"
+                                            >
                                                 <SearchIcon
                                                     data-icon="inline-start"
                                                     aria-hidden="true"

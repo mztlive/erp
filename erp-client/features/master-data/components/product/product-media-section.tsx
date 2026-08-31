@@ -7,6 +7,7 @@ import type { SetProductFields } from "@/features/master-data/components/product
 import type { ProductFields } from "@/features/master-data/types"
 
 type ProductMediaSectionProps = {
+    idPrefix?: string
     canRevise: boolean
     fields: ProductFields
     setFields: SetProductFields
@@ -14,11 +15,13 @@ type ProductMediaSectionProps = {
 }
 
 function ProductMediaSection({
+    idPrefix,
     canRevise,
     fields,
     setFields,
     rememberPendingFiles,
 }: ProductMediaSectionProps) {
+    const prefix = idPrefix ?? "master-data-product-media"
     return (
         <ProductSectionFrame
             id="product-section-media"
@@ -28,6 +31,7 @@ function ProductMediaSection({
         >
             <section className="space-y-3">
                 <MediaListEditor
+                    idPrefix={`${prefix}-carousel`}
                     label={masterDataCopy.fCarouselImages}
                     hint="建议上传 3–5 张，支持排序；首张作为商品首图"
                     value={fields.carouselImages}
@@ -63,6 +67,7 @@ function ProductMediaSection({
             <div className="border-t border-border" />
             <section className="space-y-3">
                 <MediaListEditor
+                    idPrefix={`${prefix}-detail`}
                     label={masterDataCopy.fDetailImages}
                     hint="支持批量上传与顺序调整，保存后详情图随商品版本一起保留"
                     value={fields.detailImages}

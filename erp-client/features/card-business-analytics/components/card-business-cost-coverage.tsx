@@ -19,9 +19,7 @@ export function CardBusinessCostCoverage({
             basis={data.coverage.dominantBasis}
             coveragePercent={data.coverage.ratePercent}
             coverageLabel={data.coverage.rate ?? "—"}
-            coverageState={
-                COVERAGE_STATUS_UI[data.coverage.status].noticeState
-            }
+            coverageState={COVERAGE_STATUS_UI[data.coverage.status].noticeState}
             breakdown={{
                 ACTUAL: (
                     <span>
@@ -32,9 +30,8 @@ export function CardBusinessCostCoverage({
                             )?.consumptionGross,
                         )}{" "}
                         ·{" "}
-                        {data.coverage.byBasis.find(
-                            (b) => b.basis === "ACTUAL",
-                        )?.shareLabel ?? "—"}
+                        {data.coverage.byBasis.find((b) => b.basis === "ACTUAL")
+                            ?.shareLabel ?? "—"}
                         {data.fieldPermissions.canViewCost ? (
                             <>
                                 {" "}
@@ -74,9 +71,8 @@ export function CardBusinessCostCoverage({
                             )?.consumptionGross,
                         )}{" "}
                         ·{" "}
-                        {data.coverage.byBasis.find(
-                            (b) => b.basis === "NONE",
-                        )?.shareLabel ?? "—"}
+                        {data.coverage.byBasis.find((b) => b.basis === "NONE")
+                            ?.shareLabel ?? "—"}
                         <span className="block text-xs text-muted-foreground">
                             无可用成本，不显示金额，不计入利润
                         </span>
@@ -94,11 +90,13 @@ export function CardBusinessCostCoverage({
                     ) : null}
                     <span className="mt-2 flex flex-wrap gap-2">
                         <Button
+                            id="card-contracts-analytics-cost-coverage-view-none"
                             type="button"
                             size="xs"
                             variant="outline"
                             render={
                                 <Link
+                                    id="card-contracts-analytics-cost-coverage-view-none-link"
                                     href={data.governanceLinks.noneCoverageHref}
                                 />
                             }
@@ -106,11 +104,13 @@ export function CardBusinessCostCoverage({
                             查看未归集（接口错误中心）
                         </Button>
                         <Button
+                            id="card-contracts-analytics-cost-coverage-backfill"
                             type="button"
                             size="xs"
                             variant="outline"
                             render={
                                 <Link
+                                    id="card-contracts-analytics-cost-coverage-backfill-link"
                                     href={data.governanceLinks.backfillHref}
                                 />
                             }

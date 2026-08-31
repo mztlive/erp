@@ -66,9 +66,7 @@ export function SupplierEditorHistorySection({
                         >
                             <span>{s.contextLabel}</span>
                             <Badge
-                                variant={
-                                    s.eligible ? "success" : "destructive"
-                                }
+                                variant={s.eligible ? "success" : "destructive"}
                             >
                                 {s.eligible
                                     ? masterDataCopy.eligible

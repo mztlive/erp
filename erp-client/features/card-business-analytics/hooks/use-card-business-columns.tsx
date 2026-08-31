@@ -5,6 +5,7 @@ import { ExternalLinkIcon } from "lucide-react"
 
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import type { CardBusinessAnalyticsView, CardBusinessRow } from "../types"
 import { COST_BASIS_ROW_UI } from "../types"
@@ -22,6 +23,7 @@ export function useCardBusinessColumns(
                 cell: ({ row }) =>
                     row.original.customerId ? (
                         <Link
+                            id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-customer`}
                             href={`/sales/customers/${row.original.customerId}`}
                             className="text-sm underline-offset-2 hover:underline"
                         >
@@ -41,6 +43,7 @@ export function useCardBusinessColumns(
                 cell: ({ row }) =>
                     row.original.salesOrderId ? (
                         <Link
+                            id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-sales-order`}
                             href={`/sales/orders/${row.original.salesOrderId}`}
                             className="text-sm underline-offset-2 hover:underline"
                         >
@@ -196,11 +199,13 @@ export function useCardBusinessColumns(
                     <div className="flex flex-wrap gap-1">
                         {row.original.consumptionOrderHref ? (
                             <Button
+                                id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-open-w25`}
                                 type="button"
                                 size="xs"
                                 variant="ghost"
                                 render={
                                     <Link
+                                        id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-open-w25-link`}
                                         href={row.original.consumptionOrderHref}
                                     />
                                 }
@@ -214,11 +219,13 @@ export function useCardBusinessColumns(
                         ) : null}
                         {row.original.supplierOrderHref ? (
                             <Button
+                                id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-open-w26`}
                                 type="button"
                                 size="xs"
                                 variant="ghost"
                                 render={
                                     <Link
+                                        id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-open-w26-link`}
                                         href={row.original.supplierOrderHref}
                                     />
                                 }
@@ -232,11 +239,13 @@ export function useCardBusinessColumns(
                         ) : null}
                         {row.original.costBasis === "NONE" && data ? (
                             <Button
+                                id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-open-w29`}
                                 type="button"
                                 size="xs"
                                 variant="ghost"
                                 render={
                                     <Link
+                                        id={`card-contracts-analytics-drill-table-row-${toAutomationIdSegment(row.original.rowId)}-open-w29-link`}
                                         href={
                                             data.governanceLinks
                                                 .noneCoverageHref

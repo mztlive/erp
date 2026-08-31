@@ -53,6 +53,7 @@ export function IntegrationQueueToolbar({
         >
             <div className="flex flex-wrap items-center gap-2">
                 <OptionCombobox
+                    id="integration-queue-toolbar-view"
                     value={urlState.view}
                     onValueChange={(v) =>
                         patchUrl({
@@ -88,6 +89,7 @@ export function IntegrationQueueToolbar({
                                 <SearchIcon aria-hidden="true" />
                             </InputGroupAddon>
                             <InputGroupInput
+                                id="integration-queue-toolbar-search"
                                 ref={searchInputRef}
                                 value={searchDraft}
                                 onChange={(e) =>
@@ -102,6 +104,7 @@ export function IntegrationQueueToolbar({
                 filters={
                     <>
                         <OptionCombobox
+                            id="integration-queue-toolbar-mode"
                             value={urlState.mode}
                             onValueChange={(v) =>
                                 patchUrl({
@@ -111,7 +114,9 @@ export function IntegrationQueueToolbar({
                                 })
                             }
                             options={(
-                                Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]
+                                Object.keys(
+                                    MODE_LABEL,
+                                ) as (keyof typeof MODE_LABEL)[]
                             ).map((m) => ({
                                 value: m,
                                 label: MODE_LABEL[m],
@@ -122,6 +127,7 @@ export function IntegrationQueueToolbar({
                             allowClear={false}
                         />
                         <OptionCombobox
+                            id="integration-queue-toolbar-environment"
                             value={urlState.environment}
                             onValueChange={(v) =>
                                 patchUrl({
@@ -131,7 +137,9 @@ export function IntegrationQueueToolbar({
                                 })
                             }
                             options={(
-                                Object.keys(ENV_LABEL) as (keyof typeof ENV_LABEL)[]
+                                Object.keys(
+                                    ENV_LABEL,
+                                ) as (keyof typeof ENV_LABEL)[]
                             ).map((e) => ({
                                 value: e,
                                 label: ENV_LABEL[e],
@@ -142,6 +150,7 @@ export function IntegrationQueueToolbar({
                             allowClear={false}
                         />
                         <OptionCombobox
+                            id="integration-queue-toolbar-error-class"
                             value={urlState.errorClass ?? "all"}
                             onValueChange={(v) =>
                                 patchUrl({
@@ -169,6 +178,7 @@ export function IntegrationQueueToolbar({
                 }
                 secondary={
                     <OptionCombobox
+                        id="integration-queue-toolbar-owner"
                         value={urlState.owner}
                         onValueChange={(v) =>
                             patchUrl({
@@ -178,7 +188,9 @@ export function IntegrationQueueToolbar({
                             })
                         }
                         options={(
-                            Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]
+                            Object.keys(
+                                OWNER_LABEL,
+                            ) as (keyof typeof OWNER_LABEL)[]
                         ).map((o) => ({
                             value: o,
                             label: OWNER_LABEL[o],
@@ -193,6 +205,7 @@ export function IntegrationQueueToolbar({
                     <>
                         {hasQueueFilters ? (
                             <Button
+                                id="integration-queue-toolbar-clear-filters"
                                 type="button"
                                 size="sm"
                                 variant="ghost"
@@ -203,13 +216,13 @@ export function IntegrationQueueToolbar({
                         ) : null}
                         <div className="flex items-center gap-2">
                             <Label
-                                htmlFor="w29-auto-next"
+                                htmlFor="integration-queue-toolbar-auto-next"
                                 className="text-xs text-muted-foreground"
                             >
                                 自动下一项
                             </Label>
                             <Switch
-                                id="w29-auto-next"
+                                id="integration-queue-toolbar-auto-next"
                                 checked={autoNext}
                                 onCheckedChange={(on) => {
                                     patchUrl({

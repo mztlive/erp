@@ -27,11 +27,13 @@ export function DefinitionEditor({
     lockVersion,
     onLockVersionChange,
     onSaved,
+    id = "governance-approval-processes-detail-editor",
 }: {
     detail: DefinitionDetailView
     lockVersion: string
     onLockVersionChange: (next: string) => void
     onSaved?: (next: DefinitionDetailView) => void
+    id?: string
 }) {
     const replaceNodes = useReplaceDefinitionNodesMutation()
     const [submitError, setSubmitError] = React.useState<string | null>(null)
@@ -132,6 +134,7 @@ export function DefinitionEditor({
                 <form.AppField name="name">
                     {(field) => (
                         <field.TextField
+                            id={`${id}-name`}
                             label="审批流程名称"
                             required
                             disabled={readOnly}
@@ -143,6 +146,7 @@ export function DefinitionEditor({
                 <form.Subscribe selector={(state) => state.values.nodes}>
                     {(nodes) => (
                         <NodeListEditor
+                            id={`${id}-nodes`}
                             documentType={detail.document_type}
                             nodes={nodes}
                             readOnly={readOnly}
@@ -172,12 +176,18 @@ export function DefinitionEditor({
                     />
                 )}
                 {readOnly ? (
-                    <Button type="button" variant="outline" disabled>
+                    <Button
+                        id={`${id}-read-only`}
+                        type="button"
+                        variant="outline"
+                        disabled
+                    >
                         此版本不可修改
                     </Button>
                 ) : (
                     <form.AppForm>
                         <form.SubmitButton
+                            id={`${id}-save`}
                             label="保存草稿"
                             pendingLabel="保存中…"
                             disabled={replaceNodes.isPending}

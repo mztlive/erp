@@ -26,6 +26,7 @@ export function EvidenceNavPanel({
                 <Separator />
                 <div className="flex flex-col gap-2">
                     <Button
+                        id="card-contracts-funds-review-evidence-open-w05"
                         type="button"
                         variant="outline"
                         size="sm"
@@ -34,6 +35,7 @@ export function EvidenceNavPanel({
                         打开销售单
                     </Button>
                     <Button
+                        id="card-contracts-funds-review-evidence-open-w11"
                         type="button"
                         variant="outline"
                         size="sm"

@@ -37,7 +37,10 @@ export function useStickySelected<T>(
     }
     const fromList = items.find((item) => keyOf(item) === key) ?? null
     if (fromList) lastRef.current = fromList
-    return fromList ?? (lastRef.current && keyOf(lastRef.current) === key
-        ? lastRef.current
-        : null)
+    return (
+        fromList ??
+        (lastRef.current && keyOf(lastRef.current) === key
+            ? lastRef.current
+            : null)
+    )
 }

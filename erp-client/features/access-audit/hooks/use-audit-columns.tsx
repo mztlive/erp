@@ -3,6 +3,7 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { AuditEventRow } from "@/features/access-audit/types"
@@ -101,6 +102,7 @@ function useAuditColumns({ rowFocusRef, openEvent }: UseAuditColumnsInput) {
                 cell: ({ row }) => (
                     <div className="flex justify-end">
                         <Button
+                            id={`operations-audit-events-row-${toAutomationIdSegment(row.original.auditEventId)}-detail`}
                             type="button"
                             size="xs"
                             variant="outline"

@@ -127,13 +127,13 @@ export function hasStructuredMallConsumptionFilters(
 ): boolean {
     return Boolean(
         applied.mallId !== "all" ||
-            applied.attributionStatus !== "all" ||
-            applied.fulfillmentChain !== "all" ||
-            applied.paymentSource !== "all" ||
-            applied.costBasis !== "all" ||
-            applied.factTypes.length > 0 ||
-            applied.supplierStatuses.length > 0 ||
-            applied.dataSources.length > 0,
+        applied.attributionStatus !== "all" ||
+        applied.fulfillmentChain !== "all" ||
+        applied.paymentSource !== "all" ||
+        applied.costBasis !== "all" ||
+        applied.factTypes.length > 0 ||
+        applied.supplierStatuses.length > 0 ||
+        applied.dataSources.length > 0,
     )
 }
 

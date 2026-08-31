@@ -209,6 +209,8 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     onConfirm: () => void | Promise<void>
     onCancel?: () => void
     onConfirmError?: (error: unknown) => void
+    id?: string
+    idPrefix?: string
 }
 
 /**
@@ -237,10 +239,13 @@ function FormalActionConfirmDialog({
     onConfirm,
     onCancel,
     onConfirmError,
+    id,
+    idPrefix,
     open,
     defaultOpen,
     onOpenChange,
 }: FormalActionConfirmDialogProps) {
+    const baseId = idPrefix ?? id ?? "workflow-formal-action"
     const [resolvedOpen, setOpen] = useControllableDialog({
         open,
         defaultOpen,
@@ -368,7 +373,11 @@ function FormalActionConfirmDialog({
                 ) : null}
 
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isPending} onClick={onCancel}>
+                    <AlertDialogCancel
+                        id={`${baseId}-cancel`}
+                        disabled={isPending}
+                        onClick={onCancel}
+                    >
                         <ArrowLeftIcon
                             data-icon="inline-start"
                             aria-hidden="true"
@@ -376,6 +385,7 @@ function FormalActionConfirmDialog({
                         {cancelLabel}
                     </AlertDialogCancel>
                     <AlertDialogAction
+                        id={`${baseId}-confirm`}
                         variant={
                             irreversibleEffects.length > 0
                                 ? "destructive"
@@ -446,6 +456,8 @@ export type SequentialProcessBarProps = Omit<
     React.ComponentProps<"section">,
     "children"
 > & {
+    id?: string
+    idPrefix?: string
     current: number
     total: number
     responsibilityStatus: ResponsibilityStatus
@@ -486,6 +498,8 @@ export type SequentialProcessBarProps = Omit<
 
 /** 连续审核/确认页的队列位置、当前责任和处理动作。 */
 function SequentialProcessBar({
+    id,
+    idPrefix,
     current,
     total,
     responsibilityStatus,
@@ -507,6 +521,7 @@ function SequentialProcessBar({
     className,
     ...props
 }: SequentialProcessBarProps) {
+    const baseId = idPrefix ?? id ?? "sequential-process-bar"
     const responsibility = responsibilityStatusMeta[responsibilityStatus]
     const canProcess =
         responsibilityStatus === "assigned_to_me" &&
@@ -521,7 +536,7 @@ function SequentialProcessBar({
             data-slot="sequential-process-bar"
             aria-label="连续处理操作"
             className={cn(
-                "flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between",
+                "erp-raised-surface flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 lg:flex-row lg:items-center lg:justify-between",
                 className,
             )}
             {...props}
@@ -551,6 +566,7 @@ function SequentialProcessBar({
             <div className="flex flex-wrap items-center gap-2">
                 {showBack ? (
                     <Button
+                        id={`${baseId}-back`}
                         type="button"
                         variant="outline"
                         disabled={pending}
@@ -566,6 +582,7 @@ function SequentialProcessBar({
 
                 {showProcess ? (
                     <Button
+                        id={`${baseId}-process`}
                         type="button"
                         /* 隐藏「并打开下一条」时，本按钮就是唯一主动作 */
                         variant={showProcessNext ? "secondary" : "default"}
@@ -589,6 +606,7 @@ function SequentialProcessBar({
                 ) : null}
                 {showProcess && showProcessNext ? (
                     <Button
+                        id={`${baseId}-process-next`}
                         type="button"
                         disabled={!canProcessNext}
                         onClick={onProcessNext}

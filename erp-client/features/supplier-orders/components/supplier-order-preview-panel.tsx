@@ -95,6 +95,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                 label="商城订单"
                                 value={
                                     <Link
+                                        id="supplier-order-preview-mall-link"
                                         href={`/commerce/consumption-orders?q=${encodeURIComponent(o.mallOrderNo)}`}
                                         className="num text-primary underline-offset-2 hover:underline"
                                     >

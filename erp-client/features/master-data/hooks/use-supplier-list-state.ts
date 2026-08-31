@@ -110,8 +110,7 @@ export function useSupplierListState(
                 supplierQualificationHealth:
                     filters.supplierQualificationHealth,
                 supplierCapabilityCodes: filters.supplierCapabilityCodes,
-                supplierQualificationTypes:
-                    filters.supplierQualificationTypes,
+                supplierQualificationTypes: filters.supplierQualificationTypes,
             }),
         [
             filters.lifecycleStatus,
@@ -128,7 +127,8 @@ export function useSupplierListState(
                 lifecycleStatus: filters.lifecycleStatus,
                 supplierCapabilityCodes: filters.supplierCapabilityCodes,
                 supplierQualificationTypes: filters.supplierQualificationTypes,
-                supplierQualificationHealth: filters.supplierQualificationHealth,
+                supplierQualificationHealth:
+                    filters.supplierQualificationHealth,
             }),
         [
             filters.lifecycleStatus,
@@ -148,7 +148,8 @@ export function useSupplierListState(
                 lifecycleStatus: filters.lifecycleStatus,
                 supplierCapabilityCodes: filters.supplierCapabilityCodes,
                 supplierQualificationTypes: filters.supplierQualificationTypes,
-                supplierQualificationHealth: filters.supplierQualificationHealth,
+                supplierQualificationHealth:
+                    filters.supplierQualificationHealth,
             },
             filterSnapshotLabel,
             resourceLabel("suppliers"),

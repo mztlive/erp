@@ -14,10 +14,7 @@ import {
     mapProcessingStatus,
     tsToIso,
 } from "./mapping"
-import type {
-    BackendCostAssessment,
-    BackendDetail,
-} from "./wire-types"
+import type { BackendCostAssessment, BackendDetail } from "./wire-types"
 
 export function mapCostAssessment(
     a: BackendCostAssessment | null | undefined,

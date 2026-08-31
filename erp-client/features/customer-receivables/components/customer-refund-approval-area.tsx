@@ -65,6 +65,7 @@ export function CustomerRefundApprovalArea({
                 <DefinitionBindingCard definition={approval?.definition} />
                 {documentId ? (
                     <ApprovalActionBar
+                        id="customer-receivables-refund-approval-action-bar"
                         allowedActions={allowedActions}
                         definition={approval?.definition}
                         documentType={CUSTOMER_REFUND_DOCUMENT_TYPE}
@@ -83,6 +84,7 @@ export function CustomerRefundApprovalArea({
         <div className="space-y-3">
             <RuntimeSummary instance={approval?.instance} />
             <ExecutionHistory
+                id="customer-receivables-refund-approval-history"
                 items={historyItems}
                 hasMore={historyQuery.hasNextPage}
                 loadingMore={historyQuery.isFetchingNextPage}
@@ -95,6 +97,7 @@ export function CustomerRefundApprovalArea({
                 }
             />
             <ApprovalActionBar
+                id="customer-receivables-refund-approval-action-bar"
                 allowedActions={allowedActions}
                 recoveryOptions={recoveryQuery.data?.actions ?? []}
                 workItemId={workItemId}

@@ -32,6 +32,7 @@ export function CreateDraftDialog({
     open,
     onOpenChange,
     onCreated,
+    id = "governance-approval-processes-create-draft-dialog",
 }: {
     item: DefinitionCatalogItem | null
     open: boolean
@@ -40,6 +41,7 @@ export function CreateDraftDialog({
         definitionId: string,
         documentType: DefinitionCatalogItem["document_type"],
     ) => void
+    id?: string
 }) {
     const createDraft = useCreateDefinitionDraftMutation()
     const [submitError, setSubmitError] = React.useState<string | null>(null)
@@ -93,7 +95,7 @@ export function CreateDraftDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>新建草稿</DialogTitle>
                     <DialogDescription>
@@ -119,15 +121,25 @@ export function CreateDraftDialog({
                     }}
                 >
                     <form.AppField name="name">
-                        {(field) => <field.TextField label="审批流程名称" required />}
+                        {(field) => (
+                            <field.TextField
+                                id={`${id}-name`}
+                                label="审批流程名称"
+                                required
+                            />
+                        )}
                     </form.AppField>
                     <form.AppField name="draft_source">
                         {(field) => (
                             <Field data-invalid={!field.state.meta.isValid}>
-                                <FieldLabel>草稿来源<span className="text-destructive">*</span></FieldLabel>
+                                <FieldLabel>
+                                    草稿来源
+                                    <span className="text-destructive">*</span>
+                                </FieldLabel>
                                 <div className="flex flex-col gap-2">
                                     <Label className="flex items-center gap-2 font-normal">
                                         <input
+                                            id={`${id}-draft-source-empty`}
                                             type="radio"
                                             name={field.name}
                                             value="EMPTY"
@@ -145,6 +157,7 @@ export function CreateDraftDialog({
                                     </Label>
                                     <Label className="flex items-center gap-2 font-normal">
                                         <input
+                                            id={`${id}-draft-source-current-published`}
                                             type="radio"
                                             name={field.name}
                                             value="CURRENT_PUBLISHED"
@@ -186,6 +199,7 @@ export function CreateDraftDialog({
                     </form.AppField>
                     <DialogFooter>
                         <Button
+                            id={`${id}-cancel`}
                             type="button"
                             variant="outline"
                             disabled={createDraft.isPending}
@@ -195,6 +209,7 @@ export function CreateDraftDialog({
                         </Button>
                         <form.AppForm>
                             <form.SubmitButton
+                                id={`${id}-submit`}
                                 label="创建草稿"
                                 disabled={createDraft.isPending}
                             />

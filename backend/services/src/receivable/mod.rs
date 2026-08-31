@@ -30,14 +30,17 @@ use entities::ids::{
     ReceiptAllocationId, ReceivableAccountId, ReceivableEntryId, ReceivableFundsReviewId,
     SalesInvoiceAllocationId, SalesOrderId, SalesOrderRevisionId, WorkflowActionId,
 };
-use entities::money::{round_to_cent, Amount};
+use entities::money::Amount;
 use entities::payable::{PurchaseInvoiceAllocation, PurchaseInvoiceAllocationData};
 use entities::receivable::{
-    AccountReviewStatus, AllocationAction, CustomerReceipt, CustomerReceiptData, CustomerReceiptStatus,
-    EntryDirection, Invoice, InvoiceData, InvoiceDirection, InvoiceKind, InvoiceStatus,
-    PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData, ReceivableAccount,
-    ReceivableAccountData, ReceivableEntry, ReceivableEntryData, ReceivableEntryType, ReceivableFundsReview,
-    ReceivableFundsReviewData, ReviewResult, SalesInvoiceAllocation, SalesInvoiceAllocationData,
+    AccountReviewStatus, AllocationAction, CardFundsRegistrationAllocationInput,
+    CardFundsRegistrationAllocations, CardFundsRegistrationAllocationsError, CustomerReceipt,
+    CustomerReceiptData, CustomerReceiptStatus, EntryDirection, Invoice, InvoiceData, InvoiceDirection,
+    InvoiceKind, InvoiceStatus, PendingReceiptAllocation, ReceiptAllocation, ReceiptAllocationData,
+    ReceivableAccount, ReceivableAccountData, ReceivableEntry, ReceivableEntryData, ReceivableEntryType,
+    ReceivableFundsReview, ReceivableFundsReviewData, RedInvoiceAllocationBasis, RedInvoiceAllocationPlan,
+    RedInvoiceAllocationPlanError, RedInvoiceAllocationReversal, ReviewResult, SalesInvoiceAllocation,
+    SalesInvoiceAllocationData,
 };
 use entities::sales_order::BusinessType;
 use entities::work_item::{WorkItem, WorkItemStatus, WorkItemType};
@@ -993,8 +996,22 @@ impl ReceivableService {
 
     /// 在 W13 当前责任任务内原子登记历史回款及其核销分配。
     ///
-    /// 任务、责任、销售版本和票款事实版本在事务内重验；回款单、单据注册、
-    /// 核销分配、子账进度、销售进度与审计任一失败时整体回滚。
+    /// 任务、责任、销售版本和票款事实版本在事务内重验；分配集合先由领域
+    /// 值对象完成单账户、严格正数和金额守恒校验，随后由 Service 持有事务边界。
+    ///
+    /// # 参数
+    /// * `req` - 历史回款字段、任务快照、分配意图与幂等键
+    /// * `actor` - 已通过鉴权且用于责任校验和审计的操作人
+    ///
+    /// # 返回
+    /// 返回登记后的票款事实版本、账户金额进度和新建回款事实。
+    ///
+    /// # 错误
+    /// 请求校验、任务责任或版本校验、领域分配不变量、重复单号、仓储写入或
+    /// 事务提交失败时返回既有服务错误，且原错误分类与文案保持不变。
+    ///
+    /// # 约束
+    /// 回款单、单据注册、核销分配、子账进度、销售进度与审计任一失败时整体回滚。
     pub async fn register_card_funds_receipt(
         &self,
         req: RegisterCardFundsReceiptRequest,
@@ -1045,11 +1062,12 @@ impl ReceivableService {
                         session,
                     )
                     .await?;
-                    validate_card_funds_registration_allocations(
+                    let validated_allocations = card_funds_registration_allocations(
                         &req_for_tx.allocations,
                         &account.base.id,
                         req_for_tx.gross_amount,
                     )?;
+                    let registration_amount = validated_allocations.total();
                     if db
                         .customer_receipts()
                         .find_by_receipt_no(&receipt_no, session)
@@ -1060,7 +1078,7 @@ impl ReceivableService {
                     }
 
                     let allocation_plan =
-                        plan_card_funds_receipt_allocations(&snapshot, req_for_tx.gross_amount)?;
+                        plan_card_funds_receipt_allocations(&snapshot, registration_amount)?;
                     let mut receipt = CustomerReceipt::new(
                         CustomerReceiptId::new(next_id()),
                         CustomerReceiptData {
@@ -1068,7 +1086,7 @@ impl ReceivableService {
                             counterparty_party_id: account.counterparty_party_id.clone(),
                             customer_id: Some(account.customer_id.clone()),
                             received_at: req_for_tx.received_at,
-                            amount: req_for_tx.gross_amount,
+                            amount: registration_amount,
                             bank_reference: Some(req_for_tx.evidence_reference.clone()),
                         },
                     )?;
@@ -1164,8 +1182,22 @@ impl ReceivableService {
 
     /// 在 W13 当前责任任务内原子登记历史销项发票及其分配。
     ///
-    /// 任务、责任、销售版本和票款事实版本在事务内重验；发票、分配、子账
-    /// 进度、销售进度与审计任一失败时整体回滚。
+    /// 任务、责任、销售版本和票款事实版本在事务内重验；分配集合先由领域
+    /// 值对象完成单账户、严格正数和金额守恒校验，发票净税恒等与写入仍由 Service 编排。
+    ///
+    /// # 参数
+    /// * `req` - 历史销项发票字段、任务快照、分配意图与幂等键
+    /// * `actor` - 已通过鉴权且用于责任校验和审计的操作人
+    ///
+    /// # 返回
+    /// 返回登记后的票款事实版本、账户金额进度和新建发票事实。
+    ///
+    /// # 错误
+    /// 请求校验、任务责任或版本校验、领域分配不变量、净税恒等、重复票号、
+    /// 仓储写入或事务提交失败时返回既有服务错误，且原错误分类与文案保持不变。
+    ///
+    /// # 约束
+    /// 发票、分配、子账进度、销售进度与审计任一失败时整体回滚。
     pub async fn register_card_funds_invoice(
         &self,
         req: RegisterCardFundsInvoiceRequest,
@@ -1216,12 +1248,13 @@ impl ReceivableService {
                         session,
                     )
                     .await?;
-                    validate_card_funds_registration_allocations(
+                    let validated_allocations = card_funds_registration_allocations(
                         &req_for_tx.allocations,
                         &account.base.id,
                         req_for_tx.gross_amount,
                     )?;
-                    if req_for_tx.gross_amount != req_for_tx.net_amount.checked_add(req_for_tx.tax_amount) {
+                    let registration_amount = validated_allocations.total();
+                    if registration_amount != req_for_tx.net_amount.checked_add(req_for_tx.tax_amount) {
                         return Err(Error::ValidationError(
                             "发票含税金额必须等于不含税金额加税额".to_string(),
                         ));
@@ -1247,7 +1280,7 @@ impl ReceivableService {
                             invoice_code: None,
                             invoice_no: invoice_no.clone(),
                             invoice_date: req_for_tx.invoice_date,
-                            gross_amount: req_for_tx.gross_amount,
+                            gross_amount: registration_amount,
                             net_amount: req_for_tx.net_amount,
                             tax_amount: req_for_tx.tax_amount,
                             rounding_adjustment_amount: zero_amount(),
@@ -1262,7 +1295,7 @@ impl ReceivableService {
                         .receivable_accounts()
                         .apply_invoicing(
                             &ReceivableAccountId::new(account.base.id.clone()),
-                            &req_for_tx.gross_amount,
+                            &registration_amount,
                             &actor_id,
                             session,
                         )
@@ -1280,7 +1313,7 @@ impl ReceivableService {
                             receivable_account_id: ReceivableAccountId::new(account.base.id.clone()),
                             allocation_seq: 1,
                             allocation_action: AllocationAction::Apply,
-                            allocated_gross_amount: req_for_tx.gross_amount,
+                            allocated_gross_amount: registration_amount,
                             allocated_net_amount: req_for_tx.net_amount,
                             allocated_tax_amount: req_for_tx.tax_amount,
                             reverses_allocation_id: None,
@@ -2644,6 +2677,9 @@ impl ReceivableService {
     /// * `NotFound` - 原蓝票或有效分配不存在
     /// * `ConflictError` - 红票号码重复
     /// * `BusinessLogicError` - 红冲累计超过原分配或超额红冲
+    ///
+    /// # 约束
+    /// 领域计划只计算金额；ID 生成、事务、写入、任务同步和审计继续由 Service 持有。
     pub async fn issue_red_invoice(
         &self,
         id: &str,
@@ -2682,7 +2718,7 @@ impl ReceivableService {
                             "只有已登记的蓝票可以被红冲".to_string(),
                         ));
                     }
-                    let (plan, fully_reversed) = match original.invoice_direction {
+                    let allocation_plan = match original.invoice_direction {
                         InvoiceDirection::Sales => {
                             let blue = db
                                 .sales_invoice_allocations()
@@ -2700,12 +2736,7 @@ impl ReceivableService {
                                 .sales_invoice_allocations()
                                 .find_allocations_by_accounts(&account_ids, session)
                                 .await?;
-                            let basis = blue
-                                .iter()
-                                .filter(|line| line.allocation_action == AllocationAction::Apply)
-                                .map(|line| red_sales_basis(line, &related))
-                                .collect::<Result<Vec<_>>>()?;
-                            plan_red_invoice_allocations(basis, requested_amount)?
+                            sales_red_invoice_allocation_plan(&blue, &related, requested_amount)?
                         }
                         InvoiceDirection::Purchase => {
                             let blue = db
@@ -2726,25 +2757,10 @@ impl ReceivableService {
                                 .purchase_invoice_allocations()
                                 .find_allocations_by_accounts(&account_ids, session)
                                 .await?;
-                            let basis = blue
-                                .iter()
-                                .filter(|line| {
-                                    line.allocation_action == entities::payable::AllocationAction::Apply
-                                })
-                                .map(|line| red_purchase_basis(line, &related))
-                                .collect::<Result<Vec<_>>>()?;
-                            plan_red_invoice_allocations(basis, requested_amount)?
+                            purchase_red_invoice_allocation_plan(&blue, &related, requested_amount)?
                         }
                     };
-                    let red_gross = plan
-                        .iter()
-                        .fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
-                    let red_net = plan
-                        .iter()
-                        .fold(zero_amount(), |sum, line| sum.checked_add(line.net));
-                    let red_tax = plan
-                        .iter()
-                        .fold(zero_amount(), |sum, line| sum.checked_add(line.tax));
+                    let (red_gross, red_net, red_tax) = allocation_plan.totals();
 
                     if let Some(existing) = db
                         .invoices()
@@ -2790,13 +2806,13 @@ impl ReceivableService {
                     let mut original_mut = original;
                     register_created_invoice_document(&db, &rbac, &red_mut, &actor_owned, session).await?;
                     db.invoices().create(&red_mut, session).await?;
-                    if fully_reversed {
+                    if allocation_plan.is_full_reversal() {
                         original_mut.mark_red_invoiced(&actor_id)?;
                         db.invoices().update(&mut original_mut, session).await?;
                     }
 
                     let mut sales_order_account_ids = Vec::new();
-                    for (index, line) in plan.iter().enumerate() {
+                    for (index, line) in allocation_plan.lines().iter().enumerate() {
                         match original_mut.invoice_direction {
                             InvoiceDirection::Sales => {
                                 let account_id = ReceivableAccountId::new(line.account_id.clone());
@@ -3427,30 +3443,44 @@ async fn load_card_funds_registration_context(
     Ok((account, snapshot))
 }
 
-/// 校验 W13 登记分配只指向当前任务账户且金额严格守恒。
-fn validate_card_funds_registration_allocations(
+/// 将 W13 服务 DTO 转换为领域输入并构造已验证分配集合。
+///
+/// # 参数
+/// * `allocations` - HTTP 契约复用的分配 DTO 行
+/// * `account_id` - 事务内重新加载的当前任务应收子账 ID
+/// * `expected_total` - 本次登记的含税总额
+///
+/// # 返回
+/// 返回保持请求顺序的领域值对象，供后续编排复用其已验证合计。
+///
+/// # 错误
+/// 领域账户错误和合计错误映射为既有 `BusinessLogicError`，非正金额映射为
+/// 既有 `ValidationError`，文案与对外错误语义保持不变。
+///
+/// # 约束
+/// 本函数只做 DTO 到领域输入的适配，不重复实现账户、金额或守恒规则。
+fn card_funds_registration_allocations(
     allocations: &[CardFundsRegistrationAllocation],
     account_id: &str,
     expected_total: Amount,
-) -> Result<()> {
-    let mut total = zero_amount();
-    for allocation in allocations {
-        if allocation.target_account_id.as_ref() != account_id {
-            return Err(Error::BusinessLogicError(
-                "卡券票款登记只能分配到当前任务应收账户".to_string(),
-            ));
-        }
-        if allocation.amount <= zero_amount() {
-            return Err(Error::ValidationError("分配金额必须大于零".to_string()));
-        }
-        total = total.checked_add(allocation.amount);
-    }
-    if total != expected_total {
-        return Err(Error::BusinessLogicError(
-            "票款分配合计必须等于本次登记金额".to_string(),
-        ));
-    }
-    Ok(())
+) -> Result<CardFundsRegistrationAllocations> {
+    let lines = allocations
+        .iter()
+        .map(|allocation| CardFundsRegistrationAllocationInput {
+            target_account_id: allocation.target_account_id.clone(),
+            amount: allocation.amount,
+        })
+        .collect();
+    CardFundsRegistrationAllocations::new(ReceivableAccountId::new(account_id), expected_total, lines)
+        .map_err(|error| match error {
+            CardFundsRegistrationAllocationsError::NonPositiveAmount => {
+                Error::ValidationError(error.to_string())
+            }
+            CardFundsRegistrationAllocationsError::TargetAccountMismatch
+            | CardFundsRegistrationAllocationsError::TotalMismatch => {
+                Error::BusinessLogicError(error.to_string())
+            }
+        })
 }
 
 /// 按应收分录顺序为 W13 历史回款生成服务端核销计划。
@@ -4588,161 +4618,204 @@ fn parse_card_funds_receipt(message: &str, expected_fingerprint: &str) -> Result
     })
 }
 
-/// 原蓝票分配扣除既有红冲后的可红冲金额基数。
-#[derive(Debug, Clone)]
-struct RedInvoiceAllocationBasis {
-    original_allocation_id: String,
-    account_id: String,
-    allocation_seq: u32,
-    gross: Amount,
-    net: Amount,
-    tax: Amount,
-}
-
-/// 本次红票由服务端计算出的反向分配行。
-#[derive(Debug, Clone)]
-struct RedInvoiceAllocationPlan {
-    original_allocation_id: String,
-    account_id: String,
-    gross: Amount,
-    net: Amount,
-    tax: Amount,
-}
-
-/// 从销项蓝票分配及其全部相关反向事实计算剩余可红冲基数。
-fn red_sales_basis(
-    blue: &SalesInvoiceAllocation,
+/// 将销项分配事实适配为领域红票规划输入并构建计划。
+///
+/// # 参数
+/// * `blue` - 原蓝票查询得到的全部销项分配事实
+/// * `related` - 同一批账户下可能引用原分配的全部相关事实
+/// * `requested` - 可选本次红冲含税金额
+///
+/// # 返回
+/// 返回完成历史净额、顺序消费和比例税额舍入的领域计划。
+///
+/// # 错误
+/// 领域规划失败时映射为与既有服务相同的业务、内部或金额错误。
+///
+/// # 约束
+/// 本函数只转换持久化事实形态，不实现或复制红冲计算规则。
+fn sales_red_invoice_allocation_plan(
+    blue: &[SalesInvoiceAllocation],
     related: &[SalesInvoiceAllocation],
-) -> Result<RedInvoiceAllocationBasis> {
-    let reversed = related
-        .iter()
-        .filter(|line| {
-            line.allocation_action == AllocationAction::Reverse
-                && line.reverses_allocation_id.as_ref()
-                    == Some(&SalesInvoiceAllocationId::new(blue.base.id.clone()))
-        })
-        .fold(
-            (zero_amount(), zero_amount(), zero_amount()),
-            |(gross, net, tax), line| {
-                (
-                    gross.checked_add(line.allocated_gross_amount),
-                    net.checked_add(line.allocated_net_amount),
-                    tax.checked_add(line.allocated_tax_amount),
-                )
-            },
-        );
-    if reversed.0 > blue.allocated_gross_amount
-        || reversed.1 > blue.allocated_net_amount
-        || reversed.2 > blue.allocated_tax_amount
-    {
-        return Err(Error::BusinessLogicError(
-            "销项发票历史红冲累计超过原分配".to_string(),
-        ));
-    }
-    Ok(RedInvoiceAllocationBasis {
-        original_allocation_id: blue.base.id.clone(),
-        account_id: blue.receivable_account_id.to_string(),
-        allocation_seq: blue.allocation_seq,
-        gross: blue.allocated_gross_amount.checked_sub(reversed.0),
-        net: blue.allocated_net_amount.checked_sub(reversed.1),
-        tax: blue.allocated_tax_amount.checked_sub(reversed.2),
-    })
-}
-
-/// 从进项蓝票分配及其全部相关反向事实计算剩余可红冲基数。
-fn red_purchase_basis(
-    blue: &PurchaseInvoiceAllocation,
-    related: &[PurchaseInvoiceAllocation],
-) -> Result<RedInvoiceAllocationBasis> {
-    let reversed = related
-        .iter()
-        .filter(|line| {
-            line.allocation_action == entities::payable::AllocationAction::Reverse
-                && line.reverses_allocation_id.as_ref()
-                    == Some(&PurchaseInvoiceAllocationId::new(blue.base.id.clone()))
-        })
-        .fold(
-            (zero_amount(), zero_amount(), zero_amount()),
-            |(gross, net, tax), line| {
-                (
-                    gross.checked_add(line.allocated_gross_amount),
-                    net.checked_add(line.allocated_net_amount),
-                    tax.checked_add(line.allocated_tax_amount),
-                )
-            },
-        );
-    if reversed.0 > blue.allocated_gross_amount
-        || reversed.1 > blue.allocated_net_amount
-        || reversed.2 > blue.allocated_tax_amount
-    {
-        return Err(Error::BusinessLogicError(
-            "进项发票历史红冲累计超过原分配".to_string(),
-        ));
-    }
-    Ok(RedInvoiceAllocationBasis {
-        original_allocation_id: blue.base.id.clone(),
-        account_id: blue.payable_account_id.to_string(),
-        allocation_seq: blue.allocation_seq,
-        gross: blue.allocated_gross_amount.checked_sub(reversed.0),
-        net: blue.allocated_net_amount.checked_sub(reversed.1),
-        tax: blue.allocated_tax_amount.checked_sub(reversed.2),
-    })
-}
-
-/// 按原分配顺序生成本次红冲行；部分红冲行按剩余税额比例做银行家舍入。
-fn plan_red_invoice_allocations(
-    mut basis: Vec<RedInvoiceAllocationBasis>,
     requested: Option<Amount>,
-) -> Result<(Vec<RedInvoiceAllocationPlan>, bool)> {
-    basis.sort_by_key(|line| line.allocation_seq);
-    basis.retain(|line| line.gross > zero_amount());
-    let remaining_total = basis
-        .iter()
-        .fold(zero_amount(), |sum, line| sum.checked_add(line.gross));
-    if remaining_total <= zero_amount() {
-        return Err(Error::BusinessLogicError(
-            "原蓝票没有可红冲的有效分配".to_string(),
-        ));
-    }
-    let requested = requested.unwrap_or(remaining_total);
-    if requested <= zero_amount() || requested > remaining_total {
-        return Err(Error::BusinessLogicError(
-            "红冲金额必须大于零且不超过原蓝票剩余有效分配".to_string(),
-        ));
-    }
+) -> Result<RedInvoiceAllocationPlan> {
+    let basis = sales_red_invoice_allocation_bases(blue);
+    let reversals = sales_red_invoice_allocation_reversals(related);
+    RedInvoiceAllocationPlan::build(InvoiceDirection::Sales, basis, &reversals, requested)
+        .map_err(map_red_invoice_allocation_plan_error)
+}
 
-    let mut unplanned = requested;
-    let mut plan = Vec::new();
-    for line in basis {
-        if unplanned == zero_amount() {
-            break;
+/// 将销项蓝票正向分配转换为领域原始基数输入。
+///
+/// # 参数
+/// * `blue` - 原蓝票查询得到的全部销项分配事实
+///
+/// # 返回
+/// 返回保持查询顺序的正向分配基数，非 `APPLY` 事实被忽略。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 只复制事实字段，不扣减历史红冲或执行金额计算。
+fn sales_red_invoice_allocation_bases(blue: &[SalesInvoiceAllocation]) -> Vec<RedInvoiceAllocationBasis> {
+    blue.iter()
+        .filter(|line| line.allocation_action == AllocationAction::Apply)
+        .map(|line| RedInvoiceAllocationBasis {
+            original_allocation_id: line.base.id.clone(),
+            account_id: line.receivable_account_id.to_string(),
+            allocation_seq: line.allocation_seq,
+            gross: line.allocated_gross_amount,
+            net: line.allocated_net_amount,
+            tax: line.allocated_tax_amount,
+        })
+        .collect()
+}
+
+/// 将销项历史反向分配转换为领域红冲事实输入。
+///
+/// # 参数
+/// * `related` - 同一批应收账户下的全部相关销项分配事实
+///
+/// # 返回
+/// 返回所有携带原分配引用的 `REVERSE` 事实，保持查询顺序。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 缺少反向引用的损坏事实沿用旧逻辑忽略，由领域计划只匹配原分配身份。
+fn sales_red_invoice_allocation_reversals(
+    related: &[SalesInvoiceAllocation],
+) -> Vec<RedInvoiceAllocationReversal> {
+    related
+        .iter()
+        .filter(|line| line.allocation_action == AllocationAction::Reverse)
+        .filter_map(|line| {
+            line.reverses_allocation_id
+                .as_ref()
+                .map(|original_id| RedInvoiceAllocationReversal {
+                    original_allocation_id: original_id.to_string(),
+                    gross: line.allocated_gross_amount,
+                    net: line.allocated_net_amount,
+                    tax: line.allocated_tax_amount,
+                })
+        })
+        .collect()
+}
+
+/// 将进项分配事实适配为领域红票规划输入并构建计划。
+///
+/// # 参数
+/// * `blue` - 原蓝票查询得到的全部进项分配事实
+/// * `related` - 同一批账户下可能引用原分配的全部相关事实
+/// * `requested` - 可选本次红冲含税金额
+///
+/// # 返回
+/// 返回完成历史净额、顺序消费和比例税额舍入的领域计划。
+///
+/// # 错误
+/// 领域规划失败时映射为与既有服务相同的业务、内部或金额错误。
+///
+/// # 约束
+/// 本函数只转换 D19 持久化事实形态，不将进项实体依赖反向引入 D18 发票模型。
+fn purchase_red_invoice_allocation_plan(
+    blue: &[PurchaseInvoiceAllocation],
+    related: &[PurchaseInvoiceAllocation],
+    requested: Option<Amount>,
+) -> Result<RedInvoiceAllocationPlan> {
+    let basis = purchase_red_invoice_allocation_bases(blue);
+    let reversals = purchase_red_invoice_allocation_reversals(related);
+    RedInvoiceAllocationPlan::build(InvoiceDirection::Purchase, basis, &reversals, requested)
+        .map_err(map_red_invoice_allocation_plan_error)
+}
+
+/// 将进项蓝票正向分配转换为领域原始基数输入。
+///
+/// # 参数
+/// * `blue` - 原蓝票查询得到的全部进项分配事实
+///
+/// # 返回
+/// 返回保持查询顺序的正向分配基数，非 `APPLY` 事实被忽略。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 只复制 D19 事实字段，不在 Service 内扣减历史红冲或执行金额计算。
+fn purchase_red_invoice_allocation_bases(
+    blue: &[PurchaseInvoiceAllocation],
+) -> Vec<RedInvoiceAllocationBasis> {
+    blue.iter()
+        .filter(|line| line.allocation_action == entities::payable::AllocationAction::Apply)
+        .map(|line| RedInvoiceAllocationBasis {
+            original_allocation_id: line.base.id.clone(),
+            account_id: line.payable_account_id.to_string(),
+            allocation_seq: line.allocation_seq,
+            gross: line.allocated_gross_amount,
+            net: line.allocated_net_amount,
+            tax: line.allocated_tax_amount,
+        })
+        .collect()
+}
+
+/// 将进项历史反向分配转换为领域红冲事实输入。
+///
+/// # 参数
+/// * `related` - 同一批应付账户下的全部相关进项分配事实
+///
+/// # 返回
+/// 返回所有携带原分配引用的 `REVERSE` 事实，保持查询顺序。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # 约束
+/// 缺少反向引用的损坏事实沿用旧逻辑忽略，且 D19 实体不会进入 D18 领域模型。
+fn purchase_red_invoice_allocation_reversals(
+    related: &[PurchaseInvoiceAllocation],
+) -> Vec<RedInvoiceAllocationReversal> {
+    related
+        .iter()
+        .filter(|line| line.allocation_action == entities::payable::AllocationAction::Reverse)
+        .filter_map(|line| {
+            line.reverses_allocation_id
+                .as_ref()
+                .map(|original_id| RedInvoiceAllocationReversal {
+                    original_allocation_id: original_id.to_string(),
+                    gross: line.allocated_gross_amount,
+                    net: line.allocated_net_amount,
+                    tax: line.allocated_tax_amount,
+                })
+        })
+        .collect()
+}
+
+/// 将领域红票规划错误映射回冻结的服务错误分类和文案。
+///
+/// # 参数
+/// * `error` - 领域计划构建失败原因
+///
+/// # 返回
+/// 返回与迁移前相同的 `BusinessLogicError`、`Internal` 或 `Logic` 服务错误。
+///
+/// # 错误
+/// 本函数只构造错误值，不再失败。
+///
+/// # 约束
+/// 不解析字符串决定分类；每个领域变体显式保持既有外部错误语义。
+fn map_red_invoice_allocation_plan_error(error: RedInvoiceAllocationPlanError) -> Error {
+    match error {
+        error @ (RedInvoiceAllocationPlanError::SalesHistoricalOverReversal
+        | RedInvoiceAllocationPlanError::PurchaseHistoricalOverReversal
+        | RedInvoiceAllocationPlanError::NoRemainingAllocation
+        | RedInvoiceAllocationPlanError::InvalidRequestedAmount) => {
+            Error::BusinessLogicError(error.to_string())
         }
-        let gross = if line.gross <= unplanned {
-            line.gross
-        } else {
-            unplanned
-        };
-        let (net, tax) = if gross == line.gross {
-            (line.net, line.tax)
-        } else {
-            let tax = Amount::try_from(round_to_cent(
-                gross.to_decimal() * line.tax.to_decimal() / line.gross.to_decimal(),
-            ))?;
-            (gross.checked_sub(tax), tax)
-        };
-        plan.push(RedInvoiceAllocationPlan {
-            original_allocation_id: line.original_allocation_id,
-            account_id: line.account_id,
-            gross,
-            net,
-            tax,
-        });
-        unplanned = unplanned.checked_sub(gross);
+        RedInvoiceAllocationPlanError::UncoveredRequest => {
+            Error::Internal("红票反向分配计划未覆盖请求金额".to_string())
+        }
+        RedInvoiceAllocationPlanError::InvalidAmount(error) => Error::Logic(error),
     }
-    if unplanned != zero_amount() {
-        return Err(Error::Internal("红票反向分配计划未覆盖请求金额".to_string()));
-    }
-    Ok((plan, requested == remaining_total))
 }
 
 /// 返回固定零金额（`Amount::from_str("0.00")` 的确定性快捷方式）。

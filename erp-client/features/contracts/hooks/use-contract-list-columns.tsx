@@ -8,6 +8,7 @@ import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { ContractListRow } from "@/features/contracts/types"
 import { contractOwnerLabel } from "@/features/contracts/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 export function useContractListColumns() {
     return React.useMemo<ColumnDef<ContractListRow>[]>(
@@ -20,6 +21,7 @@ export function useContractListColumns() {
                 cell: ({ row }) => (
                     <div className="min-w-0">
                         <Button
+                            id={`card-contracts-list-row-${toAutomationIdSegment(row.original.contractId)}-open`}
                             type="button"
                             variant="link"
                             size="xs"

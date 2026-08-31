@@ -61,6 +61,7 @@ export function SalesOrdersListHeader(props: {
                         actions={[
                             {
                                 actionKey: "create",
+                                id: "sales-orders-list-header-create",
                                 label: "新建销售单",
                                 icon: PlusIcon,
                                 render: (
@@ -69,6 +70,7 @@ export function SalesOrdersListHeader(props: {
                             },
                             {
                                 actionKey: "export",
+                                id: "sales-orders-list-header-export",
                                 label: isExporting ? "导出中…" : "导出",
                                 icon: isExporting
                                     ? LoaderCircleIcon

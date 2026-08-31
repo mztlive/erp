@@ -27,6 +27,7 @@ type TextFieldProps = {
     max?: React.ComponentProps<"input">["max"]
     step?: React.ComponentProps<"input">["step"]
     testId?: string
+    id?: string
 }
 
 /**
@@ -49,12 +50,14 @@ export function TextField({
     max,
     step,
     testId,
+    id,
 }: TextFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
-    const descriptionId = `${field.name}-description`
-    const errorId = `${field.name}-error`
+    const resolvedId = id ?? field.name
+    const descriptionId = `${resolvedId}-description`
+    const errorId = `${resolvedId}-error`
     const describedBy = [
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
@@ -65,16 +68,14 @@ export function TextField({
     return (
         <Field data-invalid={isInvalid || undefined} className={cn(className)}>
             <FieldLabel
-                htmlFor={field.name}
+                htmlFor={resolvedId}
                 className={hideLabel ? "sr-only" : undefined}
             >
                 {label}
-                {required ? (
-                    <span className="text-destructive">*</span>
-                ) : null}
+                {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <Input
-                id={field.name}
+                id={resolvedId}
                 name={field.name}
                 type={type}
                 value={field.state.value ?? ""}

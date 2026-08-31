@@ -16,6 +16,7 @@ import type {
     ProductSpecDimension,
 } from "@/features/master-data/types"
 import type { FixedSku } from "@/features/supplier-offerings/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SkuRowProps = {
     sku: ProductSkuFields
@@ -27,7 +28,10 @@ type SkuRowProps = {
     activeSpecs: readonly ProductSpecDimension[]
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
     rememberSkuFile: (index: number, file?: File) => void
-    onOpenInventory: (skuId: string | undefined, trigger: HTMLButtonElement) => void
+    onOpenInventory: (
+        skuId: string | undefined,
+        trigger: HTMLButtonElement,
+    ) => void
     supplierCount: number
     supplierCountsPending: boolean
     supplierCountsError: unknown
@@ -52,6 +56,9 @@ function SkuRow({
     onRegisterSupply,
     stableId,
 }: SkuRowProps) {
+    const skuSegment = toAutomationIdSegment(
+        sku.skuId || sku.skuNo || sku.specificationSignature || `sku-${index}`,
+    )
     return (
         <tr
             key={`${sku.skuNo}-${index}`}
@@ -59,10 +66,7 @@ function SkuRow({
         >
             {activeSpecs.length > 0 ? (
                 activeSpecs.map((spec, specIndex) => (
-                    <td
-                        key={`${spec.name}-${specIndex}`}
-                        className="px-3 py-3"
-                    >
+                    <td key={`${spec.name}-${specIndex}`} className="px-3 py-3">
                         <Badge variant="secondary">
                             {sku.attributeValues[specIndex] || "—"}
                         </Badge>
@@ -77,6 +81,7 @@ function SkuRow({
             )}
             <td className="px-3 py-3">
                 <Input
+                    id={`master-data-product-sku-${skuSegment}-code`}
                     className="h-8"
                     value={sku.skuNo}
                     disabled={!canRevise}
@@ -91,6 +96,7 @@ function SkuRow({
             </td>
             <td className="px-3 py-3">
                 <Input
+                    id={`master-data-product-sku-${skuSegment}-name`}
                     className="h-8"
                     value={sku.name}
                     disabled={!canRevise}
@@ -106,6 +112,7 @@ function SkuRow({
             </td>
             <td className="px-3 py-3">
                 <Input
+                    id={`master-data-product-sku-${skuSegment}-barcode`}
                     className="h-8"
                     value={sku.barcode ?? ""}
                     disabled={!canRevise}
@@ -119,6 +126,7 @@ function SkuRow({
             </td>
             <td className="px-3 py-3">
                 <SkuMainImageField
+                    idPrefix={`master-data-product-sku-${skuSegment}-main-image`}
                     value={sku.mainImage}
                     previewUrl={sku.mainImagePreviewUrl}
                     disabled={!canRevise}
@@ -142,8 +150,7 @@ function SkuRow({
                         if (file) {
                             updateSku(index, {
                                 mainImage: file.name,
-                                mainImagePreviewUrl:
-                                    URL.createObjectURL(file),
+                                mainImagePreviewUrl: URL.createObjectURL(file),
                                 mainImageAssetId: undefined,
                             })
                         }
@@ -152,6 +159,7 @@ function SkuRow({
             </td>
             <td className="px-3 py-3">
                 <MoneyInput
+                    id={`master-data-product-sku-${skuSegment}-sale-price`}
                     value={sku.salePrice ?? ""}
                     disabled={!canRevise}
                     onChange={(next) =>
@@ -164,6 +172,7 @@ function SkuRow({
             </td>
             <td className="px-3 py-3">
                 <MoneyInput
+                    id={`master-data-product-sku-${skuSegment}-market-price`}
                     value={sku.marketPrice ?? ""}
                     disabled={!canRevise}
                     onChange={(next) =>
@@ -193,6 +202,7 @@ function SkuRow({
                     </span>
                 ) : sku.skuId ? (
                     <Button
+                        id={`master-data-product-sku-${skuSegment}-inventory`}
                         type="button"
                         variant="link"
                         size="xs"
@@ -221,6 +231,7 @@ function SkuRow({
             <td className="px-3 py-3">
                 <div className="flex items-center gap-2">
                     <Switch
+                        id={`master-data-product-sku-${skuSegment}-enable`}
                         size="sm"
                         disabled={!canRevise}
                         checked={sku.lifecycleStatus === "ENABLED"}
@@ -258,7 +269,10 @@ type ProductSkuTableProps = {
     name: string
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
     rememberSkuFile: (index: number, file?: File) => void
-    onOpenInventory: (skuId: string | undefined, trigger: HTMLButtonElement) => void
+    onOpenInventory: (
+        skuId: string | undefined,
+        trigger: HTMLButtonElement,
+    ) => void
     supplierCounts: Map<string, number> | undefined
     supplierCountsPending: boolean
     supplierCountsError: unknown
@@ -339,18 +353,10 @@ function ProductSkuTable({
                         <th className="min-w-28 px-3 py-2 font-medium">
                             {masterDataCopy.fMarketPrice}
                         </th>
-                        <th className="min-w-32 px-3 py-2 font-medium">
-                            供给
-                        </th>
-                        <th className="min-w-28 px-3 py-2 font-medium">
-                            库存
-                        </th>
-                        <th className="min-w-24 px-3 py-2 font-medium">
-                            上架
-                        </th>
-                        <th className="min-w-24 px-3 py-2 font-medium">
-                            启用
-                        </th>
+                        <th className="min-w-32 px-3 py-2 font-medium">供给</th>
+                        <th className="min-w-28 px-3 py-2 font-medium">库存</th>
+                        <th className="min-w-24 px-3 py-2 font-medium">上架</th>
+                        <th className="min-w-24 px-3 py-2 font-medium">启用</th>
                     </tr>
                 </thead>
                 <tbody>

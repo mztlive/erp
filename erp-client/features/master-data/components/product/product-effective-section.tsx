@@ -7,6 +7,7 @@ import { ProductSectionFrame } from "@/features/master-data/components/product/p
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 type ProductEffectiveSectionProps = {
+    idPrefix?: string
     isCreate: boolean
     canRevise: boolean
     effectiveFrom: string
@@ -18,6 +19,7 @@ type ProductEffectiveSectionProps = {
 }
 
 function ProductEffectiveSection({
+    idPrefix,
     isCreate,
     canRevise,
     effectiveFrom,
@@ -27,6 +29,7 @@ function ProductEffectiveSection({
     setEffectiveTo,
     setChangeReason,
 }: ProductEffectiveSectionProps) {
+    const prefix = idPrefix ?? "master-data-product-effective"
     return (
         <ProductSectionFrame
             id="product-section-effective"
@@ -35,31 +38,33 @@ function ProductEffectiveSection({
         >
             <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                    <Label htmlFor="ef-from">
+                    <Label htmlFor={`${prefix}-from`}>
                         {masterDataCopy.fieldEffectiveFrom}
                     </Label>
                     <DatePicker
+                        id={`${prefix}-from`}
                         value={effectiveFrom || undefined}
                         onValueChange={(next) => setEffectiveFrom(next ?? "")}
                         className="w-full"
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label htmlFor="ef-to">
+                    <Label htmlFor={`${prefix}-to`}>
                         {masterDataCopy.fieldEffectiveTo}
                     </Label>
                     <DatePicker
+                        id={`${prefix}-to`}
                         value={effectiveTo || undefined}
                         onValueChange={(next) => setEffectiveTo(next ?? "")}
                         className="w-full"
                     />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="reason">
+                    <Label htmlFor={`${prefix}-reason`}>
                         {masterDataCopy.fieldChangeReason}
                     </Label>
                     <Textarea
-                        id="reason"
+                        id={`${prefix}-reason`}
                         value={changeReason}
                         onChange={(e) => setChangeReason(e.target.value)}
                         rows={2}

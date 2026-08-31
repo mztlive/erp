@@ -127,8 +127,12 @@ export function CustomerForm({
 
             const response =
                 mode === "create"
-                    ? await createMutation.mutateAsync(input as CreateCustomerInput)
-                    : await saveMutation.mutateAsync(input as SaveCustomerDetailsInput)
+                    ? await createMutation.mutateAsync(
+                          input as CreateCustomerInput,
+                      )
+                    : await saveMutation.mutateAsync(
+                          input as SaveCustomerDetailsInput,
+                      )
 
             setResult(response)
             if (response.outcome === "conflict") {
@@ -190,19 +194,27 @@ export function CustomerForm({
                         <form.AppField
                             name="legalName"
                             children={(field) => (
-                                <field.TextField label="法定名称" required />
+                                <field.TextField
+                                    id="customers-form-legal-name"
+                                    label="法定名称"
+                                    required
+                                />
                             )}
                         />
                         <form.AppField
                             name="shortName"
                             children={(field) => (
-                                <field.TextField label="客户简称" />
+                                <field.TextField
+                                    id="customers-form-short-name"
+                                    label="客户简称"
+                                />
                             )}
                         />
                         <form.AppField
                             name="unifiedCreditCode"
                             children={(field) => (
                                 <field.TextField
+                                    id="customers-form-credit-code"
                                     label="统一社会信用代码"
                                     required
                                     placeholder="18 位字母或数字"
@@ -213,6 +225,7 @@ export function CustomerForm({
                             name="defaultPaymentTerm"
                             children={(field) => (
                                 <field.SelectField
+                                    id="customers-form-payment-term"
                                     label="默认付款条件"
                                     options={PAYMENT_TERM_OPTIONS}
                                     placeholder="请选择付款条件"
@@ -223,6 +236,7 @@ export function CustomerForm({
                             name="status"
                             children={(field) => (
                                 <field.SelectField
+                                    id="customers-form-status"
                                     label="客户状态"
                                     required
                                     options={[
@@ -237,6 +251,7 @@ export function CustomerForm({
                                 name="changeReason"
                                 children={(field) => (
                                     <field.TextareaField
+                                        id="customers-form-change-reason"
                                         label="修订原因"
                                         required
                                         placeholder="必填，写入修订时间线"
@@ -252,6 +267,7 @@ export function CustomerForm({
                         name="legalName"
                         children={(field) => (
                             <field.TextField
+                                id="customers-form-legal-name"
                                 label="法定名称"
                                 required
                                 placeholder="企业全称"
@@ -262,6 +278,7 @@ export function CustomerForm({
                         name="shortName"
                         children={(field) => (
                             <field.TextField
+                                id="customers-form-short-name"
                                 label="客户简称"
                                 placeholder="可选"
                             />
@@ -271,6 +288,7 @@ export function CustomerForm({
                         name="unifiedCreditCode"
                         children={(field) => (
                             <field.TextField
+                                id="customers-form-credit-code"
                                 label="统一社会信用代码"
                                 required
                                 placeholder="18 位字母或数字"
@@ -281,6 +299,7 @@ export function CustomerForm({
                         name="defaultPaymentTerm"
                         children={(field) => (
                             <field.SelectField
+                                id="customers-form-payment-term"
                                 label="默认付款条件"
                                 options={PAYMENT_TERM_OPTIONS}
                                 placeholder="录单提示"
@@ -387,6 +406,7 @@ export function CustomerForm({
             ) : null}
 
             <DiscardConfirmDialog
+                id="customers-form-discard"
                 open={discardOpen}
                 onOpenChange={setDiscardOpen}
                 onConfirm={() => {

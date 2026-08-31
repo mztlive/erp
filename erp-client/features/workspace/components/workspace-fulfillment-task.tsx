@@ -26,12 +26,16 @@ import {
     useWorkItemResponsibilityMutation,
 } from "@/features/work-items/queries"
 import { getErrorMessage } from "@/lib/api/errors"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { workspaceTaskSurfacePadClassName } from "@/components/business"
+import { cn } from "@/lib/utils"
 
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { fulfillmentTaskTitle } from "../lib/fulfillment-title"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
+import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 
 type WorkspaceFulfillmentTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -86,7 +90,12 @@ export function WorkspaceFulfillmentTask({
             className="flex h-full min-h-0 flex-col"
             aria-label="当前履约任务"
         >
-            <header className="flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5">
+            <header
+                className={cn(
+                    workspaceTaskSurfacePadClassName,
+                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
+                )}
+            >
                 <div className="flex min-w-0 flex-col gap-2">
                     <WorkspaceDocumentBadge item={item} />
                     <h2 className="text-xl font-semibold tracking-tight">
@@ -103,18 +112,21 @@ export function WorkspaceFulfillmentTask({
                             .join(" · ")}
                     </p>
                 </div>
-                {item.allowedActions.includes("REASSIGN") ? (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setReassignOpen(true)}
-                    >
-                        转交责任
-                    </Button>
-                ) : null}
+                <WorkspaceTaskHeaderActions item={item}>
+                    {item.allowedActions.includes("REASSIGN") ? (
+                        <Button
+                            id={`workspace-fulfillment-reassign-trigger-${toAutomationIdSegment(item.workItemId)}`}
+                            type="button"
+                            variant="outline"
+                            onClick={() => setReassignOpen(true)}
+                        >
+                            转交责任
+                        </Button>
+                    ) : null}
+                </WorkspaceTaskHeaderActions>
             </header>
 
-            <div className="min-h-0 flex-1 overflow-auto py-4">
+            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
                 {!descriptor ? (
                     <Alert variant="destructive">
                         <AlertTitle>任务责任与履约对象不一致</AlertTitle>
@@ -248,7 +260,11 @@ function WorkspaceFulfillmentReassignDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent
+                closeButtonId={`workspace-fulfillment-reassign-close-${toAutomationIdSegment(item.workItemId)}`}
+                aria-describedby={undefined}
+                className="sm:max-w-lg"
+            >
                 <DialogHeader>
                     <DialogTitle>转交履约责任</DialogTitle>
                     <DialogDescription>
@@ -284,6 +300,7 @@ function WorkspaceFulfillmentReassignDialog({
                         <form.AppField name="targetUserId">
                             {(field) => (
                                 <field.SelectField
+                                    id={`workspace-fulfillment-reassign-target-${toAutomationIdSegment(item.workItemId)}`}
                                     label="新责任人"
                                     options={options}
                                     placeholder="选择合格人员"
@@ -299,6 +316,7 @@ function WorkspaceFulfillmentReassignDialog({
                         <form.AppField name="reason">
                             {(field) => (
                                 <field.TextareaField
+                                    id={`workspace-fulfillment-reassign-reason-${toAutomationIdSegment(item.workItemId)}`}
                                     label="转交原因"
                                     placeholder="说明本次责任调整依据"
                                     maxLength={150}
@@ -309,7 +327,14 @@ function WorkspaceFulfillmentReassignDialog({
                     </FieldGroup>
                     <DialogFooter>
                         <DialogClose
-                            render={<Button type="button" variant="outline" />}
+                            id={`workspace-fulfillment-reassign-cancel-${toAutomationIdSegment(item.workItemId)}`}
+                            render={
+                                <Button
+                                    id={`workspace-fulfillment-reassign-cancel-${toAutomationIdSegment(item.workItemId)}`}
+                                    type="button"
+                                    variant="outline"
+                                />
+                            }
                         >
                             取消
                         </DialogClose>
@@ -319,6 +344,7 @@ function WorkspaceFulfillmentReassignDialog({
                             {(targetUserId) => (
                                 <form.AppForm>
                                     <form.SubmitButton
+                                        id={`workspace-fulfillment-reassign-submit-${toAutomationIdSegment(item.workItemId)}`}
                                         label="确认转交"
                                         pendingLabel="转交中…"
                                         disabled={

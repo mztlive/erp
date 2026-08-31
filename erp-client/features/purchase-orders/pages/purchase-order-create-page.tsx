@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
+import type { ReactNode } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useStore } from "@tanstack/react-form"
 import { ArrowLeftIcon } from "lucide-react"
 
@@ -14,7 +15,9 @@ import {
     PageHeader,
     PageScaffold,
     StickyTotalBar,
-    surfacePanelClassName,
+    surfaceClassName,
+    workspaceEmbeddedScaffoldClassName,
+    workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -61,24 +64,48 @@ import { cn } from "@/lib/utils"
 /**
  * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建并提交审批；成功后回到列表。
  */
+export type SalesOrderPaperPreviewRenderProps = Readonly<{
+    salesOrderId: string | null
+    title?: string
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}>
+
 export function PurchaseOrderCreatePage({
     initialSalesOrderId = "",
     initialWorkItemId = "",
     embedded = false,
     onTaskCompleted,
+    renderSalesOrderPreview,
+    headerActions,
 }: {
     initialSalesOrderId?: string
     initialWorkItemId?: string
     embedded?: boolean
     onTaskCompleted?: (workItemId: string) => void
+    /** 按销售单身份渲染原始单据预览；不得用供给投影凑纸。 */
+    renderSalesOrderPreview?: (
+        props: SalesOrderPaperPreviewRenderProps,
+    ) => ReactNode
+    /** 嵌入工作台时放在标题行右侧，例如全屏。 */
+    headerActions?: ReactNode
 }) {
     const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const salesOrderReturnTo = embedded
+        ? `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
+        : undefined
     const basesQuery = useCreationBasesQuery({
         salesOrderId: initialSalesOrderId || undefined,
         workItemId: initialWorkItemId || undefined,
     })
     const createMutation = useCreateFromSourcingMutation()
     const [previewOpen, setPreviewOpen] = React.useState(false)
+    const [sourcePaper, setSourcePaper] = React.useState<{
+        id: string
+        title: string
+    } | null>(null)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
     const [actionError, setActionError] = React.useState<{
         title: string
@@ -454,7 +481,9 @@ export function PurchaseOrderCreatePage({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <PageHeader
                     title="供给分配"
@@ -476,19 +505,35 @@ export function PurchaseOrderCreatePage({
         return (
             <PageScaffold
                 density={embedded ? "compact" : "default"}
-                className={embedded ? "max-w-none p-0" : undefined}
+                className={
+                    embedded ? workspaceEmbeddedScaffoldClassName : undefined
+                }
             >
                 <PageHeader title="供给分配" description="供给依据加载失败" />
                 <BusinessFailureState
                     error={basesQuery.error}
-                    onRetry={() => void basesQuery.refetch()}
-                    retryLabel="重新加载"
+                    action={
+                        <Button
+                            id="procurement-orders-create-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void basesQuery.refetch()}
+                        >
+                            重新加载
+                        </Button>
+                    }
                     details={
                         !embedded ? (
                             <Button
                                 type="button"
                                 variant="outline"
-                                render={<Link href="/procurement/orders" />}
+                                render={
+                                    <Link
+                                        id="procurement-orders-create-back"
+                                        href="/procurement/orders"
+                                    />
+                                }
                             >
                                 返回列表
                             </Button>
@@ -499,16 +544,54 @@ export function PurchaseOrderCreatePage({
         )
     }
 
+    const sourcingTotalItems = [
+        {
+            id: "orders",
+            label: "将创建采购单",
+            value: `${previews.length} 张`,
+        },
+        {
+            id: "stock",
+            label: "将建立库存预留",
+            value: `${stockPreviews.length} 条`,
+        },
+        {
+            id: "lines",
+            label: "采购缺口明细",
+            value: `${previews.reduce((count, preview) => count + preview.lines.length, 0)} 行`,
+        },
+        {
+            id: "gross",
+            label: "采购含税合计",
+            value: <MoneyValue value={previewTotals.gross} />,
+        },
+    ]
+
+    const previewAction = (
+        <Button
+            id="procurement-orders-create-preview"
+            type="button"
+            data-testid="purchase-create-preview"
+            onClick={() => void openPreview()}
+        >
+            预览供给分配
+        </Button>
+    )
+
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? "max-w-none p-0 pb-8" : "pb-8"}
+            className={embedded ? workspaceEmbeddedScaffoldClassName : "pb-8"}
         >
             <PageHeader
                 title="供给分配"
                 description="系统优先推荐现有库存，不足部分再推荐采购；确认后一次完成库存预留和采购缺口建单。"
+                titleRowAlign={embedded ? "start" : undefined}
+                className={embedded ? "static bg-transparent" : undefined}
                 actions={
-                    !embedded ? (
+                    embedded ? (
+                        headerActions
+                    ) : (
                         <PageActions
                             actions={[
                                 {
@@ -518,143 +601,186 @@ export function PurchaseOrderCreatePage({
                                     variant: "outline",
                                     onClick: () =>
                                         router.push("/procurement/orders"),
+                                    id: "procurement-orders-create-back-header",
                                 },
                             ]}
                         />
-                    ) : undefined
+                    )
                 }
             />
 
-            {actionError ? (
-                <Alert variant="destructive">
-                    <AlertTitle>{actionError.title}</AlertTitle>
-                    <AlertDescription>
-                        {actionError.description}
-                    </AlertDescription>
-                </Alert>
+            <div
+                className={
+                    embedded ? "min-h-0 flex-1 overflow-auto" : undefined
+                }
+            >
+                {actionError ? (
+                    <Alert
+                        variant="destructive"
+                        className={embedded ? "mx-5 my-5" : undefined}
+                    >
+                        <AlertTitle>{actionError.title}</AlertTitle>
+                        <AlertDescription>
+                            {actionError.description}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+
+                {workspace.length === 0 ? (
+                    <BusinessEmptyState
+                        kind="no-data"
+                        className={
+                            embedded
+                                ? workspaceTaskSurfacePadClassName
+                                : undefined
+                        }
+                        title="当前没有待分配供给"
+                        description={
+                            initialSalesOrderId
+                                ? "该销售单可能尚未生效、供给已覆盖，或既无可用库存也无合格采购供给。"
+                                : "当前没有待分配供给。请检查已生效销售单、库存余额和供应商供给。"
+                        }
+                        action={
+                            !embedded ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    render={
+                                        <Link
+                                            id="procurement-orders-create-empty-back"
+                                            href="/procurement/orders"
+                                        />
+                                    }
+                                >
+                                    返回列表
+                                </Button>
+                            ) : undefined
+                        }
+                    />
+                ) : (
+                    <form
+                        className={cn(
+                            "flex flex-col",
+                            embedded ? "gap-0" : "gap-4",
+                        )}
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                        }}
+                    >
+                        <PurchaseOrderCreateSourcePanel
+                            workspace={workspace}
+                            selectedSalesOrderId={selectedSalesOrderId}
+                            selectedOrder={selectedOrder}
+                            disabled={Boolean(initialSalesOrderId)}
+                            flat={embedded}
+                            salesOrderReturnTo={salesOrderReturnTo}
+                            onPreviewSalesOrder={
+                                renderSalesOrderPreview
+                                    ? (id, title) =>
+                                          setSourcePaper({ id, title })
+                                    : undefined
+                            }
+                            onSalesOrderChange={(value) =>
+                                form.setFieldValue("salesOrderId", value)
+                            }
+                        />
+
+                        {selectedOrder ? (
+                            <section
+                                className={cn(
+                                    "overflow-hidden",
+                                    surfaceClassName(embedded),
+                                    embedded &&
+                                        cn(
+                                            workspaceTaskSurfacePadClassName,
+                                            "py-5",
+                                        ),
+                                )}
+                            >
+                                <div
+                                    className={cn(
+                                        "flex flex-col gap-3",
+                                        !embedded && "p-4 md:p-5",
+                                    )}
+                                >
+                                    <div className="flex items-center justify-between gap-2">
+                                        <h2 className="font-heading text-sm font-semibold">
+                                            销售明细与供给方案
+                                        </h2>
+                                        <span className="text-xs text-muted-foreground">
+                                            {selectedOrder.lines.length} 行
+                                        </span>
+                                    </div>
+                                    <PurchaseOrderCreateBatchBar
+                                        selectedCount={selectedCount}
+                                        options={commonSourcingOptions}
+                                        onApply={applyBatchSupplier}
+                                        matchDisabled={!canMatchBest}
+                                        onMatchBest={applyBestSourcingOptions}
+                                    />
+                                    {sourcingFormLinesReady(
+                                        lines,
+                                        selectedOrder,
+                                    ) ? (
+                                        <PurchaseOrderCreateSourcingTable
+                                            form={
+                                                form as unknown as PurchaseOrderCreateFormApi
+                                            }
+                                            order={selectedOrder}
+                                            onAddSplit={addSplitLine}
+                                            onRemoveSplit={removeSplitLine}
+                                        />
+                                    ) : (
+                                        <Skeleton className="h-40" />
+                                    )}
+                                    <p className="text-xs text-muted-foreground">
+                                        页面已自动优先分配现有库存；库存不足时，再按可覆盖数量、成本和交期推荐采购。可调整或拆分，同一采购维度会合并为一张采购单。
+                                    </p>
+                                </div>
+                            </section>
+                        ) : null}
+
+                        {embedded ? null : (
+                            <StickyTotalBar
+                                items={sourcingTotalItems}
+                                actions={previewAction}
+                            />
+                        )}
+                    </form>
+                )}
+            </div>
+            {embedded && workspace.length > 0 ? (
+                <div
+                    className={cn(
+                        workspaceTaskSurfacePadClassName,
+                        "flex shrink-0 flex-col items-stretch gap-3 border-t border-border/40 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+                    )}
+                >
+                    <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                        {sourcingTotalItems.map((item) => (
+                            <div key={item.id} className="min-w-0">
+                                <dt className="text-xs text-muted-foreground">
+                                    {item.label}
+                                </dt>
+                                <dd className="num mt-0.5 font-medium">
+                                    {item.value}
+                                </dd>
+                            </div>
+                        ))}
+                    </dl>
+                    {previewAction}
+                </div>
             ) : null}
 
-            {workspace.length === 0 ? (
-                <BusinessEmptyState
-                    kind="no-data"
-                    title="当前没有待分配供给"
-                    description={
-                        initialSalesOrderId
-                            ? "该销售单可能尚未生效、供给已覆盖，或既无可用库存也无合格采购供给。"
-                            : "当前没有待分配供给。请检查已生效销售单、库存余额和供应商供给。"
-                    }
-                    action={
-                        !embedded ? (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                render={<Link href="/procurement/orders" />}
-                            >
-                                返回列表
-                            </Button>
-                        ) : undefined
-                    }
-                />
-            ) : (
-                <form
-                    className="flex flex-col gap-4"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                    }}
-                >
-                    <PurchaseOrderCreateSourcePanel
-                        workspace={workspace}
-                        selectedSalesOrderId={selectedSalesOrderId}
-                        selectedOrder={selectedOrder}
-                        disabled={Boolean(initialSalesOrderId)}
-                        onSalesOrderChange={(value) =>
-                            form.setFieldValue("salesOrderId", value)
-                        }
-                    />
-
-                    {selectedOrder ? (
-                        <section
-                            className={cn(
-                                surfacePanelClassName,
-                                "overflow-hidden",
-                            )}
-                        >
-                            <div className="flex flex-col gap-3 p-4 md:p-5">
-                                <div className="flex items-center justify-between gap-2">
-                                    <h2 className="font-heading text-sm font-semibold">
-                                        销售明细与供给方案
-                                    </h2>
-                                    <span className="text-xs text-muted-foreground">
-                                        {selectedOrder.lines.length} 行
-                                    </span>
-                                </div>
-                                <PurchaseOrderCreateBatchBar
-                                    selectedCount={selectedCount}
-                                    options={commonSourcingOptions}
-                                    onApply={applyBatchSupplier}
-                                    matchDisabled={!canMatchBest}
-                                    onMatchBest={applyBestSourcingOptions}
-                                />
-                                {sourcingFormLinesReady(
-                                    lines,
-                                    selectedOrder,
-                                ) ? (
-                                    <PurchaseOrderCreateSourcingTable
-                                        form={
-                                            form as unknown as PurchaseOrderCreateFormApi
-                                        }
-                                        order={selectedOrder}
-                                        onAddSplit={addSplitLine}
-                                        onRemoveSplit={removeSplitLine}
-                                    />
-                                ) : (
-                                    <Skeleton className="h-40" />
-                                )}
-                                <p className="text-xs text-muted-foreground">
-                                    页面已自动优先分配现有库存；库存不足时，再按可覆盖数量、成本和交期推荐采购。可调整或拆分，同一采购维度会合并为一张采购单。
-                                </p>
-                            </div>
-                        </section>
-                    ) : null}
-
-                    <StickyTotalBar
-                        items={[
-                            {
-                                id: "orders",
-                                label: "将创建采购单",
-                                value: `${previews.length} 张`,
-                            },
-                            {
-                                id: "stock",
-                                label: "将建立库存预留",
-                                value: `${stockPreviews.length} 条`,
-                            },
-                            {
-                                id: "lines",
-                                label: "采购缺口明细",
-                                value: `${previews.reduce((count, preview) => count + preview.lines.length, 0)} 行`,
-                            },
-                            {
-                                id: "gross",
-                                label: "采购含税合计",
-                                value: (
-                                    <MoneyValue value={previewTotals.gross} />
-                                ),
-                            },
-                        ]}
-                        actions={
-                            <Button
-                                type="button"
-                                data-testid="purchase-create-preview"
-                                onClick={() => void openPreview()}
-                            >
-                                预览供给分配
-                            </Button>
-                        }
-                    />
-                </form>
-            )}
+            {renderSalesOrderPreview?.({
+                salesOrderId: sourcePaper?.id ?? null,
+                title: sourcePaper?.title,
+                open: Boolean(sourcePaper),
+                onOpenChange: (open) => {
+                    if (!open) setSourcePaper(null)
+                },
+            })}
 
             <PurchaseOrderCreatePreviewDialog
                 open={previewOpen}
@@ -692,10 +818,14 @@ export function PurchaseOrderCreatePage({
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={createMutation.isPending}>
+                        <AlertDialogCancel
+                            id="procurement-orders-create-confirm-cancel"
+                            disabled={createMutation.isPending}
+                        >
                             返回预览
                         </AlertDialogCancel>
                         <AlertDialogAction
+                            id="procurement-orders-create-confirm"
                             data-testid="purchase-create-confirm"
                             disabled={createMutation.isPending}
                             onClick={() => {

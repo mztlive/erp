@@ -32,15 +32,18 @@ export function CustomerSearchCombobox({
         { query: search.input, purpose, scope },
         value,
     )
-    const { rows, loading, emptyLabel: resolvedEmptyLabel } =
-        useRemoteSearchCombobox({
-            list: query.list,
-            selected: query.selected,
-            selectedItem,
-            idOf: (item) => item.id,
-            emptyLabel,
-            fallbackError: "客户加载失败，请重试",
-        })
+    const {
+        rows,
+        loading,
+        emptyLabel: resolvedEmptyLabel,
+    } = useRemoteSearchCombobox({
+        list: query.list,
+        selected: query.selected,
+        selectedItem,
+        idOf: (item) => item.id,
+        emptyLabel,
+        fallbackError: "客户加载失败，请重试",
+    })
     return (
         <CustomerCombobox
             {...props}

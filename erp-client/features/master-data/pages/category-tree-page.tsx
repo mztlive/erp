@@ -87,6 +87,7 @@ export function CategoryTreePage() {
                     <PageActions
                         actions={[
                             {
+                                id: "master-data-category-tree-export",
                                 actionKey: "export",
                                 label: masterDataCopy.actionExport,
                                 icon: DownloadIcon,
@@ -96,6 +97,7 @@ export function CategoryTreePage() {
                                 onClick: onExport,
                             },
                             {
+                                id: "master-data-category-tree-create-root",
                                 actionKey: "create-root",
                                 label: masterDataCopy.categoryAddRoot,
                                 icon: PlusIcon,
@@ -134,6 +136,7 @@ export function CategoryTreePage() {
                         </h2>
                         <div className="flex items-center gap-1">
                             <Button
+                                id="master-data-category-tree-expand-all"
                                 type="button"
                                 variant="ghost"
                                 onClick={expandAll}
@@ -141,6 +144,7 @@ export function CategoryTreePage() {
                                 {masterDataCopy.categoryExpandAll}
                             </Button>
                             <Button
+                                id="master-data-category-tree-collapse-all"
                                 type="button"
                                 variant="ghost"
                                 onClick={collapseAll}
@@ -153,6 +157,7 @@ export function CategoryTreePage() {
                         </div>
                     </div>
                     <CategoryTreeToolbar
+                        idPrefix="master-data-category-tree-toolbar"
                         searchInputRef={searchInputRef}
                         searchDraft={searchDraft}
                         setSearchDraft={setSearchDraft}
@@ -173,6 +178,7 @@ export function CategoryTreePage() {
                             error={listQuery.error}
                             action={
                                 <Button
+                                    id="master-data-category-tree-retry"
                                     type="button"
                                     onClick={() => void listQuery.refetch()}
                                 >
@@ -182,6 +188,7 @@ export function CategoryTreePage() {
                         />
                     ) : (
                         <CategoryTreeList
+                            idPrefix="master-data-category-tree-list"
                             forest={forest}
                             expanded={expanded}
                             selectedId={selectedId}
@@ -196,6 +203,7 @@ export function CategoryTreePage() {
 
                 {listQuery.data ? (
                     <CategoryTreeDetailPanel
+                        idPrefix="master-data-category-tree-detail-panel"
                         selected={selected}
                         selectedId={selectedId}
                         selectedPath={selectedPath}
