@@ -131,6 +131,7 @@ export function ContractDetailPage({
                 className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}
             >
                 <ObjectSectionTabs
+                    id={`contracts-detail-tabs-${contractId}`}
                     value={activeSection}
                     onValueChange={handleSectionChange}
                     items={CONTRACT_SECTION_NAV}

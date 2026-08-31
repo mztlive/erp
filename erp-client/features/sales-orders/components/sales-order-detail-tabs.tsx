@@ -94,6 +94,7 @@ export function SalesOrderDetailTabs({
 
     return (
         <ObjectSectionTabs
+            id={`sales-orders-detail-tabs-${order.id}`}
             value={navSection}
             onValueChange={(next) => {
                 const target = next as NavSectionId

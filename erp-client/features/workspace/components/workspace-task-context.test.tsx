@@ -48,7 +48,7 @@ function sampleItem(
     }
 }
 
-test("单据审批和供给分配在标题栏内嵌问号，未登记作业面才用右上角入口", () => {
+test("单据审批、供给分配和票款复核都在标题栏内嵌问号", () => {
     expect(
         workspaceTaskHasInlineContextHelp({
             workItemType: "DOCUMENT_APPROVAL",
@@ -62,6 +62,11 @@ test("单据审批和供给分配在标题栏内嵌问号，未登记作业面�
     expect(
         workspaceTaskHasInlineContextHelp({
             workItemType: "CARD_FUNDS_REVIEW",
+        }),
+    ).toBe(true)
+    expect(
+        workspaceTaskHasInlineContextHelp({
+            workItemType: "UNKNOWN_HANDLER",
         }),
     ).toBe(false)
 })

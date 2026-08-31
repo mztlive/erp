@@ -2,7 +2,11 @@
 
 import { CircleCheckIcon, XIcon } from "lucide-react"
 
-import { surfacePanelClassName } from "@/components/business"
+import {
+    WorkspaceTaskFooter,
+    surfacePanelClassName,
+    useWorkspaceTaskPane,
+} from "@/components/business"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -54,10 +58,15 @@ export function DecisionPanel({
     onApprove: (advance: boolean) => void
     onReject: () => void
 }) {
+    const inWorkspaceTaskPane = useWorkspaceTaskPane()
+
     return (
         <Card
             size="sm"
-            className={cn(surfacePanelClassName, "sticky bottom-2 z-10")}
+            className={cn(
+                surfacePanelClassName,
+                !inWorkspaceTaskPane && "sticky bottom-2 z-10",
+            )}
         >
             <CardHeader className="border-b border-grid py-3">
                 <CardTitle className="text-base">结论区</CardTitle>
@@ -116,62 +125,108 @@ export function DecisionPanel({
                         rows={2}
                     />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    {keyHint ? (
-                        <span className="text-xs text-destructive" role="alert">
-                            {keyHint}
-                        </span>
-                    ) : null}
-                    {canConfirmZero ? (
-                        <Button
-                            id="card-contracts-funds-review-decision-zero"
-                            type="button"
-                            variant="secondary"
-                            disabled={formalPending || !evidenceOk}
-                            title={
-                                evidenceOk
-                                    ? undefined
-                                    : "须先填写凭证编号或证据说明"
-                            }
-                            onClick={onZero}
-                        >
-                            <CircleCheckIcon data-icon="inline-start" />
-                            无历史票款，从 0 起
-                        </Button>
-                    ) : null}
-                    <Button
-                        id="card-contracts-funds-review-decision-approve"
-                        type="button"
-                        disabled={
-                            formalPending ||
-                            !evidenceOk ||
-                            !task.workItem.allowedActions.includes("APPROVE")
-                        }
-                        title={
-                            evidenceOk
-                                ? undefined
-                                : "须先填写凭证编号或证据说明"
-                        }
-                        onClick={() => onApprove(autoNext)}
-                    >
-                        复核通过
-                    </Button>
-                    <Button
-                        id="card-contracts-funds-review-decision-reject"
-                        type="button"
-                        variant="destructive"
-                        disabled={
-                            formalPending ||
-                            !evidenceOk ||
-                            !task.workItem.allowedActions.includes("REJECT")
-                        }
-                        onClick={onReject}
-                    >
-                        <XIcon data-icon="inline-start" />
-                        驳回
-                    </Button>
-                </div>
+                <WorkspaceTaskFooter
+                    fallback={
+                        <DecisionPanelActions
+                            task={task}
+                            keyHint={keyHint}
+                            canConfirmZero={canConfirmZero}
+                            formalPending={formalPending}
+                            evidenceOk={evidenceOk}
+                            autoNext={autoNext}
+                            onZero={onZero}
+                            onApprove={onApprove}
+                            onReject={onReject}
+                        />
+                    }
+                >
+                    <DecisionPanelActions
+                        task={task}
+                        keyHint={keyHint}
+                        canConfirmZero={canConfirmZero}
+                        formalPending={formalPending}
+                        evidenceOk={evidenceOk}
+                        autoNext={autoNext}
+                        onZero={onZero}
+                        onApprove={onApprove}
+                        onReject={onReject}
+                    />
+                </WorkspaceTaskFooter>
             </CardContent>
         </Card>
+    )
+}
+
+function DecisionPanelActions({
+    task,
+    keyHint,
+    canConfirmZero,
+    formalPending,
+    evidenceOk,
+    autoNext,
+    onZero,
+    onApprove,
+    onReject,
+}: {
+    task: CardFundsReviewItemView
+    keyHint: string | null
+    canConfirmZero: boolean
+    formalPending: boolean
+    evidenceOk: boolean
+    autoNext: boolean
+    onZero: () => void
+    onApprove: (advance: boolean) => void
+    onReject: () => void
+}) {
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            {keyHint ? (
+                <span className="text-xs text-destructive" role="alert">
+                    {keyHint}
+                </span>
+            ) : null}
+            {canConfirmZero ? (
+                <Button
+                    id="card-contracts-funds-review-decision-zero"
+                    type="button"
+                    variant="secondary"
+                    disabled={formalPending || !evidenceOk}
+                    title={
+                        evidenceOk ? undefined : "须先填写凭证编号或证据说明"
+                    }
+                    onClick={onZero}
+                >
+                    <CircleCheckIcon data-icon="inline-start" />
+                    无历史票款，从 0 起
+                </Button>
+            ) : null}
+            <Button
+                id="card-contracts-funds-review-decision-approve"
+                type="button"
+                disabled={
+                    formalPending ||
+                    !evidenceOk ||
+                    !task.workItem.allowedActions.includes("APPROVE")
+                }
+                title={evidenceOk ? undefined : "须先填写凭证编号或证据说明"}
+                onClick={() => onApprove(autoNext)}
+            >
+                复核通过
+            </Button>
+            <Button
+                id="card-contracts-funds-review-decision-reject"
+                type="button"
+                variant="destructive"
+                disabled={
+                    formalPending ||
+                    !evidenceOk ||
+                    !task.workItem.allowedActions.includes("REJECT")
+                }
+                onClick={onReject}
+            >
+                <XIcon data-icon="inline-start" />
+                驳回
+            </Button>
+        </div>
     )
 }

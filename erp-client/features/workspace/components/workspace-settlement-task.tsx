@@ -2,10 +2,12 @@
 
 import * as React from "react"
 
+import { WorkspaceTaskPane } from "@/components/business"
 import { SettlementCenter } from "@/features/supplier-settlements/components/settlement-center"
 import type { SettlementsUrlState } from "@/features/supplier-settlements/lib/url-state"
 
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 /** W01 供应商结算复核：以本地页签状态承载 W27 正式作业，不污染工作台 URL。 */
 export function WorkspaceSettlementTask({
@@ -31,8 +33,8 @@ export function WorkspaceSettlementTask({
     )
 
     return (
-        <section
-            className="h-full min-h-0 overflow-auto"
+        <WorkspaceTaskPane
+            header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前供应商结算复核任务"
         >
             <SettlementCenter
@@ -44,6 +46,6 @@ export function WorkspaceSettlementTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </section>
+        </WorkspaceTaskPane>
     )
 }

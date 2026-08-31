@@ -10,6 +10,7 @@ import {
     PageActions,
     PageHeader,
     PageScaffold,
+    WorkspaceTaskPane,
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -258,14 +259,28 @@ export function WorkspaceHomePage() {
             />
         </WorkspacePaneActionsProvider>
     ) : (
-        <div className="flex flex-1 items-center justify-center p-8">
-            <BusinessEmptyState
-                kind="no-tasks"
-                title="在此处理任务"
-                description="选中左侧待办后，可在此核对并提交决定。"
-                className="bg-transparent ring-0"
-            />
-        </div>
+        <WorkspaceTaskPane
+            header={
+                <div className="flex min-w-0 flex-col gap-2">
+                    <h2 className="text-xl font-semibold tracking-tight">
+                        任务处理
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        选中左侧待办后，可在此核对并提交决定。
+                    </p>
+                </div>
+            }
+            aria-label="任务处理"
+        >
+            <div className="flex min-h-full items-center justify-center p-8">
+                <BusinessEmptyState
+                    kind="no-tasks"
+                    title="在此处理任务"
+                    description="选中左侧待办后，可在此核对并提交决定。"
+                    className="bg-transparent ring-0"
+                />
+            </div>
+        </WorkspaceTaskPane>
     )
 
     return (

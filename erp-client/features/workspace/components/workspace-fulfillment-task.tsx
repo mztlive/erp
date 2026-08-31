@@ -27,15 +27,13 @@ import {
 } from "@/features/work-items/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { workspaceTaskSurfacePadClassName } from "@/components/business"
-import { cn } from "@/lib/utils"
+import { WorkspaceTaskPane } from "@/components/business"
 
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import { fulfillmentTaskTitle } from "../lib/fulfillment-title"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspaceFulfillmentTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -86,33 +84,18 @@ export function WorkspaceFulfillmentTask({
     })
 
     return (
-        <section
-            className="flex h-full min-h-0 flex-col"
-            aria-label="当前履约任务"
-        >
-            <header
-                className={cn(
-                    workspaceTaskSurfacePadClassName,
-                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
-                )}
-            >
-                <div className="flex min-w-0 flex-col gap-2">
-                    <WorkspaceDocumentBadge item={item} />
-                    <h2 className="text-xl font-semibold tracking-tight">
-                        {fulfillmentTaskTitle(item, controller.operation)}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        {[
-                            `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                            displayText(
-                                controller.operation?.source.customerLabel,
-                            ),
-                        ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                    </p>
-                </div>
-                <WorkspaceTaskHeaderActions item={item}>
+        <WorkspaceTaskPane
+            header={
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    title={fulfillmentTaskTitle(item, controller.operation)}
+                    subtitle={[
+                        `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
+                        displayText(controller.operation?.source.customerLabel),
+                    ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                >
                     {item.allowedActions.includes("REASSIGN") ? (
                         <Button
                             id={`workspace-fulfillment-reassign-trigger-${toAutomationIdSegment(item.workItemId)}`}
@@ -123,53 +106,50 @@ export function WorkspaceFulfillmentTask({
                             转交责任
                         </Button>
                     ) : null}
-                </WorkspaceTaskHeaderActions>
-            </header>
-
-            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
-                {!descriptor ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>任务责任与履约对象不一致</AlertTitle>
-                        <AlertDescription>
-                            请联系管理员核对责任人、对象类型与任务原因后重试。
-                        </AlertDescription>
-                    </Alert>
-                ) : controller.queueQuery.isPending ||
-                  controller.queueQuery.isError ? (
-                    <FulfillmentPageStates
-                        status={
-                            controller.queueQuery.isPending
-                                ? "pending"
-                                : "error"
-                        }
-                        standalone
-                        embedded
-                        headerDescription="履约处理"
-                        error={controller.queueQuery.error}
-                        onRetry={() => void controller.queueQuery.refetch()}
-                    />
-                ) : (
-                    <FulfillmentOperationsWorkspace
-                        controller={controller}
-                        headerDescription="当前任务"
-                        operationTypes={[operationType!]}
-                        roleLabel={
-                            controller.context?.roleLabel ??
-                            FULFILLMENT_ROLES[descriptor.role].label
-                        }
-                        embedded
-                        singleOperation
-                        onBack={() => undefined}
-                    />
-                )}
-            </div>
+                </WorkspaceTaskIdentityHeader>
+            }
+            aria-label="当前履约任务"
+        >
+            {!descriptor ? (
+                <Alert variant="destructive">
+                    <AlertTitle>任务责任与履约对象不一致</AlertTitle>
+                    <AlertDescription>
+                        请联系管理员核对责任人、对象类型与任务原因后重试。
+                    </AlertDescription>
+                </Alert>
+            ) : controller.queueQuery.isPending ||
+              controller.queueQuery.isError ? (
+                <FulfillmentPageStates
+                    status={
+                        controller.queueQuery.isPending ? "pending" : "error"
+                    }
+                    standalone
+                    embedded
+                    headerDescription="履约处理"
+                    error={controller.queueQuery.error}
+                    onRetry={() => void controller.queueQuery.refetch()}
+                />
+            ) : (
+                <FulfillmentOperationsWorkspace
+                    controller={controller}
+                    headerDescription="当前任务"
+                    operationTypes={[operationType!]}
+                    roleLabel={
+                        controller.context?.roleLabel ??
+                        FULFILLMENT_ROLES[descriptor.role].label
+                    }
+                    embedded
+                    singleOperation
+                    onBack={() => undefined}
+                />
+            )}
             <WorkspaceFulfillmentReassignDialog
                 open={reassignOpen}
                 onOpenChange={setReassignOpen}
                 item={item}
                 onReassigned={() => onTaskCompleted(item.workItemId)}
             />
-        </section>
+        </WorkspaceTaskPane>
     )
 }
 

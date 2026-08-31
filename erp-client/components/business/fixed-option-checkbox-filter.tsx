@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { Checkbox } from "@/components/ui/checkbox"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type FixedOptionCheckboxFilterOption<Value extends string = string> =
@@ -20,6 +21,8 @@ export type FixedOptionCheckboxFilterProps<Value extends string = string> = {
     disabled?: boolean
     "aria-label"?: string
     className?: string
+    id?: string
+    idPrefix?: string
 }
 
 /**
@@ -36,8 +39,11 @@ export function FixedOptionCheckboxFilter<Value extends string>({
     disabled = false,
     "aria-label": ariaLabel,
     className,
+    id,
+    idPrefix,
 }: FixedOptionCheckboxFilterProps<Value>) {
     const labelId = React.useId()
+    const baseId = idPrefix ?? id
 
     /** 将单个复选操作转换为按声明顺序排列的已选值。 */
     const changeOption = (optionValue: Value, checked: boolean) => {
@@ -80,6 +86,11 @@ export function FixedOptionCheckboxFilter<Value extends string>({
                         )}
                     >
                         <Checkbox
+                            id={
+                                baseId
+                                    ? `${baseId}-option-${toAutomationIdSegment(option.value)}`
+                                    : undefined
+                            }
                             checked={value.includes(option.value)}
                             disabled={disabled || option.disabled}
                             onCheckedChange={(checked) =>

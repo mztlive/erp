@@ -12,6 +12,7 @@ interface FilterChipProps extends React.ComponentProps<"span"> {
     readonly onClear: () => void
     /** 清除按钮的无障碍说明；缺省为「清除{label}筛选」。 */
     readonly clearLabel?: string
+    readonly idPrefix?: string
 }
 
 /**
@@ -26,20 +27,22 @@ function FilterChip({
     clearLabel,
     className,
     id,
+    idPrefix,
     ...props
 }: FilterChipProps) {
+    const baseId = idPrefix ?? id
     return (
         <Badge
             variant="secondary"
             data-slot="filter-chip"
             className={cn("gap-1 font-normal", className)}
-            id={id}
+            id={baseId}
             {...props}
         >
             {label}
             <button
                 type="button"
-                id={id ? `${id}-clear` : undefined}
+                id={baseId ? `${baseId}-clear` : undefined}
                 onClick={onClear}
                 aria-label={clearLabel ?? `清除${String(label)}筛选`}
                 className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

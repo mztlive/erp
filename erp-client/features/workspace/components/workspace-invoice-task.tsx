@@ -2,7 +2,10 @@
 
 import * as React from "react"
 
-import { workspaceTaskSurfacePadClassName } from "@/components/business"
+import {
+    WorkspaceTaskPane,
+    workspaceTaskSurfacePadClassName,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
@@ -22,8 +25,7 @@ import {
     workspaceInvoiceDescriptor,
     workspaceInvoiceMatchesReceivable,
 } from "../lib/workspace-invoice"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspaceInvoiceTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -49,90 +51,75 @@ export function WorkspaceInvoiceTask({
     const executionAuthorized = item.allowedActions.includes("PROCESS")
 
     return (
-        <section
-            className="flex h-full min-h-0 flex-col"
+        <WorkspaceTaskPane
+            header={
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    subtitle={[
+                        `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
+                        receivable?.customerName,
+                        receivable?.salesOrderNo,
+                    ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                />
+            }
             aria-label="当前开票任务"
         >
-            <header
-                className={cn(
-                    workspaceTaskSurfacePadClassName,
-                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
-                )}
-            >
-                <div className="flex min-w-0 flex-col gap-2">
-                    <WorkspaceDocumentBadge item={item} />
-                    <h2 className="text-xl font-semibold tracking-tight">
-                        {item.objectTitle}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        {[
-                            `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                            receivable?.customerName,
-                            receivable?.salesOrderNo,
-                        ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                    </p>
-                </div>
-                <WorkspaceTaskHeaderActions item={item} />
-            </header>
-
-            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
-                {!descriptor ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>任务责任与开票对象不一致</AlertTitle>
-                        <AlertDescription>
-                            请联系管理员核对责任人、应收子账与销售来源后重试。
-                        </AlertDescription>
-                    </Alert>
-                ) : receivableQuery.isPending ? (
-                    <InvoiceSessionSkeleton />
-                ) : receivableQuery.isError ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>应收子账加载失败</AlertTitle>
-                        <AlertDescription className="flex flex-col gap-3">
-                            <span>
-                                {getErrorMessage(
-                                    receivableQuery.error,
-                                    "请刷新后重试",
-                                )}
-                            </span>
-                            <Button
-                                id={`workspace-invoice-receivable-retry-${toAutomationIdSegment(item.workItemId)}`}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="self-start"
-                                onClick={() => void receivableQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                ) : !identityOk || !receivable || !descriptor ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>应收子账与任务冻结事实不一致</AlertTitle>
-                        <AlertDescription>
-                            当前任务绑定的应收不是该销售单来源，已停止展开开票作业。
-                        </AlertDescription>
-                    </Alert>
-                ) : !executionAuthorized ? (
-                    <Alert variant="warning">
-                        <AlertTitle>当前无法登记销项发票</AlertTitle>
-                        <AlertDescription>
-                            {item.actionBlockers[0]?.message ??
-                                "当前账号没有处理此开票任务的资格。"}
-                        </AlertDescription>
-                    </Alert>
-                ) : (
-                    <WorkspaceInvoiceSession
-                        item={item}
-                        receivable={receivable}
-                        onTaskCompleted={onTaskCompleted}
-                    />
-                )}
-            </div>
-        </section>
+            {!descriptor ? (
+                <Alert variant="destructive">
+                    <AlertTitle>任务责任与开票对象不一致</AlertTitle>
+                    <AlertDescription>
+                        请联系管理员核对责任人、应收子账与销售来源后重试。
+                    </AlertDescription>
+                </Alert>
+            ) : receivableQuery.isPending ? (
+                <InvoiceSessionSkeleton />
+            ) : receivableQuery.isError ? (
+                <Alert variant="destructive">
+                    <AlertTitle>应收子账加载失败</AlertTitle>
+                    <AlertDescription className="flex flex-col gap-3">
+                        <span>
+                            {getErrorMessage(
+                                receivableQuery.error,
+                                "请刷新后重试",
+                            )}
+                        </span>
+                        <Button
+                            id={`workspace-invoice-receivable-retry-${toAutomationIdSegment(item.workItemId)}`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="self-start"
+                            onClick={() => void receivableQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            ) : !identityOk || !receivable || !descriptor ? (
+                <Alert variant="destructive">
+                    <AlertTitle>应收子账与任务冻结事实不一致</AlertTitle>
+                    <AlertDescription>
+                        当前任务绑定的应收不是该销售单来源，已停止展开开票作业。
+                    </AlertDescription>
+                </Alert>
+            ) : !executionAuthorized ? (
+                <Alert variant="warning">
+                    <AlertTitle>当前无法登记销项发票</AlertTitle>
+                    <AlertDescription>
+                        {item.actionBlockers[0]?.message ??
+                            "当前账号没有处理此开票任务的资格。"}
+                    </AlertDescription>
+                </Alert>
+            ) : (
+                <WorkspaceInvoiceSession
+                    item={item}
+                    receivable={receivable}
+                    onTaskCompleted={onTaskCompleted}
+                />
+            )}
+        </WorkspaceTaskPane>
     )
 }
 

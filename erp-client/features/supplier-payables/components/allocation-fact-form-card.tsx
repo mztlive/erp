@@ -3,6 +3,7 @@
 import {
     MoneyValue,
     ValidationSummary,
+    WorkspaceTaskFooter,
     surfaceInsetClassName,
     surfacePanelClassName,
     type ValidationIssue,
@@ -386,38 +387,82 @@ export function AllocationFactFormCard({
 
                 <ValidationSummary issues={issues} />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
-                <div className="min-w-0">
-                    {draftHint ? (
-                        <p className="text-xs text-muted-foreground">
-                            {draftHint}（不形成业务记录）
-                        </p>
-                    ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                    {onSaveDraft ? (
-                        <Button
-                            id="supplier-payables-allocation-form-save-draft"
-                            type="button"
-                            variant="outline"
-                            disabled={isSavingDraft || isSubmitting}
-                            onClick={onSaveDraft}
-                        >
-                            {isSavingDraft ? "保存中…" : "保存草稿"}
-                        </Button>
-                    ) : null}
-                    <Button
-                        id="supplier-payables-allocation-form-submit"
-                        type="button"
-                        disabled={!canSubmit || isSubmitting}
-                        onClick={onSubmitClick}
-                    >
-                        {track === "payment"
-                            ? "登记付款并核销"
-                            : "确认登记并核销"}
-                    </Button>
-                </div>
-            </div>
+            <WorkspaceTaskFooter
+                fallback={
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+                        <AllocationFactFormActions
+                            track={track}
+                            draftHint={draftHint}
+                            isSavingDraft={isSavingDraft}
+                            isSubmitting={isSubmitting}
+                            canSubmit={canSubmit}
+                            onSaveDraft={onSaveDraft}
+                            onSubmitClick={onSubmitClick}
+                        />
+                    </div>
+                }
+            >
+                <AllocationFactFormActions
+                    track={track}
+                    draftHint={draftHint}
+                    isSavingDraft={isSavingDraft}
+                    isSubmitting={isSubmitting}
+                    canSubmit={canSubmit}
+                    onSaveDraft={onSaveDraft}
+                    onSubmitClick={onSubmitClick}
+                />
+            </WorkspaceTaskFooter>
         </section>
+    )
+}
+
+function AllocationFactFormActions({
+    track,
+    draftHint,
+    isSavingDraft,
+    isSubmitting,
+    canSubmit,
+    onSaveDraft,
+    onSubmitClick,
+}: {
+    track: AllocationTrack
+    draftHint?: string | null
+    isSavingDraft: boolean
+    isSubmitting: boolean
+    canSubmit: boolean
+    onSaveDraft?: () => void
+    onSubmitClick: () => void
+}) {
+    return (
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+                {draftHint ? (
+                    <p className="text-xs text-muted-foreground">
+                        {draftHint}（不形成业务记录）
+                    </p>
+                ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+                {onSaveDraft ? (
+                    <Button
+                        id="supplier-payables-allocation-form-save-draft"
+                        type="button"
+                        variant="outline"
+                        disabled={isSavingDraft || isSubmitting}
+                        onClick={onSaveDraft}
+                    >
+                        {isSavingDraft ? "保存中…" : "保存草稿"}
+                    </Button>
+                ) : null}
+                <Button
+                    id="supplier-payables-allocation-form-submit"
+                    type="button"
+                    disabled={!canSubmit || isSubmitting}
+                    onClick={onSubmitClick}
+                >
+                    {track === "payment" ? "登记付款并核销" : "确认登记并核销"}
+                </Button>
+            </div>
+        </div>
     )
 }

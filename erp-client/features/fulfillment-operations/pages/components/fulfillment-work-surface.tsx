@@ -16,6 +16,7 @@ import {
     BusinessStatusBadge,
     SequentialProcessBar,
     ValidationSummary,
+    WorkspaceTaskFooter,
     surfacePanelClassName,
     type ValidationIssue,
 } from "@/components/business"
@@ -234,110 +235,199 @@ export function FulfillmentWorkSurface({
                     ) : null}
 
                     {canExecute ? (
-                        <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
-                            {!singleOperation ? (
-                                <Button
-                                    id="fulfillment-operations-work-surface-skip"
-                                    type="button"
-                                    variant="ghost"
-                                    disabled={formalPending}
-                                    onClick={onSkip}
-                                >
-                                    <SkipForwardIcon data-icon="inline-start" />
-                                    先跳过
-                                </Button>
-                            ) : null}
-                            {dirty ? (
-                                <Button
-                                    id="fulfillment-operations-work-surface-discard"
-                                    type="button"
-                                    variant="ghost"
-                                    disabled={formalPending}
-                                    onClick={onDiscard}
-                                >
-                                    <Undo2Icon data-icon="inline-start" />
-                                    放弃修改
-                                </Button>
-                            ) : null}
-                            {supportsSave ? (
-                                <Button
-                                    id="fulfillment-operations-work-surface-save"
-                                    type="button"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    disabled={formalPending || !dirty}
-                                    onClick={() => void onSave()}
-                                >
-                                    {formalPending ? (
-                                        <LoaderCircleIcon
-                                            data-icon="inline-start"
-                                            aria-hidden="true"
-                                            className="animate-spin"
-                                        />
-                                    ) : (
-                                        <SaveIcon data-icon="inline-start" />
-                                    )}
-                                    {formalPending ? "保存中…" : "保存"}
-                                </Button>
-                            ) : null}
-                            <Button
-                                id="fulfillment-operations-work-surface-confirm"
-                                type="button"
-                                disabled={formalPending || !canPost}
-                                onClick={onConfirm}
-                            >
-                                {formalPending ? (
-                                    <LoaderCircleIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                        className="animate-spin"
+                        <WorkspaceTaskFooter
+                            fallback={
+                                <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
+                                    <FulfillmentExecuteActions
+                                        operation={operation}
+                                        singleOperation={singleOperation}
+                                        dirty={dirty}
+                                        supportsSave={supportsSave}
+                                        formalPending={formalPending}
+                                        canPost={canPost}
+                                        autoNext={autoNext}
+                                        onSkip={onSkip}
+                                        onDiscard={onDiscard}
+                                        onSave={onSave}
+                                        onConfirm={onConfirm}
                                     />
-                                ) : (
-                                    <CircleCheckIcon data-icon="inline-start" />
-                                )}
-                                {formalPending
-                                    ? "处理中…"
-                                    : autoNext
-                                      ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
-                                      : OPERATION_ACTION_LABEL[
-                                            operation.operationType
-                                        ]}
-                            </Button>
-                        </div>
+                                </div>
+                            }
+                        >
+                            <FulfillmentExecuteActions
+                                operation={operation}
+                                singleOperation={singleOperation}
+                                dirty={dirty}
+                                supportsSave={supportsSave}
+                                formalPending={formalPending}
+                                canPost={canPost}
+                                autoNext={autoNext}
+                                onSkip={onSkip}
+                                onDiscard={onDiscard}
+                                onSave={onSave}
+                                onConfirm={onConfirm}
+                            />
+                        </WorkspaceTaskFooter>
                     ) : (
-                        /* 只读角色：与其摆一排点不动的按钮，不如说清楚谁在处理 */
-                        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
-                            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <EyeIcon
-                                    className="size-4 shrink-0"
-                                    aria-hidden="true"
-                                />
-                                {readOnlyNote}
-                            </p>
-                            {showSalesOrderLinks ? (
-                                <Button
-                                    id="fulfillment-operations-work-surface-open-sales-order"
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    className="rounded-lg shadow-none"
-                                    render={
-                                        <Link
-                                            href={salesOrderHref(
-                                                operation.source.salesOrderId,
-                                                currentUrl,
-                                            )}
-                                        />
-                                    }
-                                >
-                                    打开销售单
-                                    <ArrowRightIcon data-icon="inline-end" />
-                                </Button>
-                            ) : null}
-                        </div>
+                        <WorkspaceTaskFooter
+                            fallback={
+                                <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-grid bg-card/95 py-3 backdrop-blur">
+                                    <FulfillmentReadOnlyActions
+                                        readOnlyNote={readOnlyNote}
+                                        showSalesOrderLinks={
+                                            showSalesOrderLinks
+                                        }
+                                        salesOrderId={
+                                            operation.source.salesOrderId
+                                        }
+                                        currentUrl={currentUrl}
+                                    />
+                                </div>
+                            }
+                        >
+                            <FulfillmentReadOnlyActions
+                                readOnlyNote={readOnlyNote}
+                                showSalesOrderLinks={showSalesOrderLinks}
+                                salesOrderId={operation.source.salesOrderId}
+                                currentUrl={currentUrl}
+                            />
+                        </WorkspaceTaskFooter>
                     )}
                 </CardContent>
             </Card>
+        </div>
+    )
+}
+
+function FulfillmentExecuteActions({
+    operation,
+    singleOperation,
+    dirty,
+    supportsSave,
+    formalPending,
+    canPost,
+    autoNext,
+    onSkip,
+    onDiscard,
+    onSave,
+    onConfirm,
+}: {
+    operation: FulfillmentOperation
+    singleOperation: boolean
+    dirty: boolean
+    supportsSave: boolean
+    formalPending: boolean
+    canPost: boolean
+    autoNext: boolean
+    onSkip: () => void
+    onDiscard: () => void
+    onSave: () => void
+    onConfirm: () => void
+}) {
+    return (
+        <div className="flex flex-wrap justify-end gap-2">
+            {!singleOperation ? (
+                <Button
+                    id="fulfillment-operations-work-surface-skip"
+                    type="button"
+                    variant="ghost"
+                    disabled={formalPending}
+                    onClick={onSkip}
+                >
+                    <SkipForwardIcon data-icon="inline-start" />
+                    先跳过
+                </Button>
+            ) : null}
+            {dirty ? (
+                <Button
+                    id="fulfillment-operations-work-surface-discard"
+                    type="button"
+                    variant="ghost"
+                    disabled={formalPending}
+                    onClick={onDiscard}
+                >
+                    <Undo2Icon data-icon="inline-start" />
+                    放弃修改
+                </Button>
+            ) : null}
+            {supportsSave ? (
+                <Button
+                    id="fulfillment-operations-work-surface-save"
+                    type="button"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
+                    disabled={formalPending || !dirty}
+                    onClick={() => void onSave()}
+                >
+                    {formalPending ? (
+                        <LoaderCircleIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                            className="animate-spin"
+                        />
+                    ) : (
+                        <SaveIcon data-icon="inline-start" />
+                    )}
+                    {formalPending ? "保存中…" : "保存"}
+                </Button>
+            ) : null}
+            <Button
+                id="fulfillment-operations-work-surface-confirm"
+                type="button"
+                disabled={formalPending || !canPost}
+                onClick={onConfirm}
+            >
+                {formalPending ? (
+                    <LoaderCircleIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                        className="animate-spin"
+                    />
+                ) : (
+                    <CircleCheckIcon data-icon="inline-start" />
+                )}
+                {formalPending
+                    ? "处理中…"
+                    : autoNext
+                      ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
+                      : OPERATION_ACTION_LABEL[operation.operationType]}
+            </Button>
+        </div>
+    )
+}
+
+function FulfillmentReadOnlyActions({
+    readOnlyNote,
+    showSalesOrderLinks,
+    salesOrderId,
+    currentUrl,
+}: {
+    readOnlyNote: string
+    showSalesOrderLinks: boolean
+    salesOrderId: string
+    currentUrl: string
+}) {
+    return (
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <EyeIcon className="size-4 shrink-0" aria-hidden="true" />
+                {readOnlyNote}
+            </p>
+            {showSalesOrderLinks ? (
+                <Button
+                    id="fulfillment-operations-work-surface-open-sales-order"
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
+                    render={
+                        <Link href={salesOrderHref(salesOrderId, currentUrl)} />
+                    }
+                >
+                    打开销售单
+                    <ArrowRightIcon data-icon="inline-end" />
+                </Button>
+            ) : null}
         </div>
     )
 }

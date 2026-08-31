@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { getErrorMessage } from "@/lib/api/errors"
 import { responsibilityText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
@@ -531,7 +532,7 @@ function SequentialProcessBar({
         processNextDisabled !== undefined
             ? !pending && !processNextDisabled
             : canProcess
-    return (
+    const bar = (
         <section
             data-slot="sequential-process-bar"
             aria-label="连续处理操作"
@@ -629,6 +630,8 @@ function SequentialProcessBar({
             </div>
         </section>
     )
+    if (!showProcess) return bar
+    return <WorkspaceTaskFooter fallback={bar}>{bar}</WorkspaceTaskFooter>
 }
 
 export { FormalActionConfirmDialog, SequentialProcessBar }

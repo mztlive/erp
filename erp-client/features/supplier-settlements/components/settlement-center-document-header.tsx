@@ -6,6 +6,7 @@ import {
     DocumentHeader,
     GuardedBusinessAction,
     PageHeader,
+    WorkspaceTaskFooter,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
@@ -84,45 +85,81 @@ function SettlementCenterDocumentHeader({
                     </span>
                 }
                 primaryAction={
-                    <div className="flex flex-wrap gap-2">
-                        {allowed.has("REFRESH_TRIAL") ? (
-                            <Button
-                                id="supplier-settlements-center-refresh"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={refreshPending}
-                                onClick={() => void onRefresh()}
-                            >
-                                <RefreshCwIcon className="size-3.5" />
-                                刷新试算
-                            </Button>
-                        ) : null}
-                        {allowed.has("SUBMIT_REVIEW") ? (
-                            <Button
-                                id="supplier-settlements-center-submit-review"
-                                type="button"
-                                size="sm"
-                                onClick={onSubmitReview}
-                            >
-                                <SendIcon className="size-3.5" />
-                                提交复核
-                            </Button>
-                        ) : submitBlocker ? (
-                            <GuardedBusinessAction
-                                id="supplier-settlements-center-submit-review-disabled"
-                                type="button"
-                                size="sm"
-                                disabled
-                                reason={submitBlocker.message}
-                            >
-                                提交复核
-                            </GuardedBusinessAction>
-                        ) : null}
-                    </div>
+                    <WorkspaceTaskFooter
+                        fallback={
+                            <SettlementCenterHeaderActions
+                                allowed={allowed}
+                                refreshPending={refreshPending}
+                                submitBlocker={submitBlocker}
+                                onRefresh={onRefresh}
+                                onSubmitReview={onSubmitReview}
+                            />
+                        }
+                    >
+                        <SettlementCenterHeaderActions
+                            allowed={allowed}
+                            refreshPending={refreshPending}
+                            submitBlocker={submitBlocker}
+                            onRefresh={onRefresh}
+                            onSubmitReview={onSubmitReview}
+                        />
+                    </WorkspaceTaskFooter>
                 }
             />
         </>
+    )
+}
+
+function SettlementCenterHeaderActions({
+    allowed,
+    refreshPending,
+    submitBlocker,
+    onRefresh,
+    onSubmitReview,
+}: {
+    allowed: Set<string>
+    refreshPending: boolean
+    submitBlocker?: { message: string }
+    onRefresh: () => void
+    onSubmitReview: () => void
+}) {
+    return (
+        <div className="flex flex-wrap gap-2">
+            {allowed.has("REFRESH_TRIAL") ? (
+                <Button
+                    id="supplier-settlements-center-refresh"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={refreshPending}
+                    onClick={() => void onRefresh()}
+                >
+                    <RefreshCwIcon className="size-3.5" />
+                    刷新试算
+                </Button>
+            ) : null}
+            {allowed.has("SUBMIT_REVIEW") ? (
+                <Button
+                    id="supplier-settlements-center-submit-review"
+                    type="button"
+                    size="sm"
+                    onClick={onSubmitReview}
+                >
+                    <SendIcon className="size-3.5" />
+                    提交复核
+                </Button>
+            ) : submitBlocker ? (
+                <GuardedBusinessAction
+                    id="supplier-settlements-center-submit-review-disabled"
+                    type="button"
+                    size="sm"
+                    disabled
+                    reason={submitBlocker.message}
+                >
+                    提交复核
+                </GuardedBusinessAction>
+            ) : null}
+        </div>
     )
 }
 

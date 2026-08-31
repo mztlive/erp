@@ -137,6 +137,7 @@ export function SupplierListToolbar({
                                     {appliedChips.map((chip) => (
                                         <FilterChip
                                             key={chip.key}
+                                            id={`${prefix}-chip-${chip.key}`}
                                             label={chip.label}
                                             clearLabel={`移除${chip.label}`}
                                             onClear={() =>
@@ -162,6 +163,7 @@ export function SupplierListToolbar({
                                     aria-label="供应商与资质更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id={`${prefix}-filter-lifecycle`}
                                         label="启停"
                                         value={lifecycleStatusDraft}
                                         onValueChange={setLifecycleStatusDraft}
@@ -171,6 +173,7 @@ export function SupplierListToolbar({
                                         }
                                     />
                                     <FixedOptionRadioFilter
+                                        id={`${prefix}-filter-qualification-health`}
                                         label="资质状态"
                                         value={supplierQualificationHealthDraft}
                                         onValueChange={
@@ -182,6 +185,7 @@ export function SupplierListToolbar({
                                         aria-label="资质状态"
                                     />
                                     <FixedOptionCheckboxFilter
+                                        id={`${prefix}-filter-capability`}
                                         label="供应能力"
                                         value={supplierCapabilityCodesDraft}
                                         onValueChange={
@@ -191,6 +195,7 @@ export function SupplierListToolbar({
                                         aria-label="供应能力，可多选"
                                     />
                                     <FixedOptionCheckboxFilter
+                                        id={`${prefix}-filter-qualification-type`}
                                         label="资质类型"
                                         value={supplierQualificationTypesDraft}
                                         onValueChange={

@@ -2,11 +2,13 @@
 
 import * as React from "react"
 
+import { WorkspaceTaskPane } from "@/components/business"
 import { BatchDetailView } from "@/features/import-opening/components/batch-detail-view"
 import type { ImportOpeningUrlState } from "@/features/import-opening/lib/url-state"
 import type { ConfirmationScope } from "@/features/import-opening/types"
 
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 const CONFIRMATION_SCOPES = new Set<ConfirmationScope>([
     "SALES",
@@ -51,8 +53,8 @@ export function WorkspaceImportTask({
     )
 
     return (
-        <section
-            className="h-full min-h-0 overflow-auto"
+        <WorkspaceTaskPane
+            header={<WorkspaceTaskIdentityHeader item={item} />}
             aria-label="当前导入业务确认任务"
         >
             <BatchDetailView
@@ -63,6 +65,6 @@ export function WorkspaceImportTask({
                 embedded
                 onTaskCompleted={onTaskCompleted}
             />
-        </section>
+        </WorkspaceTaskPane>
     )
 }

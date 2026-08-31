@@ -7,6 +7,7 @@ import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import {
     MoneyValue,
+    WorkspaceTaskPane,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -43,12 +44,11 @@ import {
     workspacePaymentDescriptor,
     workspacePaymentMatchesPayable,
 } from "../lib/workspace-payment"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
 } from "./workspace-document-paper-dialog"
-import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspacePaymentTaskProps = Readonly<{
     item: WorkspaceWorkItem
@@ -83,152 +83,139 @@ export function WorkspacePaymentTask({
     const readPurchaseLabel = workspaceReadActionLabel("purchase_order")
 
     return (
-        <section
-            className="flex h-full min-h-0 flex-col"
+        <WorkspaceTaskPane
+            header={
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    title={`向${payable?.supplierName ?? item.counterpartyName ?? "供应商"}付款`}
+                    subtitle={
+                        payable ? (
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                <span>
+                                    待付{" "}
+                                    <MoneyValue
+                                        value={payable.openTotal}
+                                        taxBasis="gross"
+                                    />
+                                </span>
+                                <span className="inline-flex min-w-0 items-center gap-1">
+                                    <span>采购单</span>
+                                    <span className="num text-foreground">
+                                        {payable.sourceDocumentNo}
+                                    </span>
+                                    {purchaseOrderId ? (
+                                        <IconActionButton
+                                            id={`workspace-payment-preview-po-${toAutomationIdSegment(item.workItemId)}`}
+                                            label={readPurchaseLabel}
+                                            testId={`work-item-read-purchase-order-${item.workItemId}`}
+                                            onClick={() =>
+                                                setPaper({
+                                                    kind: "purchase_order",
+                                                    objectId: purchaseOrderId,
+                                                    title: purchaseOrderNo,
+                                                })
+                                            }
+                                        >
+                                            <FileTextIcon aria-hidden="true" />
+                                        </IconActionButton>
+                                    ) : null}
+                                    {purchaseOrderHref ? (
+                                        <IconActionButton
+                                            id={`workspace-payment-open-po-${toAutomationIdSegment(item.workItemId)}`}
+                                            label="打开采购单"
+                                            testId={`work-item-open-purchase-order-${item.workItemId}`}
+                                            href={purchaseOrderHref}
+                                        >
+                                            <ArrowUpRightIcon aria-hidden="true" />
+                                        </IconActionButton>
+                                    ) : null}
+                                </span>
+                                {payable.dueDate ? (
+                                    <span>
+                                        {payable.dueStateLabel} ·{" "}
+                                        {payable.dueDate}
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : undefined
+                    }
+                />
+            }
             aria-label="当前付款任务"
         >
-            <header
-                className={cn(
-                    workspaceTaskSurfacePadClassName,
-                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid py-5",
-                )}
-            >
-                <div className="flex min-w-0 flex-col gap-2">
-                    <WorkspaceDocumentBadge item={item} />
-                    <h2 className="text-xl font-semibold tracking-tight">
-                        向
-                        {payable?.supplierName ??
-                            item.counterpartyName ??
-                            "供应商"}
-                        付款
-                    </h2>
-                    {payable ? (
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                            <span>
-                                待付{" "}
-                                <MoneyValue
-                                    value={payable.openTotal}
-                                    taxBasis="gross"
-                                />
-                            </span>
-                            <span className="inline-flex min-w-0 items-center gap-1">
-                                <span>采购单</span>
-                                <span className="num text-foreground">
-                                    {payable.sourceDocumentNo}
-                                </span>
-                                {purchaseOrderId ? (
-                                    <IconActionButton
-                                        id={`workspace-payment-preview-po-${toAutomationIdSegment(item.workItemId)}`}
-                                        label={readPurchaseLabel}
-                                        testId={`work-item-read-purchase-order-${item.workItemId}`}
-                                        onClick={() =>
-                                            setPaper({
-                                                kind: "purchase_order",
-                                                objectId: purchaseOrderId,
-                                                title: purchaseOrderNo,
-                                            })
-                                        }
-                                    >
-                                        <FileTextIcon aria-hidden="true" />
-                                    </IconActionButton>
-                                ) : null}
-                                {purchaseOrderHref ? (
-                                    <IconActionButton
-                                        id={`workspace-payment-open-po-${toAutomationIdSegment(item.workItemId)}`}
-                                        label="打开采购单"
-                                        testId={`work-item-open-purchase-order-${item.workItemId}`}
-                                        href={purchaseOrderHref}
-                                    >
-                                        <ArrowUpRightIcon aria-hidden="true" />
-                                    </IconActionButton>
-                                ) : null}
-                            </span>
-                            {payable.dueDate ? (
-                                <span>
-                                    {payable.dueStateLabel} · {payable.dueDate}
-                                </span>
-                            ) : null}
-                        </div>
-                    ) : null}
+            {!descriptor ? (
+                <Alert variant="destructive">
+                    <AlertTitle>任务责任与付款对象不一致</AlertTitle>
+                    <AlertDescription>
+                        请联系管理员核对责任人、应付子账与采购来源后重试。
+                    </AlertDescription>
+                </Alert>
+            ) : payableQuery.isPending ? (
+                <div
+                    className={cn(
+                        workspaceTaskSurfacePadClassName,
+                        "grid gap-4 py-5",
+                    )}
+                >
+                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
                 </div>
-                <WorkspaceTaskHeaderActions item={item} />
-            </header>
-
-            <div className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5">
-                {!descriptor ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>任务责任与付款对象不一致</AlertTitle>
-                        <AlertDescription>
-                            请联系管理员核对责任人、应付子账与采购来源后重试。
-                        </AlertDescription>
-                    </Alert>
-                ) : payableQuery.isPending ? (
-                    <div
-                        className={cn(
-                            workspaceTaskSurfacePadClassName,
-                            "grid gap-4 py-5",
-                        )}
-                    >
-                        <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                        <div className="h-40 animate-pulse rounded-lg bg-muted" />
-                    </div>
-                ) : payableQuery.isError ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>应付子账加载失败</AlertTitle>
-                        <AlertDescription className="flex flex-col gap-3">
-                            <span>
-                                {getErrorMessage(
-                                    payableQuery.error,
-                                    "请刷新后重试",
-                                )}
-                            </span>
-                            <Button
-                                id={`workspace-payment-payable-retry-${toAutomationIdSegment(item.workItemId)}`}
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="self-start"
-                                onClick={() => void payableQuery.refetch()}
-                            >
-                                重试
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                ) : !identityOk || !payable || !descriptor ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>应付子账与任务冻结事实不一致</AlertTitle>
-                        <AlertDescription>
-                            当前任务绑定的应付不是该采购单来源，已停止展开付款作业。
-                        </AlertDescription>
-                    </Alert>
-                ) : !executionAuthorized ? (
-                    <Alert variant="warning">
-                        <AlertTitle>当前无法登记付款</AlertTitle>
-                        <AlertDescription>
-                            {item.actionBlockers[0]?.message ??
-                                "当前账号没有处理此付款任务的资格。"}
-                        </AlertDescription>
-                    </Alert>
-                ) : !payable.paymentRecipient ? (
-                    <Alert variant="warning">
-                        <AlertTitle>供应商未配置可用收款账户</AlertTitle>
-                        <AlertDescription>
-                            当前付款任务不能执行。请先在供应商主数据中维护唯一的当前默认收款账户，再刷新任务。
-                        </AlertDescription>
-                    </Alert>
-                ) : (
-                    <WorkspacePaymentSession
-                        key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}`}
-                        item={item}
-                        supplierId={payable.supplierId}
-                        purchaseOrderId={descriptor.purchaseOrderId}
-                        payableAccountId={payable.payableAccountId}
-                        openTotal={payable.openTotal}
-                        paymentRecipient={payable.paymentRecipient}
-                        onTaskCompleted={onTaskCompleted}
-                    />
-                )}
-            </div>
+            ) : payableQuery.isError ? (
+                <Alert variant="destructive">
+                    <AlertTitle>应付子账加载失败</AlertTitle>
+                    <AlertDescription className="flex flex-col gap-3">
+                        <span>
+                            {getErrorMessage(
+                                payableQuery.error,
+                                "请刷新后重试",
+                            )}
+                        </span>
+                        <Button
+                            id={`workspace-payment-payable-retry-${toAutomationIdSegment(item.workItemId)}`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="self-start"
+                            onClick={() => void payableQuery.refetch()}
+                        >
+                            重试
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            ) : !identityOk || !payable || !descriptor ? (
+                <Alert variant="destructive">
+                    <AlertTitle>应付子账与任务冻结事实不一致</AlertTitle>
+                    <AlertDescription>
+                        当前任务绑定的应付不是该采购单来源，已停止展开付款作业。
+                    </AlertDescription>
+                </Alert>
+            ) : !executionAuthorized ? (
+                <Alert variant="warning">
+                    <AlertTitle>当前无法登记付款</AlertTitle>
+                    <AlertDescription>
+                        {item.actionBlockers[0]?.message ??
+                            "当前账号没有处理此付款任务的资格。"}
+                    </AlertDescription>
+                </Alert>
+            ) : !payable.paymentRecipient ? (
+                <Alert variant="warning">
+                    <AlertTitle>供应商未配置可用收款账户</AlertTitle>
+                    <AlertDescription>
+                        当前付款任务不能执行。请先在供应商主数据中维护唯一的当前默认收款账户，再刷新任务。
+                    </AlertDescription>
+                </Alert>
+            ) : (
+                <WorkspacePaymentSession
+                    key={`${item.workItemId}:${payable.paymentRecipient.bankAccountId}:${payable.paymentRecipient.version}`}
+                    item={item}
+                    supplierId={payable.supplierId}
+                    purchaseOrderId={descriptor.purchaseOrderId}
+                    payableAccountId={payable.payableAccountId}
+                    openTotal={payable.openTotal}
+                    paymentRecipient={payable.paymentRecipient}
+                    onTaskCompleted={onTaskCompleted}
+                />
+            )}
             <WorkspaceDocumentPaperDialog
                 target={paper}
                 open={Boolean(paper)}
@@ -236,7 +223,7 @@ export function WorkspacePaymentTask({
                     if (!open) setPaper(null)
                 }}
             />
-        </section>
+        </WorkspaceTaskPane>
     )
 }
 

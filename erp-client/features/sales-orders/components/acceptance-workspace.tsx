@@ -3,7 +3,11 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 
-import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    WorkspaceTaskFooter,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -299,21 +303,45 @@ export function AcceptanceWorkspace({
                             <p className="text-sm text-muted-foreground">
                                 还有 {progress.pendingFactCount} 批待客户验收。
                             </p>
-                            <Button
-                                id="sales-orders-acceptance-register-open"
-                                type="button"
-                                size="sm"
-                                disabled={!canPost}
-                                onClick={() => {
-                                    prefilledOpenRef.current = true
-                                    selection.replace(
-                                        pendingAsPassSelection(view.salesLines),
-                                    )
-                                    setRegisterMode(true)
-                                }}
+                            <WorkspaceTaskFooter
+                                fallback={
+                                    <Button
+                                        id="sales-orders-acceptance-register-open"
+                                        type="button"
+                                        size="sm"
+                                        disabled={!canPost}
+                                        onClick={() => {
+                                            prefilledOpenRef.current = true
+                                            selection.replace(
+                                                pendingAsPassSelection(
+                                                    view.salesLines,
+                                                ),
+                                            )
+                                            setRegisterMode(true)
+                                        }}
+                                    >
+                                        登记客户验收
+                                    </Button>
+                                }
                             >
-                                登记客户验收
-                            </Button>
+                                <Button
+                                    id="sales-orders-acceptance-register-open"
+                                    type="button"
+                                    size="sm"
+                                    disabled={!canPost}
+                                    onClick={() => {
+                                        prefilledOpenRef.current = true
+                                        selection.replace(
+                                            pendingAsPassSelection(
+                                                view.salesLines,
+                                            ),
+                                        )
+                                        setRegisterMode(true)
+                                    }}
+                                >
+                                    登记客户验收
+                                </Button>
+                            </WorkspaceTaskFooter>
                         </div>
                     ) : !isOwner && pendingCount > 0 ? (
                         <p className="text-sm text-muted-foreground">

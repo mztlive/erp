@@ -167,6 +167,7 @@ export function ConsumptionOrderFilterBar({
                                     aria-label="商城消费订单更多筛选条件"
                                 >
                                     <FixedOptionRadioFilter
+                                        id="mall-consumption-orders-filter-attribution-status"
                                         label="归集状态"
                                         value={filterDraft.attributionStatus}
                                         onValueChange={(attributionStatus) =>
@@ -178,6 +179,7 @@ export function ConsumptionOrderFilterBar({
                                         options={ATTRIBUTION_STATUS_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="mall-consumption-orders-filter-fulfillment-chain"
                                         label="履约链"
                                         value={filterDraft.fulfillmentChain}
                                         onValueChange={(fulfillmentChain) =>
@@ -189,6 +191,7 @@ export function ConsumptionOrderFilterBar({
                                         options={FULFILLMENT_CHAIN_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="mall-consumption-orders-filter-payment-source"
                                         label="支付方式"
                                         value={filterDraft.paymentSource}
                                         onValueChange={(paymentSource) =>
@@ -200,6 +203,7 @@ export function ConsumptionOrderFilterBar({
                                         options={PAYMENT_SOURCE_OPTIONS}
                                     />
                                     <FixedOptionRadioFilter
+                                        id="mall-consumption-orders-filter-cost-basis"
                                         label="成本口径"
                                         value={filterDraft.costBasis}
                                         onValueChange={(costBasis) =>
@@ -211,6 +215,7 @@ export function ConsumptionOrderFilterBar({
                                         options={COST_BASIS_OPTIONS}
                                     />
                                     <FixedOptionCheckboxFilter
+                                        id="mall-consumption-orders-filter-fact-types"
                                         label="事实类型"
                                         value={filterDraft.factTypes}
                                         onValueChange={(factTypes) =>
@@ -222,6 +227,7 @@ export function ConsumptionOrderFilterBar({
                                         options={FACT_TYPE_OPTIONS}
                                     />
                                     <FixedOptionCheckboxFilter
+                                        id="mall-consumption-orders-filter-data-sources"
                                         label="数据来源"
                                         value={filterDraft.dataSources}
                                         onValueChange={(dataSources) =>

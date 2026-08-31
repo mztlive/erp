@@ -15,6 +15,7 @@ import {
     PageHeader,
     PageScaffold,
     StickyTotalBar,
+    WorkspaceTaskFooter,
     surfaceClassName,
     workspaceEmbeddedScaffoldClassName,
     workspaceTaskSurfacePadClassName,
@@ -77,7 +78,6 @@ export function PurchaseOrderCreatePage({
     embedded = false,
     onTaskCompleted,
     renderSalesOrderPreview,
-    headerActions,
 }: {
     initialSalesOrderId?: string
     initialWorkItemId?: string
@@ -87,8 +87,6 @@ export function PurchaseOrderCreatePage({
     renderSalesOrderPreview?: (
         props: SalesOrderPaperPreviewRenderProps,
     ) => ReactNode
-    /** 嵌入工作台时放在标题行右侧，例如全屏。 */
-    headerActions?: ReactNode
 }) {
     const router = useRouter()
     const pathname = usePathname()
@@ -485,10 +483,12 @@ export function PurchaseOrderCreatePage({
                     embedded ? workspaceEmbeddedScaffoldClassName : undefined
                 }
             >
-                <PageHeader
-                    title="供给分配"
-                    description="正在加载库存与采购供给…"
-                />
+                {embedded ? null : (
+                    <PageHeader
+                        title="供给分配"
+                        description="正在加载库存与采购供给…"
+                    />
+                )}
                 <div
                     className="flex flex-col gap-3"
                     aria-busy="true"
@@ -509,7 +509,12 @@ export function PurchaseOrderCreatePage({
                     embedded ? workspaceEmbeddedScaffoldClassName : undefined
                 }
             >
-                <PageHeader title="供给分配" description="供给依据加载失败" />
+                {embedded ? null : (
+                    <PageHeader
+                        title="供给分配"
+                        description="供给依据加载失败"
+                    />
+                )}
                 <BusinessFailureState
                     error={basesQuery.error}
                     action={
@@ -583,15 +588,11 @@ export function PurchaseOrderCreatePage({
             density={embedded ? "compact" : "default"}
             className={embedded ? workspaceEmbeddedScaffoldClassName : "pb-8"}
         >
-            <PageHeader
-                title="供给分配"
-                description="系统优先推荐现有库存，不足部分再推荐采购；确认后一次完成库存预留和采购缺口建单。"
-                titleRowAlign={embedded ? "start" : undefined}
-                className={embedded ? "static bg-transparent" : undefined}
-                actions={
-                    embedded ? (
-                        headerActions
-                    ) : (
+            {embedded ? null : (
+                <PageHeader
+                    title="供给分配"
+                    description="系统优先推荐现有库存，不足部分再推荐采购；确认后一次完成库存预留和采购缺口建单。"
+                    actions={
                         <PageActions
                             actions={[
                                 {
@@ -605,9 +606,9 @@ export function PurchaseOrderCreatePage({
                                 },
                             ]}
                         />
-                    )
-                }
-            />
+                    }
+                />
+            )}
 
             <div
                 className={
@@ -751,26 +752,26 @@ export function PurchaseOrderCreatePage({
                 )}
             </div>
             {embedded && workspace.length > 0 ? (
-                <div
-                    className={cn(
-                        workspaceTaskSurfacePadClassName,
-                        "flex shrink-0 flex-col items-stretch gap-3 border-t border-border/40 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
-                    )}
+                <WorkspaceTaskFooter
+                    fallback={
+                        <div
+                            className={cn(
+                                workspaceTaskSurfacePadClassName,
+                                "flex shrink-0 flex-col items-stretch gap-3 border-t border-border/40 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+                            )}
+                        >
+                            <PurchaseOrderCreateFooterTotals
+                                items={sourcingTotalItems}
+                                action={previewAction}
+                            />
+                        </div>
+                    }
                 >
-                    <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
-                        {sourcingTotalItems.map((item) => (
-                            <div key={item.id} className="min-w-0">
-                                <dt className="text-xs text-muted-foreground">
-                                    {item.label}
-                                </dt>
-                                <dd className="num mt-0.5 font-medium">
-                                    {item.value}
-                                </dd>
-                            </div>
-                        ))}
-                    </dl>
-                    {previewAction}
-                </div>
+                    <PurchaseOrderCreateFooterTotals
+                        items={sourcingTotalItems}
+                        action={previewAction}
+                    />
+                </WorkspaceTaskFooter>
             ) : null}
 
             {renderSalesOrderPreview?.({
@@ -840,5 +841,33 @@ export function PurchaseOrderCreatePage({
                 </AlertDialogContent>
             </AlertDialog>
         </PageScaffold>
+    )
+}
+
+function PurchaseOrderCreateFooterTotals({
+    items,
+    action,
+}: {
+    items: readonly {
+        id: string
+        label: string
+        value: ReactNode
+    }[]
+    action: ReactNode
+}) {
+    return (
+        <div className="flex w-full min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                {items.map((item) => (
+                    <div key={item.id} className="min-w-0">
+                        <dt className="text-xs text-muted-foreground">
+                            {item.label}
+                        </dt>
+                        <dd className="num mt-0.5 font-medium">{item.value}</dd>
+                    </div>
+                ))}
+            </dl>
+            {action}
+        </div>
     )
 }

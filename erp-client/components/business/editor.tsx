@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/table"
 import { GuardedBusinessAction } from "@/components/business/feedback"
 import { taxAmountToneClass } from "@/components/business/values"
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { sequentialText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
@@ -743,9 +744,15 @@ function AllocationWorkspace<TAllocation>({
                 </CardContent>
 
                 {actions ? (
-                    <CardFooter className="justify-end gap-2 border-t border-border">
+                    <WorkspaceTaskFooter
+                        fallback={
+                            <CardFooter className="justify-end gap-2 border-t border-border">
+                                {actions}
+                            </CardFooter>
+                        }
+                    >
                         {actions}
-                    </CardFooter>
+                    </WorkspaceTaskFooter>
                 ) : null}
             </Card>
         </section>

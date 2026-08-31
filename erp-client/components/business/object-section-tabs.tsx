@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
 export type ObjectSectionTabItem = Readonly<{
@@ -26,6 +27,8 @@ export type ObjectSectionTabsProps = Omit<
     listClassName?: string
     /** 传给 TabsList 的无障碍标签。 */
     listLabel?: string
+    id?: string
+    idPrefix?: string
 }
 
 /**
@@ -40,10 +43,14 @@ function ObjectSectionTabs({
     className,
     listClassName,
     listLabel = "对象分区",
+    id,
+    idPrefix,
     ...props
 }: ObjectSectionTabsProps) {
+    const baseId = idPrefix ?? id
     return (
         <Tabs
+            id={baseId}
             data-slot="object-section-tabs"
             value={value}
             onValueChange={(next) => {
@@ -65,6 +72,11 @@ function ObjectSectionTabs({
                 {items.map((item) => (
                     <TabsTrigger
                         key={item.id}
+                        id={
+                            baseId
+                                ? `${baseId}-tab-${toAutomationIdSegment(item.id)}`
+                                : undefined
+                        }
                         value={item.id}
                         title={item.title}
                         className="h-10 flex-none gap-1.5 rounded-none px-3 text-sm after:inset-x-3 after:bottom-0 after:h-0.5 data-active:font-semibold"

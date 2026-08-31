@@ -11,6 +11,7 @@ import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
     surfaceInsetClassName,
     taxAmountToneClass,
+    WorkspaceTaskPane,
     workspaceTaskSurfaceClassName,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
@@ -22,7 +23,6 @@ import {
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
-import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Tooltip,
     TooltipContent,
@@ -49,7 +49,6 @@ import {
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceCardFundsTask } from "./workspace-card-funds-task"
 import { WorkspaceFulfillmentTask } from "./workspace-fulfillment-task"
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
@@ -61,12 +60,7 @@ import { WorkspaceProcurementTask } from "./workspace-procurement-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
 import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
 import { WorkspaceSupplyExceptionTask } from "./workspace-supply-exception-task"
-import { WorkspacePaneActions } from "./workspace-pane-actions"
-import {
-    WorkspaceTaskContextHelp,
-    WorkspaceTaskHeaderActions,
-    workspaceTaskHasInlineContextHelp,
-} from "./workspace-task-context"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 import { WorkspaceTaskSurfaceBoundary } from "./workspace-task-surface-boundary"
 import {
     WorkspaceDocumentPaperDialog,
@@ -90,23 +84,15 @@ type WorkspaceTaskDetailProps = Readonly<{
 }>
 
 export function WorkspaceTaskDetail(props: WorkspaceTaskDetailProps) {
-    const inlineHelp = workspaceTaskHasInlineContextHelp(props.item)
-
     return (
         <section
             data-slot="workspace-task-surface"
             className={cn(
                 workspaceTaskSurfaceClassName,
-                "relative flex h-full min-h-0 flex-col",
+                "relative flex h-full min-h-0 flex-1 flex-col",
             )}
             aria-label="当前工作台任务"
         >
-            {inlineHelp ? null : (
-                <div className="absolute top-5 right-5 z-10 flex items-center gap-1">
-                    <WorkspaceTaskContextHelp item={props.item} />
-                    <WorkspacePaneActions />
-                </div>
-            )}
             <div className="min-h-0 flex-1">
                 <WorkspaceTaskSurfaceBoundary
                     workItemId={props.item.workItemId}
@@ -284,12 +270,17 @@ function WorkspaceTaskSurface({
         item.workItemType !== "APPROVAL_INSTANCE"
     ) {
         return (
-            <Alert variant="destructive">
-                <AlertTitle>任务处理器未登记</AlertTitle>
-                <AlertDescription>
-                    当前任务类型与业务对象没有签署原地处理面，系统已停止提供处理动作。请联系管理员核对任务类型、业务对象和处理器登记。
-                </AlertDescription>
-            </Alert>
+            <WorkspaceTaskPane
+                header={<WorkspaceTaskIdentityHeader item={item} />}
+                aria-label="当前任务"
+            >
+                <Alert variant="destructive">
+                    <AlertTitle>任务处理器未登记</AlertTitle>
+                    <AlertDescription>
+                        当前任务类型与业务对象没有签署原地处理面，系统已停止提供处理动作。请联系管理员核对任务类型、业务对象和处理器登记。
+                    </AlertDescription>
+                </Alert>
+            </WorkspaceTaskPane>
         )
     }
 
@@ -363,8 +354,6 @@ function WorkspaceDocumentTaskDetail({
     const [primaryAmount, ...otherAmounts] = detailFacts.amounts
     const documentFields = [...detailFacts.keyFields, ...detailFacts.moreFields]
     const lineCount = (briefLines?.length ?? 0) + (briefMoreCount ?? 0)
-    const blocked = isBlockedWorkItem(item)
-    const overdue = item.dueBucket === "overdue"
     const subtitle = [
         counterpartyName,
         sourceSales.source ? `来源 ${sourceSales.source.orderNo}` : undefined,
@@ -386,36 +375,6 @@ function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
-    const documentActions = (
-        <WorkspaceTaskHeaderActions item={item}>
-            {canReadPaper && currentPaperKind ? (
-                <IconActionButton
-                    id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
-                    label={readActionLabel}
-                    testId={`work-item-read-document-${item.workItemId}`}
-                    onClick={() =>
-                        setPaper({
-                            kind: currentPaperKind,
-                            objectId: item.businessObjectId,
-                            title: item.stableNumber,
-                        })
-                    }
-                >
-                    <FileTextIcon aria-hidden="true" />
-                </IconActionButton>
-            ) : null}
-            {approvalTask && documentHref ? (
-                <IconActionButton
-                    id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
-                    label={openActionLabel}
-                    testId={`work-item-open-document-${item.workItemId}`}
-                    href={documentHref}
-                >
-                    <ArrowUpRightIcon aria-hidden="true" />
-                </IconActionButton>
-            ) : null}
-        </WorkspaceTaskHeaderActions>
-    )
     const actions = approvalTask ? (
         <ApprovalActionBar
             id={`workspace-task-detail-approval-${toAutomationIdSegment(item.workItemId)}`}
@@ -454,233 +413,228 @@ function WorkspaceDocumentTaskDetail({
         </Button>
     ) : null
 
-    return (
-        <section className="flex h-full min-h-0 flex-col" aria-label="当前任务">
-            <div className="min-h-0 flex-1 overflow-auto">
-                <div className="flex w-full flex-col">
-                    <header
-                        className={cn(
-                            workspaceTaskSurfacePadClassName,
-                            "flex items-start justify-between gap-3 border-b border-grid py-5",
-                        )}
-                    >
-                        <div className="flex min-w-0 flex-col gap-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <WorkspaceDocumentBadge item={item} />
-                                {blocked ? (
-                                    <StatusBadge label="受阻" tone="warning" />
-                                ) : overdue ? (
-                                    <StatusBadge
-                                        label="已超期"
-                                        tone="destructive"
-                                    />
-                                ) : null}
-                            </div>
-                            <h2 className="text-xl font-semibold tracking-tight">
-                                {item.objectTitle}
-                            </h2>
-                            <p className="text-sm text-muted-foreground">
-                                {canReadSensitive
-                                    ? subtitle
-                                    : "当前账号无权查看部分业务字段"}
-                            </p>
-                        </div>
-                        {documentActions}
-                    </header>
+    const paneFooter =
+        actions || item.nextActionHint ? (
+            <div
+                className={cn(
+                    "flex w-full min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4",
+                    actions ? "sm:justify-between" : "sm:justify-end",
+                )}
+            >
+                {item.nextActionHint ? (
+                    <p className="order-1 max-w-sm text-left text-xs text-muted-foreground sm:order-2 sm:text-right">
+                        {item.nextActionHint}
+                    </p>
+                ) : null}
+                {actions ? (
+                    <div className="order-2 shrink-0 sm:order-1">{actions}</div>
+                ) : null}
+            </div>
+        ) : undefined
 
-                    {documentFacts.isError ? (
+    return (
+        <WorkspaceTaskPane
+            header={
+                <WorkspaceTaskIdentityHeader
+                    item={item}
+                    subtitle={
+                        canReadSensitive
+                            ? subtitle
+                            : "当前账号无权查看部分业务字段"
+                    }
+                >
+                    {canReadPaper && currentPaperKind ? (
+                        <IconActionButton
+                            id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}
+                            label={readActionLabel}
+                            testId={`work-item-read-document-${item.workItemId}`}
+                            onClick={() =>
+                                setPaper({
+                                    kind: currentPaperKind,
+                                    objectId: item.businessObjectId,
+                                    title: item.stableNumber,
+                                })
+                            }
+                        >
+                            <FileTextIcon aria-hidden="true" />
+                        </IconActionButton>
+                    ) : null}
+                    {approvalTask && documentHref ? (
+                        <IconActionButton
+                            id={`workspace-task-detail-open-${toAutomationIdSegment(item.workItemId)}`}
+                            label={openActionLabel}
+                            testId={`work-item-open-document-${item.workItemId}`}
+                            href={documentHref}
+                        >
+                            <ArrowUpRightIcon aria-hidden="true" />
+                        </IconActionButton>
+                    ) : null}
+                </WorkspaceTaskIdentityHeader>
+            }
+            footer={paneFooter}
+            aria-label="当前任务"
+        >
+            <div className="flex w-full flex-col">
+                {documentFacts.isError ? (
+                    <div
+                        className={cn(workspaceTaskSurfacePadClassName, "mt-4")}
+                    >
+                        <Alert variant="destructive">
+                            <AlertTitle>单据补充信息读取失败</AlertTitle>
+                            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                                <span>
+                                    {facts
+                                        ? "已保留当前可见内容；部分最新信息可能暂未显示。"
+                                        : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
+                                </span>
+                                <Button
+                                    id={`workspace-task-detail-document-facts-retry-${toAutomationIdSegment(item.workItemId)}`}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void documentFacts.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+                ) : null}
+
+                {primaryAmount ? (
+                    <DetailBlock title="金额">
                         <div
                             className={cn(
-                                workspaceTaskSurfacePadClassName,
-                                "mt-4",
+                                surfaceInsetClassName,
+                                "flex flex-wrap items-end gap-x-8 gap-y-2 px-4 py-4",
                             )}
                         >
-                            <Alert variant="destructive">
-                                <AlertTitle>单据补充信息读取失败</AlertTitle>
-                                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                                    <span>
-                                        {facts
-                                            ? "已保留当前可见内容；部分最新信息可能暂未显示。"
-                                            : "当前没有可展示的单据事实，请重试后再执行审批或财务操作。"}
-                                    </span>
-                                    <Button
-                                        id={`workspace-task-detail-document-facts-retry-${toAutomationIdSegment(item.workItemId)}`}
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            void documentFacts.refetch()
-                                        }
-                                    >
-                                        重试
-                                    </Button>
-                                </AlertDescription>
-                            </Alert>
-                        </div>
-                    ) : null}
-
-                    {primaryAmount ? (
-                        <DetailBlock title="金额">
-                            <div
-                                className={cn(
-                                    surfaceInsetClassName,
-                                    "flex flex-wrap items-end gap-x-8 gap-y-2 px-4 py-4",
-                                )}
-                            >
-                                <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-1">
+                                <span
+                                    className={cn(
+                                        "num text-3xl font-semibold tracking-tight",
+                                        taxAmountToneClass(primaryAmount.label),
+                                    )}
+                                >
+                                    {primaryAmount.value}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                    {primaryAmount.label}
+                                </span>
+                            </div>
+                            {otherAmounts.map((amount) => (
+                                <div
+                                    key={amount.label}
+                                    className="flex flex-col gap-1"
+                                >
                                     <span
                                         className={cn(
-                                            "num text-3xl font-semibold tracking-tight",
-                                            taxAmountToneClass(
-                                                primaryAmount.label,
-                                            ),
+                                            "num text-lg font-medium",
+                                            taxAmountToneClass(amount.label),
                                         )}
                                     >
-                                        {primaryAmount.value}
+                                        {amount.value}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
-                                        {primaryAmount.label}
+                                        {amount.label}
                                     </span>
                                 </div>
-                                {otherAmounts.map((amount) => (
-                                    <div
-                                        key={amount.label}
-                                        className="flex flex-col gap-1"
-                                    >
-                                        <span
-                                            className={cn(
-                                                "num text-lg font-medium",
-                                                taxAmountToneClass(
-                                                    amount.label,
-                                                ),
-                                            )}
-                                        >
-                                            {amount.value}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {amount.label}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </DetailBlock>
-                    ) : documentFacts.isPending ? (
-                        <DetailBlock title="金额">
-                            <p className="text-sm text-muted-foreground">
-                                正在读取单据事实…
-                            </p>
-                        </DetailBlock>
-                    ) : impactSummary ? (
-                        <DetailBlock title="说明">
-                            <p className="text-sm">{impactSummary}</p>
-                        </DetailBlock>
-                    ) : null}
-
-                    {documentFields.length > 0 ? (
-                        <DetailBlock title="单据信息">
-                            <FieldGrid
-                                sections={documentFields}
-                                returnTo={returnTo}
-                                onPreview={(section) => {
-                                    const kind = linkedDocumentPaperKind(
-                                        section.label,
-                                    )
-                                    if (!kind || !section.objectId) return
-                                    setPaper({
-                                        kind,
-                                        objectId: section.objectId,
-                                        title: `${section.label} ${section.value}`,
-                                    })
-                                }}
-                            />
-                        </DetailBlock>
-                    ) : null}
-
-                    {briefLines && briefLines.length > 0 ? (
-                        <DetailBlock
-                            title="明细"
-                            description={`${lineCount} 行`}
-                        >
-                            <ul className="flex flex-col text-sm">
-                                {briefLines.map((line, lineIndex) => (
-                                    <li
-                                        key={`${lineIndex}:${line.title}`}
-                                        className="grid gap-1 border-b border-border/40 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4"
-                                    >
-                                        <span className="min-w-0">
-                                            {line.title}
-                                        </span>
-                                        {line.quantity || line.dueLabel ? (
-                                            <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground sm:max-w-md sm:justify-end sm:text-right">
-                                                {line.quantity ? (
-                                                    <span className="num">
-                                                        {line.quantity}
-                                                    </span>
-                                                ) : null}
-                                                {line.dueLabel ? (
-                                                    <span className="text-xs">
-                                                        {line.dueLabel}
-                                                    </span>
-                                                ) : null}
-                                            </span>
-                                        ) : null}
-                                    </li>
-                                ))}
-                            </ul>
-                            {briefMoreCount ? (
-                                <p className="text-xs text-muted-foreground">
-                                    {canReadPaper
-                                        ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
-                                        : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}
-                                </p>
-                            ) : null}
-                        </DetailBlock>
-                    ) : null}
-
-                    {item.actionBlockers.length > 0 ? (
-                        <DetailBlock title="处理受阻">
-                            <Alert variant="warning">
-                                <AlertTitle>当前无法继续</AlertTitle>
-                                <AlertDescription>
-                                    {item.actionBlockers[0]?.message}
-                                </AlertDescription>
-                            </Alert>
-                        </DetailBlock>
-                    ) : null}
-
-                    {approvalTask ? (
-                        instance ? (
-                            <DetailBlock title="审批">
-                                <RuntimeSummary instance={instance} compact />
-                            </DetailBlock>
-                        ) : null
-                    ) : item.impactSummary && primaryAmount ? (
-                        <DetailBlock title="说明">
-                            <p className="text-sm">{item.impactSummary}</p>
-                        </DetailBlock>
-                    ) : null}
-                </div>
-            </div>
-            {actions || item.nextActionHint ? (
-                <div
-                    className={cn(
-                        workspaceTaskSurfacePadClassName,
-                        "flex shrink-0 flex-col items-stretch gap-2 border-t border-border/40 py-3 sm:flex-row sm:items-center sm:gap-4",
-                        actions ? "sm:justify-between" : "sm:justify-end",
-                    )}
-                >
-                    {item.nextActionHint ? (
-                        <p className="order-1 max-w-sm text-left text-xs text-muted-foreground sm:order-2 sm:text-right">
-                            {item.nextActionHint}
-                        </p>
-                    ) : null}
-                    {actions ? (
-                        <div className="order-2 shrink-0 sm:order-1">
-                            {actions}
+                            ))}
                         </div>
-                    ) : null}
-                </div>
-            ) : null}
+                    </DetailBlock>
+                ) : documentFacts.isPending ? (
+                    <DetailBlock title="金额">
+                        <p className="text-sm text-muted-foreground">
+                            正在读取单据事实…
+                        </p>
+                    </DetailBlock>
+                ) : impactSummary ? (
+                    <DetailBlock title="说明">
+                        <p className="text-sm">{impactSummary}</p>
+                    </DetailBlock>
+                ) : null}
+
+                {documentFields.length > 0 ? (
+                    <DetailBlock title="单据信息">
+                        <FieldGrid
+                            sections={documentFields}
+                            returnTo={returnTo}
+                            onPreview={(section) => {
+                                const kind = linkedDocumentPaperKind(
+                                    section.label,
+                                )
+                                if (!kind || !section.objectId) return
+                                setPaper({
+                                    kind,
+                                    objectId: section.objectId,
+                                    title: `${section.label} ${section.value}`,
+                                })
+                            }}
+                        />
+                    </DetailBlock>
+                ) : null}
+
+                {briefLines && briefLines.length > 0 ? (
+                    <DetailBlock title="明细" description={`${lineCount} 行`}>
+                        <ul className="flex flex-col text-sm">
+                            {briefLines.map((line, lineIndex) => (
+                                <li
+                                    key={`${lineIndex}:${line.title}`}
+                                    className="grid gap-1 border-b border-border/40 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4"
+                                >
+                                    <span className="min-w-0">
+                                        {line.title}
+                                    </span>
+                                    {line.quantity || line.dueLabel ? (
+                                        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground sm:max-w-md sm:justify-end sm:text-right">
+                                            {line.quantity ? (
+                                                <span className="num">
+                                                    {line.quantity}
+                                                </span>
+                                            ) : null}
+                                            {line.dueLabel ? (
+                                                <span className="text-xs">
+                                                    {line.dueLabel}
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    ) : null}
+                                </li>
+                            ))}
+                        </ul>
+                        {briefMoreCount ? (
+                            <p className="text-xs text-muted-foreground">
+                                {canReadPaper
+                                    ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
+                                    : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}
+                            </p>
+                        ) : null}
+                    </DetailBlock>
+                ) : null}
+
+                {item.actionBlockers.length > 0 ? (
+                    <DetailBlock title="处理受阻">
+                        <Alert variant="warning">
+                            <AlertTitle>当前无法继续</AlertTitle>
+                            <AlertDescription>
+                                {item.actionBlockers[0]?.message}
+                            </AlertDescription>
+                        </Alert>
+                    </DetailBlock>
+                ) : null}
+
+                {approvalTask ? (
+                    instance ? (
+                        <DetailBlock title="审批">
+                            <RuntimeSummary instance={instance} compact />
+                        </DetailBlock>
+                    ) : null
+                ) : item.impactSummary && primaryAmount ? (
+                    <DetailBlock title="说明">
+                        <p className="text-sm">{item.impactSummary}</p>
+                    </DetailBlock>
+                ) : null}
+            </div>
             <WorkspaceDocumentPaperDialog
                 target={paper}
                 open={Boolean(paper)}
@@ -688,7 +642,7 @@ function WorkspaceDocumentTaskDetail({
                     if (!open) setPaper(null)
                 }}
             />
-        </section>
+        </WorkspaceTaskPane>
     )
 }
 
