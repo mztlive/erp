@@ -235,6 +235,25 @@ mod tests {
     }
 
     #[test]
+    fn new_rejects_negative_amounts() {
+        // 负含税金额走 is_sign_negative 分支，错误文案与零金额一致。
+        let negative_gross = CostAllocationData {
+            allocated_gross_amount: Amount::from_str("-1.00").unwrap(),
+            ..data()
+        };
+        let error = CostAllocation::new(CostAllocationId::new("ca-8"), negative_gross).unwrap_err();
+        assert_eq!(error.to_string(), "分配金额必须为正数");
+
+        // 负不含税金额同样拒绝。
+        let negative_net = CostAllocationData {
+            allocated_net_amount: Amount::from_str("-1.00").unwrap(),
+            ..data()
+        };
+        let error = CostAllocation::new(CostAllocationId::new("ca-9"), negative_net).unwrap_err();
+        assert_eq!(error.to_string(), "分配金额必须为正数");
+    }
+
+    #[test]
     fn formal_fact_rejects_update() {
         let mut allocation = CostAllocation::new(CostAllocationId::new("ca-1"), data()).unwrap();
         assert!(allocation.update(data(), "admin-2").is_err());

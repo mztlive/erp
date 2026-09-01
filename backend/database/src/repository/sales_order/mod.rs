@@ -45,11 +45,13 @@ const SALES_ORDER_GOODS_SERVICE_LINE_REVISIONS: &str =
 const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
     <mongodb::Database as SalesOrderExt>::SALES_ORDER_VOUCHER_LINE_REVISIONS;
 
-/// D13 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+/// D13 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入，以及按 ID
+/// 集合批量返回存在性事实的精确读取（如
+/// [`SalesOrderRepository::find_existing_ids`]）。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口（提交快照化、版本生效、明细替换），由
-/// `SalesOrderExt::sales_order()` 访问。
+/// 跨集合原子写入入口（提交快照化、版本生效、明细替换）与批量精确读取，
+/// 由 `SalesOrderExt::sales_order()` 访问。
 pub struct SalesOrderRepository<'a> {
     db: &'a Database,
 }

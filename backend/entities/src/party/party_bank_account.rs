@@ -290,6 +290,53 @@ impl PartyBankAccount {
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
+
+    /// 从已装载的账户事实中解析主体当前唯一的默认收款账户（FIN-E04）。
+    ///
+    /// 入参必须是仓储按业务日期过滤后的「当前有效」账户集合：有效期窗口、
+    /// 启停状态与业务日期读取由 Repository 负责（`list_current_on`），本方法
+    /// 只做默认标记的唯一性解析。零个默认返回 `Ok(None)`（未配置默认收款
+    /// 账户），恰一个默认返回该账户引用，多个默认视为主数据损坏并失败关闭，
+    /// 与旧 Service 手工过滤行为保持一致。
+    ///
+    /// # 参数
+    /// * `accounts` - 同一主体在指定时点当前有效的银行账户事实集合
+    ///
+    /// # 返回
+    /// 返回唯一默认账户引用；未配置默认账户时返回 `None`。
+    ///
+    /// # 错误
+    /// 集合中存在多个默认账户（主数据损坏）时返回错误。
+    ///
+    /// # 约束
+    /// 不读写数据库、不判断有效期与启停状态、不生成脱敏视图；日期读取、
+    /// CAS 写入与错误到 API 的映射仍由 Repository／Service 负责。
+    pub fn resolve_current_default(accounts: &[PartyBankAccount]) -> Result<Option<&PartyBankAccount>> {
+        let mut defaults = accounts.iter().filter(|account| account.is_default);
+        let found = defaults.next();
+        if defaults.next().is_some() {
+            return Err(Error::from("主体存在多个当前默认收款账户，请先修复主数据"));
+        }
+        Ok(found)
+    }
+
+    /// 校验账户身份与版本是否与页面所见期望一致（FIN-E04）。
+    ///
+    /// 只做纯身份匹配：真实 ID 与版本同时相等才返回 `true`；任一漂移返回
+    /// `false`，由 Service 映射为「请刷新并重新核对」的冲突结论。
+    ///
+    /// # 参数
+    /// * `expected_id` - 页面提交时展示的收款账户 ID
+    /// * `expected_version` - 页面提交时展示的收款账户版本
+    ///
+    /// # 返回
+    /// 身份与版本均一致时返回 `true`。
+    ///
+    /// # 约束
+    /// 不执行 I/O；CAS 写入与冲突错误到 API 的映射仍由 Service 负责。
+    pub fn matches_expected(&self, expected_id: &PartyBankAccountId, expected_version: u64) -> bool {
+        self.base.id == expected_id.as_ref() && self.base.version == expected_version
+    }
 }
 
 /// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
@@ -480,5 +527,121 @@ mod tests {
             roundtrip.account_number_query_hmac,
             account.account_number_query_hmac
         );
+    }
+
+    /// 收款账户解析：无默认账户时返回 `Ok(None)`（含空集合与全部非默认两种形态）。
+    #[test]
+    fn resolve_current_default_returns_none_without_default() {
+        let accounts = vec![
+            PartyBankAccount::new(
+                PartyBankAccountId::new("ba-5"),
+                PartyBankAccountData {
+                    bank_account_no: "BA-2026-002".to_string(),
+                    is_default: false,
+                    ..bank_account_data()
+                },
+                KEY,
+                "admin-1",
+            )
+            .unwrap(),
+            PartyBankAccount::new(
+                PartyBankAccountId::new("ba-6"),
+                PartyBankAccountData {
+                    bank_account_no: "BA-2026-003".to_string(),
+                    is_default: false,
+                    ..bank_account_data()
+                },
+                KEY,
+                "admin-1",
+            )
+            .unwrap(),
+        ];
+        assert!(PartyBankAccount::resolve_current_default(&[]).unwrap().is_none());
+        assert!(PartyBankAccount::resolve_current_default(&accounts)
+            .unwrap()
+            .is_none());
+    }
+
+    /// 收款账户解析：恰一个默认账户时返回该账户（与输入顺序无关）。
+    #[test]
+    fn resolve_current_default_returns_unique_default() {
+        let default = PartyBankAccount::new(
+            PartyBankAccountId::new("ba-7"),
+            PartyBankAccountData {
+                bank_account_no: "BA-2026-004".to_string(),
+                is_default: true,
+                ..bank_account_data()
+            },
+            KEY,
+            "admin-1",
+        )
+        .unwrap();
+        let accounts = vec![
+            PartyBankAccount::new(
+                PartyBankAccountId::new("ba-8"),
+                PartyBankAccountData {
+                    bank_account_no: "BA-2026-005".to_string(),
+                    is_default: false,
+                    ..bank_account_data()
+                },
+                KEY,
+                "admin-1",
+            )
+            .unwrap(),
+            default.clone(),
+        ];
+        let resolved = PartyBankAccount::resolve_current_default(&accounts)
+            .unwrap()
+            .expect("唯一默认账户");
+        assert_eq!(resolved.base.id, default.base.id);
+        assert!(resolved.is_default);
+    }
+
+    /// 收款账户解析：多个默认账户（主数据损坏）必须失败关闭，禁止静默取首项。
+    #[test]
+    fn resolve_current_default_rejects_multiple_defaults() {
+        let accounts = vec![
+            PartyBankAccount::new(
+                PartyBankAccountId::new("ba-9"),
+                PartyBankAccountData {
+                    bank_account_no: "BA-2026-006".to_string(),
+                    is_default: true,
+                    ..bank_account_data()
+                },
+                KEY,
+                "admin-1",
+            )
+            .unwrap(),
+            PartyBankAccount::new(
+                PartyBankAccountId::new("ba-10"),
+                PartyBankAccountData {
+                    bank_account_no: "BA-2026-007".to_string(),
+                    is_default: true,
+                    ..bank_account_data()
+                },
+                KEY,
+                "admin-1",
+            )
+            .unwrap(),
+        ];
+        assert!(PartyBankAccount::resolve_current_default(&accounts).is_err());
+    }
+
+    /// expected 身份匹配：ID 与版本同时一致才通过，任一漂移必须拒绝。
+    #[test]
+    fn matches_expected_accepts_only_exact_identity_and_version() {
+        let account = PartyBankAccount::new(
+            PartyBankAccountId::new("ba-11"),
+            bank_account_data(),
+            KEY,
+            "admin-1",
+        )
+        .unwrap();
+        let account_id = PartyBankAccountId::new("ba-11");
+        assert!(account.matches_expected(&account_id, account.base.version));
+
+        assert!(!account.matches_expected(&PartyBankAccountId::new("ba-other"), account.base.version));
+        assert!(!account.matches_expected(&account_id, account.base.version + 1));
+        assert!(!account.matches_expected(&PartyBankAccountId::new("ba-other"), 0));
     }
 }

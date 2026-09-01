@@ -15,12 +15,16 @@ pub mod payable_account;
 pub mod payable_entry;
 pub mod payable_entry_offset;
 pub mod payment_allocation;
+pub mod payment_allocation_ledger;
 pub mod purchase_invoice_allocation;
+pub mod purchase_invoice_allocation_plan;
 pub mod supplier_payment;
 
 pub use payable_account::*;
 pub use payable_entry::*;
 pub use payable_entry_offset::*;
 pub use payment_allocation::*;
+pub use payment_allocation_ledger::*;
 pub use purchase_invoice_allocation::*;
+pub use purchase_invoice_allocation_plan::*;
 pub use supplier_payment::*;

@@ -12,9 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use super::super::regex_filter::insert_literal_regex_filter;
 use super::super::{PageResult, Pagination, QueryFilter, Repository};
-use super::{sort_doc, SalesOrderRepository};
+use super::{sort_doc, SalesOrderRepository, SALES_ORDERS};
 use crate::executor::Executor;
 use crate::{mongo_ops, Result};
+use std::collections::HashSet;
 
 /// 销售单列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -384,7 +385,68 @@ impl<'a> Repository<'a, WorkItem> {
     }
 }
 
-impl<'a> SalesOrderRepository<'a> {}
+impl<'a> SalesOrderRepository<'a> {
+    /// 按 ID 集合批量返回存在的未删除销售单 ID（最小存在性事实）。
+    ///
+    /// 一次 `$in` 查询完成全部存在性装载，查询次数与输入数量无关；空输入
+    /// 或全部为重复 ID 时直接返回空集合，不发起数据库往返。软删除语义与
+    /// [`Repository::find_by_id`] 一致（仅统计 `deleted_at` 为未删除标记的
+    /// 销售单）。返回集合只保证是输入的子集，不承诺顺序；跨聚合报错决策
+    /// （如“哪些订单缺失”）由调用方 Service 解释。
+    ///
+    /// # 参数
+    /// * `ids` - 待校验的销售单 ID；重复 ID 自动去重，结果中每个 ID 至多出现一次
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回输入中真实存在且未删除的销售单 ID 集合。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    pub async fn find_existing_ids(
+        &self,
+        ids: &[SalesOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesOrderId>> {
+        let unique = dedupe_sales_order_ids(ids);
+        if unique.is_empty() {
+            return Ok(Vec::new());
+        }
+        let id_strings = unique.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let rows = mongo_ops::find_many(
+            &self.db.collection::<SalesOrderIdRow>(SALES_ORDERS),
+            doc! { "id": { "$in": id_strings }, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::builder()
+                .projection(doc! { "_id": 0, "id": 1 })
+                .build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| SalesOrderId::new(row.id)).collect())
+    }
+}
+
+/// 销售单存在性投影行（只取 `id` 字段的最小事实）。
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct SalesOrderIdRow {
+    /// 实体主键。
+    id: String,
+}
+
+/// 去重销售单 ID（保持首次出现顺序）。
+///
+/// # 参数
+/// * `ids` - 输入 ID 列表，可能包含重复
+///
+/// # 返回
+/// 返回去重后的 ID 列表，顺序与首次出现一致。
+///
+/// # 错误
+/// 无。
+fn dedupe_sales_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
+    let mut seen = HashSet::with_capacity(ids.len());
+    ids.iter().filter(|&id| seen.insert(id.clone())).cloned().collect()
+}
 
 /// 销售单列表投影字段。
 ///
@@ -512,5 +574,24 @@ mod tests {
                 .unwrap(),
             r"SO\-2026\.\[x\]"
         );
+    }
+
+    #[test]
+    fn dedupe_sales_order_ids_keeps_first_occurrence_order() {
+        let ids = vec![
+            SalesOrderId::new("so-1"),
+            SalesOrderId::new("so-2"),
+            SalesOrderId::new("so-1"),
+            SalesOrderId::new("so-3"),
+            SalesOrderId::new("so-2"),
+        ];
+        let unique = dedupe_sales_order_ids(&ids);
+        let strings = unique.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(strings, vec!["so-1", "so-2", "so-3"]);
+    }
+
+    #[test]
+    fn dedupe_sales_order_ids_empty_input_returns_empty() {
+        assert!(dedupe_sales_order_ids(&[]).is_empty());
     }
 }

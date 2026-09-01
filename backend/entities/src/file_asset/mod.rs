@@ -14,12 +14,14 @@
 //! 当前业务对象、角色与数据范围重验（P3）。成功/失败/导出三类资产必须拆成
 //! 不同 `file_asset` 且不得混用保留期（§4.5.7，P3 校验）。
 
+pub mod bank_receipt_evidence_policy;
 pub mod document_attachment;
 mod entity;
 mod pending_reference;
 
 // 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
 pub use crate::ids::{DocumentAttachmentId, FileAssetId};
+pub use bank_receipt_evidence_policy::BankReceiptEvidencePolicy;
 pub use document_attachment::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
 pub use entity::{
     content_fingerprint, ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus,

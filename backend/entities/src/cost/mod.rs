@@ -9,7 +9,9 @@
 //! - 成本无 §7 状态机（阶段由 `cost_stage` 固定枚举表达），不发明状态机。
 
 pub mod cost_allocation;
+pub mod cost_allocation_set;
 pub mod cost_entry;
 
 pub use cost_allocation::*;
+pub use cost_allocation_set::*;
 pub use cost_entry::*;

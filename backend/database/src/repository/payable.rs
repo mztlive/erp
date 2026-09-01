@@ -47,6 +47,24 @@ struct AccountDueDateRow {
     due_date: BusinessDate,
 }
 
+/// 批量条件核销结果：按账户逐个报告命中情况，由 Service 转译业务错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettlementBatchResult {
+    /// 条件命中并完成核销的账户（输入顺序）。
+    pub applied: Vec<PayableAccountId>,
+    /// 条件未命中（超过剩余开放余额）被拒绝的账户（输入顺序）。
+    pub rejected: Vec<PayableAccountId>,
+}
+
+/// 批量条件收票结果：按账户逐个报告命中情况，由 Service 转译业务错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoicingBatchResult {
+    /// 条件命中并完成收票的账户（输入顺序）。
+    pub applied: Vec<PayableAccountId>,
+    /// 条件未命中（超过剩余可收票额度）被拒绝的账户（输入顺序）。
+    pub rejected: Vec<PayableAccountId>,
+}
+
 /// 应付往来子账列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayableAccountRow {
@@ -294,22 +312,62 @@ impl<'a> Repository<'a, PayableAccount> {
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let amount = amount_bson(amount)?;
-        let filter = doc! {
-            "id": id,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "$expr": {
-                "$lte": [
-                    { "$add": ["$settled_total", &amount] },
-                    "$gross_total",
-                ],
-            },
-        };
+        let filter = settlement_guard(id, &amount);
         self.conditional_update(
             filter,
             progress_pipeline("settled_total", "open_total", &amount, true, updated_by),
             executor,
         )
         .await
+    }
+
+    /// 批量条件核销：按账户聚合增量逐个执行不超额核销。
+    ///
+    /// 对每个 `(账户, 增量)` 复用与 [`Self::apply_settlement`] 相同的写条件
+    /// （`settled_total + 增量 <= gross_total`），每个账户一次原子条件更新，
+    /// 返回逐账户命中结果：`applied` 为已生效账户，`rejected` 为超过剩余
+    /// 开放余额被拒绝的账户，金额与状态均未变化。调用方（Service）负责把
+    /// 全部更新放入同一事务，任一账户被拒绝即整体回滚，不产生半写入。
+    ///
+    /// # 参数
+    /// * `deltas` - 按账户聚合的本次核销增量（同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回逐账户的命中结果；空输入不访问数据库并返回空结果。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    pub async fn apply_settlements_many(
+        &self,
+        deltas: &[(PayableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SettlementBatchResult> {
+        let mut applied = Vec::new();
+        let mut rejected = Vec::new();
+        for (id, amount) in deltas {
+            let amount = amount_bson(amount)?;
+            let filter = settlement_guard(id.as_ref(), &amount);
+            let hit = self
+                .conditional_update(
+                    filter,
+                    progress_pipeline("settled_total", "open_total", &amount, true, updated_by),
+                    executor,
+                )
+                .await?;
+            if hit {
+                applied.push(id.clone());
+            } else {
+                rejected.push(id.clone());
+            }
+        }
+        Ok(SettlementBatchResult { applied, rejected })
     }
 
     /// 条件核销冲减：减少已核销进度（不产生负已核销）。
@@ -377,16 +435,7 @@ impl<'a> Repository<'a, PayableAccount> {
         executor: &mut dyn Executor,
     ) -> Result<bool> {
         let amount = amount_bson(amount)?;
-        let filter = doc! {
-            "id": id,
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "$expr": {
-                "$lte": [
-                    { "$add": ["$invoiced_total", &amount] },
-                    "$invoiceable_total",
-                ],
-            },
-        };
+        let filter = invoicing_guard(id, &amount);
         self.conditional_update(
             filter,
             progress_pipeline(
@@ -399,6 +448,61 @@ impl<'a> Repository<'a, PayableAccount> {
             executor,
         )
         .await
+    }
+
+    /// 批量条件收票：按账户聚合增量逐个执行不超额收票。
+    ///
+    /// 对每个 `(账户, 增量)` 复用与 [`Self::apply_invoicing`] 相同的写条件
+    /// （`invoiced_total + 增量 <= invoiceable_total`），每个账户一次原子条件
+    /// 更新，返回逐账户命中结果：`applied` 为已生效账户，`rejected` 为超过
+    /// 剩余可收票额度被拒绝的账户，金额与状态均未变化。调用方（Service）
+    /// 负责把全部更新放入同一事务，任一账户被拒绝即整体回滚，不产生半写入。
+    ///
+    /// # 参数
+    /// * `deltas` - 按账户聚合的本次收票增量（同一账户只出现一次）
+    /// * `updated_by` - 本次更新执行人
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回逐账户的命中结果；空输入不访问数据库并返回空结果。
+    ///
+    /// # 错误
+    /// 当 MongoDB 更新失败时返回错误。
+    ///
+    /// # 约束
+    /// 聚合口径（同一账户增量求和、同一账户只更新一次）由 Service 经领域
+    /// 计划保证；本方法不自行开启事务、不决定跨账户业务结论。
+    pub async fn apply_invoicings_many(
+        &self,
+        deltas: &[(PayableAccountId, Amount)],
+        updated_by: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<InvoicingBatchResult> {
+        let mut applied = Vec::new();
+        let mut rejected = Vec::new();
+        for (id, amount) in deltas {
+            let amount = amount_bson(amount)?;
+            let filter = invoicing_guard(id.as_ref(), &amount);
+            let hit = self
+                .conditional_update(
+                    filter,
+                    progress_pipeline(
+                        "invoiced_total",
+                        "open_invoiceable_total",
+                        &amount,
+                        true,
+                        updated_by,
+                    ),
+                    executor,
+                )
+                .await?;
+            if hit {
+                applied.push(id.clone());
+            } else {
+                rejected.push(id.clone());
+            }
+        }
+        Ok(InvoicingBatchResult { applied, rejected })
     }
 
     /// 条件收票冲减：减少净已收票进度（不产生负已收票）。
@@ -900,6 +1004,120 @@ impl<'a> PayableRepository<'a> {
         .await?;
         Ok(())
     }
+
+    /// 批量写入付款核销分配（`insert_many`，禁止逐笔插入）。
+    ///
+    /// 一次批量写入同一付款单的核销分配；空输入不访问数据库。分配行是
+    /// 正式事实，`(supplier_payment_id, allocation_seq)` 唯一索引在并发重复
+    /// 过账时抛出唯一键冲突，由 Service 转译并整体回滚。
+    /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
+    /// `database::Transactional::with_transaction` 传入事务会话。
+    ///
+    /// # 参数
+    /// * `allocations` - 待持久化的核销分配
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 全部写入成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    pub async fn create_payment_allocations_many(
+        &self,
+        allocations: &[PaymentAllocation],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_many(
+            &self
+                .db
+                .collection::<PaymentAllocation>(<mongodb::Database as PayableExt>::PAYMENT_ALLOCATIONS),
+            allocations.to_vec(),
+            executor,
+        )
+        .await
+    }
+
+    /// 批量写入进项发票分配（`insert_many`，禁止逐笔插入）。
+    ///
+    /// 一次批量写入同一进项发票的分配；空输入不访问数据库。分配行是
+    /// 正式事实，`(invoice_id, allocation_seq)` 唯一索引在并发重复登记时抛出
+    /// 唯一键冲突，由 Service 转译并整体回滚。
+    /// **必须收到事务执行器**：本方法不构成原子边界，Service 必须通过
+    /// `database::Transactional::with_transaction` 传入事务会话。
+    ///
+    /// # 参数
+    /// * `allocations` - 待持久化的进项发票分配
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 全部写入成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    pub async fn create_purchase_invoice_allocations_many(
+        &self,
+        allocations: &[PurchaseInvoiceAllocation],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_many(
+            &self.db.collection::<PurchaseInvoiceAllocation>(
+                <mongodb::Database as PayableExt>::PURCHASE_INVOICE_ALLOCATIONS,
+            ),
+            allocations.to_vec(),
+            executor,
+        )
+        .await
+    }
+}
+
+/// 构造条件核销的写前置条件（不超额核销）。
+///
+/// 以写条件而非读后判断保证 `settled_total + 本次核销 <= gross_total`，
+/// 不满足时整个更新不生效（matched 为 0）。
+///
+/// # 参数
+/// * `id` - 应付往来子账 ID
+/// * `amount` - 本次核销含税金额（已转为 Decimal128 形态）
+///
+/// # 返回
+/// 返回未删除账户的核销额度守卫文档。
+fn settlement_guard(id: &str, amount: &Bson) -> Document {
+    doc! {
+        "id": id,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "$expr": {
+            "$lte": [
+                { "$add": ["$settled_total", amount] },
+                "$gross_total",
+            ],
+        },
+    }
+}
+
+/// 构造条件收票的写前置条件（不超过可收票额度）。
+///
+/// 以写条件而非读后判断保证 `invoiced_total + 本次收票 <= invoiceable_total`，
+/// 不满足时整个更新不生效（matched 为 0）。
+///
+/// # 参数
+/// * `id` - 应付往来子账 ID
+/// * `amount` - 本次收票含税金额（已转为 Decimal128 形态）
+///
+/// # 返回
+/// 返回未删除账户的收票额度守卫文档。
+fn invoicing_guard(id: &str, amount: &Bson) -> Document {
+    doc! {
+        "id": id,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+        "$expr": {
+            "$lte": [
+                { "$add": ["$invoiced_total", amount] },
+                "$invoiceable_total",
+            ],
+        },
+    }
 }
 
 /// 将金额按 BSON Decimal128 形态转换（仓储层禁止任何舍入或换算）。
@@ -1046,12 +1264,13 @@ fn supplier_payment_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        amount_bson, minimum_due_dates_pipeline, progress_pipeline, sort_doc, PayableAccountFilter,
-        QueryFilter, SupplierPaymentFilter,
+        amount_bson, invoicing_guard, minimum_due_dates_pipeline, progress_pipeline, settlement_guard,
+        sort_doc, PayableAccountFilter, PayableRepository, QueryFilter, SupplierPaymentFilter,
     };
-    use entities::ids::SupplierAccountId;
+    use crate::{NoTransaction, PayableExt, Repository, Transactional};
+    use entities::ids::{PayableAccountId, SupplierAccountId};
     use entities::money::Amount;
-    use entities::payable::{PayableAccountStatus, PayableSourceType};
+    use entities::payable::{PayableAccount, PayableAccountData, PayableAccountStatus, PayableSourceType};
     use mongodb::bson::{doc, Bson};
     use std::str::FromStr;
 
@@ -1189,5 +1408,630 @@ mod tests {
         assert!(nested[0].as_document().unwrap().get_array("$eq").is_ok());
         assert_eq!(nested[1], Bson::String("open".to_string()), "已核销归零为未结");
         assert_eq!(nested[2], Bson::String("partially_settled".to_string()));
+    }
+
+    #[test]
+    fn settlement_guard_builds_expected_guard() {
+        let amount = amount_bson(&Amount::from_str("100.50").unwrap()).unwrap();
+        let guard = settlement_guard("acct-1", &amount);
+        assert_eq!(guard.get_str("id").unwrap(), "acct-1");
+        assert_eq!(guard.get_i64("deleted_at").unwrap(), 0);
+        let expr = guard.get_document("$expr").unwrap();
+        let lte = expr.get_array("$lte").unwrap();
+        let add = lte[0].as_document().unwrap().get_array("$add").unwrap();
+        assert_eq!(add[0], Bson::String("$settled_total".to_string()));
+        assert!(matches!(add[1], Bson::Decimal128(_)));
+        assert_eq!(lte[1], Bson::String("$gross_total".to_string()));
+    }
+
+    /// 空输入必须返回空结果且不访问数据库。
+    #[tokio::test]
+    async fn apply_settlements_many_empty_input_returns_empty_without_db() {
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .expect("客户端句柄创建失败");
+        let database = client.database("unused");
+        let repository: Repository<'_, entities::payable::PayableAccount> =
+            Repository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+        let result = repository
+            .apply_settlements_many(&[], "tester", &mut NoTransaction)
+            .await
+            .expect("空输入批量核销必须成功");
+        assert!(result.applied.is_empty());
+        assert!(result.rejected.is_empty());
+    }
+
+    /// 批量条件核销：聚合增量逐账户生效，超出开放余额的账户被拒绝且金额不变。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn batch_settlement_applies_aggregated_deltas_and_reports_rejected() {
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("payable_settle_batch")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let accounts = fixture.db().payable_accounts();
+            let account_one = PayableAccount::new(
+                PayableAccountId::new("acct-1"),
+                PayableAccountData {
+                    source_document_id: "PO-1".to_string(),
+                    supplier_id: SupplierAccountId::new("sup-1"),
+                    source_type: PayableSourceType::PurchaseOrder,
+                    gross_total: Amount::from_str("1000.00").unwrap(),
+                    settled_total: Amount::from_str("0.00").unwrap(),
+                    invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                    invoiced_total: Amount::from_str("0.00").unwrap(),
+                },
+                "tester",
+            )
+            .unwrap();
+            let account_two = PayableAccount::new(
+                PayableAccountId::new("acct-2"),
+                PayableAccountData {
+                    source_document_id: "PO-2".to_string(),
+                    supplier_id: SupplierAccountId::new("sup-1"),
+                    source_type: PayableSourceType::PurchaseOrder,
+                    gross_total: Amount::from_str("1000.00").unwrap(),
+                    settled_total: Amount::from_str("0.00").unwrap(),
+                    invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                    invoiced_total: Amount::from_str("0.00").unwrap(),
+                },
+                "tester",
+            )
+            .unwrap();
+            accounts
+                .create(&account_one, &mut NoTransaction)
+                .await
+                .expect("子账写入失败");
+            accounts
+                .create(&account_two, &mut NoTransaction)
+                .await
+                .expect("子账写入失败");
+
+            let deltas = [
+                (
+                    PayableAccountId::new("acct-1"),
+                    Amount::from_str("400.00").unwrap(),
+                ),
+                (
+                    PayableAccountId::new("acct-2"),
+                    Amount::from_str("600.00").unwrap(),
+                ),
+            ];
+            let result = accounts
+                .apply_settlements_many(&deltas, "tester", &mut NoTransaction)
+                .await
+                .expect("批量核销失败");
+            assert!(result.rejected.is_empty());
+            assert_eq!(
+                result.applied,
+                vec![PayableAccountId::new("acct-1"), PayableAccountId::new("acct-2")]
+            );
+
+            let one = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(one.settled_total, Amount::from_str("400.00").unwrap());
+            assert_eq!(one.open_total, Amount::from_str("600.00").unwrap());
+            let two = accounts
+                .find_by_id("acct-2", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(two.settled_total, Amount::from_str("600.00").unwrap());
+
+            // 超出剩余开放余额的账户被拒绝且金额不变
+            let over = [(
+                PayableAccountId::new("acct-1"),
+                Amount::from_str("700.00").unwrap(),
+            )];
+            let result = accounts
+                .apply_settlements_many(&over, "tester", &mut NoTransaction)
+                .await
+                .expect("批量核销失败");
+            assert!(result.applied.is_empty());
+            assert_eq!(result.rejected, vec![PayableAccountId::new("acct-1")]);
+            let one = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(one.settled_total, Amount::from_str("400.00").unwrap());
+        });
+    }
+
+    /// 任一账户被拒绝时整个事务回滚，不产生半写入。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn batch_settlement_rejected_rolls_back_whole_transaction() {
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("payable_settle_tx")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let accounts = fixture.db().payable_accounts();
+            accounts
+                .create(
+                    &PayableAccount::new(
+                        PayableAccountId::new("acct-1"),
+                        PayableAccountData {
+                            source_document_id: "PO-1".to_string(),
+                            supplier_id: SupplierAccountId::new("sup-1"),
+                            source_type: PayableSourceType::PurchaseOrder,
+                            gross_total: Amount::from_str("1000.00").unwrap(),
+                            settled_total: Amount::from_str("0.00").unwrap(),
+                            invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                            invoiced_total: Amount::from_str("0.00").unwrap(),
+                        },
+                        "tester",
+                    )
+                    .unwrap(),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("子账写入失败");
+            accounts
+                .create(
+                    &PayableAccount::new(
+                        PayableAccountId::new("acct-2"),
+                        PayableAccountData {
+                            source_document_id: "PO-2".to_string(),
+                            supplier_id: SupplierAccountId::new("sup-1"),
+                            source_type: PayableSourceType::PurchaseOrder,
+                            gross_total: Amount::from_str("1000.00").unwrap(),
+                            settled_total: Amount::from_str("0.00").unwrap(),
+                            invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                            invoiced_total: Amount::from_str("0.00").unwrap(),
+                        },
+                        "tester",
+                    )
+                    .unwrap(),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("子账写入失败");
+
+            let deltas = [
+                (
+                    PayableAccountId::new("acct-1"),
+                    Amount::from_str("400.00").unwrap(),
+                ),
+                (
+                    PayableAccountId::new("acct-2"),
+                    Amount::from_str("1100.00").unwrap(),
+                ),
+            ];
+            let db_handle = fixture.db().clone();
+            let outcome = fixture
+                .client()
+                .with_transaction::<_, _, crate::Error>(move |session| {
+                    Box::pin(async move {
+                        let accounts: Repository<'_, entities::payable::PayableAccount> =
+                            Repository::new(&db_handle, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                        let result = accounts
+                            .apply_settlements_many(&deltas, "tester", session)
+                            .await?;
+                        if !result.rejected.is_empty() {
+                            return Err(crate::Error::DatabaseError(mongodb::error::Error::custom(
+                                "expected rejection",
+                            )));
+                        }
+                        Ok(())
+                    })
+                })
+                .await;
+            assert!(outcome.is_err(), "任一账户被拒绝必须使整个事务失败");
+            let one = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(
+                one.settled_total,
+                Amount::from_str("0.00").unwrap(),
+                "回滚后不得留下 acct-1 的半写入进度"
+            );
+        });
+    }
+
+    /// 并发批量核销：同一账户额度只允许一次命中，绝不产生超额核销。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn concurrent_batch_settlement_never_exceeds_open_balance() {
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("payable_settle_race")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let accounts = fixture.db().payable_accounts();
+            accounts
+                .create(
+                    &PayableAccount::new(
+                        PayableAccountId::new("acct-1"),
+                        PayableAccountData {
+                            source_document_id: "PO-1".to_string(),
+                            supplier_id: SupplierAccountId::new("sup-1"),
+                            source_type: PayableSourceType::PurchaseOrder,
+                            gross_total: Amount::from_str("1000.00").unwrap(),
+                            settled_total: Amount::from_str("0.00").unwrap(),
+                            invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                            invoiced_total: Amount::from_str("0.00").unwrap(),
+                        },
+                        "tester",
+                    )
+                    .unwrap(),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("子账写入失败");
+
+            // 两个并发写入方各自尝试核销 700（总额 1400 > 开放余额 1000）
+            let deltas = vec![(
+                PayableAccountId::new("acct-1"),
+                Amount::from_str("700.00").unwrap(),
+            )];
+            let db_handle_a = fixture.db().clone();
+            let deltas_a = deltas.clone();
+            let task_a = tokio::spawn(async move {
+                let repository: Repository<'_, entities::payable::PayableAccount> =
+                    Repository::new(&db_handle_a, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                repository
+                    .apply_settlements_many(&deltas_a, "tester-a", &mut NoTransaction)
+                    .await
+                    .expect("写入方 A 失败")
+            });
+            let db_handle_b = fixture.db().clone();
+            let task_b = tokio::spawn(async move {
+                let repository: Repository<'_, entities::payable::PayableAccount> =
+                    Repository::new(&db_handle_b, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                repository
+                    .apply_settlements_many(&deltas, "tester-b", &mut NoTransaction)
+                    .await
+                    .expect("写入方 B 失败")
+            });
+            let result_a = task_a.await.expect("任务 A 失败");
+            let result_b = task_b.await.expect("任务 B 失败");
+            let applied_count = result_a.applied.len() + result_b.applied.len();
+            assert_eq!(applied_count, 1, "额度只允许一方命中");
+            let rejected_count = result_a.rejected.len() + result_b.rejected.len();
+            assert_eq!(rejected_count, 1, "另一方必须被拒绝");
+
+            let account = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(account.settled_total, Amount::from_str("700.00").unwrap());
+            assert_eq!(account.open_total, Amount::from_str("300.00").unwrap());
+            assert!(!account.open_total.to_decimal().is_sign_negative());
+        });
+    }
+
+    #[test]
+    fn invoicing_guard_builds_expected_guard() {
+        let amount = amount_bson(&Amount::from_str("100.50").unwrap()).unwrap();
+        let guard = invoicing_guard("acct-1", &amount);
+        assert_eq!(guard.get_str("id").unwrap(), "acct-1");
+        assert_eq!(guard.get_i64("deleted_at").unwrap(), 0);
+        let expr = guard.get_document("$expr").unwrap();
+        let lte = expr.get_array("$lte").unwrap();
+        let add = lte[0].as_document().unwrap().get_array("$add").unwrap();
+        assert_eq!(add[0], Bson::String("$invoiced_total".to_string()));
+        assert!(matches!(add[1], Bson::Decimal128(_)));
+        assert_eq!(lte[1], Bson::String("$invoiceable_total".to_string()));
+    }
+
+    /// 空输入必须返回空结果且不访问数据库。
+    #[tokio::test]
+    async fn apply_invoicings_many_empty_input_returns_empty_without_db() {
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .expect("客户端句柄创建失败");
+        let database = client.database("unused");
+        let repository: Repository<'_, entities::payable::PayableAccount> =
+            Repository::new(&database, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+        let result = repository
+            .apply_invoicings_many(&[], "tester", &mut NoTransaction)
+            .await
+            .expect("空输入批量收票必须成功");
+        assert!(result.applied.is_empty());
+        assert!(result.rejected.is_empty());
+    }
+
+    /// 空输入必须直接成功且不访问数据库。
+    #[tokio::test]
+    async fn create_purchase_invoice_allocations_many_empty_input_without_db() {
+        let client = mongodb::Client::with_uri_str("mongodb://127.0.0.1:1")
+            .await
+            .expect("客户端句柄创建失败");
+        let database = client.database("unused");
+        let repository = PayableRepository::new(&database);
+        repository
+            .create_purchase_invoice_allocations_many(&[], &mut NoTransaction)
+            .await
+            .expect("空输入批量插入必须成功");
+    }
+
+    /// 批量条件收票：聚合增量逐账户生效，超出可收票额度的账户被拒绝且金额不变。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn batch_invoicing_applies_aggregated_deltas_and_reports_rejected() {
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("payable_invoice_batch")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let accounts = fixture.db().payable_accounts();
+            let account_one = PayableAccount::new(
+                PayableAccountId::new("acct-1"),
+                PayableAccountData {
+                    source_document_id: "PO-1".to_string(),
+                    supplier_id: SupplierAccountId::new("sup-1"),
+                    source_type: PayableSourceType::PurchaseOrder,
+                    gross_total: Amount::from_str("1000.00").unwrap(),
+                    settled_total: Amount::from_str("0.00").unwrap(),
+                    invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                    invoiced_total: Amount::from_str("0.00").unwrap(),
+                },
+                "tester",
+            )
+            .unwrap();
+            let account_two = PayableAccount::new(
+                PayableAccountId::new("acct-2"),
+                PayableAccountData {
+                    source_document_id: "PO-2".to_string(),
+                    supplier_id: SupplierAccountId::new("sup-1"),
+                    source_type: PayableSourceType::PurchaseOrder,
+                    gross_total: Amount::from_str("1000.00").unwrap(),
+                    settled_total: Amount::from_str("0.00").unwrap(),
+                    invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                    invoiced_total: Amount::from_str("0.00").unwrap(),
+                },
+                "tester",
+            )
+            .unwrap();
+            accounts
+                .create(&account_one, &mut NoTransaction)
+                .await
+                .expect("子账写入失败");
+            accounts
+                .create(&account_two, &mut NoTransaction)
+                .await
+                .expect("子账写入失败");
+
+            let deltas = [
+                (
+                    PayableAccountId::new("acct-1"),
+                    Amount::from_str("400.00").unwrap(),
+                ),
+                (
+                    PayableAccountId::new("acct-2"),
+                    Amount::from_str("600.00").unwrap(),
+                ),
+            ];
+            let result = accounts
+                .apply_invoicings_many(&deltas, "tester", &mut NoTransaction)
+                .await
+                .expect("批量收票失败");
+            assert!(result.rejected.is_empty());
+            assert_eq!(
+                result.applied,
+                vec![PayableAccountId::new("acct-1"), PayableAccountId::new("acct-2")]
+            );
+
+            let one = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(one.invoiced_total, Amount::from_str("400.00").unwrap());
+            assert_eq!(one.open_invoiceable_total, Amount::from_str("600.00").unwrap());
+            let two = accounts
+                .find_by_id("acct-2", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(two.invoiced_total, Amount::from_str("600.00").unwrap());
+
+            // 超出剩余可收票额度的账户被拒绝且金额不变
+            let over = [(
+                PayableAccountId::new("acct-1"),
+                Amount::from_str("700.00").unwrap(),
+            )];
+            let result = accounts
+                .apply_invoicings_many(&over, "tester", &mut NoTransaction)
+                .await
+                .expect("批量收票失败");
+            assert!(result.applied.is_empty());
+            assert_eq!(result.rejected, vec![PayableAccountId::new("acct-1")]);
+            let one = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(one.invoiced_total, Amount::from_str("400.00").unwrap());
+        });
+    }
+
+    /// 任一账户被拒绝时整个事务回滚，不产生半写入。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn batch_invoicing_rejected_rolls_back_whole_transaction() {
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("payable_invoice_tx")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let accounts = fixture.db().payable_accounts();
+            accounts
+                .create(
+                    &PayableAccount::new(
+                        PayableAccountId::new("acct-1"),
+                        PayableAccountData {
+                            source_document_id: "PO-1".to_string(),
+                            supplier_id: SupplierAccountId::new("sup-1"),
+                            source_type: PayableSourceType::PurchaseOrder,
+                            gross_total: Amount::from_str("1000.00").unwrap(),
+                            settled_total: Amount::from_str("0.00").unwrap(),
+                            invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                            invoiced_total: Amount::from_str("0.00").unwrap(),
+                        },
+                        "tester",
+                    )
+                    .unwrap(),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("子账写入失败");
+            accounts
+                .create(
+                    &PayableAccount::new(
+                        PayableAccountId::new("acct-2"),
+                        PayableAccountData {
+                            source_document_id: "PO-2".to_string(),
+                            supplier_id: SupplierAccountId::new("sup-1"),
+                            source_type: PayableSourceType::PurchaseOrder,
+                            gross_total: Amount::from_str("1000.00").unwrap(),
+                            settled_total: Amount::from_str("0.00").unwrap(),
+                            invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                            invoiced_total: Amount::from_str("0.00").unwrap(),
+                        },
+                        "tester",
+                    )
+                    .unwrap(),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("子账写入失败");
+
+            let deltas = [
+                (
+                    PayableAccountId::new("acct-1"),
+                    Amount::from_str("400.00").unwrap(),
+                ),
+                (
+                    PayableAccountId::new("acct-2"),
+                    Amount::from_str("1100.00").unwrap(),
+                ),
+            ];
+            let db_handle = fixture.db().clone();
+            let outcome = fixture
+                .client()
+                .with_transaction::<_, _, crate::Error>(move |session| {
+                    Box::pin(async move {
+                        let accounts: Repository<'_, entities::payable::PayableAccount> =
+                            Repository::new(&db_handle, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                        let result = accounts.apply_invoicings_many(&deltas, "tester", session).await?;
+                        if !result.rejected.is_empty() {
+                            return Err(crate::Error::DatabaseError(mongodb::error::Error::custom(
+                                "expected rejection",
+                            )));
+                        }
+                        Ok(())
+                    })
+                })
+                .await;
+            assert!(outcome.is_err(), "任一账户被拒绝必须使整个事务失败");
+            let one = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(
+                one.invoiced_total,
+                Amount::from_str("0.00").unwrap(),
+                "回滚后不得留下 acct-1 的半写入进度"
+            );
+        });
+    }
+
+    /// 并发批量收票：同一账户额度只允许一次命中，绝不产生超额收票。
+    #[tokio::test]
+    #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+    async fn concurrent_batch_invoicing_never_exceeds_invoiceable_balance() {
+        use test_support::{require_mongo, TestDb};
+
+        require_mongo!(async {
+            let fixture = TestDb::new("payable_invoice_race")
+                .await
+                .expect("测试数据库创建失败");
+            crate::ensure_indexes(fixture.db()).await.expect("索引创建失败");
+            let accounts = fixture.db().payable_accounts();
+            accounts
+                .create(
+                    &PayableAccount::new(
+                        PayableAccountId::new("acct-1"),
+                        PayableAccountData {
+                            source_document_id: "PO-1".to_string(),
+                            supplier_id: SupplierAccountId::new("sup-1"),
+                            source_type: PayableSourceType::PurchaseOrder,
+                            gross_total: Amount::from_str("1000.00").unwrap(),
+                            settled_total: Amount::from_str("0.00").unwrap(),
+                            invoiceable_total: Amount::from_str("1000.00").unwrap(),
+                            invoiced_total: Amount::from_str("0.00").unwrap(),
+                        },
+                        "tester",
+                    )
+                    .unwrap(),
+                    &mut NoTransaction,
+                )
+                .await
+                .expect("子账写入失败");
+
+            // 两个并发写入方各自尝试收票 700（总额 1400 > 可收票额度 1000）
+            let deltas = vec![(
+                PayableAccountId::new("acct-1"),
+                Amount::from_str("700.00").unwrap(),
+            )];
+            let db_handle_a = fixture.db().clone();
+            let deltas_a = deltas.clone();
+            let task_a = tokio::spawn(async move {
+                let repository: Repository<'_, entities::payable::PayableAccount> =
+                    Repository::new(&db_handle_a, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                repository
+                    .apply_invoicings_many(&deltas_a, "tester-a", &mut NoTransaction)
+                    .await
+                    .expect("写入方 A 失败")
+            });
+            let db_handle_b = fixture.db().clone();
+            let task_b = tokio::spawn(async move {
+                let repository: Repository<'_, entities::payable::PayableAccount> =
+                    Repository::new(&db_handle_b, <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS);
+                repository
+                    .apply_invoicings_many(&deltas, "tester-b", &mut NoTransaction)
+                    .await
+                    .expect("写入方 B 失败")
+            });
+            let result_a = task_a.await.expect("任务 A 失败");
+            let result_b = task_b.await.expect("任务 B 失败");
+            let applied_count = result_a.applied.len() + result_b.applied.len();
+            assert_eq!(applied_count, 1, "额度只允许一方命中");
+            let rejected_count = result_a.rejected.len() + result_b.rejected.len();
+            assert_eq!(rejected_count, 1, "另一方必须被拒绝");
+
+            let account = accounts
+                .find_by_id("acct-1", &mut NoTransaction)
+                .await
+                .expect("读取失败")
+                .expect("子账必须存在");
+            assert_eq!(account.invoiced_total, Amount::from_str("700.00").unwrap());
+            assert_eq!(
+                account.open_invoiceable_total,
+                Amount::from_str("300.00").unwrap()
+            );
+            assert!(!account.open_invoiceable_total.to_decimal().is_sign_negative());
+        });
     }
 }

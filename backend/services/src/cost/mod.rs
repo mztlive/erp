@@ -5,18 +5,19 @@
 //!   `database::Transactional::with_transaction`；
 //! - 列表查询单集合 → `&mut NoTransaction`。
 //!
-//! 跨域只经 `DatabaseExt` 调对方域 Repository：D13 `sales_orders()` 校验
-//! 成本归属销售单存在（D20 依赖域 D15/D16/D13，本期 P3 只落地 D13 校验与
-//! 查询编排，D15/D16 的采购/履约来源由对方域在 P3 经 `CostExt` 直接写入）。
+//! 跨域只经 `DatabaseExt` 调对方域 Repository：D13 `sales_order()`
+//! 按 ID 集合批量校验成本归属销售单存在（D20 依赖域 D15/D16/D13，本期 P3
+//! 只落地 D13 校验与查询编排，D15/D16 的采购/履约来源由对方域在 P3 经
+//! `CostExt` 直接写入）。
 
 use database::{AccessControlExt, CostExt, NoTransaction, SalesOrderExt, Transactional};
-use entities::cost::{CostAllocation, CostAllocationData, CostEntry, CostEntryData};
-use entities::ids::{CostAllocationId, CostEntryId};
-use entities::money::Amount;
+use entities::cost::{
+    CostAllocation, CostAllocationData, CostAllocationLineInput, CostAllocationSet, CostEntry, CostEntryData,
+};
+use entities::ids::{CostAllocationId, CostEntryId, SalesOrderId};
 use id_generator::next_id;
 use mongodb::Database;
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::collections::{HashMap, HashSet};
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -130,31 +131,45 @@ impl CostService {
     /// # 错误
     /// * `NotFound` - 归属销售单不存在
     /// * `ConflictError` - 业务唯一键重复
-    /// * `BusinessLogicError` - 分配合计与事实金额不一致
+    /// * `Logic` - 分配合计与事实金额不一致
     pub async fn create_cost_entry(
         &self,
         req: CreateCostEntryRequest,
         actor: &AuditActor,
     ) -> Result<CostEntryView> {
         req.validate()?;
-        for line in &req.allocations {
-            self.db
-                .sales_orders()
-                .find_by_id(&line.sales_order_id, &mut NoTransaction)
-                .await?
-                .ok_or_else(|| Error::NotFound("成本归属销售单不存在".to_string()))?;
+        // 归属销售单存在性：先去重、一次批量读取存在性事实，再解释缺失订单；
+        // Repository 只返回已存在 ID 的最小事实，跨聚合报错决策保留 Service。
+        let requested_order_ids = req
+            .allocations
+            .iter()
+            .map(|line| line.sales_order_id.clone())
+            .collect::<Vec<_>>();
+        let unique_order_ids = dedupe_order_ids(&requested_order_ids);
+        let existing_order_ids = self
+            .db
+            .sales_order()
+            .find_existing_ids(&unique_order_ids, &mut NoTransaction)
+            .await?;
+        if missing_order_id(&unique_order_ids, &existing_order_ids).is_some() {
+            return Err(Error::NotFound("成本归属销售单不存在".to_string()));
         }
-        let gross_requested: Amount = req.allocations.iter().fold(zero_amount(), |sum, line| {
-            sum.checked_add(line.allocated_gross_amount)
-        });
-        let net_requested: Amount = req.allocations.iter().fold(zero_amount(), |sum, line| {
-            sum.checked_add(line.allocated_net_amount)
-        });
-        if gross_requested != req.gross_amount || net_requested != req.net_amount {
-            return Err(Error::BusinessLogicError(
-                "成本分配合计必须等于成本事实金额".to_string(),
-            ));
-        }
+        // 金额守恒与尾差归属由计划 VO 一次性验证与解析，失败不产生部分计划；
+        // Service 只注入已确认的销售事实并编排事务。
+        let plan = CostAllocationSet::new(
+            req.gross_amount,
+            req.net_amount,
+            req.allocations
+                .iter()
+                .map(|line| CostAllocationLineInput {
+                    sales_order_id: line.sales_order_id.clone(),
+                    sales_order_line_id: line.sales_order_line_id.clone(),
+                    allocated_gross_amount: line.allocated_gross_amount,
+                    allocated_net_amount: line.allocated_net_amount,
+                    rounding_residual_flag: line.rounding_residual_flag,
+                })
+                .collect(),
+        )?;
 
         let entry_id = CostEntryId::new(next_id());
         let entry = CostEntry::new(
@@ -179,19 +194,19 @@ impl CostService {
                 evidence_attachment_id: req.evidence_attachment_id,
             },
         )?;
-        let mut allocations = Vec::with_capacity(req.allocations.len());
-        for (index, line) in req.allocations.iter().enumerate() {
+        let mut allocations = Vec::with_capacity(plan.lines().len());
+        for line in plan.into_lines() {
             allocations.push(CostAllocation::new(
                 CostAllocationId::new(next_id()),
                 CostAllocationData {
                     cost_entry_id: entry_id.clone(),
-                    sales_order_id: Some(line.sales_order_id.clone()),
-                    sales_order_line_id: line.sales_order_line_id.clone(),
+                    sales_order_id: Some(line.sales_order_id),
+                    sales_order_line_id: line.sales_order_line_id,
                     mall_consumption_entry_id: None,
                     mall_payment_source_id: None,
                     allocated_gross_amount: line.allocated_gross_amount,
                     allocated_net_amount: line.allocated_net_amount,
-                    rounding_residual_flag: line.rounding_residual_flag.unwrap_or(index == 0),
+                    rounding_residual_flag: line.rounding_residual_flag,
                 },
             )?);
         }
@@ -372,7 +387,8 @@ fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter> {
 
 /// 将成本事实投影与已批量加载的分配事实装配为列表视图。
 ///
-/// 金额字段均直接复制持久化 [`Amount`]；分配缺失时保持既有空列表语义。
+/// 金额字段均直接复制持久化金额（`entities::money::Amount`）；分配缺失时保持
+/// 既有空列表语义。
 ///
 /// # 参数
 /// * `row` - 当前页成本事实持久化投影
@@ -405,7 +421,8 @@ fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> C
 
 /// 将持久化成本分配事实无损映射为服务响应视图。
 ///
-/// 金额字段直接复制原始 [`Amount`]，不得在读取路径归一化、重算或改变小数位。
+/// 金额字段直接复制原始金额（`entities::money::Amount`），不得在读取路径归一化、
+/// 重算或改变小数位。
 ///
 /// # 参数
 /// * `allocation` - 仓储读取的成本分配事实
@@ -425,12 +442,42 @@ fn cost_allocation_entity_view(allocation: CostAllocation) -> CostAllocationView
     }
 }
 
-/// 返回固定零金额。
+/// 去重销售单 ID（保持首次出现顺序）。
+///
+/// 批量存在性读取前先去重，保证同一销售订单只查询一次。
+///
+/// # 参数
+/// * `ids` - 分配行销售单 ID 列表，可能包含重复
 ///
 /// # 返回
-/// 返回金额 `0.00`。
-fn zero_amount() -> Amount {
-    Amount::from_str("0.00").expect("固定零金额必须可解析")
+/// 返回去重后的销售单 ID，顺序与首次出现一致。
+///
+/// # 错误
+/// 无。
+fn dedupe_order_ids(ids: &[SalesOrderId]) -> Vec<SalesOrderId> {
+    let mut seen = HashSet::with_capacity(ids.len());
+    ids.iter().filter(|&id| seen.insert(id.clone())).cloned().collect()
+}
+
+/// 按输入顺序返回第一个缺失的销售单 ID。
+///
+/// # 参数
+/// * `requested` - 去重后的请求销售单 ID（保持输入顺序）
+/// * `existing` - 仓储批量返回的已存在销售单 ID
+///
+/// # 返回
+/// 全部存在时返回 `None`；否则返回输入顺序中第一个缺失的 ID。
+///
+/// # 错误
+/// 无。
+fn missing_order_id(requested: &[SalesOrderId], existing: &[SalesOrderId]) -> Option<SalesOrderId> {
+    let existing = existing.iter().collect::<HashSet<_>>();
+    for id in requested {
+        if !existing.contains(id) {
+            return Some(id.clone());
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -496,5 +543,46 @@ mod tests {
 
         assert_eq!(view.allocated_gross_amount.to_string(), "1.00");
         assert_eq!(view.allocated_net_amount.to_string(), "0.10");
+    }
+
+    #[test]
+    fn dedupe_order_ids_keeps_first_occurrence_order() {
+        let ids = vec![
+            SalesOrderId::new("so-1"),
+            SalesOrderId::new("so-2"),
+            SalesOrderId::new("so-1"),
+            SalesOrderId::new("so-3"),
+        ];
+        let unique = super::dedupe_order_ids(&ids);
+        let strings = unique.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(strings, vec!["so-1", "so-2", "so-3"]);
+    }
+
+    #[test]
+    fn missing_order_id_returns_none_when_all_exist() {
+        let requested = vec![SalesOrderId::new("so-1"), SalesOrderId::new("so-2")];
+        let existing = vec![SalesOrderId::new("so-2"), SalesOrderId::new("so-1")];
+        assert!(super::missing_order_id(&requested, &existing).is_none());
+    }
+
+    #[test]
+    fn missing_order_id_reports_first_missing_in_input_order() {
+        let requested = vec![SalesOrderId::new("so-1"), SalesOrderId::new("so-2")];
+        let existing = vec![SalesOrderId::new("so-1")];
+        assert_eq!(
+            super::missing_order_id(&requested, &existing).unwrap(),
+            SalesOrderId::new("so-2")
+        );
+
+        let empty_existing = Vec::<SalesOrderId>::new();
+        assert_eq!(
+            super::missing_order_id(&requested, &empty_existing).unwrap(),
+            SalesOrderId::new("so-1")
+        );
+    }
+
+    #[test]
+    fn missing_order_id_empty_request_is_none() {
+        assert!(super::missing_order_id(&[], &[SalesOrderId::new("so-1")]).is_none());
     }
 }
