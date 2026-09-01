@@ -3,11 +3,8 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{
-    AccessControlExt, NoTransaction, SupplierFulfillmentExt, SupplierSettlementExt, Transactional,
-};
+use database::{AccessControlExt, NoTransaction, SupplierSettlementExt, Transactional};
 use entities::common::time::{BusinessDate, Instant};
-use entities::ids::{SupplierFulfillmentOrderId, SupplierRefundFactId};
 use entities::money::{line_amounts, Amount};
 use entities::supplier_fulfillment::AllocationAction;
 use entities::supplier_settlement::{
@@ -190,52 +187,39 @@ impl SupplierSettlementService {
             .iter()
             .map(|line| line.supplier_fulfillment_item_id.to_string())
             .collect::<HashSet<_>>();
-        let orders = self
+        let scope = self
             .db
-            .supplier_fulfillment_orders()
-            .list_by_supplier_id(&req.supplier_id, &mut NoTransaction)
+            .supplier_settlement()
+            .settlement_source_scope(
+                &req.supplier_id,
+                period.start(),
+                period.end(),
+                &req.lines
+                    .iter()
+                    .map(|line| line.supplier_fulfillment_order_id.clone())
+                    .collect::<Vec<_>>(),
+                &input_item_ids,
+                &mut NoTransaction,
+            )
             .await?;
-        let order_ids = orders
-            .iter()
-            .map(|order| order.base.id.clone())
-            .collect::<HashSet<_>>();
-        if order_ids.is_empty() {
+        if scope.orders.is_empty() {
             return Err(Error::NotFound(
                 "当前供应商没有可核验的供应商履约订单".to_string(),
             ));
         }
-        let typed_order_ids = order_ids
-            .iter()
-            .map(SupplierFulfillmentOrderId::new)
-            .collect::<Vec<_>>();
-        let items = self
-            .db
-            .supplier_fulfillment_items()
-            .find_items_by_order_ids(&typed_order_ids, &mut NoTransaction)
-            .await?;
-        let order_map = orders
+        let order_map = scope
+            .orders
             .into_iter()
             .map(|value| (value.base.id.clone(), value))
             .collect::<HashMap<_, _>>();
-        let item_map = items
+        let item_map = scope
+            .items
             .into_iter()
             .map(|value| (value.base.id.clone(), value))
             .collect::<HashMap<_, _>>();
-        let refund_facts = self
-            .db
-            .supplier_refund_facts()
-            .find_refund_facts_by_order_ids(&typed_order_ids, &mut NoTransaction)
-            .await?;
-        let refund_fact_ids = refund_facts
-            .iter()
-            .map(|fact| SupplierRefundFactId::new(fact.base.id.as_str()))
-            .collect::<Vec<_>>();
-        let refund_allocations = self
-            .db
-            .supplier_refund_allocations()
-            .find_allocations_by_fact_ids(&refund_fact_ids, &mut NoTransaction)
-            .await?;
-        let refund_fact_map = refund_facts
+        let refund_allocations = scope.refund_allocations;
+        let refund_fact_map = scope
+            .refund_facts
             .iter()
             .map(|fact| (fact.base.id.as_str(), fact))
             .collect::<HashMap<_, _>>();
@@ -606,4 +590,566 @@ fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> String {
         parts.push(references.join(","));
     }
     digest_parts(&parts)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, HashSet};
+    use std::str::FromStr;
+
+    use entities::common::time::{BusinessDate, Instant};
+    use entities::ids::{
+        CostAllocationId, CostEntryId, InboxMessageId, MallOrderId, MallOrderItemId, PayableEntryId,
+        SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+        SupplierOfferingRevisionId, SupplierRefundAllocationId, SupplierRefundFactId,
+    };
+    use entities::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
+    use entities::supplier_fulfillment::{
+        AllocationAction, FulfillmentStatus, SupplierFulfillmentItem, SupplierFulfillmentItemData,
+        SupplierFulfillmentOrder, SupplierFulfillmentOrderData, SupplierRefundAllocation,
+        SupplierRefundAllocationData, SupplierRefundFact, SupplierRefundFactData,
+    };
+    use entities::supplier_settlement::{
+        SettlementAmountComponents, SettlementCancelEvidence, SettlementPeriod, SettlementSourceFactType,
+        SETTLEMENT_TIMEZONE,
+    };
+
+    use super::{build_source_line, ensure_complete_source_scope, refund_amounts, CompleteSourceScope};
+    use crate::errors::{Error, Result};
+    use crate::supplier_settlement::RecordSettlementSourceEvidenceLineRequest;
+
+    const SUPPLIER: &str = "supplier-1";
+    const PERIOD_START: &str = "2026-07-01";
+    const PERIOD_END: &str = "2026-07-31";
+
+    fn instant(rfc3339: &str) -> Instant {
+        Instant::from_unix_secs(chrono::DateTime::parse_from_rfc3339(rfc3339).unwrap().timestamp())
+    }
+
+    fn period() -> SettlementPeriod {
+        SettlementPeriod::new(
+            BusinessDate::from_str(PERIOD_START).unwrap(),
+            BusinessDate::from_str(PERIOD_END).unwrap(),
+            SETTLEMENT_TIMEZONE,
+        )
+        .unwrap()
+    }
+
+    fn completed_order(id: &str, completed_at: Instant) -> SupplierFulfillmentOrder {
+        let mut order = SupplierFulfillmentOrder::new(
+            SupplierFulfillmentOrderId::new(id),
+            SupplierFulfillmentOrderData::submitting(
+                format!("SO-{id}"),
+                MallOrderId::new(format!("mall-{id}")),
+                SupplierAccountId::new(SUPPLIER),
+                SupplierApiConnectionId::new("connection-1"),
+                1,
+                Instant::from_unix_secs(1_700_000_000),
+                "encrypted-address",
+                "fingerprint-address",
+            ),
+        )
+        .expect("订单构造失败");
+        order
+            .advance_fulfillment(FulfillmentStatus::Accepted)
+            .expect("迁移失败");
+        order
+            .advance_fulfillment(FulfillmentStatus::Fulfilling)
+            .expect("迁移失败");
+        order
+            .advance_fulfillment(FulfillmentStatus::Completed)
+            .expect("迁移失败");
+        order.completed_at = Some(completed_at);
+        order
+    }
+
+    fn fulfillment_item(id: &str, order_id: &SupplierFulfillmentOrderId) -> SupplierFulfillmentItem {
+        let unit_price = UnitPrice::from_str("113.0000").unwrap();
+        let quantity = Quantity::from_str("1.000000").unwrap();
+        let (gross, _, _) = line_amounts(unit_price, quantity, Rate::from_str("0.130000").unwrap());
+        SupplierFulfillmentItem::new(
+            SupplierFulfillmentItemId::new(id),
+            SupplierFulfillmentItemData {
+                supplier_fulfillment_order_id: order_id.clone(),
+                mall_order_item_id: MallOrderItemId::new(format!("mall-item-{id}")),
+                supplier_offering_revision_id: SupplierOfferingRevisionId::new("offering-rev-1"),
+                supplier_sku_code_snapshot: format!("SKU-{id}"),
+                supplier_product_code_snapshot: None,
+                quantity,
+                unit_cost_snapshot_gross: unit_price,
+                cost_snapshot_total_gross: gross,
+                input_tax_rate: Rate::from_str("0.130000").unwrap(),
+            },
+        )
+        .expect("明细构造失败")
+    }
+
+    fn refund_fact(
+        id: &str,
+        order_id: &SupplierFulfillmentOrderId,
+        refunded_at: Instant,
+    ) -> SupplierRefundFact {
+        SupplierRefundFact::new(
+            SupplierRefundFactId::new(id),
+            SupplierRefundFactData {
+                supplier_id: SupplierAccountId::new(SUPPLIER),
+                connection_id: SupplierApiConnectionId::new("connection-1"),
+                supplier_fulfillment_order_id: order_id.clone(),
+                external_refund_no: format!("RF-{id}"),
+                external_refund_version: "1".to_string(),
+                refund_amount: Amount::from_str("10.00").unwrap(),
+                refunded_at,
+                source_event_id: format!("event-{id}"),
+                inbox_message_id: InboxMessageId::new(format!("inbox-{id}")),
+            },
+        )
+        .expect("退款事实构造失败")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn refund_allocation(
+        id: &str,
+        fact_id: &SupplierRefundFactId,
+        item_id: &SupplierFulfillmentItemId,
+        gross: &str,
+        net: &str,
+        tax: &str,
+        action: AllocationAction,
+        reverses_allocation_id: Option<SupplierRefundAllocationId>,
+    ) -> SupplierRefundAllocation {
+        SupplierRefundAllocation::new(
+            SupplierRefundAllocationId::new(id),
+            SupplierRefundAllocationData {
+                supplier_refund_fact_id: fact_id.clone(),
+                allocation_no: 1,
+                supplier_fulfillment_item_id: item_id.clone(),
+                original_cost_entry_id: CostEntryId::new(format!("cost-{id}")),
+                original_cost_allocation_id: CostAllocationId::new(format!("cost-alloc-{id}")),
+                original_payable_entry_id: PayableEntryId::new(format!("payable-{id}")),
+                original_payment_allocation_id: None,
+                refund_quantity: Quantity::from_str("1.000000").unwrap(),
+                gross_amount: Amount::from_str(gross).unwrap(),
+                net_amount: Amount::from_str(net).unwrap(),
+                tax_amount: Amount::from_str(tax).unwrap(),
+                payable_reduction_amount: Amount::from_str(gross).unwrap(),
+                cash_refund_amount: Amount::from_str("0.00").unwrap(),
+                cash_supplier_refund_id: None,
+                allocation_action: action,
+                reverses_allocation_id,
+            },
+        )
+        .expect("退款分配构造失败")
+    }
+
+    fn line_request(item_id: &str, order_id: &str) -> RecordSettlementSourceEvidenceLineRequest {
+        RecordSettlementSourceEvidenceLineRequest {
+            supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new(order_id),
+            supplier_fulfillment_item_id: SupplierFulfillmentItemId::new(item_id),
+            cancel_occurred_at: None,
+            cancel_evidence_reference_id: None,
+            evidence_reference_ids: vec!["bill://line".to_string()],
+            freight_gross: Amount::from_str("0.00").unwrap(),
+            freight_net: Amount::from_str("0.00").unwrap(),
+            freight_tax: Amount::from_str("0.00").unwrap(),
+            service_fee_gross: Amount::from_str("0.00").unwrap(),
+            service_fee_net: Amount::from_str("0.00").unwrap(),
+            service_fee_tax: Amount::from_str("0.00").unwrap(),
+            supplier_billed_gross: Amount::from_str("113.00").unwrap(),
+            supplier_billed_net: Amount::from_str("98.31").unwrap(),
+            supplier_billed_tax: Amount::from_str("14.69").unwrap(),
+        }
+    }
+
+    fn order_map(orders: &[SupplierFulfillmentOrder]) -> HashMap<String, SupplierFulfillmentOrder> {
+        orders
+            .iter()
+            .map(|order| (order.base.id.clone(), order.clone()))
+            .collect()
+    }
+
+    fn item_map(items: &[SupplierFulfillmentItem]) -> HashMap<String, SupplierFulfillmentItem> {
+        items
+            .iter()
+            .map(|item| (item.base.id.clone(), item.clone()))
+            .collect()
+    }
+
+    fn fact_map(facts: &[SupplierRefundFact]) -> HashMap<&str, &SupplierRefundFact> {
+        facts.iter().map(|fact| (fact.base.id.as_str(), fact)).collect()
+    }
+
+    fn input_item_ids(inputs: &[RecordSettlementSourceEvidenceLineRequest]) -> HashSet<String> {
+        inputs
+            .iter()
+            .map(|line| line.supplier_fulfillment_item_id.to_string())
+            .collect()
+    }
+
+    fn ensure_scope(
+        inputs: Vec<RecordSettlementSourceEvidenceLineRequest>,
+        orders: Vec<SupplierFulfillmentOrder>,
+        items: Vec<SupplierFulfillmentItem>,
+        refund_allocations: Vec<SupplierRefundAllocation>,
+        refund_facts: Vec<SupplierRefundFact>,
+    ) -> Result<()> {
+        let input_item_ids = input_item_ids(&inputs);
+        let order_map = order_map(&orders);
+        let item_map = item_map(&items);
+        let refund_fact_map = fact_map(&refund_facts);
+        ensure_complete_source_scope(CompleteSourceScope {
+            inputs: &inputs,
+            input_item_ids: &input_item_ids,
+            order_map: &order_map,
+            item_map: &item_map,
+            refund_allocations: &refund_allocations,
+            refund_fact_map: &refund_fact_map,
+            period: period(),
+        })
+    }
+
+    fn business_logic_message(error: Error) -> String {
+        match error {
+            Error::BusinessLogicError(message) => message,
+            other => panic!("期望 BusinessLogicError，得到 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn complete_scope_accepts_all_in_period_facts() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let fact = refund_fact(
+            "fact-1",
+            &SupplierFulfillmentOrderId::new("order-1"),
+            instant("2026-07-20T10:00:00+08:00"),
+        );
+        let allocation = refund_allocation(
+            "alloc-1",
+            &SupplierRefundFactId::new("fact-1"),
+            &SupplierFulfillmentItemId::new("item-1"),
+            "10.00",
+            "8.70",
+            "1.30",
+            AllocationAction::Apply,
+            None,
+        );
+        assert!(ensure_scope(
+            vec![line_request("item-1", "order-1")],
+            vec![order],
+            vec![item],
+            vec![allocation],
+            vec![fact],
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn complete_scope_rejects_omitted_in_period_completed_item() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let item_1 = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let item_2 = fulfillment_item("item-2", &SupplierFulfillmentOrderId::new("order-1"));
+        let message = business_logic_message(
+            ensure_scope(
+                vec![line_request("item-1", "order-1")],
+                vec![order],
+                vec![item_1, item_2],
+                Vec::new(),
+                Vec::new(),
+            )
+            .expect_err("漏掉期间内完成明细必须拒绝"),
+        );
+        assert!(
+            message.contains("SOURCE_EVIDENCE_INCOMPLETE") && message.contains("item-2"),
+            "错误必须 fail-closed 并列出遗漏明细: {message}"
+        );
+    }
+
+    #[test]
+    fn complete_scope_rejects_omitted_in_period_refund_allocation() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let item_1 = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let fact = refund_fact(
+            "fact-1",
+            &SupplierFulfillmentOrderId::new("order-1"),
+            instant("2026-07-20T10:00:00+08:00"),
+        );
+        // 期间内退款分配指向 item-2，但命令只覆盖 item-1 → 完整性检查必须拒绝。
+        let allocation = refund_allocation(
+            "alloc-1",
+            &SupplierRefundFactId::new("fact-1"),
+            &SupplierFulfillmentItemId::new("item-2"),
+            "10.00",
+            "8.70",
+            "1.30",
+            AllocationAction::Apply,
+            None,
+        );
+        let message = business_logic_message(
+            ensure_scope(
+                vec![line_request("item-1", "order-1")],
+                vec![order],
+                vec![item_1],
+                vec![allocation],
+                vec![fact],
+            )
+            .expect_err("漏掉期间内退款分配对应明细必须拒绝"),
+        );
+        assert!(
+            message.contains("SOURCE_EVIDENCE_INCOMPLETE") && message.contains("item-2"),
+            "错误必须 fail-closed 并列出遗漏明细: {message}"
+        );
+    }
+
+    #[test]
+    fn complete_scope_rejects_allocation_missing_fact_head() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let item_1 = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let allocation = refund_allocation(
+            "alloc-1",
+            &SupplierRefundFactId::new("fact-missing"),
+            &SupplierFulfillmentItemId::new("item-1"),
+            "10.00",
+            "8.70",
+            "1.30",
+            AllocationAction::Apply,
+            None,
+        );
+        let message = business_logic_message(
+            ensure_scope(
+                vec![line_request("item-1", "order-1")],
+                vec![order],
+                vec![item_1],
+                vec![allocation],
+                Vec::new(),
+            )
+            .expect_err("分配缺少退款头必须拒绝"),
+        );
+        assert!(
+            message.contains("退款分配缺少正式退款头"),
+            "错误必须指向缺失的退款头: {message}"
+        );
+    }
+
+    #[test]
+    fn complete_scope_rejects_item_without_order_head() {
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-missing"));
+        let message = business_logic_message(
+            ensure_scope(
+                vec![line_request("item-1", "order-missing")],
+                Vec::new(),
+                vec![item],
+                Vec::new(),
+                Vec::new(),
+            )
+            .expect_err("明细缺少订单头必须拒绝"),
+        );
+        assert!(
+            message.contains("履约明细缺少供应商订单头"),
+            "错误必须指向缺失的订单头: {message}"
+        );
+    }
+
+    #[test]
+    fn refund_amounts_net_apply_and_reverse_within_period() {
+        let input = line_request("item-1", "order-1");
+        let fact = refund_fact(
+            "fact-1",
+            &SupplierFulfillmentOrderId::new("order-1"),
+            instant("2026-07-20T10:00:00+08:00"),
+        );
+        let allocations = vec![
+            refund_allocation(
+                "alloc-1",
+                &SupplierRefundFactId::new("fact-1"),
+                &SupplierFulfillmentItemId::new("item-1"),
+                "10.00",
+                "8.70",
+                "1.30",
+                AllocationAction::Apply,
+                None,
+            ),
+            refund_allocation(
+                "alloc-2",
+                &SupplierRefundFactId::new("fact-1"),
+                &SupplierFulfillmentItemId::new("item-1"),
+                "4.00",
+                "3.48",
+                "0.52",
+                AllocationAction::Reverse,
+                Some(SupplierRefundAllocationId::new("alloc-1")),
+            ),
+        ];
+        let facts = [fact];
+        let fact_map = fact_map(&facts);
+        let mut references = vec!["bill://line".to_string()];
+        let refund = refund_amounts(&input, &allocations, &fact_map, period(), &mut references).unwrap();
+        assert_eq!(refund.gross, Amount::from_str("6.00").unwrap());
+        assert_eq!(refund.net, Amount::from_str("5.22").unwrap());
+        assert_eq!(refund.tax, Amount::from_str("0.78").unwrap());
+        assert_eq!(
+            references,
+            vec![
+                "bill://line".to_string(),
+                "supplier-refund://fact-1/allocation/alloc-1".to_string(),
+                "supplier-refund://fact-1/allocation/alloc-2".to_string(),
+            ],
+            "退款证据引用必须按分配追加"
+        );
+    }
+
+    #[test]
+    fn refund_amounts_skip_out_of_period_facts_and_other_items() {
+        let input = line_request("item-1", "order-1");
+        let out_fact = refund_fact(
+            "fact-out",
+            &SupplierFulfillmentOrderId::new("order-1"),
+            instant("2026-08-01T00:00:00+08:00"),
+        );
+        let other_fact = refund_fact(
+            "fact-other",
+            &SupplierFulfillmentOrderId::new("order-1"),
+            instant("2026-07-20T10:00:00+08:00"),
+        );
+        let allocations = vec![
+            refund_allocation(
+                "alloc-out",
+                &SupplierRefundFactId::new("fact-out"),
+                &SupplierFulfillmentItemId::new("item-1"),
+                "10.00",
+                "8.70",
+                "1.30",
+                AllocationAction::Apply,
+                None,
+            ),
+            refund_allocation(
+                "alloc-other",
+                &SupplierRefundFactId::new("fact-other"),
+                &SupplierFulfillmentItemId::new("item-9"),
+                "10.00",
+                "8.70",
+                "1.30",
+                AllocationAction::Apply,
+                None,
+            ),
+        ];
+        let facts = [out_fact, other_fact];
+        let fact_map = fact_map(&facts);
+        let mut references = Vec::new();
+        let refund = refund_amounts(&input, &allocations, &fact_map, period(), &mut references).unwrap();
+        assert_eq!(
+            refund,
+            SettlementAmountComponents::zero(),
+            "期外与异明细分配不计入"
+        );
+        assert!(references.is_empty());
+    }
+
+    #[test]
+    fn refund_amounts_reject_allocation_without_fact_head() {
+        let input = line_request("item-1", "order-1");
+        let allocation = refund_allocation(
+            "alloc-1",
+            &SupplierRefundFactId::new("fact-missing"),
+            &SupplierFulfillmentItemId::new("item-1"),
+            "10.00",
+            "8.70",
+            "1.30",
+            AllocationAction::Apply,
+            None,
+        );
+        let fact_map = HashMap::new();
+        let mut references = Vec::new();
+        let message = business_logic_message(
+            refund_amounts(&input, &[allocation], &fact_map, period(), &mut references)
+                .expect_err("分配缺少退款头必须拒绝"),
+        );
+        assert!(message.contains("退款分配缺少正式退款头"));
+    }
+
+    #[test]
+    fn build_source_line_derives_completed_order_amounts_and_references() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let input = line_request("item-1", "order-1");
+        let line = build_source_line(&input, &order, &item, &[], &HashMap::new(), period())
+            .expect("期间内完成行必须构造成功");
+        let (gross, net, tax) =
+            line_amounts(item.unit_cost_snapshot_gross, item.quantity, item.input_tax_rate);
+        assert!(line
+            .source_fact_types
+            .contains(&SettlementSourceFactType::FulfillmentCompleted));
+        assert_eq!(line.order_gross, gross);
+        assert_eq!(line.order_net, net);
+        assert_eq!(line.order_tax, tax);
+        assert_eq!(line.refund_gross, Amount::from_str("0.00").unwrap());
+        assert_eq!(line.refund_net, Amount::from_str("0.00").unwrap());
+        assert_eq!(line.refund_tax, Amount::from_str("0.00").unwrap());
+        assert!(line.evidence_reference_ids.iter().any(|reference| {
+            reference
+                == &format!(
+                    "supplier-fulfillment://order-1/item-1/completed/{}",
+                    order.confirmed_completed_at().unwrap().unwrap().unix_secs()
+                )
+        }));
+        assert_eq!(line.supplier_billed_gross, Amount::from_str("113.00").unwrap());
+    }
+
+    #[test]
+    fn build_source_line_rejects_cancel_evidence_without_canceled_order() {
+        let order = completed_order("order-1", instant("2026-07-15T12:00:00+08:00"));
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let mut input = line_request("item-1", "order-1");
+        input.cancel_occurred_at = Some(instant("2026-07-20T10:00:00+08:00").unix_secs());
+        input.cancel_evidence_reference_id = Some("cancel://proof-1".to_string());
+        let error = build_source_line(&input, &order, &item, &[], &HashMap::new(), period())
+            .expect_err("未取消订单携带取消补证必须拒绝");
+        assert!(
+            error.to_string().contains("取消"),
+            "错误必须指向取消状态: {error}"
+        );
+    }
+
+    #[test]
+    fn build_source_line_rejects_item_without_in_period_fact() {
+        let order = completed_order("order-1", instant("2026-06-01T00:00:00+08:00"));
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let input = line_request("item-1", "order-1");
+        let error = build_source_line(&input, &order, &item, &[], &HashMap::new(), period())
+            .expect_err("期间内没有任何正式事实的行必须拒绝");
+        assert!(
+            error.to_string().contains("没有完成、取消或退款正式事实"),
+            "错误必须指向缺失正式事实: {error}"
+        );
+    }
+
+    #[test]
+    fn build_source_line_accepts_cancel_evidence_for_canceled_order() {
+        let mut order = completed_order("order-1", instant("2026-06-01T00:00:00+08:00"));
+        order
+            .advance_cancel(entities::supplier_fulfillment::CancelStatus::CancelPending)
+            .expect("迁移失败");
+        order
+            .advance_cancel(entities::supplier_fulfillment::CancelStatus::Canceled)
+            .expect("迁移失败");
+        let item = fulfillment_item("item-1", &SupplierFulfillmentOrderId::new("order-1"));
+        let mut input = line_request("item-1", "order-1");
+        input.cancel_occurred_at = Some(instant("2026-07-20T10:00:00+08:00").unix_secs());
+        input.cancel_evidence_reference_id = Some("cancel://proof-1".to_string());
+        let line = build_source_line(&input, &order, &item, &[], &HashMap::new(), period())
+            .expect("已取消订单携带期间内取消补证必须构造成功");
+        assert!(line
+            .source_fact_types
+            .contains(&SettlementSourceFactType::CancelConfirmed));
+        let cancel = SettlementCancelEvidence::from_optional(
+            input.cancel_occurred_at.map(Instant::from_unix_secs),
+            input.cancel_evidence_reference_id.clone(),
+            period(),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(line
+            .evidence_reference_ids
+            .iter()
+            .any(|reference| reference == cancel.reference_id()));
+    }
 }

@@ -16,13 +16,16 @@
 
 use entities::common::time::Instant;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use entities::ids::{
-    MallAfterSalesRequestId, MallOrderId, MallOrderItemId, SupplierAccountId, SupplierApiConnectionId,
-    SupplierFulfillmentOrderId, SupplierOfferingRevisionId, SupplierOrderActionId, SupplierRefundFactId,
+    MallAfterSalesRequestId, MallAfterSalesRequestLineId, MallOrderId, MallOrderItemId, SupplierAccountId,
+    SupplierApiConnectionId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId,
+    SupplierOfferingRevisionId, SupplierOrderActionId, SupplierRefundFactId,
 };
 use entities::mall_after_sales::MallAfterSalesRequestLine;
 use entities::mall_order::MallOrderItem;
+use entities::money::{Amount, Quantity};
 use entities::supplier_fulfillment::{
     CancelStatus, FulfillmentStatus, RefundStatus, SupplierFulfillmentItem, SupplierFulfillmentOrder,
     SupplierOrderAction, SupplierOrderActionLine, SupplierOrderStatusHistory, SupplierRefundAllocation,
@@ -30,12 +33,13 @@ use entities::supplier_fulfillment::{
 };
 use entities::supplier_offering::{SupplierOffering, SupplierOfferingRevision};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use futures_util::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{SupplierFulfillmentExt, SupplierOfferingExt};
+use super::extensions::{MallAfterSalesExt, SupplierFulfillmentExt, SupplierOfferingExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -49,6 +53,9 @@ const SUPPLIER_FULFILLMENT_ITEMS: &str =
     <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_FULFILLMENT_ITEMS;
 /// `supplier_order_action` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_ORDER_ACTIONS: &str = <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_ORDER_ACTIONS;
+/// `supplier_order_action_line` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
+const SUPPLIER_ORDER_ACTION_LINES: &str =
+    <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_ORDER_ACTION_LINES;
 /// `supplier_offering` 集合名。
 const SUPPLIER_OFFERINGS: &str = <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 /// `supplier_offering_revision` 集合名。
@@ -59,6 +66,9 @@ const SUPPLIER_REFUND_FACTS: &str = <mongodb::Database as SupplierFulfillmentExt
 /// `supplier_refund_allocation` 集合名（单一来源：`SupplierFulfillmentExt` 关联常量）。
 const SUPPLIER_REFUND_ALLOCATIONS: &str =
     <mongodb::Database as SupplierFulfillmentExt>::SUPPLIER_REFUND_ALLOCATIONS;
+/// `mall_after_sales_request_line` 集合名（单一来源：`MallAfterSalesExt` 关联常量）。
+const MALL_AFTER_SALES_REQUEST_LINES: &str =
+    <mongodb::Database as MallAfterSalesExt>::MALL_AFTER_SALES_REQUEST_LINES;
 
 /// 履约订单列表排序白名单（§6.19 查询索引支持的字段；白名单外一律回退 `created_at`）。
 const ORDER_SORT_FIELDS: &[&str] = &["created_at", "submitted_at", "accepted_at", "completed_at"];
@@ -644,10 +654,94 @@ impl<'a> Repository<'a, SupplierRefundAllocation> {
     }
 }
 
-/// D32 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+/// 售后申请行限额投影行（FUL-R03）。
+///
+/// 只投影售后动作净余额校验所需的申请行限额，不反序列化整实体。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AfterSalesRequestLineLimitRow {
+    /// 商城售后申请行主键。
+    pub id: MallAfterSalesRequestLineId,
+    /// 本商品申请数量。
+    pub requested_quantity: Quantity,
+    /// 本商品申请金额。
+    pub requested_amount: Amount,
+}
+
+/// 按商城售后申请行聚合的历史已提交动作行合计（FUL-R03）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SubmittedActionTotals {
+    /// 历史已提交数量。
+    pub quantity: Quantity,
+    /// 历史已提交金额。
+    pub amount: Amount,
+}
+
+/// 售后动作校验范围快照（FUL-R03）。
+///
+/// 一次取回服务层跨聚合校验所需的持久化事实：订单合法履约明细主键、
+/// 售后申请行限额与按申请行聚合的历史已提交数量/金额；不携带 services
+/// DTO 或授权结论。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AfterSalesActionScope {
+    /// 订单合法履约明细主键集合。
+    pub item_ids: Vec<SupplierFulfillmentItemId>,
+    /// 售后申请全部未删除申请行限额。
+    pub request_line_limits: Vec<AfterSalesRequestLineLimitRow>,
+    /// 按申请行聚合的历史已提交数量/金额（同一申请下全部未软删除动作行，
+    /// 不按动作状态过滤，六态均计入）。
+    pub submitted_by_request_line: HashMap<MallAfterSalesRequestLineId, SubmittedActionTotals>,
+}
+
+/// 订单退款财务快照（FUL-R05）。
+///
+/// 只包含退款上限校验所需的两个持久化金额，不携带 services DTO 或授权
+/// 结论；任一来源集合为空时对应金额为精确零。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RefundFinancialSnapshot {
+    /// 订单明细含税成本快照合计。
+    pub order_cost_gross: Amount,
+    /// 历史退款事实实际退款金额合计。
+    pub refunded_total: Amount,
+}
+
+/// 履约明细主键投影行（FUL-R03）。
+#[derive(Debug, Deserialize)]
+struct FulfillmentItemIdRow {
+    /// 履约明细主键。
+    id: SupplierFulfillmentItemId,
+}
+
+/// 动作头主键投影行（FUL-R03）。
+#[derive(Debug, Deserialize)]
+struct OrderActionIdRow {
+    /// 动作头主键。
+    id: SupplierOrderActionId,
+}
+
+/// 动作行已提交合计聚合行（FUL-R03）。
+#[derive(Debug, Deserialize)]
+struct SubmittedActionTotalRow {
+    /// 商城售后申请行主键（聚合分组键）。
+    #[serde(rename = "_id")]
+    after_sales_request_line_id: MallAfterSalesRequestLineId,
+    /// 累计已提交数量（Decimal128 求和结果）。
+    quantity: Quantity,
+    /// 累计已提交金额（Decimal128 求和结果）。
+    amount: Amount,
+}
+
+/// 订单金额合计聚合行（FUL-R05）。
+#[derive(Debug, Deserialize)]
+struct AmountTotalRow {
+    /// 合计金额（Decimal128 求和结果）。
+    total: Amount,
+}
+
+/// D32 域专用仓储：跨集合聚合写入与售后/退款读取范围。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
-/// 跨集合原子写入入口，由 `SupplierFulfillmentExt::supplier_fulfillment()` 访问。
+/// 跨集合原子写入入口与跨集合只读范围快照（FUL-R03/FUL-R05），由
+/// `SupplierFulfillmentExt::supplier_fulfillment()` 访问。
 pub struct SupplierFulfillmentRepository<'a> {
     db: &'a Database,
 }
@@ -800,6 +894,227 @@ impl<'a> SupplierFulfillmentRepository<'a> {
         .await?;
         Ok(())
     }
+
+    /// 读取售后动作校验范围（FUL-R03）。
+    ///
+    /// 一次取回订单合法履约明细主键、商城售后申请行限额，以及按申请行
+    /// 聚合的历史已提交数量/金额。历史累计包含同一申请下全部未软删除
+    /// 正式动作行，不按动作状态过滤（PENDING/SENDING/RESULT_UNKNOWN/
+    /// SUCCEEDED/FAILED/MANUAL 六态均计入）；软删除动作头或动作行一律
+    /// 排除。固定四次数据库访问，不随明细或动作行数增长；全部使用调用方
+    /// 执行器，事务内调用看到同一事务的未提交写入，本方法不自行开启或
+    /// 提交事务。跨聚合归属与净余额决定仍由 Service 承担。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商子订单主键
+    /// * `request_id` - 商城售后申请主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回订单合法明细主键、申请行限额与按申请行聚合的历史已提交合计；
+    /// 无历史动作时提交合计映射为空，由 Service 按精确零处理。
+    ///
+    /// # 错误
+    /// MongoDB 查询或聚合失败时返回错误；Decimal128 无法转换为
+    /// `Quantity`/`Amount`（精度或上限越界）时返回错误而非 panic。
+    pub async fn after_sales_action_scope(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        request_id: &MallAfterSalesRequestId,
+        executor: &mut dyn Executor,
+    ) -> Result<AfterSalesActionScope> {
+        let item_ids = self.scope_fulfillment_item_ids(order_id, executor).await?;
+        let request_line_limits = self.scope_request_line_limits(request_id, executor).await?;
+        let submitted_by_request_line = self.scope_submitted_totals(request_id, executor).await?;
+        Ok(AfterSalesActionScope {
+            item_ids,
+            request_line_limits,
+            submitted_by_request_line,
+        })
+    }
+
+    /// 读取订单退款财务快照（FUL-R05）。
+    ///
+    /// 在数据库内分别聚合未删除履约明细的含税成本快照合计
+    /// （`order_cost_gross`）与未删除退款事实的实际退款金额合计
+    /// （`refunded_total`），只返回两个金额，不反序列化明细或事实实体；
+    /// 任一集合为空时对应金额为精确零。固定两次数据库访问，不随明细或
+    /// 退款事实数增长；全部使用调用方执行器，事务内调用看到同一事务的
+    /// 未提交写入，本方法不自行开启或提交事务。退款上限「历史累计 + 本次
+    /// 退款不超过订单成本」的跨聚合决定仍由 Service 承担，本方法不返回
+    /// services DTO 或授权结论。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商子订单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回订单含税成本合计与历史退款合计；无明细或无退款事实时对应
+    /// 金额为精确零。
+    ///
+    /// # 错误
+    /// MongoDB 聚合失败时返回错误；Decimal128 求和结果无法转换为
+    /// `Amount`（精度或上限越界）时返回错误而非 panic。
+    pub async fn refund_financial_snapshot(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<RefundFinancialSnapshot> {
+        let order_cost_gross = aggregate_single_total(
+            &self.db.collection::<AmountTotalRow>(SUPPLIER_FULFILLMENT_ITEMS),
+            financial_total_pipeline(order_id, "cost_snapshot_total_gross"),
+            executor,
+        )
+        .await?;
+        let refunded_total = aggregate_single_total(
+            &self.db.collection::<AmountTotalRow>(SUPPLIER_REFUND_FACTS),
+            financial_total_pipeline(order_id, "refund_amount"),
+            executor,
+        )
+        .await?;
+        Ok(RefundFinancialSnapshot {
+            order_cost_gross,
+            refunded_total,
+        })
+    }
+
+    /// 读取订单合法履约明细主键集合（FUL-R03）。
+    ///
+    /// 按订单主键过滤未删除明细并只投影主键。
+    ///
+    /// # 参数
+    /// * `order_id` - 供应商子订单主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回订单全部未删除履约明细主键；无明细时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    async fn scope_fulfillment_item_ids(
+        &self,
+        order_id: &SupplierFulfillmentOrderId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierFulfillmentItemId>> {
+        let rows = mongo_ops::find_many(
+            &self
+                .db
+                .collection::<FulfillmentItemIdRow>(SUPPLIER_FULFILLMENT_ITEMS),
+            doc! {
+                "supplier_fulfillment_order_id": order_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder().projection(doc! { "id": 1 }).build(),
+            executor,
+        )
+        .await?;
+        Ok(rows.into_iter().map(|row| row.id).collect())
+    }
+
+    /// 读取售后申请全部未删除申请行限额（FUL-R03）。
+    ///
+    /// 按售后申请主键过滤未删除申请行并只投影限额字段。
+    ///
+    /// # 参数
+    /// * `request_id` - 商城售后申请主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回申请全部未删除申请行限额；无申请行时返回空集合。
+    ///
+    /// # 错误
+    /// MongoDB 查询或游标读取失败时返回错误。
+    async fn scope_request_line_limits(
+        &self,
+        request_id: &MallAfterSalesRequestId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<AfterSalesRequestLineLimitRow>> {
+        mongo_ops::find_many(
+            &self
+                .db
+                .collection::<AfterSalesRequestLineLimitRow>(MALL_AFTER_SALES_REQUEST_LINES),
+            doc! {
+                "after_sales_request_id": request_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder()
+                .projection(doc! { "id": 1, "requested_quantity": 1, "requested_amount": 1 })
+                .build(),
+            executor,
+        )
+        .await
+    }
+
+    /// 读取按申请行聚合的历史已提交合计（FUL-R03）。
+    ///
+    /// 先按售后申请主键读取全部未删除动作头主键（不按动作状态过滤），再
+    /// 在动作行上按动作头主键 `$in` 过滤未删除行并聚合数量与金额。
+    ///
+    /// # 参数
+    /// * `request_id` - 商城售后申请主键
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按申请行聚合的历史已提交合计；无历史动作时返回空映射。
+    ///
+    /// # 错误
+    /// MongoDB 查询或聚合失败时返回错误；Decimal128 无法转换为
+    /// `Quantity`/`Amount`（精度或上限越界）时返回错误而非 panic。
+    async fn scope_submitted_totals(
+        &self,
+        request_id: &MallAfterSalesRequestId,
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<MallAfterSalesRequestLineId, SubmittedActionTotals>> {
+        let action_rows = mongo_ops::find_many(
+            &self.db.collection::<OrderActionIdRow>(SUPPLIER_ORDER_ACTIONS),
+            doc! {
+                "after_sales_request_id": request_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            },
+            FindOptions::builder().projection(doc! { "id": 1 }).build(),
+            executor,
+        )
+        .await?;
+        let action_ids = action_rows
+            .into_iter()
+            .map(|row| row.id.to_string())
+            .collect::<Vec<_>>();
+        if action_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = aggregate_rows(
+            &self
+                .db
+                .collection::<SubmittedActionTotalRow>(SUPPLIER_ORDER_ACTION_LINES),
+            submitted_action_totals_pipeline(&action_ids),
+            executor,
+        )
+        .await?;
+        Ok(build_submitted_by_request_line(rows))
+    }
+}
+
+/// 把动作行已提交合计聚合行归组为按申请行映射。
+///
+/// # 参数
+/// * `rows` - 按 `after_sales_request_line_id` 分组的动作行合计行
+///
+/// # 返回
+/// 返回按申请行主键映射的历史已提交合计；空集合返回空映射。
+fn build_submitted_by_request_line(
+    rows: Vec<SubmittedActionTotalRow>,
+) -> HashMap<MallAfterSalesRequestLineId, SubmittedActionTotals> {
+    rows.into_iter()
+        .map(|row| {
+            (
+                row.after_sales_request_line_id,
+                SubmittedActionTotals {
+                    quantity: row.quantity,
+                    amount: row.amount,
+                },
+            )
+        })
+        .collect()
 }
 
 /// 构建履约订单排序文档（白名单映射，禁止透传任意字段名）。
@@ -816,6 +1131,157 @@ fn order_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
         .filter(|field| ORDER_SORT_FIELDS.contains(field))
         .unwrap_or("created_at");
     doc! { field: direction }
+}
+
+/// 按执行器语义执行聚合管道并收集全部结果行。
+///
+/// 带会话时使用 `SessionCursor` 逐条读取，与非会话游标返回同样的结果集合。
+///
+/// # 参数
+/// * `collection` - 目标集合
+/// * `pipeline` - 聚合管道
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回全部聚合结果行。
+///
+/// # 错误
+/// 聚合执行、游标读取或结果行反序列化（含 Decimal128 精度/上限越界）
+/// 失败时返回错误。
+async fn aggregate_rows<T>(
+    collection: &mongodb::Collection<T>,
+    pipeline: Vec<Document>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<T>>
+where
+    T: serde::de::DeserializeOwned + Send + Sync,
+{
+    match executor.session() {
+        Some(session) => {
+            collection
+                .aggregate(pipeline)
+                .with_type::<T>()
+                .session(&mut *session)
+                .await?
+                .stream(session)
+                .try_collect::<Vec<_>>()
+                .await
+        }
+        None => {
+            collection
+                .aggregate(pipeline)
+                .with_type::<T>()
+                .await?
+                .try_collect::<Vec<_>>()
+                .await
+        }
+    }
+    .map_err(crate::Error::from)
+}
+
+/// 执行订单金额合计管道并返回合计金额。
+///
+/// # 参数
+/// * `collection` - 目标集合
+/// * `pipeline` - 已构造的过滤与合计管道（`$match` + `$group` + `$project`）
+/// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+///
+/// # 返回
+/// 返回合计金额；无匹配文档时返回精确零。
+///
+/// # 错误
+/// 聚合执行、游标读取或结果反序列化（含 Decimal128 精度/上限越界）
+/// 失败时返回错误。
+async fn aggregate_single_total(
+    collection: &mongodb::Collection<AmountTotalRow>,
+    pipeline: Vec<Document>,
+    executor: &mut dyn Executor,
+) -> Result<Amount> {
+    let rows = aggregate_rows(collection, pipeline, executor).await?;
+    Ok(first_total_or_zero(rows))
+}
+
+/// 返回金额合计的空集合兜底值（精确零）。
+///
+/// `Amount::from_str("0.00")` 对定点金额恒合法，集中为纯函数以便
+/// 「无历史为精确零」维度直接单测。
+///
+/// # 返回
+/// 返回精确零金额。
+fn zero_total() -> Amount {
+    Amount::from_str("0.00").expect("零是合法金额")
+}
+
+/// 把单行金额合计聚合结果映射为合计金额；无行时返回精确零。
+///
+/// # 参数
+/// * `rows` - 金额合计聚合行（`$group` 管道至多一行）
+///
+/// # 返回
+/// 返回首行合计金额；空集合返回 [`zero_total`]。
+fn first_total_or_zero(rows: Vec<AmountTotalRow>) -> Amount {
+    rows.into_iter()
+        .next()
+        .map(|row| row.total)
+        .unwrap_or_else(zero_total)
+}
+
+/// 构造订单金额合计管道（FUL-R05）。
+///
+/// 按订单主键过滤未删除文档，对指定 Decimal128 金额字段求和，并移除
+/// 分组键 `_id`。
+///
+/// # 参数
+/// * `order_id` - 供应商子订单主键
+/// * `amount_field` - 待求和金额字段名
+///
+/// # 返回
+/// 返回三段聚合管道（`$match` + `$group` + `$project`）。
+fn financial_total_pipeline(order_id: &SupplierFulfillmentOrderId, amount_field: &str) -> Vec<Document> {
+    vec![
+        doc! {
+            "$match": {
+                "supplier_fulfillment_order_id": order_id.to_string(),
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            }
+        },
+        doc! {
+            "$group": {
+                "_id": mongodb::bson::Bson::Null,
+                "total": { "$sum": format!("${amount_field}") },
+            }
+        },
+        doc! { "$project": { "_id": 0 } },
+    ]
+}
+
+/// 构造动作行已提交合计聚合管道（FUL-R03）。
+///
+/// 按动作头主键 `$in` 过滤未删除动作行，并按 `after_sales_request_line_id`
+/// 对数量与金额求和；不按动作状态过滤（六态均计入），软删除动作头已由
+/// 调用方从 `action_ids` 排除。
+///
+/// # 参数
+/// * `action_ids` - 同一售后申请下未删除动作头主键集合（非空）
+///
+/// # 返回
+/// 返回两段聚合管道（`$match` + `$group`）。
+fn submitted_action_totals_pipeline(action_ids: &[String]) -> Vec<Document> {
+    vec![
+        doc! {
+            "$match": {
+                "supplier_order_action_id": { "$in": action_ids },
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+            }
+        },
+        doc! {
+            "$group": {
+                "_id": "$after_sales_request_line_id",
+                "quantity": { "$sum": "$quantity" },
+                "amount": { "$sum": "$amount" },
+            }
+        },
+    ]
 }
 
 /// 把 ID 集合转换为 BSON `$in` 需要的字符串集合。
@@ -904,5 +1370,187 @@ mod tests {
             order_sort_doc(Some("completed_at"), false),
             doc! { "completed_at": -1 }
         );
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use std::str::FromStr;
+
+    use mongodb::bson::{doc, Bson};
+
+    use super::{
+        build_submitted_by_request_line, financial_total_pipeline, first_total_or_zero,
+        submitted_action_totals_pipeline, zero_total, AmountTotalRow, SubmittedActionTotalRow,
+    };
+    use entities::ids::{MallAfterSalesRequestLineId, SupplierFulfillmentOrderId};
+    use entities::money::{Amount, Quantity};
+
+    /// FUL-R05 金额合计管道：按订单过滤未删除文档、单值求和并移除分组键。
+    #[test]
+    fn financial_total_pipeline_filters_undelted_documents_and_sums_single_total() {
+        let pipeline = financial_total_pipeline(
+            &SupplierFulfillmentOrderId::new("order-1"),
+            "cost_snapshot_total_gross",
+        );
+        let match_stage = pipeline[0].get_document("$match").expect("过滤阶段");
+        assert_eq!(
+            match_stage.get_str("supplier_fulfillment_order_id").unwrap(),
+            "order-1"
+        );
+        assert_eq!(match_stage.get_i64("deleted_at").expect("未删除条件"), 0);
+        let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
+        assert!(matches!(group_stage.get("_id").expect("分组键"), Bson::Null));
+        assert_eq!(
+            group_stage
+                .get_document("total")
+                .expect("求和字段")
+                .get_str("$sum")
+                .expect("求和表达式"),
+            "$cost_snapshot_total_gross"
+        );
+        let project_stage = pipeline[2].get_document("$project").expect("投影阶段");
+        assert_eq!(project_stage.get_i32("_id").expect("移除分组键"), 0);
+    }
+
+    /// FUL-R05 求和字段随调用方指定，退款事实走 `refund_amount`。
+    #[test]
+    fn financial_total_pipeline_sums_refund_amount_field() {
+        let pipeline = financial_total_pipeline(&SupplierFulfillmentOrderId::new("order-1"), "refund_amount");
+        let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
+        assert_eq!(
+            group_stage
+                .get_document("total")
+                .expect("求和字段")
+                .get_str("$sum")
+                .expect("求和表达式"),
+            "$refund_amount"
+        );
+    }
+
+    /// FUL-R05 Decimal128 合计结果可反序列化为 `Amount`。
+    #[test]
+    fn amount_total_row_deserializes_decimal128_total() {
+        let document = doc! { "total": { "$numberDecimal": "1234.56" } };
+        let row: AmountTotalRow =
+            mongodb::bson::deserialize_from_document(document).expect("合法 Decimal128 必须成功");
+        assert_eq!(row.total, Amount::from_str("1234.56").expect("合法金额"));
+    }
+
+    /// FUL-R05 超精度 Decimal128 必须返回反序列化错误而非 panic。
+    #[test]
+    fn amount_total_row_rejects_precision_overflow_without_panicking() {
+        let document = doc! { "total": { "$numberDecimal": "1.235" } };
+        let result: std::result::Result<AmountTotalRow, mongodb::bson::error::Error> =
+            mongodb::bson::deserialize_from_document(document);
+        assert!(result.is_err(), "超精度 Decimal128 必须失败而非 panic");
+    }
+
+    /// FUL-R03 动作行合计管道：只过滤未删除行并按申请行求和数量与金额，
+    /// 不携带动作状态条件（六态均计入）。
+    #[test]
+    fn submitted_totals_pipeline_filters_undelted_lines_and_groups_by_request_line() {
+        let pipeline = submitted_action_totals_pipeline(&["action-1".to_string(), "action-2".to_string()]);
+        let match_stage = pipeline[0].get_document("$match").expect("过滤阶段");
+        let action_ids = match_stage
+            .get_document("supplier_order_action_id")
+            .expect("动作头主键条件")
+            .get_array("$in")
+            .expect("动作头主键 $in 条件");
+        assert_eq!(
+            action_ids,
+            &[
+                Bson::String("action-1".to_string()),
+                Bson::String("action-2".to_string())
+            ]
+        );
+        assert_eq!(match_stage.get_i64("deleted_at").expect("未删除条件"), 0);
+        assert!(!match_stage.contains_key("status"), "历史累计不得按动作状态过滤");
+        let group_stage = pipeline[1].get_document("$group").expect("分组阶段");
+        assert_eq!(
+            group_stage.get_str("_id").expect("分组键"),
+            "$after_sales_request_line_id"
+        );
+        assert_eq!(
+            group_stage
+                .get_document("quantity")
+                .expect("数量求和字段")
+                .get_str("$sum")
+                .expect("数量求和表达式"),
+            "$quantity"
+        );
+        assert_eq!(
+            group_stage
+                .get_document("amount")
+                .expect("金额求和字段")
+                .get_str("$sum")
+                .expect("金额求和表达式"),
+            "$amount"
+        );
+    }
+
+    /// FUL-R03 Decimal128 聚合行可反序列化为数量与金额。
+    #[test]
+    fn submitted_total_row_deserializes_decimal128_totals() {
+        let document = doc! {
+            "_id": "request-line-1",
+            "quantity": { "$numberDecimal": "2.500000" },
+            "amount": { "$numberDecimal": "49.98" },
+        };
+        let row: SubmittedActionTotalRow =
+            mongodb::bson::deserialize_from_document(document).expect("合法 Decimal128 必须成功");
+        assert_eq!(row.after_sales_request_line_id.as_ref(), "request-line-1");
+        assert_eq!(row.quantity, Quantity::from_str("2.5").expect("合法数量"));
+        assert_eq!(row.amount, Amount::from_str("49.98").expect("合法金额"));
+    }
+
+    /// FUL-R03 超精度 Decimal128 必须返回反序列化错误而非 panic。
+    #[test]
+    fn submitted_total_row_rejects_precision_overflow_without_panicking() {
+        let document = doc! {
+            "_id": "request-line-2",
+            "quantity": { "$numberDecimal": "1.0000001" },
+            "amount": { "$numberDecimal": "1.00" },
+        };
+        let result: std::result::Result<SubmittedActionTotalRow, mongodb::bson::error::Error> =
+            mongodb::bson::deserialize_from_document(document);
+        assert!(result.is_err(), "超精度 Decimal128 必须失败而非 panic");
+    }
+
+    /// FUL-R05 无行聚合结果映射为精确零（「空集合为精确零」验收的单元级证据）。
+    #[test]
+    fn first_total_or_zero_maps_empty_rows_to_exact_zero() {
+        assert_eq!(zero_total(), Amount::from_str("0.00").expect("合法金额"));
+        assert_eq!(first_total_or_zero(Vec::new()), zero_total());
+
+        let document = doc! { "total": { "$numberDecimal": "88.80" } };
+        let row: AmountTotalRow =
+            mongodb::bson::deserialize_from_document(document).expect("合法 Decimal128 必须成功");
+        assert_eq!(
+            first_total_or_zero(vec![row]),
+            Amount::from_str("88.80").expect("合法金额")
+        );
+    }
+
+    /// FUL-R03 空动作行集合映射为空映射（空 `action_ids` 提前返回分支的
+    /// 纯映射证据；无历史端到端仍由 Mongo 集成测试覆盖）。
+    #[test]
+    fn build_submitted_by_request_line_maps_empty_rows_to_empty_map() {
+        assert!(build_submitted_by_request_line(Vec::new()).is_empty());
+
+        let document = doc! {
+            "_id": "request-line-1",
+            "quantity": { "$numberDecimal": "1.500000" },
+            "amount": { "$numberDecimal": "20.00" },
+        };
+        let row: SubmittedActionTotalRow =
+            mongodb::bson::deserialize_from_document(document).expect("合法 Decimal128 必须成功");
+        let map = build_submitted_by_request_line(vec![row]);
+        assert_eq!(map.len(), 1);
+        let totals = map
+            .get(&MallAfterSalesRequestLineId::new("request-line-1"))
+            .expect("聚合行必须按申请行归组");
+        assert_eq!(totals.quantity, Quantity::from_str("1.5").expect("合法数量"));
+        assert_eq!(totals.amount, Amount::from_str("20.00").expect("合法金额"));
     }
 }

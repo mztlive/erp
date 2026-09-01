@@ -125,6 +125,12 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
             "idx_supplier_fulfillment_orders_mall_order",
             doc! { "mall_order_id": 1 },
         ),
+        // FUL-R06 结算来源范围：按供应商枚举期间内完成订单（completed_at 区间）
+        // 的有界查询索引；回滚方式：删除本索引后查询退化为全表扫描。
+        named_index(
+            "idx_supplier_fulfillment_orders_supplier_completed",
+            doc! { "supplier_id": 1, "completed_at": 1 },
+        ),
     ]
 }
 
@@ -143,7 +149,12 @@ fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_order_action` 的身份约束索引（§6.19）。
+/// 返回 `supplier_order_action` 的身份约束与查询索引（§6.19）。
+///
+/// `idx_supplier_order_actions_request` 支撑 FUL-R03 `scope_submitted_totals`
+/// 按 `{after_sales_request_id, deleted_at}` 枚举动作头的有界查询；前向路径为
+/// 本函数随 `ensure_indexes` 创建，回滚方式为删除本索引后查询退化为全表扫描
+/// （合同 §7.3.5）。
 fn supplier_order_action_indexes() -> Vec<IndexModel> {
     vec![
         unique_index(
@@ -153,6 +164,10 @@ fn supplier_order_action_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_supplier_order_actions_order",
             doc! { "supplier_fulfillment_order_id": 1 },
+        ),
+        named_index(
+            "idx_supplier_order_actions_request",
+            doc! { "after_sales_request_id": 1, "deleted_at": 1 },
         ),
     ]
 }
@@ -198,6 +213,12 @@ fn supplier_refund_fact_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_supplier_refund_facts_order",
             doc! { "supplier_fulfillment_order_id": 1 },
+        ),
+        // FUL-R06 结算来源范围：按供应商枚举期间内退款事实（refunded_at 区间）
+        // 的有界查询索引；回滚方式：删除本索引后查询退化为全表扫描。
+        named_index(
+            "idx_supplier_refund_facts_supplier_refunded",
+            doc! { "supplier_id": 1, "refunded_at": 1 },
         ),
     ]
 }
@@ -313,6 +334,29 @@ mod tests {
     }
 
     #[test]
+    fn action_request_index_covers_after_sales_scope_query() {
+        let actions = supplier_order_action_indexes();
+
+        let request = actions
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_supplier_order_actions_request")
+            })
+            .unwrap();
+        assert_eq!(
+            request.keys,
+            doc! { "after_sales_request_id": 1, "deleted_at": 1 },
+            "FUL-R03 按售后申请枚举动作头必须命中该索引"
+        );
+        assert_ne!(
+            request.options.as_ref().and_then(|options| options.unique),
+            Some(true),
+            "查询索引不得携带唯一约束"
+        );
+    }
+
+    #[test]
     fn action_and_line_identity_indexes_are_unique() {
         assert!(supplier_order_action_indexes().iter().any(|index| {
             index.options.as_ref().and_then(|options| options.name.as_deref())
@@ -376,5 +420,30 @@ mod tests {
             reverse.options.as_ref().unwrap().partial_filter_expression,
             Some(doc! { "allocation_action": { "$eq": "REVERSE" } })
         );
+    }
+
+    #[test]
+    fn settlement_source_scope_range_indexes_are_present() {
+        let orders = supplier_fulfillment_order_indexes();
+        let completed = orders
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_supplier_fulfillment_orders_supplier_completed")
+            })
+            .expect("供应商完成时间范围索引缺失");
+        assert_eq!(completed.keys, doc! { "supplier_id": 1, "completed_at": 1 });
+        assert_ne!(completed.options.as_ref().unwrap().unique, Some(true));
+
+        let facts = supplier_refund_fact_indexes();
+        let refunded = facts
+            .iter()
+            .find(|index| {
+                index.options.as_ref().and_then(|options| options.name.as_deref())
+                    == Some("idx_supplier_refund_facts_supplier_refunded")
+            })
+            .expect("供应商退款时间范围索引缺失");
+        assert_eq!(refunded.keys, doc! { "supplier_id": 1, "refunded_at": 1 });
+        assert_ne!(refunded.options.as_ref().unwrap().unique, Some(true));
     }
 }

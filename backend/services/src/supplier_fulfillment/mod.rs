@@ -209,18 +209,6 @@ fn zero_quantity() -> Quantity {
     Quantity::from_str("0.000000").expect("零是合法数量")
 }
 
-/// 数量相加（小数位受类型约束，恒合法）。
-///
-/// # 参数
-/// * `left` - 加数
-/// * `right` - 加数
-///
-/// # 返回
-/// 返回相加结果。
-fn qty_add(left: Quantity, right: Quantity) -> Quantity {
-    Quantity::try_from(left.to_decimal() + right.to_decimal()).expect("数量小数位合法")
-}
-
 /// 数量相减（小数位受类型约束，恒合法）。
 ///
 /// # 参数
@@ -1163,14 +1151,13 @@ impl SupplierFulfillmentService {
                 .await?;
             return Ok(refund_fact_view(&existing, &allocations));
         }
-        let order_total = self.order_total_cost(id).await?;
-        let refunded_total = self
+        let financial = self
             .db
-            .supplier_refund_facts()
-            .find_refund_facts_by_order_ids(&[SupplierFulfillmentOrderId::new(id)], &mut NoTransaction)
-            .await?
-            .iter()
-            .fold(zero_amount(), |acc, fact| acc.checked_add(fact.refund_amount));
+            .supplier_fulfillment()
+            .refund_financial_snapshot(&SupplierFulfillmentOrderId::new(id), &mut NoTransaction)
+            .await?;
+        let order_total = financial.order_cost_gross;
+        let refunded_total = financial.refunded_total;
         let total_after = refunded_total.checked_add(req.refund_amount);
         if total_after > order_total {
             return Err(Error::BusinessLogicError(
@@ -2125,7 +2112,9 @@ impl SupplierFulfillmentService {
     }
 
     /// 校验动作行范围（§6.19）：行明细必须属于该子订单；数量/金额不得超过
-    /// 对应售后申请行尚未提交的净余额。
+    /// 对应售后申请行尚未提交的净余额。范围事实（订单合法明细、申请行限额、
+    /// 按申请行聚合的历史已提交数量/金额）由 Repository 一次取回
+    /// （FUL-R03），Service 只保留跨聚合归属与剩余净额决定。
     ///
     /// # 参数
     /// * `order` - 供应商子订单
@@ -2139,56 +2128,31 @@ impl SupplierFulfillmentService {
         order: &SupplierFulfillmentOrder,
         req: &SubmitAfterSalesActionRequest,
     ) -> Result<()> {
-        let order_items = self
+        let scope = self
             .db
-            .supplier_fulfillment_items()
-            .find_items_by_order_ids(
-                &[SupplierFulfillmentOrderId::new(order.base.id.as_str())],
+            .supplier_fulfillment()
+            .after_sales_action_scope(
+                &SupplierFulfillmentOrderId::new(order.base.id.as_str()),
+                &req.after_sales_request_id,
                 &mut NoTransaction,
             )
             .await?;
-        let item_ids: std::collections::HashSet<String> =
-            order_items.iter().map(|item| item.base.id.clone()).collect();
-        let request_lines = self
-            .db
-            .mall_after_sales_request_lines()
-            .list_by_request_id(&req.after_sales_request_id, &mut NoTransaction)
-            .await?;
-        let prior_actions = self
-            .db
-            .supplier_order_actions()
-            .list_by_after_sales_request(&req.after_sales_request_id, &mut NoTransaction)
-            .await?;
-        let prior_action_ids: Vec<SupplierOrderActionId> = prior_actions
-            .iter()
-            .map(|action| SupplierOrderActionId::new(action.base.id.as_str()))
-            .collect();
-        let prior_lines = self
-            .db
-            .supplier_order_action_lines()
-            .find_lines_by_action_ids(&prior_action_ids, &mut NoTransaction)
-            .await?;
-        let mut submitted: HashMap<String, (Quantity, Amount)> = HashMap::new();
-        for line in &prior_lines {
-            let entry = submitted
-                .entry(line.after_sales_request_line_id.to_string())
-                .or_insert((zero_quantity(), zero_amount()));
-            entry.0 = qty_add(entry.0, line.quantity);
-            entry.1 = entry.1.checked_add(line.amount);
-        }
+        let item_ids: std::collections::HashSet<&str> = scope.item_ids.iter().map(|id| id.as_ref()).collect();
         for line in &req.lines {
             if !item_ids.contains(line.supplier_fulfillment_item_id.as_ref()) {
                 return Err(Error::BusinessLogicError(
                     "动作行不属于该供应商子订单".to_string(),
                 ));
             }
-            let request_line = request_lines
+            let request_line = scope
+                .request_line_limits
                 .iter()
-                .find(|request_line| request_line.base.id == *line.after_sales_request_line_id.as_ref())
+                .find(|request_line| request_line.id == line.after_sales_request_line_id)
                 .ok_or_else(|| Error::NotFound("商城售后申请行不存在".to_string()))?;
-            let (submitted_qty, submitted_amount) = submitted
-                .get(line.after_sales_request_line_id.as_ref())
-                .copied()
+            let (submitted_qty, submitted_amount) = scope
+                .submitted_by_request_line
+                .get(&line.after_sales_request_line_id)
+                .map(|totals| (totals.quantity, totals.amount))
                 .unwrap_or((zero_quantity(), zero_amount()));
             if line.quantity.to_decimal()
                 > qty_sub(request_line.requested_quantity, submitted_qty).to_decimal()
@@ -2267,27 +2231,6 @@ impl SupplierFulfillmentService {
             .collect::<std::result::Result<Vec<_>, entities::Error>>()?;
         fact.validate_allocations(&allocations)?;
         Ok((fact, allocations))
-    }
-
-    /// 计算订单成本余额（明细含税成本快照合计，§4.2 铁律 2）。
-    ///
-    /// # 参数
-    /// * `id` - 供应商子订单 ID
-    ///
-    /// # 返回
-    /// 返回订单含税成本余额。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回 `RepositoryError`。
-    async fn order_total_cost(&self, id: &str) -> Result<Amount> {
-        let items = self
-            .db
-            .supplier_fulfillment_items()
-            .find_items_by_order_ids(&[SupplierFulfillmentOrderId::new(id)], &mut NoTransaction)
-            .await?;
-        Ok(items.iter().fold(zero_amount(), |acc, item| {
-            acc.checked_add(item.cost_snapshot_total_gross)
-        }))
     }
 
     /// 事务外派发供应商动作并承接结果（P3 §7）。

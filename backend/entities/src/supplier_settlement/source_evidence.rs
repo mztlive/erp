@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use chrono::FixedOffset;
+use chrono::{FixedOffset, TimeZone};
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use rust_decimal::Decimal;
@@ -114,6 +114,41 @@ impl SettlementPeriod {
         let offset = FixedOffset::east_opt(8 * 60 * 60).expect("上海时区偏移合法");
         let date = value.as_utc().with_timezone(&offset).date_naive();
         date >= self.start.as_naive_date() && date <= self.end.as_naive_date()
+    }
+
+    /// 计算上海业务日期区间的秒级边界。
+    ///
+    /// 与 [`SettlementPeriod::contains`] 同口径：开始日 `00:00`（+08:00）含，
+    /// 结束日次日 `00:00`（+08:00）不含；返回可直接用于秒级时间戳比较的
+    /// `$gte`/`$lt` 边界。仓储层的时间范围过滤必须复用本方法，禁止在
+    /// Repository 复制第二份边界计算。
+    ///
+    /// # 参数
+    /// * `start` - 期间开始日期（含）
+    /// * `end` - 期间结束日期（含）
+    ///
+    /// # 返回
+    /// 返回 `(开始秒级时间戳, 结束次日零点的秒级时间戳)`。
+    pub fn secs_bounds(start: BusinessDate, end: BusinessDate) -> (i64, i64) {
+        const SHANGHAI_OFFSET_SECS: i32 = 8 * 3600;
+        let offset = FixedOffset::east_opt(SHANGHAI_OFFSET_SECS).expect("上海时区偏移合法");
+        let start_secs = offset
+            .from_local_datetime(&start.as_naive_date().and_hms_opt(0, 0, 0).expect("午夜时刻合法"))
+            .single()
+            .expect("固定时区本地时刻无歧义")
+            .timestamp();
+        let end_exclusive = end
+            .as_naive_date()
+            .succ_opt()
+            .expect("业务日期存在次日")
+            .and_hms_opt(0, 0, 0)
+            .expect("午夜时刻合法");
+        let end_secs = offset
+            .from_local_datetime(&end_exclusive)
+            .single()
+            .expect("固定时区本地时刻无歧义")
+            .timestamp();
+        (start_secs, end_secs)
     }
 }
 
@@ -942,6 +977,33 @@ mod tests {
         assert!(SettlementCancelEvidence::from_optional(Some(occurred_at), None, period).is_err());
         assert!(SettlementPeriod::new(period.end(), period.start(), SETTLEMENT_TIMEZONE).is_err());
         assert!(SettlementPeriod::new(period.start(), period.end(), "UTC").is_err());
+    }
+
+    #[test]
+    fn period_secs_bounds_match_contains_across_dense_samples() {
+        let start = BusinessDate::from_ymd(2026, 7, 1).unwrap();
+        let end = BusinessDate::from_ymd(2026, 7, 31).unwrap();
+        let period = SettlementPeriod::new(start, end, SETTLEMENT_TIMEZONE).unwrap();
+        let (start_secs, end_secs) = SettlementPeriod::secs_bounds(start, end);
+        // 以小时为步长覆盖期间前后各一天，秒级区间判定必须与上海业务日期
+        // 判定完全一致（开始日 00:00 含、结束日次日 00:00 不含）。
+        let first = chrono::DateTime::parse_from_rfc3339("2026-06-30T00:00:00+08:00")
+            .unwrap()
+            .timestamp();
+        let last = chrono::DateTime::parse_from_rfc3339("2026-08-01T00:00:00+08:00")
+            .unwrap()
+            .timestamp();
+        let mut cursor = first;
+        while cursor <= last {
+            let in_interval = (start_secs..end_secs).contains(&cursor);
+            assert_eq!(
+                period.contains(Instant::from_unix_secs(cursor)),
+                in_interval,
+                "秒级边界与业务日期判定在 {cursor} 不一致"
+            );
+            cursor += 3600;
+        }
+        assert!(start_secs < end_secs, "边界必须单调");
     }
 
     #[test]

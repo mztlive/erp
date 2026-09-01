@@ -7,11 +7,8 @@ use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
     SupplierSettlementDifferenceId, SupplierSettlementItemId, SupplierSettlementStatementId,
 };
-use entities::money::Amount;
 use entities::supplier_settlement::{
-    SettlementDifferenceStatus, SettlementDifferenceType, SupplierSettlementDifference,
-    SupplierSettlementDifferenceData, SupplierSettlementItem, SupplierSettlementItemData,
-    SupplierSettlementSnapshotUpdate, SupplierSettlementSourceEvidence, SupplierSettlementStatement,
+    SupplierSettlementDraftSnapshot, SupplierSettlementSnapshotUpdate, SupplierSettlementStatement,
     SupplierSettlementStatementData,
 };
 use id_generator::next_id;
@@ -24,14 +21,6 @@ use super::{
 };
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
-
-/// 服务端构建的完整草稿快照。
-struct DraftSnapshot {
-    items: Vec<SupplierSettlementItem>,
-    differences: Vec<SupplierSettlementDifference>,
-    erp_amount: Amount,
-    supplier_amount: Amount,
-}
 
 /// 刷新命令的持久化幂等收据。
 struct RefreshReceipt {
@@ -86,7 +75,12 @@ impl SupplierSettlementService {
                 )
             })?;
         let statement_id = SupplierSettlementStatementId::new(next_id());
-        let snapshot = build_snapshot(&statement_id, &source)?;
+        let snapshot = SupplierSettlementDraftSnapshot::from_source(
+            &statement_id,
+            &source,
+            || SupplierSettlementItemId::new(next_id()),
+            || SupplierSettlementDifferenceId::new(next_id()),
+        )?;
         let now = Instant::now();
         let mut statement = SupplierSettlementStatement::new(
             statement_id,
@@ -266,9 +260,11 @@ impl SupplierSettlementService {
                 "当前已是最新权威来源快照",
             ));
         }
-        let snapshot = build_snapshot(
+        let snapshot = SupplierSettlementDraftSnapshot::from_source(
             &SupplierSettlementStatementId::new(statement.base.id.clone()),
             &source,
+            || SupplierSettlementItemId::new(next_id()),
+            || SupplierSettlementDifferenceId::new(next_id()),
         )?;
         statement.refresh_snapshot(SupplierSettlementSnapshotUpdate {
             external_bill_no: source.external_bill_no.clone(),
@@ -434,66 +430,6 @@ impl SupplierSettlementService {
     }
 }
 
-fn build_snapshot(
-    statement_id: &SupplierSettlementStatementId,
-    source: &SupplierSettlementSourceEvidence,
-) -> Result<DraftSnapshot> {
-    let mut items = Vec::with_capacity(source.lines.len());
-    let mut differences = Vec::new();
-    let mut erp_amount = zero();
-    let mut supplier_amount = zero();
-    for line in &source.lines {
-        let item = SupplierSettlementItem::new(
-            SupplierSettlementItemId::new(next_id()),
-            SupplierSettlementItemData {
-                statement_id: statement_id.clone(),
-                supplier_fulfillment_order_id: line.supplier_fulfillment_order_id.clone(),
-                supplier_fulfillment_item_id: line.supplier_fulfillment_item_id.clone(),
-                quantity: line.quantity,
-                order_amount: line.order_gross,
-                freight_amount: line.freight_gross,
-                service_fee_amount: line.service_fee_gross,
-                refund_amount: line.refund_gross,
-                erp_calculated_amount: line.erp_gross,
-                erp_calculated_net_amount: line.erp_net,
-                erp_calculated_tax_amount: line.erp_tax,
-                supplier_billed_amount: line.supplier_billed_gross,
-                supplier_billed_net_amount: line.supplier_billed_net,
-                supplier_billed_tax_amount: line.supplier_billed_tax,
-            },
-        )?;
-        erp_amount = erp_amount.checked_add(line.erp_gross);
-        supplier_amount = supplier_amount.checked_add(line.supplier_billed_gross);
-        let difference_amount = line.supplier_billed_gross.checked_sub(line.erp_gross);
-        if difference_amount != zero() {
-            differences.push(SupplierSettlementDifference::new(
-                SupplierSettlementDifferenceId::new(next_id()),
-                SupplierSettlementDifferenceData {
-                    statement_item_id: SupplierSettlementItemId::new(item.base.id.clone()),
-                    difference_type: SettlementDifferenceType::Amount,
-                    difference_amount,
-                    status: SettlementDifferenceStatus::Pending,
-                    resolution: None,
-                    resolved_by: None,
-                    resolved_at: None,
-                },
-            )?);
-        }
-        items.push(item);
-    }
-    if items.is_empty() {
-        return Err(Error::BusinessLogicError(
-            "SOURCE_EVIDENCE_INCOMPLETE: 来源证据批次没有可结算行".to_string(),
-        ));
-    }
-    Ok(DraftSnapshot {
-        items,
-        differences,
-        erp_amount,
-        supplier_amount,
-    })
-}
-
 fn deterministic_statement_no(req: &CreateSettlementStatementRequest) -> String {
     let digest = digest_parts(&[
         "supplier-settlement-create-v1".to_string(),
@@ -620,79 +556,4 @@ fn parse_usize(value: &str, field: &str) -> Result<usize> {
     value
         .parse::<usize>()
         .map_err(|_| Error::Internal(format!("刷新收据{field}非法")))
-}
-
-fn zero() -> Amount {
-    Amount::from_str("0.00").expect("零是合法金额")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use entities::ids::{SupplierAccountId, SupplierFulfillmentItemId, SupplierFulfillmentOrderId};
-    use entities::money::Quantity;
-    use entities::supplier_settlement::{
-        SettlementSourceFactType, SupplierSettlementSourceEvidenceData, SupplierSettlementSourceEvidenceLine,
-    };
-
-    fn source() -> SupplierSettlementSourceEvidence {
-        SupplierSettlementSourceEvidence::new(
-            "source-1",
-            SupplierSettlementSourceEvidenceData {
-                request_id: "source-request-1".to_string(),
-                supplier_id: SupplierAccountId::new("supplier-1"),
-                period_start: BusinessDate::from_str("2026-07-01").unwrap(),
-                period_end: BusinessDate::from_str("2026-07-31").unwrap(),
-                period_policy_id: "monthly".to_string(),
-                period_policy_version: "1".to_string(),
-                timezone: "Asia/Shanghai".to_string(),
-                source_version: 1,
-                external_bill_no: "BILL-1".to_string(),
-                external_bill_version: "1".to_string(),
-                external_bill_evidence_reference_id: "bill://1".to_string(),
-                lines: vec![SupplierSettlementSourceEvidenceLine {
-                    supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
-                    supplier_fulfillment_item_id: SupplierFulfillmentItemId::new("item-1"),
-                    quantity: Quantity::from_str("1").unwrap(),
-                    source_fact_types: vec![SettlementSourceFactType::FulfillmentCompleted],
-                    evidence_reference_ids: vec!["fulfillment://1".to_string()],
-                    order_gross: Amount::from_str("113.00").unwrap(),
-                    order_net: Amount::from_str("100.00").unwrap(),
-                    order_tax: Amount::from_str("13.00").unwrap(),
-                    freight_gross: zero(),
-                    freight_net: zero(),
-                    freight_tax: zero(),
-                    service_fee_gross: zero(),
-                    service_fee_net: zero(),
-                    service_fee_tax: zero(),
-                    refund_gross: zero(),
-                    refund_net: zero(),
-                    refund_tax: zero(),
-                    erp_gross: Amount::from_str("113.00").unwrap(),
-                    erp_net: Amount::from_str("100.00").unwrap(),
-                    erp_tax: Amount::from_str("13.00").unwrap(),
-                    supplier_billed_gross: Amount::from_str("114.00").unwrap(),
-                    supplier_billed_net: Amount::from_str("100.88").unwrap(),
-                    supplier_billed_tax: Amount::from_str("13.12").unwrap(),
-                }],
-                source_as_of: Instant::from_unix_secs(1_700_000_000),
-                recorded_by: "finance-1".to_string(),
-                source_hash: "a".repeat(64),
-                request_hash: "b".repeat(64),
-            },
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn snapshot_builds_one_exact_item_and_signed_difference() {
-        let snapshot = build_snapshot(&SupplierSettlementStatementId::new("statement-1"), &source()).unwrap();
-        assert_eq!(snapshot.items.len(), 1);
-        assert_eq!(snapshot.differences.len(), 1);
-        assert_eq!(
-            snapshot.differences[0].difference_amount,
-            Amount::from_str("1.00").unwrap()
-        );
-        assert_eq!(snapshot.items[0].supplier_fulfillment_item_id.as_ref(), "item-1");
-    }
 }

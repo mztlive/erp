@@ -12,6 +12,7 @@
 //! 留给 P3。
 
 pub mod difference;
+pub mod draft_snapshot;
 pub mod evidence;
 pub mod item;
 pub mod source_evidence;
@@ -25,6 +26,7 @@ pub use difference::{
     SettlementDifferenceType, SupplierSettlementDifference, SupplierSettlementDifferenceData,
     SupplierSettlementDifferenceUpdate,
 };
+pub use draft_snapshot::SupplierSettlementDraftSnapshot;
 pub use evidence::{SupplierSettlementDifferenceEvidence, SupplierSettlementDifferenceEvidenceData};
 pub use item::{SettlementCostDelta, SupplierSettlementItem, SupplierSettlementItemData};
 pub use source_evidence::{
