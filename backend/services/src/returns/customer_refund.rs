@@ -13,7 +13,6 @@ use super::dto::{
     CancelCustomerRefundApprovalRequest, CommitCustomerRefundRequest, CreateCustomerRefundRequest,
     CustomerRefundListParams, CustomerRefundView, PageView, SortDir, SubmitCustomerRefundRequest,
 };
-use super::reversal_plan::{plan_receipt_reverse, zero_amount};
 use super::start_approval::{
     build_customer_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_bound_definition_graph,
@@ -45,6 +44,8 @@ use entities::ids::{
     CustomerAccountId, CustomerReceiptId, CustomerRefundId, ReceiptAllocationId, ReceivableEntryId,
     ReceivableEntryOffsetId,
 };
+use std::str::FromStr;
+
 use entities::money::Amount;
 use entities::receivable::{
     AllocationAction as ReceivableAllocationAction, CustomerReceiptStatus,
@@ -926,7 +927,10 @@ async fn apply_customer_refund_posting(
         .await?
         .iter()
         .filter(|other| other.base.id != refund.base.id)
-        .fold(zero_amount(), |sum, other| sum.checked_add(other.amount));
+        .fold(
+            Amount::from_str("0.00").expect("固定零金额必须可解析"),
+            |sum, other| sum.checked_add(other.amount),
+        );
     if refunded_before.checked_add(refund.amount) > receipt.amount {
         return Err(Error::BusinessLogicError(
             "累计退款金额不得超过原回款金额".to_string(),
@@ -950,24 +954,19 @@ async fn persist_refund_offsets_and_reversals(
         .receipt_allocations()
         .find_allocations_by_receipts(&[receipt.base.id.clone().into()], session)
         .await?;
-    let (reverse_rows, chunks) = plan_receipt_reverse(&allocations, refund.amount)?;
-    let next_seq = allocations
-        .iter()
-        .map(|allocation| allocation.allocation_seq)
-        .max()
-        .unwrap_or(0)
-        + 1;
+    let (reverse_rows, chunks) = ReceiptAllocation::plan_reverse(&allocations, refund.amount)?;
+    let seqs = ReceiptAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     let decrease_entry = create_decrease_offsets(db, refund, receipt, actor_id, &chunks, session).await?;
     if let Some(entry) = decrease_entry {
         db.receivable_entries().create(&entry, session).await?;
     }
-    for (reverse_index, reverse) in reverse_rows.iter().enumerate() {
+    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
         let allocation = ReceiptAllocation::new(
             ReceiptAllocationId::new(next_id()),
             ReceiptAllocationData {
                 customer_receipt_id: receipt.base.id.clone().into(),
                 receivable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: next_seq + reverse_index as u32,
+                allocation_seq: *seq,
                 allocation_action: ReceivableAllocationAction::Reverse,
                 allocated_amount: reverse.amount,
                 allocated_at: refund.occurred_at,
@@ -988,7 +987,7 @@ async fn create_decrease_offsets(
     refund: &CustomerRefund,
     receipt: &entities::receivable::CustomerReceipt,
     actor_id: &str,
-    chunks: &[super::reversal_plan::ReceiptReverseChunk],
+    chunks: &[entities::receivable::ReceiptReverseChunk],
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<ReceivableEntry>> {
     let mut decrease_entry: Option<ReceivableEntry> = None;

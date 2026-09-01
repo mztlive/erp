@@ -15,7 +15,8 @@ use super::dto::{
     CancelPaymentReversalApprovalRequest, CommitPaymentReversalRequest, CreatePaymentReversalRequest,
     PaymentReversalView, SubmitPaymentReversalRequest,
 };
-use super::reversal_plan::{plan_payment_reverse, zero_amount};
+use std::str::FromStr;
+
 use super::start_approval::{
     build_payment_reversal_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_payment_reversal_start_receipt,
@@ -727,7 +728,10 @@ async fn apply_payment_reversal_posting(
         .await?
         .iter()
         .filter(|other| other.base.id != reversal.base.id)
-        .fold(zero_amount(), |sum, other| sum.checked_add(other.amount));
+        .fold(
+            Amount::from_str("0.00").expect("固定零金额必须可解析"),
+            |sum, other| sum.checked_add(other.amount),
+        );
     if reversed_before.checked_add(reversal.amount) > payment.amount {
         return Err(Error::BusinessLogicError(
             "累计冲正金额不得超过原付款金额".to_string(),
@@ -751,15 +755,10 @@ async fn persist_reversal_offsets_and_mark_payment(
         .payment_allocations()
         .find_allocations_by_payments(&[payment.base.id.clone().into()], session)
         .await?;
-    let (reverse_rows, chunks) = plan_payment_reverse(&allocations, reversal.amount)?;
-    let next_seq = allocations
-        .iter()
-        .map(|allocation| allocation.allocation_seq)
-        .max()
-        .unwrap_or(0)
-        + 1;
+    let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, reversal.amount)?;
+    let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     revert_payment_settlements(db, &chunks, actor_id, session).await?;
-    persist_reverse_allocations(db, reversal, &payment, &reverse_rows, next_seq, session).await?;
+    persist_reverse_allocations(db, reversal, &payment, &reverse_rows, &seqs, session).await?;
     let mut payment = payment;
     payment.transition(SupplierPaymentStatus::Reversed)?;
     db.supplier_payments().update(&mut payment, session).await?;
@@ -772,7 +771,7 @@ async fn persist_reversal_offsets_and_mark_payment(
 /// 分录缺失或超额冲减时返回错误。
 async fn revert_payment_settlements(
     db: &Database,
-    chunks: &[super::reversal_plan::PaymentReverseChunk],
+    chunks: &[entities::payable::PaymentReverseChunk],
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -806,17 +805,17 @@ async fn persist_reverse_allocations(
     db: &Database,
     reversal: &PaymentReversal,
     payment: &SupplierPayment,
-    reverse_rows: &[super::reversal_plan::PaymentReversePlanRow],
-    next_seq: u32,
+    reverse_rows: &[entities::payable::PaymentReversePlanRow],
+    seqs: &[u32],
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    for (reverse_index, reverse) in reverse_rows.iter().enumerate() {
+    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(next_id()),
             PaymentAllocationData {
                 supplier_payment_id: payment.base.id.clone().into(),
                 payable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: next_seq + reverse_index as u32,
+                allocation_seq: *seq,
                 allocation_action: PayableAllocationAction::Reverse,
                 allocated_amount: reverse.amount,
                 allocated_at: reversal.occurred_at,

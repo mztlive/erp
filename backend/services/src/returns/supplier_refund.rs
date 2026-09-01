@@ -13,7 +13,8 @@ use super::dto::{
     CancelSupplierRefundApprovalRequest, CommitSupplierRefundRequest, CreateSupplierRefundRequest,
     SubmitSupplierRefundRequest, SupplierRefundView,
 };
-use super::reversal_plan::{plan_payment_reverse, zero_amount};
+use std::str::FromStr;
+
 use super::start_approval::{
     build_supplier_refund_start_input, ensure_return_start_actor_active,
     ensure_return_start_replay_authorized, load_bound_definition_graph,
@@ -886,7 +887,10 @@ async fn apply_supplier_refund_posting(
         .await?
         .iter()
         .filter(|other| other.base.id != refund.base.id)
-        .fold(zero_amount(), |sum, other| sum.checked_add(other.amount));
+        .fold(
+            Amount::from_str("0.00").expect("固定零金额必须可解析"),
+            |sum, other| sum.checked_add(other.amount),
+        );
     if refunded_before.checked_add(refund.amount) > payment.amount {
         return Err(Error::BusinessLogicError(
             "累计退款金额不得超过原付款金额".to_string(),
@@ -910,24 +914,19 @@ async fn persist_refund_offsets_and_reversals(
         .payment_allocations()
         .find_allocations_by_payments(&[payment.base.id.clone().into()], session)
         .await?;
-    let (reverse_rows, chunks) = plan_payment_reverse(&allocations, refund.amount)?;
-    let next_seq = allocations
-        .iter()
-        .map(|allocation| allocation.allocation_seq)
-        .max()
-        .unwrap_or(0)
-        + 1;
+    let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, refund.amount)?;
+    let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     let decrease_entry = create_decrease_offsets(db, refund, payment, actor_id, &chunks, session).await?;
     if let Some(entry) = decrease_entry {
         db.payable_entries().create(&entry, session).await?;
     }
-    for (reverse_index, reverse) in reverse_rows.iter().enumerate() {
+    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(next_id()),
             PaymentAllocationData {
                 supplier_payment_id: payment.base.id.clone().into(),
                 payable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: next_seq + reverse_index as u32,
+                allocation_seq: *seq,
                 allocation_action: PayableAllocationAction::Reverse,
                 allocated_amount: reverse.amount,
                 allocated_at: refund.occurred_at,
@@ -948,7 +947,7 @@ async fn create_decrease_offsets(
     refund: &SupplierRefund,
     payment: &entities::payable::SupplierPayment,
     actor_id: &str,
-    chunks: &[super::reversal_plan::PaymentReverseChunk],
+    chunks: &[entities::payable::PaymentReverseChunk],
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<PayableEntry>> {
     let mut decrease_entry: Option<PayableEntry> = None;
@@ -1013,7 +1012,7 @@ fn build_decrease_entry(
 async fn persist_decrease_offset(
     db: &Database,
     decrease_entry: Option<&PayableEntry>,
-    chunk: &super::reversal_plan::PaymentReverseChunk,
+    chunk: &entities::payable::PaymentReverseChunk,
     offset_index: usize,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {

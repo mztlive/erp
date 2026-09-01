@@ -22,7 +22,6 @@ mod dto;
 mod payment_reversal;
 mod purchase_return;
 mod receipt_reversal;
-mod reversal_plan;
 mod sales_return;
 mod start_approval;
 mod supplier_refund;

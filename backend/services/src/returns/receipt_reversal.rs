@@ -13,7 +13,8 @@ use super::dto::{
     CancelReceiptReversalApprovalRequest, CommitReceiptReversalRequest, CreateReceiptReversalRequest,
     ReceiptReversalView, SubmitReceiptReversalRequest,
 };
-use super::reversal_plan::{plan_receipt_reverse, zero_amount};
+use std::str::FromStr;
+
 use super::start_approval::{
     build_receipt_reversal_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_receipt_reversal_start_receipt,
@@ -760,7 +761,10 @@ async fn apply_receipt_reversal_posting(
         .await?
         .iter()
         .filter(|other| other.base.id != reversal.base.id)
-        .fold(zero_amount(), |sum, other| sum.checked_add(other.amount));
+        .fold(
+            Amount::from_str("0.00").expect("固定零金额必须可解析"),
+            |sum, other| sum.checked_add(other.amount),
+        );
     if reversed_before.checked_add(reversal.amount) > receipt.amount {
         return Err(Error::BusinessLogicError(
             "累计冲正金额不得超过原回款金额".to_string(),
@@ -784,15 +788,10 @@ async fn persist_reversal_offsets_and_mark_receipt(
         .receipt_allocations()
         .find_allocations_by_receipts(&[receipt.base.id.clone().into()], session)
         .await?;
-    let (reverse_rows, chunks) = plan_receipt_reverse(&allocations, reversal.amount)?;
-    let next_seq = allocations
-        .iter()
-        .map(|allocation| allocation.allocation_seq)
-        .max()
-        .unwrap_or(0)
-        + 1;
+    let (reverse_rows, chunks) = ReceiptAllocation::plan_reverse(&allocations, reversal.amount)?;
+    let seqs = ReceiptAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     revert_receipt_settlements(db, &chunks, actor_id, session).await?;
-    persist_reverse_allocations(db, reversal, &receipt, &reverse_rows, next_seq, session).await?;
+    persist_reverse_allocations(db, reversal, &receipt, &reverse_rows, &seqs, session).await?;
     let mut receipt = receipt;
     receipt.transition(CustomerReceiptStatus::Reversed)?;
     db.customer_receipts().update(&mut receipt, session).await?;
@@ -805,7 +804,7 @@ async fn persist_reversal_offsets_and_mark_receipt(
 /// 分录缺失或超额冲减时返回错误。
 async fn revert_receipt_settlements(
     db: &Database,
-    chunks: &[super::reversal_plan::ReceiptReverseChunk],
+    chunks: &[entities::receivable::ReceiptReverseChunk],
     actor_id: &str,
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
@@ -834,17 +833,17 @@ async fn persist_reverse_allocations(
     db: &Database,
     reversal: &ReceiptReversal,
     receipt: &CustomerReceipt,
-    reverse_rows: &[super::reversal_plan::ReceiptReversePlanRow],
-    next_seq: u32,
+    reverse_rows: &[entities::receivable::ReceiptReversePlanRow],
+    seqs: &[u32],
     session: &mut mongodb::ClientSession,
 ) -> Result<()> {
-    for (reverse_index, reverse) in reverse_rows.iter().enumerate() {
+    for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
         let allocation = ReceiptAllocation::new(
             ReceiptAllocationId::new(next_id()),
             ReceiptAllocationData {
                 customer_receipt_id: receipt.base.id.clone().into(),
                 receivable_entry_id: reverse.entry_id.clone(),
-                allocation_seq: next_seq + reverse_index as u32,
+                allocation_seq: *seq,
                 allocation_action: ReceivableAllocationAction::Reverse,
                 allocated_amount: reverse.amount,
                 allocated_at: reversal.occurred_at,
