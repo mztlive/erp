@@ -16,18 +16,21 @@
 //! - `PurchaseReceipt` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机；
 //! - `Delivery` 签署为 `NO_APPROVAL`，不得新增审批绑定字段或审批状态机。
 
+pub mod acceptance_eligibility;
 pub mod acceptance_fulfillment_allocation;
 pub mod customer_acceptance;
 pub mod delivery;
 pub mod electronic_delivery;
 mod fingerprint;
 pub mod purchase_receipt;
+pub mod service_evidence;
 pub mod service_fulfillment;
 
 pub use crate::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId,
     DeliveryLineId, ElectronicDeliveryId, PurchaseReceiptId, PurchaseReceiptLineId, ServiceFulfillmentId,
 };
+pub use acceptance_eligibility::{AcceptanceFactEligibility, AcceptanceLineEligibility, AcceptanceProgress};
 pub use acceptance_fulfillment_allocation::{
     AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AllocationAction,
     FulfillmentFactType,
@@ -47,6 +50,7 @@ pub use purchase_receipt::{
     PurchaseFulfillmentEligibility, PurchaseReceipt, PurchaseReceiptData, PurchaseReceiptLine,
     PurchaseReceiptLineData, PurchaseReceiptState, PurchaseReceiptUpdate, QualityResult,
 };
+pub use service_evidence::{ActualServiceLocation, ServiceEvidencePolicy, SERVICE_LOCATION_PLACEHOLDER};
 pub use service_fulfillment::{
     ServiceFulfillment, ServiceFulfillmentConfirmation, ServiceFulfillmentData, ServiceFulfillmentState,
     ServiceFulfillmentUpdate,

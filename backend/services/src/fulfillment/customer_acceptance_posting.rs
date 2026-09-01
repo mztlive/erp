@@ -1,17 +1,17 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use database::{AccessControlExt, FulfillmentExt, SalesOrderExt, Transactional};
 use entities::common::time::Instant;
 use entities::fulfillment::{
-    AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceResult, AllocationAction,
-    CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine, CustomerAcceptanceLineData,
-    CustomerAcceptanceUpdate, FulfillmentFactType,
+    AcceptanceFulfillmentAllocation, AcceptanceFulfillmentAllocationData, AcceptanceProgress,
+    AcceptanceResult, AllocationAction, CustomerAcceptance, CustomerAcceptanceData, CustomerAcceptanceLine,
+    CustomerAcceptanceLineData, CustomerAcceptanceUpdate, FulfillmentFactType, ServiceFulfillment,
 };
 use entities::ids::{
     AcceptanceFulfillmentAllocationId, CustomerAcceptanceId, CustomerAcceptanceLineId, SalesOrderId,
 };
 use entities::money::Quantity;
-use entities::sales_order::{BusinessType, FulfillmentProgress};
+use entities::sales_order::BusinessType;
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -19,7 +19,7 @@ use validator::Validate;
 use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt};
 use crate::errors::{Error, Result};
 
-use super::acceptance_eligibility::{build_eligibility_groups, so_line_ids, EligibilityGroupSources};
+use super::acceptance_eligibility::{build_line_eligibilities, so_line_ids, EligibilityGroupSources};
 use super::customer_acceptance::{build_acceptance_lines, register_created_customer_acceptance_document};
 use super::{
     AcceptanceAllocationInput, CommitCustomerAcceptanceRequest, CommitCustomerAcceptanceView,
@@ -780,9 +780,10 @@ async fn load_fulfillment_fact(
 
 /// 验收过账/冲正后刷新销售单履约进度（§4.3.1：实物与服务「客户验收通过即履约完成」）。
 ///
-/// 按销售明细汇总净已验收（APPLY − REVERSE）并与应履约数量比较：
-/// 全部明细验收通过 → 已完成；部分通过 → 部分履约；否则 → 未开始。
-/// 卡券销售单进度由履约期限到期任务写入（§4.3.1），本函数不触碰。
+/// 净验收（APPLY − REVERSE）、剩余可验收与进度派生全部由领域投影
+/// `AcceptanceProgress` 执行（与验收工作台同一规则源）：全部明细验收通过 →
+/// 已完成；部分通过 → 部分履约；否则 → 未开始。数量错误向上传递，不得静默
+/// 降为零。卡券销售单进度由履约期限到期任务写入（§4.3.1），本函数不触碰。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -848,7 +849,10 @@ async fn update_sales_order_fulfillment_progress(
     let service = db
         .fulfillment()
         .list_confirmed_service_fulfillments(&sales_order_line_ids, session)
-        .await?;
+        .await?
+        .into_iter()
+        .filter(ServiceFulfillment::is_acceptance_eligible)
+        .collect::<Vec<_>>();
     let delivery_allocations = db
         .fulfillment()
         .allocations_by_fulfillment_fact(
@@ -882,7 +886,7 @@ async fn update_sales_order_fulfillment_progress(
             session,
         )
         .await?;
-    let groups = build_eligibility_groups(EligibilityGroupSources {
+    let lines = build_line_eligibilities(&EligibilityGroupSources {
         revision_lines: &revision_lines,
         goods_service_lines: &goods_service_lines,
         deliveries: &deliveries,
@@ -893,50 +897,18 @@ async fn update_sales_order_fulfillment_progress(
         electronic_allocations: &electronic_allocations,
         service_allocations: &service_allocations,
     })?;
-    if groups.is_empty() {
+    let Some(progress) = AcceptanceProgress::derive(&lines) else {
         return Ok(false);
-    }
-    let zero = Quantity::from_str("0").unwrap();
-    let has_remaining_eligible = groups.iter().any(|group| {
-        group
-            .fulfillment_facts
-            .iter()
-            .any(|fact| fact.eligible_quantity != zero)
-    });
-    let mut all_fulfilled = true;
-    let mut any_accepted = false;
-    for group in &groups {
-        let mut net_accepted = Quantity::from_str("0").unwrap();
-        for fact in &group.fulfillment_facts {
-            net_accepted = Quantity::try_from(
-                net_accepted.to_decimal() + fact.net_accepted_allocated_quantity.to_decimal(),
-            )
-            .unwrap_or_else(|_| Quantity::from_str("0").unwrap());
-        }
-        if net_accepted != Quantity::from_str("0").unwrap() {
-            any_accepted = true;
-        }
-        if net_accepted.to_decimal() < group.required_quantity.to_decimal() {
-            all_fulfilled = false;
-        }
-    }
-    let progress = if all_fulfilled {
-        FulfillmentProgress::Completed
-    } else if any_accepted {
-        FulfillmentProgress::PartiallyFulfilled
-    } else {
-        FulfillmentProgress::NotStarted
     };
-    // 履约进度变化后联动刷新回款/开票进度与关闭状态（§9.3 自动结案）
     crate::sales_order::update_sales_order_money_progress(
         db,
         session,
         sales_order_id,
         actor_id,
-        Some(progress),
+        Some(progress.progress),
     )
     .await?;
-    Ok(has_remaining_eligible)
+    Ok(progress.has_remaining_eligible)
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
@@ -9,9 +10,9 @@ use entities::fulfillment::{
     PurchaseReceiptLine,
 };
 use entities::ids::{
-    DeliveryId, DeliveryLineId, PurchaseOrderId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId,
-    SalesOrderLineId, SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId,
-    StockReservationId, WarehouseId,
+    DeliveryId, DeliveryLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
+    SalesOrderRevisionLineId, StockBalanceId, StockMovementId, StockReservationEntryId, StockReservationId,
+    WarehouseId,
 };
 use entities::inventory::{
     MovementDirection, MovementType, ReservationEntryType, ReservationStatus, StockBalance, StockBalanceData,
@@ -114,8 +115,13 @@ impl FulfillmentService {
                         .purchase_order_revision_lines()
                         .find_lines_by_revision_ids(&[revision.base.id.clone().into()], session)
                         .await?;
-                    let mut received =
-                        cumulative_received_quantities(&db, session, &receipt.purchase_order_id).await?;
+                    let mut received = db
+                        .fulfillment()
+                        .qualified_received_totals_by_purchase_revision_line(
+                            &receipt.purchase_order_id,
+                            session,
+                        )
+                        .await?;
                     let occurred_at = Instant::now();
                     for line in &lines {
                         let revision_line = revision_lines
@@ -125,7 +131,7 @@ impl FulfillmentService {
                             })
                             .ok_or_else(|| Error::BusinessLogicError("采购明细不存在".to_string()))?;
                         let already_received = received
-                            .get(line.purchase_order_revision_line_id.as_ref())
+                            .get(&line.purchase_order_revision_line_id)
                             .copied()
                             .unwrap_or_else(|| Quantity::from_str("0").unwrap());
                         line.ensure_within_revision(revision_line, already_received)
@@ -140,15 +146,21 @@ impl FulfillmentService {
                             &actor,
                         )
                         .await?;
-                        received
-                            .entry(line.purchase_order_revision_line_id.to_string())
-                            .and_modify(|total| {
-                                *total = Quantity::try_from(
-                                    total.to_decimal() + line.qualified_quantity.to_decimal(),
-                                )
-                                .expect("Quantity 加法和不超过精度上限")
-                            })
-                            .or_insert(line.qualified_quantity);
+                        match received.entry(line.purchase_order_revision_line_id.clone()) {
+                            Entry::Occupied(mut occupied) => {
+                                let next = occupied
+                                    .get()
+                                    .to_decimal()
+                                    .checked_add(line.qualified_quantity.to_decimal())
+                                    .ok_or_else(|| {
+                                        Error::BusinessLogicError("累计数量超出精度上限".to_string())
+                                    })?;
+                                *occupied.get_mut() = Quantity::try_from(next).map_err(Error::Logic)?;
+                            }
+                            Entry::Vacant(vacant) => {
+                                vacant.insert(line.qualified_quantity);
+                            }
+                        }
                     }
                     receipt.mark_posted(occurred_at, actor.id().to_string())?;
                     db.purchase_receipts().update(&mut receipt, session).await?;
@@ -177,48 +189,6 @@ impl FulfillmentService {
             .await?;
         Ok(posted.into())
     }
-}
-
-/// 统计采购单已过账入库的累计有效收货（按采购版本行分组）。
-///
-/// # 参数
-/// * `db` - 数据库实例
-/// * `session` - 事务会话执行器
-/// * `po_id` - 采购单
-///
-/// # 返回
-/// 返回「采购版本行 → 累计合格数量」映射。
-///
-/// # 错误
-/// 任一步查询失败时返回 `RepositoryError`。
-async fn cumulative_received_quantities(
-    db: &Database,
-    session: &mut mongodb::ClientSession,
-    po_id: &PurchaseOrderId,
-) -> Result<HashMap<String, Quantity>> {
-    let receipts = db
-        .fulfillment()
-        .list_posted_receipts_for_purchase_order(po_id, session)
-        .await?;
-    let receipt_ids: Vec<PurchaseReceiptId> = receipts
-        .iter()
-        .map(|receipt| receipt.base.id.clone().into())
-        .collect();
-    let lines = db
-        .fulfillment()
-        .receipt_lines_by_receipt_ids(&receipt_ids, session)
-        .await?;
-    let mut totals: HashMap<String, Quantity> = HashMap::new();
-    for line in lines {
-        totals
-            .entry(line.purchase_order_revision_line_id.to_string())
-            .and_modify(|total| {
-                *total = Quantity::try_from(total.to_decimal() + line.qualified_quantity.to_decimal())
-                    .expect("Quantity 加法和不超过精度上限")
-            })
-            .or_insert(line.qualified_quantity);
-    }
-    Ok(totals)
 }
 
 /// 过账单条入库行（流水 + 余额 + 预占，位于调用方事务内）。
@@ -654,6 +624,32 @@ mod tests {
         assert!(post.contains("mark_posted"));
         assert!(!post.contains("submit_"));
         assert!(!post.contains("start_approval"));
+    }
+
+    /// 累计有效收货必须由 Repository 聚合：旧 Service helper 已删除，过账
+    /// 路径改调仓储聚合并继续在 Service 完成超收校验与进度更新。
+    #[test]
+    fn received_totals_are_aggregated_in_repository() {
+        let production = include_str!("purchase_receipt_posting.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(
+            !production.contains("cumulative_received_quantities"),
+            "旧 Service 聚合 helper 必须删除"
+        );
+        assert!(!production.contains("list_posted_receipts_for_purchase_order"));
+        assert!(
+            production.contains("qualified_received_totals_by_purchase_revision_line"),
+            "过账路径必须调用 Repository 聚合"
+        );
+        let post = production
+            .split("pub async fn post_purchase_receipt")
+            .nth(1)
+            .and_then(|rest| rest.split("#[cfg(test)]").next())
+            .expect("post_purchase_receipt 生产片段");
+        assert!(post.contains("ensure_within_revision"), "超收校验保留在 Service");
+        assert!(post.contains("fulfillment_progress"), "进度计算保留在 Service");
     }
 
     /// 入库预占必须按销售单与仓库复用草稿，并把新预占补成发货行。

@@ -4,8 +4,9 @@ use std::collections::HashSet;
 
 use database::{AccessControlExt, FileAssetExt, FulfillmentExt, PurchaseOrderExt, Transactional};
 use entities::common::time::Instant;
-use entities::file_asset::{RetentionClass, SensitivityClass};
-use entities::fulfillment::{ServiceFulfillment, ServiceFulfillmentConfirmation};
+use entities::fulfillment::{
+    ActualServiceLocation, ServiceEvidencePolicy, ServiceFulfillment, ServiceFulfillmentConfirmation,
+};
 use entities::ids::{FileAssetId, ServiceFulfillmentId};
 use mongodb::{ClientSession, Database};
 use validator::Validate;
@@ -18,9 +19,6 @@ use crate::pending_file_assets::PendingFileAssets;
 
 use super::purchase_context::{ensure_allocation_valid, ensure_po_fulfillable, ensure_prepay_gate};
 use super::{ConfirmServiceFulfillmentRequest, FulfillmentService, ServiceFulfillmentView};
-
-/// 采购审核草稿使用的服务地点占位值；确认时必须替换为实际地点。
-const SERVICE_LOCATION_PLACEHOLDER: &str = "待填写";
 
 impl FulfillmentService {
     /// 确认服务履约（草稿 → 已确认；§8.1.5 + §6.7 跨集合事务）。
@@ -107,6 +105,9 @@ impl FulfillmentService {
 
 /// 把确认命令写成已规范化的现场事实。
 ///
+/// 地点占位值与空白规则由领域值对象 [`ActualServiceLocation`] 独占；本函数
+/// 只负责把已校验明文交给 Service 的加密编解码器与查询指纹函数。
+///
 /// # 参数
 /// * `req` - 已通过校验的确认命令
 /// * `evidence_attachment_id` - 已解析的正式凭证主键
@@ -124,13 +125,14 @@ fn service_confirmation_from_request(
     fingerprint_key: &[u8],
     sensitive_data: &SensitiveDataCodec,
 ) -> Result<ServiceFulfillmentConfirmation> {
-    let service_location = normalize_actual_service_location(&req.service_location)?;
+    let service_location = ActualServiceLocation::parse(&req.service_location)
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(ServiceFulfillmentConfirmation::new(
         req.result,
         req.completion_note.clone(),
         evidence_attachment_id,
-        sensitive_data.encrypt(service_location)?,
-        ServiceFulfillment::service_location_fingerprint(service_location, fingerprint_key),
+        sensitive_data.encrypt(service_location.as_str())?,
+        ServiceFulfillment::service_location_fingerprint(service_location.as_str(), fingerprint_key),
         Instant::from_unix_secs(req.service_started_at),
         Instant::from_unix_secs(req.service_ended_at),
         req.quantity,
@@ -265,28 +267,10 @@ async fn confirm_service_fulfillment_in_transaction(
     Ok(record)
 }
 
-/// 规范化实际服务地点，并拒绝空白或采购审核占位值。
-///
-/// # 参数
-/// * `service_location` - 确认命令中的服务地点
-///
-/// # 返回
-/// 地点为实际值时返回去除首尾空白的明文引用。
-///
-/// # 错误
-/// 空白或仍为「待填写」时返回校验错误。
-fn normalize_actual_service_location(service_location: &str) -> Result<&str> {
-    let service_location = service_location.trim();
-    if service_location.is_empty() {
-        return Err(Error::ValidationError("服务地点不能为空".to_string()));
-    }
-    if service_location == SERVICE_LOCATION_PLACEHOLDER {
-        return Err(Error::ValidationError("请填写实际服务地点".to_string()));
-    }
-    Ok(service_location)
-}
-
 /// 校验本次待登记图片凭证的类型、敏感级别和保留策略。
+///
+/// 元数据规则由领域 [`ServiceEvidencePolicy`] 独占；待登记与既有资产两条
+/// 路径必须使用同一策略，本函数只是按批次逐项应用。
 ///
 /// # 参数
 /// * `requests` - 待登记文件资产
@@ -298,12 +282,13 @@ fn normalize_actual_service_location(service_location: &str) -> Result<&str> {
 /// 图片类型、敏感级别或保留策略不满足时返回校验错误。
 fn validate_service_evidence_pending_requests(requests: &[PendingFileAssetRequest]) -> Result<()> {
     for request in requests {
-        validate_service_evidence_metadata(
+        ServiceEvidencePolicy::validate(
             &request.registration.content_type,
             request.registration.sensitivity_class,
             request.registration.retention_class,
             false,
-        )?;
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
     }
     Ok(())
 }
@@ -331,6 +316,9 @@ fn resolve_service_evidence_id(
 
 /// 在确认事务内校验正式或本批次待登记的现场图片凭证。
 ///
+/// 本批次待登记资产在事务前已按 [`ServiceEvidencePolicy`] 完成元数据校验，
+/// 此处只识别其属于本批次；正式资产按同一策略校验持久化元数据。
+///
 /// # 参数
 /// * `db` - 数据库实例
 /// * `asset_id` - 正式凭证主键
@@ -349,14 +337,6 @@ async fn ensure_service_evidence_asset_in_transaction(
     session: &mut ClientSession,
 ) -> Result<()> {
     if pending_assets.contains_id(asset_id) {
-        let sensitivity = pending_assets
-            .sensitivity(asset_id)
-            .ok_or_else(|| Error::ValidationError("现场图片凭证临时引用无效".to_string()))?;
-        if sensitivity == SensitivityClass::General {
-            return Err(Error::ValidationError(
-                "现场图片凭证必须按敏感文件保存".to_string(),
-            ));
-        }
         return Ok(());
     }
     let asset = db
@@ -364,58 +344,18 @@ async fn ensure_service_evidence_asset_in_transaction(
         .find_by_id(asset_id.as_ref(), session)
         .await?
         .ok_or_else(|| Error::NotFound("现场图片凭证不存在".to_string()))?;
-    validate_service_evidence_metadata(
+    ServiceEvidencePolicy::validate(
         &asset.content_type,
         asset.sensitivity_class,
         asset.retention_class,
         asset.destroyed_at.is_some(),
     )
-}
-
-/// 校验现场图片凭证的类型、敏感级别、保留策略与销毁状态。
-///
-/// # 参数
-/// * `content_type` - 文件 MIME 类型
-/// * `sensitivity` - 敏感级别
-/// * `retention` - 保留策略
-/// * `destroyed` - 是否已销毁
-///
-/// # 返回
-/// 元数据合法时返回 `Ok(())`。
-///
-/// # 错误
-/// 非图片、非敏感、非长期保留或已销毁时返回校验错误。
-fn validate_service_evidence_metadata(
-    content_type: &str,
-    sensitivity: SensitivityClass,
-    retention: RetentionClass,
-    destroyed: bool,
-) -> Result<()> {
-    if !matches!(content_type, "image/jpeg" | "image/png" | "image/webp") {
-        return Err(Error::ValidationError(
-            "现场凭证仅支持 JPG、PNG 或 WebP 图片".to_string(),
-        ));
-    }
-    if sensitivity == SensitivityClass::General {
-        return Err(Error::ValidationError(
-            "现场图片凭证必须按敏感文件保存".to_string(),
-        ));
-    }
-    if retention != RetentionClass::LongTerm {
-        return Err(Error::ValidationError("现场图片凭证必须长期保留".to_string()));
-    }
-    if destroyed {
-        return Err(Error::ValidationError("现场图片凭证已销毁".to_string()));
-    }
-    Ok(())
+    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_actual_service_location, service_confirmation_from_request,
-        validate_service_evidence_metadata, RetentionClass, SensitivityClass,
-    };
+    use super::service_confirmation_from_request;
     use crate::party::SensitiveDataCodec;
     use entities::fulfillment::{FulfillmentResult, ServiceFulfillment};
     use entities::ids::FileAssetId;
@@ -423,17 +363,6 @@ mod tests {
     use std::str::FromStr;
 
     use super::ConfirmServiceFulfillmentRequest;
-
-    /// 确认必须替换采购审核写入的地点占位值。
-    #[test]
-    fn actual_service_location_rejects_placeholder() {
-        assert_eq!(
-            normalize_actual_service_location(" 客户现场 ").unwrap(),
-            "客户现场"
-        );
-        assert!(normalize_actual_service_location("待填写").is_err());
-        assert!(normalize_actual_service_location("   ").is_err());
-    }
 
     /// 确认边界只持久化密文，并以同一份规范化明文计算查询指纹。
     #[test]
@@ -488,36 +417,18 @@ mod tests {
         assert!(!production.contains("load_published_graph"));
     }
 
-    /// 现场凭证只接受敏感、长期保留的 JPG/PNG/WebP。
+    /// 占位值、空白与凭证元数据规则已下沉到实体层，Service 不得残留镜像规则。
     #[test]
-    fn service_evidence_requires_sensitive_long_term_image() {
-        assert!(validate_service_evidence_metadata(
-            "image/jpeg",
-            SensitivityClass::Sensitive,
-            RetentionClass::LongTerm,
-            false,
-        )
-        .is_ok());
-        assert!(validate_service_evidence_metadata(
-            "application/pdf",
-            SensitivityClass::Sensitive,
-            RetentionClass::LongTerm,
-            false,
-        )
-        .is_err());
-        assert!(validate_service_evidence_metadata(
-            "image/png",
-            SensitivityClass::General,
-            RetentionClass::LongTerm,
-            false,
-        )
-        .is_err());
-        assert!(validate_service_evidence_metadata(
-            "image/webp",
-            SensitivityClass::Sensitive,
-            RetentionClass::LongTerm,
-            true,
-        )
-        .is_err());
+    fn evidence_rules_do_not_stay_in_service() {
+        let production = include_str!("service_fulfillment_confirm.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码");
+        assert!(!production.contains("normalize_actual_service_location"));
+        assert!(!production.contains("validate_service_evidence_metadata"));
+        assert!(!production.contains("SERVICE_LOCATION_PLACEHOLDER"));
+        assert!(!production.contains("matches!(content_type"));
+        assert!(production.contains("ActualServiceLocation::parse"));
+        assert!(production.contains("ServiceEvidencePolicy::validate"));
     }
 }

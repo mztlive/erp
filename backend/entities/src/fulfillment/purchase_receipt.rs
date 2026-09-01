@@ -388,13 +388,13 @@ impl PurchaseReceipt {
     ///
     /// # 参数
     /// * `revision_lines` - 当前生效采购版本行
-    /// * `received` - 按采购版本行汇总的累计合格收货
+    /// * `received` - 按采购版本行（强类型主键）汇总的累计合格收货
     ///
     /// # 返回
     /// 全部有数量行均收满时返回 `Completed`，否则返回 `Partial`。
     pub fn fulfillment_progress(
         revision_lines: &[PurchaseOrderRevisionLine],
-        received: &HashMap<String, Quantity>,
+        received: &HashMap<PurchaseOrderRevisionLineId, Quantity>,
     ) -> ProgressStatus {
         let total = revision_lines
             .iter()
@@ -404,7 +404,7 @@ impl PurchaseReceipt {
             });
         let received_total = revision_lines
             .iter()
-            .filter_map(|line| received.get(&line.base.id))
+            .filter_map(|line| received.get(&PurchaseOrderRevisionLineId::new(line.base.id.clone())))
             .fold(rust_decimal::Decimal::ZERO, |sum, quantity| {
                 sum + quantity.to_decimal()
             });
@@ -928,7 +928,10 @@ mod tests {
             .is_err());
 
         let mut received = HashMap::new();
-        received.insert("po-line-1".to_string(), Quantity::from_str("10").unwrap());
+        received.insert(
+            PurchaseOrderRevisionLineId::new("po-line-1"),
+            Quantity::from_str("10").unwrap(),
+        );
         assert_eq!(
             PurchaseReceipt::fulfillment_progress(std::slice::from_ref(&revision_line), &received),
             ProgressStatus::Completed,

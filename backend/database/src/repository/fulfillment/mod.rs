@@ -9,6 +9,8 @@
 //! `FulfillmentExt` 关联常量导入。
 //!
 //! - [`purchase_receipt`]：采购入库单列表投影与按入库单号查询；
+//! - [`purchase_receipt_totals`]：采购单已过账入库行的累计合格收货聚合
+//!   （FUL-R01）；
 //! - [`delivery`]：发货单列表投影与按物流单号查询；
 //! - [`electronic_delivery`]：电子交付记录列表投影查询；
 //! - [`service_fulfillment`]：线下服务履约记录列表投影查询；
@@ -29,6 +31,7 @@ mod customer_acceptance;
 mod delivery;
 mod electronic_delivery;
 mod purchase_receipt;
+mod purchase_receipt_totals;
 mod service_fulfillment;
 
 pub use customer_acceptance::CustomerAcceptanceFilter;
@@ -42,18 +45,20 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use entities::fulfillment::{
     AcceptanceFulfillmentAllocation, CustomerAcceptance, CustomerAcceptanceLine, Delivery, DeliveryLine,
     DeliveryState, DeliveryType, ElectronicDelivery, ElectronicDeliveryState, FulfillmentFactType,
-    PurchaseReceipt, PurchaseReceiptLine, PurchaseReceiptState, ServiceFulfillment, ServiceFulfillmentState,
+    PurchaseReceipt, PurchaseReceiptLine, ServiceFulfillment, ServiceFulfillmentState,
 };
 use entities::ids::{
     CustomerAcceptanceId, CustomerAcceptanceLineId, DeliveryId, ElectronicDeliveryId, PurchaseOrderId,
-    PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId, SalesOrderRevisionLineId,
-    ServiceFulfillmentId,
+    PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderLineId,
+    SalesOrderRevisionLineId, ServiceFulfillmentId,
 };
 use entities::inventory::StockReservation;
+use entities::money::Quantity;
 use entities::payable::{PayableAccount, PayableSourceType};
 use entities::sales_order::{SalesOrderLine, SalesOrderRevisionLine};
 
@@ -400,35 +405,31 @@ impl<'a> FulfillmentRepository<'a> {
         .await
     }
 
-    /// 查询采购单全部已过账入库单。
+    /// 统计采购单已过账入库的累计有效收货（按采购版本行分组）。
+    ///
+    /// 只在数据库内过滤未删除且 `POSTED` 的入库单，并按
+    /// `purchase_order_revision_line_id` 聚合未删除入库行的
+    /// `qualified_quantity`；不反序列化入库单/入库行整实体，也不随单据或
+    /// 行数增长数据库访问次数。查询使用调用方执行器：事务内调用看到同一
+    /// 事务的未提交写入；本方法不自行开启或提交事务。
     ///
     /// # 参数
     /// * `purchase_order_id` - 采购单主键
-    /// * `executor` - 数据访问执行器
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回状态为已过账的入库单。
+    /// 返回「采购版本行 → 累计合格数量」映射；无任何已过账未删除入库行时
+    /// 返回空映射。
     ///
     /// # 错误
-    /// 当 MongoDB 查询或游标读取失败时返回错误。
-    pub async fn list_posted_receipts_for_purchase_order(
+    /// 聚合或游标读取失败时返回错误；Decimal128 求和结果无法转换为
+    /// `Quantity`（精度或上限越界）时返回错误而非 panic。
+    pub async fn qualified_received_totals_by_purchase_revision_line(
         &self,
         purchase_order_id: &PurchaseOrderId,
         executor: &mut dyn Executor,
-    ) -> Result<Vec<PurchaseReceipt>> {
-        mongo_ops::find_many(
-            &self
-                .db
-                .collection::<PurchaseReceipt>(<mongodb::Database as FulfillmentExt>::PURCHASE_RECEIPTS),
-            doc! {
-                "purchase_order_id": purchase_order_id.to_string(),
-                "status": PurchaseReceiptState::Posted.as_str(),
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            },
-            FindOptions::default(),
-            executor,
-        )
-        .await
+    ) -> Result<HashMap<PurchaseOrderRevisionLineId, Quantity>> {
+        purchase_receipt_totals::load_qualified_received_totals(self.db, purchase_order_id, executor).await
     }
 
     /// 按主键批量读取销售版本行。
