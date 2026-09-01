@@ -49,7 +49,7 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **176 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、46 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **173 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、49 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
@@ -57,22 +57,22 @@
 | --- | ---: | ---: | ---: | ---: |
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
 | Approval | 3 | 4 | 1 | 8 |
-| Master | 4 | 8 | 0 | 12 |
+| Master | 3 | 6 | 0 | 9 |
 | Sales / Contract / Returns / Projection | 7 | 19 | 0 | 26 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 10 | 0 | 17 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **76** | **103** | **1** | **180** |
+| **合计** | **75** | **101** | **1** | **177** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **10 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 13 | 44 | 0 | 57 |
-| P1 | 58 | 47 | 1 | 106 |
+| P0 | 13 | 42 | 0 | 55 |
+| P1 | 57 | 47 | 1 | 105 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **76** | **103** | **1** | **180** |
+| **合计** | **75** | **101** | **1** | **177** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -229,7 +229,7 @@ git diff --check
 | --- | --- | --- | --- | --- | --- | --- |
 | MASTER-R01 | P1 | OPEN | `backend/services/src/catalog/category.rs:290` `ensure_parent_chain_ok` 在 `295-306` 循环逐级 `find_by_id`；调用点为同文件 `101/151/209` 及 `backend/services/src/catalog/voucher.rs:311`。Service 承担持久化树遍历，数据库往返随层级增长。 | Repository 必须提供接收 `&mut dyn Executor` 的祖先链投影查询，只返回 ID、父 ID、缺失或异常链事实；Service 保留父节点不存在、命中自身和成环的业务判定及错误适配；Repository 不得开启事务。 | 必须覆盖根节点、正常多级链、父节点缺失、直接环、间接环；单次校验的查询次数不得随树深度线性增长；必须校验 `backend/database/src/indexes/catalog.rs:109` 及稳定主键索引的执行计划。历史断链或环必须失败关闭并可观测，不得无限遍历。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-R02 | P1 | OPEN | `backend/services/src/catalog/listing.rs:202` `product_listing_views` 在 `206-234` 读取完整 SKU 后按商品统计启用数和已上架数。持久化投影、过滤和聚合规则滞留 Service。 | Catalog Repository 必须提供按 `ProductId` 批量返回上架汇总的投影接口，只读取必要字段并完成固定次数批量聚合；`ProductListingStatus::inherited` 保留为领域规则，`ProductView` 映射保留在 Service。 | 必须覆盖零 SKU、全部停用、全部上架、部分上架、全部未上架及多商品批量；必须保持旧 SKU 缺失 `listing_status` 的兼容语义；查询次数不得随商品数增长。必须与现有 `product_list_pipeline` 共用同一统计口径，禁止双份规则。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
-| MASTER-R03 | P1 | OPEN | `backend/services/src/publication/mod.rs:1108` `next_revision_no_in_transaction` 与 `:1134` `next_revision_no` 均加载 `list_revisions_by_publication` 后取首行，获取最大序号却读取完整修订列表。 | 发布修订 Repository 必须提供 `latest_revision_no(publication_id, executor) -> Option<u32>`，只投影 `revision_no`、降序、`limit(1)`；Service 决定事务执行器；Repository 不得执行“加一”或开启事务，“加一”必须由领域受检后继规则处理。 | 必须覆盖无历史、单条、多条乱序和事务执行器路径；Repository 测试必须断言过滤、排序、投影和 `limit(1)`；必须保留 `backend/database/src/indexes/publication.rs:98` 唯一索引作为并发最终约束。普通创建路径的事务外分配需由 Service 明确冲突/重试策略。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| MASTER-R03 | P1 | DONE | `backend/services/src/publication/mod.rs:1108` `next_revision_no_in_transaction` 与 `:1134` `next_revision_no` 均加载 `list_revisions_by_publication` 后取首行，获取最大序号却读取完整修订列表。 | 发布修订 Repository 必须提供 `latest_revision_no(publication_id, executor) -> Option<u32>`，只投影 `revision_no`、降序、`limit(1)`；Service 决定事务执行器；Repository 不得执行“加一”或开启事务，“加一”必须由领域受检后继规则处理。 | 必须覆盖无历史、单条、多条乱序和事务执行器路径；Repository 测试必须断言过滤、排序、投影和 `limit(1)`；必须保留 `backend/database/src/indexes/publication.rs:98` 唯一索引作为并发最终约束。普通创建路径的事务外分配需由 Service 明确冲突/重试策略。 | 批次：`MASTER-6.3-E08-E10-R03-20260901`；责任人：Grok；依赖：与 `MASTER-E10` 同批；关闭证据：`latest_revision_no` 只投影 `revision_no`、降序、`limit(1)`；Service 统一调用领域受检后继；普通创建 DuplicateKey 映射为刷新后重试；隔离 Mongo 验证空历史/单条/乱序/事务执行器、并发单胜者及无 hint 的 IXSCAN。 |
 | MASTER-R04 | P1 | OPEN | `backend/services/src/publication/delivery.rs:175` `process_pending_publication_deliveries` 在 `181-189` 读取批次后，又于 `198-210` 为每条投递逐一读取修订与稳定发布，形成 `1 + 2N`。 | Repository 必须提供有界批次上下文查询，以聚合或固定次数批量读取返回投递及关联修订、发布事实；商城调用、逐项处理、结果统计和失败策略必须保留在 Service。 | 必须覆盖空批次、单条、多条、缺失修订、缺失发布；必须保持处理顺序、`limit`、到期重试筛选和缺失关系失败语义；查询次数不得随批次数增长；必须校验 `backend/database/src/indexes/publication.rs:127` 及关联 ID 索引。不得把外部调用纳入数据库事务或静默跳过坏关系。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 
 #### Entity / VO / DTO 待办
@@ -243,9 +243,9 @@ git diff --check
 | MASTER-E05 | P1 | OPEN | `backend/services/src/customer/profile/facts.rs:384` `contact_matches`、`:396` `address_matches`、`:406` `bank_account_matches` 在 Service 实现稳定内容等价及敏感值 HMAC 匹配。 | Service/crypto port 必须持有密钥并计算强类型 fingerprint；对应 Entity 或比较 VO 只比较预计算 fingerprint 与非敏感规范值，并表达“敏感明文缺失/空白时沿用原事实”的纯领域合同；Service 继续负责解密替换值和差异编排。 | 必须覆盖敏感明文缺失、空白、相同、变化，可选文本规范化相等，非敏感字段单项变化及银行账户禁止原地修改。原始密钥、加密、解密、随机数和敏感明文不得进入 Entity。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E06 | P1 | OPEN | `backend/services/src/customer/profile/facts.rs:485` `close_contact`、`:497` `close_address`、`:509` `close_bank`、`:563` `close_date` 在 Service 拼装停用、结束日期和取消默认的实体生命周期；当前 `close_date` 把倒序日期静默转成 `Unchanged`。 | `PartyContact`、`PartyAddress`、`PartyBankAccount` 必须提供 `close_at`：`close_at < valid_from` 返回 `LogicError` 且零 mutation；同日关闭不写零长度 `valid_to`，只停用并取消默认；晚于开始日写 `valid_to=close_at` 后停用并取消默认。Service 保留集合差异、事务写入和操作人传递。 | 三类实体均覆盖 `<`、`==`、`>`、已经关闭及默认标记；倒序分支必须断言 status/valid_to/is_default/updated_by 均不变；Service 中四个 helper 删除。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | MASTER-E07 | P0 | DONE | `backend/services/src/customer/profile/idempotency.rs:18` `TransactionResolutionContext`、`:85` `profile_command`、`:120` `request_fingerprint`、`:127` `replay_command` 分散实现幂等请求身份、指纹与同一命令核对；误判会重放其他请求结果。 | Entity 必须定义稳定重放上下文，并由 `CustomerProfileCommand` 校验 operation、customer、initiator、fingerprint；请求指纹进入 DTO 或专用请求身份 VO；Service 仅保留事务失败后的仓储重查和 View 映射。 | 必须覆盖完全匹配及操作、客户、发起人、指纹分别不匹配，并覆盖创建命令无既有 customer_id；指纹必须确定性且不得持久化敏感请求正文。序列化顺序或算法变更必须版本化或兼容既有幂等记录。 | 批次：`MASTER-6.3-E07-20260901`；责任人：Codex；依赖：无；关闭证据：`CustomerProfileReplayContext`、`CustomerProfileRequestFingerprint` 与 `CustomerProfileCommand` 统一拥有精确身份及重放核对；DTO 固化 v1 输入字节和 golden，生产 Service 的旧身份、指纹与重放 helper 已删除；真实 MongoDB 并发、自然执行计划及失败事务退出后重读均通过。 |
-| MASTER-E08 | P0 | OPEN | `backend/services/src/publication/dto.rs:762` `publication_content_hash` 与 `:789` `fnv1a64` 在 DTO 文件计算正式内容身份；`backend/services/src/publication/mod.rs:604-608` 先写 `placeholder` 再覆盖，安全暂停路径在同文件 `296-301` 二次覆盖。 | `ProductPublicationRevision` 或内容身份 VO 必须负责规范编码和指纹派生；构造修订时必须一次得到真实指纹，禁止任何占位值；算法、字段顺序和编码必须固定或显式版本化。 | 相同内容必须产生相同指纹，每个参与字段变化必须改变指纹；普通创建和安全暂停复制均不得出现占位值；必须覆盖可选字段、枚举、金额、税率、时间和能力列表。若改变现有 FNV 合同，必须提供兼容读取、迁移和回滚。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| MASTER-E08 | P0 | DONE | `backend/services/src/publication/dto.rs:762` `publication_content_hash` 与 `:789` `fnv1a64` 在 DTO 文件计算正式内容身份；`backend/services/src/publication/mod.rs:604-608` 先写 `placeholder` 再覆盖，安全暂停路径在同文件 `296-301` 二次覆盖。 | `ProductPublicationRevision` 或内容身份 VO 必须负责规范编码和指纹派生；构造修订时必须一次得到真实指纹，禁止任何占位值；算法、字段顺序和编码必须固定或显式版本化。 | 相同内容必须产生相同指纹，每个参与字段变化必须改变指纹；普通创建和安全暂停复制均不得出现占位值；必须覆盖可选字段、枚举、金额、税率、时间和能力列表。若改变现有 FNV 合同，必须提供兼容读取、迁移和回滚。 | 批次：`MASTER-6.3-E08-E10-R03-20260901`；责任人：Grok；依赖：无；关闭证据：`PublicationContentFingerprint` 拥有冻结 v1 canonical 与 FNV-1a 64；`ProductPublicationRevision::new`/`safety_pause_copy` 一次写入真实指纹；Service 占位覆盖与 DTO hash helper 已删除；golden `f2da0094c4fd33b9`，wire shape 仍为 16 位小写十六进制。 |
 | MASTER-E09 | P0 | DONE | `backend/services/src/publication/delivery.rs:1120` `publication_error_is_unknown` 与 `:1126` `publication_unknown_error` 以松散 helper 维护外部副作用的“结果未知”判定及重新分类。 | `ClassifiedError` 或 integration error VO 必须提供 `is_result_unknown` 和受控转换；错误类、稳定错误码及脱敏摘要保留规则必须内聚；Connector 调用、失败结算、重试和升级保留在 Service。 | 必须覆盖显式 `ResultUnknown`、`TIMEOUT`、`OUTCOME_UNKNOWN`、普通临时故障和业务拒绝；转换后必须保留错误码和摘要。未确认结果只能查询原结果或升级，禁止当作明确失败盲目重放；错误码大小写及子串规则必须固定。 | 批次：`MASTER-6.3-E09-20260901`；责任人：Codex；依赖：无；关闭证据：`ClassifiedError` 统一拥有结果未知判定与受控归一化，旧 Service helper 已删除；首次投递和查询原结果的全部失败均在唯一 settlement 入口归一化；15 项 publication 测试固定分类矩阵、字段保真及未知结果禁止重试。 |
-| MASTER-E10 | P0 | OPEN | `backend/services/src/publication/mod.rs:1121` 与 `:1143` 直接执行 `row.revision_no + 1`；`backend/entities/src/common/revision.rs:15` `RevisionBase` 当前无受检后继方法，最大值可能 panic 或回绕。 | `RevisionBase` 或发布修订领域类型必须提供 checked successor；Repository 只返回最新 `Option<u32>`，Service 调用领域方法并映射稳定错误；Service 中裸 `+ 1` 必须删除。 | 无历史必须返回 1，普通序号必须单调加一，`u32::MAX` 必须返回错误且不 panic、不回绕；普通创建与事务内安全暂停必须复用同一方法。必须与最新修订号投影查询同批实施；唯一索引仍为并发最终防线。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| MASTER-E10 | P0 | DONE | `backend/services/src/publication/mod.rs:1121` 与 `:1143` 直接执行 `row.revision_no + 1`；`backend/entities/src/common/revision.rs:15` `RevisionBase` 当前无受检后继方法，最大值可能 panic 或回绕。 | `RevisionBase` 或发布修订领域类型必须提供 checked successor；Repository 只返回最新 `Option<u32>`，Service 调用领域方法并映射稳定错误；Service 中裸 `+ 1` 必须删除。 | 无历史必须返回 1，普通序号必须单调加一，`u32::MAX` 必须返回错误且不 panic、不回绕；普通创建与事务内安全暂停必须复用同一方法。必须与最新修订号投影查询同批实施；唯一索引仍为并发最终防线。 | 批次：`MASTER-6.3-E08-E10-R03-20260901`；责任人：Grok；依赖：与 `MASTER-R03` 同批；关闭证据：`RevisionBase::next_revision_no` 与 `ProductPublicationRevision::next_revision_no` 覆盖空历史、单调加一和 `u32::MAX`；Service 普通创建与安全暂停共用该方法，裸 `+ 1` 已删除。 |
 
 #### 不得下沉的 Service 边界
 
@@ -275,6 +275,14 @@ git diff --check
 12. 定向与统一门禁：`cargo test -p services publication:: --all-features --locked` 通过 15 项，覆盖显式 `ResultUnknown`、大写 token、大小写敏感子串、普通临时故障、业务拒绝、code/summary 保真、明确错误不改写及查询返回未知结果不得重试；`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
 13. 兼容、迁移与回滚合同：本批不改变 HTTP DTO、错误响应、BSON 字段、索引、数据库字段、依赖或锁文件；初次投递的大小写敏感 `contains` 语义及落库 class/code/summary wire shape 保持不变，仅关闭查询原结果路径遗漏归一化的缺陷。不执行数据或索引迁移。应用代码可按整个批次原子回滚，禁止只回滚两个调用文件之一；生产回滚前必须停止自动重试并完成第 14 项历史状态扫描，否则将重新暴露未知结果盲目重放风险。
 14. 发布前数据与外部边界：当前仓库生产组合只注册失败关闭的 publication connector，未注册真实商城实现；仓外注入及生产历史状态不在本地验收范围。发布前必须扫描 `Failed/Retrying + 可自动重试错误类 + code 含大写 TIMEOUT/OUTCOME_UNKNOWN` 的发布投递；命中项必须先查询原消息最终结果或升级人工处理，禁止直接重试。浏览器、真实商城和生产数据扫描登记为未在本批本地执行，不得以纯单元测试替代生产发布审批。
+15. 批次编号：`MASTER-6.3-E08-E10-R03-20260901`。交付范围：`MASTER-E08`、`MASTER-E10`、`MASTER-R03`。责任人：Grok。外部依赖：无。
+16. 分层结果：`PublicationContentFingerprint` / `PublicationContentSnapshot` 独占 v1 canonical 编码与 FNV-1a 64 指纹；`ProductPublicationRevision::new` 与 `safety_pause_copy` 在构造时一次写入真实指纹，创建数据不再接受指纹字段。`RevisionBase::next_revision_no` 提供受检后继，发布修订领域方法复用它；Repository `latest_revision_no` 只返回 `Option<u32>`，不执行加一、不开启事务。Service 普通创建可在事务外读取最新序号，安全暂停使用调用方事务执行器；`uk_product_publication_revisions_publication_revision` DuplicateKey 映射为“该发布修订序号已被占用，请刷新后重试”，禁止复用失败事务会话。原 DTO `publication_content_hash`/`fnv1a64`、Service 占位覆盖和裸 `revision_no + 1` 已删除。
+17. 指纹兼容合同：v1 字段顺序冻结为名称、规格 Debug 可选文本、销售说明、最小购买量、含税销售价、销项税率、计量单位、可销售区域 Debug 可选文本、上架状态 `as_str`、能力清单 Debug 变体名、`valid_from` Unix 秒、`valid_to` Debug 可选秒。算法为 FNV-1a 64，持久化仍为 16 位小写十六进制、无前缀。样本 golden 固定为 `f2da0094c4fd33b9`。本批不改变既有 FNV wire shape，不执行数据迁移；算法或编码变更必须升级版本并提供兼容读取。
+18. 定向验收：`cargo test -p entities --all-features --locked publication::` 通过 29 项，覆盖相同内容同指纹、各参与字段变化、可选字段/枚举/金额/税率/时间/能力清单、构造与安全暂停无占位值、空历史返回 1、单调加一和 `u32::MAX` 失败。`cargo test -p database --all-features --locked publication::` 通过 11 项，断言最新序号查询过滤、`revision_no` 降序、`limit(1)` 和最小投影。`cargo test -p services --all-features --locked publication::` 通过 14 项；DuplicateKey 索引名映射测试通过。
+19. 真实 MongoDB 验收：`ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true' cargo test -p database --test publication_revision_layering --all-features --locked -- --include-ignored --nocapture --test-threads=1` 通过 1 项，验证无历史 `None`、单条、乱序取最大、事务执行器同会话可见、并发同序号单胜者为 `DuplicateKey`。代表查询未使用 hint，自然选择 `uk_product_publication_revisions_publication_revision`，`IXSCAN` 且无 `COLLSCAN`，`totalDocsExamined <= 1`。
+20. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
+21. 迁移与回滚合同：本批不改变 HTTP DTO、响应、BSON 字段名、唯一索引或已持久化指纹 hex 形态，不执行数据或索引迁移。应用代码可按整个批次原子回滚；回滚后会重新暴露占位指纹、完整修订列表取最大序号和裸 `+ 1` 溢出风险，生产回滚必须按变更审批执行。
+22. 外部验收边界：浏览器和真实商城为 `N/A`；本批不改变用户界面或外部调用。发布前必须以生产代表数据复核 `uk_product_publication_revisions_publication_revision` 存在、最新序号查询自然执行计划，以及滚动部署期间新旧版本对同一内容指纹的兼容读取；本地隔离副本集结果不得替代生产发布审批。Exact/Exists、Batch、Page、Aggregation 对本项标记 `N/A`：本批只交付最新序号投影、受检后继和内容指纹，不改变列表分页或聚合口径。
 
 ### 6.4 Sales / Contract / Returns / Projection
 

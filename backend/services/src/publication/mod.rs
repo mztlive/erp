@@ -47,7 +47,6 @@ use crate::publication::dto::SortDir;
 mod delivery;
 mod dto;
 
-pub(crate) use self::dto::publication_content_hash;
 pub use self::dto::{
     CreateProductPublicationRequest, CreateProductPublicationRevisionRequest,
     DeliverPublicationRevisionRequest, MediaItemRequest, PageView, ProcessPublicationDeliveriesRequest,
@@ -321,15 +320,12 @@ impl PublicationService {
                     "安全暂停影响集与当前生效供给修订不一致".to_string(),
                 ));
             }
-            let revision_no = self
-                .next_revision_no_in_transaction(&publication.base.id, executor)
-                .await?;
-            let mut pause_revision = current_revision.safety_pause_copy(
+            let revision_no = self.next_revision_no(&publication.base.id, executor).await?;
+            let pause_revision = current_revision.safety_pause_copy(
                 ProductPublicationRevisionId::new(next_id()),
                 revision_no,
                 committed_at,
             )?;
-            pause_revision.content_hash = publication_content_hash(&pause_revision);
             let current_media = self
                 .db
                 .product_publication_revision_media()
@@ -552,7 +548,7 @@ impl PublicationService {
 
     /// 形成发布修订（不可变版本 + 受控媒体 + 发布状态推进，跨集合事务写入）。
     ///
-    /// 修订号取当前最大序号 + 1；提交发布必填快照（`category_id`、`sales_description`
+    /// 修订号由仓储最新序号经领域受检后继得到；提交发布必填快照（`category_id`、`sales_description`
     /// 与至少一张主图，§6.15）与销售不变式由实体 `new()` 校验；媒体主图跨行约束
     /// 与供给修订存在性在 Service 校验。成功后把发布推进为「待发布」。
     ///
@@ -567,7 +563,7 @@ impl PublicationService {
     /// # 错误
     /// * `NotFound` - 发布/供给修订/商品版本不存在
     /// * `ValidationError` - 必填快照缺失或缺少主图
-    /// * `ConflictError` - `(publication_id, revision_no)` 唯一索引冲突
+    /// * `ConflictError` - `(publication_id, revision_no)` 唯一索引冲突，调用方刷新后重试
     pub async fn create_revision(
         &self,
         publication_id: &str,
@@ -609,7 +605,7 @@ impl PublicationService {
         MediaRole::ensure_main_present(req.media.iter().map(|item| item.media_role))
             .map_err(|error| Error::ValidationError(error.to_string()))?;
 
-        let revision_no = self.next_revision_no(publication_id).await?;
+        let revision_no = self.next_revision_no(publication_id, &mut NoTransaction).await?;
         let revision = ProductPublicationRevision::new(
             ProductPublicationRevisionId::new(next_id()),
             revision_no,
@@ -632,11 +628,8 @@ impl PublicationService {
                 valid_to: req
                     .valid_to
                     .map(|secs| entities::common::time::Instant::from_unix_secs(secs as i64)),
-                content_hash: "placeholder".to_string(),
             },
         )?;
-        let mut revision = revision;
-        revision.content_hash = publication_content_hash(&revision);
         let media = req
             .media
             .into_iter()
@@ -1125,53 +1118,32 @@ impl PublicationService {
         }))
     }
 
-    /// 在调用方事务内计算发布的下一个修订序号。
+    /// 计算发布的下一个修订序号。
+    ///
+    /// Repository 只返回最新 `Option<u32>`；受检后继由领域方法计算。普通创建
+    /// 可在事务外读取最新序号，并发以 `uk_product_publication_revisions_publication_revision`
+    /// 唯一索引仲裁，DuplicateKey 映射为冲突并要求调用方刷新后重试，禁止在
+    /// 已失败事务会话上重试。安全暂停必须传入调用方事务执行器。
     ///
     /// # 参数
     /// * `publication_id` - 所属稳定发布 ID
-    /// * `executor` - 当前发布写事务的数据库执行器
+    /// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
     ///
     /// # 返回
-    /// 返回当前最大修订序号加一；没有修订时返回一。
+    /// 返回当前最大修订序号的受检后继；没有修订时返回一。
     ///
     /// # 错误
-    /// 仓储查询失败时返回错误。
-    async fn next_revision_no_in_transaction(
-        &self,
-        publication_id: &str,
-        executor: &mut dyn Executor,
-    ) -> Result<u32> {
-        let rows = self
+    /// 仓储查询失败或修订序号溢出时返回错误。
+    async fn next_revision_no(&self, publication_id: &str, executor: &mut dyn Executor) -> Result<u32> {
+        let latest = self
             .db
             .product_publication_revisions()
-            .list_revisions_by_publication(
+            .latest_revision_no(
                 &entities::ids::ProductPublicationId::new(publication_id.to_string()),
                 executor,
             )
             .await?;
-        Ok(rows.first().map(|row| row.revision_no + 1).unwrap_or(1))
-    }
-
-    /// 计算发布的下一个修订序号（当前最大序号 + 1，首个修订为 1）。
-    ///
-    /// # 参数
-    /// * `publication_id` - 所属稳定发布
-    ///
-    /// # 返回
-    /// 返回下一个修订序号。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn next_revision_no(&self, publication_id: &str) -> Result<u32> {
-        let rows = self
-            .db
-            .product_publication_revisions()
-            .list_revisions_by_publication(
-                &entities::ids::ProductPublicationId::new(publication_id.to_string()),
-                &mut NoTransaction,
-            )
-            .await?;
-        Ok(rows.first().map(|row| row.revision_no + 1).unwrap_or(1))
+        Ok(ProductPublicationRevision::next_revision_no(latest)?)
     }
 }
 
@@ -1280,7 +1252,6 @@ mod tests {
                 product_capabilities: vec![entities::publication::ProductCapability::Cancel],
                 valid_from: entities::common::time::Instant::from_unix_secs(1_700_000_000),
                 valid_to: None,
-                content_hash: "abc".to_string(),
             },
         )
         .unwrap()

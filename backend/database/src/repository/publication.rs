@@ -359,6 +359,13 @@ pub struct ProductPublicationRevisionRow {
     pub created_at: u64,
 }
 
+/// 发布修订号最小投影行。
+#[derive(Debug, Deserialize)]
+struct ProductPublicationRevisionNoRow {
+    /// 同一发布内修订序号。
+    revision_no: u32,
+}
+
 impl<'a> Repository<'a, ProductPublicationRevision> {
     /// 按「发布 + 修订序号」查找唯一发布修订。
     ///
@@ -427,6 +434,37 @@ impl<'a> Repository<'a, ProductPublicationRevision> {
             executor,
         )
         .await
+    }
+
+    /// 读取指定发布的历史最大修订序号。
+    ///
+    /// 查询只读取 `revision_no`、按序号降序并限制一条；修订号分配与溢出校验
+    /// 由实体负责。本方法不开启事务，也不执行加一。
+    ///
+    /// # 参数
+    /// * `product_publication_id` - 所属稳定发布
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回历史最大修订序号；没有历史修订时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或投影反序列化失败时返回错误。
+    pub async fn latest_revision_no(
+        &self,
+        product_publication_id: &entities::ids::ProductPublicationId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<u32>> {
+        let rows = mongo_ops::find_many(
+            &self
+                .collection()
+                .clone_with_type::<ProductPublicationRevisionNoRow>(),
+            latest_publication_revision_filter(product_publication_id),
+            latest_publication_revision_options(),
+            executor,
+        )
+        .await?;
+        Ok(publication_revision_no_from_rows(rows))
     }
 
     /// 批量读取指定供给修订形成的上架发布修订。
@@ -1110,6 +1148,54 @@ fn product_publication_projection() -> Document {
     }
 }
 
+/// 构建发布最大修订号查询条件。
+///
+/// # 参数
+/// * `product_publication_id` - 所属稳定发布
+///
+/// # 返回
+/// 返回按发布 ID 与未删除标记过滤的查询文档。
+///
+/// # 错误
+/// 无。
+fn latest_publication_revision_filter(
+    product_publication_id: &entities::ids::ProductPublicationId,
+) -> Document {
+    doc! {
+        "product_publication_id": product_publication_id.to_string(),
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+    }
+}
+
+/// 构建发布最大修订号的最小投影与有界排序。
+///
+/// # 返回
+/// 返回按 `revision_no` 降序、`limit(1)` 且只投影序号的查询选项。
+///
+/// # 错误
+/// 无。
+fn latest_publication_revision_options() -> FindOptions {
+    FindOptions::builder()
+        .sort(doc! { "revision_no": -1 })
+        .limit(1)
+        .projection(doc! { "revision_no": 1, "_id": 0 })
+        .build()
+}
+
+/// 从已按修订号倒序返回的零或一条投影中读取最大修订号。
+///
+/// # 参数
+/// * `rows` - 仓储查询结果
+///
+/// # 返回
+/// 空结果返回 `None`；否则返回首行序号。
+///
+/// # 错误
+/// 无。本函数不排序，调用方必须已按 `revision_no` 降序限制一条。
+fn publication_revision_no_from_rows(rows: Vec<ProductPublicationRevisionNoRow>) -> Option<u32> {
+    rows.into_iter().next().map(|row| row.revision_no)
+}
+
 /// 发布修订列表投影字段。
 ///
 /// # 返回
@@ -1159,11 +1245,13 @@ fn product_publication_delivery_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        publication_claim_filter, publication_retry_pipeline, sort_doc, ProductPublicationDeliveryFilter,
-        ProductPublicationFilter, QueryFilter,
+        latest_publication_revision_filter, latest_publication_revision_options, publication_claim_filter,
+        publication_retry_pipeline, publication_revision_no_from_rows, sort_doc,
+        ProductPublicationDeliveryFilter, ProductPublicationFilter, ProductPublicationRevisionNoRow,
+        QueryFilter,
     };
     use entities::common::time::Instant;
-    use entities::ids::{SkuId, SourceSystemId};
+    use entities::ids::{ProductPublicationId, SkuId, SourceSystemId};
     use entities::publication::{ProductPublicationStatus, PublicationDeliveryStatus};
     use mongodb::bson::doc;
 
@@ -1245,5 +1333,22 @@ mod tests {
         let set = pipeline[0].get_document("$set").unwrap();
         assert_eq!(set.get_i64("updated_at").unwrap(), 100);
         assert_eq!(set.get_i64("next_attempt_at").unwrap(), 160);
+    }
+
+    #[test]
+    fn latest_revision_query_is_minimal_bounded_and_reads_empty_history() {
+        assert_eq!(
+            latest_publication_revision_filter(&ProductPublicationId::new("pub-1")),
+            doc! { "product_publication_id": "pub-1", "deleted_at": 0_i64 }
+        );
+        let options = latest_publication_revision_options();
+        assert_eq!(options.sort, Some(doc! { "revision_no": -1 }));
+        assert_eq!(options.limit, Some(1));
+        assert_eq!(options.projection, Some(doc! { "revision_no": 1, "_id": 0 }));
+        assert_eq!(publication_revision_no_from_rows(Vec::new()), None);
+        assert_eq!(
+            publication_revision_no_from_rows(vec![ProductPublicationRevisionNoRow { revision_no: 5 }]),
+            Some(5)
+        );
     }
 }

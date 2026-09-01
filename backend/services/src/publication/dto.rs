@@ -7,9 +7,9 @@
 use entities::ids::{FileAssetId, ProductCategoryId, SkuId, SkuRevisionId, SourceSystemId};
 use entities::money::{Amount, Quantity, Rate};
 use entities::publication::{
-    MediaRole, ProductCapability, ProductPublication, ProductPublicationRevision, ProductPublicationStatus,
-    PublicationDeliveryStatus, SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType,
-    SaleStatus, SystemSafetyPauseOperation,
+    MediaRole, ProductCapability, ProductPublication, ProductPublicationStatus, PublicationDeliveryStatus,
+    SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType, SaleStatus,
+    SystemSafetyPauseOperation,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -752,49 +752,6 @@ impl ProductPublicationDeliveryListParams {
     }
 }
 
-/// 计算发布修订内容指纹（发布内容指纹，§6.15；由快照字段的规范化文本派生）。
-///
-/// # 参数
-/// * `revision` - 待指纹化的发布修订实体
-///
-/// # 返回
-/// 返回 64 位 FNV-1a 十六进制指纹（长度上限 128 内）。
-pub(crate) fn publication_content_hash(revision: &ProductPublicationRevision) -> String {
-    let canonical = format!(
-        "{}|{:?}|{}|{}|{}|{}|{}|{:?}|{}|{:?}|{}|{:?}",
-        revision.name,
-        revision.specification,
-        revision.sales_description,
-        revision.minimum_purchase_quantity,
-        revision.sales_price_gross,
-        revision.sales_tax_rate,
-        revision.base_unit_code,
-        revision.sales_region,
-        revision.sale_status.as_str(),
-        revision.product_capabilities,
-        revision.valid_from.unix_secs(),
-        revision.valid_to.map(|at| at.unix_secs()),
-    );
-    let hash = fnv1a64(canonical.as_bytes());
-    format!("{hash:016x}")
-}
-
-/// FNV-1a 64 位哈希。
-///
-/// # 参数
-/// * `bytes` - 待哈希字节
-///
-/// # 返回
-/// 返回哈希值。
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
-}
-
 impl From<ProductPublication> for ProductPublicationView {
     /// 从实体构造响应视图。
     ///
@@ -818,13 +775,9 @@ impl From<ProductPublication> for ProductPublicationView {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalize_sort, publication_content_hash, ProductPublicationListParams, SortDir,
-        SystemSafetyPauseTrigger,
-    };
-    use entities::ids::{ProductPublicationId, SkuId, SourceSystemId};
+    use super::{normalize_sort, ProductPublicationListParams, SortDir, SystemSafetyPauseTrigger};
+    use entities::ids::{SkuId, SourceSystemId};
     use entities::publication::{ProductPublicationStatus, SafetyPauseCause, SafetyPauseSourceObjectType};
-    use std::str::FromStr;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -857,38 +810,6 @@ mod tests {
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
-    }
-
-    #[test]
-    fn content_hash_is_deterministic_and_bounded() {
-        let revision = entities::publication::ProductPublicationRevision::new(
-            entities::ids::ProductPublicationRevisionId::new("rev-1"),
-            1,
-            entities::publication::ProductPublicationRevisionData {
-                product_publication_id: ProductPublicationId::new("pub-1"),
-                sku_revision_id: entities::ids::SkuRevisionId::new("sku-rev-1"),
-                supplier_offering_revision_id: entities::ids::SupplierOfferingRevisionId::new("off-rev-1"),
-                category_id: entities::ids::ProductCategoryId::new("cat-1"),
-                name: "福利商城卡".to_string(),
-                specification: None,
-                sales_description: "员工福利采购".to_string(),
-                minimum_purchase_quantity: entities::money::Quantity::from_str("1.000000").unwrap(),
-                sales_price_gross: entities::money::Amount::from_str("100.00").unwrap(),
-                sales_tax_rate: entities::money::Rate::from_str("0.130000").unwrap(),
-                base_unit_code: "张".to_string(),
-                sales_region: None,
-                sale_status: entities::publication::SaleStatus::OnSale,
-                product_capabilities: vec![entities::publication::ProductCapability::Cancel],
-                valid_from: entities::common::time::Instant::from_unix_secs(1_700_000_000),
-                valid_to: Some(entities::common::time::Instant::from_unix_secs(1_800_000_000)),
-                content_hash: "placeholder".to_string(),
-            },
-        )
-        .unwrap();
-        let first = publication_content_hash(&revision);
-        let second = publication_content_hash(&revision);
-        assert_eq!(first, second, "指纹必须确定");
-        assert!(first.len() <= 128);
     }
 
     #[test]

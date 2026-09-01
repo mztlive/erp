@@ -11,6 +11,7 @@ use entity_macros::Entity;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use super::content_identity::{PublicationContentFingerprint, PublicationContentSnapshot};
 use crate::common::revision::RevisionBase;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
@@ -31,8 +32,6 @@ const DESCRIPTION_MAX_LEN: usize = 4096;
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
 /// 可销售区域最大长度。
 const SALES_REGION_MAX_LEN: usize = 256;
-/// 发布内容指纹最大长度。
-const HASH_MAX_LEN: usize = 128;
 /// 媒体替代文本最大长度。
 const ALT_TEXT_MAX_LEN: usize = 256;
 
@@ -211,8 +210,6 @@ pub struct ProductPublicationRevisionData {
     pub valid_from: Instant,
     /// 生效区间结束；必须晚于 `valid_from`。
     pub valid_to: Option<Instant>,
-    /// 发布内容指纹（P3 形成版本时计算）。
-    pub content_hash: String,
 }
 
 /// 发布版本实体（不可变版本，数据模型 §6.15）。
@@ -261,14 +258,13 @@ pub struct ProductPublicationRevision {
 impl ProductPublicationRevision {
     /// 创建发布版本。
     ///
-    /// 完成展示名称/销售说明/计量单位/内容指纹的校验与规范化，校验销售不变式
-    /// （最小购买量大于零、销售价与税率非负、生效区间不倒挂），并对商品级能力
-    /// 清单去重（保留首次出现顺序）。
+    /// 完成展示名称/销售说明/计量单位的校验与规范化，校验销售不变式，对商品
+    /// 级能力清单去重，并一次派生真实内容指纹。禁止任何占位指纹。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::ProductPublicationRevisionId`）
     /// * `revision_no` - 修订序号（同一发布内从 1 递增）
-    /// * `data` - 创建数据
+    /// * `data` - 创建数据；不含内容指纹
     ///
     /// # 返回
     /// 返回新建的发布版本实体。
@@ -281,26 +277,12 @@ impl ProductPublicationRevision {
         revision_no: u32,
         data: ProductPublicationRevisionData,
     ) -> Result<Self> {
-        let name = normalize_required_text(data.name, "发布名称不能为空", NAME_MAX_LEN, "发布名称过长")?;
-        let specification = normalize_optional_text(data.specification, "规格快照", SPECIFICATION_MAX_LEN)?;
-        let sales_description = normalize_required_text(
-            data.sales_description,
-            "销售说明不能为空",
-            DESCRIPTION_MAX_LEN,
-            "销售说明过长",
-        )?;
-        let base_unit_code = normalize_required_text(
-            data.base_unit_code,
-            "计量单位不能为空",
-            BASE_UNIT_CODE_MAX_LEN,
-            "计量单位过长",
-        )?;
-        let sales_region = normalize_optional_text(data.sales_region, "可销售区域", SALES_REGION_MAX_LEN)?;
-        let content_hash = normalize_required_text(
-            data.content_hash,
-            "发布内容指纹不能为空",
-            HASH_MAX_LEN,
-            "发布内容指纹过长",
+        let texts = normalize_revision_texts(
+            data.name.clone(),
+            data.specification.clone(),
+            data.sales_description.clone(),
+            data.base_unit_code.clone(),
+            data.sales_region.clone(),
         )?;
         validate_sales_invariants(
             data.minimum_purchase_quantity,
@@ -309,28 +291,34 @@ impl ProductPublicationRevision {
             data.valid_from,
             data.valid_to,
         )?;
-
-        Ok(Self {
-            base: BaseModel::new(id.to_string()),
-            revision: RevisionBase::new(revision_no),
-            product_publication_id: data.product_publication_id,
-            sku_revision_id: data.sku_revision_id,
-            supplier_offering_revision_id: data.supplier_offering_revision_id,
-            category_id: data.category_id,
-            name,
-            specification,
-            sales_description,
-            minimum_purchase_quantity: data.minimum_purchase_quantity,
-            sales_price_gross: data.sales_price_gross,
-            sales_tax_rate: data.sales_tax_rate,
-            base_unit_code,
-            sales_region,
-            sale_status: data.sale_status,
-            product_capabilities: dedup_capabilities(data.product_capabilities),
-            valid_from: data.valid_from,
-            valid_to: data.valid_to,
+        let product_capabilities = dedup_capabilities(data.product_capabilities.clone());
+        let content_hash = content_hash_from(&texts, &data, &product_capabilities);
+        Ok(assemble_revision(
+            id,
+            revision_no,
+            data,
+            texts,
+            product_capabilities,
             content_hash,
-        })
+        ))
+    }
+
+    /// 由仓储返回的最新修订号计算下一发布修订序号。
+    ///
+    /// # 参数
+    /// * `latest` - 当前发布的最大修订号；没有历史时为 `None`
+    ///
+    /// # 返回
+    /// 无历史返回 `1`；否则返回最大序号加一。
+    ///
+    /// # 错误
+    /// 当前最大序号已为 `u32::MAX` 时返回错误，禁止 panic 或回绕。
+    ///
+    /// # 关键业务约束
+    /// 普通创建与事务内安全暂停必须复用本方法；并发唯一性仍由
+    /// `(product_publication_id, revision_no)` 唯一索引保证。
+    pub fn next_revision_no(latest: Option<u32>) -> Result<u32> {
+        RevisionBase::next_revision_no(latest)
     }
 
     /// 复制当前商城内容形成不可变安全暂停修订。
@@ -371,9 +359,142 @@ impl ProductPublicationRevision {
                 product_capabilities: self.product_capabilities.clone(),
                 valid_from: committed_at,
                 valid_to: None,
-                content_hash: "pending-safety-pause-hash".to_string(),
             },
         )
+    }
+}
+
+/// 发布修订已规范化的展示文本。
+struct RevisionTexts {
+    /// 商城展示名称。
+    name: String,
+    /// 规格快照。
+    specification: Option<String>,
+    /// 销售说明。
+    sales_description: String,
+    /// 计量单位代码。
+    base_unit_code: String,
+    /// 可销售区域。
+    sales_region: Option<String>,
+}
+
+/// 规范化发布修订的必填与可选展示文本。
+///
+/// # 参数
+/// * `name` - 商城展示名称
+/// * `specification` - 规格快照
+/// * `sales_description` - 销售说明
+/// * `base_unit_code` - 计量单位代码
+/// * `sales_region` - 可销售区域
+///
+/// # 返回
+/// 返回去首尾空白后的展示文本。
+///
+/// # 错误
+/// 必填文本为空或任一文本超长时返回错误。
+fn normalize_revision_texts(
+    name: String,
+    specification: Option<String>,
+    sales_description: String,
+    base_unit_code: String,
+    sales_region: Option<String>,
+) -> Result<RevisionTexts> {
+    Ok(RevisionTexts {
+        name: normalize_required_text(name, "发布名称不能为空", NAME_MAX_LEN, "发布名称过长")?,
+        specification: normalize_optional_text(specification, "规格快照", SPECIFICATION_MAX_LEN)?,
+        sales_description: normalize_required_text(
+            sales_description,
+            "销售说明不能为空",
+            DESCRIPTION_MAX_LEN,
+            "销售说明过长",
+        )?,
+        base_unit_code: normalize_required_text(
+            base_unit_code,
+            "计量单位不能为空",
+            BASE_UNIT_CODE_MAX_LEN,
+            "计量单位过长",
+        )?,
+        sales_region: normalize_optional_text(sales_region, "可销售区域", SALES_REGION_MAX_LEN)?,
+    })
+}
+
+/// 由规范化快照一次派生真实内容指纹。
+///
+/// # 参数
+/// * `texts` - 已规范化展示文本
+/// * `data` - 原始创建数据中的销售、状态与时间字段
+/// * `product_capabilities` - 已去重的能力清单
+///
+/// # 返回
+/// 返回 v1 FNV 十六进制指纹，不含占位值。
+///
+/// # 错误
+/// 无。指纹派生是确定性纯函数。
+fn content_hash_from(
+    texts: &RevisionTexts,
+    data: &ProductPublicationRevisionData,
+    product_capabilities: &[ProductCapability],
+) -> String {
+    PublicationContentFingerprint::from_snapshot(&PublicationContentSnapshot {
+        name: &texts.name,
+        specification: texts.specification.as_deref(),
+        sales_description: &texts.sales_description,
+        minimum_purchase_quantity: data.minimum_purchase_quantity,
+        sales_price_gross: data.sales_price_gross,
+        sales_tax_rate: data.sales_tax_rate,
+        base_unit_code: &texts.base_unit_code,
+        sales_region: texts.sales_region.as_deref(),
+        sale_status: data.sale_status,
+        product_capabilities,
+        valid_from: data.valid_from,
+        valid_to: data.valid_to,
+    })
+    .into_wire()
+}
+
+/// 组装已通过校验的发布修订实体。
+///
+/// # 参数
+/// * `id` - 实体主键
+/// * `revision_no` - 修订序号
+/// * `data` - 已通过销售不变式校验的创建数据
+/// * `texts` - 已规范化展示文本
+/// * `product_capabilities` - 已去重能力清单
+/// * `content_hash` - 一次派生的真实指纹
+///
+/// # 返回
+/// 返回不可变发布修订。
+///
+/// # 错误
+/// 无。调用前必须已完成校验。
+fn assemble_revision(
+    id: ProductPublicationRevisionId,
+    revision_no: u32,
+    data: ProductPublicationRevisionData,
+    texts: RevisionTexts,
+    product_capabilities: Vec<ProductCapability>,
+    content_hash: String,
+) -> ProductPublicationRevision {
+    ProductPublicationRevision {
+        base: BaseModel::new(id.to_string()),
+        revision: RevisionBase::new(revision_no),
+        product_publication_id: data.product_publication_id,
+        sku_revision_id: data.sku_revision_id,
+        supplier_offering_revision_id: data.supplier_offering_revision_id,
+        category_id: data.category_id,
+        name: texts.name,
+        specification: texts.specification,
+        sales_description: texts.sales_description,
+        minimum_purchase_quantity: data.minimum_purchase_quantity,
+        sales_price_gross: data.sales_price_gross,
+        sales_tax_rate: data.sales_tax_rate,
+        base_unit_code: texts.base_unit_code,
+        sales_region: texts.sales_region,
+        sale_status: data.sale_status,
+        product_capabilities,
+        valid_from: data.valid_from,
+        valid_to: data.valid_to,
+        content_hash,
     }
 }
 
@@ -560,7 +681,6 @@ mod tests {
             ],
             valid_from: Instant::from_unix_secs(1_700_000_000),
             valid_to: Some(Instant::from_unix_secs(1_800_000_000)),
-            content_hash: " aabbccddeeff ".to_string(),
         }
     }
 
@@ -577,7 +697,11 @@ mod tests {
         assert_eq!(revision.specification.as_deref(), Some("100 元面额"));
         assert_eq!(revision.sales_description, "员工福利采购");
         assert_eq!(revision.base_unit_code, "张");
-        assert_eq!(revision.content_hash, "aabbccddeeff");
+        assert_eq!(revision.content_hash.len(), 16);
+        assert!(revision.content_hash.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_ne!(revision.content_hash, "placeholder");
+        assert_ne!(revision.content_hash, "pending-safety-pause-hash");
+        assert_eq!(revision.content_hash, expected_content_hash(&revision));
         assert_eq!(
             revision.product_capabilities,
             vec![ProductCapability::Cancel, ProductCapability::Refund],
@@ -618,17 +742,6 @@ mod tests {
             blank_description
         )
         .is_err());
-
-        let blank_hash = ProductPublicationRevisionData {
-            content_hash: "  ".to_string(),
-            ..revision_data()
-        };
-        assert!(ProductPublicationRevision::new(
-            ProductPublicationRevisionId::new("pub-rev-4"),
-            1,
-            blank_hash
-        )
-        .is_err());
     }
 
     #[test]
@@ -652,17 +765,6 @@ mod tests {
             ProductPublicationRevisionId::new("pub-rev-6"),
             1,
             overlong_description
-        )
-        .is_err());
-
-        let overlong_hash = ProductPublicationRevisionData {
-            content_hash: "h".repeat(129),
-            ..revision_data()
-        };
-        assert!(ProductPublicationRevision::new(
-            ProductPublicationRevisionId::new("pub-rev-7"),
-            1,
-            overlong_hash
         )
         .is_err());
     }
@@ -826,6 +928,10 @@ mod tests {
         assert_eq!(paused.name, current.name);
         assert_eq!(paused.revision.revision_no, 2);
         assert_eq!(paused.valid_to, None);
+        assert_eq!(paused.content_hash.len(), 16);
+        assert_ne!(paused.content_hash, current.content_hash);
+        assert_ne!(paused.content_hash, "pending-safety-pause-hash");
+        assert_eq!(paused.content_hash, expected_content_hash(&paused));
 
         let media = ProductPublicationRevisionMedia::new(
             ProductPublicationRevisionMediaId::new("media-1"),
@@ -849,5 +955,37 @@ mod tests {
             ProductPublicationRevisionId::new("pub-rev-2")
         );
         assert_eq!(copied.file_asset_id, media.file_asset_id);
+    }
+
+    #[test]
+    fn next_revision_no_is_checked_and_shared_with_revision_base() {
+        assert_eq!(ProductPublicationRevision::next_revision_no(None).unwrap(), 1);
+        assert_eq!(ProductPublicationRevision::next_revision_no(Some(7)).unwrap(), 8);
+        assert_eq!(
+            ProductPublicationRevision::next_revision_no(Some(u32::MAX))
+                .unwrap_err()
+                .to_string(),
+            "修订序号已达上限"
+        );
+    }
+
+    fn expected_content_hash(revision: &ProductPublicationRevision) -> String {
+        crate::publication::PublicationContentFingerprint::from_snapshot(
+            &crate::publication::PublicationContentSnapshot {
+                name: &revision.name,
+                specification: revision.specification.as_deref(),
+                sales_description: &revision.sales_description,
+                minimum_purchase_quantity: revision.minimum_purchase_quantity,
+                sales_price_gross: revision.sales_price_gross,
+                sales_tax_rate: revision.sales_tax_rate,
+                base_unit_code: &revision.base_unit_code,
+                sales_region: revision.sales_region.as_deref(),
+                sale_status: revision.sale_status,
+                product_capabilities: &revision.product_capabilities,
+                valid_from: revision.valid_from,
+                valid_to: revision.valid_to,
+            },
+        )
+        .into_wire()
     }
 }

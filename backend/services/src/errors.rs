@@ -109,6 +109,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
         Some("uk_work_items_open_customer_acceptance_object") => {
             "该销售单已存在开放客户验收任务，请刷新后重试".to_string()
         }
+        Some("uk_product_publication_revisions_publication_revision") => {
+            "该发布修订序号已被占用，请刷新后重试".to_string()
+        }
         _ => "数据已存在，请勿重复提交".to_string(),
     }
 }
@@ -323,6 +326,14 @@ mod tests {
         let message = duplicate_index_conflict_message(Some("uk_work_items_open_customer_acceptance_object"));
 
         assert_eq!(message, "该销售单已存在开放客户验收任务，请刷新后重试");
+    }
+
+    #[test]
+    fn publication_revision_duplicate_maps_to_refresh_message() {
+        let message =
+            duplicate_index_conflict_message(Some("uk_product_publication_revisions_publication_revision"));
+
+        assert_eq!(message, "该发布修订序号已被占用，请刷新后重试");
     }
 
     #[test]

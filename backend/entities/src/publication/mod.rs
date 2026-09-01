@@ -26,11 +26,13 @@
 //! - 已支付订单永久引用下单时 `product_publication_revision_id`（§6.15）；
 //! - 商品发布数据与商城生效版本的核对只生成差异任务（phase-2 §13.3）。
 
+pub mod content_identity;
 pub mod delivery;
 pub mod product_publication;
 pub mod revision;
 pub mod safety_pause;
 
+pub use content_identity::{PublicationContentFingerprint, PublicationContentSnapshot};
 pub use delivery::{
     ProductPublicationDelivery, ProductPublicationDeliveryData, ProductPublicationDeliveryUpdate,
     PublicationDeliveryStatus,
