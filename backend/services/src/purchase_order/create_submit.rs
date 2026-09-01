@@ -452,6 +452,7 @@ async fn persist_frozen_created_order_start(
             organization_id,
             now,
             audit,
+            receipt: None,
         },
         session,
     )

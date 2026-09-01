@@ -4,19 +4,23 @@
 //! 不得读取时钟、生成 ID、打开事务或访问 Repository。
 
 mod cancel;
+mod cancel_plan;
 mod decision;
 mod enter_node;
 mod event;
 mod resume;
 mod start;
+mod start_plan;
 mod transition_plan;
 
 pub use crate::graph::DefinitionGraph;
 pub use cancel::{cancel, CancelCommand};
+pub use cancel_plan::{plan_cancel, CancelPlan, CancelPlanInput};
 pub use decision::{block_current, decide, DecideCommand};
 pub use event::{BpmEvent, BpmEventKind};
 pub use resume::{resume, ResumeCommand};
 pub use start::{start, StartAssigneeBinding, StartCommand};
+pub use start_plan::{plan_start, StartBindingInput, StartPlan, StartPlanInput};
 pub use transition_plan::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
 
 use crate::error::{Error, Result};

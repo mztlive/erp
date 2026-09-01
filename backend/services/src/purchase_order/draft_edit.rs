@@ -7,8 +7,9 @@ use database::{AccessControlExt, Executor, NoTransaction, PurchaseOrderExt, Sale
 use entities::ids::PurchaseOrderSubmissionId;
 use entities::money::{Amount, Quantity};
 use entities::purchase_order::{
-    PurchaseLineType, PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SubmissionStatus,
+    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseLineType,
+    PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+    PurchaseOrderSubmissionLine, SubmissionStatus,
 };
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -17,20 +18,16 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
-use super::command_receipt::{
-    command_receipt_id, command_receipt_message, command_request_fingerprint, parse_command_receipt,
-};
 use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverage};
 use super::dto::{
     SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
-    SavePurchaseOrderLinePatch, TotalsView,
+    SavePurchaseOrderLinePatch, TotalsView, SAVE_ACTION,
 };
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
-const SAVE_ACTION: &str = "purchase_order.update";
 const SAVE_PERMISSION: &str = "purchase_order:update";
 const SAVE_RECEIPT_PREFIX: &str = "purchase-order-save-draft-command-";
 
@@ -63,19 +60,6 @@ struct SaveDraftReceipt {
     tax: String,
     /// 首次成功响应的业务引用。
     reference: String,
-}
-
-/// 保存草稿请求指纹载荷。
-#[derive(Serialize)]
-struct SaveDraftFingerprintPayload<'a> {
-    /// 客户端期望乐观锁版本。
-    expected_lock_version: u64,
-    /// 按业务语义规范化的付款条件。
-    payment_term_code: Option<&'a str>,
-    /// 保留顺序的完整草稿行。
-    lines: &'a [SavePurchaseOrderLine],
-    /// 保留顺序的草稿行可编辑字段快照。
-    line_patches: &'a [SavePurchaseOrderLinePatch],
 }
 
 /// 待写入的新采购草稿提交及金额。
@@ -119,14 +103,16 @@ impl PurchaseOrderService {
         req.validate()?;
         ensure_save_request_shape(&req)?;
         let authorization = self.authorize_actor_permission(actor, SAVE_PERMISSION).await?;
-        let fingerprint = save_request_fingerprint(id, &req)?;
-        let receipt_id = command_receipt_id(
+        let fingerprint = req.request_fingerprint(id)?;
+        let receipt_identity = PurchaseCommandReceipt::<SaveDraftReceipt>::identity(
             SAVE_RECEIPT_PREFIX,
             actor.id(),
             SAVE_ACTION,
-            id,
+            Some(id),
             &req.idempotency_key,
-        );
+            LegacyReceiptIdScheme::None,
+        )?;
+        let receipt_id = receipt_identity.receipt_id().to_string();
         if let Some(result) =
             replay_saved_draft(&self.db, &receipt_id, &fingerprint, id, actor, &mut NoTransaction).await?
         {
@@ -628,7 +614,10 @@ async fn persist_draft_replacement(
         SAVE_ACTION,
         "purchase_order",
         order.base.id.clone(),
-        Some(command_receipt_message(command.request_fingerprint, &receipt)?),
+        Some(
+            PurchaseCommandReceipt::new(command.request_fingerprint.to_string(), receipt.clone())
+                .encode_message()?,
+        ),
     )?;
     db.audit_logs().create(&audit, session).await?;
     Ok(receipt.into_result())
@@ -663,23 +652,31 @@ async fn replay_saved_draft(
     let Some(audit) = db.audit_logs().find_by_id(receipt_id, executor).await? else {
         return Ok(None);
     };
-    let receipt: SaveDraftReceipt = parse_command_receipt(
+    let receipt = match PurchaseCommandReceipt::<SaveDraftReceipt>::decode(
         &audit,
         actor.id(),
         SAVE_ACTION,
-        purchase_order_id,
+        Some(purchase_order_id),
         expected_fingerprint,
-    )?;
-    if receipt.purchase_order_id != purchase_order_id {
+    ) {
+        Ok(receipt) => receipt,
+        Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
+            return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
+        }
+        Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+            return Err(Error::Internal(message));
+        }
+    };
+    if receipt.payload().purchase_order_id != purchase_order_id {
         return Err(Error::ConflictError(
             "采购草稿保存收据与业务资源不一致".to_string(),
         ));
     }
     let order = load_purchase_order(db, purchase_order_id, executor).await?;
-    if order.base.version < receipt.lock_version {
+    if order.base.version < receipt.payload().lock_version {
         return Err(Error::Internal("采购草稿保存收据版本超前".to_string()));
     }
-    Ok(Some(receipt.into_result()))
+    Ok(Some(receipt.into_payload().into_result()))
 }
 
 /// 在事务错误后回读保存草稿收据并决定最终响应。
@@ -721,33 +718,6 @@ async fn recover_saved_draft(
         .await?
         .ok_or(error),
     }
-}
-
-/// 构造保存草稿请求载荷指纹。
-///
-/// # 参数
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `request` - 保存草稿请求
-///
-/// # 返回
-/// 返回不包含原始幂等键的稳定 SHA-256 指纹。
-///
-/// # 错误
-/// 指纹载荷无法序列化时返回内部错误。
-///
-/// # 关键业务约束
-/// 行顺序影响提交行序号，因此必须保留；付款条件按现有校验语义去除首尾空白。
-fn save_request_fingerprint(
-    purchase_order_id: &str,
-    request: &SavePurchaseOrderDraftRequest,
-) -> Result<String> {
-    let payload = SaveDraftFingerprintPayload {
-        expected_lock_version: request.expected_lock_version,
-        payment_term_code: request.payment_term_code.as_deref().map(str::trim),
-        lines: &request.lines,
-        line_patches: &request.line_patches,
-    };
-    command_request_fingerprint(SAVE_ACTION, purchase_order_id, &payload)
 }
 
 impl SaveDraftReceipt {
@@ -1037,9 +1007,7 @@ mod tests {
     use entities::purchase_order::{PurchaseLineType, PurchaseOrderStatus};
     use validator::Validate;
 
-    use super::{
-        ensure_payment_term_unchanged, ensure_save_target, parse_required_quantity, save_request_fingerprint,
-    };
+    use super::{ensure_payment_term_unchanged, ensure_save_target, parse_required_quantity};
     use crate::errors::Error;
     use crate::purchase_order::dto::{SavePurchaseOrderDraftRequest, SavePurchaseOrderLine};
 
@@ -1173,12 +1141,12 @@ mod tests {
         let different_payload = save_request("2");
 
         assert_eq!(
-            save_request_fingerprint("po-1", &first).unwrap(),
-            save_request_fingerprint("po-1", &same_payload).unwrap()
+            first.request_fingerprint("po-1").unwrap(),
+            same_payload.request_fingerprint("po-1").unwrap()
         );
         assert_ne!(
-            save_request_fingerprint("po-1", &first).unwrap(),
-            save_request_fingerprint("po-1", &different_payload).unwrap()
+            first.request_fingerprint("po-1").unwrap(),
+            different_payload.request_fingerprint("po-1").unwrap()
         );
     }
 

@@ -4,10 +4,11 @@ use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SalesOrderExt,
 use entities::common::time::Instant;
 use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use entities::purchase_order::{
-    PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
+    LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+    PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+    PurchaseOrderSubmissionLine, PurchaseReceiptWire,
 };
 use id_generator::next_id;
-use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::adapter::{
@@ -16,7 +17,9 @@ use super::adapter::{
     purchase_order_subject_ref, require_frozen_binding, start_approval_command_kind, RECENT_HISTORY_LIMIT,
 };
 use super::draft_edit::{ensure_payment_term_unchanged, resolve_line_patches};
-use super::dto::{SavePurchaseOrderLine, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult};
+use super::dto::{
+    SavePurchaseOrderLine, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult, PURCHASE_SUBMIT_ACTION,
+};
 use super::start_approval::{
     build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
     persist_purchase_order_start, replay_purchase_order_start_with_executor, PurchaseOrderStartInput,
@@ -30,7 +33,6 @@ use crate::document_registry::{find_approval_binding, find_registered_document};
 use crate::errors::{Error, Result};
 
 const PURCHASE_SUBMIT_RECEIPT_PREFIX: &str = "purchase-submit-command-";
-const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 
 impl PurchaseOrderService {
     /// 提交采购单并调用统一 `start_approval`。
@@ -61,11 +63,21 @@ impl PurchaseOrderService {
         for patch in &req.line_patches {
             patch.validate()?;
         }
-        let action = "purchase_order.submit";
-        let request_shape = format!("{:?}|{:?}", req.payment_term_code, req.line_patches);
-        let fingerprint = command_fingerprint(&[id, &req.expected_lock_version.to_string(), &request_shape]);
-        let audit_id = purchase_submit_audit_id(actor.id(), id, &req.idempotency_key);
-        if let Some(result) = self.replay_purchase_submit(&audit_id, &fingerprint, id).await? {
+        let action = PURCHASE_SUBMIT_ACTION;
+        let fingerprint = req.request_fingerprint(id);
+        let receipt_identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
+            PURCHASE_SUBMIT_RECEIPT_PREFIX,
+            actor.id(),
+            action,
+            Some(id),
+            &req.idempotency_key,
+            LegacyReceiptIdScheme::WholeStringJoined,
+        )?;
+        let audit_id = receipt_identity.receipt_id().to_string();
+        if let Some(result) = self
+            .replay_purchase_submit(&receipt_identity, &fingerprint, id, actor)
+            .await?
+        {
             return Ok(result);
         }
         let adapter = purchase_order_adapter()?;
@@ -183,18 +195,7 @@ impl PurchaseOrderService {
             action,
             "purchase_order",
             order.base.id.clone(),
-            Some(purchase_submit_receipt_message(
-                &fingerprint,
-                &PurchaseSubmitReceipt {
-                    purchase_no: order.purchase_no.clone(),
-                    submission_id: submission.base.id.clone(),
-                    submission_no: submission.submission_no.clone(),
-                    work_item_id: String::new(),
-                    task_version: 0,
-                    subject_version: order.approval_subject_version.to_string(),
-                    lock_version: order.base.version,
-                },
-            )),
+            None,
         )?;
         let first_task = persist_purchase_order_start(
             &self.db,
@@ -211,6 +212,18 @@ impl PurchaseOrderService {
                 organization_id,
                 now,
                 audit,
+                receipt: Some((
+                    fingerprint.clone(),
+                    PurchaseSubmitReceipt {
+                        purchase_no: order.purchase_no.clone(),
+                        submission_id: submission.base.id.clone(),
+                        submission_no: submission.submission_no.clone(),
+                        work_item_id: String::new(),
+                        task_version: 0,
+                        subject_version: order.approval_subject_version.to_string(),
+                        lock_version: order.base.version,
+                    },
+                )),
             },
         )
         .await;
@@ -223,7 +236,7 @@ impl PurchaseOrderService {
                         order.approval_subject_version,
                         &req.idempotency_key,
                         actor,
-                        &audit_id,
+                        &receipt_identity,
                         &fingerprint,
                         error,
                     )
@@ -248,28 +261,45 @@ impl PurchaseOrderService {
     /// 重放已提交的采购冻结命令，并拒绝同一键混用不同对象版本。
     async fn replay_purchase_submit(
         &self,
-        audit_id: &str,
+        identity: &PurchaseCommandReceiptIdentity,
         expected_fingerprint: &str,
         purchase_order_id: &str,
+        actor: &AuditActor,
     ) -> Result<Option<SubmitPurchaseOrderResult>> {
-        let Some(audit) = self
-            .db
-            .audit_logs()
-            .find_by_id(audit_id, &mut NoTransaction)
-            .await?
-        else {
+        let mut audit = None;
+        for candidate in identity.id_candidates() {
+            if let Some(found) = self
+                .db
+                .audit_logs()
+                .find_by_id(candidate, &mut NoTransaction)
+                .await?
+            {
+                audit = Some(found);
+                break;
+            }
+        }
+        let Some(audit) = audit else {
             return Ok(None);
         };
-        if audit.resource_id.as_deref() != Some(purchase_order_id) {
-            return Err(Error::Internal("采购提交幂等收据与业务对象不一致".to_string()));
-        }
-        let receipt = parse_purchase_submit_receipt(
-            audit
-                .message
-                .as_deref()
-                .ok_or_else(|| Error::Internal("采购提交幂等收据缺少结果".to_string()))?,
+        let receipt = match PurchaseCommandReceipt::<PurchaseSubmitReceipt>::decode(
+            &audit,
+            actor.id(),
+            PURCHASE_SUBMIT_ACTION,
+            Some(purchase_order_id),
             expected_fingerprint,
-        )?;
+        ) {
+            Ok(receipt) => receipt,
+            Err(PurchaseCommandReceiptError::IdentityMismatch) => {
+                return Err(Error::Internal("采购提交幂等收据与业务对象不一致".to_string()));
+            }
+            Err(PurchaseCommandReceiptError::PayloadConflict) => {
+                return Err(Error::ConflictError("幂等键已用于不同的采购提交命令".to_string()));
+            }
+            Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+                return Err(Error::Internal(message));
+            }
+        }
+        .into_payload();
         let _order = self
             .db
             .purchase_orders()
@@ -297,7 +327,7 @@ impl PurchaseOrderService {
         subject_version: u32,
         idempotency_key: &str,
         actor: &AuditActor,
-        audit_id: &str,
+        identity: &PurchaseCommandReceiptIdentity,
         fingerprint: &str,
         original_error: Error,
     ) -> Result<SubmitPurchaseOrderResult> {
@@ -343,7 +373,7 @@ impl PurchaseOrderService {
             match recovered {
                 Ok(Some(_)) => {
                     if let Some(result) = self
-                        .replay_purchase_submit(audit_id, fingerprint, purchase_order_id)
+                        .replay_purchase_submit(identity, fingerprint, purchase_order_id, actor)
                         .await?
                     {
                         return Ok(result);
@@ -445,97 +475,139 @@ fn assign_formal_purchase_no(order: &mut PurchaseOrder) -> Result<()> {
 
 /// 采购提交命令的最小、可重放结果收据。
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct PurchaseSubmitReceipt {
-    purchase_no: String,
-    submission_id: String,
-    submission_no: String,
-    work_item_id: String,
-    task_version: u64,
-    subject_version: String,
-    lock_version: u64,
+pub(super) struct PurchaseSubmitReceipt {
+    /// 采购单号。
+    pub(super) purchase_no: String,
+    /// 形成的不可变提交。
+    pub(super) submission_id: String,
+    /// 提交序号。
+    pub(super) submission_no: String,
+    /// 审核待办；事务内首个入口任务写入后回填，无任务时保持空。
+    pub(super) work_item_id: String,
+    /// 审核待办乐观锁版本。
+    pub(super) task_version: u64,
+    /// 待办锁定的不可变采购提交版本。
+    pub(super) subject_version: String,
+    /// 采购单新乐观锁版本。
+    pub(super) lock_version: u64,
 }
 
-/// 生成不暴露原始幂等键的稳定采购提交收据主键。
-fn purchase_submit_audit_id(actor_id: &str, purchase_order_id: &str, key: &str) -> String {
-    format!(
-        "{PURCHASE_SUBMIT_RECEIPT_PREFIX}{}",
-        stable_digest(&format!(
-            "{actor_id}|purchase_order.submit|{purchase_order_id}|{key}"
+impl PurchaseSubmitReceipt {
+    /// 回填首个入口任务身份，保证回放与首次响应一致。
+    ///
+    /// # 参数
+    /// * `first_task` - 事务内写入的首个入口任务身份；无任务时为空
+    ///
+    /// # 返回
+    /// 返回携带真实任务身份（或无任务时保持空占位）的收据。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 只能在收据编码前调用一次；同一命令首次响应与回放必须返回相同的任务身份。
+    pub(super) fn with_first_task(mut self, first_task: Option<&(String, u64)>) -> Self {
+        if let Some((work_item_id, task_version)) = first_task {
+            self.work_item_id = work_item_id.clone();
+            self.task_version = *task_version;
+        }
+        self
+    }
+}
+
+impl PurchaseReceiptWire for PurchaseSubmitReceipt {
+    /// 把提交结果编码为历史管道分隔 wire 文本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `purchase_no|submission_id|submission_no|work_item_id|task_version|subject_version|lock_version`。
+    ///
+    /// # 错误
+    /// 无；全字段均为可显示文本。
+    ///
+    /// # 关键业务约束
+    /// 字段顺序与存量收据一致，变更会破坏幂等回放。
+    fn encode_wire(&self) -> entities::Result<String> {
+        Ok(format!(
+            "{}|{}|{}|{}|{}|{}|{}",
+            self.purchase_no,
+            self.submission_id,
+            self.submission_no,
+            self.work_item_id,
+            self.task_version,
+            self.subject_version,
+            self.lock_version,
         ))
-    )
-}
-
-/// 把采购提交结果编码为审计消息。
-fn purchase_submit_receipt_message(fingerprint: &str, receipt: &PurchaseSubmitReceipt) -> String {
-    format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={}|{}|{}|{}|{}|{}|{}",
-        receipt.purchase_no,
-        receipt.submission_id,
-        receipt.submission_no,
-        receipt.work_item_id,
-        receipt.task_version,
-        receipt.subject_version,
-        receipt.lock_version,
-    )
-}
-
-/// 解析并校验采购提交命令收据。
-fn parse_purchase_submit_receipt(message: &str, expected_fingerprint: &str) -> Result<PurchaseSubmitReceipt> {
-    let (fingerprint, result) = message
-        .strip_prefix(COMMAND_FINGERPRINT_PREFIX)
-        .and_then(|value| value.split_once(";result="))
-        .ok_or_else(|| Error::Internal("采购提交幂等收据格式非法".to_string()))?;
-    if fingerprint != expected_fingerprint {
-        return Err(Error::ConflictError("幂等键已用于不同的采购提交命令".to_string()));
     }
-    let fields = result.split('|').collect::<Vec<_>>();
-    let [purchase_no, submission_id, submission_no, work_item_id, task_version, subject_version, lock_version] =
-        fields.as_slice()
-    else {
-        return Err(Error::Internal("采购提交幂等收据结果非法".to_string()));
-    };
-    Ok(PurchaseSubmitReceipt {
-        purchase_no: (*purchase_no).to_string(),
-        submission_id: (*submission_id).to_string(),
-        submission_no: (*submission_no).to_string(),
-        work_item_id: (*work_item_id).to_string(),
-        task_version: parse_receipt_number(task_version, "待办版本")?,
-        subject_version: (*subject_version).to_string(),
-        lock_version: parse_receipt_number(lock_version, "采购单版本")?,
-    })
-}
 
-/// 解析收据中的整数版本字段。
-fn parse_receipt_number<T>(value: &str, field: &str) -> Result<T>
-where
-    T: std::str::FromStr,
-{
-    value
-        .parse()
-        .map_err(|_| Error::Internal(format!("采购提交幂等收据{field}非法")))
-}
-
-/// 对字段逐项加入长度前缀后计算命令载荷摘要。
-fn command_fingerprint(parts: &[&str]) -> String {
-    let mut digest = Sha256::new();
-    for part in parts {
-        digest.update((part.len() as u64).to_be_bytes());
-        digest.update(part.as_bytes());
+    /// 从历史管道分隔 wire 文本解码提交结果。
+    ///
+    /// # 参数
+    /// * `wire` - 已通过指纹校验的结果文本
+    ///
+    /// # 返回
+    /// 七个字段齐全且版本字段为整数时返回结果；否则返回 `None`。
+    ///
+    /// # 关键业务约束
+    /// 字段缺失或版本非法必须返回 `None`，由收据解码统一映射为内部错误。
+    fn decode_wire(wire: &str) -> Option<Self> {
+        let fields = wire.split('|').collect::<Vec<_>>();
+        let [purchase_no, submission_id, submission_no, work_item_id, task_version, subject_version, lock_version] =
+            fields.as_slice()
+        else {
+            return None;
+        };
+        Some(Self {
+            purchase_no: (*purchase_no).to_string(),
+            submission_id: (*submission_id).to_string(),
+            submission_no: (*submission_no).to_string(),
+            work_item_id: (*work_item_id).to_string(),
+            task_version: task_version.parse().ok()?,
+            subject_version: (*subject_version).to_string(),
+            lock_version: lock_version.parse().ok()?,
+        })
     }
-    hex::encode(digest.finalize())
-}
-
-/// 计算稳定 SHA-256 十六进制摘要。
-fn stable_digest(value: &str) -> String {
-    hex::encode(Sha256::digest(value.as_bytes()))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        parse_purchase_submit_receipt, purchase_submit_audit_id, purchase_submit_receipt_message,
-        PurchaseSubmitReceipt,
+    use entities::purchase_order::{
+        LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
     };
+    use entities::{AccountKind, AuditLog, AuditLogData};
+    use sha2::{Digest, Sha256};
+
+    use super::{PurchaseSubmitReceipt, PURCHASE_SUBMIT_RECEIPT_PREFIX};
+    use crate::purchase_order::dto::PURCHASE_SUBMIT_ACTION;
+
+    /// 构造最小有效采购提交审计日志。
+    ///
+    /// # 参数
+    /// * `message` - 已编码命令收据消息
+    ///
+    /// # 返回
+    /// 返回用于纯函数校验的审计实体。
+    ///
+    /// # 错误
+    /// 测试数据固定有效，不返回错误。
+    fn submit_audit_fixture(message: String) -> AuditLog {
+        AuditLog::new(
+            "receipt-1".to_string(),
+            AuditLogData {
+                actor_id: "actor-1".to_string(),
+                actor_account: "buyer".to_string(),
+                actor_type: AccountKind::Admin,
+                action: PURCHASE_SUBMIT_ACTION.to_string(),
+                resource_type: "purchase_order".to_string(),
+                resource_id: Some("po-1".to_string()),
+                success: true,
+                message: Some(message),
+            },
+        )
+        .expect("audit fixture 必须合法")
+    }
 
     #[test]
     fn submit_receipt_round_trips_and_hides_raw_key() {
@@ -549,14 +621,100 @@ mod tests {
             subject_version: "1".to_string(),
             lock_version: 2,
         };
-        let message = purchase_submit_receipt_message(&fingerprint, &receipt);
+        let message = PurchaseCommandReceipt::new(fingerprint.clone(), receipt.clone())
+            .encode_message()
+            .unwrap();
+        let audit = submit_audit_fixture(message.clone());
 
         assert_eq!(
-            parse_purchase_submit_receipt(&message, &fingerprint).unwrap(),
+            PurchaseCommandReceipt::<PurchaseSubmitReceipt>::decode(
+                &audit,
+                "actor-1",
+                PURCHASE_SUBMIT_ACTION,
+                Some("po-1"),
+                &fingerprint,
+            )
+            .unwrap()
+            .into_payload(),
             receipt
         );
-        let audit_id = purchase_submit_audit_id("actor-1", "po-1", "raw-secret-key");
-        assert!(!audit_id.contains("raw-secret-key"));
+        let identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
+            PURCHASE_SUBMIT_RECEIPT_PREFIX,
+            "actor-1",
+            PURCHASE_SUBMIT_ACTION,
+            Some("po-1"),
+            "raw-secret-key",
+            LegacyReceiptIdScheme::WholeStringJoined,
+        )
+        .unwrap();
+        assert!(!identity.receipt_id().contains("raw-secret-key"));
         assert!(message.len() <= 256);
+        assert!(matches!(
+            PurchaseCommandReceipt::<PurchaseSubmitReceipt>::decode(
+                &audit,
+                "actor-1",
+                PURCHASE_SUBMIT_ACTION,
+                Some("po-1"),
+                &"a".repeat(64),
+            ),
+            Err(PurchaseCommandReceiptError::PayloadConflict)
+        ));
+    }
+
+    /// 验证存量整串摘要收据 ID 保留为回读候选。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 历史 ID 不在候选或新写入 ID 非规范摘要时测试失败。
+    #[test]
+    fn legacy_submit_identity_remains_lookup_candidate() {
+        let identity = PurchaseCommandReceipt::<PurchaseSubmitReceipt>::identity(
+            PURCHASE_SUBMIT_RECEIPT_PREFIX,
+            "actor-1",
+            PURCHASE_SUBMIT_ACTION,
+            Some("po-1"),
+            "legacy-key",
+            LegacyReceiptIdScheme::WholeStringJoined,
+        )
+        .unwrap();
+        let legacy = format!(
+            "{PURCHASE_SUBMIT_RECEIPT_PREFIX}{}",
+            hex::encode(Sha256::digest(b"actor-1|purchase_order.submit|po-1|legacy-key"))
+        );
+        assert!(identity.id_candidates().contains(&legacy.as_str()));
+    }
+
+    /// 验证收据任务身份在事务内回填，无任务时保持空占位。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 首次响应与回放的任务身份不一致时测试失败。
+    #[test]
+    fn submit_receipt_backfills_first_task_identity() {
+        let receipt = PurchaseSubmitReceipt {
+            purchase_no: "PO-1".to_string(),
+            submission_id: "submission-1".to_string(),
+            submission_no: "SUB-000001".to_string(),
+            work_item_id: String::new(),
+            task_version: 0,
+            subject_version: "1".to_string(),
+            lock_version: 2,
+        };
+        let filled = receipt.clone().with_first_task(Some(&("wi-9".to_string(), 7)));
+        assert_eq!(filled.work_item_id, "wi-9");
+        assert_eq!(filled.task_version, 7);
+        let placeholder = receipt.with_first_task(None);
+        assert_eq!(placeholder.work_item_id, "");
+        assert_eq!(placeholder.task_version, 0);
     }
 }

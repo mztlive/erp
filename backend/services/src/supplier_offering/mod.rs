@@ -23,13 +23,11 @@ use entities::supplier::{CapabilityCode, SupplierAccount};
 use entities::supplier_offering::{
     AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingStatus,
     PrefillSourceRefs, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingAvailabilityData,
-    SupplierOfferingCommand, SupplierOfferingCommandData, SupplierOfferingData, SupplierOfferingRevision,
-    SupplierOfferingRevisionData,
+    SupplierOfferingCommand, SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData,
 };
 use id_generator::next_id;
 use mongodb::Database;
-use serde::{de::DeserializeOwned, Serialize};
-use sha2::{Digest, Sha256};
+use serde::de::DeserializeOwned;
 use validator::Validate;
 
 use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
@@ -51,7 +49,10 @@ pub use self::dto::{
     ReviseSupplierOfferingResult, SupplierOfferingListParams, SupplierOfferingView,
     UpdateSupplierOfferingAvailabilityRequest, UpdateSupplierOfferingAvailabilityResult,
 };
-use self::dto::{SortDir, SupplierOfferingTermsWrite, OFFERING_SORT_FIELDS};
+use self::dto::{
+    SortDir, SupplierOfferingTermsWrite, CREATE_OFFERING_COMMAND, OFFERING_SORT_FIELDS,
+    REVISE_OFFERING_COMMAND, UPDATE_OFFERING_AVAILABILITY_COMMAND,
+};
 
 type SupplierOfferingFilter = <Database as SupplierOfferingExt>::SupplierOfferingFilter;
 
@@ -235,9 +236,14 @@ impl SupplierOfferingService {
         actor: &AuditActor,
     ) -> Result<CreateSupplierOfferingResult> {
         req.validate()?;
-        let fingerprint = command_fingerprint("create_offering", &req)?;
+        let fingerprint = req.command_fingerprint()?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "create_offering", &fingerprint);
+            command
+                .ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint)
+                .map_err(|e| Error::ConflictError(e.to_string()))?;
+            return command
+                .replay_result()
+                .map_err(|e| Error::Internal(e.to_string()));
         }
         let offering_id = SupplierOfferingId::new(next_id());
         let mut offering = SupplierOffering::new(
@@ -278,7 +284,13 @@ impl SupplierOfferingService {
             revision_no: 1,
             status: offering.stable.status,
         };
-        let command = build_command(&req.idempotency_key, "create_offering", &fingerprint, &result)?;
+        let command = SupplierOfferingCommand::with_result(
+            next_id(),
+            &req.idempotency_key,
+            CREATE_OFFERING_COMMAND,
+            &fingerprint,
+            &result,
+        )?;
         let audit = actor.clone().resource_log_with_message(
             "supplier_offering.create",
             "supplier_offering",
@@ -328,9 +340,14 @@ impl SupplierOfferingService {
         actor: &AuditActor,
     ) -> Result<ReviseSupplierOfferingResult> {
         req.validate()?;
-        let fingerprint = command_fingerprint("revise_offering", &(id, &req))?;
+        let fingerprint = req.command_fingerprint(id)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "revise_offering", &fingerprint);
+            command
+                .ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint)
+                .map_err(|e| Error::ConflictError(e.to_string()))?;
+            return command
+                .replay_result()
+                .map_err(|e| Error::Internal(e.to_string()));
         }
         let mut offering = self
             .db
@@ -432,8 +449,13 @@ impl SupplierOfferingService {
                         version: expected_version,
                         safety_pause,
                     };
-                    let command =
-                        build_command(&idempotency_key, "revise_offering", &fingerprint_for_tx, &result)?;
+                    let command = SupplierOfferingCommand::with_result(
+                        next_id(),
+                        &idempotency_key,
+                        REVISE_OFFERING_COMMAND,
+                        &fingerprint_for_tx,
+                        &result,
+                    )?;
                     db.supplier_offering_commands().create(&command, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<ReviseSupplierOfferingResult, Error>(result)
@@ -468,9 +490,14 @@ impl SupplierOfferingService {
         actor: &AuditActor,
     ) -> Result<UpdateSupplierOfferingAvailabilityResult> {
         req.validate()?;
-        let fingerprint = command_fingerprint("update_offering_availability", &(id, &req))?;
+        let fingerprint = req.command_fingerprint(id)?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
-            return replay_command(command, "update_offering_availability", &fingerprint);
+            command
+                .ensure_replayable(UPDATE_OFFERING_AVAILABILITY_COMMAND, &fingerprint)
+                .map_err(|e| Error::ConflictError(e.to_string()))?;
+            return command
+                .replay_result()
+                .map_err(|e| Error::Internal(e.to_string()));
         }
         let offering_id = SupplierOfferingId::new(id.trim());
         self.db
@@ -557,9 +584,10 @@ impl SupplierOfferingService {
                         source_updated_at: result_source_updated_at,
                         safety_pause,
                     };
-                    let command = build_command(
+                    let command = SupplierOfferingCommand::with_result(
+                        next_id(),
                         &idempotency_key,
-                        "update_offering_availability",
+                        UPDATE_OFFERING_AVAILABILITY_COMMAND,
                         &fingerprint_for_tx,
                         &result,
                     )?;
@@ -873,7 +901,14 @@ impl SupplierOfferingService {
         match transaction_result {
             Ok(()) => Ok(intended_result),
             Err(error) => match self.command_record(idempotency_key).await? {
-                Some(command) => replay_command(command, operation, fingerprint),
+                Some(command) => {
+                    command
+                        .ensure_replayable(operation, fingerprint)
+                        .map_err(|e| Error::ConflictError(e.to_string()))?;
+                    command
+                        .replay_result()
+                        .map_err(|e| Error::Internal(e.to_string()))
+                }
                 None => Err(error),
             },
         }
@@ -892,7 +927,14 @@ impl SupplierOfferingService {
         match transaction_result {
             Ok(result) => Ok(result),
             Err(error) => match self.command_record(idempotency_key).await? {
-                Some(command) => replay_command(command, operation, fingerprint),
+                Some(command) => {
+                    command
+                        .ensure_replayable(operation, fingerprint)
+                        .map_err(|e| Error::ConflictError(e.to_string()))?;
+                    command
+                        .replay_result()
+                        .map_err(|e| Error::Internal(e.to_string()))
+                }
                 None => Err(error),
             },
         }
@@ -1214,49 +1256,14 @@ fn by_id<T: HasId>(values: Vec<T>) -> HashMap<String, T> {
         .collect()
 }
 
-fn command_fingerprint<T: Serialize>(operation: &str, request: &T) -> Result<String> {
-    let payload = serde_json::to_vec(&(operation, request))
-        .map_err(|error| Error::Internal(format!("序列化命令指纹失败: {error}")))?;
-    Ok(hex::encode(Sha256::digest(payload)))
-}
-
-fn build_command<T: Serialize>(
-    idempotency_key: &str,
-    operation: &str,
-    fingerprint: &str,
-    result: &T,
-) -> Result<SupplierOfferingCommand> {
-    SupplierOfferingCommand::new(
-        next_id(),
-        SupplierOfferingCommandData {
-            idempotency_key: idempotency_key.to_string(),
-            operation: operation.to_string(),
-            request_fingerprint: fingerprint.to_string(),
-            result_json: serde_json::to_string(result)
-                .map_err(|error| Error::Internal(format!("序列化命令结果失败: {error}")))?,
-        },
-    )
-    .map_err(Into::into)
-}
-
-fn replay_command<T: DeserializeOwned>(
-    command: SupplierOfferingCommand,
-    operation: &str,
-    fingerprint: &str,
-) -> Result<T> {
-    if command.operation != operation || command.request_fingerprint != fingerprint {
-        return Err(Error::ConflictError("幂等键已被其他请求使用".to_string()));
-    }
-    serde_json::from_str(&command.result_json)
-        .map_err(|error| Error::Internal(format!("反序列化幂等结果失败: {error}")))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         ensure_supply_exception_operation, ensure_supply_exception_work_item,
         safety_pause_cause_for_availability, safety_pause_cause_for_revision, typed_id,
+        CreateSupplierOfferingRequest, CreateSupplierOfferingResult,
     };
+    use crate::supplier_offering::dto::{CREATE_OFFERING_COMMAND, REVISE_OFFERING_COMMAND};
     use entities::common::time::Instant;
     use entities::ids::{
         ProductPublicationDeliveryId, ProductPublicationId, ProductPublicationRevisionId, SkuId, WorkItemId,
@@ -1265,8 +1272,71 @@ mod tests {
         SafetyPauseAffectedPublication, SafetyPauseCause, SafetyPauseFollowUp, SafetyPauseSourceObjectType,
         SafetyPauseWorkItemRef, SystemSafetyPauseOperation, SystemSafetyPauseOperationData,
     };
-    use entities::supplier_offering::{AvailabilityInterruptionReason, OfferingRevisionImpact};
+    use entities::supplier_offering::{
+        AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingSourceType,
+        OfferingStatus, SupplierOfferingCommand, SupplierOfferingCommandData,
+    };
     use entities::work_item::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+
+    /// 覆盖存量命令重放：历史裸指纹命令与 DTO 新指纹同键同载荷可重放，跨操作必须冲突。
+    #[test]
+    fn stored_command_replays_dto_fingerprint_and_decodes_result() {
+        let req = create_request();
+        let fingerprint = req.command_fingerprint().unwrap();
+        let stored = SupplierOfferingCommand::new(
+            "command-1",
+            SupplierOfferingCommandData {
+                idempotency_key: req.idempotency_key.clone(),
+                operation: CREATE_OFFERING_COMMAND.to_string(),
+                request_fingerprint: fingerprint.clone(),
+                result_json: "{\"offering_id\":\"offering-1\",\"revision_id\":\"revision-1\",\
+                              \"availability_id\":\"availability-1\",\"revision_no\":1,\
+                              \"status\":\"ACTIVE\"}"
+                    .to_string(),
+            },
+        )
+        .unwrap();
+        stored
+            .ensure_replayable(CREATE_OFFERING_COMMAND, &fingerprint)
+            .unwrap();
+        assert!(stored
+            .ensure_replayable(REVISE_OFFERING_COMMAND, &fingerprint)
+            .is_err());
+        let result: CreateSupplierOfferingResult = stored.replay_result().unwrap();
+        assert_eq!(result.offering_id, "offering-1");
+        assert_eq!(result.revision_no, 1);
+        assert_eq!(result.status, OfferingStatus::Active);
+    }
+
+    fn create_request() -> CreateSupplierOfferingRequest {
+        CreateSupplierOfferingRequest {
+            sku_id: "sku-1".to_string(),
+            supplier_id: "supplier-1".to_string(),
+            supplier_product_code: Some("P-1".to_string()),
+            supplier_sku_code: "SKU-1".to_string(),
+            source_type: OfferingSourceType::Manual,
+            source_connection_id: None,
+            terms: crate::supplier_offering::dto::SupplierOfferingTermsWrite {
+                dropship_supply_price_gross: "10.00".to_string(),
+                bulk_supply_price_gross: "9.00".to_string(),
+                input_tax_rate: "0.13".to_string(),
+                bulk_minimum_order_quantity: "10".to_string(),
+                supply_region: vec!["CN".to_string()],
+                product_capabilities: vec!["DROP_SHIP".to_string()],
+                valid_from: "2026-01-01".to_string(),
+                valid_to: None,
+                dropship_express: None,
+                freight_amount: None,
+                service_fee_amount: None,
+            },
+            availability_status: AvailabilityStatus::Available,
+            available_quantity: Some("100".to_string()),
+            source_updated_at: Some(1_700_000_000),
+            source_revision_token: None,
+            change_reason: "登记新供给".to_string(),
+            idempotency_key: "key-1".to_string(),
+        }
+    }
 
     #[test]
     fn blank_filter_ids_are_omitted() {

@@ -31,7 +31,6 @@ mod change;
 mod change_adapter;
 mod change_cancel;
 mod change_start;
-mod command_receipt;
 pub(crate) mod coverage;
 mod create_submit;
 mod creation_basis;

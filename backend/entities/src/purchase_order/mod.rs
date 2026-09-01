@@ -18,6 +18,7 @@
 
 mod allocation;
 mod change_order;
+mod command_receipt;
 mod line_common;
 mod order;
 mod purchase_revision;
@@ -33,6 +34,10 @@ pub use change_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
     PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseChangeSubmissionLine,
     PurchaseChangeSubmissionLineData,
+};
+pub use command_receipt::{
+    digest_parts, payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt,
+    PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseReceiptWire,
 };
 pub use order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,

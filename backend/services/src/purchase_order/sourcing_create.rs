@@ -21,6 +21,9 @@ use entities::inventory::{
     StockReservationEntryData, StockReservationSourceType,
 };
 use entities::money::Quantity;
+use entities::purchase_order::{
+    payload_fingerprint, LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+};
 use entities::work_item::{WorkItemStatus, WorkItemType};
 use id_generator::next_id;
 use mongodb::ClientSession;
@@ -29,9 +32,6 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
-use super::command_receipt::{
-    command_receipt_id, command_receipt_message, command_request_fingerprint, parse_command_receipt,
-};
 use super::creation_basis::{
     basis_groups_for_order, basis_id_for, basis_scope_key, load_effective_sales_order, persist_basis_draft,
     procurement_quantity_changed, stable_line_id, stock_basis_groups_for_order, stock_basis_id_for,
@@ -40,7 +40,7 @@ use super::creation_basis::{
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
     CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
-    ExistingStockReservationResult, SupplySourceType,
+    ExistingStockReservationResult, SupplySourceType, CREATE_SOURCING_ACTION,
 };
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
@@ -51,7 +51,6 @@ use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
-const CREATE_SOURCING_ACTION: &str = "purchase_order.create_from_sourcing";
 const CREATE_SOURCING_RECEIPT_PREFIX: &str = "purchase-order-sourcing-command-";
 const CREATE_SOURCING_ITEM_PREFIX: &str = "purchase-order-sourcing-item-";
 
@@ -141,15 +140,17 @@ impl PurchaseOrderService {
     ) -> Result<CreatePurchaseOrdersFromSourcingResult> {
         req.validate()?;
         let assignments = normalize_sourcing_assignments(&req)?;
-        let request_fingerprint = sourcing_request_fingerprint(&req, &assignments)?;
+        let request_fingerprint = req.request_fingerprint(&assignments)?;
         let sales_order_id = SalesOrderId::new(req.sales_order_id.trim().to_string());
-        let audit_id = command_receipt_id(
+        let receipt_identity = PurchaseCommandReceipt::<SourcingReceipt>::identity(
             CREATE_SOURCING_RECEIPT_PREFIX,
             actor.id(),
             CREATE_SOURCING_ACTION,
-            sales_order_id.as_ref(),
+            Some(sales_order_id.as_ref()),
             &req.idempotency_key,
-        );
+            LegacyReceiptIdScheme::None,
+        )?;
+        let audit_id = receipt_identity.receipt_id().to_string();
         let PurchaseOrderAuthorization {
             rbac,
             policy_revision,
@@ -317,13 +318,15 @@ async fn create_from_sourcing_in_transaction(
                 .collect(),
             idempotency_key: req.idempotency_key.clone(),
         };
-        let item_audit_id = command_receipt_id(
+        let item_receipt_identity = PurchaseCommandReceipt::<SourcingReceipt>::identity(
             CREATE_SOURCING_ITEM_PREFIX,
             actor.id(),
             CREATE_SOURCING_ACTION,
-            &basis_id,
+            Some(basis_id.as_str()),
             &req.idempotency_key,
-        );
+            LegacyReceiptIdScheme::None,
+        )?;
+        let item_audit_id = item_receipt_identity.receipt_id().to_string();
         let command = CreateBasisCommand {
             sales_order_id,
             req: &item_req,
@@ -375,19 +378,19 @@ async fn create_from_sourcing_in_transaction(
 
 /// 已规范化的选源行。
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct RequestedSourcingLine {
+pub(super) struct RequestedSourcingLine {
     /// 稳定销售行。
-    sales_order_line_id: String,
+    pub(super) sales_order_line_id: String,
     /// 本行选用的精确创建依据。
-    basis_id: String,
+    pub(super) basis_id: String,
     /// 供给来源。
-    source_type: SupplySourceType,
+    pub(super) source_type: SupplySourceType,
     /// 仓库履约采购的目标收货仓。
-    target_warehouse_id: Option<String>,
+    pub(super) target_warehouse_id: Option<String>,
     /// 本次分配数量。
-    quantity: Quantity,
+    pub(super) quantity: Quantity,
     /// 采购确认的预计交付日。
-    expected_delivery_date: BusinessDate,
+    pub(super) expected_delivery_date: BusinessDate,
 }
 
 /// 规范化并校验选源行。
@@ -807,7 +810,7 @@ async fn persist_stock_allocations(
             {
                 return Err(procurement_quantity_changed());
             }
-            let source_allocation_id = command_request_fingerprint(
+            let source_allocation_id = payload_fingerprint(
                 "inventory.allocate_existing_stock",
                 sales_order_id.as_ref(),
                 &(
@@ -990,44 +993,6 @@ fn build_stock_delivery_lines(
         .collect()
 }
 
-/// 构造选源命令载荷指纹。
-///
-/// # 参数
-/// * `req` - 选源创建请求
-/// * `assignments` - 已规范化并排序的选源行
-///
-/// # 返回
-/// 返回不包含原始幂等键的 SHA-256 指纹。
-///
-/// # 错误
-/// 指纹序列化失败时返回内部错误。
-///
-/// # 关键业务约束
-/// 同一幂等键用于不同任务、销售单、供应商或数量时必须冲突。
-fn sourcing_request_fingerprint(
-    req: &CreatePurchaseOrdersFromSourcingRequest,
-    assignments: &[RequestedSourcingLine],
-) -> Result<String> {
-    let payload = assignments
-        .iter()
-        .map(|line| {
-            (
-                line.sales_order_line_id.clone(),
-                line.basis_id.clone(),
-                line.source_type,
-                line.target_warehouse_id.clone(),
-                line.quantity.to_string(),
-                line.expected_delivery_date.to_string(),
-            )
-        })
-        .collect::<Vec<_>>();
-    command_request_fingerprint(
-        CREATE_SOURCING_ACTION,
-        req.sales_order_id.trim(),
-        &(req.work_item_id.trim(), payload),
-    )
-}
-
 /// 写入整批选源创建命令收据。
 ///
 /// # 参数
@@ -1061,7 +1026,7 @@ async fn write_sourcing_receipt(
         CREATE_SOURCING_ACTION,
         "purchase_order",
         sales_order_id.to_string(),
-        Some(command_receipt_message(request_fingerprint, receipt)?),
+        Some(PurchaseCommandReceipt::new(request_fingerprint.to_string(), receipt.clone()).encode_message()?),
     )?;
     db.audit_logs().create(&audit, session).await?;
     Ok(())
@@ -1098,13 +1063,22 @@ async fn replay_sourcing(
     let Some(audit) = db.audit_logs().find_by_id(audit_id, executor).await? else {
         return Ok(None);
     };
-    let receipt = parse_command_receipt::<SourcingReceipt>(
+    let receipt = match PurchaseCommandReceipt::<SourcingReceipt>::decode(
         &audit,
         actor.id(),
         CREATE_SOURCING_ACTION,
-        sales_order_id,
+        Some(sales_order_id),
         expected_fingerprint,
-    )?;
+    ) {
+        Ok(receipt) => receipt,
+        Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
+            return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
+        }
+        Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+            return Err(Error::Internal(message));
+        }
+    }
+    .into_payload();
     let work_item_status = sourcing_receipt_work_item_status(
         db,
         receipt.work_item_status,

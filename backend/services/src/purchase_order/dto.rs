@@ -15,14 +15,27 @@
 
 use entities::money::Amount;
 use entities::purchase_order::{
-    FulfillmentResponsibility, ProgressStatus, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
-    PurchaseType,
+    digest_parts, payload_fingerprint, FulfillmentResponsibility, ProgressStatus, PurchaseLineType,
+    PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::creation_basis::RequestedLine;
+use super::sourcing_create::RequestedSourcingLine;
 use crate::errors::Result;
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
+
+/// 作废草稿命令的服务端固定审计动作（同时参与请求指纹）。
+pub(crate) const VOID_ACTION: &str = "purchase_order.void";
+/// 保存草稿命令的服务端固定审计动作（同时参与请求指纹）。
+pub(crate) const SAVE_ACTION: &str = "purchase_order.update";
+/// 依据创建命令的服务端固定审计动作（同时参与请求指纹）。
+pub(crate) const CREATE_ACTION: &str = "purchase_order.create_from_basis";
+/// 选源创建命令的服务端固定审计动作（同时参与请求指纹）。
+pub(crate) const CREATE_SOURCING_ACTION: &str = "purchase_order.create_from_sourcing";
+/// 提交命令的服务端固定审计动作。
+pub(crate) const PURCHASE_SUBMIT_ACTION: &str = "purchase_order.submit";
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no"];
@@ -633,6 +646,43 @@ pub struct CreatePurchaseOrderFromBasisRequest {
     pub idempotency_key: String,
 }
 
+impl CreatePurchaseOrderFromBasisRequest {
+    /// 计算创建命令请求指纹（不含原始幂等键）。
+    ///
+    /// # 参数
+    /// * `lines` - 已规范化并排序的请求行
+    ///
+    /// # 返回
+    /// 返回不包含原始幂等键的 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 同一幂等键用于不同依据、范围或数量时必须冲突；摘要形态与存量收据一致，
+    /// 修改会破坏幂等兼容。
+    pub(super) fn request_fingerprint(&self, lines: &[RequestedLine]) -> String {
+        let mut parts = vec![
+            self.work_item_id.trim().to_string(),
+            self.basis_id.trim().to_string(),
+            self.purchase_type.as_str().to_string(),
+            self.payment_term_code.trim().to_string(),
+            self.target_warehouse_id
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string(),
+        ];
+        parts.extend(lines.iter().map(|line| {
+            format!(
+                "{}|{}|{}",
+                line.sales_order_line_id, line.quantity, line.expected_delivery_date
+            )
+        }));
+        digest_parts(parts)
+    }
+}
+
 /// 创建采购单结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreatePurchaseOrderResult {
@@ -694,6 +744,44 @@ pub struct CreatePurchaseOrdersFromSourcingRequest {
     pub idempotency_key: String,
 }
 
+impl CreatePurchaseOrdersFromSourcingRequest {
+    /// 计算整批选源创建命令请求指纹（不含原始幂等键）。
+    ///
+    /// # 参数
+    /// * `assignments` - 已规范化并排序的选源行
+    ///
+    /// # 返回
+    /// 返回不包含原始幂等键的 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 指纹载荷序列化失败时返回内部错误。
+    ///
+    /// # 关键业务约束
+    /// 同一幂等键用于不同任务、销售单、供应商或数量时必须冲突；摘要形态与
+    /// 存量收据一致，修改会破坏幂等兼容。
+    pub(super) fn request_fingerprint(&self, assignments: &[RequestedSourcingLine]) -> Result<String> {
+        let payload = assignments
+            .iter()
+            .map(|line| {
+                (
+                    line.sales_order_line_id.clone(),
+                    line.basis_id.clone(),
+                    line.source_type,
+                    line.target_warehouse_id.clone(),
+                    line.quantity.to_string(),
+                    line.expected_delivery_date.to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        payload_fingerprint(
+            CREATE_SOURCING_ACTION,
+            self.sales_order_id.trim(),
+            &(self.work_item_id.trim(), payload),
+        )
+        .map_err(Into::into)
+    }
+}
+
 /// 供给分配确认结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreatePurchaseOrdersFromSourcingResult {
@@ -742,6 +830,45 @@ pub struct SavePurchaseOrderDraftRequest {
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     #[validate(length(max = 128, message = "幂等键过长"))]
     pub idempotency_key: String,
+}
+
+impl SavePurchaseOrderDraftRequest {
+    /// 计算保存草稿请求指纹（不含原始幂等键）。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 当前路径采购单 ID
+    ///
+    /// # 返回
+    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 指纹载荷无法序列化时返回内部错误。
+    ///
+    /// # 关键业务约束
+    /// 行顺序影响提交行序号，因此必须保留；付款条件按现有校验语义去除首尾
+    /// 空白；摘要形态与存量收据一致，修改会破坏幂等兼容。
+    pub(crate) fn request_fingerprint(&self, purchase_order_id: &str) -> Result<String> {
+        let payload = SaveDraftFingerprintPayload {
+            expected_lock_version: self.expected_lock_version,
+            payment_term_code: self.payment_term_code.as_deref().map(str::trim),
+            lines: &self.lines,
+            line_patches: &self.line_patches,
+        };
+        payload_fingerprint(SAVE_ACTION, purchase_order_id, &payload).map_err(Into::into)
+    }
+}
+
+/// 保存草稿请求指纹载荷。
+#[derive(Serialize)]
+struct SaveDraftFingerprintPayload<'a> {
+    /// 客户端期望乐观锁版本。
+    expected_lock_version: u64,
+    /// 按业务语义规范化的付款条件。
+    payment_term_code: Option<&'a str>,
+    /// 保留顺序的完整草稿行。
+    lines: &'a [SavePurchaseOrderLine],
+    /// 保留顺序的草稿行可编辑字段快照。
+    line_patches: &'a [SavePurchaseOrderLinePatch],
 }
 
 /// 采购草稿行可编辑字段快照。
@@ -825,6 +952,39 @@ pub struct VoidPurchaseOrderRequest {
     pub idempotency_key: String,
 }
 
+impl VoidPurchaseOrderRequest {
+    /// 计算作废请求指纹（不含原始幂等键）。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 当前路径采购单 ID
+    ///
+    /// # 返回
+    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 指纹载荷无法序列化时返回内部错误。
+    ///
+    /// # 关键业务约束
+    /// 作废原因按实际审计语义去除首尾空白，期望版本仍属于请求载荷；摘要形态
+    /// 与存量收据一致，修改会破坏幂等兼容。
+    pub(crate) fn request_fingerprint(&self, purchase_order_id: &str) -> Result<String> {
+        let payload = VoidDraftFingerprintPayload {
+            expected_lock_version: self.expected_lock_version,
+            reason: self.reason.trim(),
+        };
+        payload_fingerprint(VOID_ACTION, purchase_order_id, &payload).map_err(Into::into)
+    }
+}
+
+/// 作废请求指纹载荷。
+#[derive(Serialize)]
+struct VoidDraftFingerprintPayload<'a> {
+    /// 客户端期望乐观锁版本。
+    expected_lock_version: u64,
+    /// 去除首尾空白后的作废原因。
+    reason: &'a str,
+}
+
 /// 作废采购草稿结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct VoidPurchaseOrderResult {
@@ -855,6 +1015,76 @@ pub struct SubmitPurchaseOrderRequest {
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     #[validate(length(max = 128, message = "幂等键过长"))]
     pub idempotency_key: String,
+}
+
+impl SubmitPurchaseOrderRequest {
+    /// 计算提交请求指纹（不含原始幂等键）。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 当前路径采购单 ID
+    ///
+    /// # 返回
+    /// 返回不包含原始幂等键的稳定 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 同一幂等键用于不同期望版本或草稿补丁时必须冲突；形态文本按字段顺序显式
+    /// 编码（不依赖 Debug 派生），摘要形态与存量收据一致，修改会破坏幂等兼容。
+    pub(crate) fn request_fingerprint(&self, purchase_order_id: &str) -> String {
+        digest_parts([
+            purchase_order_id.to_string(),
+            self.expected_lock_version.to_string(),
+            submit_request_shape(&self.payment_term_code, &self.line_patches),
+        ])
+    }
+}
+
+/// 构造提交请求的稳定形态文本。
+///
+/// 历史提交指纹直接使用 Rust Debug 派生输出（`format!("{:?}|{:?}", ...)`），
+/// DTO 字段改名会静默改变指纹并破坏存量收据回放；本函数按字段顺序显式重放
+/// 同一字节形态，字段改名不再影响指纹。
+fn submit_request_shape(
+    payment_term_code: &Option<String>,
+    line_patches: &[SavePurchaseOrderLinePatch],
+) -> String {
+    let patches = line_patches
+        .iter()
+        .map(|patch| {
+            format!(
+                "SavePurchaseOrderLinePatch {{ line_id: {:?}, line_type: {}, quantity: {:?}, unit_cost_gross: {:?}, input_tax_rate: {:?} }}",
+                patch.line_id,
+                submit_line_type_shape(patch.line_type),
+                patch.quantity,
+                patch.unit_cost_gross,
+                patch.input_tax_rate,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{:?}|[{}]", payment_term_code, patches)
+}
+
+/// 返回行类型的历史 Debug 派生字节形态。
+///
+/// # 参数
+/// * `line_type` - 采购行类型
+///
+/// # 返回
+/// 返回与历史 Debug 派生输出一致的固定字符串。
+///
+/// # 错误
+/// 无。
+///
+/// # 关键业务约束
+/// 输出必须与提交指纹存量形态逐字节一致，禁止改名或改变大小写。
+fn submit_line_type_shape(line_type: PurchaseLineType) -> &'static str {
+    match line_type {
+        PurchaseLineType::ItemService => "ItemService",
+        PurchaseLineType::LogisticsFee => "LogisticsFee",
+    }
 }
 
 /// 提交财务审核结果。
@@ -1043,10 +1273,256 @@ pub struct PurchaseChangeOrderView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, PurchaseOrderListParams, SortDir, SupplySourceType};
+    use std::str::FromStr;
+
+    use entities::common::time::BusinessDate;
+    use entities::money::Quantity;
     use entities::purchase_order::PurchaseOrderStatus;
     use serde_json::json;
     use validator::Validate;
+
+    use super::super::creation_basis::RequestedLine;
+    use super::super::sourcing_create::RequestedSourcingLine;
+    use super::{
+        normalize_sort, submit_request_shape, CreatePurchaseOrderFromBasisRequest,
+        CreatePurchaseOrderLineRequest, CreatePurchaseOrdersFromSourcingRequest, PurchaseLineType,
+        PurchaseOrderListParams, SavePurchaseOrderDraftRequest, SavePurchaseOrderLine,
+        SavePurchaseOrderLinePatch, SortDir, SourcingLineAssignment, SubmitPurchaseOrderRequest,
+        SupplySourceType, VoidPurchaseOrderRequest,
+    };
+
+    /// 作废路径指纹金值：锁定历史算法绝对摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    #[test]
+    fn void_fingerprint_golden() {
+        let request = VoidPurchaseOrderRequest {
+            expected_lock_version: 4,
+            reason: " 重复采购 ".to_string(),
+            idempotency_key: "void-key-1".to_string(),
+        };
+        assert_eq!(
+            request.request_fingerprint("po-1").unwrap(),
+            "bcb616e27bcce0b0d3e09c5a26d1ac15d386f7672ebcf85757b0c52d10761b8b"
+        );
+    }
+
+    /// 保存草稿路径指纹金值：锁定历史算法绝对摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    #[test]
+    fn save_fingerprint_golden() {
+        let request = SavePurchaseOrderDraftRequest {
+            expected_lock_version: 3,
+            payment_term_code: Some(" NET-30 ".to_string()),
+            lines: vec![SavePurchaseOrderLine {
+                line_type: PurchaseLineType::ItemService,
+                procurement_confirmation_line_id: None,
+                sku_id: Some("sku-1".to_string()),
+                sku_revision_id: Some("sku-rev-1".to_string()),
+                product_name: Some("产品".to_string()),
+                specification: None,
+                quantity: Some("1".to_string()),
+                base_unit_code: Some("EA".to_string()),
+                unit_cost_gross: Some("10".to_string()),
+                input_tax_rate: Some("0.13".to_string()),
+                expected_delivery_date: Some("2026-08-25".to_string()),
+                sales_order_line_id: Some("sales-line-1".to_string()),
+                sales_order_revision_line_id: Some("sales-revision-line-1".to_string()),
+                sales_order_submission_line_id: Some("sales-submission-line-1".to_string()),
+                allocated_quantity: Some("1".to_string()),
+                gross_amount: None,
+            }],
+            line_patches: vec![],
+            idempotency_key: "save-key-1".to_string(),
+        };
+        assert_eq!(
+            request.request_fingerprint("po-1").unwrap(),
+            "28ffd5720e0a0bd90a07358d39f81a313c3b10746c037a927ceb4b635068a8f5"
+        );
+    }
+
+    /// 依据创建路径指纹金值：锁定历史算法绝对摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    #[test]
+    fn create_fingerprint_golden() {
+        let request = CreatePurchaseOrderFromBasisRequest {
+            work_item_id: "wi-1".to_string(),
+            basis_id: "basis-1".to_string(),
+            purchase_type: entities::purchase_order::PurchaseType::Physical,
+            payment_term_code: "NET-30".to_string(),
+            target_warehouse_id: Some("wh-1".to_string()),
+            lines: vec![CreatePurchaseOrderLineRequest {
+                sales_order_line_id: "sol-1".to_string(),
+                quantity: "10".to_string(),
+                expected_delivery_date: "2026-08-25".to_string(),
+            }],
+            idempotency_key: "create-key-1".to_string(),
+        };
+        let lines = vec![RequestedLine {
+            sales_order_line_id: "sol-1".to_string(),
+            quantity: Quantity::from_str("10").unwrap(),
+            expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
+        }];
+        assert_eq!(
+            request.request_fingerprint(&lines),
+            "e225f0fda8a15fdf6b332cf1bb97ee893e9f0fd9092367986446a4e3f87f5a2f"
+        );
+    }
+
+    /// 选源创建路径指纹金值：锁定历史算法绝对摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
+    #[test]
+    fn sourcing_fingerprint_golden() {
+        let request = CreatePurchaseOrdersFromSourcingRequest {
+            work_item_id: "wi-1".to_string(),
+            sales_order_id: "so-1".to_string(),
+            lines: vec![
+                SourcingLineAssignment {
+                    sales_order_line_id: "sol-1".to_string(),
+                    basis_id: "basis-1".to_string(),
+                    source_type: SupplySourceType::Purchase,
+                    target_warehouse_id: Some("wh-1".to_string()),
+                    quantity: "10".to_string(),
+                    expected_delivery_date: "2026-08-25".to_string(),
+                },
+                SourcingLineAssignment {
+                    sales_order_line_id: "sol-2".to_string(),
+                    basis_id: "basis-2".to_string(),
+                    source_type: SupplySourceType::ExistingStock,
+                    target_warehouse_id: None,
+                    quantity: "5".to_string(),
+                    expected_delivery_date: "2026-08-26".to_string(),
+                },
+            ],
+            idempotency_key: "sourcing-key-1".to_string(),
+        };
+        let assignments = vec![
+            RequestedSourcingLine {
+                sales_order_line_id: "sol-1".to_string(),
+                basis_id: "basis-1".to_string(),
+                source_type: SupplySourceType::Purchase,
+                target_warehouse_id: Some("wh-1".to_string()),
+                quantity: Quantity::from_str("10").unwrap(),
+                expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
+            },
+            RequestedSourcingLine {
+                sales_order_line_id: "sol-2".to_string(),
+                basis_id: "basis-2".to_string(),
+                source_type: SupplySourceType::ExistingStock,
+                target_warehouse_id: None,
+                quantity: Quantity::from_str("5").unwrap(),
+                expected_delivery_date: BusinessDate::from_str("2026-08-26").unwrap(),
+            },
+        ];
+        assert_eq!(
+            request.request_fingerprint(&assignments).unwrap(),
+            "189640d37d07d808e3fc76001481775cade3f948f9873ddfdf9af4ecd87cfa1b"
+        );
+    }
+
+    /// 提交路径指纹金值：锁定历史算法绝对摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 指纹算法或形态编码变化导致摘要漂移时测试失败。
+    #[test]
+    fn submit_fingerprint_golden() {
+        let request = SubmitPurchaseOrderRequest {
+            expected_lock_version: 3,
+            payment_term_code: Some("NET-30".to_string()),
+            line_patches: vec![SavePurchaseOrderLinePatch {
+                line_id: "line-1".to_string(),
+                line_type: PurchaseLineType::ItemService,
+                quantity: Some("10".to_string()),
+                unit_cost_gross: Some("100.00".to_string()),
+                input_tax_rate: Some("0.13".to_string()),
+            }],
+            idempotency_key: "submit-key-1".to_string(),
+        };
+        assert_eq!(
+            request.request_fingerprint("po-1"),
+            "377e75901732461d599f88b8297478c5c9bb9c0dfbe34d0506b701f12d4f1ee6"
+        );
+    }
+
+    /// 提交形态文本必须与历史 Debug 派生字节逐字一致。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无。
+    ///
+    /// # 错误
+    /// 显式编码与历史 Debug 输出不一致时测试失败。
+    #[test]
+    fn submit_shape_matches_historical_debug_bytes() {
+        let payment_term_code = Some("NET-30".to_string());
+        let line_patches = vec![SavePurchaseOrderLinePatch {
+            line_id: "line-1".to_string(),
+            line_type: PurchaseLineType::ItemService,
+            quantity: Some("10".to_string()),
+            unit_cost_gross: Some("100.00".to_string()),
+            input_tax_rate: Some("0.13".to_string()),
+        }];
+        assert_eq!(
+            submit_request_shape(&payment_term_code, &line_patches),
+            format!("{:?}|{:?}", payment_term_code, line_patches)
+        );
+        let empty_term = None;
+        let empty_patches = vec![];
+        assert_eq!(
+            submit_request_shape(&empty_term, &empty_patches),
+            format!("{:?}|{:?}", empty_term, empty_patches)
+        );
+        let logistics = vec![SavePurchaseOrderLinePatch {
+            line_id: "line-2".to_string(),
+            line_type: PurchaseLineType::LogisticsFee,
+            quantity: None,
+            unit_cost_gross: Some("50".to_string()),
+            input_tax_rate: None,
+        }];
+        assert_eq!(
+            submit_request_shape(&None, &logistics),
+            format!("{:?}|{:?}", None::<String>, logistics)
+        );
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

@@ -2,11 +2,20 @@
 
 use entities::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use validator::Validate;
 
+use crate::errors::{Error, Result};
 use crate::publication::SystemSafetyPauseOperationView;
 
 pub(crate) const OFFERING_SORT_FIELDS: &[&str] = &["created_at", "supplier_sku_code", "status"];
+
+/// 新增供给命令的稳定操作名。
+pub(crate) const CREATE_OFFERING_COMMAND: &str = "create_offering";
+/// 追加供给商业条款修订命令的稳定操作名。
+pub(crate) const REVISE_OFFERING_COMMAND: &str = "revise_offering";
+/// 更新实时可供状态命令的稳定操作名。
+pub(crate) const UPDATE_OFFERING_AVAILABILITY_COMMAND: &str = "update_offering_availability";
 
 /// 分页响应。
 pub use crate::query::PageView;
@@ -220,6 +229,27 @@ pub struct CreateSupplierOfferingRequest {
     pub idempotency_key: String,
 }
 
+impl CreateSupplierOfferingRequest {
+    /// 计算新增供给命令的稳定指纹。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回对 `(操作名, 请求体)` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，与存量命令格式一致。
+    ///
+    /// # 错误
+    /// JSON 序列化失败时返回 `Internal` 错误。
+    ///
+    /// # 约束
+    /// 输入为 `&self`，不触及外部 I/O；序列化形态与历史实现字节一致，存量幂等键可继续重放。
+    pub(crate) fn command_fingerprint(&self) -> Result<String> {
+        let payload = serde_json::to_vec(&(CREATE_OFFERING_COMMAND, self))
+            .map_err(|error| Error::Internal(format!("序列化供给命令指纹失败: {error}")))?;
+        Ok(hex::encode(Sha256::digest(payload)))
+    }
+}
+
 /// 新增供给结果。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateSupplierOfferingResult {
@@ -252,6 +282,29 @@ pub struct ReviseSupplierOfferingRequest {
     /// 幂等键。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
+}
+
+impl ReviseSupplierOfferingRequest {
+    /// 计算修订供给命令的稳定指纹。
+    ///
+    /// # 参数
+    /// * `offering_id` - 命令目标供给主键
+    ///
+    /// # 返回
+    /// 返回对 `(操作名, (目标供给, 请求体))` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，
+    /// 与存量命令格式一致。
+    ///
+    /// # 错误
+    /// JSON 序列化失败时返回 `Internal` 错误。
+    ///
+    /// # 约束
+    /// 输入为 `&self` 与目标供给 ID，不触及外部 I/O；序列化形态与历史实现字节一致，
+    /// 存量幂等键可继续重放。
+    pub(crate) fn command_fingerprint(&self, offering_id: &str) -> Result<String> {
+        let payload = serde_json::to_vec(&(REVISE_OFFERING_COMMAND, (offering_id, self)))
+            .map_err(|error| Error::Internal(format!("序列化供给命令指纹失败: {error}")))?;
+        Ok(hex::encode(Sha256::digest(payload)))
+    }
 }
 
 /// 保存供给商业条款结果。
@@ -290,6 +343,29 @@ pub struct UpdateSupplierOfferingAvailabilityRequest {
     /// 幂等键。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
+}
+
+impl UpdateSupplierOfferingAvailabilityRequest {
+    /// 计算更新可供状态命令的稳定指纹。
+    ///
+    /// # 参数
+    /// * `offering_id` - 命令目标供给主键
+    ///
+    /// # 返回
+    /// 返回对 `(操作名, (目标供给, 请求体))` 元组 JSON 进行 SHA-256 后的 64 位十六进制指纹，
+    /// 与存量命令格式一致。
+    ///
+    /// # 错误
+    /// JSON 序列化失败时返回 `Internal` 错误。
+    ///
+    /// # 约束
+    /// 输入为 `&self` 与目标供给 ID，不触及外部 I/O；序列化形态与历史实现字节一致，
+    /// 存量幂等键可继续重放。
+    pub(crate) fn command_fingerprint(&self, offering_id: &str) -> Result<String> {
+        let payload = serde_json::to_vec(&(UPDATE_OFFERING_AVAILABILITY_COMMAND, (offering_id, self)))
+            .map_err(|error| Error::Internal(format!("序列化供给命令指纹失败: {error}")))?;
+        Ok(hex::encode(Sha256::digest(payload)))
+    }
 }
 
 /// 更新实时可供状态结果。
@@ -377,9 +453,13 @@ pub struct CompleteSupplierSupplyExceptionTaskResult {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_sort, SortDir, SupplierOfferingListParams, SupplierOfferingView, OFFERING_SORT_FIELDS,
+        normalize_sort, CreateSupplierOfferingRequest, ReviseSupplierOfferingRequest, SortDir,
+        SupplierOfferingListParams, SupplierOfferingTermsWrite, SupplierOfferingView,
+        UpdateSupplierOfferingAvailabilityRequest, CREATE_OFFERING_COMMAND, OFFERING_SORT_FIELDS,
+        REVISE_OFFERING_COMMAND, UPDATE_OFFERING_AVAILABILITY_COMMAND,
     };
     use entities::supplier_offering::{AvailabilityStatus, OfferingSourceType, OfferingStatus};
+    use serde::Serialize;
 
     #[test]
     fn sort_contract_rejects_unknown_fields() {
@@ -449,5 +529,141 @@ mod tests {
         assert!(view.dropship_supply_price_gross.is_none());
         assert_eq!(view.available_quantity.as_deref(), Some("5"));
         assert_eq!(view.supplier_sku_code, "S-1");
+    }
+
+    /// 覆盖新增供给命令指纹：同一请求确定稳定，任一载荷字段变化必须产生不同指纹。
+    #[test]
+    fn create_command_fingerprint_is_deterministic_and_payload_sensitive() {
+        let req = create_request();
+        let fp1 = req.command_fingerprint().unwrap();
+        assert_eq!(fp1, req.command_fingerprint().unwrap());
+        assert_eq!(fp1.len(), 64);
+
+        let mut other = req.clone();
+        other.supplier_sku_code = "SKU-2".to_string();
+        assert_ne!(fp1, other.command_fingerprint().unwrap());
+
+        let mut other_key = req.clone();
+        other_key.idempotency_key = "key-2".to_string();
+        assert_ne!(fp1, other_key.command_fingerprint().unwrap());
+    }
+
+    /// 覆盖修订与更新命令指纹：目标供给或载荷任一变化必须产生不同指纹。
+    #[test]
+    fn revise_and_update_command_fingerprints_are_target_sensitive() {
+        let revise = revise_request();
+        let fp1 = revise.command_fingerprint("offering-1").unwrap();
+        assert_ne!(fp1, revise.command_fingerprint("offering-2").unwrap());
+        let mut other = revise.clone();
+        other.expected_revision_no = 3;
+        assert_ne!(fp1, other.command_fingerprint("offering-1").unwrap());
+
+        let update = update_request();
+        let fp2 = update.command_fingerprint("offering-1").unwrap();
+        assert_ne!(fp2, update.command_fingerprint("offering-2").unwrap());
+        let mut other_update = update.clone();
+        other_update.available_quantity = Some("9".to_string());
+        assert_ne!(fp2, other_update.command_fingerprint("offering-1").unwrap());
+    }
+
+    /// 覆盖指纹与历史算法字节一致：`(操作名, 请求体)` 元组 JSON 的 SHA-256 裸十六进制。
+    #[test]
+    fn command_fingerprint_matches_legacy_tuple_serialization() {
+        let create = create_request();
+        assert_eq!(
+            create.command_fingerprint().unwrap(),
+            legacy_fingerprint(CREATE_OFFERING_COMMAND, &create)
+        );
+        let revise = revise_request();
+        assert_eq!(
+            revise.command_fingerprint("offering-1").unwrap(),
+            legacy_fingerprint(REVISE_OFFERING_COMMAND, &("offering-1", &revise))
+        );
+        let update = update_request();
+        assert_eq!(
+            update.command_fingerprint("offering-1").unwrap(),
+            legacy_fingerprint(UPDATE_OFFERING_AVAILABILITY_COMMAND, &("offering-1", &update))
+        );
+    }
+
+    /// 历史实现：`serde_json::to_vec(&(operation, request))` 的 SHA-256 裸十六进制。
+    fn legacy_fingerprint<T: Serialize>(operation: &str, request: &T) -> String {
+        use sha2::{Digest, Sha256};
+
+        let bytes = serde_json::to_vec(&(operation, request)).unwrap();
+        hex::encode(Sha256::digest(bytes))
+    }
+
+    /// 覆盖指纹金 test：锁定三个操作的稳定字节合同，防止未来漂移破坏存量重放。
+    #[test]
+    fn command_fingerprint_golden_contracts() {
+        assert_eq!(
+            create_request().command_fingerprint().unwrap(),
+            "b4ffb0315515f864f185763a8629534919751a5bdb898cd241e31036f97d436b"
+        );
+        assert_eq!(
+            revise_request().command_fingerprint("offering-1").unwrap(),
+            "bf555bf28973bd5c274b1e8b2aa359bc5bf72f636cd33040614a0db03823a7d1"
+        );
+        assert_eq!(
+            update_request().command_fingerprint("offering-1").unwrap(),
+            "b2a0134c236897bfb7c3c0eb73c9ea26d31904cd479bf763490f83a601b77aab"
+        );
+    }
+
+    fn terms() -> SupplierOfferingTermsWrite {
+        SupplierOfferingTermsWrite {
+            dropship_supply_price_gross: "10.00".to_string(),
+            bulk_supply_price_gross: "9.00".to_string(),
+            input_tax_rate: "0.13".to_string(),
+            bulk_minimum_order_quantity: "10".to_string(),
+            supply_region: vec!["CN".to_string()],
+            product_capabilities: vec!["DROP_SHIP".to_string()],
+            valid_from: "2026-01-01".to_string(),
+            valid_to: None,
+            dropship_express: Some("顺丰".to_string()),
+            freight_amount: None,
+            service_fee_amount: None,
+        }
+    }
+
+    fn create_request() -> CreateSupplierOfferingRequest {
+        CreateSupplierOfferingRequest {
+            sku_id: "sku-1".to_string(),
+            supplier_id: "supplier-1".to_string(),
+            supplier_product_code: Some("P-1".to_string()),
+            supplier_sku_code: "SKU-1".to_string(),
+            source_type: OfferingSourceType::Manual,
+            source_connection_id: None,
+            terms: terms(),
+            availability_status: AvailabilityStatus::Available,
+            available_quantity: Some("100".to_string()),
+            source_updated_at: Some(1_700_000_000),
+            source_revision_token: None,
+            change_reason: "登记新供给".to_string(),
+            idempotency_key: "key-1".to_string(),
+        }
+    }
+
+    fn revise_request() -> ReviseSupplierOfferingRequest {
+        ReviseSupplierOfferingRequest {
+            expected_revision_no: 2,
+            terms: terms(),
+            status: Some(OfferingStatus::Active),
+            change_reason: "调整条款".to_string(),
+            idempotency_key: "key-1".to_string(),
+        }
+    }
+
+    fn update_request() -> UpdateSupplierOfferingAvailabilityRequest {
+        UpdateSupplierOfferingAvailabilityRequest {
+            expected_version: Some(1),
+            availability_status: AvailabilityStatus::Unavailable,
+            available_quantity: Some("0".to_string()),
+            source_updated_at: Some(1_700_000_001),
+            source_revision_token: Some("token-1".to_string()),
+            change_reason: "库存更新".to_string(),
+            idempotency_key: "key-1".to_string(),
+        }
     }
 }

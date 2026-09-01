@@ -1,6 +1,6 @@
 //! 采购单提交启动：加载定义图、构造 `prepare_start` 输入并持久化运行事实。
 
-use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
+use bpm::engine::{plan_start, DefinitionGraph, StartBindingInput, StartPlanInput, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
@@ -15,7 +15,9 @@ use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::{BusinessDocument, DocumentType};
 use entities::ids::{ApprovalSubjectSnapshotId, WorkItemId};
-use entities::purchase_order::{PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine};
+use entities::purchase_order::{
+    PurchaseCommandReceipt, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+};
 use entities::work_item::DocumentApprovalWorkItemData;
 use entities::work_item::{WorkItem, WorkItemPriority};
 use id_generator::next_id;
@@ -27,6 +29,7 @@ use crate::approval::execution::authorization::{converge_eligibility, Authorizat
 use crate::approval::execution::idempotency::{
     normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
 };
+use crate::approval::execution::start::map_engine_error;
 use crate::approval::execution::{
     map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
 };
@@ -243,7 +246,8 @@ pub(super) struct PurchaseOrderStartInput<'a> {
 /// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED。
 ///
 /// # 用途
-/// 把启动参数收敛为引擎 `prepare_start` 输入。
+/// 计算逐节点对象读取授权结果并交给 BPM 通用启动计划，再把计划组装为引擎
+/// `prepare_start` 输入。
 ///
 /// # 参数
 /// * `input` - 定义图、绑定、主体与提交人
@@ -255,7 +259,9 @@ pub(super) struct PurchaseOrderStartInput<'a> {
 /// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
 ///
 /// # 关键业务约束
-/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
+/// 定义版本漂移、空节点、入口缺失与办理人校验由 BPM `plan_start` 失败关闭；
+/// 对象读取权失败收敛为 BLOCKED 资格，由引擎启动校验统一拒绝。采购变更单
+/// 与采购单必须复用同一 BPM 规则。
 pub(super) fn build_purchase_order_start_input(
     input: PurchaseOrderStartInput<'_>,
 ) -> Result<StartExecutionInput> {
@@ -270,29 +276,37 @@ pub(super) fn build_purchase_order_start_input(
         receipt,
         now,
     } = input;
-    if graph.definition.definition_version != binding.approval_definition_version {
-        return Err(Error::ConflictError(
-            "采购单绑定定义版本与已加载定义不一致".to_string(),
-        ));
-    }
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
-    let bindings = start_bindings_from_graph(&graph, organization_id)?;
-    let entry = graph
-        .entry_node()
-        .map_err(|_| Error::ConflictError("审批定义缺少入口节点".to_string()))?;
-    let entry_eligibility = bindings
+    let binding_inputs = graph
+        .nodes
         .iter()
-        .find(|item| item.node_key == entry.node_key)
-        .map(|item| item.eligibility.clone())
-        .ok_or_else(|| Error::ConflictError("入口节点缺少审批人绑定".to_string()))?;
+        .map(|node| {
+            let assignee = node.assignee_participant_id.as_str();
+            let failure = match purchase_order_object_readable(organization_id, assignee) {
+                Ok(true) => None,
+                Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+            };
+            Ok(StartBindingInput {
+                node_key: node.node_key.clone(),
+                assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
+                eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let plan = plan_start(StartPlanInput {
+        graph: &graph,
+        expected_definition_version: binding.approval_definition_version,
+        bindings: binding_inputs,
+    })
+    .map_err(map_start_plan_error)?;
     Ok(StartExecutionInput {
         command: ExecutionCommandInput {
             graph,
-            current_eligibility: entry_eligibility.clone(),
-            next_eligibility: entry_eligibility,
+            current_eligibility: plan.entry_eligibility.clone(),
+            next_eligibility: plan.entry_eligibility,
             receipt,
             idempotency_key,
             now: timestamp,
@@ -306,45 +320,22 @@ pub(super) fn build_purchase_order_start_input(
         instance_id: ApprovalProcessInstanceId::new(next_id()),
         entry_execution_id: ApprovalNodeExecutionId::new(next_id()),
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
-        bindings,
+        bindings: plan.bindings,
     })
 }
 
-/// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
+/// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。
 ///
 /// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
+/// * `error` - BPM 启动计划错误
 ///
 /// # 返回
-/// 返回与节点一一对应的绑定。
-///
-/// # 错误
-/// 节点审批人引用非法或显示名为空时返回校验错误。
-fn start_bindings_from_graph(
-    graph: &DefinitionGraph,
-    organization_id: &str,
-) -> Result<Vec<StartAssigneeBinding>> {
-    let mut bindings = Vec::with_capacity(graph.nodes.len());
-    for node in &graph.nodes {
-        let assignee = node.assignee_participant_id.as_str();
-        let failure = match purchase_order_object_readable(organization_id, assignee) {
-            Ok(true) => None,
-            Ok(false) | Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-        };
-        bindings.push(StartAssigneeBinding {
-            id: ApprovalInstanceAssigneeId::new(next_id()),
-            node_key: node.node_key.clone(),
-            participant: node.assignee_participant_id.clone(),
-            eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
-        });
+/// 计划前置条件返回冲突，其余错误按引擎错误映射。
+fn map_start_plan_error(error: bpm::engine::EngineError) -> Error {
+    match error {
+        bpm::engine::EngineError::InvalidCommand(message) => Error::ConflictError(message.to_string()),
+        other => map_engine_error(other),
     }
-    if bindings.is_empty() {
-        return Err(Error::ConflictError(
-            "审批定义没有节点，无法启动采购单审批".to_string(),
-        ));
-    }
-    Ok(bindings)
 }
 
 /// 采购单提交事务内需要一并写入的冻结提交。
@@ -386,8 +377,10 @@ pub(super) struct PurchaseOrderStartPersistInput {
     pub organization_id: String,
     /// 调用方时间。
     pub now: Instant,
-    /// 已构造审计。
+    /// 已构造审计（结果消息留空，事务内任务写入后回填）。
     pub audit: entities::AuditLog,
+    /// 采购提交收据：请求指纹与结果载荷；任务身份在事务内回填后编码进审计消息。
+    pub receipt: Option<(String, super::submission::PurchaseSubmitReceipt)>,
 }
 
 /// 提交时草稿补丁的采购覆盖校验上下文。
@@ -465,7 +458,8 @@ pub(super) async fn persist_purchase_order_start_with_session(
         owner_role,
         organization_id,
         now,
-        audit,
+        mut audit,
+        receipt,
     } = input;
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(None);
@@ -515,6 +509,10 @@ pub(super) async fn persist_purchase_order_start_with_session(
         session,
     )
     .await?;
+    if let Some((fingerprint, receipt)) = receipt {
+        let receipt = receipt.with_first_task(first_task.as_ref());
+        audit.message = Some(PurchaseCommandReceipt::new(fingerprint, receipt).encode_message()?);
+    }
     db.audit_logs().create(&audit, session).await?;
     Ok(first_task)
 }
@@ -626,4 +624,260 @@ async fn persist_open_tasks(
         db.work_items().create(&item, session).await?;
     }
     Ok(first_task)
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::{build_purchase_order_start_input, map_start_plan_error, PurchaseOrderStartInput};
+    use bpm::engine::EngineError;
+    use bpm::graph::DefinitionGraph;
+    use bpm::ids::{
+        ApprovalCommandReceiptId, ApprovalNodeDefinitionId, ApprovalProcessDefinitionId,
+        ApprovalTransitionDefinitionId,
+    };
+    use bpm::model::types::{ApprovalBlockerCode, ApprovalTransitionEvent};
+    use bpm::model::{
+        ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, ParticipantId,
+        ProcessKind, Timestamp,
+    };
+    use entities::common::time::Instant;
+    use entities::document_registry::business_document::ApprovalDefinitionBinding;
+    use entities::document_registry::DocumentType;
+    use entities::ids::WorkItemId;
+    use entities::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
+
+    use crate::approval::execution::idempotency::start_identity;
+    use crate::approval::execution::{prepare_start, PreparedExecution};
+    use crate::approval::process_kind::process_kind_of;
+    use crate::errors::Error;
+
+    fn node(
+        id: &str,
+        key: &str,
+        name: &str,
+        order: u32,
+        user: &str,
+        label: &str,
+        at: Timestamp,
+    ) -> ApprovalNodeDefinition {
+        ApprovalNodeDefinition::new(bpm::model::NewNodeDefinition {
+            id: ApprovalNodeDefinitionId::new(id),
+            process_definition_id: ApprovalProcessDefinitionId::new("def"),
+            node_key: key.into(),
+            node_name: name.into(),
+            node_purpose: None,
+            display_order: order,
+            assignee_participant_id: ParticipantId::new(user).unwrap(),
+            assignee_label_snapshot: label.into(),
+            at,
+        })
+        .unwrap()
+    }
+
+    /// 双节点采购审批图夹具：取消输入组装测试复用。
+    pub(crate) fn two_node_graph() -> DefinitionGraph {
+        let at = at(1);
+        DefinitionGraph {
+            definition: ApprovalProcessDefinition::new_draft(
+                ApprovalProcessDefinitionId::new("def"),
+                ProcessKind::PurchaseOrder,
+                1,
+                "采购审批",
+                "n1",
+                ParticipantId::new("admin").unwrap(),
+                at,
+            )
+            .unwrap(),
+            nodes: vec![
+                node("nd1", "n1", "采购确认", 1, "u1", "张三", at),
+                node("nd2", "n2", "财务复核", 2, "u2", "李四", at),
+            ],
+            transitions: vec![
+                ApprovalTransitionDefinition::to_node(
+                    ApprovalTransitionDefinitionId::new("t1"),
+                    ApprovalProcessDefinitionId::new("def"),
+                    "n1",
+                    ApprovalTransitionEvent::Approve,
+                    "n2",
+                    at,
+                )
+                .unwrap(),
+                ApprovalTransitionDefinition::to_approved(
+                    ApprovalTransitionDefinitionId::new("t2"),
+                    ApprovalProcessDefinitionId::new("def"),
+                    "n2",
+                    ApprovalTransitionEvent::Approve,
+                    at,
+                )
+                .unwrap(),
+            ],
+        }
+    }
+
+    fn empty_graph(entry_node_key: &str) -> DefinitionGraph {
+        let at = at(1);
+        DefinitionGraph {
+            definition: ApprovalProcessDefinition::new_draft(
+                ApprovalProcessDefinitionId::new("def"),
+                ProcessKind::PurchaseOrder,
+                1,
+                "采购审批",
+                entry_node_key,
+                ParticipantId::new("admin").unwrap(),
+                at,
+            )
+            .unwrap(),
+            nodes: vec![],
+            transitions: vec![],
+        }
+    }
+
+    fn binding(definition_version: u32) -> ApprovalDefinitionBinding {
+        ApprovalDefinitionBinding::new(
+            bpm::ids::ApprovalProcessDefinitionId::new("def"),
+            definition_version,
+            Instant::from_unix_secs(1),
+        )
+        .unwrap()
+    }
+
+    fn at(secs: i64) -> Timestamp {
+        Timestamp::from_unix_secs(secs).unwrap()
+    }
+
+    fn input<'a>(
+        graph: DefinitionGraph,
+        binding: &'a ApprovalDefinitionBinding,
+        organization_id: &'a str,
+    ) -> PurchaseOrderStartInput<'a> {
+        PurchaseOrderStartInput {
+            graph,
+            binding,
+            subject: bpm::model::SubjectRef::new("purchase_order", "po-1").unwrap(),
+            subject_version: 1,
+            actor_id: "starter",
+            organization_id,
+            idempotency_key: "key-1",
+            receipt: None,
+            now: Instant::from_unix_secs(10),
+        }
+    }
+
+    /// 采购单启动输入逐节点冻结绑定，并复用 BPM 通用计划解析入口资格。
+    #[test]
+    fn purchase_order_start_freezes_all_nodes_with_bpm_plan() {
+        let graph = two_node_graph();
+        let built = build_purchase_order_start_input(input(graph, &binding(1), "org-1")).unwrap();
+        assert_eq!(built.bindings.len(), 2);
+        assert_eq!(built.bindings[0].node_key, "n1");
+        assert_eq!(built.bindings[0].participant.as_str(), "u1");
+        assert_eq!(built.bindings[1].node_key, "n2");
+        assert_eq!(built.command.current_eligibility.participant().as_str(), "u1");
+        assert_eq!(built.command.graph.definition.definition_version, 1);
+        assert_eq!(built.process_kind, process_kind_of(DocumentType::PurchaseOrder));
+        assert_eq!(built.definition_version, 1);
+        assert_eq!(built.subject_version, 1);
+    }
+
+    /// 定义版本漂移时失败关闭，不得用旧冻结绑定启动新图。
+    #[test]
+    fn purchase_order_start_rejects_definition_version_drift() {
+        let graph = two_node_graph();
+        let error = build_purchase_order_start_input(input(graph, &binding(2), "org-1")).unwrap_err();
+        assert!(
+            matches!(error, Error::ConflictError(message) if message.contains("定义版本与冻结绑定不一致"))
+        );
+    }
+
+    /// 空节点定义不得启动。
+    #[test]
+    fn purchase_order_start_rejects_empty_node_graph() {
+        let error =
+            build_purchase_order_start_input(input(empty_graph("n1"), &binding(1), "org-1")).unwrap_err();
+        assert!(matches!(error, Error::ConflictError(message) if message.contains("审批定义没有节点")));
+    }
+
+    /// 入口键缺失时失败关闭。
+    #[test]
+    fn purchase_order_start_rejects_missing_entry_node() {
+        let mut graph = two_node_graph();
+        graph.definition.entry_node_key = "missing".to_string();
+        let error = build_purchase_order_start_input(input(graph, &binding(1), "org-1")).unwrap_err();
+        assert!(matches!(error, Error::ConflictError(message) if message.contains("审批定义缺少入口节点")));
+    }
+
+    /// 对象读取失败收敛为 BLOCKED 资格，并由引擎启动校验统一拒绝。
+    #[test]
+    fn purchase_order_start_converges_read_failure_to_blocked() {
+        let built = build_purchase_order_start_input(input(two_node_graph(), &binding(1), "")).unwrap();
+        assert_eq!(
+            built.command.current_eligibility.blocked_code(),
+            Some(ApprovalBlockerCode::ApproverCannotReadSubject)
+        );
+        let error = prepare_start(built).unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message.contains("启动时全部审批人必须有效"))
+        );
+    }
+
+    /// 同键同载荷启动收据必须重放，不重复规划写入。
+    #[test]
+    fn purchase_order_start_replays_matching_receipt() {
+        let identity = start_identity(
+            bpm::model::IdempotencyKey::parse("key-1").unwrap(),
+            process_kind_of(DocumentType::PurchaseOrder).as_str(),
+            "purchase_order",
+            "po-1",
+            1,
+            "def",
+            1,
+            "starter",
+        )
+        .unwrap();
+        let receipt = bpm::model::ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("r1"),
+            identity.current(),
+            "inst-1",
+            at(10),
+        )
+        .unwrap();
+        let mut built =
+            build_purchase_order_start_input(input(two_node_graph(), &binding(1), "org-1")).unwrap();
+        built.command.receipt = Some(receipt);
+        assert!(matches!(
+            prepare_start(built).unwrap(),
+            PreparedExecution::Replay { .. }
+        ));
+    }
+
+    /// 计划前置条件映射保持冲突语义。
+    #[test]
+    fn start_plan_error_maps_to_conflict() {
+        let error = map_start_plan_error(EngineError::InvalidCommand("定义版本与冻结绑定不一致"));
+        assert!(matches!(error, Error::ConflictError(_)));
+        let error = map_start_plan_error(EngineError::Uncommittable("无法形成合法快照"));
+        assert!(matches!(error, Error::Internal(_)));
+    }
+
+    /// 开放任务夹具：取消输入组装测试复用。
+    pub(crate) fn open_task(version: u64) -> WorkItem {
+        let mut item = WorkItem::new_document_approval(
+            WorkItemId::new("wi-1"),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: bpm::ids::ApprovalNodeExecutionId::new("e1"),
+                business_object_type: DocumentType::PurchaseOrder.as_str().to_string(),
+                business_object_id: "po-1".to_string(),
+                subject_version: "1".to_string(),
+                owner_role: "purchase_manager".to_string(),
+                owner_organization_id: "org-1".to_string(),
+                owner_user_id: "u1".to_string(),
+                priority: WorkItemPriority::Normal,
+                due_at: None,
+            },
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        item.base.version = version;
+        item
+    }
 }

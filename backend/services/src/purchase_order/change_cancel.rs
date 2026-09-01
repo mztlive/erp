@@ -1,8 +1,7 @@
 //! 采购变更撤回：调用统一 `prepare_cancel`，再执行业务 `cancel_action`。
 
-use bpm::engine::{DefinitionGraph, Eligibility};
-use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessInstanceId};
-use bpm::model::types::ApprovalProcessInstanceStatus;
+use bpm::engine::{plan_cancel, CancelPlan, CancelPlanInput, DefinitionGraph};
+use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{AccessControlExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional, WorkItemExt};
@@ -13,9 +12,12 @@ use id_generator::next_id;
 use mongodb::Database;
 
 use super::change_start::load_bound_definition_graph;
-use crate::approval::execution::authorization::{converge_eligibility, requires_blocked_cancel};
+use crate::approval::execution::authorization::converge_eligibility;
 use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::{CancelExecutionInput, ExecutionCommandInput, PreparedExecution};
+use crate::approval::execution::start::map_engine_error;
+use crate::approval::execution::{
+    normalize_document_cancel_reason, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
+};
 use crate::errors::{Error, Result};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
@@ -27,19 +29,26 @@ pub(super) struct LoadedCancelRuntime {
     pub instance: ApprovalProcessInstance,
     /// 当前执行。
     pub current: ApprovalNodeExecution,
+    /// BPM 统一取消计划。
+    pub plan: CancelPlan,
     /// 当前执行上的开放任务。
     pub open_tasks: Vec<WorkItem>,
 }
 
-/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务。
+/// 按主体加载 RUNNING/BLOCKED 实例、当前执行与开放任务，并由 BPM 形成取消计划。
 ///
-/// 已 `APPROVED` 的实例必须拒绝。`BLOCKED` 时不得存在开放任务。
+/// 已 `APPROVED` 的实例必须拒绝。`RUNNING` 必须恰有一个开放任务，`BLOCKED`
+/// 时不得存在开放任务。开放任务计数与采购单一致：仅统计当前执行上的
+/// 单据审批任务，独立任务不得影响取消计划。
 ///
 /// # 参数
 /// * `db` - 数据库
 /// * `binding` - 创建时冻结的定义绑定
 /// * `subject` - 业务对象引用
 /// * `subject_version` - 冻结提交版本
+///
+/// # 返回
+/// 返回定义图、实例、当前执行、取消计划与开放任务快照。
 ///
 /// # 错误
 /// 实例缺失、已终态、受阻仍有开放任务或仓储失败时返回错误。
@@ -54,7 +63,6 @@ pub(super) async fn load_cancel_runtime(
         .find_non_terminal_by_subject(subject, subject_version, &mut NoTransaction)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
-    ensure_instance_cancellable(&instance)?;
     let current = db
         .bpm_workflow()
         .find_current_execution(
@@ -64,71 +72,50 @@ pub(super) async fn load_cancel_runtime(
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db
-        .purchase_order()
-        .list_open_work_items_by_execution(&current.base.id, &mut NoTransaction)
+        .work_items()
+        .open_approval_tasks_for_execution(
+            &ApprovalNodeExecutionId::new(current.base.id.clone()),
+            &mut NoTransaction,
+        )
         .await?;
-    ensure_open_tasks_match_instance(&instance, open_tasks.len())?;
+    let plan = plan_cancel(CancelPlanInput {
+        instance: &instance,
+        current: &current,
+        open_task_count: open_tasks.len(),
+    })
+    .map_err(map_cancel_plan_error)?;
     Ok(LoadedCancelRuntime {
         graph: load_bound_definition_graph(db, binding).await?,
         instance,
         current,
+        plan,
         open_tasks,
     })
 }
 
-/// 已最终通过的实例不得撤回。
-///
-/// # 错误
-/// 终态通过或状态不允许时返回冲突。
-pub fn ensure_instance_cancellable(instance: &ApprovalProcessInstance) -> Result<()> {
-    if instance.status == ApprovalProcessInstanceStatus::Approved {
-        return Err(Error::ConflictError("已最终通过的审批实例不得撤回".to_string()));
-    }
-    if !matches!(
-        instance.status,
-        ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked
-    ) {
-        return Err(Error::ConflictError(
-            "只有运行中或受阻的审批实例可以撤回".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-/// RUNNING 必须锁定开放任务；BLOCKED 必须证明没有开放任务。
-///
-/// # 错误
-/// 任务数量与实例状态不一致时返回冲突。
-fn ensure_open_tasks_match_instance(
-    instance: &ApprovalProcessInstance,
-    open_task_count: usize,
-) -> Result<()> {
-    match instance.status {
-        ApprovalProcessInstanceStatus::Running => Ok(()),
-        ApprovalProcessInstanceStatus::Blocked if open_task_count == 0 => Ok(()),
-        ApprovalProcessInstanceStatus::Blocked => {
-            Err(Error::ConflictError("受阻审批实例不得存在开放任务".to_string()))
-        }
-        _ => Err(Error::ConflictError(
-            "只有运行中或受阻的审批实例可以撤回".to_string(),
-        )),
-    }
-}
-
 /// 构造统一 `cancel_approval` 输入。
 ///
-/// 人员失效走业务取消；非人员一致性 blocker 必须走受阻取消。
+/// 本端口为业务单据普通撤回；人员失效 blocker 走业务取消，非人员一致性
+/// blocker 由统一受阻取消端口承担。
 ///
 /// # 参数
-/// * `runtime` - 已加载运行事实
+/// * `runtime` - 已加载运行事实与 BPM 取消计划
 /// * `reason` - 已校验的非空原因
 /// * `actor_id` - 撤回人
 /// * `idempotency_key` - 幂等键
 /// * `receipt` - 已存在收据
 /// * `now` - 调用方时间
 ///
+/// # 返回
+/// 返回可交给统一 `prepare_cancel` 的取消编排输入。
+///
 /// # 错误
 /// 原因/幂等键非法、审批人引用无效或端口与 blocker 不匹配时返回错误。
+///
+/// # 关键业务约束
+/// 状态、开放任务数量与 blocker 端口分类由 BPM `plan_cancel` 计算；本端口为
+/// 业务单据普通撤回，受阻取消由统一取消端口承担。采购单与采购变更单必须
+/// 复用同一规则。
 pub fn build_purchase_change_cancel_input(
     runtime: &LoadedCancelRuntime,
     reason: &str,
@@ -137,15 +124,15 @@ pub fn build_purchase_change_cancel_input(
     receipt: Option<bpm::model::ApprovalCommandReceipt>,
     now: Instant,
 ) -> Result<CancelExecutionInput> {
-    let reason = reason.trim();
-    if reason.is_empty() {
-        return Err(Error::ValidationError("撤回原因不能为空".to_string()));
-    }
+    let reason = normalize_document_cancel_reason(reason)?;
     let idempotency_key = normalize_idempotency_key(idempotency_key)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
-    let eligibility = cancel_eligibility(&runtime.current)?;
-    let blocked_port = runtime.instance.blocker_code.is_some_and(requires_blocked_cancel);
+    let eligibility = converge_eligibility(
+        runtime.current.assignee_participant_id.as_str(),
+        &runtime.current.assignee_name_snapshot,
+        None,
+    )?;
     Ok(CancelExecutionInput {
         command: ExecutionCommandInput {
             graph: runtime.graph.clone(),
@@ -161,24 +148,26 @@ pub fn build_purchase_change_cancel_input(
         expected_instance_version: runtime.instance.base.version,
         expected_execution_version: runtime.current.base.version,
         expected_task_version: runtime.open_tasks.first().map(|item| item.base.version),
-        reason: reason.to_string(),
+        reason,
         actor,
-        close_open_task: runtime.instance.status == ApprovalProcessInstanceStatus::Running,
-        blocked_port,
+        close_open_task: runtime.plan.close_open_task,
+        blocked_port: false,
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
     })
 }
 
-/// 由当前执行构造取消资格，不得补默认办理人。
+/// 将取消计划错误映射为服务错误；状态与任务数量错误保持冲突语义。
 ///
-/// # 错误
-/// 审批人引用或显示名为空时返回校验错误。
-fn cancel_eligibility(current: &ApprovalNodeExecution) -> Result<Eligibility> {
-    converge_eligibility(
-        current.assignee_participant_id.as_str(),
-        &current.assignee_name_snapshot,
-        None,
-    )
+/// # 参数
+/// * `error` - BPM 取消计划错误
+///
+/// # 返回
+/// 模型状态错误返回冲突，其余错误按引擎错误映射。
+fn map_cancel_plan_error(error: bpm::engine::EngineError) -> Error {
+    match error {
+        bpm::engine::EngineError::Model(error) => Error::ConflictError(error.to_string()),
+        other => map_engine_error(other),
+    }
 }
 
 /// 采购变更撤回事务写入集合。
@@ -383,5 +372,176 @@ fn require_cas_applied<T>(outcome: database::repository::bpm::CasWriteOutcome<T>
         _ => Err(Error::ConflictError(format!(
             "{label}已被其他请求修改，请刷新后重试"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_purchase_change_cancel_input, LoadedCancelRuntime};
+    use bpm::engine::{plan_cancel, CancelPlanInput};
+    use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+    use bpm::model::types::{ApprovalBlockerCode, ApprovalExecutionAssignmentSource};
+    use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
+    use entities::common::time::Instant;
+
+    use crate::approval::execution::prepare_cancel;
+    use crate::errors::Error;
+    use crate::purchase_order::start_approval::tests::{open_task, two_node_graph};
+
+    fn current_execution() -> ApprovalNodeExecution {
+        ApprovalNodeExecution::new_active(NewNodeExecution {
+            id: ApprovalNodeExecutionId::new("e1"),
+            process_instance_id: ApprovalProcessInstanceId::new("inst-1"),
+            node_key: "n1".into(),
+            node_name: "采购确认".into(),
+            round_no: 1,
+            execution_no: 1,
+            assignment_source: ApprovalExecutionAssignmentSource::Definition,
+            replaces_execution_id: None,
+            assignee_participant_id: ParticipantId::new("u1").unwrap(),
+            assignee_name_snapshot: "张三".into(),
+            at: bpm::model::Timestamp::from_unix_secs(10).unwrap(),
+        })
+        .expect("当前执行夹具")
+    }
+
+    fn running_instance() -> ApprovalProcessInstance {
+        let mut inst = ApprovalProcessInstance::start_running(bpm::model::NewProcessInstance {
+            id: ApprovalProcessInstanceId::new("inst-1"),
+            process_definition_id: bpm::ids::ApprovalProcessDefinitionId::new("def"),
+            definition_version: 1,
+            process_kind: bpm::model::ProcessKind::PurchaseChangeOrder,
+            subject: bpm::model::SubjectRef::new("purchase_change_order", "co-1").unwrap(),
+            subject_version: 1,
+            started_by: ParticipantId::new("starter").unwrap(),
+            at: bpm::model::Timestamp::from_unix_secs(10).unwrap(),
+        })
+        .unwrap();
+        inst.set_current_execution(
+            ApprovalNodeExecutionId::new("e1"),
+            bpm::model::Timestamp::from_unix_secs(11).unwrap(),
+        )
+        .unwrap();
+        inst
+    }
+
+    fn blocked_instance(code: ApprovalBlockerCode) -> ApprovalProcessInstance {
+        let mut inst = running_instance();
+        inst.enter_blocked(code, bpm::model::Timestamp::from_unix_secs(12).unwrap())
+            .unwrap();
+        inst
+    }
+
+    fn runtime(
+        instance: ApprovalProcessInstance,
+        open_tasks: Vec<entities::work_item::WorkItem>,
+    ) -> LoadedCancelRuntime {
+        let current = current_execution();
+        let plan = plan_cancel(CancelPlanInput {
+            instance: &instance,
+            current: &current,
+            open_task_count: open_tasks.len(),
+        })
+        .unwrap();
+        LoadedCancelRuntime {
+            graph: two_node_graph(),
+            instance,
+            current,
+            plan,
+            open_tasks,
+        }
+    }
+
+    /// 运行中撤回按 BPM 计划关闭唯一开放任务，与采购单行为一致。
+    #[test]
+    fn purchase_change_cancel_uses_bpm_plan_for_open_task_close() {
+        let input = build_purchase_change_cancel_input(
+            &runtime(running_instance(), vec![open_task(3)]),
+            " 撤销重提  ",
+            "u1",
+            "key-1",
+            None,
+            Instant::from_unix_secs(20),
+        )
+        .unwrap();
+        assert!(input.close_open_task);
+        assert!(!input.blocked_port);
+        assert_eq!(input.expected_instance_version, 2);
+        assert_eq!(input.expected_execution_version, 1);
+        assert_eq!(input.expected_task_version, Some(3));
+        assert_eq!(input.reason, "撤销重提");
+    }
+
+    /// 人员失效 blocker 走业务取消端口。
+    #[test]
+    fn purchase_change_cancel_personnel_blocker_uses_business_port() {
+        let input = build_purchase_change_cancel_input(
+            &runtime(
+                blocked_instance(ApprovalBlockerCode::ApproverAccountInactive),
+                vec![],
+            ),
+            "撤销",
+            "u1",
+            "key-1",
+            None,
+            Instant::from_unix_secs(20),
+        )
+        .unwrap();
+        assert!(!input.close_open_task);
+        assert!(!input.blocked_port);
+    }
+
+    /// 非人员 blocker 不得走业务撤回端口，与采购单业务端口失败关闭一致；
+    /// 统一受阻取消端口由 `prepare_cancel` 的受阻分支承担。
+    #[test]
+    fn purchase_change_cancel_structural_blocker_fails_closed() {
+        let built = build_purchase_change_cancel_input(
+            &runtime(blocked_instance(ApprovalBlockerCode::OpenTaskConflict), vec![]),
+            "撤销",
+            "u1",
+            "key-1",
+            None,
+            Instant::from_unix_secs(20),
+        )
+        .unwrap();
+        assert!(!built.close_open_task);
+        assert!(!built.blocked_port);
+        let error = prepare_cancel(built).unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message.contains("不可恢复原审批人的阻塞只能走受阻取消"))
+        );
+    }
+
+    /// 空白撤回原因失败关闭。
+    #[test]
+    fn purchase_change_cancel_rejects_empty_reason() {
+        let error = build_purchase_change_cancel_input(
+            &runtime(running_instance(), vec![open_task(1)]),
+            "   ",
+            "u1",
+            "key-1",
+            None,
+            Instant::from_unix_secs(20),
+        )
+        .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(_)));
+    }
+
+    /// 运行中零开放任务必须失败关闭，与采购单开放任务约束一致。
+    #[test]
+    fn purchase_change_cancel_running_without_open_task_fails_closed() {
+        let current = current_execution();
+        let instance = running_instance();
+        let error = plan_cancel(CancelPlanInput {
+            instance: &instance,
+            current: &current,
+            open_task_count: 0,
+        })
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            bpm::engine::EngineError::Model(bpm::model::types::ModelError::InvalidStatus(message))
+                if message.contains("运行中审批实例必须恰有一个开放任务")
+        ));
     }
 }

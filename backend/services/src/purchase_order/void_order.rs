@@ -1,22 +1,19 @@
 //! 采购草稿作废与采购覆盖释放。
 
 use database::{AccessControlExt, Executor, NoTransaction, PurchaseOrderExt, SalesOrderExt};
+use entities::purchase_order::{LegacyReceiptIdScheme, PurchaseCommandReceipt, PurchaseCommandReceiptError};
 use entities::purchase_order::{PurchaseOrder, PurchaseOrderStatus, SubmissionStatus};
 use mongodb::ClientSession;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::authorization::{ensure_purchase_order_actor_account, PurchaseOrderAuthorization};
-use super::command_receipt::{
-    command_receipt_id, command_receipt_message, command_request_fingerprint, parse_command_receipt,
-};
-use super::dto::{VoidPurchaseOrderRequest, VoidPurchaseOrderResult};
+use super::dto::{VoidPurchaseOrderRequest, VoidPurchaseOrderResult, VOID_ACTION};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::PurchaseOrderService;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
-const VOID_ACTION: &str = "purchase_order.void";
 const VOID_PERMISSION: &str = "purchase_order:delete";
 const VOID_RECEIPT_PREFIX: &str = "purchase-order-void-command-";
 
@@ -49,15 +46,6 @@ struct VoidDraftReceipt {
     reference: String,
 }
 
-/// 作废请求指纹载荷。
-#[derive(Serialize)]
-struct VoidDraftFingerprintPayload<'a> {
-    /// 客户端期望乐观锁版本。
-    expected_lock_version: u64,
-    /// 去除首尾空白后的作废原因。
-    reason: &'a str,
-}
-
 impl PurchaseOrderService {
     /// 作废当前账号创建的采购草稿并释放销售采购覆盖。
     ///
@@ -84,14 +72,16 @@ impl PurchaseOrderService {
     ) -> Result<VoidPurchaseOrderResult> {
         req.validate()?;
         let authorization = self.authorize_actor_permission(actor, VOID_PERMISSION).await?;
-        let fingerprint = void_request_fingerprint(id, &req)?;
-        let receipt_id = command_receipt_id(
+        let fingerprint = req.request_fingerprint(id)?;
+        let receipt_identity = PurchaseCommandReceipt::<VoidDraftReceipt>::identity(
             VOID_RECEIPT_PREFIX,
             actor.id(),
             VOID_ACTION,
-            id,
+            Some(id),
             &req.idempotency_key,
-        );
+            LegacyReceiptIdScheme::None,
+        )?;
+        let receipt_id = receipt_identity.receipt_id().to_string();
         if let Some(result) =
             replay_void_draft(&self.db, &receipt_id, &fingerprint, id, actor, &mut NoTransaction).await?
         {
@@ -356,7 +346,10 @@ async fn void_order_and_persist(
         VOID_ACTION,
         "purchase_order",
         order.base.id.clone(),
-        Some(command_receipt_message(command.request_fingerprint, &receipt)?),
+        Some(
+            PurchaseCommandReceipt::new(command.request_fingerprint.to_string(), receipt.clone())
+                .encode_message()?,
+        ),
     )?;
     db.audit_logs().create(&audit, session).await?;
     Ok(receipt.into_result(false))
@@ -391,23 +384,33 @@ async fn replay_void_draft(
     let Some(audit) = db.audit_logs().find_by_id(receipt_id, executor).await? else {
         return Ok(None);
     };
-    let receipt: VoidDraftReceipt = parse_command_receipt(
+    let receipt = match PurchaseCommandReceipt::<VoidDraftReceipt>::decode(
         &audit,
         actor.id(),
         VOID_ACTION,
-        purchase_order_id,
+        Some(purchase_order_id),
         expected_fingerprint,
-    )?;
-    if receipt.purchase_order_id != purchase_order_id {
+    ) {
+        Ok(receipt) => receipt,
+        Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
+            return Err(Error::ConflictError("幂等键已用于不同采购命令".to_string()));
+        }
+        Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+            return Err(Error::Internal(message));
+        }
+    };
+    if receipt.payload().purchase_order_id != purchase_order_id {
         return Err(Error::ConflictError(
             "采购草稿作废收据与业务资源不一致".to_string(),
         ));
     }
     let order = load_purchase_order(db, purchase_order_id, executor).await?;
-    if order.stable.status != PurchaseOrderStatus::Voided || order.base.version < receipt.lock_version {
+    if order.stable.status != PurchaseOrderStatus::Voided
+        || order.base.version < receipt.payload().lock_version
+    {
         return Err(Error::Internal("采购草稿作废收据与当前状态不一致".to_string()));
     }
-    Ok(Some(receipt.into_result(true)))
+    Ok(Some(receipt.into_payload().into_result(true)))
 }
 
 /// 在事务错误后回读作废草稿收据并决定最终响应。
@@ -449,28 +452,6 @@ async fn recover_void_draft(
         .await?
         .ok_or(error),
     }
-}
-
-/// 构造作废采购草稿请求载荷指纹。
-///
-/// # 参数
-/// * `purchase_order_id` - 当前路径采购单 ID
-/// * `request` - 作废采购草稿请求
-///
-/// # 返回
-/// 返回不包含原始幂等键的稳定 SHA-256 指纹。
-///
-/// # 错误
-/// 指纹载荷无法序列化时返回内部错误。
-///
-/// # 关键业务约束
-/// 作废原因按实际审计语义去除首尾空白，期望版本仍属于请求载荷。
-fn void_request_fingerprint(purchase_order_id: &str, request: &VoidPurchaseOrderRequest) -> Result<String> {
-    let payload = VoidDraftFingerprintPayload {
-        expected_lock_version: request.expected_lock_version,
-        reason: request.reason.trim(),
-    };
-    command_request_fingerprint(VOID_ACTION, purchase_order_id, &payload)
 }
 
 impl VoidDraftReceipt {
@@ -526,7 +507,7 @@ impl VoidDraftReceipt {
 mod tests {
     use entities::purchase_order::PurchaseOrderStatus;
 
-    use super::{ensure_void_target, void_request_fingerprint, VoidDraftReceipt};
+    use super::{ensure_void_target, VoidDraftReceipt};
     use crate::errors::Error;
     use crate::purchase_order::dto::VoidPurchaseOrderRequest;
 
@@ -582,14 +563,9 @@ mod tests {
         same_payload.idempotency_key = "another-key".to_string();
         let different_payload = void_request("供应商错误");
 
-        assert_eq!(
-            void_request_fingerprint("po-1", &first).unwrap(),
-            void_request_fingerprint("po-1", &same_payload).unwrap()
-        );
-        assert_ne!(
-            void_request_fingerprint("po-1", &first).unwrap(),
-            void_request_fingerprint("po-1", &different_payload).unwrap()
-        );
+        let fingerprint = |request: &VoidPurchaseOrderRequest| request.request_fingerprint("po-1").unwrap();
+        assert_eq!(fingerprint(&first), fingerprint(&same_payload));
+        assert_ne!(fingerprint(&first), fingerprint(&different_payload));
     }
 
     /// 验证只有收据转换路径能够显式标记作废结果为回放。

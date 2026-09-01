@@ -22,7 +22,8 @@ use entities::ids::{
 use entities::inventory::StockBalance;
 use entities::money::{line_amounts, Amount, Quantity, UnitPrice};
 use entities::purchase_order::{
-    FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
+    digest_parts, FulfillmentResponsibility, LegacyReceiptIdScheme, PurchaseCommandReceipt,
+    PurchaseCommandReceiptError, PurchaseLineType, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
     PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseType,
     SupplierSnapshot,
 };
@@ -35,7 +36,6 @@ use entities::warehouse::WarehouseFulfillmentOperation;
 use id_generator::next_id;
 use mongodb::ClientSession;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use super::adapter::{purchase_order_object_readable, purchase_order_responsible_org_id};
@@ -44,7 +44,7 @@ use super::coverage::{load_sales_procurement_coverage, SalesProcurementCoverageL
 use super::create_submit::submit_created_draft_in_session;
 use super::dto::{
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreationBasisLineView,
-    CreationBasisListParams, CreationBasisView, SupplySourceType,
+    CreationBasisListParams, CreationBasisView, SupplySourceType, CREATE_ACTION,
 };
 use super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
@@ -60,10 +60,8 @@ use crate::document_registry::new_registered_document;
 use crate::errors::{Error, Result};
 use crate::iam::SharedRbacService;
 
-const CREATE_ACTION: &str = "purchase_order.create_from_basis";
 const CREATE_PERMISSION: &str = "purchase_order:create";
 const CREATE_RECEIPT_PREFIX: &str = "purchase-order-create-command-";
-const COMMAND_FINGERPRINT_PREFIX: &str = "command_sha256=";
 
 /// 单条销售当前版本明细的合格供应商供给。
 #[derive(Debug, Clone)]
@@ -347,8 +345,16 @@ impl PurchaseOrderService {
     ) -> Result<CreatePurchaseOrderResult> {
         req.validate()?;
         let requested_lines = normalize_requested_lines(&req)?;
-        let request_fingerprint = create_request_fingerprint(&req, &requested_lines);
-        let audit_id = create_command_audit_id(actor.id(), &req.idempotency_key);
+        let request_fingerprint = req.request_fingerprint(&requested_lines);
+        let receipt_identity = PurchaseCommandReceipt::<CreationReceipt>::identity(
+            CREATE_RECEIPT_PREFIX,
+            actor.id(),
+            CREATE_ACTION,
+            None,
+            &req.idempotency_key,
+            LegacyReceiptIdScheme::None,
+        )?;
+        let audit_id = receipt_identity.receipt_id().to_string();
         let PurchaseOrderAuthorization {
             rbac,
             policy_revision,
@@ -1422,7 +1428,10 @@ async fn write_creation_receipt(
         CREATE_ACTION,
         "purchase_order",
         purchase_order_id.to_string(),
-        Some(creation_receipt_message(command.request_fingerprint, &receipt)?),
+        Some(
+            PurchaseCommandReceipt::new(command.request_fingerprint.to_string(), receipt.clone())
+                .encode_message()?,
+        ),
     )?;
     db.audit_logs().create(&audit, session).await?;
     Ok(receipt.into_result(false))
@@ -1765,7 +1774,7 @@ fn compose_basis_id(
     if let Some(target_warehouse_id) = target_warehouse_id {
         parts.push(format!("target_warehouse:{target_warehouse_id}"));
     }
-    format!("{sales_order_id}:{}", digest_parts(&parts))
+    format!("{sales_order_id}:{}", digest_parts(parts))
 }
 
 /// 形成绑定销售 guard、库存余额版本与逐行剩余量的现有库存依据 ID。
@@ -1788,7 +1797,7 @@ pub(super) fn stock_basis_id_for(order: &SalesOrder, group: &StockBasisGroup, wo
             line.max_create_quantity,
         )
     }));
-    format!("{}:{}", order.base.id, digest_parts(&parts))
+    format!("{}:{}", order.base.id, digest_parts(parts))
 }
 
 /// 形成单条依据行的供给与剩余量指纹。
@@ -1887,88 +1896,6 @@ pub(super) fn stable_line_id(line: &BasisLine) -> &str {
     line.coverage.revision_line.sales_order_line_id.as_ref()
 }
 
-/// 构造创建命令载荷指纹。
-///
-/// # 参数
-/// * `req` - 创建请求
-/// * `lines` - 已规范化并排序的请求行
-///
-/// # 返回
-/// 返回不包含原始幂等键的 SHA-256 指纹。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 同一幂等键用于不同依据、范围或数量时必须冲突。
-fn create_request_fingerprint(req: &CreatePurchaseOrderFromBasisRequest, lines: &[RequestedLine]) -> String {
-    let mut parts = vec![
-        req.work_item_id.trim().to_string(),
-        req.basis_id.trim().to_string(),
-        req.purchase_type.as_str().to_string(),
-        req.payment_term_code.trim().to_string(),
-        req.target_warehouse_id
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or_default()
-            .to_string(),
-    ];
-    parts.extend(lines.iter().map(|line| {
-        format!(
-            "{}|{}|{}",
-            line.sales_order_line_id, line.quantity, line.expected_delivery_date
-        )
-    }));
-    digest_parts(&parts)
-}
-
-/// 生成不暴露原始幂等键的稳定命令收据 ID。
-///
-/// # 参数
-/// * `actor_id` - 操作人 ID
-/// * `idempotency_key` - 客户端幂等键
-///
-/// # 返回
-/// 返回审计日志唯一 ID。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 同一操作人同一幂等键只能对应一个创建命令载荷。
-fn create_command_audit_id(actor_id: &str, idempotency_key: &str) -> String {
-    format!(
-        "{CREATE_RECEIPT_PREFIX}{}",
-        digest_parts(&[
-            actor_id.to_string(),
-            CREATE_ACTION.to_string(),
-            idempotency_key.to_string(),
-        ])
-    )
-}
-
-/// 编码采购创建命令收据。
-///
-/// # 参数
-/// * `fingerprint` - 命令载荷指纹
-/// * `receipt` - 创建结果载荷
-///
-/// # 返回
-/// 返回可写入审计消息的收据文本。
-///
-/// # 错误
-/// JSON 序列化失败时返回内部错误。
-///
-/// # 关键业务约束
-/// 收据不得包含原始幂等键。
-fn creation_receipt_message(fingerprint: &str, receipt: &CreationReceipt) -> Result<String> {
-    let result = serde_json::to_string(receipt)
-        .map_err(|error| Error::Internal(format!("采购创建幂等收据序列化失败: {error}")))?;
-    Ok(format!(
-        "{COMMAND_FINGERPRINT_PREFIX}{fingerprint};result={result}"
-    ))
-}
-
 /// 查询并校验采购创建幂等收据。
 ///
 /// # 参数
@@ -1996,56 +1923,37 @@ async fn replay_creation(
     let Some(audit) = db.audit_logs().find_by_id(audit_id, executor).await? else {
         return Ok(None);
     };
-    if !audit.success
-        || audit.actor_id != actor.id()
-        || audit.action != CREATE_ACTION
-        || audit.resource_type != "purchase_order"
-    {
-        return Err(Error::ConflictError("幂等键已用于不同采购创建命令".to_string()));
-    }
-    let receipt = parse_creation_receipt(audit.message.as_deref().unwrap_or_default(), expected_fingerprint)?;
-    if audit.resource_id.as_deref() != Some(receipt.purchase_order_id.as_str()) {
+    let receipt = match PurchaseCommandReceipt::<CreationReceipt>::decode(
+        &audit,
+        actor.id(),
+        CREATE_ACTION,
+        None,
+        expected_fingerprint,
+    ) {
+        Ok(receipt) => receipt,
+        Err(PurchaseCommandReceiptError::IdentityMismatch | PurchaseCommandReceiptError::PayloadConflict) => {
+            return Err(Error::ConflictError("幂等键已用于不同采购创建命令".to_string()));
+        }
+        Err(PurchaseCommandReceiptError::Corrupted(message)) => {
+            return Err(Error::Internal(message));
+        }
+    };
+    if audit.resource_id.as_deref() != Some(receipt.payload().purchase_order_id.as_str()) {
         return Err(Error::ConflictError(
             "采购创建幂等收据与业务资源不一致".to_string(),
         ));
     }
     let order = db
         .purchase_orders()
-        .find_by_id(&receipt.purchase_order_id, executor)
+        .find_by_id(&receipt.payload().purchase_order_id, executor)
         .await?
         .ok_or_else(|| Error::Internal("采购创建幂等收据引用的采购单不存在".to_string()))?;
-    if order.base.id != receipt.purchase_order_id {
+    if order.base.id != receipt.payload().purchase_order_id {
         return Err(Error::ConflictError(
             "采购创建幂等收据与当前采购单不一致".to_string(),
         ));
     }
-    Ok(Some(receipt.into_result(true)))
-}
-
-/// 解析并校验采购创建命令收据。
-///
-/// # 参数
-/// * `message` - 审计消息
-/// * `expected_fingerprint` - 当前命令载荷指纹
-///
-/// # 返回
-/// 返回已反序列化创建结果。
-///
-/// # 错误
-/// 收据格式非法、同键异载荷或结果 JSON 损坏时返回错误。
-///
-/// # 关键业务约束
-/// 指纹必须在读取结果前比较。
-fn parse_creation_receipt(message: &str, expected_fingerprint: &str) -> Result<CreationReceipt> {
-    let (fingerprint, result) = message
-        .strip_prefix(COMMAND_FINGERPRINT_PREFIX)
-        .and_then(|value| value.split_once(";result="))
-        .ok_or_else(|| Error::Internal("采购创建幂等收据格式非法".to_string()))?;
-    if fingerprint != expected_fingerprint {
-        return Err(Error::ConflictError("幂等键已用于不同采购创建命令".to_string()));
-    }
-    serde_json::from_str(result)
-        .map_err(|error| Error::Internal(format!("采购创建幂等收据结果非法: {error}")))
+    Ok(Some(receipt.into_payload().into_result(true)))
 }
 
 impl CreationReceipt {
@@ -2071,28 +1979,6 @@ impl CreationReceipt {
             reference: self.purchase_order_id,
         }
     }
-}
-
-/// 对规范化字符串序列计算 SHA-256。
-///
-/// # 参数
-/// * `parts` - 已按业务稳定顺序排列的字符串片段
-///
-/// # 返回
-/// 返回 64 位小写十六进制摘要。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 每段带长度前缀，避免简单拼接歧义。
-fn digest_parts(parts: &[String]) -> String {
-    let mut hasher = Sha256::new();
-    for part in parts {
-        hasher.update(part.len().to_be_bytes());
-        hasher.update(part.as_bytes());
-    }
-    hex::encode(hasher.finalize())
 }
 
 /// 读取供应商主体当前法定名称。
@@ -2306,12 +2192,11 @@ mod tests {
     use entities::common::time::Instant;
     use entities::ids::WarehouseId;
     use entities::money::Quantity;
-    use entities::purchase_order::{FulfillmentResponsibility, PurchaseType};
+    use entities::purchase_order::{digest_parts, FulfillmentResponsibility, PurchaseType};
 
     use super::{
-        business_date_of, compose_basis_id, digest_parts, ensure_expected_delivery_within_sales_due,
-        fulfillment_options, maximum_create_quantity, parse_basis_sales_order_id,
-        purchase_type_from_product_kind, BasisScope,
+        business_date_of, compose_basis_id, ensure_expected_delivery_within_sales_due, fulfillment_options,
+        maximum_create_quantity, parse_basis_sales_order_id, purchase_type_from_product_kind, BasisScope,
     };
 
     /// 上海零点对应前一日 UTC 时仍还原业务自然日。
@@ -2342,7 +2227,7 @@ mod tests {
     /// 新依据 ID 只接受销售单加 SHA-256，不兼容旧供应商拼接形式。
     #[test]
     fn basis_id_parser_rejects_legacy_shape() {
-        let digest = digest_parts(&["scope".to_string()]);
+        let digest = digest_parts(["scope".to_string()]);
         assert_eq!(
             parse_basis_sales_order_id(&format!("so-1:{digest}"))
                 .unwrap()
