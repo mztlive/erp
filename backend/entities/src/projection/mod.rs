@@ -31,6 +31,7 @@
 //!   基线（phase-2 §8.5.4）。
 
 pub mod delivery;
+pub mod delivery_guard;
 pub mod revision;
 pub mod sales_order_projection;
 

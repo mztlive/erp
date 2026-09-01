@@ -223,6 +223,32 @@ impl SalesOrderProjectionRevision {
             .checked_add(1)
             .ok_or_else(|| Error::from("执行投影版本号溢出"))
     }
+
+    /// 校验投影修订归属于指定投影。
+    ///
+    /// 用于强命令入口的链路一致性校验，确保命令携带的投影身份与修订实际归属
+    /// 的投影一致，避免跨投影的误关联。
+    ///
+    /// # 参数
+    /// * `expected_projection_id` - 命令携带的期望投影身份
+    ///
+    /// # 返回
+    /// 归属一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 修订不属于该投影时返回错误，调用方应映射为 409 Conflict。
+    ///
+    /// # 关键业务约束
+    /// 该方法不触及持久化或外部状态；仅比较已加载修订事实与命令身份。
+    pub fn ensure_belongs_to_projection(
+        &self,
+        expected_projection_id: &SalesOrderProjectionId,
+    ) -> Result<()> {
+        if &self.projection_id != expected_projection_id {
+            return Err(Error::from("投影修订不属于命令投影"));
+        }
+        Ok(())
+    }
 }
 
 /// 校验唯一卡券明细执行字段。

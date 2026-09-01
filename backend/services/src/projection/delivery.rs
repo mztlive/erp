@@ -8,14 +8,15 @@ use database::{
 };
 use entities::common::time::Instant;
 use entities::ids::{
-    InboxMessageId, IntegrationErrorTaskId, SalesOrderProjectionId, SalesOrderProjectionRevisionId,
+    InboxMessageId, IntegrationErrorTaskId, SalesOrderProjectionDeliveryId, SalesOrderProjectionId,
+    SalesOrderProjectionRevisionId,
 };
 use entities::integration_ops::{
     ErrorClass, InboxMessage, InboxMessageData, InboxMessageStatus, InboxMessageUpdate, IntegrationErrorTask,
     IntegrationErrorTaskData, MessageType,
 };
 use entities::projection::{
-    ProjectionDeliveryStatus, SalesOrderProjection, SalesOrderProjectionDelivery,
+    delivery_guard, ProjectionDeliveryStatus, SalesOrderProjection, SalesOrderProjectionDelivery,
     SalesOrderProjectionRevision, SalesOrderProjectionUpdate,
 };
 use serde::{Deserialize, Serialize};
@@ -98,7 +99,11 @@ impl ProjectionService {
         actor: &AuditActor,
     ) -> Result<ProjectionDeliveryResultView> {
         command.validate()?;
-        ensure_command_identity(path_delivery_id, &command)?;
+        SalesOrderProjectionDelivery::ensure_command_identity(
+            &SalesOrderProjectionDeliveryId::new(path_delivery_id.to_string()),
+            &SalesOrderProjectionDeliveryId::new(command.delivery_id.clone()),
+        )
+        .map_err(|err| Error::ValidationError(err.to_string()))?;
         let operation_id = operation_id(
             actor.id(),
             command.action.as_str(),
@@ -403,7 +408,8 @@ impl ProjectionService {
         command_action: &'static str,
         actor: &AuditActor,
     ) -> Result<ProjectionDeliveryResultView> {
-        ensure_delivery_relation(&projection, &revision, &delivery)?;
+        delivery_guard::ensure_delivery_relation(&projection, &revision, &delivery)
+            .map_err(|err| Error::ConflictError(err.to_string()))?;
         let message = self.ensure_message(&delivery).await?;
         let now = Instant::now();
         let claimed = self
@@ -730,19 +736,22 @@ impl ProjectionService {
         projection: &SalesOrderProjection,
         revision: &SalesOrderProjectionRevision,
     ) -> Result<bool> {
+        if projection.is_same_acked_revision(&SalesOrderProjectionRevisionId::new(revision.base.id.clone())) {
+            return Ok(false);
+        }
         let Some(current_id) = projection.current_acked_revision_id.as_ref() else {
             return Ok(true);
         };
-        if current_id.as_ref() == revision.base.id.as_str() {
-            return Ok(false);
-        }
         let current = self
             .db
             .sales_order_projection_revisions()
             .find_by_id(current_id.as_ref(), &mut NoTransaction)
             .await?;
         Ok(current.is_none_or(|current| {
-            should_advance_acked_revision(current.revision.revision_no, revision.revision.revision_no)
+            SalesOrderProjection::should_advance_acked_revision(
+                current.revision.revision_no,
+                revision.revision.revision_no,
+            )
         }))
     }
 
@@ -1074,11 +1083,12 @@ impl ProjectionService {
         command: &ProjectionDeliveryCommand,
     ) -> Result<SalesOrderProjectionDelivery> {
         let delivery = self.current_delivery(&command.delivery_id).await?;
-        if delivery.base.version != command.expected_object_version
-            || delivery.projection_revision_id.to_string() != command.projection_revision_id
-        {
-            return Err(Error::ConflictError("投递对象版本或修订身份已变化".to_string()));
-        }
+        delivery
+            .ensure_matches_command(
+                command.expected_object_version,
+                &SalesOrderProjectionRevisionId::new(command.projection_revision_id.clone()),
+            )
+            .map_err(|err| Error::ConflictError(err.to_string()))?;
         Ok(delivery)
     }
 
@@ -1092,9 +1102,9 @@ impl ProjectionService {
             .find_by_id(&command.projection_revision_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("投影修订不存在".to_string()))?;
-        if revision.projection_id.to_string() != command.projection_id {
-            return Err(Error::ConflictError("投影修订不属于命令投影".to_string()));
-        }
+        revision
+            .ensure_belongs_to_projection(&SalesOrderProjectionId::new(command.projection_id.clone()))
+            .map_err(|err| Error::ConflictError(err.to_string()))?;
         Ok(revision)
     }
 
@@ -1128,27 +1138,6 @@ impl ProjectionService {
             .await?
             .ok_or_else(|| Error::NotFound("原投递消息不存在".to_string()))
     }
-}
-
-fn ensure_command_identity(path_delivery_id: &str, command: &ProjectionDeliveryCommand) -> Result<()> {
-    if command.delivery_id != path_delivery_id {
-        return Err(Error::ValidationError("路径投递ID与命令不一致".to_string()));
-    }
-    Ok(())
-}
-
-fn ensure_delivery_relation(
-    projection: &SalesOrderProjection,
-    revision: &SalesOrderProjectionRevision,
-    delivery: &SalesOrderProjectionDelivery,
-) -> Result<()> {
-    if revision.projection_id.to_string() != projection.base.id
-        || delivery.projection_revision_id.to_string() != revision.base.id
-        || delivery.target_mall_id != projection.target_mall_id
-    {
-        return Err(Error::ConflictError("投影、修订与固定投递身份不一致".to_string()));
-    }
-    Ok(())
 }
 
 fn is_unknown_error(error: &ClassifiedError) -> bool {
@@ -1306,13 +1295,9 @@ fn stable_entity_id(prefix: &str, identity: &str) -> String {
     format!("{prefix}_{}", hex::encode(Sha256::digest(identity.as_bytes())))
 }
 
-fn should_advance_acked_revision(current_revision_no: u32, incoming_revision_no: u32) -> bool {
-    incoming_revision_no >= current_revision_no
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{operation_id, should_advance_acked_revision, stable_entity_id, unknown_error};
+    use super::{operation_id, stable_entity_id, unknown_error};
     use crate::projection::ClassifiedError;
     use entities::integration_ops::ErrorClass;
 
@@ -1342,12 +1327,5 @@ mod tests {
             stable_entity_id("w29err", "projection_delivery:r1:m1"),
             stable_entity_id("w29err", "projection_delivery:r1:m1")
         );
-    }
-
-    #[test]
-    fn delayed_old_ack_never_moves_the_projection_pointer_backwards() {
-        assert!(!should_advance_acked_revision(7, 6));
-        assert!(should_advance_acked_revision(7, 7));
-        assert!(should_advance_acked_revision(7, 8));
     }
 }

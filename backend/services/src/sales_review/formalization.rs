@@ -7,9 +7,8 @@ use std::str::FromStr;
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::ReceivableEntryId;
 use entities::money::Amount;
-use entities::receivable::{AccountReviewStatus, ReceivableAccountUpdate};
 use entities::sales_order::{
-    BusinessType, FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
+    FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
 };
 use entities::sales_review::{SalesChangeSubmission, SalesChangeSubmissionLine};
@@ -106,6 +105,8 @@ fn allocate_formal_revision_identities(lines: &[SalesChangeSubmissionLine]) -> F
 ///
 /// 差额必须挂到销售单既有应收子账（`account_seq = 1`）；子账缺失说明正式
 /// 事实链已损坏，必须拒绝变更，不得补造兼容数据。
+/// 差额方向、绝对金额与复核迁移由领域层 `ReceivableDelta` / `ReceivableAccount`
+/// 决定，Service 仅保留账户读取、跨聚合判定与事务写入。
 ///
 /// # 参数
 /// * `order` - 销售单（含当前生效版本）
@@ -119,7 +120,7 @@ fn allocate_formal_revision_identities(lines: &[SalesChangeSubmissionLine]) -> F
 /// 返回 `(应收子账, 差额分录)`；差额为零时返回 `None`。
 ///
 /// # 错误
-/// 分录字段校验失败时返回错误。
+/// 分录字段校验失败或复核状态不允许形成差额时返回错误。
 pub(super) fn build_receivable_delta(
     order: &SalesOrder,
     revision: &RevisionAggregate,
@@ -134,27 +135,24 @@ pub(super) fn build_receivable_delta(
     )>,
 > {
     let new_gross = revision_gross(revision)?;
-    let delta = new_gross.to_decimal() - current_gross.to_decimal();
-    if delta.is_zero() {
+    let delta = entities::receivable::ReceivableDelta::try_from_gross(new_gross, current_gross)
+        .map_err(Error::Logic)?;
+    let Some(delta) = delta else {
         return Ok(None);
-    }
+    };
     let mut account = existing_account
         .ok_or_else(|| Error::BusinessLogicError("销售单缺少正式应收子账，不能生效销售变更".to_string()))?;
-    let mut account_update = receivable_delta_review_update(order.business_type, account.review_status)?;
-    account_update.gross_total = Some(new_gross);
-    account_update.invoiceable_total = Some(new_gross);
+    let account_update = account
+        .sales_change_delta_update(order.business_type, new_gross)
+        .map_err(Error::Logic)?;
     account.update(account_update, updated_by).map_err(Error::Logic)?;
     let entry = entities::receivable::ReceivableEntry::new(
         ReceivableEntryId::new(next_id()),
         entities::receivable::ReceivableEntryData {
             receivable_account_id: account.base.id.clone().into(),
             entry_type: entities::receivable::ReceivableEntryType::SalesChangeDelta,
-            direction: if delta.is_sign_positive() {
-                entities::receivable::EntryDirection::Increase
-            } else {
-                entities::receivable::EntryDirection::Decrease
-            },
-            amount: Amount::from_str(&delta.abs().to_string()).expect("差额必须为正数金额"),
+            direction: delta.direction(),
+            amount: delta.absolute_amount(),
             due_date: BusinessDate::today(),
             source_fact_type: "SALES_CHANGE".to_string(),
             source_document_id: order.base.id.clone(),
@@ -165,75 +163,4 @@ pub(super) fn build_receivable_delta(
     )
     .map_err(Error::Logic)?;
     Ok(Some((account, entry)))
-}
-
-/// 返回销售变更差额对应的复核缓存迁移。
-///
-/// 卡券差额只能建立在已完成期初/上次差额复核的账户上，并清除上一轮查询缓存；
-/// 非卡券账户必须保持“不适用”。任何不一致都说明正式事实链未闭合，失败关闭。
-fn receivable_delta_review_update(
-    business_type: BusinessType,
-    current_status: AccountReviewStatus,
-) -> Result<ReceivableAccountUpdate> {
-    match (business_type, current_status) {
-        (BusinessType::Voucher, AccountReviewStatus::Reviewed) => Ok(ReceivableAccountUpdate {
-            review_status: Some(AccountReviewStatus::SyncDeltaPending),
-            reviewed_by: Some(String::new()),
-            reviewed_at: None,
-            review_evidence_reference: Some(String::new()),
-            ..Default::default()
-        }),
-        (BusinessType::Voucher, _) => Err(Error::BusinessLogicError(
-            "卡券上一轮票款复核尚未通过，不能生效新的销售变更差额".to_string(),
-        )),
-        (BusinessType::GoodsService, AccountReviewStatus::NotApplicable) => {
-            Ok(ReceivableAccountUpdate::default())
-        }
-        (BusinessType::GoodsService, _) => Err(Error::BusinessLogicError(
-            "非卡券应收账户的票款复核状态不合法，不能生效销售变更".to_string(),
-        )),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::receivable_delta_review_update;
-    use entities::receivable::AccountReviewStatus;
-    use entities::sales_order::BusinessType;
-
-    #[test]
-    fn voucher_delta_reopens_review_and_clears_previous_cache() {
-        let update = receivable_delta_review_update(BusinessType::Voucher, AccountReviewStatus::Reviewed)
-            .expect("已复核卡券允许形成差额复核");
-
-        assert_eq!(update.review_status, Some(AccountReviewStatus::SyncDeltaPending));
-        assert_eq!(update.reviewed_by.as_deref(), Some(""));
-        assert!(update.reviewed_at.is_none());
-        assert_eq!(update.review_evidence_reference.as_deref(), Some(""));
-    }
-
-    #[test]
-    fn voucher_delta_requires_previous_review_to_be_complete() {
-        assert!(
-            receivable_delta_review_update(BusinessType::Voucher, AccountReviewStatus::OpeningPending,)
-                .is_err()
-        );
-        assert!(
-            receivable_delta_review_update(BusinessType::Voucher, AccountReviewStatus::SyncDeltaPending,)
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn goods_service_delta_keeps_review_not_applicable() {
-        let update =
-            receivable_delta_review_update(BusinessType::GoodsService, AccountReviewStatus::NotApplicable)
-                .expect("实物服务应收不进入卡券复核");
-
-        assert_eq!(update, Default::default());
-        assert!(
-            receivable_delta_review_update(BusinessType::GoodsService, AccountReviewStatus::Reviewed,)
-                .is_err()
-        );
-    }
 }

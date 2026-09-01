@@ -367,6 +367,61 @@ impl SalesOrderProjectionDelivery {
                 | ProjectionDeliveryStatus::Failed
         )
     }
+
+    /// 校验投递与命令的身份及版本一致性。
+    ///
+    /// 用于强命令入口的版本乐观锁校验，确保调用方基于最新投递事实提交命令，
+    /// 避免对过时版本的误操作或对错误修订的交叉写入。
+    ///
+    /// # 参数
+    /// * `expected_version` - 命令携带的期望投递版本
+    /// * `expected_revision_id` - 命令携带的期望投影修订身份
+    ///
+    /// # 返回
+    /// 一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 投递版本或修订身份不一致时返回错误，调用方应映射为 409 Conflict。
+    ///
+    /// # 关键业务约束
+    /// 该方法不触及持久化或外部状态；仅比较已加载投递事实与命令身份。
+    pub fn ensure_matches_command(
+        &self,
+        expected_version: u64,
+        expected_revision_id: &SalesOrderProjectionRevisionId,
+    ) -> Result<()> {
+        if self.base.version != expected_version || &self.projection_revision_id != expected_revision_id {
+            return Err(Error::from("投递对象版本或修订身份已变化"));
+        }
+        Ok(())
+    }
+
+    /// 校验投递命令的路径投递身份与命令投递身份一致性。
+    ///
+    /// 防止路径参数与命令体携带的投递身份不一致导致的误操作，确保强命令
+    /// 仅作用于路径指定的投递对象。
+    ///
+    /// # 参数
+    /// * `path_delivery_id` - HTTP 路径中的投递身份
+    /// * `command_delivery_id` - 命令体中的投递身份
+    ///
+    /// # 返回
+    /// 一致时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 两者不一致时返回错误，调用方应映射为 400 Validation。
+    ///
+    /// # 关键业务约束
+    /// 该方法为纯身份比较，不触及持久化或外部状态。
+    pub fn ensure_command_identity(
+        path_delivery_id: &SalesOrderProjectionDeliveryId,
+        command_delivery_id: &SalesOrderProjectionDeliveryId,
+    ) -> Result<()> {
+        if path_delivery_id != command_delivery_id {
+            return Err(Error::from("路径投递ID与命令不一致"));
+        }
+        Ok(())
+    }
 }
 
 /// 校验下发记录不变式（重试安排、成对字段与状态一致性）。

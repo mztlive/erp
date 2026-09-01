@@ -20,6 +20,7 @@ pub mod receivable_account;
 pub mod receivable_entry;
 pub mod receivable_entry_offset;
 pub mod receivable_funds_review;
+pub mod sales_change_delta;
 pub mod sales_invoice_allocation;
 
 pub use customer_receipt::*;
@@ -29,4 +30,5 @@ pub use receivable_account::*;
 pub use receivable_entry::*;
 pub use receivable_entry_offset::*;
 pub use receivable_funds_review::*;
+pub use sales_change_delta::ReceivableDelta;
 pub use sales_invoice_allocation::*;

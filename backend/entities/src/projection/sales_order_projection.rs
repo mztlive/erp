@@ -83,6 +83,49 @@ impl SalesOrderProjection {
             self.current_acked_revision_id = Some(current_acked_revision_id);
         }
     }
+
+    /// 判断商城确认指针是否应推进到新版本。
+    ///
+    /// 用于 W23 投递成功后决定是否将投影的 `current_acked_revision_id` 前进。
+    /// 指针只允许单调不减，已确认的旧版本回退视为无效。
+    ///
+    /// # 参数
+    /// * `current_revision_no` - 当前已确认修订序号
+    /// * `incoming_revision_no` - 新确认修订序号
+    ///
+    /// # 返回
+    /// 新版本序号大于等于当前序号时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 该方法为纯序号比较，不触及持久化或外部状态；同修订重复 ACK 场景应由
+    /// 调用方先比较修订身份，单调性仅用于序号不同的推进判断。
+    pub fn should_advance_acked_revision(current_revision_no: u32, incoming_revision_no: u32) -> bool {
+        incoming_revision_no >= current_revision_no
+    }
+
+    /// 判断给定修订是否为当前已确认修订的重复确认。
+    ///
+    /// 用于区分同修订重复 ACK 与同序号不同身份的场景。
+    ///
+    /// # 参数
+    /// * `incoming_revision_id` - 新确认修订身份
+    ///
+    /// # 返回
+    /// 与当前已确认身份相同时返回 `true`，表示重复 ACK 不应重复推进。
+    ///
+    /// # 错误
+    /// 无。
+    ///
+    /// # 关键业务约束
+    /// 该方法仅比较身份，不触及持久化；调用方应在加载当前修订后调用。
+    pub fn is_same_acked_revision(&self, incoming_revision_id: &SalesOrderProjectionRevisionId) -> bool {
+        self.current_acked_revision_id
+            .as_ref()
+            .is_some_and(|current| current == incoming_revision_id)
+    }
 }
 
 #[cfg(test)]
