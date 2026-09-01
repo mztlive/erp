@@ -49,7 +49,7 @@
 | `P1` | N+1、无界读取、持久化事实归属、关键复用规则或高频路径风险 |
 | `P2` | 重复转换、次要 DTO/VO 内聚、测试适配或低频查询优化 |
 
-第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **170 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、52 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
+第 6 节每个稳定 ID 行同时构成唯一执行登记，不另建重复编号表。`状态` 与 `执行登记` 必须在同一实施提交中更新；执行登记至少包含批次、责任人、依赖或解除条件、关闭证据。当前登记为 **169 项 OPEN、0 项 IN_PROGRESS、4 项 BLOCKED、53 项 DONE**；未分配责任人不得进入 `IN_PROGRESS`，无关闭证据不得进入 `DONE`。`BLOCKED` 项仍计入开放问题总量，但在解除条件签署前不得实施会固化未授权业务语义的代码。
 
 ## 4. 当前总量
 
@@ -58,21 +58,21 @@
 | Core / Access / WorkItem | 0 | 0 | 0 | 0 |
 | Approval | 3 | 4 | 1 | 8 |
 | Master | 3 | 6 | 0 | 9 |
-| Sales / Contract / Returns / Projection | 7 | 16 | 0 | 23 |
+| Sales / Contract / Returns / Projection | 7 | 15 | 0 | 22 |
 | Procurement / Supplier | 10 | 18 | 0 | 28 |
 | Fulfillment / Inventory / Settlement | 7 | 10 | 0 | 17 |
 | Finance | 13 | 14 | 0 | 27 |
 | Integrations / Mall / Import | 32 | 30 | 0 | 62 |
-| **合计** | **75** | **98** | **1** | **174** |
+| **合计** | **75** | **97** | **1** | **173** |
 
 统计口径：当前确认 **216 个分层责任簇**，另有 **10 个必须保留在 Service 修复的缺陷**。本文件的计数、优先级、状态和关闭结论仅以第 6 节稳定 ID 为准；其他报告的候选项、批次或状态不得替代本文件。
 
 | 优先级 | Repository / Index | Entity / VO / DTO / BPM | Service 内缺陷 | 合计 |
 | --- | ---: | ---: | ---: | ---: |
-| P0 | 13 | 40 | 0 | 53 |
+| P0 | 13 | 39 | 0 | 52 |
 | P1 | 57 | 46 | 1 | 104 |
 | P2 | 5 | 12 | 0 | 17 |
-| **合计** | **75** | **98** | **1** | **174** |
+| **合计** | **75** | **97** | **1** | **173** |
 
 ## 5. 单项关闭条件与统一门禁
 
@@ -310,7 +310,7 @@ git diff --check
 | SALES-E04 | P1 | OPEN | `backend/services/src/sales_order/mapper.rs:239`，`draft_hash`；`sales_review/sales_change_order.rs:254`、`:588`：draft/change 内容标识仍散落 Service。正式版本 `sub:{id}` 已由 `SALES-E06`/`SALES-E10` 迁入聚合工厂，本项不得重复关闭该指纹。 | 必须建立强类型 `SalesContentHash` 或实体工厂，统一 draft/change/submission 派生；Service 只传身份与版本。命令幂等 SHA-256 fingerprint 不得并入该 VO。 | 必须为既有格式建立 golden tests；迁移不得改变已持久化语义；空 ID、非法版本和长度边界必须失败关闭。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E05 | P1 | OPEN | `backend/services/src/sales_order/mapper.rs:258`，`build_submission`；`:342`，`build_submission_lines`：工作副本向提交快照的字段、快照、金额和字段组复制规则完整滞留 Service。 | 必须新增 `SalesOrderSubmissionData::from_working_copy(...)` 与 `SalesOrderSubmissionLineData::from_working_copy_line(...)`；ID 生成、外部身份解析、提交序号读取和事务写入保留 Service；Entity 禁止依赖 `services::dto` 或 `id-generator`。 | 必须覆盖 GoodsService、Voucher、可选快照、外部身份、金额、行顺序及字段组缺失；转换测试必须直接位于 entities。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E06 | P0 | DONE | `backend/services/src/sales_order/formalize.rs:572`，`build_revision_for_order`，及 `build_goods_service_revision`、`build_voucher_revision`、`new_revision_header`、`new_revision_line`：正式版本聚合生成规则由 Service 持有。 | entities 必须提供不依赖持久化的正式版本聚合数据工厂；Service 提供 ID、时间、提交实体及行并持久化。卡券单行约束与字段组一致性必须由工厂失败关闭。 | 必须覆盖 GoodsService 多行、Voucher 单行、空行、混合行、多卡券行、金额/快照完整性及上一版本关系。`formalize_submission` 写入和事务顺序不得移动。 | 批次：`SALES-6.4-E06-E09-E10-20260901`；责任人：Grok；依赖：与 `SALES-E10` 同批，直接前置 `SALES-E09`；关闭证据：`SalesOrderRevisionAggregate::from_sales_order_submission` 一次构造版本头、公共行和子类型行；Service 只注入 ID、时间、版本号与上一版本指针；旧 Service 聚合 helper 已删除。 |
-| SALES-E07 | P0 | OPEN | `backend/services/src/sales_order/adapter.rs:543`，`build_sales_order_snapshot`；`:572`，`sum_line_quantity`：当前只 `filter_map(quantity)`，Voucher 行以 `card_count` 表达数量，导致审批快照漏量。 | `SalesOrderSubmission` / 行实体按业务性质计算审批总数量：GoodsService 汇总各行基础单位 `quantity`；Voucher 固定取唯一卡券行 `card_count`，单位为“张”，精确转换成 Quantity；适用行缺量必须失败，Service 只映射快照。 | 覆盖单/多行实物、唯一卡券行、空行、缺量、非法混合行及数值溢出；不得用 `filter_map` 静默跳过或由 Service 临时兜底。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
+| SALES-E07 | P0 | DONE | `backend/services/src/sales_order/adapter.rs:543`，`build_sales_order_snapshot`；`:572`，`sum_line_quantity`：当前只 `filter_map(quantity)`，Voucher 行以 `card_count` 表达数量，导致审批快照漏量。 | `SalesOrderSubmission` / 行实体按业务性质计算审批总数量：GoodsService 汇总各行基础单位 `quantity`；Voucher 固定取唯一卡券行 `card_count`，单位为“张”，精确转换成 Quantity；适用行缺量必须失败，Service 只映射快照。 | 覆盖单/多行实物、唯一卡券行、空行、缺量、非法混合行及数值溢出；不得用 `filter_map` 静默跳过或由 Service 临时兜底。 | 批次：`SALES-6.4-E07-20260901`；责任人：Grok；依赖：无；关闭证据：`SalesOrderSubmission::approval_total_quantity` 按业务性质合计；卡券只换算唯一行 `card_count`；Service `sum_line_quantity` 已删除；实体 5 项覆盖单/多行实物、唯一卡券、空行、缺量、混合行、零张数和溢出。 |
 | SALES-E08 | P1 | OPEN | `backend/services/src/sales_order/status.rs:77`，`CloseEligibilityInputs`；`:118`，`compute_close_eligibility`：Service 重复解释终态、履约及回款事实；无子账时金额兜底可能形成 `0 >= 0`。 | `SalesOrder` / `SalesOrderClosureFacts` 必须承载单聚合状态事实与金额兜底边界；Service 保留应收摘要读取、跨聚合最终编排及中文 View 文案。无子账不得仅因零金额比较视为结清。 | 必须覆盖 Closed、Voided、Draft、Effective、履约未完成、回款未结清、无子账、合法零额及“开票不参与结案”。`has_active_change_order` 等仓储事实不得下沉 Entity。 | 批次：未分配；责任人：未分配；依赖：见本项；关闭证据：— |
 | SALES-E09 | P1 | DONE | `backend/services/src/sales_review/sales_change_mapping.rs:55`，`change_submission_goods`；`:99`，`change_submission_voucher`：变更提交行字段组反向还原规则位于 Service，而销售提交行已有实体镜像能力。 | `SalesChangeSubmissionLine` 必须提供 `goods_fields()`、`voucher_fields()`；Service 镜像 helper 必须删除；entities 错误由 Service 统一转换。 | 必须覆盖正确字段组、错误行类型、每个必填字段缺失及可选字段保留。 | 批次：`SALES-6.4-E06-E09-E10-20260901`；责任人：Grok；依赖：`SALES-E10` 直接前置；关闭证据：变更提交行拥有 `goods_fields`/`voucher_fields`；`sales_change_mapping.rs` 已删除；错误行类型、必填缺失和可选字段保留由实体单测固定。 |
 | SALES-E10 | P0 | DONE | `backend/services/src/sales_review/formalization.rs:69`，`build_change_revision`：销售变更到正式修订头、公共行及子类型行的生成规则在 Service，并与首次形式化形成双规则源。 | 正式版本聚合必须提供 `from_sales_change_submission(...)`，并与首次形式化复用公共行/快照规则；Service 保留 latest revision no 查询、基准版本复验和事务写入。 | 必须覆盖实物、卡券、上一版本指针、修订来源、内容哈希、字段组及金额一致性。Entity 禁止查询 latest revision no。 | 批次：`SALES-6.4-E06-E09-E10-20260901`；责任人：Grok；依赖：与 `SALES-E06` 同批；关闭证据：`from_sales_change_submission` 复用 `from_prepared` 公共行/快照规则；Service 继续查询 latest revision no 并注入版本号；Entity 无仓储依赖。 |
@@ -344,6 +344,13 @@ git diff --check
 5. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
 6. 兼容与回滚合同：本批不改变 HTTP DTO、BSON 字段、索引或已持久化 `sub:{id}` 指纹形态，不执行数据或索引迁移。应用代码可按整个批次原子回滚；回滚后会重新暴露 Service 双规则源和变更行 Optional 拆解。
 7. 外部验收边界：浏览器、真实商城和生产数据扫描为 `N/A`；本批不改变用户界面或外部调用。`SALES-E04` 内容身份 VO 与 `SALES-E14` 投影 CardForm 转换仍保持 OPEN，不得宣称已关闭。
+8. 批次编号：`SALES-6.4-E07-20260901`。交付范围：`SALES-E07`。责任人：Grok。外部依赖：无。
+9. 分层结果：`SalesOrderSubmission::approval_total_quantity` 独占审批快照总数量。实物及服务精确合计各行基础单位 `quantity`；卡券只读取唯一卡券行 `card_count` 并经 `integer_quantity` 换算为 `Quantity`（单位为张）。空行、行类型与业务性质不一致、缺量、零张数、精度越界和 `Decimal` 溢出均失败关闭。Service `build_sales_order_snapshot` 只注入责任组织、对手方、金额、行数并映射 View；原 `sum_line_quantity` 的 `filter_map(quantity)` 路径已删除。
+10. 定向验收：`cargo test -p entities --all-features --locked --lib approval_quantity` 通过 5 项；`cargo test -p entities --all-features --locked --lib sales_order` 通过 97 项；`cargo test -p services --all-features --locked --lib sales_order::adapter` 通过 12 项，含卡券快照冻结张数回归。Arithmetic 覆盖正值合计、小数精度、零张数拒绝和溢出；Conversion 覆盖 `card_count -> Quantity`；Collection 覆盖空集、单行、多行和非法混合。State 与 Index/Page/Batch/Aggregation 标记 `N/A`：本批不改变状态机、查询或索引。
+11. 真实 MongoDB 验收：本批不新增查询、聚合、索引、事务原语或并发 CAS；Exact/Exists、Batch、Page、Aggregation、Index 均标记 `N/A`。审批启动仍由既有 Service 事务路径写入快照，不在本批重跑隔离副本集。
+12. 统一门禁：`cargo fmt --all -- --check`、`cargo check --workspace --all-features --locked`、`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`、`cargo test --workspace --all-features --locked`、`check-bpm-boundaries.sh`、`check-service-boundaries.sh`、`check-permissions-drift.sh`、`git diff --check` 全部通过。
+13. 兼容与回滚合同：本批不改变 HTTP DTO、BSON 字段、索引或快照 payload 字段名；卡券快照 `total_quantity` 从漏量为正确张数，属于正确性修复而非 wire 形态变更。应用代码可按整个批次原子回滚；回滚后会重新暴露卡券审批快照漏量。
+14. 外部验收边界：浏览器、真实商城和生产数据扫描为 `N/A`。销售变更单 `sales_review/adapter.rs` 仍有同类 `filter_map(quantity)`，本批未关闭，不得宣称变更审批快照已修复。
 
 ### 6.5 Procurement / Supplier
 

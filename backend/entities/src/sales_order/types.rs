@@ -581,6 +581,8 @@ pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSumma
 
 /// 将卡张数转换为基础单位数量（整数，满足数量精度）。
 ///
+/// 行金额计算与审批快照总数量共用该换算，单位为张。
+///
 /// # 参数
 /// * `count` - 卡张数
 ///
@@ -589,7 +591,10 @@ pub(crate) fn validate_line_list(business_type: BusinessType, lines: &[LineSumma
 ///
 /// # 错误
 /// 数量超出精度（理论不可达，防御性分支）时返回错误。
-fn integer_quantity(count: u32) -> Result<Quantity> {
+///
+/// # 关键业务约束
+/// 不得把卡张数写入或读取 `quantity` 字段；调用方必须显式换算。
+pub(crate) fn integer_quantity(count: u32) -> Result<Quantity> {
     Quantity::try_from(Decimal::from(count))
         .map_err(|error| Error::from(format!("卡张数超出数量精度：{error}")))
 }

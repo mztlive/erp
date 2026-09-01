@@ -18,6 +18,7 @@
 //! `entities/src/common/`。
 
 mod amount_validation;
+mod approval_quantity;
 mod entity;
 pub(crate) mod formal_revision;
 mod procurement;

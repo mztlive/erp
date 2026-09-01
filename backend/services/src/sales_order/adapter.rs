@@ -10,7 +10,6 @@ use entities::common::time::Instant;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 use entities::document_registry::DocumentType;
 use entities::ids::CustomerAccountId;
-use entities::money::Quantity;
 use entities::sales_order::{
     BusinessType, CommercialStatus, ReviewStatus, SalesOrder, SalesOrderSubmission, SalesOrderSubmissionLine,
 };
@@ -559,28 +558,10 @@ pub fn build_sales_order_snapshot(
             customer_id: CustomerAccountId::new(order.customer_id.to_string()),
         }),
         total_amount: Some(submission.gross_amount),
-        total_quantity: Some(sum_line_quantity(lines)?),
+        total_quantity: Some(submission.approval_total_quantity(lines)?),
         line_count: u32::try_from(lines.len())
             .map_err(|_| Error::ValidationError("销售明细行数溢出".to_string()))?,
     })
-}
-
-/// 汇总提交明细数量。
-///
-/// # 错误
-/// 无数量或合计超出标度时返回错误。
-fn sum_line_quantity(lines: &[SalesOrderSubmissionLine]) -> Result<Quantity> {
-    let mut quantities = lines.iter().filter_map(|line| line.quantity);
-    let Some(first) = quantities.next() else {
-        return Err(Error::ValidationError(
-            "销售单明细没有数量，无法启动审批".to_string(),
-        ));
-    };
-    let mut total = first.to_decimal();
-    for quantity in quantities {
-        total += quantity.to_decimal();
-    }
-    Quantity::try_from(total).map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 由绑定与可选实例事实构造只读审批结构。
@@ -679,15 +660,15 @@ mod tests {
     use super::*;
     use crate::approval::binding::binding_from_published;
     use bpm::ids::ApprovalProcessDefinitionId;
-    use entities::common::time::Instant;
+    use entities::common::time::{BusinessDate, Instant};
     use entities::ids::{
         CustomerAccountId, PartyId, SalesOrderId, SalesOrderLineId, SalesOrderSubmissionId,
-        SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId,
+        SalesOrderSubmissionLineId, SalesOrderWorkingCopyId, SkuId, SkuRevisionId, SourceSystemId,
     };
     use entities::money::{Amount, Quantity, Rate, UnitPrice};
     use entities::sales_order::{
-        GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData, SalesOrderSubmissionData,
-        SalesOrderSubmissionLineData, WelfareScenario,
+        CardForm, GoodsLineFields, HeaderSnapshotData, LineType, SalesOrderData, SalesOrderSubmissionData,
+        SalesOrderSubmissionLineData, VoucherLineDraft, WelfareScenario,
     };
     use std::str::FromStr;
 
@@ -783,6 +764,78 @@ mod tests {
             line_data(),
         )
         .expect("提交行必须可构造")
+    }
+
+    fn voucher_line_data() -> SalesOrderSubmissionLineData {
+        SalesOrderSubmissionLineData {
+            sales_order_line_id: SalesOrderLineId::new("line-v"),
+            line_no: 1,
+            line_type: LineType::Voucher,
+            sales_tax_rate: Rate::from_str("0").expect("税率合法"),
+            item_name_snapshot: "卡券".into(),
+            spec_snapshot: None,
+            unit_snapshot: Some("张".into()),
+            goods: None,
+            voucher: Some(VoucherLineDraft {
+                face_value: Amount::from_str("100.00").expect("面额合法"),
+                card_count: 3,
+                unit_price_gross: UnitPrice::from_str("90.0000").expect("单价合法"),
+                face_value_total: Amount::from_str("300.00").expect("面额小计合法"),
+                transaction_amount: Amount::from_str("270.00").expect("成交金额合法"),
+                gift_amount: Amount::from_str("30.00").expect("配赠金额合法"),
+                gift_rate: None,
+                card_form: CardForm::Electronic,
+            }),
+        }
+    }
+
+    fn voucher_submission() -> SalesOrderSubmission {
+        SalesOrderSubmission::new(
+            SalesOrderSubmissionId::new("sub-v"),
+            SalesOrderSubmissionData {
+                sales_order_id: SalesOrderId::new("so-1"),
+                submission_no: 1,
+                working_copy_id: SalesOrderWorkingCopyId::new("wc-v"),
+                working_copy_version: 1,
+                business_type: BusinessType::Voucher,
+                customer_id: CustomerAccountId::new("cust-1"),
+                contract_revision_id: None,
+                settlement_party_id: PartyId::new("party-1"),
+                snapshot: HeaderSnapshotData {
+                    customer_name: "客户".into(),
+                    contract_no: None,
+                    settlement_party_name: Some("结算".into()),
+                    payment_term_code: "NET30".into(),
+                    payment_term_name: "月结".into(),
+                    invoice_type: "普通发票".into(),
+                    tax_point: "开票".into(),
+                },
+                project_name: None,
+                business_remark: None,
+                voucher_category_sku_id: Some(SkuId::new("vcat-1")),
+                voucher_expiry_at: Some(Instant::from_unix_secs(1_850_000_000)),
+                target_mall_id: Some(SourceSystemId::new("mall-1")),
+                customer_external_identity: Some("mall-customer-1".into()),
+                voucher_category_external_identity: Some("mall-voucher-1".into()),
+                receivable_due_date: Some(BusinessDate::from_ymd(2026, 10, 31).unwrap()),
+                gross_amount: Amount::from_str("270.00").expect("金额合法"),
+                net_amount: Amount::from_str("270.00").expect("金额合法"),
+                tax_amount: Amount::from_str("0").expect("金额合法"),
+                submitted_at: Instant::from_unix_secs(10),
+                submitted_by: "user-1".into(),
+                lines: vec![voucher_line_data()],
+            },
+        )
+        .expect("卡券提交必须可构造")
+    }
+
+    fn voucher_line() -> SalesOrderSubmissionLine {
+        SalesOrderSubmissionLine::new(
+            SalesOrderSubmissionLineId::new("sl-v"),
+            SalesOrderSubmissionId::new("sub-v"),
+            voucher_line_data(),
+        )
+        .expect("卡券提交行必须可构造")
     }
 
     /// 适配器必须显式声明合同要求的全部字段。
@@ -961,6 +1014,25 @@ mod tests {
             Instant::from_unix_secs(10)
         )
         .is_err());
+    }
+
+    /// 卡券审批快照必须冻结卡张数，不得因 `quantity` 为空而漏量。
+    #[test]
+    fn voucher_snapshot_freezes_card_count_quantity() {
+        let mut order = draft_order();
+        order.business_type = BusinessType::Voucher;
+        let line = voucher_line();
+        assert!(line.quantity.is_none());
+        let payload = build_sales_order_snapshot(
+            &order,
+            &voucher_submission(),
+            &[line],
+            "user-1",
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        assert_eq!(payload.total_amount.unwrap().to_string(), "270.00");
+        assert_eq!(payload.total_quantity.unwrap().to_string(), "3");
     }
 
     /// 详情只读审批结构；允许动作不含选择定义或审批人。
