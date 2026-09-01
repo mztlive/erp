@@ -43,8 +43,8 @@ pub struct StockReservationRow {
 /// 库存预占列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct StockReservationFilter {
-    /// 仓库；`None` 表示不筛选。
-    pub warehouse_id: Option<WarehouseId>,
+    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
     pub sku_id: Option<SkuId>,
     /// 预占状态；`None` 表示不筛选。
@@ -68,8 +68,11 @@ impl QueryFilter for StockReservationFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_id) = &self.warehouse_id {
-            filter.insert("warehouse_id", warehouse_id.to_string());
+        if let Some(warehouse_ids) = &self.warehouse_ids {
+            filter.insert(
+                "warehouse_id",
+                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+            );
         }
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
@@ -125,19 +128,16 @@ impl<'a> Repository<'a, StockReservation> {
         filter: &StockReservationFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockReservationRow>> {
+        let query = filter.to_doc();
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["created_at", "updated_at"],
-            ))
+            .sort(stock_reservation_sort(filter))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(stock_reservation_projection())
             .build();
         let collection = self.collection().clone_with_type::<StockReservationRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
         Ok(PageResult {
             items,
             total: total as i64,
@@ -286,6 +286,17 @@ impl<'a> Repository<'a, StockReservation> {
         let result = mongo_ops::update_one(&self.collection(), filter, update, false, executor).await?;
         Ok(result.matched_count > 0)
     }
+}
+
+/// 为库存预占分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+fn stock_reservation_sort(filter: &StockReservationFilter) -> Document {
+    let mut sort = sort_doc(
+        filter.sort_by.as_deref(),
+        filter.sort_ascending,
+        &["created_at", "updated_at"],
+    );
+    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
+    sort
 }
 
 impl<'a> InventoryRepository<'a> {
@@ -497,5 +508,63 @@ fn stock_reservation_projection() -> Document {
         "released_quantity": 1,
         "status": 1,
         "version": 1,
+    }
+}
+
+#[cfg(test)]
+mod filter_tests {
+    use super::{stock_reservation_sort, StockReservationFilter};
+    use crate::repository::QueryFilter;
+    use entities::ids::WarehouseId;
+    use mongodb::bson::{doc, Bson};
+
+    fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockReservationFilter {
+        StockReservationFilter {
+            warehouse_ids,
+            sku_id: None,
+            status: None,
+            sales_order_line_id: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
+
+    #[test]
+    fn authorized_warehouse_filter_preserves_company_empty_and_exact_scope() {
+        assert_eq!(
+            filter(Some(vec![
+                WarehouseId::new("warehouse-1"),
+                WarehouseId::new("warehouse-2"),
+            ]))
+            .to_doc()
+            .get_document("warehouse_id")
+            .unwrap(),
+            &doc! { "$in": ["warehouse-1", "warehouse-2"] }
+        );
+        assert_eq!(
+            filter(Some(Vec::new()))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &Vec::<Bson>::new()
+        );
+        assert!(!filter(None).to_doc().contains_key("warehouse_id"));
+    }
+
+    #[test]
+    fn reservation_sort_uses_unique_id_as_same_direction_tie_breaker() {
+        let mut value = filter(None);
+        value.sort_by = Some("created_at".to_string());
+        value.sort_ascending = true;
+        assert_eq!(stock_reservation_sort(&value), doc! { "created_at": 1, "id": 1 });
+        value.sort_ascending = false;
+        assert_eq!(
+            stock_reservation_sort(&value),
+            doc! { "created_at": -1, "id": -1 }
+        );
     }
 }

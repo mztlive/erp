@@ -1,4 +1,4 @@
-//! 库存调整的对象读取、创建动作与 Warehouse DataScope 授权边界。
+//! 库存列表读取、调整动作与 Warehouse DataScope 授权边界。
 //!
 //! 本模块只把 IAM/RBAC 与 DataScope 事实收敛为 Service 可消费的仓库范围；
 //! Repository 仅接收已证明的仓库过滤，不解释 actor、角色或权限。
@@ -23,6 +23,8 @@ const CREATE_PERMISSION: &str = "stock_adjustment:create";
 const UPDATE_PERMISSION: &str = "stock_adjustment:update";
 const BALANCE_LIST_PERMISSION: &str = "stock_balance:list";
 const BALANCE_DETAIL_PERMISSION: &str = "stock_balance:detail";
+const MOVEMENT_LIST_PERMISSION: &str = "stock_movement:list";
+const RESERVATION_LIST_PERMISSION: &str = "stock_reservation:list";
 
 /// 已由同一授权快照证明的仓库范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,19 +70,21 @@ impl WarehouseScope {
     }
 }
 
-/// 库存余额读取范围，以及库存调整读取、创建、更新的同角色联合范围。
+/// 各库存列表读取范围，以及库存调整读取、创建、更新的同角色联合范围。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StockAdjustmentAuthorization {
+pub(crate) struct InventoryAuthorization {
     actor_active: bool,
     balance_list_scope: WarehouseScope,
     balance_detail_scope: WarehouseScope,
+    movement_list_scope: WarehouseScope,
+    reservation_list_scope: WarehouseScope,
     adjustment_list_scope: WarehouseScope,
     read_scope: WarehouseScope,
     create_scope: WarehouseScope,
     update_scope: WarehouseScope,
 }
 
-impl StockAdjustmentAuthorization {
+impl InventoryAuthorization {
     /// 判断认证身份在事务快照内是否仍对应可登录账号。
     pub(crate) fn actor_is_active(&self) -> bool {
         self.actor_active
@@ -94,6 +98,16 @@ impl StockAdjustmentAuthorization {
     /// 判断当前账号是否可读取目标仓库的库存余额详情。
     pub(crate) fn can_read_balance_detail(&self, warehouse_id: &str) -> bool {
         self.balance_detail_scope.covers(warehouse_id)
+    }
+
+    /// 返回库存流水列表的仓库范围。
+    pub(crate) fn movement_list_scope(&self) -> &WarehouseScope {
+        &self.movement_list_scope
+    }
+
+    /// 返回库存预占列表的仓库范围。
+    pub(crate) fn reservation_list_scope(&self) -> &WarehouseScope {
+        &self.reservation_list_scope
     }
 
     /// 返回库存调整列表的联合 `list + detail` 仓库范围。
@@ -117,18 +131,18 @@ impl StockAdjustmentAuthorization {
     }
 }
 
-/// 在调用方执行器快照内形成余额读取及库存调整读写授权。
+/// 在调用方执行器快照内形成库存读取及调整读写授权。
 ///
 /// `create_scope`/`update_scope` 只采用同一个启用角色同时授予 `detail` 与目标
 /// 动作的范围，禁止把不同角色的权限或 DataScope 拼接。
-pub(crate) async fn stock_adjustment_authorization_with_executor(
+pub(crate) async fn inventory_authorization_with_executor(
     db: &Database,
     rbac: &RbacService,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<StockAdjustmentAuthorization> {
+) -> Result<InventoryAuthorization> {
     if !approval_actor_is_active_with_executor(db, actor, executor).await? {
-        return Ok(StockAdjustmentAuthorization::inactive());
+        return Ok(InventoryAuthorization::inactive());
     }
     let detail = Permission::parse(DETAIL_PERMISSION)?;
     let adjustment_list = Permission::parse(ADJUSTMENT_LIST_PERMISSION)?;
@@ -136,6 +150,8 @@ pub(crate) async fn stock_adjustment_authorization_with_executor(
     let update = Permission::parse(UPDATE_PERMISSION)?;
     let balance_list = Permission::parse(BALANCE_LIST_PERMISSION)?;
     let balance_detail = Permission::parse(BALANCE_DETAIL_PERMISSION)?;
+    let movement_list = Permission::parse(MOVEMENT_LIST_PERMISSION)?;
+    let reservation_list = Permission::parse(RESERVATION_LIST_PERMISSION)?;
     let permissions = [
         detail.clone(),
         adjustment_list.clone(),
@@ -143,6 +159,8 @@ pub(crate) async fn stock_adjustment_authorization_with_executor(
         update.clone(),
         balance_list.clone(),
         balance_detail.clone(),
+        movement_list.clone(),
+        reservation_list.clone(),
     ];
     let snapshot = rbac
         .role_permission_snapshot(actor.kind(), actor.id(), &permissions)
@@ -150,6 +168,8 @@ pub(crate) async fn stock_adjustment_authorization_with_executor(
     let enabled = enabled_role_ids(db, snapshot.role_ids(), executor).await?;
     let balance_list_roles = enabled_grants(snapshot.granting_role_ids(&balance_list), &enabled);
     let balance_detail_roles = enabled_grants(snapshot.granting_role_ids(&balance_detail), &enabled);
+    let movement_list_roles = enabled_grants(snapshot.granting_role_ids(&movement_list), &enabled);
+    let reservation_list_roles = enabled_grants(snapshot.granting_role_ids(&reservation_list), &enabled);
     let adjustment_list_roles = enabled_grants(
         snapshot.granting_role_ids_for_all(&[adjustment_list, detail.clone()]),
         &enabled,
@@ -169,6 +189,8 @@ pub(crate) async fn stock_adjustment_authorization_with_executor(
         [
             balance_list_roles.as_slice(),
             balance_detail_roles.as_slice(),
+            movement_list_roles.as_slice(),
+            reservation_list_roles.as_slice(),
             adjustment_list_roles.as_slice(),
             read_roles.as_slice(),
             create_roles.as_slice(),
@@ -177,10 +199,12 @@ pub(crate) async fn stock_adjustment_authorization_with_executor(
         executor,
     )
     .await?;
-    let authorization = StockAdjustmentAuthorization {
+    let authorization = InventoryAuthorization {
         actor_active: true,
         balance_list_scope: scope_from_role_facts(&user_scopes, &balance_list_roles, &role_scopes),
         balance_detail_scope: scope_from_role_facts(&user_scopes, &balance_detail_roles, &role_scopes),
+        movement_list_scope: scope_from_role_facts(&user_scopes, &movement_list_roles, &role_scopes),
+        reservation_list_scope: scope_from_role_facts(&user_scopes, &reservation_list_roles, &role_scopes),
         adjustment_list_scope: scope_from_role_facts(&user_scopes, &adjustment_list_roles, &role_scopes),
         read_scope: scope_from_role_facts(&user_scopes, &read_roles, &role_scopes),
         create_scope: scope_from_role_facts(&user_scopes, &create_roles, &role_scopes),
@@ -191,12 +215,14 @@ pub(crate) async fn stock_adjustment_authorization_with_executor(
     Ok(authorization)
 }
 
-impl StockAdjustmentAuthorization {
+impl InventoryAuthorization {
     fn inactive() -> Self {
         Self {
             actor_active: false,
             balance_list_scope: WarehouseScope::empty(),
             balance_detail_scope: WarehouseScope::empty(),
+            movement_list_scope: WarehouseScope::empty(),
+            reservation_list_scope: WarehouseScope::empty(),
             adjustment_list_scope: WarehouseScope::empty(),
             read_scope: WarehouseScope::empty(),
             create_scope: WarehouseScope::empty(),
@@ -283,7 +309,7 @@ fn scopes_by_subject(scopes: Vec<DataScope>) -> HashMap<String, Vec<DataScope>> 
 mod tests {
     use std::collections::HashMap;
 
-    use super::{scope_from_role_facts, scopes_by_subject, StockAdjustmentAuthorization, WarehouseScope};
+    use super::{scope_from_role_facts, scopes_by_subject, InventoryAuthorization, WarehouseScope};
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::ids::{DataScopeId, WarehouseId};
 
@@ -382,10 +408,12 @@ mod tests {
 
     #[test]
     fn balance_read_scope_is_independent_from_adjustment_read_and_create_scopes() {
-        let authorization = StockAdjustmentAuthorization {
+        let authorization = InventoryAuthorization {
             actor_active: true,
             balance_list_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
             balance_detail_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
+            movement_list_scope: WarehouseScope::empty(),
+            reservation_list_scope: WarehouseScope::empty(),
             adjustment_list_scope: WarehouseScope::empty(),
             read_scope: WarehouseScope::empty(),
             create_scope: WarehouseScope::empty(),
@@ -398,10 +426,12 @@ mod tests {
 
     #[test]
     fn adjustment_detail_scope_does_not_imply_list_scope() {
-        let authorization = StockAdjustmentAuthorization {
+        let authorization = InventoryAuthorization {
             actor_active: true,
             balance_list_scope: WarehouseScope::empty(),
             balance_detail_scope: WarehouseScope::empty(),
+            movement_list_scope: WarehouseScope::empty(),
+            reservation_list_scope: WarehouseScope::empty(),
             adjustment_list_scope: WarehouseScope::empty(),
             read_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
             create_scope: WarehouseScope::empty(),
@@ -415,5 +445,25 @@ mod tests {
                 .repository_warehouse_ids(None),
             Some(Vec::new())
         );
+    }
+
+    #[test]
+    fn movement_and_reservation_list_scopes_are_independent() {
+        let authorization = InventoryAuthorization {
+            actor_active: true,
+            balance_list_scope: WarehouseScope::empty(),
+            balance_detail_scope: WarehouseScope::empty(),
+            movement_list_scope: WarehouseScope::from_targets(vec!["warehouse-1".to_string()]),
+            reservation_list_scope: WarehouseScope::from_targets(vec!["warehouse-2".to_string()]),
+            adjustment_list_scope: WarehouseScope::empty(),
+            read_scope: WarehouseScope::empty(),
+            create_scope: WarehouseScope::empty(),
+            update_scope: WarehouseScope::empty(),
+        };
+
+        assert!(authorization.movement_list_scope().covers("warehouse-1"));
+        assert!(!authorization.movement_list_scope().covers("warehouse-2"));
+        assert!(authorization.reservation_list_scope().covers("warehouse-2"));
+        assert!(!authorization.reservation_list_scope().covers("warehouse-1"));
     }
 }

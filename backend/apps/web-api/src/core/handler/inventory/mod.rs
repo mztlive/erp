@@ -244,15 +244,19 @@ pub async fn stock_balance_detail(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前认证操作人，用于服务端库存流水读取范围
 /// * `query` - 分页与筛选参数（仓库/SKU/类型/方向/时间区间）
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
 pub async fn stock_movement_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockMovementListParams>,
 ) -> Result<PageView<StockMovementView>> {
-    let page = inventory_service(&state).stock_movement_list(&params).await?;
+    let page = inventory_service(&state)
+        .stock_movement_list(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -268,15 +272,19 @@ pub async fn stock_movement_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
+/// * `actor` - 当前认证操作人，用于服务端库存预占读取范围
 /// * `query` - 分页与筛选参数（仓库/SKU/状态/销售明细）
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
 pub async fn stock_reservation_list(
     State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
     Query(params): Query<StockReservationListParams>,
 ) -> Result<PageView<StockReservationView>> {
-    let page = inventory_service(&state).stock_reservation_list(&params).await?;
+    let page = inventory_service(&state)
+        .stock_reservation_list(&params, &actor)
+        .await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -634,6 +642,8 @@ mod tests {
             .expect("生产 handler 必须存在");
         assert!(production.contains("stock_balance_list(&params, &actor)"));
         assert!(production.contains("stock_balance_detail(&id, &actor)"));
+        assert!(production.contains("stock_movement_list(&params, &actor)"));
+        assert!(production.contains("stock_reservation_list(&params, &actor)"));
         assert!(production.contains("stock_adjustment_list(&params, &actor)"));
         assert!(production.contains("stock_adjustment_detail(&id, &actor)"));
     }

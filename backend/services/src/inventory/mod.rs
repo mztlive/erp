@@ -54,7 +54,7 @@ use self::adapter::{
     stock_adjustment_adapter, stock_adjustment_start_command, stock_adjustment_subject_ref,
     RECENT_HISTORY_LIMIT,
 };
-use self::authorization::stock_adjustment_authorization_with_executor;
+use self::authorization::inventory_authorization_with_executor;
 use self::dto::DocumentApprovalHistoryPageView;
 use self::dto::SortDir;
 pub use self::dto::{
@@ -142,7 +142,7 @@ impl InventoryService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let authorization =
-                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存读取权限".to_string()));
                     }
@@ -262,7 +262,7 @@ impl InventoryService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let authorization =
-                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
                     let balance = db
                         .inventory()
                         .stock_balance(&id, session)
@@ -278,7 +278,7 @@ impl InventoryService {
             })
             .await?;
         let filter = StockMovementFilter {
-            warehouse_id: Some(balance.warehouse_id.clone()),
+            warehouse_ids: Some(vec![balance.warehouse_id.clone()]),
             sku_id: Some(balance.sku_id.clone()),
             movement_type: None,
             direction: None,
@@ -354,6 +354,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `params` - 查询参数（仓库/SKU/类型/方向/发生时间区间筛选）
+    /// * `actor` - 当前认证操作人，用于计算库存流水读取范围
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -369,25 +370,45 @@ impl InventoryService {
     pub async fn stock_movement_list(
         &self,
         params: &StockMovementListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<StockMovementView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = StockMovementFilter {
-            warehouse_id: query.warehouse_id,
-            sku_id: query.sku_id,
-            movement_type: query.movement_type,
-            direction: query.direction,
-            occurred_from: query.occurred_from.map(Instant::from_unix_secs),
-            occurred_to: query.occurred_to.map(Instant::from_unix_secs),
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .stock_movements()
-            .search_stock_movements(&filter, &mut NoTransaction)
+        let page_no = query.paging.page;
+        let page_size = query.paging.page_size;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let client = db.client().clone();
+        let page = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let authorization =
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    if !authorization.actor_is_active() {
+                        return Err(Error::Forbidden("当前账号无库存流水读取权限".to_string()));
+                    }
+                    let filter = StockMovementFilter {
+                        warehouse_ids: authorization
+                            .movement_list_scope()
+                            .repository_warehouse_ids(query.warehouse_id),
+                        sku_id: query.sku_id,
+                        movement_type: query.movement_type,
+                        direction: query.direction,
+                        occurred_from: query.occurred_from.map(Instant::from_unix_secs),
+                        occurred_to: query.occurred_to.map(Instant::from_unix_secs),
+                        page: query.paging.page,
+                        page_size: query.paging.page_size,
+                        sort_by: Some(query.paging.sort_by.to_string()),
+                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                    };
+                    Ok::<_, Error>(
+                        db.stock_movements()
+                            .search_stock_movements(&filter, session)
+                            .await?,
+                    )
+                })
+            })
             .await?;
         let mut items: Vec<StockMovementView> = page
             .items
@@ -414,8 +435,8 @@ impl InventoryService {
         Ok(PageView {
             items,
             total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            page: page_no,
+            page_size,
         })
     }
 
@@ -423,6 +444,7 @@ impl InventoryService {
     ///
     /// # 参数
     /// * `params` - 查询参数（仓库/SKU/状态/销售明细筛选）
+    /// * `actor` - 当前认证操作人，用于计算库存预占读取范围
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -438,23 +460,43 @@ impl InventoryService {
     pub async fn stock_reservation_list(
         &self,
         params: &StockReservationListParams,
+        actor: &AuditActor,
     ) -> Result<PageView<StockReservationView>> {
         params.validate()?;
         let query = params.normalized()?;
-        let filter = StockReservationFilter {
-            warehouse_id: query.warehouse_id,
-            sku_id: query.sku_id,
-            status: query.status,
-            sales_order_line_id: query.sales_order_line_id,
-            page: query.paging.page,
-            page_size: query.paging.page_size,
-            sort_by: Some(query.paging.sort_by.to_string()),
-            sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
-        };
-        let page = self
-            .db
-            .stock_reservations()
-            .search_stock_reservations(&filter, &mut NoTransaction)
+        let page_no = query.paging.page;
+        let page_size = query.paging.page_size;
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let client = db.client().clone();
+        let page = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    let authorization =
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    if !authorization.actor_is_active() {
+                        return Err(Error::Forbidden("当前账号无库存预占读取权限".to_string()));
+                    }
+                    let filter = StockReservationFilter {
+                        warehouse_ids: authorization
+                            .reservation_list_scope()
+                            .repository_warehouse_ids(query.warehouse_id),
+                        sku_id: query.sku_id,
+                        status: query.status,
+                        sales_order_line_id: query.sales_order_line_id,
+                        page: query.paging.page,
+                        page_size: query.paging.page_size,
+                        sort_by: Some(query.paging.sort_by.to_string()),
+                        sort_ascending: matches!(query.paging.sort_dir, SortDir::Asc),
+                    };
+                    Ok::<_, Error>(
+                        db.stock_reservations()
+                            .search_stock_reservations(&filter, session)
+                            .await?,
+                    )
+                })
+            })
             .await?;
         let items = page
             .items
@@ -474,8 +516,8 @@ impl InventoryService {
         Ok(PageView {
             items,
             total: page.total,
-            page: filter.page,
-            page_size: filter.page_size,
+            page: page_no,
+            page_size,
         })
     }
 
@@ -513,7 +555,7 @@ impl InventoryService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let authorization =
-                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
                     if !authorization.actor_is_active() {
                         return Err(Error::Forbidden("当前账号无库存调整读取权限".to_string()));
                     }
@@ -643,7 +685,7 @@ impl InventoryService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let authorization =
-                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
                     let adjustment = db
                         .inventory()
                         .stock_adjustment(&id, session)
@@ -788,7 +830,7 @@ impl InventoryService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let authorization =
-                        stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                        inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
                     let mut adjustment = db
                         .inventory()
                         .stock_adjustment(adjustment_id.as_ref(), session)
@@ -1517,7 +1559,7 @@ async fn persist_created_adjustment(
         .with_transaction(move |session| {
             Box::pin(async move {
                 let authorization =
-                    stock_adjustment_authorization_with_executor(&db, &rbac, &actor, session).await?;
+                    inventory_authorization_with_executor(&db, &rbac, &actor, session).await?;
                 if !authorization.actor_is_active()
                     || !authorization.can_create(adjustment.warehouse_id.as_ref())
                 {

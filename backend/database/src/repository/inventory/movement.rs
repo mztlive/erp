@@ -44,8 +44,8 @@ pub struct StockMovementRow {
 /// 库存流水列表筛选条件（正式事实，恒为未删除）。
 #[derive(Debug, Clone)]
 pub struct StockMovementFilter {
-    /// 仓库；`None` 表示不筛选。
-    pub warehouse_id: Option<WarehouseId>,
+    /// Service 已证明可读取的仓库集合；`None` 表示公司级，空集合表示无范围。
+    pub warehouse_ids: Option<Vec<WarehouseId>>,
     /// SKU；`None` 表示不筛选。
     pub sku_id: Option<SkuId>,
     /// 流水类型；`None` 表示不筛选。
@@ -73,8 +73,11 @@ impl QueryFilter for StockMovementFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        if let Some(warehouse_id) = &self.warehouse_id {
-            filter.insert("warehouse_id", warehouse_id.to_string());
+        if let Some(warehouse_ids) = &self.warehouse_ids {
+            filter.insert(
+                "warehouse_id",
+                doc! { "$in": warehouse_ids.iter().map(ToString::to_string).collect::<Vec<_>>() },
+            );
         }
         if let Some(sku_id) = &self.sku_id {
             filter.insert("sku_id", sku_id.to_string());
@@ -140,19 +143,16 @@ impl<'a> Repository<'a, StockMovement> {
         filter: &StockMovementFilter,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<StockMovementRow>> {
+        let query = filter.to_doc();
         let options = FindOptions::builder()
-            .sort(sort_doc(
-                filter.sort_by.as_deref(),
-                filter.sort_ascending,
-                &["occurred_at", "recorded_at", "created_at"],
-            ))
+            .sort(stock_movement_sort(filter))
             .skip(filter.skip())
             .limit(filter.limit())
             .projection(stock_movement_projection())
             .build();
         let collection = self.collection().clone_with_type::<StockMovementRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+        let items = mongo_ops::find_many(&collection, query.clone(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), query, executor).await?;
         Ok(PageResult {
             items,
             total: total as i64,
@@ -180,6 +180,17 @@ impl<'a> Repository<'a, StockMovement> {
         self.find_many(doc! { "source_document_id": source_document_id }, executor)
             .await
     }
+}
+
+/// 为库存流水分页追加唯一主键 tie-breaker，避免相同主排序值跨页重复或遗漏。
+fn stock_movement_sort(filter: &StockMovementFilter) -> Document {
+    let mut sort = sort_doc(
+        filter.sort_by.as_deref(),
+        filter.sort_ascending,
+        &["occurred_at", "recorded_at", "created_at"],
+    );
+    sort.insert("id", if filter.sort_ascending { 1 } else { -1 });
+    sort
 }
 
 impl<'a> InventoryRepository<'a> {
@@ -264,16 +275,32 @@ fn stock_movement_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
-    use super::{QueryFilter, StockMovementFilter};
+    use super::{stock_movement_sort, QueryFilter, StockMovementFilter};
 
     use entities::common::time::Instant;
     use entities::ids::{SkuId, WarehouseId};
     use entities::inventory::{MovementDirection, MovementType};
+    use mongodb::bson::{doc, Bson};
+
+    fn filter(warehouse_ids: Option<Vec<WarehouseId>>) -> StockMovementFilter {
+        StockMovementFilter {
+            warehouse_ids,
+            sku_id: None,
+            movement_type: None,
+            direction: None,
+            occurred_from: None,
+            occurred_to: None,
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        }
+    }
 
     #[test]
     fn movement_filter_applies_dimensions_type_range_and_deleted_filter() {
         let filter = StockMovementFilter {
-            warehouse_id: Some(WarehouseId::new("wh-1")),
+            warehouse_ids: Some(vec![WarehouseId::new("wh-1")]),
             sku_id: Some(SkuId::new("sku-1")),
             movement_type: Some(MovementType::PurchaseReceiptIn),
             direction: Some(MovementDirection::Increase),
@@ -287,12 +314,46 @@ mod tests {
 
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
-        assert_eq!(document.get_str("warehouse_id").unwrap(), "wh-1");
+        assert_eq!(
+            document.get_document("warehouse_id").unwrap(),
+            &doc! { "$in": ["wh-1"] }
+        );
         assert_eq!(document.get_str("sku_id").unwrap(), "sku-1");
         assert_eq!(document.get_str("movement_type").unwrap(), "PURCHASE_RECEIPT_IN");
         assert_eq!(document.get_str("direction").unwrap(), "INCREASE");
         let range = document.get_document("occurred_at").unwrap();
         assert_eq!(range.get_i64("$gte").unwrap(), 1_700_000_000);
         assert_eq!(range.get_i64("$lte").unwrap(), 1_700_000_100);
+    }
+
+    #[test]
+    fn authorized_warehouse_filter_preserves_company_empty_and_exact_scope() {
+        assert_eq!(
+            filter(Some(vec![WarehouseId::new("warehouse-1")]))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap(),
+            &doc! { "$in": ["warehouse-1"] }
+        );
+        assert_eq!(
+            filter(Some(Vec::new()))
+                .to_doc()
+                .get_document("warehouse_id")
+                .unwrap()
+                .get_array("$in")
+                .unwrap(),
+            &Vec::<Bson>::new()
+        );
+        assert!(!filter(None).to_doc().contains_key("warehouse_id"));
+    }
+
+    #[test]
+    fn movement_sort_uses_unique_id_as_same_direction_tie_breaker() {
+        let mut value = filter(None);
+        value.sort_by = Some("occurred_at".to_string());
+        value.sort_ascending = true;
+        assert_eq!(stock_movement_sort(&value), doc! { "occurred_at": 1, "id": 1 });
+        value.sort_ascending = false;
+        assert_eq!(stock_movement_sort(&value), doc! { "occurred_at": -1, "id": -1 });
     }
 }
