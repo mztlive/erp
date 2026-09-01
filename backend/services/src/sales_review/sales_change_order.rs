@@ -38,7 +38,8 @@ use super::dto;
 use super::formalization::{build_change_revision, build_receivable_delta};
 use super::start_approval::{
     build_sales_change_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_sales_change_start, SalesChangeStartInput, SalesChangeStartPersistInput,
+    persist_sales_change_start, replay_sales_change_start_with_executor, SalesChangeStartInput,
+    SalesChangeStartPersistInput,
 };
 use super::{
     CancelSalesChangeApprovalRequest, CreateSalesChangeOrderRequest, PageView, SalesChangeOrderDetailView,
@@ -49,7 +50,10 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{prepare_cancel, prepare_start};
+use crate::approval::execution::idempotency::normalize_idempotency_key;
+use crate::approval::execution::{
+    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
+};
 use crate::approval::policy::ApprovalDomainAction;
 use crate::audit::AuditActor;
 use crate::document_registry::{find_approval_binding, new_registered_document};
@@ -468,14 +472,9 @@ impl SalesReviewService {
         let subject_version = latest_change_submission_no(&self.db, id).await?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version).await?;
         let now = Instant::now();
-        let input = build_sales_change_cancel_input(
-            &runtime,
-            &req.reason,
-            actor.id(),
-            &req.idempotency_key,
-            None,
-            now,
-        )?;
+        let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
+        let input =
+            build_sales_change_cancel_input(&runtime, &req.reason, actor.id(), &idempotency_key, None, now)?;
         let prepared = prepare_cancel(input)?;
         execute_sales_change_domain_action(&mut change_order, adapter.cancel_action, actor.id())?;
         let audit = actor.clone().resource_log(
@@ -632,7 +631,8 @@ impl SalesReviewService {
             actor
                 .clone()
                 .resource_log("sales_change_order.submit", "sales_change_order", id.to_string())?;
-        persist_sales_change_start(
+        let recovery_subject_version = submission.submission_no;
+        let persisted = persist_sales_change_start(
             &self.db,
             SalesChangeStartPersistInput {
                 change_order,
@@ -648,8 +648,76 @@ impl SalesReviewService {
                 audit,
             },
         )
-        .await?;
+        .await;
+        if let Err(error) = persisted {
+            if !command_may_have_committed(&error) {
+                return Err(error);
+            }
+            self.recover_sales_change_start(id, recovery_subject_version, &idempotency_key, actor, error)
+                .await?;
+        }
         self.sales_change_order_detail(id).await
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    async fn recover_sales_change_start(
+        &self,
+        change_order_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        original_error: Error,
+    ) -> Result<String> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let change_order_id = change_order_id.to_string();
+            let idempotency_key = idempotency_key.to_string();
+            let actor_id = actor.id().to_string();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        let change = db
+                            .sales_change_orders()
+                            .find_by_id(&change_order_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("销售变更单不存在".to_string()))?;
+                        let sales_order = db
+                            .sales_orders()
+                            .find_by_id(&change.sales_order_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+                        let organization_id = sales_change_responsible_org_id(&sales_order)?;
+                        let _ = sales_change_order_object_readable(&organization_id, &actor_id)?;
+                        let binding = find_approval_binding(&db, &change_order_id, session).await?;
+                        let binding = require_frozen_binding(binding.as_ref())?;
+                        let subject = sales_change_order_subject_ref(&change_order_id)?;
+                        replay_sales_change_start_with_executor(
+                            &db,
+                            &subject,
+                            subject_version,
+                            &idempotency_key,
+                            binding,
+                            &actor_id,
+                            session,
+                        )
+                        .await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(instance_id)) => return Ok(instance_id),
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 }
 

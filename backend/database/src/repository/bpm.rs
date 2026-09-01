@@ -9,7 +9,7 @@ use bpm::model::types::{
 };
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeDefinition, ApprovalNodeExecution,
-    ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition,
+    ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition, IdempotencyKey,
 };
 use bpm::{ProcessKind, SubjectRef};
 use entity_core::{HasBaseModel, NOT_DELETED_TIMESTAMP_BSON};
@@ -30,6 +30,9 @@ const INSTANCES: &str = <mongodb::Database as BpmExt>::APPROVAL_PROCESS_INSTANCE
 const EXECUTIONS: &str = <mongodb::Database as BpmExt>::APPROVAL_NODE_EXECUTIONS;
 const ASSIGNEES: &str = <mongodb::Database as BpmExt>::APPROVAL_INSTANCE_ASSIGNEES;
 const RECEIPTS: &str = <mongodb::Database as BpmExt>::APPROVAL_COMMAND_RECEIPTS;
+
+/// 命令收据唯一身份索引名；仅此索引冲突允许 Service 新会话回读胜者。
+pub const APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX: &str = "uk_approval_command_receipts_idempotency";
 
 const MAX_DEFINITION_GRAPH_DOCS: i64 = 20;
 const MAX_DEFINITION_VERSIONS: i64 = 100;
@@ -826,13 +829,18 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 按幂等键读取命令收据。
     ///
+    /// `scope_id` 只允许调用方传入当前 v3 scope 或其命令协议显式登记的历史
+    /// scope；幂等键必须先形成 [`IdempotencyKey`]，仓储不接受或二次规范 raw
+    /// 输入。未命中返回 `Ok(None)`，唯一索引竞争后的恢复读取必须由 Service 在
+    /// 可用的新会话中编排。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_command_receipt(
         &self,
         command_kind: ApprovalCommandKind,
         scope_id: &str,
-        idempotency_key: &str,
+        idempotency_key: &IdempotencyKey,
         executor: &mut dyn Executor,
     ) -> Result<Option<ApprovalCommandReceipt>> {
         self.receipts()
@@ -1439,11 +1447,15 @@ fn current_execution_filter(instance_id: &ApprovalProcessInstanceId) -> Document
     }
 }
 
-fn receipt_key_filter(command_kind: ApprovalCommandKind, scope_id: &str, idempotency_key: &str) -> Document {
+fn receipt_key_filter(
+    command_kind: ApprovalCommandKind,
+    scope_id: &str,
+    idempotency_key: &IdempotencyKey,
+) -> Document {
     doc! {
         "command_kind": command_kind.as_str(),
         "scope_id": scope_id,
-        "idempotency_key": idempotency_key,
+        "idempotency_key": idempotency_key.as_str(),
     }
 }
 
@@ -1893,7 +1905,7 @@ mod tests {
     use bpm::model::types::{
         ApprovalCommandKind, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
     };
-    use bpm::model::{ApprovalProcessInstance, NewProcessInstance, ParticipantId, Timestamp};
+    use bpm::model::{ApprovalProcessInstance, IdempotencyKey, NewProcessInstance, ParticipantId, Timestamp};
     use bpm::{ProcessKind, SubjectRef};
     use entity_core::{BaseModel, HasBaseModel};
     use mongodb::bson::{doc, serialize_to_document, Bson};
@@ -2520,8 +2532,9 @@ mod tests {
 
     #[test]
     fn receipt_filter_uses_command_scope_and_key() {
+        let key = IdempotencyKey::parse("  key-1  ").unwrap();
         assert_eq!(
-            receipt_key_filter(ApprovalCommandKind::SubmitDecision, "inst-1", "key-1"),
+            receipt_key_filter(ApprovalCommandKind::SubmitDecision, "inst-1", &key),
             doc! {
                 "command_kind": "SUBMIT_DECISION",
                 "scope_id": "inst-1",

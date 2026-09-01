@@ -14,6 +14,7 @@ pub mod execution;
 pub mod policy;
 pub mod process_kind;
 mod scope;
+pub mod upgrade_subject;
 
 pub use action::{
     ApprovalActionContext, ApprovalActionFuture, ApprovalDomainActionPort, FailClosedApprovalActionPort,
@@ -32,4 +33,8 @@ pub(crate) use scope::{
 pub use scope::{
     approval_management_scope, approval_recovery_authorization, approval_recovery_authorization_scope,
     approval_recovery_scope, ApprovalManagementScope,
+};
+pub use upgrade_subject::{
+    ensure_initial_unsubmitted_approval_upgrade_subject, load_approval_upgrade_subject_facts,
+    ApprovalUpgradeSubjectFacts,
 };

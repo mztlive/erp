@@ -121,6 +121,95 @@ impl Pagination for BusinessDocumentFilter {
 }
 
 impl<'a> Repository<'a, BusinessDocument> {
+    /// 在审批启动事务内永久写入注册表启动守卫。
+    ///
+    /// # 参数
+    /// * `document_id` - 强类型业务对象与注册表共用主键
+    /// * `document_type` - 启动命令已经证明的精确单据类型
+    /// * `expected_definition_id` - 本次实例冻结的定义主键
+    /// * `expected_definition_version` - 本次实例冻结的定义业务版本
+    /// * `at` - 首次启动时间
+    /// * `executor` - 调用方启动事务执行器
+    ///
+    /// # 返回
+    /// 精确类型、绑定时返回实体：首次启动执行 CAS，曾启动则保持首次时间并
+    /// 直接通过；缺失或任一守卫不匹配时返回 `None`。并发修改导致的 CAS/事务
+    /// 冲突作为仓储错误返回。
+    ///
+    /// # 错误
+    /// MongoDB 读取、CAS 更新或事务冲突时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 所有 `PROCESS_REQUIRED` 启动路径必须在写 BPM 实例前调用本入口。绑定升级
+    /// 与启动因此竞争同一注册行，禁止退回“查询是否已有实例”的跨集合竞态。
+    pub async fn mark_approval_started(
+        &self,
+        document_id: &str,
+        document_type: DocumentType,
+        expected_definition_id: &bpm::ApprovalProcessDefinitionId,
+        expected_definition_version: u32,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>> {
+        let Some(mut document) = self.find_by_id(document_id, executor).await? else {
+            return Ok(None);
+        };
+        if !self
+            .mark_loaded_approval_started(
+                &mut document,
+                document_type,
+                expected_definition_id,
+                expected_definition_version,
+                at,
+                executor,
+            )
+            .await?
+        {
+            return Ok(None);
+        }
+        Ok(Some(document))
+    }
+
+    /// 在调用方已经加载并可能合法修改的注册实体上合并审批启动守卫后执行 CAS。
+    ///
+    /// # 返回
+    /// 精确类型、定义绑定时返回 `true`：首次启动合并守卫并执行 CAS，曾启动
+    /// 则保持首次时间且不写注册行；守卫不匹配时返回 `false`。CAS 或事务冲突
+    /// 返回仓储错误。
+    ///
+    /// # 关键业务约束
+    /// 创建并提交等同事务路径可用本入口把正式编号分配与启动守卫合并为一次
+    /// 注册行 CAS，避免先写守卫后以旧版本实体覆盖或冲突。调用方不得修改类型、
+    /// 已有绑定或首次启动时间。驳回或撤回后的新 subject version 可再次启动，
+    /// 但不得覆盖首次启动事实。
+    pub async fn mark_loaded_approval_started(
+        &self,
+        document: &mut BusinessDocument,
+        document_type: DocumentType,
+        expected_definition_id: &bpm::ApprovalProcessDefinitionId,
+        expected_definition_version: u32,
+        at: Instant,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let Some(binding) = document.approval_binding.as_ref() else {
+            return Ok(false);
+        };
+        if document.document_type != document_type
+            || &binding.approval_process_definition_id != expected_definition_id
+            || binding.approval_definition_version != expected_definition_version
+        {
+            return Ok(false);
+        }
+        if document.approval_started_at.is_some() {
+            return Ok(true);
+        }
+        if document.mark_approval_started(at).is_err() {
+            return Ok(false);
+        }
+        self.update(document, executor).await?;
+        Ok(true)
+    }
+
     /// 查询单据审批绑定事实，仅投影 `id` 与 `approval_binding`。
     ///
     /// # 参数

@@ -15,6 +15,8 @@ use crate::validation::{normalize_optional_text, normalize_required_text};
 const RECEIPT_NO_MAX_LEN: usize = 64;
 /// 银行流水引用最大长度。
 const BANK_REFERENCE_MAX_LEN: usize = 256;
+/// 创建人标识最大长度。
+const CREATOR_ID_MAX_LEN: usize = 128;
 
 /// 回款单状态（合同 §4.4.2：`PENDING_REVIEW` 收敛为 `IN_APPROVAL`，删除审批 `REJECTED`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +139,9 @@ pub struct CustomerReceiptUpdate {
 pub struct CustomerReceipt {
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 创建人。旧数据缺失时反序列化为空，但不得据此执行绑定升级。
+    #[serde(default)]
+    pub created_by: String,
     /// 回款单状态。
     pub status: CustomerReceiptStatus,
     /// 回款单号。
@@ -167,13 +172,18 @@ impl CustomerReceipt {
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::CustomerReceiptId`）
     /// * `data` - 创建数据
+    /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
     /// # 返回
     /// 返回新建的回款单实体。
     ///
     /// # 错误
-    /// 当回款单号为空/超长、银行引用超长或金额非正时返回错误。
-    pub fn new(id: CustomerReceiptId, data: CustomerReceiptData) -> Result<Self> {
+    /// 当回款单号或创建人为空/超长、银行引用超长或金额非正时返回错误。
+    pub fn new(
+        id: CustomerReceiptId,
+        data: CustomerReceiptData,
+        created_by: impl Into<String>,
+    ) -> Result<Self> {
         let receipt_no = normalize_required_text(
             data.receipt_no,
             "回款单号不能为空",
@@ -182,10 +192,17 @@ impl CustomerReceipt {
         )?;
         let bank_reference =
             normalize_optional_text(data.bank_reference, "银行流水引用", BANK_REFERENCE_MAX_LEN)?;
+        let created_by = normalize_required_text(
+            created_by.into(),
+            "创建人不能为空",
+            CREATOR_ID_MAX_LEN,
+            "创建人标识过长",
+        )?;
         ensure_positive_amount(&data.amount)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            created_by,
             status: CustomerReceiptStatus::Draft,
             receipt_no,
             counterparty_party_id: data.counterparty_party_id,
@@ -196,6 +213,20 @@ impl CustomerReceipt {
             approval_subject_version: 0,
             pending_allocations: Vec::new(),
         })
+    }
+
+    /// 校验客户回款仍是从未提交审批的初始草稿。
+    ///
+    /// # 错误
+    /// 非草稿、审批主题版本已递增或已经冻结待过账分配时返回错误。
+    pub fn ensure_initial_approval_state(&self) -> Result<()> {
+        if self.status != CustomerReceiptStatus::Draft
+            || self.approval_subject_version != 0
+            || !self.pending_allocations.is_empty()
+        {
+            return Err(Error::from("客户回款单已经提交或启动过审批"));
+        }
+        Ok(())
     }
 
     /// 更新回款单草稿。
@@ -380,7 +411,7 @@ mod tests {
 
     #[test]
     fn new_trims_text_fields_and_starts_as_draft() {
-        let receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data()).unwrap();
+        let receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data(), "creator-1").unwrap();
 
         assert_eq!(receipt.receipt_no, "RC-2026-001");
         assert_eq!(receipt.bank_reference.as_deref(), Some("BANK-1"));
@@ -389,29 +420,43 @@ mod tests {
     }
 
     #[test]
+    fn creator_is_normalized_and_legacy_missing_field_defaults_empty() {
+        let mut receipt =
+            CustomerReceipt::new(CustomerReceiptId::new("creator-cr"), data(), " creator-1 ").unwrap();
+        receipt.update(CustomerReceiptUpdate::default()).unwrap();
+        assert_eq!(receipt.created_by, "creator-1");
+        assert!(CustomerReceipt::new(CustomerReceiptId::new("blank-creator-cr"), data(), "   ").is_err());
+
+        let mut legacy = bson::serialize_to_document(&receipt).unwrap();
+        legacy.remove("created_by");
+        let legacy: CustomerReceipt = bson::deserialize_from_document(legacy).unwrap();
+        assert!(legacy.created_by.is_empty());
+    }
+
+    #[test]
     fn new_rejects_blank_no_overlong_reference_and_non_positive() {
         let blank_no = CustomerReceiptData {
             receipt_no: "   ".to_string(),
             ..data()
         };
-        assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-2"), blank_no).is_err());
+        assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-2"), blank_no, "creator-1").is_err());
 
         let overlong = CustomerReceiptData {
             bank_reference: Some("b".repeat(257)),
             ..data()
         };
-        assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-3"), overlong).is_err());
+        assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-3"), overlong, "creator-1").is_err());
 
         let non_positive = CustomerReceiptData {
             amount: Amount::from_str("0.00").unwrap(),
             ..data()
         };
-        assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-4"), non_positive).is_err());
+        assert!(CustomerReceipt::new(CustomerReceiptId::new("cr-4"), non_positive, "creator-1").is_err());
     }
 
     #[test]
     fn update_applies_draft_changes_and_rejects_posted() {
-        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data()).unwrap();
+        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data(), "creator-1").unwrap();
 
         receipt
             .update(CustomerReceiptUpdate {
@@ -458,13 +503,16 @@ mod tests {
         assert!(tr(S::Reversed, S::Posted).is_err());
         assert!(tr(S::Reversed, S::Draft).is_err());
 
-        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data()).unwrap();
+        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data(), "creator-1").unwrap();
         assert!(receipt.transition(S::Reversed).is_err(), "实体迁移拒绝跨级");
     }
 
     #[test]
     fn start_approval_increments_version_and_cancel_does_not_rollback() {
-        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data()).unwrap();
+        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("cr-1"), data(), "creator-1").unwrap();
+        receipt
+            .ensure_initial_approval_state()
+            .expect("新建草稿是初始未提交状态");
         assert_eq!(receipt.approval_subject_version, 0);
         let version = receipt
             .start_approval(vec![PendingReceiptAllocation::new(
@@ -478,6 +526,7 @@ mod tests {
         receipt.cancel_approval().unwrap();
         assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
         assert_eq!(receipt.approval_subject_version, 1);
+        assert!(receipt.ensure_initial_approval_state().is_err());
         assert!(receipt.mark_posted().is_err());
     }
 

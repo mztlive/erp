@@ -345,6 +345,7 @@ mod tests {
                 note: None,
                 occurred_at: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }

@@ -96,6 +96,42 @@ export type UpgradeBindingRequest = Readonly<{
     idempotency_key: string
 }>
 
+/** 审批绑定升级结果类别。 */
+export type UpgradeBindingOutcome = "APPLIED" | "REPLAY"
+
+/** 后端返回的升级后冻结绑定。 */
+export type UpgradeBindingViewDto = Readonly<{
+    approval_process_definition_id: string
+    approval_definition_version: number
+    approval_binding_version: string
+    approval_definition_bound_at: number
+}>
+
+/** 可重试绑定升级命令的专用响应，不得伪装成审批实例视图。 */
+export type UpgradeBindingResultViewDto = Readonly<{
+    document_type: string
+    document_id: string
+    original_business_object_version: string
+    new_binding: UpgradeBindingViewDto
+    action_id: string
+    outcome: UpgradeBindingOutcome
+}>
+
+/** 页面消费的不可变绑定升级结果。 */
+export type UpgradeBindingResultView = Readonly<{
+    documentType: string
+    documentId: string
+    originalBusinessObjectVersion: string
+    newBinding: Readonly<{
+        approvalProcessDefinitionId: string
+        approvalDefinitionVersion: number
+        approvalBindingVersion: string
+        approvalDefinitionBoundAt: number
+    }>
+    actionId: string
+    outcome: UpgradeBindingOutcome
+}>
+
 /** 业务撤回请求。走单据资源接口。 */
 export type CancelApprovalRequest = Readonly<{
     reason: string
@@ -530,6 +566,28 @@ export const mapCommandViewDto = (
               ownerUserId: dto.next_open_task.owner_user_id,
           }
         : undefined,
+    outcome: dto.outcome,
+})
+
+/**
+ * 把绑定升级专用响应映射为页面投影；结果只取不可变动作所证明的绑定事实。
+ */
+export const mapUpgradeBindingResultViewDto = (
+    dto: UpgradeBindingResultViewDto,
+): UpgradeBindingResultView => ({
+    documentType: dto.document_type,
+    documentId: dto.document_id,
+    originalBusinessObjectVersion: dto.original_business_object_version,
+    newBinding: {
+        approvalProcessDefinitionId:
+            dto.new_binding.approval_process_definition_id,
+        approvalDefinitionVersion:
+            dto.new_binding.approval_definition_version,
+        approvalBindingVersion: dto.new_binding.approval_binding_version,
+        approvalDefinitionBoundAt:
+            dto.new_binding.approval_definition_bound_at,
+    },
+    actionId: dto.action_id,
     outcome: dto.outcome,
 })
 

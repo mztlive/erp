@@ -44,6 +44,10 @@ use entities::{
 };
 use mongodb::bson::{doc, Document};
 use mongodb::Database;
+use services::approval::execution::idempotency::{
+    cancel_blocked_identity, decision_identity, normalize_idempotency_key, resume_identity, start_identity,
+    PreparedCommandIdentity,
+};
 use services::approval::execution::{ApprovalCommandOutcome, ApprovalRuntimeService};
 use services::approval::policy::ApprovalDomainAction;
 use services::approval::{
@@ -55,7 +59,7 @@ use services::iam::{self, subject};
 use services::{Error, ErrorCode};
 use sha2::{Digest, Sha256};
 use test_support::{require_mongo, TestDb};
-use tokio::sync::Notify;
+use tokio::sync::{Barrier, Notify};
 
 const SUBMITTER: &str = "decision-submitter";
 const APPROVER: &str = "decision-approver";
@@ -444,12 +448,20 @@ async fn seed_runtime(db: &Database, graph: &DefinitionGraph, name: &str) {
     )
     .expect("启动运行计划");
     let current = plan.created_executions.first().expect("启动计划必须创建当前执行");
+    let start_identity = start_identity(
+        normalize_idempotency_key(&format!("decision-start-key-{name}")).expect("规范启动幂等键"),
+        ProcessKind::StockAdjustment.as_str(),
+        DocumentType::StockAdjustment.as_str(),
+        &object,
+        1,
+        DEFINITION_ID,
+        1,
+        SUBMITTER,
+    )
+    .expect("形成 V3 启动身份");
     let start_receipt = ApprovalCommandReceipt::new(
         ApprovalCommandReceiptId::new(format!("decision-start-receipt-{name}")),
-        ApprovalCommandKind::StartApproval,
-        &instance,
-        format!("decision-start-key-{name}"),
-        format!("decision-start-digest-{name}"),
+        start_identity.current(),
         &instance,
         at(10),
     )
@@ -557,12 +569,20 @@ async fn seed_blocked_runtime(db: &Database, graph: &DefinitionGraph, name: &str
     runtime_instance
         .enter_blocked(ApprovalBlockerCode::DefinitionGraphCorrupted, at(11))
         .expect("阻塞实例");
+    let start_identity = start_identity(
+        normalize_idempotency_key(&format!("decision-start-key-{name}")).expect("规范启动幂等键"),
+        ProcessKind::StockAdjustment.as_str(),
+        DocumentType::StockAdjustment.as_str(),
+        &object,
+        1,
+        DEFINITION_ID,
+        1,
+        SUBMITTER,
+    )
+    .expect("形成受阻 fixture V3 启动身份");
     let start_receipt = ApprovalCommandReceipt::new(
         ApprovalCommandReceiptId::new(format!("decision-start-receipt-{name}")),
-        ApprovalCommandKind::StartApproval,
-        &instance,
-        format!("decision-start-key-{name}"),
-        format!("decision-start-digest-{name}"),
+        start_identity.current(),
         &instance,
         at(10),
     )
@@ -656,31 +676,72 @@ async fn action_count(db: &Database, name: &str) -> u64 {
 
 async fn decision_receipt_count(db: &Database, name: &str) -> u64 {
     db.collection::<Document>("approval_command_receipts")
-        .count_documents(doc! { "scope_id": execution_id(name) })
+        .count_documents(doc! {
+            "command_kind": ApprovalCommandKind::SubmitDecision.as_str(),
+            "result_ref": instance_id(name),
+        })
         .await
         .expect("统计决定收据")
 }
 
-async fn receipt_digest(db: &Database, scope_id: &str, command_kind: &str) -> String {
+async fn command_receipt(db: &Database, result_ref: &str, command_kind: ApprovalCommandKind) -> Document {
     db.collection::<Document>("approval_command_receipts")
-        .find_one(doc! { "scope_id": scope_id, "command_kind": command_kind })
+        .find_one(doc! {
+            "result_ref": result_ref,
+            "command_kind": command_kind.as_str(),
+        })
         .await
         .expect("读取命令收据")
         .expect("命令收据必须存在")
-        .get_str("payload_digest")
-        .expect("命令收据摘要必须为字符串")
-        .to_string()
 }
 
-async fn replace_receipt_digest(db: &Database, scope_id: &str, command_kind: &str, digest: &str) {
+async fn assert_current_receipt_identity(
+    db: &Database,
+    result_ref: &str,
+    identity: &PreparedCommandIdentity,
+) {
+    let receipt = command_receipt(db, result_ref, identity.current().command_kind()).await;
+    assert_eq!(
+        receipt.get_str("scope_id").expect("scope 必须为字符串"),
+        identity.current().scope().as_str(),
+    );
+    assert_eq!(
+        receipt.get_str("idempotency_key").expect("幂等键必须为字符串"),
+        identity.idempotency_key().as_str(),
+    );
+    assert_eq!(
+        receipt.get_str("payload_digest").expect("摘要必须为字符串"),
+        identity.current().digest().as_str(),
+    );
+    assert_eq!(
+        receipt.get_str("result_ref").expect("结果引用必须为字符串"),
+        result_ref,
+    );
+}
+
+async fn replace_receipt_with_legacy_identity(
+    db: &Database,
+    result_ref: &str,
+    command_kind: ApprovalCommandKind,
+    legacy_scope: &str,
+    legacy_digest: &str,
+) {
     let result = db
         .collection::<Document>("approval_command_receipts")
         .update_one(
-            doc! { "scope_id": scope_id, "command_kind": command_kind },
-            doc! { "$set": { "payload_digest": digest } },
+            doc! {
+                "result_ref": result_ref,
+                "command_kind": command_kind.as_str(),
+            },
+            doc! {
+                "$set": {
+                    "scope_id": legacy_scope,
+                    "payload_digest": legacy_digest,
+                }
+            },
         )
         .await
-        .expect("替换历史命令摘要");
+        .expect("替换历史命令身份");
     assert_eq!(result.matched_count, 1, "必须精确命中一条命令收据");
 }
 
@@ -841,8 +902,8 @@ async fn resume_command(db: &Database, name: &str, key: &str) -> ApprovalResumeC
 async fn resume_receipt_count(db: &Database, name: &str) -> u64 {
     db.collection::<Document>("approval_command_receipts")
         .count_documents(doc! {
-            "scope_id": instance_id(name),
-            "command_kind": "RESUME_APPROVER",
+            "command_kind": ApprovalCommandKind::ResumeApprover.as_str(),
+            "result_ref": instance_id(name),
         })
         .await
         .expect("统计恢复收据")
@@ -930,8 +991,8 @@ async fn assert_resume_failure_preserves_blocked_runtime(db: &Database, name: &s
 async fn blocked_cancel_receipt_count(db: &Database, name: &str) -> u64 {
     db.collection::<Document>("approval_command_receipts")
         .count_documents(doc! {
-            "scope_id": instance_id(name),
-            "command_kind": "CANCEL_BLOCKED",
+            "command_kind": ApprovalCommandKind::CancelBlocked.as_str(),
+            "result_ref": instance_id(name),
         })
         .await
         .expect("统计受阻取消收据")
@@ -1105,11 +1166,17 @@ async fn final_decision_replays_after_terminal_task_and_rejects_changed_payload(
             applied.instance_status,
             ApprovalProcessInstanceStatus::Approved.as_str()
         );
-        assert!(
-            receipt_digest(&fixture.db, &execution_id("replay"), "SUBMIT_DECISION")
-                .await
-                .starts_with("v2:")
-        );
+        let current_identity = decision_identity(
+            normalize_idempotency_key("decision-key-replay").expect("规范决定幂等键"),
+            &execution_id("replay"),
+            &work_item_id("replay"),
+            "APPROVE",
+            Some("同意"),
+            version,
+            APPROVER,
+        )
+        .expect("形成 V3 决定身份");
+        assert_current_receipt_identity(&fixture.db, &instance_id("replay"), &current_identity).await;
 
         let ended_task = fixture
             .db
@@ -1209,7 +1276,7 @@ async fn final_decision_replays_after_terminal_task_and_rejects_changed_payload(
                 "decision-key-new-no-fallback",
             )
             .await
-            .expect_err("V2 收据不得降级为碰撞的 legacy 回放");
+            .expect_err("V3 收据不得降级为碰撞的 legacy 回放");
         assert_eq!(
             no_fallback.code(),
             Some(ErrorCode::ApprovalIdempotencyPayloadConflict)
@@ -1236,10 +1303,11 @@ async fn final_decision_replays_after_terminal_task_and_rejects_changed_payload(
             legacy_version,
             APPROVER,
         );
-        replace_receipt_digest(
+        replace_receipt_with_legacy_identity(
             &fixture.db,
+            &instance_id("legacy-replay"),
+            ApprovalCommandKind::SubmitDecision,
             &execution_id("legacy-replay"),
-            "SUBMIT_DECISION",
             &legacy_digest,
         )
         .await;
@@ -1594,6 +1662,16 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
 
         set_approver_read_scope(&fixture.db, ORG).await;
         let success = resume_command(&fixture.db, "resume-success", "resume-key-success").await;
+        let success_identity = resume_identity(
+            normalize_idempotency_key(&success.idempotency_key).expect("规范恢复幂等键"),
+            &success.approval_process_instance_id,
+            success.expected_instance_version,
+            success.expected_execution_version,
+            success.expected_assignment_version,
+            success.expected_closed_task_version,
+            RUNTIME_ADMIN,
+        )
+        .expect("形成 V3 原审批人恢复身份");
         let view = fixture
             .service
             .resume_current_approver(&actor(RUNTIME_ADMIN), success)
@@ -1605,6 +1683,7 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
             ApprovalProcessInstanceStatus::Running.as_str()
         );
         assert_eq!(resume_receipt_count(&fixture.db, "resume-success").await, 1);
+        assert_current_receipt_identity(&fixture.db, &instance_id("resume-success"), &success_identity).await;
         assert_eq!(resume_audit_count(&fixture.db, "resume-success").await, 1);
         let instance = fixture
             .db
@@ -1691,6 +1770,95 @@ async fn stock_personnel_blocker_resume_revalidates_read_permission_and_warehous
 
 #[tokio::test]
 #[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+async fn concurrent_same_key_resume_commits_once_and_replays_winner() {
+    require_mongo!(async {
+        let fixture = fixture("approval_runtime_resume_same_key", &["resume-concurrent"], false).await;
+        disable_approver_role(&fixture.db).await;
+        let version = task_version(&fixture.db, "resume-concurrent").await;
+        let blocked = fixture
+            .service
+            .submit_decision(
+                &actor(APPROVER),
+                &work_item_id("resume-concurrent"),
+                "APPROVE",
+                None,
+                version,
+                "decision-key-resume-concurrent",
+            )
+            .await
+            .expect_err("先提交人员失效受阻事实");
+        assert_eq!(blocked.code(), Some(ErrorCode::ApprovalInstanceBlocked));
+
+        enable_approver_role(&fixture.db).await;
+        set_approver_read_scope(&fixture.db, ORG).await;
+        let command = resume_command(&fixture.db, "resume-concurrent", "resume-key-concurrent").await;
+        let identity = resume_identity(
+            normalize_idempotency_key(&command.idempotency_key).expect("规范并发恢复幂等键"),
+            &command.approval_process_instance_id,
+            command.expected_instance_version,
+            command.expected_execution_version,
+            command.expected_assignment_version,
+            command.expected_closed_task_version,
+            RUNTIME_ADMIN,
+        )
+        .expect("形成并发恢复 V3 身份");
+        let barrier = Arc::new(Barrier::new(2));
+        let left_service = Arc::clone(&fixture.service);
+        let left_barrier = Arc::clone(&barrier);
+        let left_command = command.clone();
+        let left = async move {
+            left_barrier.wait().await;
+            left_service
+                .resume_current_approver(&actor(RUNTIME_ADMIN), left_command)
+                .await
+        };
+        let right_service = Arc::clone(&fixture.service);
+        let right_barrier = Arc::clone(&barrier);
+        let right = async move {
+            right_barrier.wait().await;
+            right_service
+                .resume_current_approver(&actor(RUNTIME_ADMIN), command)
+                .await
+        };
+        let (left, right) = tokio::join!(left, right);
+        let left = left.expect("左侧恢复必须成功或回放");
+        let right = right.expect("右侧恢复必须成功或回放");
+        let outcomes = [left.outcome, right.outcome];
+        assert!(outcomes.contains(&ApprovalCommandOutcome::Applied));
+        assert!(outcomes.contains(&ApprovalCommandOutcome::IdempotentReplay));
+        assert_eq!(resume_receipt_count(&fixture.db, "resume-concurrent").await, 1,);
+        assert_eq!(resume_audit_count(&fixture.db, "resume-concurrent").await, 1,);
+        assert_current_receipt_identity(&fixture.db, &instance_id("resume-concurrent"), &identity).await;
+
+        let instance = fixture
+            .db
+            .bpm_workflow()
+            .find_instance_by_id(
+                &ApprovalProcessInstanceId::new(instance_id("resume-concurrent")),
+                &mut NoTransaction,
+            )
+            .await
+            .expect("读取并发恢复实例")
+            .expect("并发恢复实例必须存在");
+        let current_execution_id = instance
+            .current_node_execution_id
+            .as_ref()
+            .expect("并发恢复后必须有当前执行");
+        let open_tasks = fixture
+            .db
+            .work_items()
+            .open_approval_tasks_for_execution(current_execution_id, &mut NoTransaction)
+            .await
+            .expect("读取并发恢复开放任务");
+        assert_eq!(open_tasks.len(), 1, "同键并发只能创建一个开放任务");
+
+        drop(fixture);
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    });
+}
+
+#[tokio::test]
+#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
 async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_conflict() {
     require_mongo!(async {
         let fixture = fixture("approval_runtime_blocked_cancel", &[], false).await;
@@ -1698,7 +1866,7 @@ async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_con
         seed_blocked_runtime(&fixture.db, &graph, "cancel-success").await;
         seed_blocked_runtime(&fixture.db, &graph, "cancel-rollback").await;
         seed_blocked_runtime(&fixture.db, &graph, "cancel-mismatch").await;
-        seed_blocked_runtime(&fixture.db, &graph, "cancel-v2-corrupt").await;
+        seed_blocked_runtime(&fixture.db, &graph, "cancel-v3-corrupt").await;
         seed_blocked_runtime(&fixture.db, &graph, "cancel-legacy-personnel").await;
 
         mismatch_blocked_execution_context(&fixture.db, "cancel-mismatch").await;
@@ -1728,24 +1896,24 @@ async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_con
 
         let corrupt_command = blocked_cancel_command(
             &fixture.db,
-            "cancel-v2-corrupt",
+            "cancel-v3-corrupt",
             RUNTIME_ADMIN,
-            "cancel-v2-corrupt-key",
-            "V2 终态破坏",
+            "cancel-v3-corrupt-key",
+            "V3 终态破坏",
         )
         .await;
         fixture
             .service
             .cancel_blocked(&actor(RUNTIME_ADMIN), corrupt_command.clone())
             .await
-            .expect("先构造 V2 受阻取消收据");
-        corrupt_cancelled_instance_current_ref(&fixture.db, "cancel-v2-corrupt").await;
+            .expect("先构造 V3 受阻取消收据");
+        corrupt_cancelled_instance_current_ref(&fixture.db, "cancel-v3-corrupt").await;
         fixture
             .service
             .cancel_blocked(&actor(RUNTIME_ADMIN), corrupt_command)
             .await
-            .expect_err("V2 收据也不得掩盖损坏的取消终态");
-        assert_eq!(action_count(&fixture.db, "cancel-v2-corrupt").await, 1);
+            .expect_err("V3 收据也不得掩盖损坏的取消终态");
+        assert_eq!(action_count(&fixture.db, "cancel-v3-corrupt").await, 1);
 
         let personnel_command = blocked_cancel_command(
             &fixture.db,
@@ -1762,10 +1930,11 @@ async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_con
             .expect("先构造受阻取消终态");
         let personnel_blocker = ApprovalBlockerCode::ApproverAccountInactive;
         replace_execution_blocker(&fixture.db, "cancel-legacy-personnel", personnel_blocker).await;
-        replace_receipt_digest(
+        replace_receipt_with_legacy_identity(
             &fixture.db,
             &instance_id("cancel-legacy-personnel"),
-            "CANCEL_BLOCKED",
+            ApprovalCommandKind::CancelBlocked,
+            &instance_id("cancel-legacy-personnel"),
             &legacy_cancel_blocked_digest(
                 personnel_blocker.as_str(),
                 personnel_command.expected_instance_version,
@@ -1821,11 +1990,18 @@ async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_con
             applied.instance_status,
             ApprovalProcessInstanceStatus::Cancelled.as_str()
         );
-        assert!(
-            receipt_digest(&fixture.db, &instance_id("cancel-success"), "CANCEL_BLOCKED")
-                .await
-                .starts_with("v2:")
-        );
+        let current_identity = cancel_blocked_identity(
+            normalize_idempotency_key(&command.idempotency_key).expect("规范受阻取消幂等键"),
+            &command.approval_process_instance_id,
+            ApprovalBlockerCode::DefinitionGraphCorrupted.as_str(),
+            command.expected_instance_version,
+            command.expected_execution_version,
+            command.expected_task_version,
+            &command.reason,
+            RUNTIME_ADMIN,
+        )
+        .expect("形成 V3 受阻取消身份");
+        assert_current_receipt_identity(&fixture.db, &instance_id("cancel-success"), &current_identity).await;
         let replay = fixture
             .service
             .cancel_blocked(&actor(RUNTIME_ADMIN), command.clone())
@@ -1898,10 +2074,11 @@ async fn blocked_cancel_is_receipt_first_scope_safe_and_rolls_back_on_outbox_con
             &command.reason,
             RUNTIME_ADMIN,
         );
-        replace_receipt_digest(
+        replace_receipt_with_legacy_identity(
             &fixture.db,
             &instance_id("cancel-success"),
-            "CANCEL_BLOCKED",
+            ApprovalCommandKind::CancelBlocked,
+            &instance_id("cancel-success"),
             &legacy_digest,
         )
         .await;

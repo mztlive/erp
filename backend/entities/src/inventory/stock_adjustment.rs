@@ -243,6 +243,9 @@ pub struct StockAdjustmentUpdate {
 pub struct StockAdjustment {
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 创建人。旧数据缺失时反序列化为空，但不得据此执行绑定升级。
+    #[serde(default)]
+    pub created_by: String,
     /// 调整单号。
     pub adjustment_no: String,
     /// 仓库。
@@ -274,13 +277,18 @@ impl StockAdjustment {
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::StockAdjustmentId`）
     /// * `data` - 创建数据
+    /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
     /// # 返回
     /// 返回新建的调整单实体。
     ///
     /// # 错误
-    /// 调整单号或经办人为空/超长时返回错误。
-    pub fn new(id: StockAdjustmentId, data: StockAdjustmentData) -> Result<Self> {
+    /// 调整单号、经办人或创建人为空/超长时返回错误。
+    pub fn new(
+        id: StockAdjustmentId,
+        data: StockAdjustmentData,
+        created_by: impl Into<String>,
+    ) -> Result<Self> {
         let adjustment_no = normalize_required_text(
             data.adjustment_no,
             "调整单号不能为空",
@@ -292,6 +300,12 @@ impl StockAdjustment {
             "仓储经办人不能为空",
             ACTOR_MAX_LEN,
             "仓储经办人过长",
+        )?;
+        let created_by = normalize_required_text(
+            created_by.into(),
+            "创建人不能为空",
+            ACTOR_MAX_LEN,
+            "创建人标识过长",
         )?;
         let note = match data.note {
             Some(text) => {
@@ -308,6 +322,7 @@ impl StockAdjustment {
         };
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            created_by,
             adjustment_no,
             warehouse_id: data.warehouse_id,
             reason_type: data.reason_type,
@@ -319,6 +334,17 @@ impl StockAdjustment {
             occurred_at: data.occurred_at,
             approval_subject_version: 0,
         })
+    }
+
+    /// 校验库存调整仍是从未提交审批的初始草稿。
+    ///
+    /// # 错误
+    /// 非草稿或审批主题版本已经递增时返回错误。
+    pub fn ensure_initial_approval_state(&self) -> Result<()> {
+        if self.status != StockAdjustmentState::Draft || self.approval_subject_version != 0 {
+            return Err(Error::from("库存调整单已经提交或启动过审批"));
+        }
+        Ok(())
     }
 
     /// 更新库存调整单（仅草稿/驳回）。
@@ -819,7 +845,8 @@ mod tests {
     }
 
     fn adjustment_in_state(status: StockAdjustmentState, subject_version: u32) -> StockAdjustment {
-        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("approval-adj"), data()).unwrap();
+        let mut adjustment =
+            StockAdjustment::new(StockAdjustmentId::new("approval-adj"), data(), "creator-1").unwrap();
         adjustment.status = status;
         adjustment.approval_subject_version = subject_version;
         adjustment
@@ -828,7 +855,8 @@ mod tests {
     /// happy path：单号规范化、岗位分离、双审核与过账/冲正全链路。
     #[test]
     fn new_normalizes_and_drives_full_state_machine() {
-        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data()).unwrap();
+        let mut adjustment =
+            StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
         assert_eq!(adjustment.adjustment_no, "ADJ-2026-001");
         assert_eq!(adjustment.prepared_by, "operator-1");
         assert_eq!(adjustment.status, StockAdjustmentState::Draft);
@@ -847,6 +875,20 @@ mod tests {
         assert_eq!(adjustment.status, StockAdjustmentState::Reversed);
     }
 
+    #[test]
+    fn creator_is_normalized_and_legacy_missing_field_defaults_empty() {
+        let mut adjustment =
+            StockAdjustment::new(StockAdjustmentId::new("creator-adj"), data(), " creator-1 ").unwrap();
+        adjustment.update(StockAdjustmentUpdate::default()).unwrap();
+        assert_eq!(adjustment.created_by, "creator-1");
+        assert!(StockAdjustment::new(StockAdjustmentId::new("blank-creator-adj"), data(), "   ").is_err());
+
+        let mut legacy = bson::serialize_to_document(&adjustment).unwrap();
+        legacy.remove("created_by");
+        let legacy: StockAdjustment = bson::deserialize_from_document(legacy).unwrap();
+        assert!(legacy.created_by.is_empty());
+    }
+
     /// 失败路径：必填空、复核人=经办人、状态不允许的迁移。
     #[test]
     fn new_rejects_invalid_inputs() {
@@ -854,15 +896,15 @@ mod tests {
             adjustment_no: "   ".to_string(),
             ..data()
         };
-        assert!(StockAdjustment::new(StockAdjustmentId::new("a2"), blank_no).is_err());
+        assert!(StockAdjustment::new(StockAdjustmentId::new("a2"), blank_no, "creator-1").is_err());
 
         let blank_prepared = StockAdjustmentData {
             prepared_by: "  ".to_string(),
             ..data()
         };
-        assert!(StockAdjustment::new(StockAdjustmentId::new("a3"), blank_prepared).is_err());
+        assert!(StockAdjustment::new(StockAdjustmentId::new("a3"), blank_prepared, "creator-1").is_err());
 
-        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a4"), data()).unwrap();
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a4"), data(), "creator-1").unwrap();
         assert!(
             adjustment.submit_for_warehouse_review("operator-1").is_err(),
             "复核人不得与经办人相同"
@@ -881,6 +923,9 @@ mod tests {
     #[test]
     fn approval_submit_and_cancel_keep_monotonic_subject_version() {
         let mut adjustment = adjustment_in_state(StockAdjustmentState::Draft, 0);
+        adjustment
+            .ensure_initial_approval_state()
+            .expect("新建草稿是初始未提交状态");
         assert_eq!(adjustment.start_approval().unwrap(), 1);
         assert_eq!(adjustment.status, StockAdjustmentState::InApproval);
 
@@ -891,6 +936,7 @@ mod tests {
         adjustment.cancel_approval().unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::Draft);
         assert_eq!(adjustment.approval_subject_version, 1);
+        assert!(adjustment.ensure_initial_approval_state().is_err());
 
         let cancelled = adjustment.clone();
         assert!(adjustment.cancel_approval().is_err());
@@ -981,7 +1027,7 @@ mod tests {
     /// 驳回路径：复核/财务确认可驳回，驳回后修改并重新提交复核。
     #[test]
     fn reject_path_resubmits_after_rejection() {
-        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a5"), data()).unwrap();
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a5"), data(), "creator-1").unwrap();
         adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
         adjustment.reject().unwrap();
         assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
@@ -1086,7 +1132,8 @@ mod tests {
     /// 明细更新：整组校验失败不产生部分修改，完整合法输入一次应用。
     #[test]
     fn line_updates_are_validated_atomically() {
-        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data()).unwrap();
+        let mut adjustment =
+            StockAdjustment::new(StockAdjustmentId::new("adj-1"), data(), "creator-1").unwrap();
         adjustment.base.version = 3;
         assert!(adjustment.matches_version(3));
         assert!(!adjustment.matches_version(2));
@@ -1153,7 +1200,7 @@ mod tests {
         assert_eq!(AdjustmentReasonType::Damage.label(), "损坏");
         assert_eq!(StockAdjustmentState::Rejected.label(), "驳回");
 
-        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a6"), data()).unwrap();
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a6"), data(), "creator-1").unwrap();
         adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
         let roundtrip: StockAdjustment =
             bson::deserialize_from_document(bson::serialize_to_document(&adjustment).unwrap()).unwrap();

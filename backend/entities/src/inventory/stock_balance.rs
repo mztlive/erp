@@ -279,6 +279,7 @@ mod tests {
                 note: None,
                 occurred_at: None,
             },
+            "creator-1",
         )
         .unwrap();
         let line = StockAdjustmentLine::new_for_reason(

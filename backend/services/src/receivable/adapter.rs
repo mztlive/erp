@@ -414,6 +414,7 @@ mod tests {
                 amount: entities::money::Amount::from_str("100").expect("金额合法"),
                 bank_reference: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }

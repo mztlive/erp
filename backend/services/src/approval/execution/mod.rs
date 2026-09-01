@@ -20,14 +20,25 @@ pub mod store;
 pub mod view;
 
 use bpm::engine::{DefinitionGraph, Eligibility};
-use bpm::model::{ApprovalCommandReceipt, Timestamp};
+use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
 
 use crate::errors::{Error, Result};
 
 pub use apply_plan::{apply_plan, DomainActionKind, PlannedWrites};
 pub use authorization::{converge_eligibility, AuthorizationFailure};
-pub use cancel::{prepare_cancel, prepare_document_cancel, CancelExecutionInput};
+pub use cancel::{
+    claim_and_persist_document_cancel_runtime, find_document_cancel_receipt,
+    normalize_document_cancel_reason, prepare_cancel, prepare_document_cancel,
+    replay_committed_document_cancel, CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof,
+};
 pub use decision::{prepare_decision, DecisionExecutionInput};
+pub(crate) use idempotency::{
+    command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
+};
+pub use idempotency::{
+    legacy_standard_start_receipt_identity, legacy_start_receipt_identity, specialized_start_identity,
+    upgrade_binding_identity, LegacyReceiptIdentity, PreparedCommandIdentity,
+};
 pub use notification_worker::ApprovalNotificationOutboxPort;
 pub use resume::{prepare_resume, ResumeExecutionInput};
 pub use runtime_history::{
@@ -41,7 +52,7 @@ pub use runtime_service::{
     ApprovalRuntimeService, RuntimeAssigneeCandidate, RuntimeInstanceListCursor, RuntimeInstanceListItem,
     RuntimeInstanceListPage, RuntimeInstanceListQuery, RuntimeRecoveryOptionsView, UpgradeBindingCommand,
 };
-pub use start::{prepare_start, StartExecutionInput};
+pub use start::{prepare_start, prepare_start_with_identity, StartExecutionInput};
 pub use store::{commit_writes, replay_after_duplicate, MemoryRuntimeStore, TaskApplyContext};
 pub use view::{map_command_view, ApprovalCommandOutcome, ApprovalCommandView, OpenTaskSummary};
 
@@ -57,7 +68,7 @@ pub struct ExecutionCommandInput {
     /// 已存在收据。
     pub receipt: Option<ApprovalCommandReceipt>,
     /// 规范化幂等键。
-    pub idempotency_key: String,
+    pub idempotency_key: IdempotencyKey,
     /// 调用方时间。
     pub now: Timestamp,
 }
@@ -512,7 +523,7 @@ mod tests {
     #[test]
     fn execution_has_no_retry_current_step_symbol() {
         let key = normalize_idempotency_key(" key ").unwrap();
-        assert_eq!(key, "key");
+        assert_eq!(key.as_str(), "key");
         assert_ne!(
             ApprovalCommandKind::ResumeApprover.as_str(),
             &format!("{}{}", "RETRY_", "CURRENT_STEP")
@@ -526,7 +537,7 @@ mod tests {
                 current_eligibility: entry.clone(),
                 next_eligibility: eligible("u2", "李四"),
                 receipt,
-                idempotency_key: "start-1".into(),
+                idempotency_key: normalize_idempotency_key("start-1").unwrap(),
                 now: at(10),
             },
             process_kind: ProcessKind::StockAdjustment,
@@ -570,7 +581,7 @@ mod tests {
                 current_eligibility,
                 next_eligibility,
                 receipt,
-                idempotency_key: "dec-1".into(),
+                idempotency_key: normalize_idempotency_key("dec-1").unwrap(),
                 now: at(20),
             },
             instance,
@@ -601,7 +612,7 @@ mod tests {
                 current_eligibility: eligible("u1", "张三"),
                 next_eligibility: eligible("u1", "张三"),
                 receipt,
-                idempotency_key: "cancel-1".into(),
+                idempotency_key: normalize_idempotency_key("cancel-1").unwrap(),
                 now: at(30),
             },
             instance,
@@ -630,7 +641,7 @@ mod tests {
                 current_eligibility: eligible("u1", "张三"),
                 next_eligibility: eligible("u1", "张三"),
                 receipt,
-                idempotency_key: "resume-1".into(),
+                idempotency_key: normalize_idempotency_key("resume-1").unwrap(),
                 now: at(40),
             },
             instance,

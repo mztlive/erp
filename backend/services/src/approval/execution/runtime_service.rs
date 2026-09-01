@@ -5,17 +5,17 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Duration,
 };
 
 use bpm::engine::{CommitRequired, Eligibility, TaskCloseReason, TaskIntent};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{
-    ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision, ApprovalNodeExecutionStatus,
-    ApprovalProcessInstanceStatus, ModelError,
+    ApprovalBlockerCode, ApprovalDecision, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
+    ModelError,
 };
 use bpm::model::{
-    ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
+    ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey, ParticipantId,
+    Timestamp,
 };
 use database::repository::approval_integration::{
     ApprovalRuntimeReadRepository, ApprovalRuntimeReadRow, ApprovalRuntimeReadScope,
@@ -30,7 +30,7 @@ use database::{
 };
 use entities::approval_integration::ApprovalSubjectSnapshot;
 use entities::common::time::Instant;
-use entities::document_registry::DocumentType;
+use entities::document_registry::{DocumentType, WorkflowActionId};
 use entities::ids::WorkItemId;
 use entities::work_item::{
     ApprovalDecisionTaskError, ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData,
@@ -39,7 +39,6 @@ use entities::work_item::{
 use id_generator::next_id;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use super::apply_plan::PlannedWrites;
 use super::authorization::{
@@ -47,7 +46,9 @@ use super::authorization::{
 };
 use super::decision::prepare_decision;
 use super::idempotency::{
-    cancel_blocked_digest, decision_digest, normalize_idempotency_key, payload_conflict_error, resume_digest,
+    cancel_blocked_identity, command_may_have_committed, command_recovery_delay, decision_identity,
+    map_receipt_first_write_error, normalize_idempotency_key, payload_conflict_error, resume_identity,
+    upgrade_binding_identity, PreparedCommandIdentity, ReceiptBranch,
 };
 use super::resume::prepare_resume;
 use super::runtime_history::{history_item_from_execution, history_page_from, RuntimeHistoryPage};
@@ -59,7 +60,10 @@ use super::{
     prepare_cancel, CancelExecutionInput, DecisionExecutionInput, ExecutionCommandInput, PreparedExecution,
     ResumeExecutionInput,
 };
-use crate::approval::binding::upgrade_unsubmitted_document_definition;
+use crate::approval::binding::{
+    replay_unsubmitted_document_definition_upgrade, upgrade_unsubmitted_document_definition,
+    UpgradeBindingResultView, UpgradeUnsubmittedDefinitionCommand,
+};
 use crate::approval::business_adapter::{
     adapter_object_read_decision, adapter_spec_of, document_type_from_subject_kind,
     ensure_separation_of_duties, BindingRevalidationContext,
@@ -512,9 +516,7 @@ struct RuntimeDecisionCommand {
     decision: ApprovalDecision,
     reason: Option<String>,
     expected_task_version: u64,
-    idempotency_key: String,
-    payload_digest: String,
-    legacy_payload_digest: String,
+    idempotency_key: IdempotencyKey,
 }
 
 /// Fresh 决定前置只允许开放任务继续；已终结任务才可能进入收据回放。
@@ -531,126 +533,6 @@ struct CancelBlockedTerminalFacts {
     reason: String,
     execution_version: u64,
     task_versions: Vec<u64>,
-}
-
-/// V2 命令摘要字段。类型标签与长度前缀共同保证字段边界不可碰撞。
-#[derive(Debug, Clone, Copy)]
-enum V2DigestField<'a> {
-    Text(&'a str),
-    U64(u64),
-    OptionalText(Option<&'a str>),
-    OptionalU64(Option<u64>),
-}
-
-const V2_DIGEST_PREFIX: &str = "v2:";
-
-/// 使用带类型标签和长度前缀的固定元组计算 V2 命令摘要。
-fn versioned_digest_v2(domain: &str, fields: &[V2DigestField<'_>]) -> String {
-    fn update_text(hasher: &mut Sha256, value: &str) {
-        hasher.update((value.len() as u64).to_be_bytes());
-        hasher.update(value.as_bytes());
-    }
-
-    let mut hasher = Sha256::new();
-    hasher.update(b"erp.approval.command-digest");
-    hasher.update([0, 2]);
-    update_text(&mut hasher, domain);
-    hasher.update((fields.len() as u64).to_be_bytes());
-    for field in fields {
-        match field {
-            V2DigestField::Text(value) => {
-                hasher.update([1]);
-                update_text(&mut hasher, value);
-            }
-            V2DigestField::U64(value) => {
-                hasher.update([2]);
-                hasher.update(value.to_be_bytes());
-            }
-            V2DigestField::OptionalText(value) => {
-                hasher.update([3]);
-                match value {
-                    Some(value) => {
-                        hasher.update([1]);
-                        update_text(&mut hasher, value);
-                    }
-                    None => hasher.update([0]),
-                }
-            }
-            V2DigestField::OptionalU64(value) => {
-                hasher.update([4]);
-                match value {
-                    Some(value) => {
-                        hasher.update([1]);
-                        hasher.update(value.to_be_bytes());
-                    }
-                    None => hasher.update([0]),
-                }
-            }
-        }
-    }
-    format!("{V2_DIGEST_PREFIX}{}", hex::encode(hasher.finalize()))
-}
-
-/// 新决定命令只写 V2 摘要；协议字段不变。
-fn decision_digest_v2(
-    work_item_id: &str,
-    decision: &str,
-    reason: Option<&str>,
-    expected_task_version: u64,
-    actor_id: &str,
-) -> String {
-    versioned_digest_v2(
-        "SUBMIT_DECISION",
-        &[
-            V2DigestField::Text(work_item_id),
-            V2DigestField::Text(decision),
-            V2DigestField::OptionalText(reason),
-            V2DigestField::U64(expected_task_version),
-            V2DigestField::Text(actor_id),
-        ],
-    )
-}
-
-/// 新受阻取消命令只写 V2 摘要；blocker 仍属于冻结命令载荷。
-fn cancel_blocked_digest_v2(
-    blocker: &str,
-    expected_instance_version: u64,
-    expected_execution_version: u64,
-    expected_task_version: Option<u64>,
-    reason: &str,
-    actor_id: &str,
-) -> String {
-    versioned_digest_v2(
-        "CANCEL_BLOCKED",
-        &[
-            V2DigestField::Text(blocker),
-            V2DigestField::U64(expected_instance_version),
-            V2DigestField::U64(expected_execution_version),
-            V2DigestField::OptionalU64(expected_task_version),
-            V2DigestField::Text(reason),
-            V2DigestField::Text(actor_id),
-        ],
-    )
-}
-
-/// 有版本前缀的收据禁止降级；仅无前缀历史收据允许匹配旧摘要。
-fn reconcile_versioned_receipt_digest(
-    receipt_digest: &str,
-    v2_candidates: &[String],
-    legacy_candidates: &[String],
-) -> Result<()> {
-    let matches = if receipt_digest.starts_with(V2_DIGEST_PREFIX) {
-        v2_candidates.iter().any(|candidate| candidate == receipt_digest)
-    } else {
-        legacy_candidates
-            .iter()
-            .any(|candidate| candidate == receipt_digest)
-    };
-    if matches {
-        Ok(())
-    } else {
-        Err(payload_conflict_error())
-    }
 }
 
 /// 决定事务的提交结果；受阻事实提交后由外层转换为稳定 409。
@@ -901,33 +783,17 @@ impl ApprovalRuntimeService {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
         let key = normalize_idempotency_key(idempotency_key)?;
-        let payload_digest = decision_digest_v2(
-            work_item_id,
-            decision.as_str(),
-            reason.as_deref(),
-            expected_task_version,
-            actor.id(),
-        );
-        let legacy_payload_digest = decision_digest(
-            work_item_id,
-            decision.as_str(),
-            reason.as_deref(),
-            expected_task_version,
-            actor.id(),
-        );
         let command = RuntimeDecisionCommand {
             work_item_id: work_item_id.to_string(),
             decision,
             reason: reason.clone(),
             expected_task_version,
-            idempotency_key: key.clone(),
-            payload_digest,
-            legacy_payload_digest,
+            idempotency_key: key,
         };
         let outcome = self.commit_decision(actor, command.clone()).await;
         let outcome = match outcome {
             Ok(outcome) => outcome,
-            Err(error) if decision_command_may_have_committed(&error) => {
+            Err(error) if command_may_have_committed(&error) => {
                 self.recover_decision_after_competing_commit(actor, command, error)
                     .await?
             }
@@ -992,11 +858,11 @@ impl ApprovalRuntimeService {
             match recovered {
                 Ok(Some(outcome)) => return Ok(outcome),
                 Ok(None) => {}
-                Err(error) if decision_command_may_have_committed(&error) => {}
+                Err(error) if command_may_have_committed(&error) => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(decision_recovery_delay(attempt)).await;
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
             }
         }
         Err(original_error)
@@ -1095,28 +961,17 @@ impl ApprovalRuntimeService {
         ensure_command_actor(actor, &command.actor_id)?;
         let instance_id = command.approval_process_instance_id.clone();
         let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
-        let digest = resume_digest(
+        let identity = resume_identity(
+            idempotency_key.clone(),
+            &instance_id,
             command.expected_instance_version,
             command.expected_execution_version,
             command.expected_assignment_version,
             command.expected_closed_task_version,
             actor.id(),
-        );
-        if let Some(receipt) = self
-            .db
-            .bpm_workflow()
-            .find_command_receipt(
-                ApprovalCommandKind::ResumeApprover,
-                &instance_id,
-                &idempotency_key,
-                &mut NoTransaction,
-            )
-            .await?
-        {
-            receipt.reconcile(&digest).map_err(|_| payload_conflict_error())?;
-            return self
-                .persisted_command_view(&instance_id, CommitRequired::Proceed, true)
-                .await;
+        )?;
+        if let Some(view) = self.replay_resume(actor, &instance_id, &identity).await? {
+            return Ok(view);
         }
 
         self.require_recovery_action(&instance_id, RuntimeRecoveryAction::ResumeCurrentApprover)
@@ -1254,6 +1109,8 @@ impl ApprovalRuntimeService {
                 spec.clone(),
             )
         });
+        let recovery_identity = identity.clone();
+        let recovery_instance_id = instance_id.clone();
         let view = client
             .with_transaction(move |session| {
                 Box::pin(async move {
@@ -1308,8 +1165,65 @@ impl ApprovalRuntimeService {
                     ))
                 })
             })
-            .await?;
-        Ok(view)
+            .await;
+        match view {
+            Ok(view) => Ok(view),
+            Err(error) if command_may_have_committed(&error) => {
+                self.recover_resume_after_competing_commit(
+                    actor,
+                    recovery_instance_id,
+                    recovery_identity,
+                    error,
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 在独立事务快照内按当前权限回放原审批人恢复结果。
+    async fn replay_resume(
+        &self,
+        actor: &AuditActor,
+        instance_id: &str,
+        identity: &PreparedCommandIdentity,
+    ) -> Result<Option<ApprovalCommandView>> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        let instance_id = instance_id.to_string();
+        let identity = identity.clone();
+        self.db
+            .client()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    replay_resume_in_transaction(&db, &rbac, &actor, &instance_id, &identity, session).await
+                })
+            })
+            .await
+    }
+
+    /// 唯一键竞争、瞬态事务错误或提交结果未知后，以新会话有限回读胜者。
+    async fn recover_resume_after_competing_commit(
+        &self,
+        actor: &AuditActor,
+        instance_id: String,
+        identity: PreparedCommandIdentity,
+        original_error: Error,
+    ) -> Result<ApprovalCommandView> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            match self.replay_resume(actor, &instance_id, &identity).await {
+                Ok(Some(view)) => return Ok(view),
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 取消不允许原审批人恢复、但允许人工终止的受阻实例。
@@ -1336,12 +1250,15 @@ impl ApprovalRuntimeService {
         if command.reason.is_empty() {
             return Err(Error::ValidationError("受阻取消原因不能为空".to_string()));
         }
-        command.idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
-        let outcome = self.commit_cancel_blocked(actor, command.clone()).await;
+        let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
+        command.idempotency_key = idempotency_key.as_str().to_string();
+        let outcome = self
+            .commit_cancel_blocked(actor, command.clone(), idempotency_key.clone())
+            .await;
         match outcome {
             Ok(view) => Ok(view),
-            Err(error) if decision_command_may_have_committed(&error) => {
-                self.recover_cancel_blocked_after_competing_commit(actor, command, error)
+            Err(error) if command_may_have_committed(&error) => {
+                self.recover_cancel_blocked_after_competing_commit(actor, command, idempotency_key, error)
                     .await
             }
             Err(error) => Err(error),
@@ -1353,6 +1270,7 @@ impl ApprovalRuntimeService {
         &self,
         actor: &AuditActor,
         command: ApprovalCancelBlockedCommand,
+        idempotency_key: IdempotencyKey,
     ) -> Result<ApprovalCommandView> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
@@ -1362,8 +1280,16 @@ impl ApprovalRuntimeService {
             .client()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    cancel_blocked_in_transaction(&db, &rbac, action_port.as_ref(), &actor, &command, session)
-                        .await
+                    cancel_blocked_in_transaction(
+                        &db,
+                        &rbac,
+                        action_port.as_ref(),
+                        &actor,
+                        &command,
+                        &idempotency_key,
+                        session,
+                    )
+                    .await
                 })
             })
             .await
@@ -1374,6 +1300,7 @@ impl ApprovalRuntimeService {
         &self,
         actor: &AuditActor,
         command: ApprovalCancelBlockedCommand,
+        idempotency_key: IdempotencyKey,
         original_error: Error,
     ) -> Result<ApprovalCommandView> {
         const RECOVERY_ATTEMPTS: usize = 8;
@@ -1382,23 +1309,32 @@ impl ApprovalRuntimeService {
             let rbac = self.rbac.clone();
             let actor = actor.clone();
             let command = command.clone();
+            let idempotency_key = idempotency_key.clone();
             let recovered = self
                 .db
                 .client()
                 .with_transaction(move |session| {
                     Box::pin(async move {
-                        replay_cancel_blocked_in_transaction(&db, &rbac, &actor, &command, session).await
+                        replay_cancel_blocked_in_transaction(
+                            &db,
+                            &rbac,
+                            &actor,
+                            &command,
+                            &idempotency_key,
+                            session,
+                        )
+                        .await
                     })
                 })
                 .await;
             match recovered {
                 Ok(Some(view)) => return Ok(view),
                 Ok(None) => {}
-                Err(error) if decision_command_may_have_committed(&error) => {}
+                Err(error) if command_may_have_committed(&error) => {}
                 Err(error) => return Err(error),
             }
             if attempt + 1 < RECOVERY_ATTEMPTS {
-                tokio::time::sleep(decision_recovery_delay(attempt)).await;
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
             }
         }
         Err(original_error)
@@ -1412,38 +1348,93 @@ impl ApprovalRuntimeService {
         &self,
         actor: &AuditActor,
         command: UpgradeBindingCommand,
-    ) -> Result<ApprovalCommandView> {
-        let context = crate::approval::business_adapter::BindingRevalidationContext {
-            organization_id: String::new(),
-            creator_id: actor.id().to_string(),
+    ) -> Result<UpgradeBindingResultView> {
+        let reason = command.reason.trim().to_string();
+        if reason.is_empty() {
+            return Err(Error::ValidationError("升级原因不能为空".to_string()));
+        }
+        let idempotency_key = normalize_idempotency_key(&command.idempotency_key)?;
+        let identity = upgrade_binding_identity(
+            command.document_type.as_str(),
+            &command.document_id,
+            command.expected_document_version,
+            command.expected_approval_binding_version,
+            &reason,
+            actor.id(),
+            idempotency_key,
+        )?;
+        let prepared = UpgradeUnsubmittedDefinitionCommand {
+            document_type: command.document_type,
+            document_id: command.document_id,
+            expected_business_object_version: command.expected_document_version,
+            expected_binding_version: command.expected_approval_binding_version,
+            reason,
+            identity,
+            action_id: WorkflowActionId::new(next_id()),
+            receipt_id: ApprovalCommandReceiptId::new(next_id()),
         };
-        let _ = upgrade_unsubmitted_document_definition(
-            &self.db,
-            &self.rbac,
-            &crate::approval::binding::UpgradeUnsubmittedDefinitionCommand {
-                document_id: command.document_id.clone(),
-                expected_document_version: command.expected_document_version,
-                expected_binding_version: command.expected_approval_binding_version,
-                reason: command.reason,
-                context,
-            },
-            actor,
-            &mut NoTransaction,
-        )
-        .await?;
-        Ok(ApprovalCommandView {
-            instance_id: command.document_id,
-            instance_status: "DRAFT".to_string(),
-            current_round_no: 0,
-            current_node_key: None,
-            current_node_name: None,
-            current_assignee_participant_id: None,
-            current_assignee_name: None,
-            subject_status: Some("DRAFT".to_string()),
-            latest_rejection_reason: None,
-            next_open_task: None,
-            outcome: super::view::ApprovalCommandOutcome::Applied,
-        })
+        match self.commit_upgrade_binding(actor, prepared.clone()).await {
+            Ok(view) => Ok(view),
+            Err(error) if command_may_have_committed(&error) => {
+                self.recover_upgrade_binding(actor, prepared, error).await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 在唯一调用方事务内执行升级；绑定端口不得自行开启嵌套事务。
+    async fn commit_upgrade_binding(
+        &self,
+        actor: &AuditActor,
+        command: UpgradeUnsubmittedDefinitionCommand,
+    ) -> Result<UpgradeBindingResultView> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    upgrade_unsubmitted_document_definition(&db, &rbac, &command, &actor, session).await
+                })
+            })
+            .await
+    }
+
+    /// 唯一键竞争或提交结果未知后，以新事务重验授权并只读胜者收据。
+    async fn recover_upgrade_binding(
+        &self,
+        actor: &AuditActor,
+        command: UpgradeUnsubmittedDefinitionCommand,
+        original_error: Error,
+    ) -> Result<UpgradeBindingResultView> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let rbac = self.rbac.clone();
+            let actor = actor.clone();
+            let command = command.clone();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        replay_unsubmitted_document_definition_upgrade(&db, &rbac, &command, &actor, session)
+                            .await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(view)) => return Ok(view),
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 重验当前读取主体仍为有效账号；失效时隐藏目标实例存在性。
@@ -1933,12 +1924,48 @@ impl ApprovalRuntimeService {
     }
 }
 
+/// 原审批人恢复回放先按当前账号与责任组织授权，再允许读取和比较收据。
+async fn replay_resume_in_transaction(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    instance_id: &str,
+    identity: &PreparedCommandIdentity,
+    session: &mut mongodb::ClientSession,
+) -> Result<Option<ApprovalCommandView>> {
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), session)
+        .await?
+        .ok_or_else(hidden_not_found)?;
+    let (_, snapshot) = load_exact_runtime_snapshot(db, &instance, session, true).await?;
+    let recovery_scope = approval_recovery_scope(db, rbac, actor).await?;
+    if !recovery_scope.covers(&snapshot.payload.responsible_org_id) {
+        return Err(Error::Forbidden("无权恢复该责任组织的审批实例".to_string()));
+    }
+    let Some(receipt) = find_receipt_for_identity(db, identity, session).await? else {
+        return Ok(None);
+    };
+    if receipt.result_ref != instance_id {
+        return Err(Error::ConflictError("恢复收据结果引用与实例不一致".to_string()));
+    }
+    match identity.classify(Some(&receipt)) {
+        ReceiptBranch::SamePayload(_) => {}
+        ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+    }
+    persisted_command_view_with_executor(db, instance_id, CommitRequired::Proceed, true, session)
+        .await
+        .map(Some)
+}
+
 /// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
 async fn replay_cancel_blocked_in_transaction(
     db: &Database,
     rbac: &SharedRbacService,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
+    idempotency_key: &IdempotencyKey,
     session: &mut mongodb::ClientSession,
 ) -> Result<Option<ApprovalCommandView>> {
     let instance = db
@@ -1971,37 +1998,34 @@ async fn replay_cancel_blocked_in_transaction(
         None
     };
 
-    let Some(receipt) = db
-        .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::CancelBlocked,
-            &command.approval_process_instance_id,
-            &command.idempotency_key,
-            session,
-        )
-        .await?
-    else {
+    let Some(terminal_facts) = terminal_facts else {
         return Ok(None);
     };
-    if receipt.scope_id != command.approval_process_instance_id
-        || receipt.result_ref != command.approval_process_instance_id
-    {
+    let identity = cancel_blocked_identity(
+        idempotency_key.clone(),
+        &command.approval_process_instance_id,
+        terminal_facts.blocker.as_str(),
+        command.expected_instance_version,
+        command.expected_execution_version,
+        command.expected_task_version,
+        &command.reason,
+        actor.id(),
+    )?;
+    let Some(receipt) = find_receipt_for_identity(db, &identity, session).await? else {
+        return Ok(None);
+    };
+    if receipt.result_ref != command.approval_process_instance_id {
         return Err(hidden_not_found());
     }
-    let Some(terminal_facts) = terminal_facts else {
-        return Err(hidden_not_found());
-    };
     // V2 与 legacy 都必须由同一组终态事实证明 receipt result；legacy 不能只依赖旧摘要。
     if !cancel_blocked_terminal_facts_match(&instance, &terminal_facts, command, actor.id()) {
         return Err(payload_conflict_error());
     }
-    reconcile_cancel_blocked_receipt(
-        &receipt,
-        command,
-        &command.reason,
-        actor.id(),
-        terminal_facts.blocker,
-    )?;
+    match identity.classify(Some(&receipt)) {
+        ReceiptBranch::SamePayload(_) => {}
+        ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+    }
     persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Cancelled, true, session)
         .await
         .map(Some)
@@ -2122,9 +2146,12 @@ async fn cancel_blocked_in_transaction(
     action_port: &dyn ApprovalDomainActionPort,
     actor: &AuditActor,
     command: &ApprovalCancelBlockedCommand,
+    idempotency_key: &IdempotencyKey,
     session: &mut mongodb::ClientSession,
 ) -> Result<ApprovalCommandView> {
-    if let Some(replay) = replay_cancel_blocked_in_transaction(db, rbac, actor, command, session).await? {
+    if let Some(replay) =
+        replay_cancel_blocked_in_transaction(db, rbac, actor, command, idempotency_key, session).await?
+    {
         return Ok(replay);
     }
     let instance_id = ApprovalProcessInstanceId::new(&command.approval_process_instance_id);
@@ -2175,24 +2202,14 @@ async fn cancel_blocked_in_transaction(
         .load_definition_graph(&instance.process_definition_id, session)
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
-    let blocker = match (instance.blocker_code, current.blocker_code) {
-        (Some(instance_blocker), Some(execution_blocker)) if instance_blocker == execution_blocker => {
-            instance_blocker
-        }
+    match (instance.blocker_code, current.blocker_code) {
+        (Some(instance_blocker), Some(execution_blocker)) if instance_blocker == execution_blocker => {}
         _ => {
             return Err(Error::ConflictError(
                 "受阻实例与当前执行 blocker 不一致".to_string(),
             ))
         }
     };
-    let payload_digest = cancel_blocked_digest_v2(
-        blocker.as_str(),
-        command.expected_instance_version,
-        command.expected_execution_version,
-        command.expected_task_version,
-        &command.reason,
-        actor.id(),
-    );
     let eligibility = converge_eligibility(
         current.assignee_participant_id.as_str(),
         &current.assignee_name_snapshot,
@@ -2205,7 +2222,7 @@ async fn cancel_blocked_in_transaction(
             current_eligibility: eligibility.clone(),
             next_eligibility: eligibility,
             receipt: None,
-            idempotency_key: command.idempotency_key.clone(),
+            idempotency_key: idempotency_key.clone(),
             now: Timestamp::from_utc(now.as_utc()),
         },
         instance,
@@ -2224,9 +2241,7 @@ async fn cancel_blocked_in_transaction(
     let PreparedExecution::Apply(writes) = prepared else {
         return Err(Error::Internal("新受阻取消命令不得进入幂等回放分支".to_string()));
     };
-    let mut writes = *writes;
-    // prepare_cancel 仍服务其他旧命令；此签署端口只把无碰撞 V2 摘要写入新收据。
-    writes.receipt.payload_digest = payload_digest;
+    let writes = *writes;
     let action_context = ApprovalActionContext {
         approval_process_instance_id: command.approval_process_instance_id.clone(),
         approval_node_execution_id: Some(current.base.id.clone()),
@@ -2248,7 +2263,7 @@ async fn cancel_blocked_in_transaction(
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, session)
         .await
-        .map_err(mark_receipt_duplicate_for_recovery)?;
+        .map_err(map_receipt_first_write_error)?;
     action_port
         .execute(spec.cancel_action, &action_context, actor, session)
         .await?;
@@ -2427,31 +2442,30 @@ async fn replay_decision_in_transaction(
         }
         Err(error) => return Err(error),
     }
-    let Some(receipt) = db
-        .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::SubmitDecision,
-            execution_id.as_ref(),
-            &command.idempotency_key,
-            session,
-        )
-        .await?
-    else {
+    let identity = decision_identity(
+        command.idempotency_key.clone(),
+        execution_id.as_ref(),
+        &command.work_item_id,
+        command.decision.as_str(),
+        command.reason.as_deref(),
+        command.expected_task_version,
+        actor.id(),
+    )?;
+    let Some(receipt) = find_receipt_for_identity(db, &identity, session).await? else {
         return Err(decision_terminal_fresh_error());
     };
     // 历史无版本摘要可能存在分隔符碰撞，必须先证明收据仍指向该任务的冻结运行身份。
     let ended_execution =
         verify_decision_receipt_runtime_identity(db, &receipt, &execution_id, session).await?;
-    let legacy_candidates = (!receipt.payload_digest.starts_with(V2_DIGEST_PREFIX)
-        && legacy_decision_terminal_facts_match(&item, &ended_execution, command, actor.id()))
-    .then(|| command.legacy_payload_digest.clone())
-    .into_iter()
-    .collect::<Vec<_>>();
-    reconcile_versioned_receipt_digest(
-        &receipt.payload_digest,
-        std::slice::from_ref(&command.payload_digest),
-        &legacy_candidates,
-    )?;
+    let is_current_v3 = receipt.scope_id == identity.current().scope().as_str();
+    if !is_current_v3 && !legacy_decision_terminal_facts_match(&item, &ended_execution, command, actor.id()) {
+        return Err(payload_conflict_error());
+    }
+    match identity.classify(Some(&receipt)) {
+        ReceiptBranch::SamePayload(_) => {}
+        ReceiptBranch::Fresh => unreachable!("receipt was loaded"),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+    }
     let view =
         persisted_command_view_with_executor(db, &receipt.result_ref, CommitRequired::Proceed, true, session)
             .await?;
@@ -2614,9 +2628,7 @@ async fn submit_decision_in_transaction(
     let PreparedExecution::Apply(writes) = prepared else {
         return Err(Error::Internal("新决定命令不得进入幂等回放分支".to_string()));
     };
-    let mut writes = *writes;
-    // prepare_decision 仍服务旧规划单测；此签署端口只把无碰撞 V2 摘要写入新收据。
-    writes.receipt.payload_digest = command.payload_digest.clone();
+    let writes = *writes;
     let actor_id = actor.id().to_string();
     let owner_role = spec.owner_role.as_str().to_string();
     let owner_organization_id = snapshot.payload.responsible_org_id.clone();
@@ -2640,7 +2652,7 @@ async fn submit_decision_in_transaction(
         subject_version: subject_version.clone(),
         actor_id: actor_id.clone(),
         reason: command.reason.clone(),
-        idempotency_key: command.idempotency_key.clone(),
+        idempotency_key: command.idempotency_key.as_str().to_string(),
     };
     let new_task_ids: Vec<String> = writes.create_tasks.iter().map(|_| next_id()).collect();
     let list_projection =
@@ -2661,7 +2673,7 @@ async fn submit_decision_in_transaction(
     db.bpm_workflow()
         .insert_command_receipt(&writes.receipt, session)
         .await
-        .map_err(mark_receipt_duplicate_for_recovery)?;
+        .map_err(map_receipt_first_write_error)?;
     if should_finalize {
         action_port
             .execute(spec.on_final_approve, &action_context, actor, session)
@@ -3047,26 +3059,30 @@ async fn persisted_command_view_with_executor(
     ))
 }
 
-/// 标记收据首写的唯一键竞争，与后续业务集合冲突区分。
-fn mark_receipt_duplicate_for_recovery(error: database::Error) -> Error {
-    match error {
-        error @ database::Error::DuplicateKey(_) => Error::ReceiptDuplicate(error),
-        other => Error::from(other),
+/// 按当前 V3 scope 优先、已知历史 scope 次之读取唯一命令收据。
+///
+/// scope 与 digest 的完整成对判定由 [`PreparedCommandIdentity::classify`] 完成；
+/// 当前 scope 一旦存在收据，调用方不得继续向历史 scope 降级。
+async fn find_receipt_for_identity(
+    db: &Database,
+    identity: &PreparedCommandIdentity,
+    executor: &mut dyn Executor,
+) -> Result<Option<ApprovalCommandReceipt>> {
+    for scope in identity.scope_candidates() {
+        if let Some(receipt) = db
+            .bpm_workflow()
+            .find_command_receipt(
+                identity.current().command_kind(),
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?
+        {
+            return Ok(Some(receipt));
+        }
     }
-}
-
-/// 只有收据首写唯一键竞争、瞬态事务冲突或提交结果未知才回读收据。
-fn decision_command_may_have_committed(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::OutcomeUnknown(_) | Error::ReceiptDuplicate(_) | Error::TransientTransaction(_)
-    )
-}
-
-/// 并发胜者可能仍在提交；新会话回读使用有界退避，不得复用失败会话。
-fn decision_recovery_delay(attempt: usize) -> Duration {
-    let shift = attempt.min(5);
-    Duration::from_millis(5_u64 << shift)
+    Ok(None)
 }
 
 /// 将单据审批任务前置校验映射为稳定的 Service 错误。
@@ -3554,33 +3570,6 @@ fn list_projection_from_writes(
     }
 }
 
-/// 校验终态受阻取消收据，允许在 blocker 投影已清除后安全回放。
-fn reconcile_cancel_blocked_receipt(
-    receipt: &bpm::model::ApprovalCommandReceipt,
-    command: &ApprovalCancelBlockedCommand,
-    reason: &str,
-    actor_id: &str,
-    proven_blocker: ApprovalBlockerCode,
-) -> Result<()> {
-    let v2_candidates = [cancel_blocked_digest_v2(
-        proven_blocker.as_str(),
-        command.expected_instance_version,
-        command.expected_execution_version,
-        command.expected_task_version,
-        reason,
-        actor_id,
-    )];
-    let legacy_candidates = [cancel_blocked_digest(
-        proven_blocker.as_str(),
-        command.expected_instance_version,
-        command.expected_execution_version,
-        command.expected_task_version,
-        reason,
-        actor_id,
-    )];
-    reconcile_versioned_receipt_digest(&receipt.payload_digest, &v2_candidates, &legacy_candidates)
-}
-
 /// 在受阻取消事务内追加通知 outbox。
 #[allow(clippy::too_many_arguments)]
 async fn persist_cancel_notifications(
@@ -3970,6 +3959,11 @@ async fn persist_resume_writes(
             ));
         }
     }
+    // 收据是完成全部只读验证后的第一笔物理写，用唯一身份仲裁同键并发。
+    db.bpm_workflow()
+        .insert_command_receipt(&input.writes.receipt, session)
+        .await
+        .map_err(map_receipt_first_write_error)?;
     let expected_execution_id = ApprovalNodeExecutionId::new(input.ended_execution_id);
     require_cas_applied(
         db.bpm_workflow()
@@ -3998,9 +3992,6 @@ async fn persist_resume_writes(
         return Err(Error::Internal("原审批人恢复不得修改实例审批人绑定".to_string()));
     }
     db.bpm_workflow().insert_execution(new_execution, session).await?;
-    db.bpm_workflow()
-        .insert_command_receipt(&input.writes.receipt, session)
-        .await?;
     create_open_tasks(
         db,
         CreateOpenTasksInput {
@@ -4236,6 +4227,9 @@ async fn create_open_tasks(
 mod tests {
     use std::str::FromStr;
 
+    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
+    use serde_json::json;
+
     use bpm::engine::TaskCloseReason;
     use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
     use bpm::model::types::{
@@ -4248,7 +4242,9 @@ mod tests {
     };
     use bpm::{ProcessKind, SubjectRef};
     use database::repository::approval_integration::{ApprovalRuntimeReadRow, ApprovalRuntimeReadTypeScope};
-    use database::repository::bpm::{ApprovalInstanceListView, ApprovalInstanceSummary};
+    use database::repository::bpm::{
+        ApprovalInstanceListView, ApprovalInstanceSummary, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
+    };
     use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
     use entities::common::time::Instant;
     use entities::document_registry::DocumentType;
@@ -4262,23 +4258,24 @@ mod tests {
     };
 
     use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
+    use crate::approval::execution::idempotency::{
+        command_may_have_committed, command_recovery_delay, map_receipt_first_write_error,
+    };
     use crate::approval::ApprovalCancelBlockedCommand;
     use crate::audit::AuditActor;
     use crate::errors::{Error, ErrorCode};
 
     use super::{
         approval_task_ending, blocked_cancel_notification_recipients, cancel_blocked_terminal_facts_match,
-        cursor_from_summary, decision_command_may_have_committed, decision_digest, decision_digest_v2,
-        decision_receipt_lookup_gate, decision_recovery_delay, decision_terminal_actor,
+        cursor_from_summary, decision_receipt_lookup_gate, decision_terminal_actor,
         decision_terminal_fresh_error, ensure_cancel_blocked_instance_preconditions,
         ensure_mine_page_integrity, item_from_runtime_read_row, item_from_summary,
         legacy_decision_terminal_facts_match, management_runtime_read_allowed, map_approval_task_error,
-        mark_receipt_duplicate_for_recovery, mine_execution_ids, mine_instance_ids,
-        mine_runtime_chain_matches, notification_recipients, ordinary_runtime_read_allowed,
-        reconcile_versioned_receipt_digest, runtime_object_readable, started_runtime_read_allowed,
-        task_proves_current_responsibility, unique_by_id, versioned_digest_v2, CancelBlockedTerminalFacts,
+        mine_execution_ids, mine_instance_ids, mine_runtime_chain_matches, notification_recipients,
+        ordinary_runtime_read_allowed, runtime_object_readable, started_runtime_read_allowed,
+        task_proves_current_responsibility, unique_by_id, CancelBlockedTerminalFacts,
         CompleteOrCloseTasksInput, DecisionReceiptLookup, RuntimeDecisionCommand, RuntimeInstanceListView,
-        RuntimeReadAuthorizationFacts, RuntimeReadSubject, V2DigestField,
+        RuntimeReadAuthorizationFacts, RuntimeReadSubject,
     };
 
     fn summary() -> ApprovalInstanceSummary {
@@ -4725,90 +4722,121 @@ mod tests {
         );
     }
 
+    fn duplicate_key_error(index_name: Option<&str>) -> database::Error {
+        let message = index_name.map_or_else(
+            || "E11000 duplicate key error".to_string(),
+            |index| format!("E11000 duplicate key error collection: erp.receipts index: {index} dup key"),
+        );
+        let write_error: WriteError = serde_json::from_value(json!({
+            "code": 11000,
+            "codeName": "DuplicateKey",
+            "errmsg": message,
+            "errInfo": null,
+        }))
+        .expect("duplicate key fixture");
+        let mongo_error: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
+        database::Error::from(mongo_error)
+    }
+
+    fn runtime_source_fn(start: &str, end: &str) -> &'static str {
+        let source = include_str!("runtime_service.rs");
+        let start = source.find(start).expect("运行时函数起点必须存在");
+        let end = source[start..]
+            .find(end)
+            .map(|offset| start + offset)
+            .expect("运行时函数终点必须存在");
+        &source[start..end]
+    }
+
     #[test]
     fn decision_recovery_only_polls_receipt_competition_and_uncertain_commits() {
-        let duplicate = mark_receipt_duplicate_for_recovery(database::Error::DuplicateKey(
-            mongodb::error::Error::custom("duplicate receipt"),
-        ));
-        assert!(decision_command_may_have_committed(&duplicate));
+        let duplicate = map_receipt_first_write_error(duplicate_key_error(Some(
+            APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
+        )));
+        assert!(command_may_have_committed(&duplicate));
         assert!(matches!(duplicate, Error::ReceiptDuplicate(_)));
+
+        for unrelated in [Some("_id_"), Some("uk_approval_command_receipts_id"), None] {
+            let error = map_receipt_first_write_error(duplicate_key_error(unrelated));
+            assert!(!command_may_have_committed(&error));
+            assert!(matches!(error, Error::ConflictError(_)));
+        }
         let transient = Error::from(database::Error::TransientTransactionConflict(
             mongodb::error::Error::custom("write conflict"),
         ));
-        assert!(decision_command_may_have_committed(&transient));
+        assert!(command_may_have_committed(&transient));
         assert!(matches!(transient, Error::TransientTransaction(_)));
-        assert!(decision_command_may_have_committed(&Error::OutcomeUnknown(
+        assert!(command_may_have_committed(&Error::OutcomeUnknown(
             database::Error::CommitOutcomeUnknown(mongodb::error::Error::custom("unknown commit")),
         )));
-        assert!(!decision_command_may_have_committed(&Error::ConflictError(
+        assert!(!command_may_have_committed(&Error::ConflictError(
             "数据已存在，请勿重复提交".to_string()
         )));
-        assert!(!decision_command_may_have_committed(&Error::ConflictError(
+        assert!(!command_may_have_committed(&Error::ConflictError(
             "并发事务冲突，请重试".to_string()
         )));
-        assert!(!decision_command_may_have_committed(&Error::ConflictError(
+        assert!(!command_may_have_committed(&Error::ConflictError(
             "审批任务已结束".to_string()
         )));
-        assert!(!decision_command_may_have_committed(&Error::ValidationError(
+        assert!(!command_may_have_committed(&Error::ValidationError(
             "请求无效".to_string()
         )));
-        assert_eq!(decision_recovery_delay(0).as_millis(), 5);
-        assert_eq!(decision_recovery_delay(5).as_millis(), 160);
-        assert_eq!(decision_recovery_delay(99).as_millis(), 160);
+        assert_eq!(command_recovery_delay(0).as_millis(), 5);
+        assert_eq!(command_recovery_delay(5).as_millis(), 160);
+        assert_eq!(command_recovery_delay(99).as_millis(), 160);
     }
 
     #[test]
-    fn v2_command_digest_has_unambiguous_boundaries_and_stable_golden() {
-        let separator_left = versioned_digest_v2(
-            "TEST",
-            &[V2DigestField::Text("a\u{1f}b"), V2DigestField::Text("c")],
+    fn resume_persistence_keeps_receipt_as_first_physical_write() {
+        let source = runtime_source_fn(
+            "async fn persist_resume_writes(",
+            "async fn persist_resume_notifications(",
         );
-        let separator_right = versioned_digest_v2(
-            "TEST",
-            &[V2DigestField::Text("a"), V2DigestField::Text("b\u{1f}c")],
-        );
-        assert_ne!(separator_left, separator_right);
-
-        assert_ne!(
-            versioned_digest_v2("TEST", &[V2DigestField::OptionalText(None)]),
-            versioned_digest_v2("TEST", &[V2DigestField::OptionalText(Some("NULL"))])
-        );
-        assert_ne!(
-            versioned_digest_v2("TEST", &[V2DigestField::Text("")]),
-            versioned_digest_v2("TEST", &[V2DigestField::Text("NULL")])
-        );
-        assert_ne!(
-            versioned_digest_v2("TEST", &[V2DigestField::Text("你"), V2DigestField::Text("好")]),
-            versioned_digest_v2("TEST", &[V2DigestField::Text("你好"), V2DigestField::Text("")])
-        );
-
-        assert_eq!(
-            decision_digest_v2("wi-1", "APPROVE", Some("同意"), 3, "u1"),
-            "v2:6055117016d832d58080637660733dac57779af9764bc1fc0429c74b60a91765"
-        );
+        let receipt = source.find("insert_command_receipt").expect("恢复必须写命令收据");
+        assert!(source[..receipt].contains("find_document_approval_by_id"));
+        assert!(!source[..receipt].contains("advance_instance"));
+        assert!(!source[..receipt].contains("end_blocked_execution"));
+        assert!(!source[..receipt].contains("insert_execution"));
+        assert!(!source[..receipt].contains("create_open_tasks"));
+        assert!(!source[..receipt].contains("persist_resume_notifications"));
+        assert!(!source[..receipt].contains("audit_logs().create"));
+        assert!(source[receipt..].contains("map_err(map_receipt_first_write_error)"));
+        for later_write in [
+            "advance_instance",
+            "end_blocked_execution",
+            "insert_execution",
+            "create_open_tasks",
+            "persist_resume_notifications",
+            "audit_logs().create",
+        ] {
+            assert!(
+                receipt < source.find(later_write).expect("恢复后续写入必须存在"),
+                "receipt 必须先于 {later_write}",
+            );
+        }
     }
 
     #[test]
-    fn versioned_receipt_accepts_legacy_but_never_falls_back_for_v2() {
-        let legacy_none = decision_digest("wi-1", "APPROVE", None, 3, "u1");
-        let legacy_literal_null = decision_digest("wi-1", "APPROVE", Some("NULL"), 3, "u1");
-        assert_eq!(legacy_none, legacy_literal_null, "锁定旧摘要的字面 NULL 碰撞");
+    fn resume_uncertain_result_recovery_always_opens_a_fresh_transaction() {
+        let endpoint = runtime_source_fn("pub async fn resume_current_approver(", "async fn replay_resume(");
+        assert!(endpoint.contains("command_may_have_committed"));
+        assert!(endpoint.contains("recover_resume_after_competing_commit"));
 
-        let v2_none = decision_digest_v2("wi-1", "APPROVE", None, 3, "u1");
-        let v2_literal_null = decision_digest_v2("wi-1", "APPROVE", Some("NULL"), 3, "u1");
-        assert_ne!(v2_none, v2_literal_null);
-        reconcile_versioned_receipt_digest(
-            &legacy_none,
-            std::slice::from_ref(&v2_none),
-            std::slice::from_ref(&legacy_none),
-        )
-        .expect("无前缀历史收据允许 legacy 双读");
-        assert!(reconcile_versioned_receipt_digest(
-            &v2_none,
-            std::slice::from_ref(&v2_literal_null),
-            std::slice::from_ref(&legacy_literal_null),
-        )
-        .is_err());
+        let replay = runtime_source_fn(
+            "async fn replay_resume(",
+            "async fn recover_resume_after_competing_commit(",
+        );
+        assert!(replay.contains("with_transaction"));
+        assert!(replay.contains("replay_resume_in_transaction"));
+
+        let recovery = runtime_source_fn(
+            "async fn recover_resume_after_competing_commit(",
+            "pub async fn cancel_blocked(",
+        );
+        assert!(recovery.contains("const RECOVERY_ATTEMPTS"));
+        assert!(recovery.contains("self.replay_resume"));
+        assert!(recovery.contains("command_recovery_delay"));
+        assert!(!recovery.contains("ClientSession"));
     }
 
     fn decided_fixture(
@@ -4833,28 +4861,15 @@ mod tests {
     fn runtime_decision_command(
         reason: Option<&str>,
         expected_task_version: u64,
-        actor_id: &str,
+        _actor_id: &str,
     ) -> RuntimeDecisionCommand {
         RuntimeDecisionCommand {
             work_item_id: "wi-legacy".to_string(),
             decision: ApprovalDecision::Approve,
             reason: reason.map(ToOwned::to_owned),
             expected_task_version,
-            idempotency_key: "legacy-key".to_string(),
-            payload_digest: decision_digest_v2(
-                "wi-legacy",
-                "APPROVE",
-                reason,
-                expected_task_version,
-                actor_id,
-            ),
-            legacy_payload_digest: decision_digest(
-                "wi-legacy",
-                "APPROVE",
-                reason,
-                expected_task_version,
-                actor_id,
-            ),
+            idempotency_key: crate::approval::execution::idempotency::normalize_idempotency_key("legacy-key")
+                .expect("幂等键"),
         }
     }
 
@@ -4942,14 +4957,10 @@ mod tests {
     }
 
     #[test]
-    fn legacy_decision_requires_exact_terminal_facts_despite_digest_collisions() {
+    fn legacy_decision_requires_exact_terminal_facts() {
         let (none_item, none_execution) = decided_fixture(None, 3);
         let exact_none = runtime_decision_command(None, 3, "warehouse-1");
         let literal_null = runtime_decision_command(Some("NULL"), 3, "warehouse-1");
-        assert_eq!(
-            exact_none.legacy_payload_digest,
-            literal_null.legacy_payload_digest
-        );
         assert!(legacy_decision_terminal_facts_match(
             &none_item,
             &none_execution,
@@ -4966,10 +4977,6 @@ mod tests {
         let (separator_item, separator_execution) = decided_fixture(Some("x\u{1f}3"), 4);
         let separator_exact = runtime_decision_command(Some("x\u{1f}3"), 4, "warehouse-1");
         let separator_relocated = runtime_decision_command(Some("x"), 3, "4\u{1f}warehouse-1");
-        assert_eq!(
-            separator_exact.legacy_payload_digest,
-            separator_relocated.legacy_payload_digest
-        );
         assert!(legacy_decision_terminal_facts_match(
             &separator_item,
             &separator_execution,

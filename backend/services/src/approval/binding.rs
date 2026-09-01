@@ -4,17 +4,23 @@
 
 use std::collections::HashMap;
 
-use bpm::ids::ApprovalProcessDefinitionId;
+use bpm::ids::{ApprovalCommandReceiptId, ApprovalProcessDefinitionId};
 use bpm::model::types::ModelError;
+use bpm::model::{ApprovalCommandReceipt, Timestamp};
 use database::repository::bpm::DefinitionGraph;
 use database::{AccessControlExt, BpmExt, DocumentRegistryExt, Executor, MongoCasbinAdapter};
 use entities::common::time::Instant;
 use entities::document_registry::business_document::{
     ApprovalBindingUpgradeError, ApprovalBindingUpgradeInput, ApprovalDefinitionBinding,
 };
-use entities::document_registry::{BusinessDocument, DocumentType};
+use entities::document_registry::workflow_action::ApprovalBindingActionContext;
+use entities::document_registry::{
+    BusinessDocument, BusinessDocumentId, DocumentType, WorkflowAction, WorkflowActionData, WorkflowActionId,
+    WorkflowActionType,
+};
 use entities::{AccountCore, RoleIdSet};
 use mongodb::Database;
+use serde::{Deserialize, Serialize};
 
 use crate::audit::AuditActor;
 use crate::errors::{Error, ErrorCode, Result};
@@ -22,15 +28,23 @@ use crate::iam::{subject, SharedRbacService};
 
 use super::business_adapter::{
     adapter_spec_of, assignment_scope_covers_organization, ensure_published_status,
-    ensure_separation_of_duties, revalidate_assignee_binding_access, subject_ref_for,
-    BindingRevalidationContext,
+    ensure_separation_of_duties, revalidate_assignee_binding_access, BindingRevalidationContext,
 };
+use super::execution::idempotency::{payload_conflict_error, ReceiptBranch};
+use super::execution::{map_receipt_first_write_error, upgrade_binding_identity, PreparedCommandIdentity};
 use super::policy::{
     policy_of, require_process_required, ApprovalRequirement, ApproverEligibilityPolicy,
     ProcessRequiredApprovalPolicy, STATIC_APPROVE_PERMISSION,
 };
 use super::process_kind::process_kind_of;
-use super::scope::approval_document_read_scope_with_executor;
+use super::scope::{
+    approval_actor_is_active_with_executor, approval_binding_upgrade_authorization_with_executor,
+    approval_document_read_scope_with_executor,
+};
+use super::upgrade_subject::{
+    ensure_initial_unsubmitted_approval_upgrade_subject, load_approval_upgrade_subject_facts,
+    ApprovalUpgradeSubjectFacts,
+};
 
 /// 绑定审计动作。
 pub const DEFINITION_BOUND_AUDIT_ACTION: &str = "approval.definition.bound";
@@ -55,16 +69,62 @@ pub struct BindPublishedDefinitionCommand {
 /// 未提交单据升级命令。目标固定为当前发布版本。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpgradeUnsubmittedDefinitionCommand {
-    /// 业务单据注册 ID。
+    /// 路由与强实体必须共同证明的精确单据类型。
+    pub document_type: DocumentType,
+    /// 强业务对象与注册行共用的精确 ID。
     pub document_id: String,
-    /// 期望的注册行版本。
-    pub expected_document_version: u64,
+    /// 客户端签署的强业务对象版本。
+    pub expected_business_object_version: u64,
     /// 期望的绑定 CAS 版本。
     pub expected_binding_version: u64,
-    /// 升级原因。
+    /// 升级原因；命令身份与不可变动作均使用其 trim 后值。
     pub reason: String,
-    /// 当前单据组织与创建人。
-    pub context: BindingRevalidationContext,
+    /// 运行层在任何仓储访问前预构造的精确 V3 命令身份。
+    pub identity: PreparedCommandIdentity,
+    /// Fresh 分支预生成的不可变动作 ID。
+    pub action_id: WorkflowActionId,
+    /// Fresh 分支预生成的命令收据 ID。
+    pub receipt_id: ApprovalCommandReceiptId,
+}
+
+/// 绑定升级结果类别。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum UpgradeBindingOutcome {
+    /// 本次事务应用了新绑定。
+    Applied,
+    /// 同载荷收据经当前授权后回读原动作。
+    Replay,
+}
+
+/// 绑定升级返回的新定义绑定。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UpgradeBindingView {
+    /// 审批定义 ID。
+    pub approval_process_definition_id: String,
+    /// 定义业务版本。
+    pub approval_definition_version: u32,
+    /// 绑定 CAS 版本；字符串形态避免 JavaScript 精度丢失。
+    pub approval_binding_version: String,
+    /// 绑定发生时间。
+    pub approval_definition_bound_at: Instant,
+}
+
+/// 从不可变 `WorkflowAction` 投影的绑定升级结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UpgradeBindingResultView {
+    /// 精确单据类型。
+    pub document_type: DocumentType,
+    /// 精确强业务对象 ID。
+    pub document_id: String,
+    /// 原命令签署的强业务对象版本。
+    pub original_business_object_version: String,
+    /// 升级后绑定；不从当前可变注册行伪造。
+    pub new_binding: UpgradeBindingView,
+    /// 收据 `result_ref` 指向的不可变动作 ID。
+    pub action_id: String,
+    /// 本次是应用还是授权回读。
+    pub outcome: UpgradeBindingOutcome,
 }
 
 /// 绑定政策决定。
@@ -143,61 +203,95 @@ pub async fn bind_published_definition_on_document_create(
 
 /// 升级未提交且未启动单据的绑定到当前发布版本。
 ///
-/// 仅运行管理员可调用；目标固定当前 `PUBLISHED`，禁止客户端提交定义 ID。
-/// 使用单据版本与 `approval_binding_version` 双 CAS。
+/// 目标固定为当前唯一 `PUBLISHED` 定义，禁止客户端提交定义 ID。
+/// 本端口不开事务；运行层必须传入同一外层事务执行器。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 共享 RBAC 服务
-/// * `command` - 单据、双 CAS、原因与重验上下文
-/// * `actor` - 已认证运行管理员
+/// * `command` - 精确对象、强版本、绑定 CAS、原因和预构造幂等身份
+/// * `actor` - 已认证操作人；仍需在事务内重验账号与授权
 /// * `executor` - 调用方事务执行器
 ///
 /// # 返回
-/// 返回升级后完整审批绑定。
+/// Fresh 返回从新动作投影的 `Applied`；同载荷收据返回从原动作
+/// 严格重建的 `Replay`。
 ///
 /// # 错误
-/// 权限、状态、版本或人员重验失败时返回错误。
+/// 身份、授权、收据、动作、强实体、注册行、定义图或人员重验失败时
+/// 返回错误。任何收据冲突之外的 duplicate 不得进入恢复。
 pub async fn upgrade_unsubmitted_document_definition(
     db: &Database,
     rbac: &SharedRbacService,
     command: &UpgradeUnsubmittedDefinitionCommand,
     actor: &AuditActor,
     executor: &mut dyn Executor,
-) -> Result<ApprovalDefinitionBinding> {
-    let mut document = load_registered_document(db, &command.document_id, executor).await?;
-    let policy = require_process_required(document.document_type)?;
-    ensure_runtime_admin(rbac, actor, &policy).await?;
-    let current = document
-        .approval_binding
-        .clone()
-        .ok_or_else(|| Error::ValidationError("尚未绑定审批定义".to_string()))?;
-    let approval_started =
-        document_has_started_instance(db, document.document_type, &document.base.id, executor).await?;
-    document
-        .ensure_unsubmitted_approval_binding_upgrade(
-            approval_started,
-            command.expected_document_version,
-            command.expected_binding_version,
-            &command.reason,
-        )
-        .map_err(map_binding_upgrade_error)?;
-    let published = load_published_graph(db, document.document_type, executor).await?;
-    revalidate_binding_graph(db, rbac, &policy, &command.context, &published, executor).await?;
-    document
-        .upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
-            approval_process_definition_id: ApprovalProcessDefinitionId::new(
-                published.definition.base.id.clone(),
-            ),
-            approval_definition_version: published.definition.definition_version,
-            approval_started,
-            expected_document_version: command.expected_document_version,
-            expected_binding_version: command.expected_binding_version,
-            reason: &command.reason,
-            at: Instant::now(),
-        })
-        .map_err(map_binding_upgrade_error)?;
-    persist_upgraded_document(db, &mut document, &current, actor, executor).await
+) -> Result<UpgradeBindingResultView> {
+    let reason = normalized_upgrade_reason(command)?;
+    ensure_prepared_upgrade_identity(command, actor, reason)?;
+
+    let authorized = load_authorized_upgrade_context(db, rbac, command, actor, executor).await?;
+
+    let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
+    match command.identity.classify(receipt.as_ref()) {
+        ReceiptBranch::SamePayload(receipt) => {
+            return replay_upgrade_result(db, command, actor, reason, receipt, executor).await;
+        }
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::Fresh => {}
+    }
+
+    authorized
+        .facts
+        .ensure_expected_business_object_version(command.expected_business_object_version)?;
+    ensure_initial_unsubmitted_approval_upgrade_subject(db, &authorized.facts, executor).await?;
+    apply_fresh_upgrade(
+        db,
+        rbac,
+        command,
+        actor,
+        reason,
+        &authorized.facts,
+        &authorized.policy,
+        &authorized.actor_role,
+        executor,
+    )
+    .await
+}
+
+/// 在 unknown/duplicate 恢复的新事务中只执行授权回读。
+///
+/// # 返回
+/// 同载荷 V3 收据及其不可变动作完整时返回 `Some(Replay)`；收据尚不存在
+/// 返回 `None`。
+///
+/// # 错误
+/// 强业务身份、当前账号、三重授权、policy revision、收据载荷或动作证明
+/// 任一失败时返回错误。
+///
+/// # 关键业务约束
+/// 本端口绝不调用 Fresh 门禁与任何写入；运行层必须为每次恢复尝试传入可用的
+/// 新事务执行器。
+pub async fn replay_unsubmitted_document_definition_upgrade(
+    db: &Database,
+    rbac: &SharedRbacService,
+    command: &UpgradeUnsubmittedDefinitionCommand,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Option<UpgradeBindingResultView>> {
+    let reason = normalized_upgrade_reason(command)?;
+    ensure_prepared_upgrade_identity(command, actor, reason)?;
+    let _authorized = load_authorized_upgrade_context(db, rbac, command, actor, executor).await?;
+    let receipt = find_upgrade_receipt(db, &command.identity, executor).await?;
+    match command.identity.classify(receipt.as_ref()) {
+        ReceiptBranch::SamePayload(receipt) => {
+            replay_upgrade_result(db, command, actor, reason, receipt, executor)
+                .await
+                .map(Some)
+        }
+        ReceiptBranch::PayloadConflict => Err(payload_conflict_error()),
+        ReceiptBranch::Fresh => Ok(None),
+    }
 }
 
 /// 将已计算绑定写入单据实体。
@@ -725,22 +819,385 @@ fn require_static_decide_permission(allowed: bool) -> Result<()> {
     Err(Error::ValidationError("指定审批人缺少审批权限".to_string()))
 }
 
-/// 校验运行管理员权限。
-async fn ensure_runtime_admin(
+/// 得到命令签署与不可变动作共用的规范化原因。
+fn normalized_upgrade_reason(command: &UpgradeUnsubmittedDefinitionCommand) -> Result<&str> {
+    let reason = command.reason.trim();
+    if reason.is_empty() {
+        return Err(Error::ValidationError("升级原因不能为空".to_string()));
+    }
+    if command.action_id.as_ref().trim().is_empty() || command.receipt_id.as_ref().trim().is_empty() {
+        return Err(Error::Internal("绑定升级预生成 ID 不完整".to_string()));
+    }
+    Ok(reason)
+}
+
+/// 同一事务快照内已重验的升级上下文。
+struct AuthorizedUpgradeContext {
+    facts: ApprovalUpgradeSubjectFacts,
+    policy: ProcessRequiredApprovalPolicy,
+    actor_role: String,
+}
+
+/// 先加载精确强事实，再重验账号与当前三重授权。
+async fn load_authorized_upgrade_context(
+    db: &Database,
     rbac: &SharedRbacService,
+    command: &UpgradeUnsubmittedDefinitionCommand,
     actor: &AuditActor,
-    policy: &ProcessRequiredApprovalPolicy,
+    executor: &mut dyn Executor,
+) -> Result<AuthorizedUpgradeContext> {
+    let facts =
+        load_approval_upgrade_subject_facts(db, command.document_type, &command.document_id, executor)
+            .await?;
+    ensure_active_upgrade_actor(db, actor, executor).await?;
+    let policy = require_process_required(facts.document_type)?;
+    let authorization = approval_binding_upgrade_authorization_with_executor(
+        db,
+        rbac,
+        actor,
+        facts.document_type,
+        &policy.definition_admin_permission,
+        &facts.responsible_org_id,
+        executor,
+    )
+    .await?;
+    Ok(AuthorizedUpgradeContext {
+        facts,
+        policy,
+        actor_role: authorization.actor_role,
+    })
+}
+
+/// 证明运行层传入的身份精确签署了本命令。
+fn ensure_prepared_upgrade_identity(
+    command: &UpgradeUnsubmittedDefinitionCommand,
+    actor: &AuditActor,
+    reason: &str,
 ) -> Result<()> {
-    let allowed = rbac
-        .enforce(
-            &subject(actor.kind(), actor.id()),
-            &policy.runtime_admin_permission,
-        )
-        .await?;
-    if allowed {
+    let expected = upgrade_binding_identity(
+        command.document_type.as_str(),
+        &command.document_id,
+        command.expected_business_object_version,
+        command.expected_binding_version,
+        reason,
+        actor.id(),
+        command.identity.idempotency_key().clone(),
+    )?;
+    let scopes = command.identity.scope_candidates();
+    if command.identity.current() != expected.current()
+        || scopes.len() != 1
+        || scopes.first().copied() != Some(command.identity.current().scope().as_str())
+    {
+        return Err(payload_conflict_error());
+    }
+    Ok(())
+}
+
+/// 在强业务对象存在性已证明后，事务内重验操作人。
+async fn ensure_active_upgrade_actor(
+    db: &Database,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if approval_actor_is_active_with_executor(db, actor, executor).await? {
         return Ok(());
     }
-    Err(Error::Forbidden("没有该单据类型的审批运行管理权限".to_string()))
+    Err(Error::Forbidden(
+        "审批绑定升级账号不存在、已停用或身份已变化".to_string(),
+    ))
+}
+
+/// 只按预构造 V3 身份查找绑定升级收据。
+async fn find_upgrade_receipt(
+    db: &Database,
+    identity: &PreparedCommandIdentity,
+    executor: &mut dyn Executor,
+) -> Result<Option<ApprovalCommandReceipt>> {
+    db.bpm_workflow()
+        .find_command_receipt(
+            identity.current().command_kind(),
+            identity.current().scope().as_str(),
+            identity.idempotency_key(),
+            executor,
+        )
+        .await
+        .map_err(Into::into)
+}
+
+/// 同载荷收据只能回读并严格证明其不可变动作。
+async fn replay_upgrade_result(
+    db: &Database,
+    command: &UpgradeUnsubmittedDefinitionCommand,
+    actor: &AuditActor,
+    reason: &str,
+    receipt: &ApprovalCommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<UpgradeBindingResultView> {
+    let action = db
+        .workflow_actions()
+        .find_by_id(&receipt.result_ref, executor)
+        .await?
+        .ok_or_else(payload_conflict_error)?;
+    upgrade_result_from_action(
+        command,
+        actor,
+        reason,
+        receipt,
+        &action,
+        UpgradeBindingOutcome::Replay,
+    )
+}
+
+/// Fresh 分支完成全部读取与预构造后，以收据作为第一物理写。
+#[allow(clippy::too_many_arguments)]
+async fn apply_fresh_upgrade(
+    db: &Database,
+    rbac: &SharedRbacService,
+    command: &UpgradeUnsubmittedDefinitionCommand,
+    actor: &AuditActor,
+    reason: &str,
+    facts: &ApprovalUpgradeSubjectFacts,
+    policy: &ProcessRequiredApprovalPolicy,
+    actor_role: &str,
+    executor: &mut dyn Executor,
+) -> Result<UpgradeBindingResultView> {
+    let mut document = load_registered_document(db, &command.document_id, executor).await?;
+    ensure_registered_upgrade_subject(&document, facts)?;
+    document
+        .ensure_unsubmitted_approval_binding_upgrade(command.expected_binding_version, reason)
+        .map_err(map_binding_upgrade_error)?;
+    let previous = document
+        .approval_binding
+        .clone()
+        .ok_or_else(|| Error::ValidationError("尚未绑定审批定义".to_string()))?;
+
+    let published = load_published_graph(db, facts.document_type, executor).await?;
+    revalidate_binding_graph(db, rbac, policy, &facts.binding_context(), &published, executor).await?;
+    ensure_upgrade_changes_definition(&previous, &published)?;
+
+    let current_definition_id = ApprovalProcessDefinitionId::new(published.definition.base.id.clone());
+    let current_binding_version = previous
+        .approval_binding_version
+        .checked_add(1)
+        .ok_or_else(|| Error::Internal("审批绑定版本溢出".to_string()))?;
+    let action = WorkflowAction::new_with_approval_binding_context(
+        command.action_id.clone(),
+        WorkflowActionData {
+            document_id: BusinessDocumentId::new(facts.document_id.clone()),
+            action_type: WorkflowActionType::ApprovalDefinitionUpgraded,
+            from_status: "DRAFT".to_string(),
+            to_status: "DRAFT".to_string(),
+            actor_id: actor.id().to_string(),
+            actor_role: actor_role.to_string(),
+            comment: Some(reason.to_string()),
+        },
+        ApprovalBindingActionContext {
+            previous_definition_id: previous.approval_process_definition_id.clone(),
+            previous_definition_version: previous.approval_definition_version,
+            previous_binding_version: previous.approval_binding_version,
+            current_definition_id: current_definition_id.clone(),
+            current_definition_version: published.definition.definition_version,
+            current_binding_version,
+            business_object_version: facts.business_object_version,
+        },
+    )?;
+    let action_at = action_timestamp(&action)?;
+    document
+        .upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
+            approval_process_definition_id: current_definition_id,
+            approval_definition_version: published.definition.definition_version,
+            expected_binding_version: command.expected_binding_version,
+            reason,
+            at: action_at,
+        })
+        .map_err(map_binding_upgrade_error)?;
+    ensure_action_matches_upgraded_document(&action, &document)?;
+
+    let receipt = ApprovalCommandReceipt::new(
+        command.receipt_id.clone(),
+        command.identity.current(),
+        action.base.id.clone(),
+        Timestamp::from_utc(action_at.as_utc()),
+    )
+    .map_err(map_model_error)?;
+    let audit = upgraded_binding_audit(actor, facts, &previous, &action)?;
+    let view = upgrade_result_from_action(
+        command,
+        actor,
+        reason,
+        &receipt,
+        &action,
+        UpgradeBindingOutcome::Applied,
+    )?;
+
+    db.bpm_workflow()
+        .insert_command_receipt(&receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    db.business_documents().update(&mut document, executor).await?;
+    db.workflow_actions().create(&action, executor).await?;
+    db.audit_logs().create(&audit, executor).await?;
+    Ok(view)
+}
+
+/// 注册投影必须与同一事务已读取的强业务事实精确一致。
+fn ensure_registered_upgrade_subject(
+    document: &BusinessDocument,
+    facts: &ApprovalUpgradeSubjectFacts,
+) -> Result<()> {
+    let conflicting_document_no = !document.document_no.is_empty()
+        && !facts.document_no.is_empty()
+        && document.document_no != facts.document_no;
+    if document.base.id != facts.document_id
+        || document.document_type != facts.document_type
+        || conflicting_document_no
+    {
+        return Err(Error::ConflictError(
+            "业务单据注册事实与强业务对象不一致".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 升级目标必须是不同且更高的发布定义。
+fn ensure_upgrade_changes_definition(
+    previous: &ApprovalDefinitionBinding,
+    published: &DefinitionGraph,
+) -> Result<()> {
+    if previous.approval_process_definition_id.as_ref() == published.definition.base.id
+        || published.definition.definition_version <= previous.approval_definition_version
+    {
+        return Err(Error::ConflictError(
+            "当前绑定已是最新发布定义，禁止空升级或降级".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 将不可变动作创建时间转为绑定与收据共用时间。
+fn action_timestamp(action: &WorkflowAction) -> Result<Instant> {
+    let secs = i64::try_from(action.base.created_at)
+        .map_err(|_| Error::Internal("工作流动作时间无法转换为绑定时间".to_string()))?;
+    Ok(Instant::from_unix_secs(secs))
+}
+
+/// 写入前证明内存中的注册绑定与不可变动作完全一致。
+fn ensure_action_matches_upgraded_document(
+    action: &WorkflowAction,
+    document: &BusinessDocument,
+) -> Result<()> {
+    let context = action
+        .approval_binding_context
+        .as_ref()
+        .ok_or_else(|| Error::Internal("绑定升级动作缺少结构化上下文".to_string()))?;
+    let binding = document
+        .approval_binding
+        .as_ref()
+        .ok_or_else(|| Error::Internal("升级后绑定丢失".to_string()))?;
+    if binding.approval_process_definition_id != context.current_definition_id
+        || binding.approval_definition_version != context.current_definition_version
+        || binding.approval_binding_version != context.current_binding_version
+        || binding.approval_definition_bound_at != action_timestamp(action)?
+    {
+        return Err(Error::Internal("绑定升级动作与注册绑定不一致".to_string()));
+    }
+    Ok(())
+}
+
+/// 在首笔写入前构造升级审计。
+fn upgraded_binding_audit(
+    actor: &AuditActor,
+    facts: &ApprovalUpgradeSubjectFacts,
+    previous: &ApprovalDefinitionBinding,
+    action: &WorkflowAction,
+) -> Result<entities::AuditLog> {
+    let context = action
+        .approval_binding_context
+        .as_ref()
+        .ok_or_else(|| Error::Internal("绑定升级动作缺少结构化上下文".to_string()))?;
+    let message = format!(
+        "document_type={} business_object_version={} from_definition={} from_version={} to_definition={} to_version={} action_id={}",
+        facts.document_type.as_str(),
+        facts.business_object_version,
+        previous.approval_process_definition_id.as_ref(),
+        previous.approval_definition_version,
+        context.current_definition_id.as_ref(),
+        context.current_definition_version,
+        action.base.id,
+    );
+    actor.clone().resource_log_with_message(
+        DEFINITION_UPGRADED_AUDIT_ACTION,
+        "business_document",
+        facts.document_id.clone(),
+        Some(message),
+    )
+}
+
+/// 从收据指向的动作严格证明并重建绑定升级结果。
+fn upgrade_result_from_action(
+    command: &UpgradeUnsubmittedDefinitionCommand,
+    actor: &AuditActor,
+    reason: &str,
+    receipt: &ApprovalCommandReceipt,
+    action: &WorkflowAction,
+    outcome: UpgradeBindingOutcome,
+) -> Result<UpgradeBindingResultView> {
+    if !matches!(
+        command.identity.classify(Some(receipt)),
+        ReceiptBranch::SamePayload(_)
+    ) {
+        return Err(payload_conflict_error());
+    }
+    let expected_current_binding_version = command
+        .expected_binding_version
+        .checked_add(1)
+        .ok_or_else(payload_conflict_error)?;
+    let Some(context) = action.approval_binding_context.as_ref() else {
+        return Err(payload_conflict_error());
+    };
+    let immutable_metadata = action.base.version == 1
+        && action.base.deleted_at == 0
+        && action.base.created_at == action.base.updated_at
+        && receipt.base.version == 1
+        && receipt.base.deleted_at == 0
+        && receipt.base.created_at == receipt.base.updated_at
+        && receipt.base.created_at == action.base.created_at;
+    let exact_action = !action.base.id.trim().is_empty()
+        && receipt.result_ref == action.base.id
+        && action.document_id.as_ref() == command.document_id
+        && action.action_type == WorkflowActionType::ApprovalDefinitionUpgraded
+        && action.from_status == "DRAFT"
+        && action.to_status == "DRAFT"
+        && action.actor_id == actor.id()
+        && !action.actor_role.trim().is_empty()
+        && action.comment.as_deref() == Some(reason)
+        && action.approval_context.is_none();
+    let exact_context = context.business_object_version == command.expected_business_object_version
+        && context.business_object_version > 0
+        && context.previous_binding_version == command.expected_binding_version
+        && context.current_binding_version == expected_current_binding_version
+        && context.previous_binding_version > 0
+        && context.previous_definition_version > 0
+        && context.current_definition_version > context.previous_definition_version
+        && !context.previous_definition_id.as_ref().trim().is_empty()
+        && !context.current_definition_id.as_ref().trim().is_empty()
+        && context.previous_definition_id != context.current_definition_id;
+    if !immutable_metadata || !exact_action || !exact_context {
+        return Err(payload_conflict_error());
+    }
+    Ok(UpgradeBindingResultView {
+        document_type: command.document_type,
+        document_id: command.document_id.clone(),
+        original_business_object_version: context.business_object_version.to_string(),
+        new_binding: UpgradeBindingView {
+            approval_process_definition_id: context.current_definition_id.to_string(),
+            approval_definition_version: context.current_definition_version,
+            approval_binding_version: context.current_binding_version.to_string(),
+            approval_definition_bound_at: action_timestamp(action).map_err(|_| payload_conflict_error())?,
+        },
+        action_id: action.base.id.clone(),
+        outcome,
+    })
 }
 
 /// 记录无审批政策事实，不查询定义。
@@ -796,37 +1253,6 @@ async fn write_bound_audit(
     Ok(())
 }
 
-/// 持久化升级后的注册行并写升级审计。
-async fn persist_upgraded_document(
-    db: &Database,
-    document: &mut BusinessDocument,
-    previous: &ApprovalDefinitionBinding,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<ApprovalDefinitionBinding> {
-    let binding = document
-        .approval_binding
-        .clone()
-        .ok_or_else(|| Error::Internal("升级后绑定丢失".to_string()))?;
-    db.business_documents().update(document, executor).await?;
-    let message = format!(
-        "from_definition={} from_version={} to_definition={} to_version={} actor={}",
-        previous.approval_process_definition_id.as_ref(),
-        previous.approval_definition_version,
-        binding.approval_process_definition_id.as_ref(),
-        binding.approval_definition_version,
-        actor.id()
-    );
-    let audit = actor.clone().resource_log_with_message(
-        DEFINITION_UPGRADED_AUDIT_ACTION,
-        "business_document",
-        document.base.id.clone(),
-        Some(message),
-    )?;
-    db.audit_logs().create(&audit, executor).await?;
-    Ok(binding)
-}
-
 /// 读取注册行。
 async fn load_registered_document(
     db: &Database,
@@ -837,35 +1263,6 @@ async fn load_registered_document(
         .find_by_id(document_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("业务单据未注册".to_string()))
-}
-
-/// 查询单据是否已经启动过审批实例。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `document_type` - ERP 单据类型
-/// * `document_id` - 业务单据注册 ID
-/// * `executor` - 调用方事务执行器
-///
-/// # 返回
-/// 任意未删除审批实例命中该主体时返回 `true`。
-///
-/// # 错误
-/// 主体引用构造或 Repository 查询失败时返回错误。
-///
-/// # 关键业务约束
-/// 查询条件由 BPM Repository 封装，终态实例仍证明单据已经启动过审批。
-async fn document_has_started_instance(
-    db: &Database,
-    document_type: DocumentType,
-    document_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<bool> {
-    let subject = subject_ref_for(document_type, document_id)?;
-    db.bpm_workflow()
-        .has_started_instance_for_subject(&subject, executor)
-        .await
-        .map_err(Into::into)
 }
 
 /// 将 ERP 单据绑定升级错误映射为稳定的 Service 错误语义。
@@ -916,6 +1313,7 @@ mod tests {
     };
     use crate::approval::policy::{policy_of, ALL_DOCUMENT_TYPES};
     use crate::document_registry::new_registered_document;
+    use bpm::model::IdempotencyKey;
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
     use entities::ids::DataScopeId;
     use entities::sales_order::BusinessType;
@@ -953,6 +1351,56 @@ mod tests {
         .unwrap()
     }
 
+    /// 构造严格回读单测命令。
+    fn upgrade_command() -> UpgradeUnsubmittedDefinitionCommand {
+        let identity = upgrade_binding_identity(
+            DocumentType::StockAdjustment.as_str(),
+            "adjustment-1",
+            7,
+            1,
+            "升级至当前发布定义",
+            "admin-1",
+            IdempotencyKey::parse("upgrade-key-1").unwrap(),
+        )
+        .unwrap();
+        UpgradeUnsubmittedDefinitionCommand {
+            document_type: DocumentType::StockAdjustment,
+            document_id: "adjustment-1".to_string(),
+            expected_business_object_version: 7,
+            expected_binding_version: 1,
+            reason: "升级至当前发布定义".to_string(),
+            identity,
+            action_id: WorkflowActionId::new("action-1"),
+            receipt_id: ApprovalCommandReceiptId::new("receipt-1"),
+        }
+    }
+
+    /// 构造收据指向的不可变升级动作。
+    fn upgrade_action(command: &UpgradeUnsubmittedDefinitionCommand) -> WorkflowAction {
+        WorkflowAction::new_with_approval_binding_context(
+            command.action_id.clone(),
+            WorkflowActionData {
+                document_id: BusinessDocumentId::new(command.document_id.clone()),
+                action_type: WorkflowActionType::ApprovalDefinitionUpgraded,
+                from_status: "DRAFT".to_string(),
+                to_status: "DRAFT".to_string(),
+                actor_id: "admin-1".to_string(),
+                actor_role: "role-definition-admin".to_string(),
+                comment: Some(command.reason.clone()),
+            },
+            ApprovalBindingActionContext {
+                previous_definition_id: ApprovalProcessDefinitionId::new("definition-1"),
+                previous_definition_version: 1,
+                previous_binding_version: 1,
+                current_definition_id: ApprovalProcessDefinitionId::new("definition-2"),
+                current_definition_version: 2,
+                current_binding_version: 2,
+                business_object_version: 7,
+            },
+        )
+        .unwrap()
+    }
+
     /// 绑定政策：无审批跳过，必须审批要求发布定义。
     #[test]
     fn binding_policy_skips_no_approval_and_requires_published() {
@@ -973,6 +1421,143 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 同载荷结果必须完全由收据指向的不可变动作重建。
+    #[test]
+    fn upgrade_result_is_rebuilt_from_strict_action_proof() {
+        let command = upgrade_command();
+        let actor = AuditActor::new("admin-1".to_string(), "admin-1".to_string(), AccountKind::Admin);
+        let action = upgrade_action(&command);
+        let receipt = ApprovalCommandReceipt::new(
+            command.receipt_id.clone(),
+            command.identity.current(),
+            action.base.id.clone(),
+            Timestamp::from_unix_secs(i64::try_from(action.base.created_at).unwrap()).unwrap(),
+        )
+        .unwrap();
+
+        let view = upgrade_result_from_action(
+            &command,
+            &actor,
+            &command.reason,
+            &receipt,
+            &action,
+            UpgradeBindingOutcome::Replay,
+        )
+        .expect("完整动作证明必须可回读");
+
+        assert_eq!(view.document_type, DocumentType::StockAdjustment);
+        assert_eq!(view.document_id, "adjustment-1");
+        assert_eq!(view.original_business_object_version, "7");
+        assert_eq!(view.new_binding.approval_process_definition_id, "definition-2");
+        assert_eq!(view.new_binding.approval_binding_version, "2");
+        assert_eq!(view.action_id, "action-1");
+        assert_eq!(view.outcome, UpgradeBindingOutcome::Replay);
+
+        let mut corrupt = action.clone();
+        corrupt.comment = Some("被篡改的原因".to_string());
+        assert!(upgrade_result_from_action(
+            &command,
+            &actor,
+            &command.reason,
+            &receipt,
+            &corrupt,
+            UpgradeBindingOutcome::Replay,
+        )
+        .is_err());
+    }
+
+    /// 生产编排必须在当前授权后分流，Fresh 内的收据是第一物理写。
+    #[test]
+    fn upgrade_orchestration_is_authorized_replay_and_receipt_first() {
+        let production = include_str!("binding.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+        let upgrade = production
+            .split("pub async fn upgrade_unsubmitted_document_definition")
+            .nth(1)
+            .expect("必须存在升级端口")
+            .split("/// 在 unknown/duplicate 恢复的新事务中")
+            .next()
+            .unwrap();
+        assert!(
+            upgrade.find("load_authorized_upgrade_context").unwrap()
+                < upgrade.find("find_upgrade_receipt").unwrap()
+        );
+        assert!(
+            upgrade.find("ReceiptBranch::SamePayload").unwrap()
+                < upgrade.find("ensure_expected_business_object_version").unwrap()
+        );
+        assert!(!upgrade.contains("NoTransaction"));
+
+        let authorization = production
+            .split("async fn load_authorized_upgrade_context")
+            .nth(1)
+            .expect("必须存在升级授权上下文")
+            .split("/// 证明运行层传入的身份")
+            .next()
+            .unwrap();
+        assert!(
+            authorization.find("load_approval_upgrade_subject_facts").unwrap()
+                < authorization.find("ensure_active_upgrade_actor").unwrap()
+        );
+        assert!(
+            authorization.find("ensure_active_upgrade_actor").unwrap()
+                < authorization
+                    .find("approval_binding_upgrade_authorization_with_executor")
+                    .unwrap()
+        );
+
+        let recovery = production
+            .split("pub async fn replay_unsubmitted_document_definition_upgrade")
+            .nth(1)
+            .expect("必须存在只读恢复端口")
+            .split("/// 将已计算绑定写入单据实体")
+            .next()
+            .unwrap();
+        assert!(
+            recovery.find("load_authorized_upgrade_context").unwrap()
+                < recovery.find("find_upgrade_receipt").unwrap()
+        );
+        assert!(recovery.contains("ReceiptBranch::Fresh => Ok(None)"));
+        assert!(!recovery.contains("apply_fresh_upgrade"));
+        assert!(!recovery.contains("insert_command_receipt"));
+
+        let fresh = production
+            .split("async fn apply_fresh_upgrade")
+            .nth(1)
+            .expect("必须存在 Fresh 编排")
+            .split("/// 注册投影必须")
+            .next()
+            .unwrap();
+        let receipt_write = fresh.find("insert_command_receipt").unwrap();
+        assert!(fresh.find("ApprovalCommandReceipt::new").unwrap() < receipt_write);
+        assert!(fresh.find("upgrade_result_from_action").unwrap() < receipt_write);
+        assert!(receipt_write < fresh.find("business_documents().update").unwrap());
+        assert!(receipt_write < fresh.find("workflow_actions().create").unwrap());
+        assert!(receipt_write < fresh.find("audit_logs().create").unwrap());
+        assert!(!fresh.contains("outbox"));
+    }
+
+    /// 单号只在注册与强实体两端均有值时作为一致性证明。
+    #[test]
+    fn upgrade_registry_identity_allows_one_sided_empty_document_number() {
+        let document = new_registered_document("adjustment-1", DocumentType::StockAdjustment, "").unwrap();
+        let facts = ApprovalUpgradeSubjectFacts {
+            document_type: DocumentType::StockAdjustment,
+            document_id: "adjustment-1".to_string(),
+            business_object_version: 1,
+            document_no: "ADJ-1".to_string(),
+            responsible_org_id: "org-1".to_string(),
+            creator_id: "creator-1".to_string(),
+        };
+        assert!(ensure_registered_upgrade_subject(&document, &facts).is_ok());
+
+        let conflicting =
+            new_registered_document("adjustment-1", DocumentType::StockAdjustment, "ADJ-OTHER").unwrap();
+        assert!(ensure_registered_upgrade_subject(&conflicting, &facts).is_err());
     }
 
     /// 缺失发布定义失败关闭。

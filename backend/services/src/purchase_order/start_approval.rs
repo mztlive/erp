@@ -4,7 +4,6 @@ use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
@@ -25,8 +24,12 @@ use mongodb::{ClientSession, Database};
 use super::adapter::purchase_order_object_readable;
 use super::dto::SavePurchaseOrderLine;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
-use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
+use crate::approval::execution::idempotency::{
+    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+};
+use crate::approval::execution::{
+    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
+};
 use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 
@@ -112,21 +115,90 @@ pub(super) async fn load_start_receipt(
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::PurchaseOrder);
-    let scope = start_scope(
+    let scopes = start_scope_candidates(
         process_kind.as_str(),
         subject.subject_kind(),
         subject.subject_id(),
         subject_version,
-    );
-    Ok(db
+    )?;
+    for scope in scopes {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                &scope,
+                &key,
+                &mut NoTransaction,
+            )
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
+}
+
+/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购启动结果。
+pub(super) async fn replay_purchase_order_start_with_executor(
+    db: &Database,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+    binding: &ApprovalDefinitionBinding,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(DocumentType::PurchaseOrder);
+    let identity = start_identity(
+        key,
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
+        actor_id,
+    )?;
+    let mut receipt = None;
+    for scope in identity.scope_candidates() {
+        receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            break;
+        }
+    }
+    let receipt = match identity.classify(receipt.as_ref()) {
+        ReceiptBranch::Fresh => return Ok(None),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::SamePayload(receipt) => receipt,
+    };
+    let instance = db
         .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
-        .await?)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("采购启动收据引用的审批实例不存在".to_string()))?;
+    if instance.base.id != receipt.result_ref
+        || instance.process_kind != process_kind
+        || instance.subject.subject_kind() != subject.subject_kind()
+        || instance.subject.subject_id() != subject.subject_id()
+        || instance.subject_version != subject_version
+        || instance.started_by.as_str() != actor_id
+        || instance.process_definition_id != binding.approval_process_definition_id
+        || instance.definition_version != binding.approval_definition_version
+    {
+        return Err(Error::ConflictError(
+            "采购启动收据与冻结运行事实不一致".to_string(),
+        ));
+    }
+    Ok(Some(instance.base.id))
 }
 
 /// 采购单启动输入。
@@ -372,7 +444,10 @@ pub(super) async fn persist_purchase_order_start(
 /// 仓储写入失败或计划不完整时返回错误，由调用方事务回滚。
 ///
 /// # 关键业务约束
-/// 创建并提交必须复用建单事务，不得再开一层事务。
+/// 独立提交通过本模块新建事务，因此审批收据是整笔事务第一写。创建并提交时，
+/// 外层创建命令已经完成自身幂等仲裁并持有同一事务；本方法不得再开事务，且其
+/// 审批写段仍必须按“启动收据 -> 带正式编号的注册行启动守卫 -> 业务提交 ->
+/// BPM 运行事实”顺序执行。
 pub(super) async fn persist_purchase_order_start_with_session(
     db: &Database,
     input: PurchaseOrderStartPersistInput,
@@ -392,6 +467,29 @@ pub(super) async fn persist_purchase_order_start_with_session(
         now,
         audit,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(None);
+    };
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, session)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    let guarded = db
+        .business_documents()
+        .mark_loaded_approval_started(
+            &mut document,
+            DocumentType::PurchaseOrder,
+            &writes.instance.process_definition_id,
+            writes.instance.definition_version,
+            now,
+            session,
+        )
+        .await?;
+    if !guarded {
+        return Err(Error::ConflictError(
+            "采购单审批启动守卫冲突，请刷新后重试".to_string(),
+        ));
+    }
     if let Some(guard) = procurement_guard {
         let coverage =
             super::draft_edit::advance_guard_and_load_coverage(db, &order, &guard.actor_id, session).await?;
@@ -407,22 +505,16 @@ pub(super) async fn persist_purchase_order_start_with_session(
     db.purchase_order_submissions()
         .update(&mut superseded_draft, session)
         .await?;
-    db.business_documents().update(&mut document, session).await?;
-    let first_task = match prepared {
-        PreparedExecution::Apply(writes) => {
-            persist_runtime_writes(
-                db,
-                &writes,
-                &snapshot_payload,
-                owner_role,
-                &organization_id,
-                now,
-                session,
-            )
-            .await?
-        }
-        PreparedExecution::Replay { .. } => None,
-    };
+    let first_task = persist_runtime_writes(
+        db,
+        &writes,
+        &snapshot_payload,
+        owner_role,
+        &organization_id,
+        now,
+        session,
+    )
+    .await?;
     db.audit_logs().create(&audit, session).await?;
     Ok(first_task)
 }
@@ -445,11 +537,10 @@ async fn persist_runtime_writes(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交采购单".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )

@@ -10,10 +10,9 @@ use std::fmt;
 
 use crate::ids::ApprovalCommandReceiptId;
 use crate::model::types::{
-    base_model_at, normalize_required, ApprovalCommandKind, ModelError, ModelResult, DIGEST_MAX_LEN,
-    SCOPE_MAX_LEN,
+    base_model_at, normalize_required, ApprovalCommandKind, ModelError, ModelResult, SCOPE_MAX_LEN,
 };
-use crate::model::Timestamp;
+use crate::model::{ApprovalCommandIdentity, IdempotencyKey, Timestamp};
 
 /// 命令执行收据。
 #[derive(Debug, Serialize, Clone, Entity, PartialEq, Eq)]
@@ -25,7 +24,7 @@ pub struct ApprovalCommandReceipt {
     /// 作用域 ID。
     pub scope_id: String,
     /// 调用方幂等键。
-    pub idempotency_key: String,
+    pub idempotency_key: IdempotencyKey,
     /// 规范化请求摘要。
     pub payload_digest: String,
     /// 不可变结果引用。
@@ -173,42 +172,41 @@ impl ApprovalCommandReceipt {
     ///
     /// # 参数
     /// * `id` - 收据主键
-    /// * `command_kind` - 命令种类
-    /// * `scope_id` - 作用域
-    /// * `idempotency_key` - 幂等键
-    /// * `payload_digest` - 请求摘要
+    /// * `identity` - 已规范化的 v3 命令身份
     /// * `result_ref` - 结果引用
     /// * `at` - 创建时间
     ///
     /// # 错误
-    /// 作用域、幂等键、摘要或结果引用非法时返回错误。
+    /// 结果引用非法或调用方时间无法持久化时返回错误。
     pub fn new(
         id: ApprovalCommandReceiptId,
-        command_kind: ApprovalCommandKind,
-        scope_id: impl Into<String>,
-        idempotency_key: impl Into<String>,
-        payload_digest: impl Into<String>,
+        identity: &ApprovalCommandIdentity,
         result_ref: impl Into<String>,
         at: Timestamp,
     ) -> ModelResult<Self> {
         Ok(Self {
             base: base_model_at(id.to_string(), at)?,
-            command_kind,
-            scope_id: normalize_required(scope_id, "作用域不能为空", SCOPE_MAX_LEN, "作用域过长")?,
-            idempotency_key: normalize_required(
-                idempotency_key,
-                "幂等键不能为空",
-                SCOPE_MAX_LEN,
-                "幂等键过长",
-            )?,
-            payload_digest: normalize_required(
-                payload_digest,
-                "请求摘要不能为空",
-                DIGEST_MAX_LEN,
-                "请求摘要过长",
-            )?,
+            command_kind: identity.command_kind(),
+            scope_id: identity.scope().as_str().to_string(),
+            idempotency_key: identity.idempotency_key().clone(),
+            payload_digest: identity.digest().as_str().to_string(),
             result_ref: normalize_required(result_ref, "结果引用不能为空", SCOPE_MAX_LEN, "结果引用过长")?,
         })
+    }
+
+    /// 按完整 v3 身份回读：唯一键身份与载荷均相同才返回自身。
+    ///
+    /// # 错误
+    /// 命令种类、作用域、规范幂等键或摘要任一不一致时返回
+    /// [`ModelError::CommandReceiptConflict`]。
+    pub fn reconcile_identity(&self, identity: &ApprovalCommandIdentity) -> ModelResult<&Self> {
+        if self.command_kind == identity.command_kind()
+            && self.scope_id == identity.scope().as_str()
+            && &self.idempotency_key == identity.idempotency_key()
+        {
+            return self.reconcile(identity.digest().as_str());
+        }
+        Err(ModelError::CommandReceiptConflict)
     }
 
     /// 按相同键回读：摘要相同返回自身，摘要不同冲突。
@@ -234,7 +232,9 @@ mod tests {
     use super::ApprovalCommandReceipt;
     use crate::ids::ApprovalCommandReceiptId;
     use crate::model::types::{ApprovalCommandKind, ModelError};
-    use crate::model::Timestamp;
+    use crate::model::{
+        ApprovalCommandIdentity, CanonicalCommandPayload, CommandPayloadField, IdempotencyKey, Timestamp,
+    };
     use entity_core::BaseModel;
     use serde::Serialize;
 
@@ -259,14 +259,23 @@ mod tests {
     use bson;
 
     fn receipt() -> ApprovalCommandReceipt {
+        let identity = identity("digest-a");
         ApprovalCommandReceipt::new(
             ApprovalCommandReceiptId::new("r1"),
-            ApprovalCommandKind::SubmitDecision,
-            "inst-1",
-            "key-1",
-            "digest-a",
+            &identity,
             "exec-1",
             Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn identity(payload: &str) -> ApprovalCommandIdentity {
+        ApprovalCommandIdentity::new(
+            ApprovalCommandKind::SubmitDecision,
+            "approval.submit-decision",
+            IdempotencyKey::parse("key-1").unwrap(),
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text("inst-1")),
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text(payload)),
         )
         .unwrap()
     }
@@ -275,9 +284,11 @@ mod tests {
     #[test]
     fn same_key_same_payload_reads_back() {
         let receipt = receipt();
-        assert!(receipt.reconcile("digest-a").is_ok());
+        let same = identity("digest-a");
+        let changed = identity("digest-b");
+        assert!(receipt.reconcile_identity(&same).is_ok());
         assert_eq!(
-            receipt.reconcile("digest-b"),
+            receipt.reconcile_identity(&changed),
             Err(ModelError::CommandReceiptConflict)
         );
     }
@@ -302,7 +313,7 @@ mod tests {
             base: receipt.base.clone(),
             command_kind: receipt.command_kind,
             scope_id: receipt.scope_id.clone(),
-            idempotency_key: receipt.idempotency_key.clone(),
+            idempotency_key: receipt.idempotency_key.to_string(),
             payload_digest: receipt.payload_digest.clone(),
             result_ref: receipt.result_ref.clone(),
             created_at: Timestamp::from_unix_secs(1).unwrap(),
@@ -329,7 +340,7 @@ mod tests {
             base: receipt.base.clone(),
             command_kind: receipt.command_kind,
             scope_id: receipt.scope_id,
-            idempotency_key: receipt.idempotency_key,
+            idempotency_key: receipt.idempotency_key.to_string(),
             payload_digest: receipt.payload_digest,
             result_ref: receipt.result_ref,
             created_at: Timestamp::from_unix_secs(2).unwrap(),
@@ -355,7 +366,7 @@ mod tests {
             base: receipt.base,
             command_kind: receipt.command_kind,
             scope_id: receipt.scope_id,
-            idempotency_key: receipt.idempotency_key,
+            idempotency_key: receipt.idempotency_key.to_string(),
             payload_digest: receipt.payload_digest,
             result_ref: receipt.result_ref,
             created_at: Timestamp::from_unix_secs(1).unwrap(),
@@ -375,5 +386,27 @@ mod tests {
                 .contains("created_at may appear at most twice for legacy receipts"),
             "unexpected error: {error}"
         );
+    }
+
+    /// 历史 scope/digest 无版本字符串继续只读兼容，幂等键仍须是规范形态。
+    #[test]
+    fn legacy_scope_and_digest_strings_remain_readable() {
+        let base = receipt().base;
+        let legacy = LegacyApprovalCommandReceipt {
+            base,
+            command_kind: ApprovalCommandKind::SubmitDecision,
+            scope_id: "inst-legacy".to_string(),
+            idempotency_key: "key-legacy".to_string(),
+            payload_digest: "legacy-digest".to_string(),
+            result_ref: "exec-legacy".to_string(),
+            created_at: Timestamp::from_unix_secs(1).unwrap(),
+        };
+        let raw = bson::serialize_to_raw_document_buf(&legacy).expect("历史收据必须可序列化");
+        let decoded: ApprovalCommandReceipt =
+            bson::deserialize_from_slice(raw.as_bytes()).expect("历史 scope/digest 必须继续可读");
+
+        assert_eq!(decoded.scope_id, "inst-legacy");
+        assert_eq!(decoded.payload_digest, "legacy-digest");
+        assert_eq!(decoded.idempotency_key.as_str(), "key-legacy");
     }
 }

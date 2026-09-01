@@ -57,6 +57,14 @@ pub struct ApprovalNodeDefinition {
 }
 
 impl ApprovalNodeDefinition {
+    /// 规范化节点显示名称，供命令摘要与实体构造共享同一规则源。
+    ///
+    /// # 错误
+    /// trim 后为空或超过 [`NAME_MAX_LEN`] 个 UTF-8 字节时返回错误。
+    pub fn normalize_name(name: impl Into<String>) -> ModelResult<String> {
+        normalize_required(name, "节点名称不能为空", NAME_MAX_LEN, "节点名称过长")
+    }
+
     /// 创建人工审批节点。
     ///
     /// 处理人与显示名由调用方提供；本模块不查询账号或组织。
@@ -80,7 +88,7 @@ impl ApprovalNodeDefinition {
             base: base_model_at(input.id.to_string(), input.at)?,
             process_definition_id: input.process_definition_id,
             node_key: normalize_required(input.node_key, "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?,
-            node_name: normalize_required(input.node_name, "节点名称不能为空", NAME_MAX_LEN, "节点名称过长")?,
+            node_name: Self::normalize_name(input.node_name)?,
             node_type: ApprovalNodeType::UserApproval,
             node_purpose: normalize_optional(input.node_purpose, PURPOSE_MAX_LEN, "用途键过长")?,
             display_order: input.display_order,
@@ -187,5 +195,17 @@ mod tests {
         assert!(node
             .with_assignee_label_snapshot("   ", Timestamp::from_unix_secs(2).unwrap())
             .is_err());
+    }
+
+    /// 摘要准备与实体构造必须共享 trim 和 UTF-8 字节边界。
+    #[test]
+    fn node_name_normalization_is_public_and_matches_constructor() {
+        assert_eq!(
+            ApprovalNodeDefinition::normalize_name("  仓储复核  ").unwrap(),
+            "仓储复核"
+        );
+        assert!(ApprovalNodeDefinition::normalize_name("  ").is_err());
+        assert!(ApprovalNodeDefinition::normalize_name("界".repeat(85)).is_ok());
+        assert!(ApprovalNodeDefinition::normalize_name("界".repeat(86)).is_err());
     }
 }

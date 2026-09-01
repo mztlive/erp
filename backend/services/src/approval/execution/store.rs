@@ -7,6 +7,7 @@ use bpm::ids::ApprovalNodeExecutionId;
 use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance,
+    IdempotencyKey,
 };
 use entities::approval_integration::{ApprovalNotificationOutbox, ApprovalNotificationTemplateParams};
 use entities::common::time::Instant;
@@ -98,7 +99,7 @@ impl DomainActionExecutor for RecordingDomainActions {
 /// 内存事务会话。begin 后失败必须 rollback，禁止半提交。
 #[derive(Debug, Default, Clone)]
 pub struct MemoryRuntimeStore {
-    receipts: HashMap<String, ApprovalCommandReceipt>,
+    receipts: HashMap<(ApprovalCommandKind, String, IdempotencyKey), ApprovalCommandReceipt>,
     instances: HashMap<String, ApprovalProcessInstance>,
     executions: HashMap<String, ApprovalNodeExecution>,
     assignees: HashMap<String, ApprovalInstanceAssignee>,
@@ -149,7 +150,7 @@ impl MemoryRuntimeStore {
         &self,
         kind: ApprovalCommandKind,
         scope_id: &str,
-        idempotency_key: &str,
+        idempotency_key: &IdempotencyKey,
     ) -> Option<&ApprovalCommandReceipt> {
         self.receipts.get(&receipt_key(kind, scope_id, idempotency_key))
     }
@@ -241,7 +242,7 @@ pub fn replay_after_duplicate(
     store: &MemoryRuntimeStore,
     kind: ApprovalCommandKind,
     scope_id: &str,
-    idempotency_key: &str,
+    idempotency_key: &IdempotencyKey,
     digest: &str,
 ) -> Result<ApprovalCommandReceipt> {
     let receipt = store
@@ -455,8 +456,12 @@ fn enqueue_notifications(
     Ok(())
 }
 
-fn receipt_key(kind: ApprovalCommandKind, scope_id: &str, idempotency_key: &str) -> String {
-    format!("{}:{scope_id}:{idempotency_key}", kind.as_str())
+fn receipt_key(
+    kind: ApprovalCommandKind,
+    scope_id: &str,
+    idempotency_key: &IdempotencyKey,
+) -> (ApprovalCommandKind, String, IdempotencyKey) {
+    (kind, scope_id.to_string(), idempotency_key.clone())
 }
 
 fn assignee_key(assignee: &ApprovalInstanceAssignee) -> String {

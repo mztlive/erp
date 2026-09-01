@@ -285,6 +285,7 @@ fn replace_nodes_command(
             headers,
         )?,
         nodes: request.nodes,
+        idempotency_key: request.idempotency_key,
     })
 }
 
@@ -343,12 +344,14 @@ mod tests {
             ReplaceNodesHttpRequest {
                 expected_definition_lock_version: "3".to_string(),
                 nodes: Vec::new(),
+                idempotency_key: " replace-1 ".to_string(),
             },
             &HeaderMap::new(),
         )
         .expect("合法版本");
         assert_eq!(command.definition_id, "def-1");
         assert_eq!(command.expected_definition_lock_version, 3);
+        assert_eq!(command.idempotency_key, " replace-1 ");
     }
 
     #[test]

@@ -18,7 +18,10 @@ import { displayProcessVersion, displayRoute } from "../display"
 import { createApprovalIdempotencyKey } from "../idempotency"
 import { useUpgradeBindingMutation } from "../queries"
 import { upgradeBindingFormSchema } from "../schema"
-import type { ApprovalDefinitionBinding, DocumentApprovalView } from "../types"
+import type {
+    ApprovalDefinitionBinding,
+    UpgradeBindingResultView,
+} from "../types"
 
 /**
  * 更新未提交单据的审批流程版本。
@@ -39,7 +42,7 @@ export function UpgradeBindingDialog({
     documentType: string
     documentId: string
     definition: ApprovalDefinitionBinding
-    onApplied?: (view: DocumentApprovalView) => void
+    onApplied?: (view: UpgradeBindingResultView) => void
     id?: string
 }) {
     const upgrade = useUpgradeBindingMutation()

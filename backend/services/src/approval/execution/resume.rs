@@ -2,13 +2,12 @@
 
 use bpm::engine::{resume, ResumeCommand};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{
     ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance,
 };
 
 use super::apply_plan::apply_plan;
-use super::idempotency::{classify_receipt, resume_digest, ReceiptBranch};
+use super::idempotency::{resume_identity, ReceiptBranch};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::errors::{Error, Result};
@@ -50,14 +49,16 @@ pub struct ResumeExecutionInput {
 /// # 错误
 /// 当前运行事实不允许原审批人恢复、异载荷冲突或引擎失败时返回错误。
 pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> {
-    let digest = resume_digest(
+    let identity = resume_identity(
+        input.command.idempotency_key.clone(),
+        &input.instance.base.id,
         input.expected_instance_version,
         input.expected_execution_version,
         input.expected_assignment_version,
         input.expected_closed_task_version,
         &input.actor_id,
-    );
-    match classify_receipt(input.command.receipt.as_ref(), &digest) {
+    )?;
+    match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
             return Ok(PreparedExecution::Replay {
@@ -66,7 +67,6 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
         }
         ReceiptBranch::Fresh => {}
     }
-    let receipt_scope = input.instance.base.id.clone();
     let plan = resume(
         input.instance,
         input.current,
@@ -82,10 +82,7 @@ pub fn prepare_resume(input: ResumeExecutionInput) -> Result<PreparedExecution> 
     .map_err(map_engine_error)?;
     let receipt = ApprovalCommandReceipt::new(
         input.receipt_id,
-        ApprovalCommandKind::ResumeApprover,
-        receipt_scope,
-        input.command.idempotency_key,
-        digest,
+        identity.current(),
         plan.instance.base.id.clone(),
         input.command.now,
     )

@@ -47,15 +47,19 @@ use super::mapper::{
 };
 use super::start_approval::{
     build_sales_order_start_input, load_bound_definition_graph, load_bound_definition_graph_with_executor,
-    load_start_receipt, persist_runtime_writes, persist_sales_order_start, SalesOrderRuntimeWriteInput,
-    SalesOrderStartInput, SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
+    load_start_receipt, persist_runtime_writes, persist_sales_order_start,
+    replay_sales_order_start_with_executor, SalesOrderRuntimeWriteInput, SalesOrderStartInput,
+    SalesOrderStartPersistInput, SalesOrderWorkingCopyPersistPlan,
 };
 use super::SalesOrderService;
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{prepare_cancel, prepare_start};
+use crate::approval::execution::idempotency::normalize_idempotency_key;
+use crate::approval::execution::{
+    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
+};
 use crate::audit::AuditActor;
 use crate::document_registry::find_approval_binding;
 use crate::errors::{Error, Result};
@@ -1072,7 +1076,8 @@ impl SalesOrderService {
                 "目标商城外部身份映射在提交期间已变化，请刷新后重试".to_string(),
             ));
         }
-        persist_sales_order_start(
+        let recovery_subject_version = submission.submission_no;
+        let persisted = persist_sales_order_start(
             &self.db,
             SalesOrderStartPersistInput {
                 order,
@@ -1091,7 +1096,24 @@ impl SalesOrderService {
                 sellable_refs,
             },
         )
-        .await
+        .await;
+        match persisted {
+            Ok(view) => Ok(view),
+            Err(error) if command_may_have_committed(&error) => {
+                self.recover_sales_submission_start(
+                    id,
+                    ports.document_type,
+                    recovery_subject_version,
+                    idempotency_key,
+                    actor,
+                    &audit_id,
+                    &fingerprint,
+                    error,
+                )
+                .await
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// 撤回审批中的销售单，回到可修正草稿。
@@ -1140,14 +1162,9 @@ impl SalesOrderService {
         let subject_version = latest_submission_no(&self.db, id).await?;
         let runtime = load_cancel_runtime(&self.db, &binding, &subject, subject_version).await?;
         let now = Instant::now();
-        let input = build_sales_order_cancel_input(
-            &runtime,
-            &req.reason,
-            actor.id(),
-            &req.idempotency_key,
-            None,
-            now,
-        )?;
+        let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
+        let input =
+            build_sales_order_cancel_input(&runtime, &req.reason, actor.id(), &idempotency_key, None, now)?;
         let prepared = prepare_cancel(input)?;
         execute_sales_order_domain_action(&mut order, ports.cancel_action, actor.id())?;
         let audit =
@@ -1209,6 +1226,81 @@ impl SalesOrderService {
             .list_lines_by_submissions(&[submission_id], &mut NoTransaction)
             .await?;
         Ok(Some(submission_view(submission, lines)))
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    #[allow(clippy::too_many_arguments)]
+    async fn recover_sales_submission_start(
+        &self,
+        sales_order_id: &str,
+        document_type: entities::document_registry::DocumentType,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        audit_id: &str,
+        fingerprint: &str,
+        original_error: Error,
+    ) -> Result<SubmissionView> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let sales_order_id_owned = sales_order_id.to_string();
+            let idempotency_key_owned = idempotency_key.to_string();
+            let actor_id = actor.id().to_string();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        let order = db
+                            .sales_orders()
+                            .find_by_id(&sales_order_id_owned, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+                        let current_ports = sales_approval_ports(order.business_type)?;
+                        if current_ports.document_type != document_type {
+                            return Err(Error::ConflictError(
+                                "销售单业务类型在提交恢复期间已变化".to_string(),
+                            ));
+                        }
+                        let organization_id = sales_order_responsible_org_id(&order)?;
+                        let _ = sales_order_object_readable(&organization_id, &actor_id)?;
+                        let binding = find_approval_binding(&db, &sales_order_id_owned, session).await?;
+                        let binding = require_frozen_binding(binding.as_ref())?;
+                        let subject =
+                            subject_ref_for_sales_business(order.business_type, &sales_order_id_owned)?;
+                        replay_sales_order_start_with_executor(
+                            &db,
+                            document_type,
+                            &subject,
+                            subject_version,
+                            &idempotency_key_owned,
+                            binding,
+                            &actor_id,
+                            session,
+                        )
+                        .await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(_)) => {
+                    if let Some(view) = self
+                        .replay_sales_submission(audit_id, fingerprint, sales_order_id, actor.id())
+                        .await?
+                    {
+                        return Ok(view);
+                    }
+                }
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 解析并校验卡券提交所需的目标商城与两类外部身份。

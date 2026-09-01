@@ -15,6 +15,8 @@ pub struct ReplaceNodesHttpRequest {
     pub expected_definition_lock_version: String,
     /// 有序节点。
     pub nodes: Vec<DefinitionNodeRequest>,
+    /// 幂等键。
+    pub idempotency_key: String,
 }
 
 /// 发布或退役草稿的 HTTP 请求。
@@ -92,7 +94,13 @@ mod tests {
         assert!(serde_json::from_value::<ReplaceNodesHttpRequest>(json!({
             "expected_definition_lock_version": "1",
             "nodes": [],
+            "idempotency_key": "k1",
             "definition_id": "forged"
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<ReplaceNodesHttpRequest>(json!({
+            "expected_definition_lock_version": "1",
+            "nodes": []
         }))
         .is_err());
         assert!(serde_json::from_value::<DefinitionLockHttpRequest>(json!({

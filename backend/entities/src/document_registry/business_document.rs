@@ -278,10 +278,6 @@ pub struct ApprovalBindingUpgradeInput<'a> {
     pub approval_process_definition_id: ApprovalProcessDefinitionId,
     /// 当前发布审批定义业务版本。
     pub approval_definition_version: u32,
-    /// 仓储确认该单据是否已启动过审批实例。
-    pub approval_started: bool,
-    /// 调用方期望的单据注册版本。
-    pub expected_document_version: u64,
     /// 调用方期望的审批绑定版本。
     pub expected_binding_version: u64,
     /// 本次升级原因。
@@ -320,6 +316,9 @@ pub struct BusinessDocument {
     /// 审批定义绑定；无需审批或尚未绑定时为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_binding: Option<ApprovalDefinitionBinding>,
+    /// 首次启动审批的时间；一经写入永久证明该单据已经启动过审批。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_started_at: Option<Instant>,
 }
 
 impl BusinessDocument {
@@ -355,6 +354,7 @@ impl BusinessDocument {
             document_no_assigned_at,
             formalized_at: None,
             approval_binding: None,
+            approval_started_at: None,
         })
     }
 
@@ -458,8 +458,6 @@ impl BusinessDocument {
     /// 校验未提交单据是否允许升级审批绑定。
     ///
     /// # 参数
-    /// * `approval_started` - 仓储确认该单据是否已经启动过审批实例
-    /// * `expected_document_version` - 调用方期望的单据注册版本
     /// * `expected_binding_version` - 调用方期望的审批绑定版本
     /// * `reason` - 本次升级原因
     ///
@@ -470,11 +468,10 @@ impl BusinessDocument {
     /// 缺少绑定、已提交、已启动、双版本冲突或原因为空时返回对应错误。
     ///
     /// # 关键业务约束
-    /// 审批启动事实由 Service 跨仓储提供，其余 ERP 单据绑定不变式由实体统一判断。
+    /// 审批启动事实必须持久化在本注册聚合中，以便启动与升级竞争同一行写冲突；
+    /// 不得以查询 BPM 实例替代该并发守卫。
     pub fn ensure_unsubmitted_approval_binding_upgrade(
         &self,
-        approval_started: bool,
-        expected_document_version: u64,
         expected_binding_version: u64,
         reason: &str,
     ) -> std::result::Result<(), ApprovalBindingUpgradeError> {
@@ -484,12 +481,10 @@ impl BusinessDocument {
         if self.formalized_at.is_some() {
             return Err(ApprovalBindingUpgradeError::Formalized);
         }
-        if approval_started {
+        if self.approval_started_at.is_some() {
             return Err(ApprovalBindingUpgradeError::ApprovalStarted);
         }
-        if self.base.version != expected_document_version
-            || binding.approval_binding_version != expected_binding_version
-        {
+        if binding.approval_binding_version != expected_binding_version {
             return Err(ApprovalBindingUpgradeError::VersionConflict);
         }
         if reason.trim().is_empty() {
@@ -515,12 +510,7 @@ impl BusinessDocument {
         &mut self,
         input: ApprovalBindingUpgradeInput<'_>,
     ) -> std::result::Result<(), ApprovalBindingUpgradeError> {
-        self.ensure_unsubmitted_approval_binding_upgrade(
-            input.approval_started,
-            input.expected_document_version,
-            input.expected_binding_version,
-            input.reason,
-        )?;
+        self.ensure_unsubmitted_approval_binding_upgrade(input.expected_binding_version, input.reason)?;
         let current = self
             .approval_binding
             .as_ref()
@@ -531,6 +521,30 @@ impl BusinessDocument {
             input.expected_binding_version,
             input.at,
         )?);
+        Ok(())
+    }
+
+    /// 永久标记该注册单据已经启动审批。
+    ///
+    /// # 参数
+    /// * `at` - 首次启动发生时间
+    ///
+    /// # 返回
+    /// 已经持有完整审批绑定时写入首次启动时间；重复调用保持首次时间不变。
+    ///
+    /// # 错误
+    /// 缺少审批绑定时返回错误。
+    ///
+    /// # 关键业务约束
+    /// 生产启动路径必须在创建 BPM 实例的同一事务内持久化本事实。字段只允许
+    /// 从空变为有值，不得由取消、驳回、完成、再次提交或数据修复覆盖、清空。
+    pub fn mark_approval_started(&mut self, at: Instant) -> Result<()> {
+        if self.approval_binding.is_none() {
+            return Err(Error::from("未绑定审批定义的单据不能启动审批"));
+        }
+        if self.approval_started_at.is_none() {
+            self.approval_started_at = Some(at);
+        }
         Ok(())
     }
 
@@ -678,7 +692,7 @@ mod tests {
             .is_err());
     }
 
-    /// 未提交绑定升级由实体统一校验双 CAS、提交状态、启动事实与原因。
+    /// 未提交绑定升级由实体统一校验绑定 CAS、提交状态、启动事实与原因。
     #[test]
     fn unsubmitted_binding_upgrade_enforces_all_document_rules() {
         let mut document = BusinessDocument::new(BusinessDocumentId::new("bd-1"), data()).unwrap();
@@ -692,14 +706,10 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let document_version = document.base.version;
-
         document
             .upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
                 approval_process_definition_id: ApprovalProcessDefinitionId::new("def-2"),
                 approval_definition_version: 2,
-                approval_started: false,
-                expected_document_version: document_version,
                 expected_binding_version: 1,
                 reason: "切换到当前发布版本",
                 at: Instant::from_unix_secs(11),
@@ -715,13 +725,10 @@ mod tests {
         );
 
         let mut missing = BusinessDocument::new(BusinessDocumentId::new("bd-2"), data()).unwrap();
-        let missing_version = missing.base.version;
         assert!(matches!(
             missing.upgrade_unsubmitted_approval_binding(ApprovalBindingUpgradeInput {
                 approval_process_definition_id: ApprovalProcessDefinitionId::new("def-2"),
                 approval_definition_version: 2,
-                approval_started: false,
-                expected_document_version: missing_version,
                 expected_binding_version: 1,
                 reason: "原因",
                 at: Instant::from_unix_secs(11),
@@ -732,25 +739,29 @@ mod tests {
         let mut formalized = document.clone();
         formalized.formalize(Instant::from_unix_secs(12));
         assert!(matches!(
-            formalized.ensure_unsubmitted_approval_binding_upgrade(false, document_version, 2, "原因"),
+            formalized.ensure_unsubmitted_approval_binding_upgrade(2, "原因"),
             Err(ApprovalBindingUpgradeError::Formalized)
         ));
+        let mut started = document.clone();
+        started
+            .mark_approval_started(Instant::from_unix_secs(12))
+            .unwrap();
         assert!(matches!(
-            document.ensure_unsubmitted_approval_binding_upgrade(true, document_version, 2, "原因"),
+            started.ensure_unsubmitted_approval_binding_upgrade(2, "原因"),
             Err(ApprovalBindingUpgradeError::ApprovalStarted)
         ));
         assert!(matches!(
-            document.ensure_unsubmitted_approval_binding_upgrade(false, document_version + 1, 2, "原因"),
+            document.ensure_unsubmitted_approval_binding_upgrade(1, "原因"),
             Err(ApprovalBindingUpgradeError::VersionConflict)
         ));
         assert!(matches!(
-            document.ensure_unsubmitted_approval_binding_upgrade(false, document_version, 1, "原因"),
-            Err(ApprovalBindingUpgradeError::VersionConflict)
-        ));
-        assert!(matches!(
-            document.ensure_unsubmitted_approval_binding_upgrade(false, document_version, 2, "   "),
+            document.ensure_unsubmitted_approval_binding_upgrade(2, "   "),
             Err(ApprovalBindingUpgradeError::EmptyReason)
         ));
+        started
+            .mark_approval_started(Instant::from_unix_secs(13))
+            .unwrap();
+        assert_eq!(started.approval_started_at, Some(Instant::from_unix_secs(12)));
     }
 
     /// 失败路径：超长编号被拒。

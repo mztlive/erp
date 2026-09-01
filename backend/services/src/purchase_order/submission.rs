@@ -1,6 +1,6 @@
 //! 采购草稿冻结并调用统一 `start_approval`。
 
-use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SalesOrderExt};
+use database::{AccessControlExt, NoTransaction, PurchaseOrderExt, SalesOrderExt, Transactional};
 use entities::common::time::Instant;
 use entities::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId};
 use entities::purchase_order::{
@@ -19,11 +19,11 @@ use super::draft_edit::{ensure_payment_term_unchanged, resolve_line_patches};
 use super::dto::{SavePurchaseOrderLine, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult};
 use super::start_approval::{
     build_purchase_order_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_order_start, PurchaseOrderStartInput, PurchaseOrderStartPersistInput,
-    PurchaseSubmitProcurementGuard,
+    persist_purchase_order_start, replay_purchase_order_start_with_executor, PurchaseOrderStartInput,
+    PurchaseOrderStartPersistInput, PurchaseSubmitProcurementGuard,
 };
 use super::PurchaseOrderService;
-use crate::approval::execution::prepare_start;
+use crate::approval::execution::{command_may_have_committed, command_recovery_delay, prepare_start};
 use crate::approval::policy::ApprovalDomainAction;
 use crate::audit::AuditActor;
 use crate::document_registry::{find_approval_binding, find_registered_document};
@@ -216,12 +216,20 @@ impl PurchaseOrderService {
         .await;
         let first_task = match first_task {
             Ok(task) => task,
-            Err(error) => {
-                if let Some(result) = self.replay_purchase_submit(&audit_id, &fingerprint, id).await? {
-                    return Ok(result);
-                }
-                return Err(error);
+            Err(error) if command_may_have_committed(&error) => {
+                return self
+                    .recover_purchase_submit_start(
+                        id,
+                        order.approval_subject_version,
+                        &req.idempotency_key,
+                        actor,
+                        &audit_id,
+                        &fingerprint,
+                        error,
+                    )
+                    .await;
             }
+            Err(error) => return Err(error),
         };
         let (work_item_id, task_version) = first_task.unwrap_or((String::new(), 0));
         Ok(SubmitPurchaseOrderResult {
@@ -279,6 +287,77 @@ impl PurchaseOrderService {
             lock_version: receipt.lock_version,
             reference: receipt.submission_no,
         }))
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    #[allow(clippy::too_many_arguments)]
+    async fn recover_purchase_submit_start(
+        &self,
+        purchase_order_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        audit_id: &str,
+        fingerprint: &str,
+        original_error: Error,
+    ) -> Result<SubmitPurchaseOrderResult> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let purchase_order_id_owned = purchase_order_id.to_string();
+            let idempotency_key_owned = idempotency_key.to_string();
+            let actor_id = actor.id().to_string();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        let order = db
+                            .purchase_orders()
+                            .find_by_id(&purchase_order_id_owned, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+                        let sales_order = db
+                            .sales_orders()
+                            .find_by_id(&order.sales_order_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+                        let organization_id = purchase_order_responsible_org_id(&sales_order)?;
+                        let _ = purchase_order_object_readable(&organization_id, &actor_id)?;
+                        let binding = find_approval_binding(&db, &purchase_order_id_owned, session).await?;
+                        let binding = require_frozen_binding(binding.as_ref())?;
+                        let subject = purchase_order_subject_ref(&purchase_order_id_owned)?;
+                        replay_purchase_order_start_with_executor(
+                            &db,
+                            &subject,
+                            subject_version,
+                            &idempotency_key_owned,
+                            binding,
+                            &actor_id,
+                            session,
+                        )
+                        .await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(_)) => {
+                    if let Some(result) = self
+                        .replay_purchase_submit(audit_id, fingerprint, purchase_order_id)
+                        .await?
+                    {
+                        return Ok(result);
+                    }
+                }
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 冻结草稿为正式提交（复制明细并重指向正式提交、推进主表指针）。

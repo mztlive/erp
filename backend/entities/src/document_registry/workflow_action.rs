@@ -8,7 +8,7 @@ use crate::errors::{Error, Result};
 use crate::ids::{BusinessDocumentId, WorkflowActionId};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
-use bpm::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use bpm::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 
 /// 状态代码最大长度。
 const STATUS_CODE_MAX_LEN: usize = 64;
@@ -133,6 +133,30 @@ impl WorkflowActionType {
                 | Self::ApprovalCompleted
         )
     }
+
+    /// 判断动作是否必须引用已经存在的审批运行实例与节点执行。
+    pub fn requires_approval_runtime_context(self) -> bool {
+        matches!(
+            self,
+            Self::ApprovalStarted
+                | Self::ApprovalNodeApproved
+                | Self::ApprovalNodeRejected
+                | Self::ApprovalRoundRestarted
+                | Self::ApprovalBlocked
+                | Self::ApprovalRecovered
+                | Self::ApprovalCancelled
+                | Self::ApprovalBlockedCancelled
+                | Self::ApprovalCompleted
+        )
+    }
+
+    /// 判断动作是否必须携带审批定义绑定变更事实。
+    pub fn requires_approval_binding_context(self) -> bool {
+        matches!(
+            self,
+            Self::ApprovalDefinitionBound | Self::ApprovalDefinitionUpgraded
+        )
+    }
 }
 
 /// 审批动作的结构化引用，不得把身份拼入 comment。
@@ -144,6 +168,25 @@ pub struct ApprovalActionContext {
     pub current_round_no: u32,
     /// 节点执行。
     pub approval_node_execution_id: ApprovalNodeExecutionId,
+}
+
+/// 审批定义绑定动作的结构化前后值，不得把版本身份拼入 comment。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalBindingActionContext {
+    /// 变更前定义主键。
+    pub previous_definition_id: ApprovalProcessDefinitionId,
+    /// 变更前定义业务版本。
+    pub previous_definition_version: u32,
+    /// 变更前绑定 CAS 版本。
+    pub previous_binding_version: u64,
+    /// 变更后定义主键。
+    pub current_definition_id: ApprovalProcessDefinitionId,
+    /// 变更后定义业务版本。
+    pub current_definition_version: u32,
+    /// 变更后绑定 CAS 版本。
+    pub current_binding_version: u64,
+    /// 强类型业务实体在命令中签署的版本。
+    pub business_object_version: u64,
 }
 
 /// 工作流动作创建数据。
@@ -192,6 +235,9 @@ pub struct WorkflowAction {
     /// 审批结构化引用。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_context: Option<ApprovalActionContext>,
+    /// 审批定义绑定变更的结构化前后值。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_binding_context: Option<ApprovalBindingActionContext>,
 }
 
 impl WorkflowAction {
@@ -210,7 +256,7 @@ impl WorkflowAction {
     /// # 错误
     /// 当状态代码为空/超长/含非法字符，或操作者/角色为空/超长时返回错误。
     pub fn new(id: WorkflowActionId, data: WorkflowActionData) -> Result<Self> {
-        Self::construct(id, data, None)
+        Self::construct(id, data, None, None)
     }
 
     /// 创建带审批结构化引用的动作。
@@ -227,13 +273,26 @@ impl WorkflowAction {
         data: WorkflowActionData,
         approval_context: ApprovalActionContext,
     ) -> Result<Self> {
-        Self::construct(id, data, Some(approval_context))
+        Self::construct(id, data, Some(approval_context), None)
+    }
+
+    /// 创建带审批定义绑定前后值的不可变动作。
+    ///
+    /// # 错误
+    /// 基础字段非法、动作不是绑定动作或绑定版本没有严格递增时返回错误。
+    pub fn new_with_approval_binding_context(
+        id: WorkflowActionId,
+        data: WorkflowActionData,
+        approval_binding_context: ApprovalBindingActionContext,
+    ) -> Result<Self> {
+        Self::construct(id, data, None, Some(approval_binding_context))
     }
 
     fn construct(
         id: WorkflowActionId,
         data: WorkflowActionData,
         approval_context: Option<ApprovalActionContext>,
+        approval_binding_context: Option<ApprovalBindingActionContext>,
     ) -> Result<Self> {
         let from_status = normalize_status_code(data.from_status, "迁移前状态")?;
         let to_status = normalize_status_code(data.to_status, "迁移后状态")?;
@@ -246,7 +305,8 @@ impl WorkflowAction {
             "责任角色过长",
         )?;
         let comment = normalize_optional_text(data.comment, "意见", COMMENT_MAX_LEN)?;
-        let approval_context = validate_approval_context(data.action_type, approval_context)?;
+        let (approval_context, approval_binding_context) =
+            validate_approval_contexts(data.action_type, approval_context, approval_binding_context)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             document_id: data.document_id,
@@ -257,6 +317,7 @@ impl WorkflowAction {
             actor_role,
             comment,
             approval_context,
+            approval_binding_context,
         })
     }
 }
@@ -265,20 +326,42 @@ impl WorkflowAction {
 ///
 /// # 错误
 /// 审批动作缺少上下文，或非审批动作携带上下文时返回错误。
-fn validate_approval_context(
+fn validate_approval_contexts(
     action_type: WorkflowActionType,
     approval_context: Option<ApprovalActionContext>,
-) -> Result<Option<ApprovalActionContext>> {
-    match (action_type.is_approval_action(), approval_context) {
-        (true, Some(context)) => {
-            if context.current_round_no == 0 {
-                return Err(Error::from("审批轮次必须从 1 开始"));
-            }
-            Ok(Some(context))
+    approval_binding_context: Option<ApprovalBindingActionContext>,
+) -> Result<(
+    Option<ApprovalActionContext>,
+    Option<ApprovalBindingActionContext>,
+)> {
+    if action_type.requires_approval_runtime_context() {
+        if approval_binding_context.is_some() {
+            return Err(Error::from("审批运行动作不得携带定义绑定上下文"));
         }
-        (true, None) => Err(Error::from("审批动作必须提供结构化审批上下文")),
-        (false, Some(_)) => Err(Error::from("非审批动作不得携带审批上下文")),
-        (false, None) => Ok(None),
+        let context = approval_context.ok_or_else(|| Error::from("审批运行动作必须提供结构化审批上下文"))?;
+        if context.current_round_no == 0 {
+            return Err(Error::from("审批轮次必须从 1 开始"));
+        }
+        return Ok((Some(context), None));
+    }
+    if action_type.requires_approval_binding_context() {
+        if approval_context.is_some() {
+            return Err(Error::from("审批绑定动作不得携带运行实例上下文"));
+        }
+        let context =
+            approval_binding_context.ok_or_else(|| Error::from("审批绑定动作必须提供结构化绑定上下文"))?;
+        if context.previous_definition_version == 0
+            || context.current_definition_version == 0
+            || context.previous_binding_version == 0
+            || Some(context.current_binding_version) != context.previous_binding_version.checked_add(1)
+        {
+            return Err(Error::from("审批绑定动作版本上下文无效"));
+        }
+        return Ok((None, Some(context)));
+    }
+    match (approval_context, approval_binding_context) {
+        (None, None) => Ok((None, None)),
+        _ => Err(Error::from("非审批动作不得携带审批上下文")),
     }
 }
 
@@ -316,7 +399,10 @@ fn normalize_status_code(value: String, label: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_status_code, WorkflowAction, WorkflowActionData, WorkflowActionType};
+    use super::{
+        normalize_status_code, ApprovalBindingActionContext, WorkflowAction, WorkflowActionData,
+        WorkflowActionType,
+    };
     use crate::ids::{BusinessDocumentId, WorkflowActionId};
 
     fn data() -> WorkflowActionData {
@@ -412,6 +498,48 @@ mod tests {
         )
         .unwrap();
         assert_eq!(action.approval_context.as_ref().unwrap().current_round_no, 2);
+
+        let upgrade = WorkflowAction::new_with_approval_binding_context(
+            WorkflowActionId::new("wa-4"),
+            WorkflowActionData {
+                action_type: WorkflowActionType::ApprovalDefinitionUpgraded,
+                from_status: "DRAFT".to_string(),
+                to_status: "DRAFT".to_string(),
+                ..data()
+            },
+            ApprovalBindingActionContext {
+                previous_definition_id: bpm::ApprovalProcessDefinitionId::new("def-1"),
+                previous_definition_version: 1,
+                previous_binding_version: 1,
+                current_definition_id: bpm::ApprovalProcessDefinitionId::new("def-2"),
+                current_definition_version: 2,
+                current_binding_version: 2,
+                business_object_version: 7,
+            },
+        )
+        .unwrap();
+        assert!(upgrade.approval_context.is_none());
+        assert_eq!(
+            upgrade
+                .approval_binding_context
+                .as_ref()
+                .unwrap()
+                .business_object_version,
+            7
+        );
+        assert!(WorkflowAction::new_with_approval_context(
+            WorkflowActionId::new("wa-5"),
+            WorkflowActionData {
+                action_type: WorkflowActionType::ApprovalDefinitionUpgraded,
+                ..data()
+            },
+            super::ApprovalActionContext {
+                approval_process_instance_id: bpm::ApprovalProcessInstanceId::new("inst-1"),
+                current_round_no: 1,
+                approval_node_execution_id: bpm::ApprovalNodeExecutionId::new("exec-1"),
+            },
+        )
+        .is_err());
     }
 
     /// BSON 往返。

@@ -132,6 +132,9 @@ pub struct CustomerRefundUpdate {
 pub struct CustomerRefund {
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 创建人。旧数据缺失时反序列化为空，但不得据此执行绑定升级。
+    #[serde(default)]
+    pub created_by: String,
     /// 退款状态。
     pub status: CustomerRefundStatus,
     /// 退款单号。
@@ -172,14 +175,19 @@ impl CustomerRefund {
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::CustomerRefundId`）
     /// * `data` - 创建数据
+    /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
     /// # 返回
     /// 返回新建的退款实体。
     ///
     /// # 错误
-    /// 当编号/原因/经办复核人为空或超长、金额非正、经办与复核人相同、原回款
-    /// 与原应收同时或均未提供时返回错误。
-    pub fn new(id: CustomerRefundId, data: CustomerRefundData) -> Result<Self> {
+    /// 当编号/原因/经办复核人/创建人为空或超长、金额非正、经办与复核人相同、
+    /// 原回款与原应收同时或均未提供时返回错误。
+    pub fn new(
+        id: CustomerRefundId,
+        data: CustomerRefundData,
+        created_by: impl Into<String>,
+    ) -> Result<Self> {
         let refund_no = normalize_required_text(
             data.refund_no,
             "退款单号不能为空",
@@ -197,9 +205,16 @@ impl CustomerRefund {
             return Err(Error::from("退款金额必须为正数"));
         }
         let (handled_by, reviewed_by) = validate_actor_pair(data.handled_by, data.reviewed_by)?;
+        let created_by = normalize_required_text(
+            created_by.into(),
+            "创建人不能为空",
+            ACTOR_MAX_LEN,
+            "创建人标识过长",
+        )?;
         validate_original_target(&data.original_receipt_id, &data.original_receivable_entry_id)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            created_by,
             status: CustomerRefundStatus::Draft,
             refund_no,
             sales_return_case_id: data.sales_return_case_id,
@@ -215,6 +230,17 @@ impl CustomerRefund {
             evidence_attachment_id: data.evidence_attachment_id,
             approval_subject_version: 0,
         })
+    }
+
+    /// 校验客户退款仍是从未提交审批的初始草稿。
+    ///
+    /// # 错误
+    /// 非草稿或审批主题版本已经递增时返回错误。
+    pub fn ensure_initial_approval_state(&self) -> Result<()> {
+        if self.status != CustomerRefundStatus::Draft || self.approval_subject_version != 0 {
+            return Err(Error::from("客户退款单已经提交或启动过审批"));
+        }
+        Ok(())
     }
 
     /// 更新客户退款草稿。
@@ -404,7 +430,7 @@ mod tests {
 
     #[test]
     fn new_trims_text_fields_and_starts_as_draft() {
-        let refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data()).unwrap();
+        let refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data(), "creator-1").unwrap();
 
         assert_eq!(refund.refund_no, "RF-2026-001");
         assert_eq!(refund.reason_code.as_deref(), Some("QUALITY"));
@@ -415,47 +441,61 @@ mod tests {
     }
 
     #[test]
+    fn creator_is_normalized_and_legacy_missing_field_defaults_empty() {
+        let mut refund =
+            CustomerRefund::new(CustomerRefundId::new("creator-crf"), data(), " creator-1 ").unwrap();
+        refund.update(CustomerRefundUpdate::default()).unwrap();
+        assert_eq!(refund.created_by, "creator-1");
+        assert!(CustomerRefund::new(CustomerRefundId::new("blank-creator-crf"), data(), "   ").is_err());
+
+        let mut legacy = bson::serialize_to_document(&refund).unwrap();
+        legacy.remove("created_by");
+        let legacy: CustomerRefund = bson::deserialize_from_document(legacy).unwrap();
+        assert!(legacy.created_by.is_empty());
+    }
+
+    #[test]
     fn new_rejects_blank_no_same_actor_and_bad_target() {
         let blank_no = CustomerRefundData {
             refund_no: "   ".to_string(),
             ..data()
         };
-        assert!(CustomerRefund::new(CustomerRefundId::new("crf-2"), blank_no).is_err());
+        assert!(CustomerRefund::new(CustomerRefundId::new("crf-2"), blank_no, "creator-1").is_err());
 
         let overlong = CustomerRefundData {
             reason_text: "r".repeat(513),
             ..data()
         };
-        assert!(CustomerRefund::new(CustomerRefundId::new("crf-3"), overlong).is_err());
+        assert!(CustomerRefund::new(CustomerRefundId::new("crf-3"), overlong, "creator-1").is_err());
 
         let same_actor = CustomerRefundData {
             reviewed_by: "handler-1".to_string(),
             ..data()
         };
-        assert!(CustomerRefund::new(CustomerRefundId::new("crf-4"), same_actor).is_err());
+        assert!(CustomerRefund::new(CustomerRefundId::new("crf-4"), same_actor, "creator-1").is_err());
 
         let no_target = CustomerRefundData {
             original_receipt_id: None,
             ..data()
         };
-        assert!(CustomerRefund::new(CustomerRefundId::new("crf-5"), no_target).is_err());
+        assert!(CustomerRefund::new(CustomerRefundId::new("crf-5"), no_target, "creator-1").is_err());
 
         let both_targets = CustomerRefundData {
             original_receivable_entry_id: Some(ReceivableEntryId::new("re-1")),
             ..data()
         };
-        assert!(CustomerRefund::new(CustomerRefundId::new("crf-6"), both_targets).is_err());
+        assert!(CustomerRefund::new(CustomerRefundId::new("crf-6"), both_targets, "creator-1").is_err());
 
         let non_positive = CustomerRefundData {
             amount: Amount::from_str("0.00").unwrap(),
             ..data()
         };
-        assert!(CustomerRefund::new(CustomerRefundId::new("crf-7"), non_positive).is_err());
+        assert!(CustomerRefund::new(CustomerRefundId::new("crf-7"), non_positive, "creator-1").is_err());
     }
 
     #[test]
     fn update_applies_draft_changes_and_rejects_posted() {
-        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data()).unwrap();
+        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data(), "creator-1").unwrap();
 
         refund
             .update(CustomerRefundUpdate {
@@ -497,7 +537,7 @@ mod tests {
         assert!(tr(S::Reversed, S::Posted).is_err());
         assert!(tr(S::Reversed, S::Draft).is_err());
 
-        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data()).unwrap();
+        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data(), "creator-1").unwrap();
         assert!(refund.transition(S::Posted).is_err(), "草稿不得直接过账");
         refund.start_approval().unwrap();
         assert!(refund.mark_posted().is_ok());
@@ -505,7 +545,10 @@ mod tests {
 
     #[test]
     fn start_approval_increments_version_and_cancel_does_not_rollback() {
-        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data()).unwrap();
+        let mut refund = CustomerRefund::new(CustomerRefundId::new("crf-1"), data(), "creator-1").unwrap();
+        refund
+            .ensure_initial_approval_state()
+            .expect("新建草稿是初始未提交状态");
         assert_eq!(refund.approval_subject_version, 0);
         let version = refund.start_approval().unwrap();
         assert_eq!(version, 1);
@@ -513,6 +556,7 @@ mod tests {
         refund.cancel_approval().unwrap();
         assert_eq!(refund.status, CustomerRefundStatus::Draft);
         assert_eq!(refund.approval_subject_version, 1);
+        assert!(refund.ensure_initial_approval_state().is_err());
         assert!(refund.mark_posted().is_err());
     }
 

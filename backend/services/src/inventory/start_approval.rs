@@ -8,11 +8,13 @@ use bpm::model::types::{
     ApprovalCommandKind, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
     ApprovalProcessInstanceStatus,
 };
-use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
+use bpm::model::{
+    ApprovalNodeExecution, CommandPayloadField, IdempotencyKey, ParticipantId, SubjectRef, Timestamp,
+};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction, Transactional,
-    WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, InventoryExt,
+    NoTransaction, Transactional, WorkItemExt,
 };
 use entities::approval_integration::{
     ApprovalNotificationEventKind, ApprovalNotificationOutbox, ApprovalNotificationTemplateParams,
@@ -32,9 +34,14 @@ use crate::approval::business_adapter::ensure_separation_of_duties;
 use crate::approval::execution::apply_plan::PlannedWrites;
 use crate::approval::execution::authorization::converge_eligibility;
 use crate::approval::execution::idempotency::{
-    normalize_idempotency_key, payload_conflict_error, payload_digest, start_digest, start_scope,
+    legacy_payload_digest, legacy_standard_start_receipt_identity, legacy_start_receipt_identity,
+    normalize_idempotency_key, payload_conflict_error, specialized_start_identity, start_identity,
+    start_scope_candidates, PreparedCommandIdentity, ReceiptBranch,
 };
-use crate::approval::execution::{ExecutionCommandInput, StartExecutionInput};
+use crate::approval::execution::{
+    map_receipt_first_write_error, prepare_start_with_identity, ExecutionCommandInput, PreparedExecution,
+    StartExecutionInput,
+};
 use crate::approval::policy::require_process_required;
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{
@@ -47,6 +54,7 @@ use crate::iam::SharedRbacService;
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
 
 const STOCK_ADJUSTMENT_START_DIGEST_VERSION: &str = "STOCK_ADJUSTMENT_START_V1";
+const STOCK_ADJUSTMENT_START_VARIANT: &str = "STOCK_ADJUSTMENT_SUBMISSION";
 const STOCK_ADJUSTMENT_SUBMIT_FORBIDDEN: &str = "当前账号不可提交该库存调整单";
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -99,10 +107,10 @@ fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> Definition
     }
 }
 
-/// 构造库存调整启动命令的稳定收据作用域。
-pub(super) fn stock_adjustment_start_scope(adjustment_id: &str, target_subject_version: u32) -> String {
+/// 返回库存调整启动命令的当前 V3 与历史无前缀作用域。
+fn stock_adjustment_start_scopes(adjustment_id: &str, target_subject_version: u32) -> Result<Vec<String>> {
     let kind = process_kind_of(DocumentType::StockAdjustment);
-    start_scope(
+    start_scope_candidates(
         kind.as_str(),
         DocumentType::StockAdjustment.as_str(),
         adjustment_id,
@@ -149,7 +157,138 @@ pub(super) fn stock_adjustment_start_digest(
         actor_id,
     ))
     .map_err(|error| Error::Internal(format!("库存调整提交摘要失败: {error}")))?;
-    Ok(format!("v1:{}", payload_digest(&canonical)))
+    Ok(format!("v1:{}", legacy_payload_digest(&canonical)))
+}
+
+/// 构造库存调整完整提交载荷的当前 V3 身份，并登记两代精确历史候选。
+fn stock_adjustment_start_identity(
+    adjustment_id: &str,
+    req: &SubmitStockAdjustmentRequest,
+    actor_id: &str,
+    binding_id: &str,
+    definition_version: u32,
+) -> Result<PreparedCommandIdentity> {
+    let key = normalize_idempotency_key(&req.idempotency_key)?;
+    let process_kind = process_kind_of(DocumentType::StockAdjustment);
+    let mut lines = super::build_adjustment_line_updates(&req.lines)?
+        .into_iter()
+        .map(|line| {
+            (
+                line.line_id,
+                line.quantity.to_decimal().normalize().to_string(),
+                line.direction
+                    .map(|value| value.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+    lines.sort();
+    let mut balances = req
+        .balances
+        .iter()
+        .map(|balance| (balance.balance_id.clone(), balance.expected_version))
+        .collect::<Vec<_>>();
+    balances.sort();
+    let occurred_at = req.occurred_at.to_string();
+    let line_fields = lines
+        .iter()
+        .map(|(line_id, quantity, direction)| {
+            CommandPayloadField::Sequence(vec![
+                CommandPayloadField::Text(line_id),
+                CommandPayloadField::Text(quantity),
+                CommandPayloadField::Text(direction),
+            ])
+        })
+        .collect::<Vec<_>>();
+    let balance_fields = balances
+        .iter()
+        .map(|(balance_id, expected_version)| {
+            CommandPayloadField::Sequence(vec![
+                CommandPayloadField::Text(balance_id),
+                CommandPayloadField::U64(*expected_version),
+            ])
+        })
+        .collect::<Vec<_>>();
+    let identity = specialized_start_identity(
+        key,
+        process_kind.as_str(),
+        DocumentType::StockAdjustment.as_str(),
+        adjustment_id,
+        req.expected_subject_version,
+        STOCK_ADJUSTMENT_START_VARIANT,
+        vec![
+            CommandPayloadField::Text(binding_id),
+            CommandPayloadField::U32(definition_version),
+            CommandPayloadField::U64(req.expected_version),
+            CommandPayloadField::U32(req.expected_subject_version),
+            CommandPayloadField::Text(req.reason_type.as_str()),
+            CommandPayloadField::Sequence(line_fields),
+            CommandPayloadField::Sequence(balance_fields),
+            CommandPayloadField::Text(req.note.trim()),
+            CommandPayloadField::Text(&occurred_at),
+            CommandPayloadField::Text(actor_id),
+        ],
+    )?
+    .with_legacy(legacy_start_receipt_identity(
+        process_kind.as_str(),
+        DocumentType::StockAdjustment.as_str(),
+        adjustment_id,
+        req.expected_subject_version,
+        stock_adjustment_start_digest(req, actor_id)?,
+    ))
+    .with_legacy(legacy_standard_start_receipt_identity(
+        process_kind.as_str(),
+        DocumentType::StockAdjustment.as_str(),
+        adjustment_id,
+        req.expected_subject_version,
+        binding_id,
+        definition_version,
+        actor_id,
+    ));
+    Ok(identity)
+}
+
+/// 使用完整库存提交身份规划启动；禁止调用方在规划后覆盖 receipt digest。
+pub(super) fn prepare_stock_adjustment_start(
+    input: StartExecutionInput,
+    req: &SubmitStockAdjustmentRequest,
+) -> Result<PreparedExecution> {
+    if input.subject.subject_kind() != DocumentType::StockAdjustment.as_str()
+        || input.subject.subject_id().trim().is_empty()
+        || input.subject_version != req.expected_subject_version
+    {
+        return Err(Error::ValidationError(
+            "库存调整启动输入与提交载荷不一致".to_string(),
+        ));
+    }
+    let identity = stock_adjustment_start_identity(
+        input.subject.subject_id(),
+        req,
+        input.actor.as_str(),
+        &input.binding_id,
+        input.definition_version,
+    )?;
+    prepare_start_with_identity(input, identity)
+}
+
+/// 按当前 V3、历史无前缀作用域顺序读取规范幂等键对应的启动收据。
+async fn find_stock_adjustment_start_receipt(
+    db: &Database,
+    scopes: &[String],
+    key: &IdempotencyKey,
+    executor: &mut dyn Executor,
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    for scope in scopes {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(ApprovalCommandKind::StartApproval, scope, key, executor)
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
 }
 
 /// 在同一数据库快照内先按稳定作用域解析启动收据，再重验当前权限与结果事实。
@@ -162,15 +301,14 @@ pub(super) async fn reconcile_stock_adjustment_start_receipt(
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     let key = normalize_idempotency_key(&req.idempotency_key)?;
-    let scope = stock_adjustment_start_scope(adjustment_id, req.expected_subject_version);
-    let receipt = db
-        .bpm_workflow()
-        .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, executor)
-        .await?;
+    let scopes = stock_adjustment_start_scopes(adjustment_id, req.expected_subject_version)?;
+    let receipt = find_stock_adjustment_start_receipt(db, &scopes, &key, executor).await?;
     let Some(receipt) = receipt else {
         return Ok(None);
     };
-    if receipt.command_kind != ApprovalCommandKind::StartApproval || receipt.scope_id != scope {
+    if receipt.command_kind != ApprovalCommandKind::StartApproval
+        || !scopes.iter().any(|scope| scope == &receipt.scope_id)
+    {
         return Err(Error::ConflictError(
             "库存调整启动收据与命令作用域不一致".to_string(),
         ));
@@ -219,15 +357,30 @@ pub(super) async fn reconcile_stock_adjustment_start_receipt(
             "库存调整启动实例与冻结定义绑定不一致".to_string(),
         ));
     }
-    let current_digest = stock_adjustment_start_digest(req, actor.id())?;
-    let legacy_digest = start_digest(
+    let identity = stock_adjustment_start_identity(
+        adjustment_id,
+        req,
+        actor.id(),
         binding.approval_process_definition_id.as_ref(),
         binding.approval_definition_version,
+    )?;
+    if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
+        return Err(payload_conflict_error());
+    }
+    let legacy_standard_identity = start_identity(
+        key.clone(),
+        process_kind_of(DocumentType::StockAdjustment).as_str(),
+        DocumentType::StockAdjustment.as_str(),
+        adjustment_id,
         req.expected_subject_version,
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
         actor.id(),
+    )?;
+    let weak_legacy_receipt = matches!(
+        legacy_standard_identity.classify(Some(&receipt)),
+        ReceiptBranch::SamePayload(_)
     );
-    let legacy_receipt =
-        classify_start_receipt_digest(&receipt.payload_digest, &current_digest, &legacy_digest)?;
     let adjustment = db
         .inventory()
         .stock_adjustment(adjustment_id, executor)
@@ -238,7 +391,7 @@ pub(super) async fn reconcile_stock_adjustment_start_receipt(
             "库存调整启动收据早于当前业务事实".to_string(),
         ));
     }
-    if legacy_receipt
+    if weak_legacy_receipt
         && !legacy_start_payload_matches_result(db, &adjustment, &snapshot, req, actor, executor).await?
     {
         return Err(payload_conflict_error());
@@ -260,17 +413,13 @@ pub(super) async fn find_stock_adjustment_start_result(
     executor: &mut dyn Executor,
 ) -> Result<Option<String>> {
     let key = normalize_idempotency_key(idempotency_key)?;
-    let scope = stock_adjustment_start_scope(adjustment_id, expected_subject_version);
-    let receipt = db
-        .bpm_workflow()
-        .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, executor)
-        .await?;
+    let scopes = stock_adjustment_start_scopes(adjustment_id, expected_subject_version)?;
+    let receipt = find_stock_adjustment_start_receipt(db, &scopes, &key, executor).await?;
     let Some(receipt) = receipt else {
         return Ok(None);
     };
     if receipt.command_kind != ApprovalCommandKind::StartApproval
-        || receipt.scope_id != scope
-        || !is_supported_start_receipt_digest(&receipt.payload_digest)
+        || !is_supported_start_receipt_identity(&receipt.scope_id, &receipt.payload_digest, &scopes)
     {
         return Err(Error::ConflictError("库存调整提交结果收据身份不一致".to_string()));
     }
@@ -332,30 +481,29 @@ pub(super) async fn find_stock_adjustment_start_result(
     Ok(Some(instance.base.id))
 }
 
-/// 新 V1 与历史裸 SHA-256 都必须具有可识别的固定长度十六进制形状。
-fn is_supported_start_receipt_digest(value: &str) -> bool {
-    let digest = value.strip_prefix("v1:").unwrap_or(value);
-    digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+/// Unknown-result 查询仅接受作用域与摘要版本的精确历史配对。
+fn is_supported_start_receipt_identity(scope_id: &str, payload_digest: &str, scopes: &[String]) -> bool {
+    let [current_scope, legacy_scope] = scopes else {
+        return false;
+    };
+    if scope_id == current_scope {
+        return has_versioned_sha256(payload_digest, "v3:");
+    }
+    if scope_id == legacy_scope {
+        return has_versioned_sha256(payload_digest, "v1:") || has_bare_sha256(payload_digest);
+    }
+    false
 }
 
-/// 分类新 V1 与无前缀历史收据；新收据不允许降级匹配旧摘要。
-fn classify_start_receipt_digest(
-    receipt_digest: &str,
-    current_digest: &str,
-    legacy_digest: &str,
-) -> Result<bool> {
-    if receipt_digest.starts_with("v1:") {
-        return if receipt_digest == current_digest {
-            Ok(false)
-        } else {
-            Err(payload_conflict_error())
-        };
-    }
-    if receipt_digest == legacy_digest {
-        // 历史只读兼容还必须由调用方完整重建库存成功结果。
-        return Ok(true);
-    }
-    Err(payload_conflict_error())
+fn has_versioned_sha256(value: &str, prefix: &str) -> bool {
+    value.strip_prefix(prefix).is_some_and(has_bare_sha256)
+}
+
+fn has_bare_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 /// 对无版本前缀的历史收据，从未再修改的成功结果重建完整提交载荷。
@@ -841,7 +989,24 @@ pub(super) async fn persist_stock_adjustment_start(
                 // 使用新会话回读 winner，不得先留下任何业务或 BPM 写入。
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, session)
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
+                let guarded = db
+                    .business_documents()
+                    .mark_approval_started(
+                        &id,
+                        DocumentType::StockAdjustment,
+                        &writes.instance.process_definition_id,
+                        writes.instance.definition_version,
+                        now,
+                        session,
+                    )
                     .await?;
+                if guarded.is_none() {
+                    return Err(Error::ConflictError(
+                        "库存调整单审批启动守卫冲突，请刷新后重试".to_string(),
+                    ));
+                }
                 persist_runtime_writes(
                     &db,
                     &writes,
@@ -943,7 +1108,10 @@ fn validate_start_writes(
     actor_id: &str,
     expected_subject_version: u32,
 ) -> Result<()> {
-    let expected_scope = stock_adjustment_start_scope(adjustment_id, expected_subject_version);
+    let expected_scope = stock_adjustment_start_scopes(adjustment_id, expected_subject_version)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::Internal("库存调整启动命令缺少 V3 scope".to_string()))?;
     if writes.receipt.command_kind != ApprovalCommandKind::StartApproval
         || writes.receipt.scope_id != expected_scope
         || writes.receipt.result_ref != writes.instance.base.id
@@ -1326,11 +1494,14 @@ async fn persist_open_tasks(
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_start_receipt_digest, is_supported_start_receipt_digest, list_projection_from_execution,
-        stock_adjustment_start_digest, validate_start_notification_identities,
+        is_supported_start_receipt_identity, legacy_payload_digest, list_projection_from_execution,
+        stock_adjustment_start_digest, stock_adjustment_start_identity, stock_adjustment_start_scopes,
+        validate_start_notification_identities, ReceiptBranch,
     };
-    use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-    use bpm::model::{ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp};
+    use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+    use bpm::model::{
+        ApprovalCommandReceipt, ApprovalNodeExecution, NewNodeExecution, ParticipantId, Timestamp,
+    };
     use entities::approval_integration::ApprovalNotificationEventKind;
     use entities::common::time::Instant;
     use entities::inventory::{AdjustmentReasonType, MovementDirection};
@@ -1338,6 +1509,47 @@ mod tests {
     use crate::inventory::dto::{
         ExpectedStockBalanceVersion, StockAdjustmentLineUpdateInput, SubmitStockAdjustmentRequest,
     };
+
+    fn assert_start_write_order(source: &str, expected_paths: usize, guard_marker: &str) {
+        let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
+        assert_eq!(
+            production.matches(".insert_command_receipt(").count(),
+            expected_paths,
+            "每条 Fresh 启动路径必须恰有一个 receipt-first 写入"
+        );
+        assert_eq!(
+            production.matches(guard_marker).count(),
+            expected_paths,
+            "每条 Fresh 启动路径必须恰有一个注册表启动守卫"
+        );
+        assert_eq!(
+            production.matches(".create_bpm_runtime_after_receipt(").count(),
+            expected_paths,
+            "每条 Fresh 启动路径必须使用 receipt 已仲裁的 BPM 写入口"
+        );
+        assert!(
+            !production.contains(".create_bpm_runtime("),
+            "业务启动路径不得回退到 receipt-last 仓储入口"
+        );
+
+        let mut cursor = 0;
+        for _ in 0..expected_paths {
+            let receipt = production[cursor..]
+                .find(".insert_command_receipt(")
+                .map(|offset| cursor + offset)
+                .expect("缺少启动收据写入");
+            let guard = production[receipt..]
+                .find(guard_marker)
+                .map(|offset| receipt + offset)
+                .expect("启动收据后缺少注册表守卫");
+            let runtime = production[guard..]
+                .find(".create_bpm_runtime_after_receipt(")
+                .map(|offset| guard + offset)
+                .expect("注册表守卫后缺少 BPM 运行事实写入");
+            assert!(receipt < guard && guard < runtime);
+            cursor = runtime + ".create_bpm_runtime_after_receipt(".len();
+        }
+    }
 
     fn execution() -> ApprovalNodeExecution {
         ApprovalNodeExecution::new_active(NewNodeExecution {
@@ -1397,6 +1609,58 @@ mod tests {
         assert_eq!(projection.current_assignee_participant_id.as_deref(), Some("u1"));
         assert_eq!(projection.current_assignee_name.as_deref(), Some("张三"));
         assert_eq!(projection.last_status_changed_at, Some(10));
+    }
+
+    /// 十一种 PROCESS_REQUIRED 启动类型均固定 receipt -> guard -> BPM 顺序。
+    #[test]
+    fn all_process_required_start_paths_are_receipt_first_and_guarded() {
+        assert_start_write_order(
+            include_str!("../sales_order/start_approval.rs"),
+            1,
+            ".mark_approval_started(",
+        );
+        assert_start_write_order(
+            include_str!("../sales_review/start_approval.rs"),
+            1,
+            ".mark_approval_started(",
+        );
+        assert_start_write_order(
+            include_str!("../purchase_order/start_approval.rs"),
+            1,
+            ".mark_loaded_approval_started(",
+        );
+        assert_start_write_order(
+            include_str!("../purchase_order/change_start.rs"),
+            1,
+            ".mark_approval_started(",
+        );
+        assert_start_write_order(
+            include_str!("../receivable/start_approval.rs"),
+            1,
+            ".mark_approval_started(",
+        );
+        assert_start_write_order(
+            include_str!("../returns/start_approval.rs"),
+            4,
+            ".mark_approval_started(",
+        );
+        assert_start_write_order(include_str!("start_approval.rs"), 1, ".mark_approval_started(");
+    }
+
+    /// 通用 Start Replay 必须在开启事务前返回，禁止重复写业务事实。
+    #[test]
+    fn generic_start_replay_paths_return_before_transaction_writes() {
+        for source in [
+            include_str!("../sales_order/start_approval.rs"),
+            include_str!("../sales_review/start_approval.rs"),
+            include_str!("../purchase_order/start_approval.rs"),
+            include_str!("../purchase_order/change_start.rs"),
+            include_str!("../receivable/start_approval.rs"),
+            include_str!("../returns/start_approval.rs"),
+        ] {
+            let production = source.split("#[cfg(test)]").next().expect("生产代码必须存在");
+            assert!(production.contains("let PreparedExecution::Apply(writes) = prepared else"));
+        }
     }
 
     /// 库存启动摘要锁定为无歧义 JSON tuple 的字面 SHA-256。
@@ -1479,24 +1743,86 @@ mod tests {
         );
     }
 
-    /// 带版本前缀的新收据异载荷时不得回退命中旧 generic 摘要。
+    /// V3、库存 V1 与旧 generic 仅允许按各自原 scope/digest 成对回放。
     #[test]
-    fn versioned_start_receipt_never_downgrades_to_legacy_digest() {
-        assert!(!classify_start_receipt_digest("v1:new", "v1:new", "legacy").unwrap());
-        assert!(classify_start_receipt_digest("v1:legacy", "v1:new", "v1:legacy").is_err());
-        assert!(classify_start_receipt_digest("legacy", "v1:new", "legacy").unwrap());
-        assert!(classify_start_receipt_digest("unknown", "v1:new", "legacy").is_err());
+    fn stock_start_identity_accepts_only_exact_generation_pairs() {
+        let req = submit_request();
+        let identity = stock_adjustment_start_identity("adj-1", &req, "actor", "def-1", 3).unwrap();
+        let current = ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("receipt-1"),
+            identity.current(),
+            "instance-1",
+            Timestamp::from_unix_secs(10).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            identity.classify(Some(&current)),
+            ReceiptBranch::SamePayload(_)
+        ));
+
+        let scopes = stock_adjustment_start_scopes("adj-1", req.expected_subject_version).unwrap();
+        let mut stock_v1 = current.clone();
+        stock_v1.scope_id = scopes[1].clone();
+        stock_v1.payload_digest = stock_adjustment_start_digest(&req, "actor").unwrap();
+        assert!(matches!(
+            identity.classify(Some(&stock_v1)),
+            ReceiptBranch::SamePayload(_)
+        ));
+
+        let mut generic = current.clone();
+        generic.scope_id = scopes[1].clone();
+        generic.payload_digest = legacy_payload_digest("def-1\u{1f}3\u{1f}2\u{1f}actor");
+        assert!(matches!(
+            identity.classify(Some(&generic)),
+            ReceiptBranch::SamePayload(_)
+        ));
+
+        stock_v1.scope_id = scopes[0].clone();
+        assert_eq!(identity.classify(Some(&stock_v1)), ReceiptBranch::PayloadConflict);
+        generic.payload_digest = stock_adjustment_start_digest(&req, "other-actor").unwrap();
+        assert_eq!(identity.classify(Some(&generic)), ReceiptBranch::PayloadConflict);
     }
 
-    /// Unknown-result 查询只接受当前带前缀或历史裸 SHA-256 收据形状。
+    /// Unknown-result 查询按作用域只接受对应世代的摘要形状。
     #[test]
     fn submit_result_receipt_digest_shape_is_fail_closed() {
         let digest = "06ca7d6d37aac050a5168f4aa2815e2e40b2c2569530f19ba7e555fd5256683b";
-        assert!(is_supported_start_receipt_digest(digest));
-        assert!(is_supported_start_receipt_digest(&format!("v1:{digest}")));
-        assert!(!is_supported_start_receipt_digest("v1:"));
-        assert!(!is_supported_start_receipt_digest("v2:06ca"));
-        assert!(!is_supported_start_receipt_digest(&"G".repeat(64)));
+        let scopes = vec!["v3-scope".to_string(), "legacy-scope".to_string()];
+        assert!(is_supported_start_receipt_identity(
+            "v3-scope",
+            &format!("v3:{digest}"),
+            &scopes,
+        ));
+        assert!(is_supported_start_receipt_identity(
+            "legacy-scope",
+            &format!("v1:{digest}"),
+            &scopes,
+        ));
+        assert!(is_supported_start_receipt_identity(
+            "legacy-scope",
+            digest,
+            &scopes,
+        ));
+        assert!(!is_supported_start_receipt_identity(
+            "v3-scope",
+            &format!("v1:{digest}"),
+            &scopes,
+        ));
+        assert!(!is_supported_start_receipt_identity(
+            "legacy-scope",
+            &format!("v3:{digest}"),
+            &scopes,
+        ));
+        assert!(!is_supported_start_receipt_identity(
+            "other-scope",
+            digest,
+            &scopes,
+        ));
+        assert!(!is_supported_start_receipt_identity(
+            "v3-scope",
+            &format!("v3:{}", "G".repeat(64)),
+            &scopes,
+        ));
     }
 
     /// 启动计划只允许精确一条 Started 和一条 Entered 通知。

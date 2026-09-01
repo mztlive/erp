@@ -3,7 +3,8 @@
 use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{
-    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
+    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
+    ParticipantId, Timestamp,
 };
 use database::{AccessControlExt, BpmExt, NoTransaction, ReceivableExt, Transactional, WorkItemExt};
 use entities::common::time::Instant;
@@ -14,9 +15,11 @@ use id_generator::next_id;
 use mongodb::Database;
 
 use super::start_approval::load_bound_definition_graph;
-use crate::approval::execution::authorization::{converge_eligibility, requires_blocked_cancel};
-use crate::approval::execution::idempotency::normalize_idempotency_key;
-use crate::approval::execution::{CancelExecutionInput, ExecutionCommandInput, PreparedExecution};
+use crate::approval::execution::authorization::converge_eligibility;
+use crate::approval::execution::{
+    claim_and_persist_document_cancel_runtime, normalize_document_cancel_reason, CancelExecutionInput,
+    ExecutionCommandInput, PreparedExecution,
+};
 use crate::errors::{Error, Result};
 
 /// 已加载的可撤回运行事实。
@@ -110,15 +113,11 @@ pub fn build_customer_receipt_cancel_input(
     runtime: &LoadedCancelRuntime,
     reason: &str,
     actor_id: &str,
-    idempotency_key: &str,
+    idempotency_key: &IdempotencyKey,
     receipt: Option<bpm::model::ApprovalCommandReceipt>,
     now: Instant,
 ) -> Result<CancelExecutionInput> {
-    let reason = reason.trim();
-    if reason.is_empty() {
-        return Err(Error::ValidationError("撤回原因不能为空".to_string()));
-    }
-    let idempotency_key = normalize_idempotency_key(idempotency_key)?;
+    let reason = normalize_document_cancel_reason(reason)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
     let eligibility = converge_eligibility(
@@ -126,14 +125,13 @@ pub fn build_customer_receipt_cancel_input(
         &runtime.current.assignee_name_snapshot,
         None,
     )?;
-    let blocked_port = runtime.instance.blocker_code.is_some_and(requires_blocked_cancel);
     Ok(CancelExecutionInput {
         command: ExecutionCommandInput {
             graph: runtime.graph.clone(),
             current_eligibility: eligibility.clone(),
             next_eligibility: eligibility,
             receipt,
-            idempotency_key,
+            idempotency_key: idempotency_key.clone(),
             now: Timestamp::from_utc(now.as_utc()),
         },
         instance: runtime.instance.clone(),
@@ -142,10 +140,10 @@ pub fn build_customer_receipt_cancel_input(
         expected_instance_version: runtime.instance.base.version,
         expected_execution_version: runtime.current.base.version,
         expected_task_version: runtime.open_tasks.first().map(|item| item.base.version),
-        reason: reason.to_string(),
+        reason,
         actor,
         close_open_task: runtime.task_policy.closes_open_task(),
-        blocked_port,
+        blocked_port: false,
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
     })
 }
@@ -213,26 +211,16 @@ pub(super) async fn persist_customer_receipt_cancel(
         now,
         audit,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(());
+    };
+    let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                if let PreparedExecution::Apply(writes) = prepared {
-                    let closed_tasks =
-                        WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
-                    db.bpm_workflow()
-                        .persist_cancelled_runtime(
-                            &writes.instance,
-                            &writes.updated_executions,
-                            &writes.receipt,
-                            session,
-                        )
-                        .await?;
-                    db.work_items()
-                        .persist_cancelled_approval_tasks(&closed_tasks, session)
-                        .await?;
-                }
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
                 db.customer_receipts().update(&mut receipt, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())

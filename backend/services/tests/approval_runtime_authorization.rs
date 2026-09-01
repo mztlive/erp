@@ -11,8 +11,9 @@ use bpm::ids::{
 };
 use bpm::model::types::{ApprovalBlockerCode, ApprovalCommandKind, ApprovalExecutionAssignmentSource};
 use bpm::model::{
-    ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution,
-    NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+    ApprovalCommandIdentity, ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance,
+    CanonicalCommandPayload, CommandPayloadField, IdempotencyKey, NewNodeExecution, NewProcessInstance,
+    ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
 use casbin::Adapter;
 use database::repository::bpm::ApprovalInstanceListProjection;
@@ -92,6 +93,32 @@ struct RuntimeFixture<'a> {
 /// 构造固定秒时间戳。
 fn at(seconds: i64) -> Timestamp {
     Timestamp::from_unix_secs(seconds).expect("测试时间戳必须合法")
+}
+
+/// 构造可指定 scope/digest 的测试收据。
+fn fixture_receipt(
+    id: &str,
+    kind: ApprovalCommandKind,
+    scope: &str,
+    key: &str,
+    digest: &str,
+    result_ref: &str,
+    at: Timestamp,
+) -> ApprovalCommandReceipt {
+    let identity = ApprovalCommandIdentity::new(
+        kind,
+        "test.fixture",
+        IdempotencyKey::parse(key).expect("测试幂等键必须有效"),
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(scope)),
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(digest)),
+    )
+    .expect("测试命令身份");
+    let mut receipt =
+        ApprovalCommandReceipt::new(ApprovalCommandReceiptId::new(id), &identity, result_ref, at)
+            .expect("测试收据");
+    receipt.scope_id = scope.to_string();
+    receipt.payload_digest = digest.to_string();
+    receipt
 }
 
 /// 构造合法 BPM 参与人。
@@ -384,16 +411,15 @@ async fn seed_runtime(db: &mongodb::Database, spec: RuntimeFixture<'_>) {
             .enter_blocked(ApprovalBlockerCode::ApproverAccountInactive, at(11))
             .expect("阻塞实例");
     }
-    let receipt = ApprovalCommandReceipt::new(
-        ApprovalCommandReceiptId::new(format!("receipt-{}", spec.instance_id)),
+    let receipt = fixture_receipt(
+        &format!("receipt-{}", spec.instance_id),
         ApprovalCommandKind::StartApproval,
         spec.instance_id,
-        format!("start-{}", spec.instance_id),
+        &format!("start-{}", spec.instance_id),
         "test-digest",
         spec.instance_id,
         at(10),
-    )
-    .expect("启动收据 fixture");
+    );
     db.bpm_workflow()
         .create_bpm_runtime(
             &instance,

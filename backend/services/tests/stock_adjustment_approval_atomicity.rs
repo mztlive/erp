@@ -16,9 +16,10 @@ use bpm::model::types::{
     ApprovalTransitionEvent,
 };
 use bpm::model::{
-    ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeDefinition, ApprovalNodeExecution,
-    ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition, NewNodeDefinition,
-    NewNodeExecution, NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
+    ApprovalCommandIdentity, ApprovalCommandReceipt, ApprovalInstanceAssignee, ApprovalNodeDefinition,
+    ApprovalNodeExecution, ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition,
+    CanonicalCommandPayload, CommandPayloadField, IdempotencyKey, NewNodeDefinition, NewNodeExecution,
+    NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
 use casbin::Adapter;
 use database::repository::bpm::ApprovalInstanceListProjection;
@@ -163,6 +164,32 @@ struct ReceiptRaceObservation {
 /// 构造固定秒时间戳。
 fn at(seconds: i64) -> Timestamp {
     Timestamp::from_unix_secs(seconds).expect("测试时间戳必须合法")
+}
+
+/// 构造可指定 scope/digest 的测试收据，覆盖当前 v3 writer 与历史字符串。
+fn fixture_receipt(
+    id: &str,
+    kind: ApprovalCommandKind,
+    scope: &str,
+    key: &str,
+    digest: &str,
+    result_ref: &str,
+    at: Timestamp,
+) -> ApprovalCommandReceipt {
+    let identity = ApprovalCommandIdentity::new(
+        kind,
+        "test.fixture",
+        IdempotencyKey::parse(key).expect("测试幂等键必须有效"),
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(scope)),
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(digest)),
+    )
+    .expect("测试命令身份");
+    let mut receipt =
+        ApprovalCommandReceipt::new(ApprovalCommandReceiptId::new(id), &identity, result_ref, at)
+            .expect("测试收据");
+    receipt.scope_id = scope.to_string();
+    receipt.payload_digest = digest.to_string();
+    receipt
 }
 
 /// 构造 BPM 参与人。
@@ -492,6 +519,7 @@ async fn seed_adjustment(db: &Database, adjustment_id: &str) -> StockAdjustment 
             note: Some("原子性验收".to_string()),
             occurred_at: Some(Instant::from_unix_secs(10)),
         },
+        STARTER,
     )
     .expect("库存调整单");
     adjustment.start_approval().expect("进入审批中");
@@ -570,16 +598,15 @@ async fn seed_runtime(
         execution.block(code, at(11)).expect("阻塞当前执行");
         instance.enter_blocked(code, at(11)).expect("阻塞审批实例");
     }
-    let start_receipt = ApprovalCommandReceipt::new(
-        ApprovalCommandReceiptId::new(format!("receipt-start-{instance_id}")),
+    let start_receipt = fixture_receipt(
+        &format!("receipt-start-{instance_id}"),
         ApprovalCommandKind::StartApproval,
         instance_id,
-        format!("start-{instance_id}"),
-        format!("start-digest-{instance_id}"),
+        &format!("start-{instance_id}"),
+        &format!("start-digest-{instance_id}"),
         instance_id,
         at(10),
-    )
-    .expect("启动收据");
+    );
     db.bpm_workflow()
         .create_bpm_runtime(
             &instance,
@@ -703,6 +730,7 @@ async fn seed_start_business(db: &Database, adjustment_id: &str) -> StartSeed {
             note: Some("提交前草稿".to_string()),
             occurred_at: Some(Instant::from_unix_secs(10)),
         },
+        STARTER,
     )
     .expect("草稿库存调整单");
     let line = StockAdjustmentLine::new_for_reason(
@@ -1359,7 +1387,7 @@ async fn stored_facts(db: &Database, seed: &RuntimeSeed, key: &str) -> StoredFac
         .find_command_receipt(
             ApprovalCommandKind::CancelApproval,
             &seed.instance_id,
-            key,
+            &IdempotencyKey::parse(key).expect("测试幂等键必须有效"),
             &mut NoTransaction,
         )
         .await
@@ -2883,16 +2911,15 @@ async fn single_and_legacy_duplicate_created_at_receipts_read_through_repository
             .expect("测试数据库创建失败");
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
 
-        let current = ApprovalCommandReceipt::new(
-            ApprovalCommandReceiptId::new("current-receipt-single-created-at"),
+        let current = fixture_receipt(
+            "current-receipt-single-created-at",
             ApprovalCommandKind::CancelApproval,
             "current-instance",
             "current-key",
             "current-digest",
             "current-instance",
             at(20),
-        )
-        .expect("构造当前单字段收据");
+        );
         fixture
             .db()
             .bpm_workflow()
@@ -2949,7 +2976,7 @@ async fn single_and_legacy_duplicate_created_at_receipts_read_through_repository
             .find_command_receipt(
                 ApprovalCommandKind::CancelApproval,
                 "legacy-instance",
-                "legacy-key",
+                &IdempotencyKey::parse("legacy-key").expect("测试幂等键必须有效"),
                 &mut NoTransaction,
             )
             .await

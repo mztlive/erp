@@ -2,7 +2,7 @@
 //!
 //! 图算法只编排 `bpm::graph` 已交付原语，不在本模块复制或另立定义源。
 
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use bpm::graph::{
     assignee_ids, copy_nodes_for_definition, CopiedNodeIdentity, DefinitionGraph, NodeReplacementDraft,
@@ -11,11 +11,14 @@ use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalNodeDefinitionId, ApprovalProcessDefinitionId,
     ApprovalTransitionDefinitionId,
 };
-use bpm::model::types::{ApprovalCommandKind, ModelError};
-use bpm::model::{ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition};
+use bpm::model::types::{ApprovalCommandKind, ApprovalDefinitionStatus, ModelError};
+use bpm::model::{
+    ApprovalCommandIdentity, ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalProcessDefinition,
+    CanonicalCommandPayload, CommandPayloadField, IdempotencyKey,
+};
 use bpm::{ParticipantId, Timestamp};
 use chrono::Utc;
-use database::repository::bpm::CasWriteOutcome;
+use database::repository::bpm::{CasWriteOutcome, APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX};
 use database::{AccessControlExt, BpmExt, Executor, NoTransaction, Transactional};
 use entities::document_registry::DocumentType;
 use entities::{AccountCore, Permission};
@@ -40,7 +43,64 @@ use super::policy::{
 };
 use super::process_kind::{document_type_of, process_kind_of};
 
+use super::scope::definition_management_visibility_with_executor;
 pub use super::scope::{definition_management_visibility, DefinitionManagementVisibility};
+
+const CREATE_DRAFT_COMMAND_DOMAIN: &str = "approval.definition.create-draft";
+const REPLACE_NODES_COMMAND_DOMAIN: &str = "approval.definition.replace-nodes";
+const PUBLISH_DEFINITION_COMMAND_DOMAIN: &str = "approval.definition.publish";
+const RETIRE_DEFINITION_COMMAND_DOMAIN: &str = "approval.definition.retire";
+const DEFINITION_RESULT_REF_PREFIX: &str = "definition-v1:";
+const DEFINITION_COMMAND_RECOVERY_ATTEMPTS: usize = 8;
+
+/// 当前 v3 命令身份与唯一允许查询的旧格式候选。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PreparedDefinitionIdentity {
+    current: ApprovalCommandIdentity,
+    legacy: Option<LegacyDefinitionIdentity>,
+}
+
+/// 历史定义命令的精确 scope/digest 配对与结果证明方式。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LegacyDefinitionIdentity {
+    command_kind: ApprovalCommandKind,
+    scope_id: String,
+    payload_digest: String,
+    proof: LegacyDefinitionProof,
+}
+
+/// 旧收据只有能由结果中的不可变事实证明完整载荷时才可回放。
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LegacyDefinitionProof {
+    /// 创建来源不是不可变结果事实，必须失败关闭。
+    Unprovable,
+    /// 发布结果可由定义身份、发布人、状态和锁版本证明。
+    Published {
+        definition_id: String,
+        expected_lock: u64,
+        actor_id: String,
+    },
+    /// 退役结果可由定义身份、退役人、状态和锁版本证明。
+    Retired {
+        definition_id: String,
+        expected_lock: u64,
+        actor_id: String,
+    },
+}
+
+/// v3 收据中版本化、可校验的定义结果引用。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DefinitionCommandResultRef {
+    definition_id: String,
+    definition_lock_version: u64,
+}
+
+/// 回放时必须证明结果仍属于命令原始资源。
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DefinitionResultExpectation {
+    ProcessKind(bpm::ProcessKind),
+    DefinitionId(String),
+}
 
 /// 审批流程定义管理服务。
 pub struct ApprovalDefinitionService {
@@ -100,27 +160,36 @@ impl ApprovalDefinitionService {
     /// 政策、权限、幂等冲突或已有活动草稿时返回错误。
     pub async fn create_definition_draft(
         &self,
-        request: CreateDefinitionDraftRequest,
+        mut request: CreateDefinitionDraftRequest,
         actor: &AuditActor,
     ) -> Result<DefinitionDetailView> {
+        let key = parse_idempotency_key(&request.idempotency_key)?;
         let policy = require_process_required(request.document_type)?;
-        self.ensure_definition_admin(actor, &policy).await?;
         let name =
             ApprovalProcessDefinition::normalize_name(request.name.clone()).map_err(map_model_error)?;
-        let digest = create_draft_digest(request.document_type, &name, request.draft_source, actor.id());
+        request.name.clone_from(&name);
+        request.idempotency_key = key.as_str().to_string();
+        let identity = create_draft_identity(
+            key,
+            request.document_type,
+            &name,
+            request.draft_source,
+            actor.id(),
+        )?;
+        self.ensure_definition_admin(actor, &policy).await?;
         if let Some(view) = self
             .replay_if_receipt(
-                ApprovalCommandKind::DefinitionWrite,
-                policy.process_kind.as_str(),
-                &request.idempotency_key,
-                &digest,
-                visibility_for_define(request.document_type),
+                &identity.current,
+                DefinitionResultExpectation::ProcessKind(policy.process_kind),
             )
             .await?
         {
             return Ok(view);
         }
-        self.commit_create_draft(&policy, &name, &request, actor, &digest)
+        if let Some(view) = self.replay_legacy_if_receipt(&identity).await? {
+            return Ok(view);
+        }
+        self.commit_create_draft(&policy, &name, request, actor, identity)
             .await
     }
 
@@ -134,14 +203,34 @@ impl ApprovalDefinitionService {
     /// 锁版本冲突、节点不合法或账号校验失败时返回错误。
     pub async fn replace_definition_nodes(
         &self,
-        request: ReplaceDefinitionNodesRequest,
+        mut request: ReplaceDefinitionNodesRequest,
         actor: &AuditActor,
     ) -> Result<DefinitionDetailView> {
+        let key = parse_idempotency_key(&request.idempotency_key)?;
+        request.nodes = prepare_definition_nodes(request.nodes)?;
+        request.idempotency_key = key.as_str().to_string();
+        let identity = replace_nodes_identity(
+            key,
+            &request.definition_id,
+            request.expected_definition_lock_version,
+            &request.nodes,
+            actor.id(),
+        )?;
         let graph = self.require_graph(&request.definition_id).await?;
         let policy = policy_for_definition(&graph.definition)?;
         self.ensure_definition_admin(actor, &policy).await?;
+        if let Some(view) = self
+            .replay_if_receipt(
+                &identity.current,
+                DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
+            )
+            .await?
+        {
+            return Ok(view);
+        }
         ensure_draft_lock(&graph.definition, request.expected_definition_lock_version)?;
-        self.commit_replace_nodes(graph, policy, request, actor).await
+        self.commit_replace_nodes(graph, policy, request, actor, identity)
+            .await
     }
 
     /// 发布草稿为当前唯一已发布版本。
@@ -154,26 +243,35 @@ impl ApprovalDefinitionService {
     /// 图、用途、账号或权限校验失败时零写入返回错误。
     pub async fn publish_definition(
         &self,
-        request: PublishDefinitionRequest,
+        mut request: PublishDefinitionRequest,
         actor: &AuditActor,
     ) -> Result<DefinitionDetailView> {
+        let key = parse_idempotency_key(&request.idempotency_key)?;
+        request.idempotency_key = key.as_str().to_string();
+        let identity = lock_command_identity(
+            key,
+            ApprovalCommandKind::PublishDefinition,
+            PUBLISH_DEFINITION_COMMAND_DOMAIN,
+            &request.definition_id,
+            request.expected_definition_lock_version,
+            actor.id(),
+        )?;
         let graph = self.require_graph(&request.definition_id).await?;
         let policy = policy_for_definition(&graph.definition)?;
         self.ensure_definition_admin(actor, &policy).await?;
-        let digest = lock_command_digest(request.expected_definition_lock_version, actor.id());
         if let Some(view) = self
             .replay_if_receipt(
-                ApprovalCommandKind::PublishDefinition,
-                &request.definition_id,
-                &request.idempotency_key,
-                &digest,
-                visibility_for_define(policy.document_type),
+                &identity.current,
+                DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
             )
             .await?
         {
             return Ok(view);
         }
-        self.commit_publish(graph, policy, &request, actor, &digest).await
+        if let Some(view) = self.replay_legacy_if_receipt(&identity).await? {
+            return Ok(view);
+        }
+        self.commit_publish(graph, policy, request, actor, identity).await
     }
 
     /// 退役当前已发布定义。
@@ -186,26 +284,35 @@ impl ApprovalDefinitionService {
     /// 目标不是当前发布版本或锁冲突时返回错误。
     pub async fn retire_definition(
         &self,
-        request: RetireDefinitionRequest,
+        mut request: RetireDefinitionRequest,
         actor: &AuditActor,
     ) -> Result<DefinitionDetailView> {
+        let key = parse_idempotency_key(&request.idempotency_key)?;
+        request.idempotency_key = key.as_str().to_string();
+        let identity = lock_command_identity(
+            key,
+            ApprovalCommandKind::RetireDefinition,
+            RETIRE_DEFINITION_COMMAND_DOMAIN,
+            &request.definition_id,
+            request.expected_definition_lock_version,
+            actor.id(),
+        )?;
         let graph = self.require_graph(&request.definition_id).await?;
         let policy = policy_for_definition(&graph.definition)?;
         self.ensure_definition_admin(actor, &policy).await?;
-        let digest = lock_command_digest(request.expected_definition_lock_version, actor.id());
         if let Some(view) = self
             .replay_if_receipt(
-                ApprovalCommandKind::RetireDefinition,
-                &request.definition_id,
-                &request.idempotency_key,
-                &digest,
-                visibility_for_define(policy.document_type),
+                &identity.current,
+                DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
             )
             .await?
         {
             return Ok(view);
         }
-        self.commit_retire(graph, policy, &request, actor, &digest).await
+        if let Some(view) = self.replay_legacy_if_receipt(&identity).await? {
+            return Ok(view);
+        }
+        self.commit_retire(graph, policy, request, actor, identity).await
     }
 
     /// 列出某单据类型的定义版本。
@@ -273,14 +380,7 @@ impl ApprovalDefinitionService {
         actor: &AuditActor,
         policy: &ProcessRequiredApprovalPolicy,
     ) -> Result<()> {
-        let allowed = self
-            .rbac
-            .enforce(
-                &subject(actor.kind(), actor.id()),
-                &policy.definition_admin_permission,
-            )
-            .await?;
-        ensure_definition_admin_allowed(allowed)
+        ensure_definition_admin_permission(&self.db, &self.rbac, actor, policy, &mut NoTransaction).await
     }
 
     /// 组装单行目录。
@@ -356,35 +456,33 @@ impl ApprovalDefinitionService {
     /// 同键同载荷回读详情。
     ///
     /// # 错误
-    /// 异载荷返回冲突；结果引用丢失返回内部错误。
+    /// 异载荷、结果引用漂移或结果资源不匹配时返回稳定冲突。
     async fn replay_if_receipt(
         &self,
-        command_kind: ApprovalCommandKind,
-        scope_id: &str,
-        idempotency_key: &str,
-        digest: &str,
-        visibility: DefinitionManagementVisibility,
+        identity: &ApprovalCommandIdentity,
+        expectation: DefinitionResultExpectation,
     ) -> Result<Option<DefinitionDetailView>> {
-        let Some(receipt) = self
-            .db
-            .bpm_workflow()
-            .find_command_receipt(command_kind, scope_id, idempotency_key, &mut NoTransaction)
-            .await?
-        else {
+        replay_current_receipt(&self.db, identity, &expectation, &mut NoTransaction).await
+    }
+
+    /// 只查询命令声明的精确旧 scope/digest 候选。
+    ///
+    /// # 错误
+    /// 旧结果不能证明完整请求载荷时固定返回幂等载荷冲突。
+    async fn replay_legacy_if_receipt(
+        &self,
+        identity: &PreparedDefinitionIdentity,
+    ) -> Result<Option<DefinitionDetailView>> {
+        let Some(legacy) = identity.legacy.as_ref() else {
             return Ok(None);
         };
-        receipt.reconcile(digest).map_err(map_model_error)?;
-        let _ = visibility;
-        let graph = self
-            .db
-            .bpm_workflow()
-            .load_definition_graph(
-                &ApprovalProcessDefinitionId::new(receipt.result_ref.clone()),
-                &mut NoTransaction,
-            )
-            .await?
-            .ok_or_else(definition_not_found)?;
-        Ok(Some(detail_view(&graph)))
+        replay_legacy_receipt(
+            &self.db,
+            identity.current.idempotency_key(),
+            legacy,
+            &mut NoTransaction,
+        )
+        .await
     }
 
     /// 在唯一事务中创建草稿。
@@ -395,20 +493,16 @@ impl ApprovalDefinitionService {
         &self,
         policy: &ProcessRequiredApprovalPolicy,
         name: &str,
-        request: &CreateDefinitionDraftRequest,
+        request: CreateDefinitionDraftRequest,
         actor: &AuditActor,
-        digest: &str,
+        identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let actor = actor.clone();
-        let policy = policy.clone();
+        let transaction_actor = actor.clone();
+        let transaction_policy = policy.clone();
         let name = name.to_string();
-        let digest = digest.to_string();
-        let request = request.clone();
-        let replay_request = request.clone();
-        let replay_digest = digest.clone();
-        let replay_scope = policy.process_kind.as_str().to_string();
+        let transaction_identity = identity.clone();
         let client = db.client().clone();
         let outcome = client.with_transaction(move |session| {
             Box::pin(async move {
@@ -416,59 +510,25 @@ impl ApprovalDefinitionService {
                     &db,
                     &rbac,
                     CreateDraftTxInput {
-                        policy: &policy,
+                        policy: &transaction_policy,
                         name: &name,
                         request: &request,
-                        actor: &actor,
-                        digest: &digest,
+                        actor: &transaction_actor,
+                        identity: &transaction_identity,
                     },
                     session,
                 )
                 .await
             })
         });
-        match outcome.await {
-            Ok(view) => Ok(view),
-            Err(error) if is_duplicate_conflict(&error) => {
-                self.replay_create_after_duplicate(&replay_scope, replay_request, &replay_digest)
-                    .await
-            }
-            Err(error) => Err(error),
-        }
-    }
-
-    /// duplicate-key 回滚后在事务外重读收据或活动草稿。
-    ///
-    /// # 错误
-    /// 收据冲突或第二活动草稿时返回错误。
-    async fn replay_create_after_duplicate(
-        &self,
-        scope_id: &str,
-        request: CreateDefinitionDraftRequest,
-        digest: &str,
-    ) -> Result<DefinitionDetailView> {
-        if let Some(view) = self
-            .replay_if_receipt(
-                ApprovalCommandKind::DefinitionWrite,
-                scope_id,
-                &request.idempotency_key,
-                digest,
-                visibility_for_define(request.document_type),
-            )
-            .await?
-        {
-            return Ok(view);
-        }
-        if self
-            .db
-            .bpm_workflow()
-            .find_active_draft(process_kind_of(request.document_type), &mut NoTransaction)
-            .await?
-            .is_some()
-        {
-            return Err(second_draft_error());
-        }
-        Err(Error::ConflictError("数据已存在，请勿重复提交".to_string()))
+        self.recover_definition_command(
+            outcome.await,
+            policy,
+            actor,
+            identity,
+            DefinitionResultExpectation::ProcessKind(policy.process_kind),
+        )
+        .await
     }
 
     /// 在唯一事务中替换草稿图。
@@ -481,17 +541,34 @@ impl ApprovalDefinitionService {
         policy: ProcessRequiredApprovalPolicy,
         request: ReplaceDefinitionNodesRequest,
         actor: &AuditActor,
+        identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let actor = actor.clone();
-        db.client()
+        let transaction_actor = actor.clone();
+        let transaction_policy = policy.clone();
+        let transaction_identity = identity.clone();
+        let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
+        let outcome = db
+            .client()
             .clone()
             .with_transaction(move |session| {
                 Box::pin(async move {
-                    replace_nodes_tx(&db, &rbac, graph, policy, request, &actor, session).await
+                    replace_nodes_tx(
+                        &db,
+                        &rbac,
+                        graph,
+                        transaction_policy,
+                        request,
+                        &transaction_actor,
+                        &transaction_identity,
+                        session,
+                    )
+                    .await
                 })
             })
+            .await;
+        self.recover_definition_command(outcome, &policy, actor, identity, expectation)
             .await
     }
 
@@ -503,19 +580,16 @@ impl ApprovalDefinitionService {
         &self,
         graph: DefinitionGraph,
         policy: ProcessRequiredApprovalPolicy,
-        request: &PublishDefinitionRequest,
+        request: PublishDefinitionRequest,
         actor: &AuditActor,
-        digest: &str,
+        identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
         let rbac = self.rbac.clone();
-        let actor = actor.clone();
-        let digest = digest.to_string();
-        let request = request.clone();
-        let replay_id = request.definition_id.clone();
-        let replay_key = request.idempotency_key.clone();
-        let replay_digest = digest.clone();
-        let replay_type = policy.document_type;
+        let transaction_actor = actor.clone();
+        let transaction_policy = policy.clone();
+        let transaction_identity = identity.clone();
+        let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
         let client = db.client().clone();
         let outcome = client.with_transaction(move |session| {
             Box::pin(async move {
@@ -524,25 +598,18 @@ impl ApprovalDefinitionService {
                     &rbac,
                     graph,
                     PublishTxInput {
-                        policy,
+                        policy: transaction_policy,
                         request,
-                        actor: &actor,
-                        digest: &digest,
+                        actor: &transaction_actor,
+                        identity: &transaction_identity,
                     },
                     session,
                 )
                 .await
             })
         });
-        self.recover_lock_command(
-            outcome.await,
-            ApprovalCommandKind::PublishDefinition,
-            &replay_id,
-            &replay_key,
-            &replay_digest,
-            replay_type,
-        )
-        .await
+        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation)
+            .await
     }
 
     /// 在唯一事务中退役当前发布版本。
@@ -553,69 +620,86 @@ impl ApprovalDefinitionService {
         &self,
         graph: DefinitionGraph,
         policy: ProcessRequiredApprovalPolicy,
-        request: &RetireDefinitionRequest,
+        request: RetireDefinitionRequest,
         actor: &AuditActor,
-        digest: &str,
+        identity: PreparedDefinitionIdentity,
     ) -> Result<DefinitionDetailView> {
         let db = self.db.clone();
-        let actor = actor.clone();
-        let digest = digest.to_string();
-        let request = request.clone();
-        let replay_id = request.definition_id.clone();
-        let replay_key = request.idempotency_key.clone();
-        let replay_digest = digest.clone();
-        let replay_type = policy.document_type;
+        let rbac = self.rbac.clone();
+        let transaction_actor = actor.clone();
+        let transaction_policy = policy.clone();
+        let transaction_identity = identity.clone();
+        let expectation = DefinitionResultExpectation::DefinitionId(request.definition_id.clone());
         let client = db.client().clone();
         let outcome = client.with_transaction(move |session| {
-            Box::pin(async move { retire_tx(&db, graph, policy, request, &actor, &digest, session).await })
+            Box::pin(async move {
+                retire_tx(
+                    &db,
+                    &rbac,
+                    graph,
+                    transaction_policy,
+                    request,
+                    &transaction_actor,
+                    &transaction_identity,
+                    session,
+                )
+                .await
+            })
         });
-        self.recover_lock_command(
-            outcome.await,
-            ApprovalCommandKind::RetireDefinition,
-            &replay_id,
-            &replay_key,
-            &replay_digest,
-            replay_type,
-        )
-        .await
+        self.recover_definition_command(outcome.await, &policy, actor, identity, expectation)
+            .await
     }
 
-    /// 发布/退役 duplicate-key 后按收据回读。
+    /// 收据竞争、瞬态事务或提交结果未知后，在新会话有限回读胜者。
     ///
     /// # 错误
-    /// 收据不存在时返回原冲突。
-    async fn recover_lock_command(
+    /// 找不到胜者时返回原错误；回放前当前定义管理权失效时返回禁止。
+    async fn recover_definition_command(
         &self,
         outcome: Result<DefinitionDetailView>,
-        command_kind: ApprovalCommandKind,
-        definition_id: &str,
-        idempotency_key: &str,
-        digest: &str,
-        document_type: DocumentType,
+        policy: &ProcessRequiredApprovalPolicy,
+        actor: &AuditActor,
+        identity: PreparedDefinitionIdentity,
+        expectation: DefinitionResultExpectation,
     ) -> Result<DefinitionDetailView> {
         let Err(error) = outcome else {
             return outcome;
         };
-        if !is_duplicate_conflict(&error) {
+        if !definition_command_may_have_committed(&error) {
             return Err(error);
         }
-        if let Some(view) = self
-            .replay_if_receipt(
-                command_kind,
-                definition_id,
-                idempotency_key,
-                digest,
-                visibility_for_define(document_type),
-            )
-            .await?
-        {
-            return Ok(view);
+        for attempt in 0..DEFINITION_COMMAND_RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let rbac = self.rbac.clone();
+            let actor = actor.clone();
+            let policy = policy.clone();
+            let identity = identity.clone();
+            let expectation = expectation.clone();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        ensure_definition_admin_permission(&db, &rbac, &actor, &policy, session).await?;
+                        replay_prepared_definition_receipt(&db, &identity, &expectation, session).await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(view)) => return Ok(view),
+                Ok(None) => {}
+                Err(recovery_error) if definition_command_may_have_committed(&recovery_error) => {}
+                Err(recovery_error) => return Err(recovery_error),
+            }
+            if attempt + 1 < DEFINITION_COMMAND_RECOVERY_ATTEMPTS {
+                tokio::time::sleep(definition_recovery_delay(attempt)).await;
+            }
         }
         Err(error)
     }
 }
 
-/// 创建草稿事务的政策、请求、摘要与操作人。
+/// 创建草稿事务的政策、请求、命令身份与操作人。
 ///
 /// # 用途
 /// 将草稿创建命令上下文字段打包。
@@ -640,8 +724,8 @@ struct CreateDraftTxInput<'a> {
     request: &'a CreateDefinitionDraftRequest,
     /// 审计操作人。
     actor: &'a AuditActor,
-    /// 命令摘要。
-    digest: &'a str,
+    /// 已规范化的当前命令身份及精确旧格式候选。
+    identity: &'a PreparedDefinitionIdentity,
 }
 
 /// 事务内创建草稿。
@@ -674,14 +758,13 @@ async fn create_draft_tx(
         name,
         request,
         actor,
-        digest,
+        identity,
     } = input;
-    if let Some(view) = replay_existing_receipt(
+    ensure_definition_admin_permission(db, rbac, actor, policy, session).await?;
+    if let Some(view) = replay_prepared_definition_receipt(
         db,
-        ApprovalCommandKind::DefinitionWrite,
-        policy.process_kind.as_str(),
-        &request.idempotency_key,
-        digest,
+        identity,
+        &DefinitionResultExpectation::ProcessKind(policy.process_kind),
         session,
     )
     .await?
@@ -694,17 +777,9 @@ async fn create_draft_tx(
             .await?,
     )?;
     let graph = build_new_draft(db, rbac, policy, name, request.draft_source, actor, session).await?;
+    let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
+    write_receipt(db, &identity.current, &result_ref, session).await?;
     persist_new_draft(db, &graph, session).await?;
-    write_receipt(
-        db,
-        ApprovalCommandKind::DefinitionWrite,
-        policy.process_kind.as_str(),
-        &request.idempotency_key,
-        digest,
-        &graph.definition.base.id,
-        session,
-    )
-    .await?;
     write_definition_audit(
         db,
         actor,
@@ -719,6 +794,7 @@ async fn create_draft_tx(
 }
 
 /// 事务内替换草稿节点。
+#[allow(clippy::too_many_arguments)]
 async fn replace_nodes_tx(
     db: &Database,
     rbac: &SharedRbacService,
@@ -726,8 +802,20 @@ async fn replace_nodes_tx(
     policy: ProcessRequiredApprovalPolicy,
     request: ReplaceDefinitionNodesRequest,
     actor: &AuditActor,
+    identity: &PreparedDefinitionIdentity,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
+    ensure_definition_admin_permission(db, rbac, actor, &policy, session).await?;
+    if let Some(view) = replay_prepared_definition_receipt(
+        db,
+        identity,
+        &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
+        session,
+    )
+    .await?
+    {
+        return Ok(view);
+    }
     let reloaded = reload_draft_for_cas(
         db,
         &graph.definition,
@@ -736,6 +824,8 @@ async fn replace_nodes_tx(
     )
     .await?;
     let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, session).await?;
+    let result_ref = DefinitionCommandResultRef::from_graph(&prepared).encode();
+    write_receipt(db, &identity.current, &result_ref, session).await?;
     apply_draft_graph(
         db,
         prepared,
@@ -748,7 +838,7 @@ async fn replace_nodes_tx(
     .await
 }
 
-/// 发布草稿事务的政策、请求、摘要与操作人。
+/// 发布草稿事务的政策、请求、命令身份与操作人。
 ///
 /// # 用途
 /// 将发布命令上下文字段打包。
@@ -771,8 +861,8 @@ struct PublishTxInput<'a> {
     request: PublishDefinitionRequest,
     /// 审计操作人。
     actor: &'a AuditActor,
-    /// 命令摘要。
-    digest: &'a str,
+    /// 已规范化的当前命令身份及精确旧格式候选。
+    identity: &'a PreparedDefinitionIdentity,
 }
 
 /// 事务内发布草稿。
@@ -806,14 +896,13 @@ async fn publish_tx(
         policy,
         request,
         actor,
-        digest,
+        identity,
     } = input;
-    if let Some(view) = replay_existing_receipt(
+    ensure_definition_admin_permission(db, rbac, actor, &policy, session).await?;
+    if let Some(view) = replay_prepared_definition_receipt(
         db,
-        ApprovalCommandKind::PublishDefinition,
-        &request.definition_id,
-        &request.idempotency_key,
-        digest,
+        identity,
+        &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
         session,
     )
     .await?
@@ -833,27 +922,66 @@ async fn publish_tx(
         validate_assignees(db, rbac, &policy, &current.assignee_ids(), session).await,
         ensure_actions_registered(&policy),
     )?;
-    current = refresh_and_replace_for_publish(db, current, request.expected_definition_lock_version, session)
+    current = prepare_publish_graph(db, current, session).await?;
+    let previous = db
+        .bpm_workflow()
+        .find_published_by_process_kind(policy.process_kind, session)
         .await?;
-    publish_and_store(db, current, policy, request, actor, digest, session).await
+    let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
+    let (published, previous) = current
+        .definition
+        .clone()
+        .publish_replacing(previous, participant(actor)?, now()?)
+        .map_err(map_model_error)?;
+    let mut result = DefinitionGraph {
+        definition: published,
+        nodes: current.nodes.clone(),
+        transitions: current.transitions.clone(),
+    };
+    let result_ref = DefinitionCommandResultRef::from_graph(&result).encode();
+    write_receipt(db, &identity.current, &result_ref, session).await?;
+    let refreshed = replace_graph(db, current, request.expected_definition_lock_version, session).await?;
+    let outcome = db
+        .bpm_workflow()
+        .publish_and_retire_previous(
+            &result.definition,
+            previous.as_ref(),
+            refreshed.definition.definition_lock_version(),
+            previous_lock,
+            session,
+        )
+        .await?;
+    result.definition = applied_definition(outcome)?;
+    write_definition_audit(
+        db,
+        actor,
+        "approval_definition.publish",
+        &result,
+        Some(request.expected_definition_lock_version),
+        None,
+        session,
+    )
+    .await?;
+    Ok(detail_view(&result))
 }
 
 /// 事务内退役当前发布版本。
+#[allow(clippy::too_many_arguments)]
 async fn retire_tx(
     db: &Database,
+    rbac: &SharedRbacService,
     graph: DefinitionGraph,
     policy: ProcessRequiredApprovalPolicy,
     request: RetireDefinitionRequest,
     actor: &AuditActor,
-    digest: &str,
+    identity: &PreparedDefinitionIdentity,
     session: &mut mongodb::ClientSession,
 ) -> Result<DefinitionDetailView> {
-    if let Some(view) = replay_existing_receipt(
+    ensure_definition_admin_permission(db, rbac, actor, &policy, session).await?;
+    if let Some(view) = replay_prepared_definition_receipt(
         db,
-        ApprovalCommandKind::RetireDefinition,
-        &request.definition_id,
-        &request.idempotency_key,
-        digest,
+        identity,
+        &DefinitionResultExpectation::DefinitionId(request.definition_id.clone()),
         session,
     )
     .await?
@@ -878,20 +1006,17 @@ async fn retire_tx(
     retired
         .retire(participant(actor)?, now()?)
         .map_err(map_model_error)?;
+    let graph = DefinitionGraph {
+        definition: retired.clone(),
+        nodes: graph.nodes,
+        transitions: graph.transitions,
+    };
+    let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
+    write_receipt(db, &identity.current, &result_ref, session).await?;
     retired.base.version = expected;
     db.approval_process_definitions()
         .update(&mut retired, session)
         .await?;
-    write_receipt(
-        db,
-        ApprovalCommandKind::RetireDefinition,
-        &request.definition_id,
-        &request.idempotency_key,
-        digest,
-        &retired.base.id,
-        session,
-    )
-    .await?;
     let graph = DefinitionGraph {
         definition: retired,
         nodes: graph.nodes,
@@ -1091,106 +1216,30 @@ async fn prepare_replacement(
     rebuild_draft_graph(&graph.definition, nodes)
 }
 
-/// 刷新快照后写回草稿图，供发布重验使用。
+/// 刷新快照并构造待写草稿图，供发布事务在 receipt-first 后持久化。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `graph` - 已完成发布前校验的草稿图
-/// * `expected` - 草稿定义锁版本
 /// * `session` - 调用方事务执行器
 ///
 /// # 返回
-/// 返回 Repository CAS 写回后的完整草稿图。
+/// 返回尚未写库的完整草稿图。
 ///
 /// # 错误
-/// 账号快照缺失、BPM 重建或 Repository CAS 失败时返回错误。
+/// 账号快照缺失或 BPM 重建失败时返回错误。
 ///
 /// # 关键业务约束
-/// 发布前必须以当前账号显示名刷新全部节点快照，再整组替换图。
-async fn refresh_and_replace_for_publish(
+/// 发布前必须以当前账号显示名刷新全部节点快照；本函数不得产生物理写入。
+async fn prepare_publish_graph(
     db: &Database,
     graph: DefinitionGraph,
-    expected: u64,
     session: &mut dyn Executor,
 ) -> Result<DefinitionGraph> {
     let assignee_ids = graph.assignee_ids();
     let snapshots = load_assignee_snapshots(db, &assignee_ids, session).await?;
     let nodes = apply_snapshots(graph.nodes, &snapshots)?;
-    let prepared = rebuild_draft_graph(&graph.definition, nodes)?;
-    replace_graph(db, prepared, expected, session).await
-}
-
-/// 发布已重验的草稿并退役旧版本。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `graph` - 已刷新快照的草稿图
-/// * `policy` - 当前单据类型必须审批政策
-/// * `request` - 发布请求与幂等键
-/// * `actor` - 已认证定义管理员
-/// * `digest` - 规范化命令摘要
-/// * `session` - 调用方事务执行器
-///
-/// # 返回
-/// 返回事务内发布后的定义详情。
-///
-/// # 错误
-/// BPM 状态切换、CAS、收据或审计写入失败时返回错误。
-///
-/// # 关键业务约束
-/// 新旧定义状态由 BPM 同步计算，Repository 在同一事务中退役旧版本并发布新版本。
-async fn publish_and_store(
-    db: &Database,
-    mut graph: DefinitionGraph,
-    policy: ProcessRequiredApprovalPolicy,
-    request: PublishDefinitionRequest,
-    actor: &AuditActor,
-    digest: &str,
-    session: &mut dyn Executor,
-) -> Result<DefinitionDetailView> {
-    let previous = db
-        .bpm_workflow()
-        .find_published_by_process_kind(policy.process_kind, session)
-        .await?;
-    let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
-    let expected = graph.definition.definition_lock_version();
-    let (published, previous) = graph
-        .definition
-        .publish_replacing(previous, participant(actor)?, now()?)
-        .map_err(map_model_error)?;
-    graph.definition = published;
-    let outcome = db
-        .bpm_workflow()
-        .publish_and_retire_previous(
-            &graph.definition,
-            previous.as_ref(),
-            expected,
-            previous_lock,
-            session,
-        )
-        .await?;
-    graph.definition = applied_definition(outcome)?;
-    write_receipt(
-        db,
-        ApprovalCommandKind::PublishDefinition,
-        &request.definition_id,
-        &request.idempotency_key,
-        digest,
-        &graph.definition.base.id,
-        session,
-    )
-    .await?;
-    write_definition_audit(
-        db,
-        actor,
-        "approval_definition.publish",
-        &graph,
-        Some(request.expected_definition_lock_version),
-        None,
-        session,
-    )
-    .await?;
-    Ok(detail_view(&graph))
+    rebuild_draft_graph(&graph.definition, nodes)
 }
 
 /// 以 CAS 写回草稿图并记录审计。
@@ -1501,23 +1550,74 @@ async fn next_definition_version(
     ApprovalProcessDefinition::next_version_after(current).map_err(map_model_error)
 }
 
-/// 事务内若已有同载荷收据则回读原结果。
-async fn replay_existing_receipt(
+/// 事务内若已有同载荷 v3 收据则回读仍未漂移的结果版本。
+async fn replay_current_receipt(
     db: &Database,
-    command_kind: ApprovalCommandKind,
-    scope_id: &str,
-    idempotency_key: &str,
-    digest: &str,
+    identity: &ApprovalCommandIdentity,
+    expectation: &DefinitionResultExpectation,
     session: &mut dyn Executor,
 ) -> Result<Option<DefinitionDetailView>> {
     let Some(receipt) = db
         .bpm_workflow()
-        .find_command_receipt(command_kind, scope_id, idempotency_key, session)
+        .find_command_receipt(
+            identity.command_kind(),
+            identity.scope().as_str(),
+            identity.idempotency_key(),
+            session,
+        )
         .await?
     else {
         return Ok(None);
     };
-    receipt.reconcile(digest).map_err(map_model_error)?;
+    receipt.reconcile_identity(identity).map_err(map_model_error)?;
+    let result_ref = DefinitionCommandResultRef::parse(&receipt.result_ref)?;
+    let graph = db
+        .bpm_workflow()
+        .load_definition_graph(
+            &ApprovalProcessDefinitionId::new(result_ref.definition_id.clone()),
+            session,
+        )
+        .await?
+        .ok_or_else(idempotency_payload_conflict)?;
+    result_ref.ensure_matches(&graph, expectation)?;
+    Ok(Some(detail_view(&graph)))
+}
+
+/// 事务内先读取 v3 收据；仅在 v3 不存在时读取命令声明的精确旧格式候选。
+///
+/// 当前格式一旦存在即由 `reconcile_identity` 决定回放或冲突，不得降级至旧格式。
+async fn replay_prepared_definition_receipt(
+    db: &Database,
+    identity: &PreparedDefinitionIdentity,
+    expectation: &DefinitionResultExpectation,
+    session: &mut dyn Executor,
+) -> Result<Option<DefinitionDetailView>> {
+    if let Some(view) = replay_current_receipt(db, &identity.current, expectation, session).await? {
+        return Ok(Some(view));
+    }
+    let Some(legacy) = identity.legacy.as_ref() else {
+        return Ok(None);
+    };
+    replay_legacy_receipt(db, identity.current.idempotency_key(), legacy, session).await
+}
+
+/// 精确读取一个旧 scope/digest 候选，并以不可变结果事实证明完整载荷。
+async fn replay_legacy_receipt(
+    db: &Database,
+    key: &IdempotencyKey,
+    legacy: &LegacyDefinitionIdentity,
+    session: &mut dyn Executor,
+) -> Result<Option<DefinitionDetailView>> {
+    let Some(receipt) = db
+        .bpm_workflow()
+        .find_command_receipt(legacy.command_kind, &legacy.scope_id, key, session)
+        .await?
+    else {
+        return Ok(None);
+    };
+    receipt
+        .reconcile(&legacy.payload_digest)
+        .map_err(map_model_error)?;
     let graph = db
         .bpm_workflow()
         .load_definition_graph(
@@ -1525,34 +1625,29 @@ async fn replay_existing_receipt(
             session,
         )
         .await?
-        .ok_or_else(definition_not_found)?;
+        .ok_or_else(idempotency_payload_conflict)?;
+    ensure_legacy_result(&receipt, &graph, &legacy.proof)?;
     Ok(Some(detail_view(&graph)))
 }
 
 /// 写入命令收据。
 async fn write_receipt(
     db: &Database,
-    command_kind: ApprovalCommandKind,
-    scope_id: &str,
-    idempotency_key: &str,
-    digest: &str,
+    identity: &ApprovalCommandIdentity,
     result_ref: &str,
     session: &mut dyn Executor,
 ) -> Result<()> {
     let receipt = ApprovalCommandReceipt::new(
         ApprovalCommandReceiptId::new(next_id()),
-        command_kind,
-        scope_id,
-        idempotency_key,
-        digest,
+        identity,
         result_ref,
         now()?,
     )
     .map_err(map_model_error)?;
-    db.approval_command_receipts()
-        .create(&receipt, session)
+    db.bpm_workflow()
+        .insert_command_receipt(&receipt, session)
         .await
-        .map_err(Into::into)
+        .map_err(mark_receipt_duplicate)
 }
 
 /// 写入定义变更审计。
@@ -1677,23 +1772,154 @@ fn node_summary(nodes: &[ApprovalNodeDefinition]) -> String {
         .join(",")
 }
 
-/// 创建草稿 canonical payload。
-fn create_draft_digest(
+/// 在任何 Repository 读取前把外部幂等键转换为规范值对象。
+fn parse_idempotency_key(raw: &str) -> Result<IdempotencyKey> {
+    IdempotencyKey::parse(raw.to_string()).map_err(|error| match error {
+        ModelError::InvalidField(message) => Error::ValidationError(message.to_string()),
+        other => Error::Internal(format!("审批命令幂等键构造失败: {other}")),
+    })
+}
+
+/// 使用 BPM 实体的名称规则准备完整有序节点载荷。
+fn prepare_definition_nodes(nodes: Vec<DefinitionNodeRequest>) -> Result<Vec<DefinitionNodeRequest>> {
+    let mut prepared = Vec::with_capacity(nodes.len());
+    for mut node in nodes {
+        node.node_id = node
+            .node_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        node.node_name = ApprovalNodeDefinition::normalize_name(node.node_name).map_err(map_model_error)?;
+        let assignee = node.assignee_user_id.trim().to_string();
+        ParticipantId::new(assignee.clone()).map_err(map_bpm_error)?;
+        node.assignee_user_id = assignee;
+        prepared.push(node);
+    }
+    prepared.sort_by_key(|node| node.display_order);
+    Ok(prepared)
+}
+
+/// 创建草稿的 v3 身份与唯一旧格式候选。
+fn create_draft_identity(
+    key: IdempotencyKey,
     document_type: DocumentType,
     name: &str,
     draft_source: DraftSource,
     actor_id: &str,
-) -> String {
-    payload_digest(&[document_type.as_str(), name, draft_source.as_str(), actor_id])
+) -> Result<PreparedDefinitionIdentity> {
+    let process_kind = process_kind_of(document_type);
+    let current = ApprovalCommandIdentity::new(
+        ApprovalCommandKind::DefinitionWrite,
+        CREATE_DRAFT_COMMAND_DOMAIN,
+        key,
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(process_kind.as_str())),
+        CanonicalCommandPayload::new()
+            .field(CommandPayloadField::Text(document_type.as_str()))
+            .field(CommandPayloadField::Text(name))
+            .field(CommandPayloadField::Text(draft_source.as_str()))
+            .field(CommandPayloadField::Text(actor_id)),
+    )
+    .map_err(map_identity_error)?;
+    Ok(PreparedDefinitionIdentity {
+        current,
+        legacy: Some(LegacyDefinitionIdentity {
+            command_kind: ApprovalCommandKind::DefinitionWrite,
+            scope_id: process_kind.as_str().to_string(),
+            payload_digest: legacy_payload_digest(&[
+                document_type.as_str(),
+                name,
+                draft_source.as_str(),
+                actor_id,
+            ]),
+            proof: LegacyDefinitionProof::Unprovable,
+        }),
+    })
 }
 
-/// 发布/退役 canonical payload。
-fn lock_command_digest(expected_lock: u64, actor_id: &str) -> String {
-    payload_digest(&[&expected_lock.to_string(), actor_id])
+/// 整组节点替换的 v3 身份；Create/Replace 即使资源文本相同也使用不同 domain。
+fn replace_nodes_identity(
+    key: IdempotencyKey,
+    definition_id: &str,
+    expected_lock: u64,
+    nodes: &[DefinitionNodeRequest],
+    actor_id: &str,
+) -> Result<PreparedDefinitionIdentity> {
+    let node_fields = nodes
+        .iter()
+        .map(|node| {
+            CommandPayloadField::Sequence(vec![
+                CommandPayloadField::OptionalText(node.node_id.as_deref()),
+                CommandPayloadField::Text(&node.node_name),
+                CommandPayloadField::U32(node.display_order),
+                CommandPayloadField::Text(&node.assignee_user_id),
+            ])
+        })
+        .collect();
+    let current = ApprovalCommandIdentity::new(
+        ApprovalCommandKind::DefinitionWrite,
+        REPLACE_NODES_COMMAND_DOMAIN,
+        key,
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(definition_id)),
+        CanonicalCommandPayload::new()
+            .field(CommandPayloadField::Text(definition_id))
+            .field(CommandPayloadField::U64(expected_lock))
+            .field(CommandPayloadField::Sequence(node_fields))
+            .field(CommandPayloadField::Text(actor_id)),
+    )
+    .map_err(map_identity_error)?;
+    Ok(PreparedDefinitionIdentity {
+        current,
+        legacy: None,
+    })
 }
 
-/// 固定字段顺序生成摘要。
-fn payload_digest(parts: &[&str]) -> String {
+/// 发布或退役的 v3 身份与可证明旧格式候选。
+fn lock_command_identity(
+    key: IdempotencyKey,
+    command_kind: ApprovalCommandKind,
+    domain: &'static str,
+    definition_id: &str,
+    expected_lock: u64,
+    actor_id: &str,
+) -> Result<PreparedDefinitionIdentity> {
+    let current = ApprovalCommandIdentity::new(
+        command_kind,
+        domain,
+        key,
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(definition_id)),
+        CanonicalCommandPayload::new()
+            .field(CommandPayloadField::Text(definition_id))
+            .field(CommandPayloadField::U64(expected_lock))
+            .field(CommandPayloadField::Text(actor_id)),
+    )
+    .map_err(map_identity_error)?;
+    let proof = match command_kind {
+        ApprovalCommandKind::PublishDefinition => LegacyDefinitionProof::Published {
+            definition_id: definition_id.to_string(),
+            expected_lock,
+            actor_id: actor_id.to_string(),
+        },
+        ApprovalCommandKind::RetireDefinition => LegacyDefinitionProof::Retired {
+            definition_id: definition_id.to_string(),
+            expected_lock,
+            actor_id: actor_id.to_string(),
+        },
+        _ => {
+            return Err(Error::Internal("定义锁命令种类不属于发布或退役".to_string()));
+        }
+    };
+    Ok(PreparedDefinitionIdentity {
+        current,
+        legacy: Some(LegacyDefinitionIdentity {
+            command_kind,
+            scope_id: definition_id.to_string(),
+            payload_digest: legacy_payload_digest(&[&expected_lock.to_string(), actor_id]),
+            proof,
+        }),
+    })
+}
+
+/// 只用于精确读取旧收据候选的历史 U+001F 摘要。
+fn legacy_payload_digest(parts: &[&str]) -> String {
     let mut hasher = Sha256::new();
     for (index, part) in parts.iter().enumerate() {
         if index > 0 {
@@ -1702,6 +1928,76 @@ fn payload_digest(parts: &[&str]) -> String {
         hasher.update(part.as_bytes());
     }
     hex::encode(hasher.finalize())
+}
+
+impl DefinitionCommandResultRef {
+    /// 从尚未或已经持久化的图冻结定义身份与结果锁版本。
+    fn from_graph(graph: &DefinitionGraph) -> Self {
+        Self {
+            definition_id: graph.definition.base.id.clone(),
+            definition_lock_version: graph.definition.definition_lock_version(),
+        }
+    }
+
+    /// 使用长度定界 ID 编码版本化结果引用。
+    fn encode(&self) -> String {
+        format!(
+            "{DEFINITION_RESULT_REF_PREFIX}{}:{}:{}",
+            self.definition_id.len(),
+            self.definition_id,
+            self.definition_lock_version
+        )
+    }
+
+    /// 解析当前结果引用；旧 raw ID 不得被当前 v3 收据接受。
+    fn parse(raw: &str) -> Result<Self> {
+        let payload = raw
+            .strip_prefix(DEFINITION_RESULT_REF_PREFIX)
+            .ok_or_else(idempotency_payload_conflict)?;
+        let (length, payload) = payload.split_once(':').ok_or_else(idempotency_payload_conflict)?;
+        let length = length
+            .parse::<usize>()
+            .map_err(|_| idempotency_payload_conflict())?;
+        if payload.len() <= length || !payload.is_char_boundary(length) {
+            return Err(idempotency_payload_conflict());
+        }
+        let definition_id = &payload[..length];
+        let version = payload[length..]
+            .strip_prefix(':')
+            .ok_or_else(idempotency_payload_conflict)?
+            .parse::<u64>()
+            .map_err(|_| idempotency_payload_conflict())?;
+        if definition_id.is_empty() {
+            return Err(idempotency_payload_conflict());
+        }
+        Ok(Self {
+            definition_id: definition_id.to_string(),
+            definition_lock_version: version,
+        })
+    }
+
+    /// 证明当前图仍是该命令冻结的精确结果版本与资源。
+    fn ensure_matches(
+        &self,
+        graph: &DefinitionGraph,
+        expectation: &DefinitionResultExpectation,
+    ) -> Result<()> {
+        let resource_matches = match expectation {
+            DefinitionResultExpectation::ProcessKind(process_kind) => {
+                graph.definition.process_kind == *process_kind
+            }
+            DefinitionResultExpectation::DefinitionId(definition_id) => {
+                graph.definition.base.id == *definition_id
+            }
+        };
+        if resource_matches
+            && graph.definition.base.id == self.definition_id
+            && graph.definition.definition_lock_version() == self.definition_lock_version
+        {
+            return Ok(());
+        }
+        Err(idempotency_payload_conflict())
+    }
 }
 
 /// 配置状态。
@@ -1807,11 +2103,6 @@ fn version_item(definition: &ApprovalProcessDefinition) -> DefinitionVersionItem
     }
 }
 
-/// 仅用于回读详情的类型级范围。
-fn visibility_for_define(document_type: DocumentType) -> DefinitionManagementVisibility {
-    DefinitionManagementVisibility::from_type_permissions(vec![document_type], Vec::new())
-}
-
 /// 当前调用方时间。
 fn now() -> Result<Timestamp> {
     Ok(Timestamp::from_utc(Utc::now()))
@@ -1843,9 +2134,123 @@ fn map_bpm_error(error: bpm::Error) -> Error {
     Error::from_approval_code(ErrorCode::ApprovalDefinitionInvalid)
 }
 
-/// 是否为唯一键冲突。
-fn is_duplicate_conflict(error: &Error) -> bool {
-    matches!(error, Error::ConflictError(message) if message.contains("数据已存在"))
+/// v3 身份构造失败只可能来自服务端固定 domain，按内部错误处理。
+fn map_identity_error(error: ModelError) -> Error {
+    Error::Internal(format!("审批定义命令身份构造失败: {error}"))
+}
+
+/// 返回稳定幂等载荷冲突。
+fn idempotency_payload_conflict() -> Error {
+    Error::from_approval_code(ErrorCode::ApprovalIdempotencyPayloadConflict)
+}
+
+/// 证明旧收据结果完整对应历史载荷；不可证明时不得降级回放。
+fn ensure_legacy_result(
+    receipt: &ApprovalCommandReceipt,
+    graph: &DefinitionGraph,
+    proof: &LegacyDefinitionProof,
+) -> Result<()> {
+    let definition = &graph.definition;
+    let proven = match proof {
+        LegacyDefinitionProof::Unprovable => false,
+        LegacyDefinitionProof::Published {
+            definition_id,
+            expected_lock,
+            actor_id,
+        } => {
+            let published_lock = expected_lock.checked_add(2);
+            let retired_lock = expected_lock.checked_add(3);
+            let lock_matches = match definition.status {
+                ApprovalDefinitionStatus::Published => {
+                    published_lock == Some(definition.definition_lock_version())
+                }
+                ApprovalDefinitionStatus::Retired => {
+                    retired_lock == Some(definition.definition_lock_version())
+                }
+                ApprovalDefinitionStatus::Draft => false,
+            };
+            receipt.result_ref == *definition_id
+                && definition.base.id == *definition_id
+                && definition
+                    .published_by
+                    .as_ref()
+                    .is_some_and(|actor| actor.as_str() == actor_id)
+                && definition.published_at.is_some()
+                && lock_matches
+        }
+        LegacyDefinitionProof::Retired {
+            definition_id,
+            expected_lock,
+            actor_id,
+        } => {
+            receipt.result_ref == *definition_id
+                && definition.base.id == *definition_id
+                && definition.status == ApprovalDefinitionStatus::Retired
+                && expected_lock.checked_add(1) == Some(definition.definition_lock_version())
+                && definition
+                    .retired_by
+                    .as_ref()
+                    .is_some_and(|actor| actor.as_str() == actor_id)
+                && definition.retired_at.is_some()
+        }
+    };
+    if proven {
+        return Ok(());
+    }
+    Err(idempotency_payload_conflict())
+}
+
+/// 使用当前启用角色重新验证目标类型定义管理权。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `actor` - 已认证操作人
+/// * `policy` - 目标单据类型必须审批政策
+/// * `executor` - 调用方事务或非事务执行器
+///
+/// # 返回
+/// 当前启用角色授予该类型定义管理权时返回 `Ok(())`。
+///
+/// # 错误
+/// 缺少权限或仅剩禁用角色残留 Casbin grant 时返回禁止。
+///
+/// # 关键业务约束
+/// 回放与 Fresh 必须共用本检查，禁止用账号级 Casbin 判定绕过停用角色。
+async fn ensure_definition_admin_permission(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    policy: &ProcessRequiredApprovalPolicy,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let visibility = definition_management_visibility_with_executor(db, rbac, actor, executor).await?;
+    ensure_definition_admin_allowed(visibility.can_define(policy.document_type))
+}
+
+/// 仅把 receipt-first 的唯一键竞争标记为可恢复错误。
+fn mark_receipt_duplicate(error: database::Error) -> Error {
+    match error {
+        error @ database::Error::DuplicateKey(_)
+            if error.duplicate_index_name() == Some(APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX) =>
+        {
+            Error::ReceiptDuplicate(error)
+        }
+        other => Error::from(other),
+    }
+}
+
+/// 只有收据竞争、瞬态事务和提交结果未知允许退出失败会话后回读。
+fn definition_command_may_have_committed(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::ReceiptDuplicate(_) | Error::TransientTransaction(_) | Error::OutcomeUnknown(_)
+    )
+}
+
+/// 并发胜者可能仍在提交，使用有界指数退避等待新会话可见。
+fn definition_recovery_delay(attempt: usize) -> Duration {
+    Duration::from_millis(5_u64 << attempt.min(5))
 }
 
 /// 创建草稿写库步骤。仅在无活动草稿时允许持久化。
@@ -1923,7 +2328,7 @@ fn allow_apply_replaced_definition(
 /// 发布写库步骤。仅在全部重验通过后允许刷新快照并退役旧版本。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PublishWriteStep {
-    /// 允许 refresh_and_replace_for_publish 与 publish_and_retire_previous。
+    /// 允许准备快照并在 receipt-first 后替换图与发布定义。
     RefreshSnapshotsAndRetirePrevious,
 }
 
@@ -2054,6 +2459,8 @@ mod tests {
     use super::*;
     use bpm::ids::ApprovalProcessDefinitionId;
     use bpm::ProcessKind;
+    use mongodb::error::{Error as MongoError, ErrorKind, WriteError, WriteFailure};
+    use serde_json::json;
 
     fn draft_definition(process_kind: ProcessKind, entry: &str) -> ApprovalProcessDefinition {
         ApprovalProcessDefinition::new_draft(
@@ -2110,6 +2517,22 @@ mod tests {
             .unwrap_or(source)
     }
 
+    fn duplicate_key_error(index: Option<&str>) -> database::Error {
+        let message = index.map_or_else(
+            || "E11000 duplicate key".to_string(),
+            |index| format!("E11000 duplicate key index: {index} dup key"),
+        );
+        let write_error: WriteError = serde_json::from_value(json!({
+            "code": 11000,
+            "codeName": "DuplicateKey",
+            "errmsg": message,
+            "errInfo": null,
+        }))
+        .expect("duplicate fixture");
+        let mongo: MongoError = ErrorKind::Write(WriteFailure::WriteError(write_error)).into();
+        database::Error::DuplicateKey(mongo)
+    }
+
     /// 已有活动草稿时不得 persist_new_draft / write_receipt。
     #[test]
     fn second_active_draft_is_conflict() {
@@ -2127,8 +2550,9 @@ mod tests {
             "async fn replace_nodes_tx",
         );
         let gate = create_tx.find("decide_create_draft_write").expect("创建闸门");
-        assert!(gate < create_tx.find("persist_new_draft").expect("persist"));
-        assert!(gate < create_tx.find("write_receipt").expect("receipt"));
+        let receipt = create_tx.find("write_receipt").expect("receipt");
+        assert!(gate < receipt);
+        assert!(receipt < create_tx.find("persist_new_draft").expect("persist"));
     }
 
     /// 陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
@@ -2218,8 +2642,12 @@ mod tests {
         assert!(decide_publish_write(Ok(()), Ok(()), failed_assignees, Ok(())).is_err());
         let publish_tx = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
         let gate = publish_tx.find("decide_publish_write").expect("发布闸门");
-        assert!(gate < publish_tx.find("refresh_and_replace_for_publish").expect("刷新"));
-        assert!(gate < publish_tx.find("publish_and_store").expect("写库"));
+        let prepared = publish_tx.find("prepare_publish_graph").expect("刷新规划");
+        let receipt = publish_tx.find("write_receipt").expect("收据首写");
+        let graph_write = publish_tx.find("replace_graph").expect("图写入");
+        assert!(gate < prepared);
+        assert!(prepared < receipt);
+        assert!(receipt < graph_write);
     }
 
     /// 账号或静态权限重验失败时发布不得进入写库步骤。
@@ -2322,115 +2750,156 @@ mod tests {
         );
     }
 
-    /// 创建/发布/退役 canonical payload：固定字段顺序、异载荷不等、冲突与 duplicate-key 语义。
+    /// 四条定义命令固定 v3 golden，Create/Replace domain 隔离且完整载荷可区分。
     #[test]
     fn canonical_payloads_are_stable() {
-        let first = create_draft_digest(
+        assert!(matches!(
+            parse_idempotency_key("  "),
+            Err(Error::ValidationError(_))
+        ));
+        assert!(matches!(
+            parse_idempotency_key(&"界".repeat(43)),
+            Err(Error::ValidationError(_))
+        ));
+        let key = parse_idempotency_key("  key-1  ").expect("规范 key");
+        assert_eq!(key.as_str(), "key-1");
+        let create = create_draft_identity(
+            key.clone(),
             DocumentType::StockAdjustment,
             "库存调整",
             DraftSource::Empty,
             "admin-1",
+        )
+        .expect("创建身份");
+        assert_eq!(
+            create.current.scope().as_str(),
+            "v3:dfdad7669efdc17e5e2b4a013c9e3ff9fe2fc972e2a1f730557e11039fa77574"
         );
         assert_eq!(
-            first,
-            payload_digest(&[
-                DocumentType::StockAdjustment.as_str(),
-                "库存调整",
-                DraftSource::Empty.as_str(),
-                "admin-1",
-            ])
+            create.current.digest().as_str(),
+            "v3:987f7ac0bf5bbd761d38f649dfe68a98f6e6c923605ce31e22a08b714cd470a6"
+        );
+
+        let nodes = prepare_definition_nodes(vec![
+            DefinitionNodeRequest {
+                node_id: None,
+                node_name: " 财务 ".to_string(),
+                display_order: 2,
+                assignee_user_id: " u2 ".to_string(),
+            },
+            DefinitionNodeRequest {
+                node_id: Some(" node-1 ".to_string()),
+                node_name: " 仓储复核 ".to_string(),
+                display_order: 1,
+                assignee_user_id: " u1 ".to_string(),
+            },
+        ])
+        .expect("节点规范化");
+        assert_eq!(nodes[0].node_name, "仓储复核");
+        assert_eq!(nodes[0].node_id.as_deref(), Some("node-1"));
+        assert_eq!(nodes[1].assignee_user_id, "u2");
+        let replace = replace_nodes_identity(key.clone(), "def-1", 3, &nodes, "admin-1").expect("替换身份");
+        assert_eq!(
+            replace.current.scope().as_str(),
+            "v3:8fb38d7db619da0a2f1f164fa6575056b8ecadc45c066396f07aaba97c5a06f3"
         );
         assert_eq!(
-            first,
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                "库存调整",
-                DraftSource::Empty,
-                "admin-1",
-            )
+            replace.current.digest().as_str(),
+            "v3:6623c0836bdd568ef761a797ee6b73dbb799bae019eb20a479fe1f101a5dc3f5"
         );
-        assert_ne!(
-            first,
-            create_draft_digest(
-                DocumentType::SalesOrder,
-                "库存调整",
-                DraftSource::Empty,
-                "admin-1",
-            )
+
+        let publish = lock_command_identity(
+            key.clone(),
+            ApprovalCommandKind::PublishDefinition,
+            PUBLISH_DEFINITION_COMMAND_DOMAIN,
+            "def-1",
+            3,
+            "admin-1",
         );
-        assert_ne!(
-            first,
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                "另一名称",
-                DraftSource::Empty,
-                "admin-1",
-            )
-        );
-        assert_ne!(
-            first,
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                "库存调整",
-                DraftSource::CurrentPublished,
-                "admin-1",
-            )
-        );
-        assert_ne!(
-            first,
-            create_draft_digest(
-                DocumentType::StockAdjustment,
-                "库存调整",
-                DraftSource::Empty,
-                "admin-2",
-            )
+        let publish = publish.expect("发布身份");
+        assert_eq!(
+            publish.current.scope().as_str(),
+            "v3:5001966af5c0b5d438e4adb337a5f052689071e4fad50ab18800eb5055394786"
         );
         assert_eq!(
-            lock_command_digest(3, "admin-1"),
-            payload_digest(&["3", "admin-1"])
+            publish.current.digest().as_str(),
+            "v3:fe9b47c8cd4d4e5b98c9b4ebab65b8b4756668aed1d8068705b7bd0024c5b345"
+        );
+
+        let retire = lock_command_identity(
+            key.clone(),
+            ApprovalCommandKind::RetireDefinition,
+            RETIRE_DEFINITION_COMMAND_DOMAIN,
+            "def-1",
+            3,
+            "admin-1",
+        )
+        .expect("退役身份");
+        assert_eq!(
+            retire.current.scope().as_str(),
+            "v3:c89adeafb2fcbb835edf67a65ad722c7fdf172e8c44be3c54372e2aa9e00fb86"
         );
         assert_eq!(
-            lock_command_digest(3, "admin-1"),
-            lock_command_digest(3, "admin-1")
+            retire.current.digest().as_str(),
+            "v3:6ae60ca970d53104d79c8ff103c64542fa44118fb0436416eaccd6e9e8fe34db"
         );
+
+        assert_ne!(create.current.scope(), replace.current.scope());
+        let create_changed = create_draft_identity(
+            key.clone(),
+            DocumentType::StockAdjustment,
+            "库存\u{1f}调整",
+            DraftSource::Empty,
+            "admin-1",
+        )
+        .expect("分隔符文本");
+        assert_ne!(create.current.digest(), create_changed.current.digest());
+        let literal_null_nodes = prepare_definition_nodes(vec![DefinitionNodeRequest {
+            node_id: Some("NULL".to_string()),
+            node_name: "审批".to_string(),
+            display_order: 1,
+            assignee_user_id: "用户甲".to_string(),
+        }])
+        .expect("字面量 NULL");
+        let absent_nodes = prepare_definition_nodes(vec![DefinitionNodeRequest {
+            node_id: None,
+            node_name: "审批".to_string(),
+            display_order: 1,
+            assignee_user_id: "用户甲".to_string(),
+        }])
+        .expect("空可选值");
         assert_ne!(
-            lock_command_digest(3, "admin-1"),
-            lock_command_digest(4, "admin-1")
-        );
-        assert_ne!(
-            lock_command_digest(3, "admin-1"),
-            lock_command_digest(3, "admin-2")
+            replace_nodes_identity(key.clone(), "def-1", 3, &literal_null_nodes, "admin-1")
+                .unwrap()
+                .current
+                .digest(),
+            replace_nodes_identity(key.clone(), "def-1", 3, &absent_nodes, "admin-1")
+                .unwrap()
+                .current
+                .digest()
         );
 
         assert!(matches!(
             map_model_error(ModelError::CommandReceiptConflict),
             Error::Coded(ErrorCode::ApprovalIdempotencyPayloadConflict)
         ));
+        let result_ref = DefinitionCommandResultRef {
+            definition_id: "def-1".to_string(),
+            definition_lock_version: 1,
+        }
+        .encode();
         let same = ApprovalCommandReceipt::new(
             ApprovalCommandReceiptId::new("r1"),
-            ApprovalCommandKind::DefinitionWrite,
-            "stock_adjustment",
-            "k1",
-            "digest-a",
-            "def-1",
+            &create.current,
+            result_ref,
             Timestamp::from_unix_secs(1).unwrap(),
         )
         .unwrap();
-        same.reconcile("digest-a").expect("同载荷必须回读");
+        same.reconcile_identity(&create.current).expect("同载荷必须回读");
         assert!(matches!(
-            map_model_error(same.reconcile("digest-b").unwrap_err()),
+            map_model_error(same.reconcile_identity(&create_changed.current).unwrap_err()),
             Error::Coded(ErrorCode::ApprovalIdempotencyPayloadConflict)
         ));
-        assert!(is_duplicate_conflict(&Error::ConflictError("数据已存在".into())));
-        assert!(is_duplicate_conflict(&Error::ConflictError(
-            "数据已存在，请勿重复提交".into()
-        )));
-        assert!(!is_duplicate_conflict(&Error::ConflictError(
-            "幂等键载荷冲突".into()
-        )));
-        assert!(!is_duplicate_conflict(&Error::ValidationError(
-            "数据已存在".into()
-        )));
 
         let create = source_fn(
             production_source(),
@@ -2438,8 +2907,8 @@ mod tests {
             "pub async fn replace_definition_nodes",
         );
         assert!(
-            create.find("ensure_definition_admin").expect("创建权限")
-                < create.find("replay_if_receipt").expect("创建回放")
+            create.find("parse_idempotency_key").expect("key 规范化")
+                < create.find("ensure_definition_admin").expect("创建权限")
         );
         let publish = source_fn(
             production_source(),
@@ -2447,8 +2916,8 @@ mod tests {
             "pub async fn retire_definition",
         );
         assert!(
-            publish.find("ensure_definition_admin").expect("发布权限")
-                < publish.find("replay_if_receipt").expect("发布回放")
+            publish.find("parse_idempotency_key").expect("key 规范化")
+                < publish.find("require_graph").expect("首次查库")
         );
         let retire = source_fn(
             production_source(),
@@ -2456,40 +2925,215 @@ mod tests {
             "pub async fn definition_versions",
         );
         assert!(
-            retire.find("ensure_definition_admin").expect("退役权限")
-                < retire.find("replay_if_receipt").expect("退役回放")
+            retire.find("parse_idempotency_key").expect("key 规范化")
+                < retire.find("require_graph").expect("首次查库")
         );
-        let create_commit = source_fn(
+        let replace = source_fn(
             production_source(),
-            "async fn commit_create_draft",
-            "async fn replay_create_after_duplicate",
+            "pub async fn replace_definition_nodes",
+            "pub async fn publish_definition",
         );
         assert!(
-            create_commit
-                .find("is_duplicate_conflict")
-                .expect("创建 duplicate-key")
-                < create_commit
-                    .find("replay_create_after_duplicate")
-                    .expect("事务外重读")
+            replace.find("parse_idempotency_key").expect("key 规范化")
+                < replace.find("require_graph").expect("首次查库")
         );
         let recover = source_fn(
             production_source(),
-            "async fn recover_lock_command",
+            "async fn recover_definition_command",
             "async fn create_draft_tx",
         );
-        assert!(
-            recover
-                .find("is_duplicate_conflict")
-                .expect("锁命令 duplicate-key")
-                < recover.find("replay_if_receipt").expect("锁命令回放")
-        );
-        let replay = source_fn(
+        assert!(recover.contains("with_transaction"));
+        assert!(recover.contains("replay_prepared_definition_receipt"));
+        assert!(recover.contains("ensure_definition_admin_permission"));
+        assert!(!recover.contains("contains("));
+        let prepared_replay = source_fn(
             production_source(),
-            "async fn replay_if_receipt",
-            "async fn commit_create_draft",
+            "async fn replay_prepared_definition_receipt",
+            "async fn replay_legacy_receipt",
         );
-        assert!(replay.contains("reconcile"));
-        assert!(replay.contains("map_model_error"));
+        assert!(
+            prepared_replay
+                .find("replay_current_receipt")
+                .expect("必须先查当前 v3")
+                < prepared_replay
+                    .find("replay_legacy_receipt")
+                    .expect("当前不存在后才能查旧候选")
+        );
+    }
+
+    /// 只有幂等三元组唯一索引冲突可进入胜者回读，ID 或未知索引必须失败关闭。
+    #[test]
+    fn receipt_duplicate_recovery_requires_exact_idempotency_index() {
+        let idempotency = mark_receipt_duplicate(duplicate_key_error(Some(
+            APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
+        )));
+        assert!(matches!(idempotency, Error::ReceiptDuplicate(_)));
+        assert!(definition_command_may_have_committed(&idempotency));
+
+        let id_collision =
+            mark_receipt_duplicate(duplicate_key_error(Some("uk_approval_command_receipts_id")));
+        assert!(matches!(id_collision, Error::ConflictError(_)));
+        assert!(!definition_command_may_have_committed(&id_collision));
+
+        let unknown = mark_receipt_duplicate(duplicate_key_error(None));
+        assert!(matches!(unknown, Error::ConflictError(_)));
+        assert!(!definition_command_may_have_committed(&unknown));
+    }
+
+    /// 当前结果引用冻结 UTF-8 字节长度与锁版本，资源或版本漂移必须失败关闭。
+    #[test]
+    fn definition_result_reference_is_versioned_and_exact() {
+        let unicode = DefinitionCommandResultRef {
+            definition_id: "定义-一".to_string(),
+            definition_lock_version: 7,
+        };
+        assert_eq!(
+            DefinitionCommandResultRef::parse(&unicode.encode()).unwrap(),
+            unicode
+        );
+        assert!(DefinitionCommandResultRef::parse("def-1").is_err());
+        assert!(DefinitionCommandResultRef::parse("definition-v1:99:def-1:1").is_err());
+
+        let graph = two_node_publish_graph();
+        let result_ref = DefinitionCommandResultRef::from_graph(&graph);
+        result_ref
+            .ensure_matches(
+                &graph,
+                &DefinitionResultExpectation::DefinitionId(graph.definition.base.id.clone()),
+            )
+            .expect("精确结果");
+        assert!(result_ref
+            .ensure_matches(
+                &graph,
+                &DefinitionResultExpectation::DefinitionId("other".to_string()),
+            )
+            .is_err());
+        let mut drifted = graph.clone();
+        drifted.definition.base.version += 1;
+        assert!(result_ref
+            .ensure_matches(
+                &drifted,
+                &DefinitionResultExpectation::ProcessKind(ProcessKind::StockAdjustment),
+            )
+            .is_err());
+    }
+
+    /// 旧收据只按精确候选读取；发布/退役可由不可变事实证明，创建来源不可证明。
+    #[test]
+    fn legacy_definition_receipts_require_complete_immutable_proof() {
+        let key = IdempotencyKey::parse("key-legacy").unwrap();
+        let identity = lock_command_identity(
+            key,
+            ApprovalCommandKind::PublishDefinition,
+            PUBLISH_DEFINITION_COMMAND_DOMAIN,
+            "def-1",
+            2,
+            "admin",
+        )
+        .unwrap();
+        let mut receipt = ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("receipt-legacy"),
+            &identity.current,
+            "def-1",
+            Timestamp::from_unix_secs(1).unwrap(),
+        )
+        .unwrap();
+        receipt.scope_id = "def-1".to_string();
+        receipt.payload_digest = legacy_payload_digest(&["2", "admin"]);
+
+        let draft = two_node_publish_graph();
+        let refreshed = DefinitionGraph::rebuild_draft(
+            &draft.definition,
+            draft.nodes,
+            next_transition_ids(2),
+            Timestamp::from_unix_secs(2).unwrap(),
+        )
+        .unwrap();
+        let mut published = refreshed;
+        published
+            .definition
+            .publish(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(3).unwrap(),
+            )
+            .unwrap();
+        ensure_legacy_result(
+            &receipt,
+            &published,
+            &LegacyDefinitionProof::Published {
+                definition_id: "def-1".to_string(),
+                expected_lock: 2,
+                actor_id: "admin".to_string(),
+            },
+        )
+        .expect("发布旧结果可证明");
+        assert!(ensure_legacy_result(
+            &receipt,
+            &published,
+            &LegacyDefinitionProof::Published {
+                definition_id: "def-1".to_string(),
+                expected_lock: 2,
+                actor_id: "other".to_string(),
+            },
+        )
+        .is_err());
+        assert!(ensure_legacy_result(&receipt, &published, &LegacyDefinitionProof::Unprovable,).is_err());
+
+        let retire_expected = published.definition.definition_lock_version();
+        published
+            .definition
+            .retire(
+                ParticipantId::new("admin").unwrap(),
+                Timestamp::from_unix_secs(4).unwrap(),
+            )
+            .unwrap();
+        ensure_legacy_result(
+            &receipt,
+            &published,
+            &LegacyDefinitionProof::Retired {
+                definition_id: "def-1".to_string(),
+                expected_lock: retire_expected,
+                actor_id: "admin".to_string(),
+            },
+        )
+        .expect("退役旧结果可证明");
+    }
+
+    /// 四条定义写命令均在完整只读校验后先写收据，再写图、状态或审计。
+    #[test]
+    fn definition_commands_are_receipt_first_after_read_validation() {
+        let create = source_fn(
+            production_source(),
+            "async fn create_draft_tx",
+            "async fn replace_nodes_tx",
+        );
+        let create_receipt = create.find("write_receipt").expect("创建收据");
+        assert!(create.find("build_new_draft").expect("创建只读准备") < create_receipt);
+        assert!(create_receipt < create.find("persist_new_draft").expect("创建图写入"));
+
+        let replace = source_fn(
+            production_source(),
+            "async fn replace_nodes_tx",
+            "async fn publish_tx",
+        );
+        let replace_receipt = replace.find("write_receipt").expect("替换收据");
+        assert!(replace.find("prepare_replacement").expect("替换只读准备") < replace_receipt);
+        assert!(replace_receipt < replace.find("apply_draft_graph").expect("替换图写入"));
+
+        let publish = source_fn(production_source(), "async fn publish_tx", "async fn retire_tx");
+        let publish_receipt = publish.find("write_receipt").expect("发布收据");
+        assert!(publish.find("prepare_publish_graph").expect("发布只读准备") < publish_receipt);
+        assert!(publish_receipt < publish.find("replace_graph").expect("发布图写入"));
+        assert!(publish_receipt < publish.find("publish_and_retire_previous").expect("发布状态写入"));
+
+        let retire = source_fn(
+            production_source(),
+            "async fn retire_tx",
+            "async fn build_new_draft",
+        );
+        let retire_receipt = retire.find("write_receipt").expect("退役收据");
+        assert!(retire.find("decide_retire_write").expect("退役只读校验") < retire_receipt);
+        assert!(retire_receipt < retire.find("approval_process_definitions").expect("退役状态写入"));
     }
     /// 只能退役当前 PUBLISHED；无发布版或非当前版失败，锁匹配才允许写回。
     #[test]
@@ -2634,7 +3278,7 @@ mod tests {
         let prepare = source_fn(
             production_source(),
             "async fn prepare_replacement",
-            "async fn refresh_and_replace_for_publish",
+            "async fn prepare_publish_graph",
         );
         let gate = prepare
             .find("allow_replace_after_assignees")

@@ -67,6 +67,8 @@ pub struct ReplaceDefinitionNodesRequest {
     pub expected_definition_lock_version: u64,
     /// 有序节点。
     pub nodes: Vec<DefinitionNodeRequest>,
+    /// 幂等键。
+    pub idempotency_key: String,
 }
 
 /// 发布草稿请求。
@@ -257,12 +259,17 @@ mod tests {
             r#"{"node_name":"仓储","display_order":1,"assignee_user_id":"u1","node_purpose":"X"}"#
         )
         .is_err());
+        let replace = serde_json::from_str::<ReplaceDefinitionNodesRequest>(
+            r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"replace-1"}"#,
+        )
+        .expect("替换请求必须携带幂等键");
+        assert_eq!(replace.idempotency_key, "replace-1");
         assert!(serde_json::from_str::<ReplaceDefinitionNodesRequest>(
-            r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"transitions":[]}"#
+            r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"k1","transitions":[]}"#
         )
         .is_err());
         assert!(serde_json::from_str::<ReplaceDefinitionNodesRequest>(
-            r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"resolver":"x"}"#
+            r#"{"definition_id":"d1","expected_definition_lock_version":1,"nodes":[],"idempotency_key":"k1","resolver":"x"}"#
         )
         .is_err());
         assert!(serde_json::from_str::<DefinitionNodeRequest>(

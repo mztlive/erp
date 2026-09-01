@@ -39,7 +39,7 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{prepare_start, PreparedExecution};
+use crate::approval::execution::PreparedExecution;
 use crate::approval::ApprovalActionContext;
 use crate::audit::AuditActor;
 use crate::document_registry::{new_registered_document, persist_registered_document};
@@ -748,6 +748,7 @@ impl InventoryService {
                 note: req.note,
                 occurred_at: req.occurred_at.map(Instant::from_unix_secs),
             },
+            actor.id(),
         )?;
         let lines = build_adjustment_lines(&id, adjustment.reason_type, &req.lines)?;
         let audit =
@@ -909,7 +910,6 @@ impl InventoryService {
         if let Some(view) = committed_stock_adjustment_start_replay(self, id, &req, actor).await? {
             return Ok(view);
         }
-        let start_digest = start_approval::stock_adjustment_start_digest(&req, actor.id())?;
         let adapter = stock_adjustment_adapter()?;
         let subject = stock_adjustment_subject_ref(id)?;
         let mut adjustment = self.load_stock_adjustment(id).await?;
@@ -980,10 +980,11 @@ impl InventoryService {
             &mut NoTransaction,
         )
         .await?;
-        let PreparedExecution::Apply(mut writes) = prepare_start(start_input)? else {
+        let PreparedExecution::Apply(writes) =
+            start_approval::prepare_stock_adjustment_start(start_input, &req)?
+        else {
             return Err(Error::Internal("新库存调整提交不得进入回放分支".to_string()));
         };
-        writes.receipt.payload_digest = start_digest;
         let result_instance_id = writes.instance.base.id.clone();
         let persist_result = start_approval::persist_stock_adjustment_start(
             &self.db,

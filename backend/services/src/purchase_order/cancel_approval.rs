@@ -3,7 +3,8 @@
 use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::{
-    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
+    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
+    ParticipantId, Timestamp,
 };
 use database::{AccessControlExt, BpmExt, NoTransaction, PurchaseOrderExt, Transactional, WorkItemExt};
 use entities::common::time::Instant;
@@ -19,10 +20,12 @@ use super::adapter::{
 use super::dto::CancelPurchaseOrderApprovalRequest;
 use super::start_approval::load_bound_definition_graph;
 use super::PurchaseOrderService;
-use crate::approval::execution::authorization::{converge_eligibility, requires_blocked_cancel};
-use crate::approval::execution::idempotency::normalize_idempotency_key;
+use crate::approval::execution::authorization::converge_eligibility;
 use crate::approval::execution::{
-    prepare_cancel, CancelExecutionInput, ExecutionCommandInput, PreparedExecution,
+    claim_and_persist_document_cancel_runtime, command_may_have_committed, command_recovery_delay,
+    normalize_document_cancel_reason, prepare_document_cancel, replay_committed_document_cancel,
+    CancelExecutionInput, DocumentCancelCommand, DocumentCancelReplayProof, ExecutionCommandInput,
+    PreparedExecution,
 };
 use crate::approval::policy::ApprovalDomainAction;
 use crate::audit::AuditActor;
@@ -59,23 +62,34 @@ impl PurchaseOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+        let subject = purchase_order_subject_ref(id)?;
+        let command = DocumentCancelCommand::new(
+            subject.clone(),
+            order.approval_subject_version,
+            req.expected_lock_version,
+            &req.reason,
+            actor.id(),
+            &req.idempotency_key,
+        )?;
+        if replay_purchase_order_cancel(&self.db, &command).await?.is_some() {
+            return Ok(());
+        }
         self.ensure_version(&order, req.expected_lock_version)?;
         let adapter = purchase_order_adapter()?;
         let binding = find_approval_binding(&self.db, id, &mut NoTransaction).await?;
         let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let subject = purchase_order_subject_ref(id)?;
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, order.approval_subject_version).await?;
         let now = Instant::now();
         let input = build_purchase_order_cancel_input(
             &runtime,
-            &req.reason,
+            command.reason(),
             actor.id(),
-            &req.idempotency_key,
+            command.idempotency_key(),
             None,
             now,
         )?;
-        let prepared = prepare_cancel(input)?;
+        let prepared = prepare_document_cancel(input, command.expected_document_version())?;
         let submission_id = order.current_submission_id.clone().unwrap_or_default();
         execute_purchase_order_domain_action(
             &mut order,
@@ -88,20 +102,64 @@ impl PurchaseOrderService {
             actor
                 .clone()
                 .resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
-        persist_purchase_order_cancel(
+        let result = persist_purchase_order_cancel(
             &self.db,
             PurchaseOrderCancelPersistInput {
                 order,
                 prepared,
                 open_tasks: runtime.open_tasks,
                 actor_id: actor.id().to_string(),
-                reason: req.reason.clone(),
+                reason: command.reason().to_string(),
                 now,
                 audit,
             },
         )
-        .await
+        .await;
+        match result {
+            Ok(()) => Ok(()),
+            Err(error) if command_may_have_committed(&error) => {
+                recover_purchase_order_cancel(&self.db, &command, error).await
+            }
+            Err(error) => Err(error),
+        }
     }
+}
+
+const CANCEL_RECOVERY_ATTEMPTS: usize = 8;
+
+/// 使用独立 snapshot 会话回读采购单撤回 winner；本函数只读。
+async fn replay_purchase_order_cancel(
+    db: &Database,
+    command: &DocumentCancelCommand,
+) -> Result<Option<DocumentCancelReplayProof>> {
+    let db = db.clone();
+    let command = command.clone();
+    let client = db.client().clone();
+    client
+        .with_transaction(move |session| {
+            Box::pin(async move { replay_committed_document_cancel(&db, &command, session).await })
+        })
+        .await
+}
+
+/// 失败事务退出后只在新会话有限回读，不盲重跑 Fresh。
+async fn recover_purchase_order_cancel(
+    db: &Database,
+    command: &DocumentCancelCommand,
+    original_error: Error,
+) -> Result<()> {
+    for attempt in 0..CANCEL_RECOVERY_ATTEMPTS {
+        match replay_purchase_order_cancel(db, command).await {
+            Ok(Some(_)) => return Ok(()),
+            Ok(None) => {}
+            Err(error) if command_may_have_committed(&error) => {}
+            Err(error) => return Err(error),
+        }
+        if attempt + 1 < CANCEL_RECOVERY_ATTEMPTS {
+            tokio::time::sleep(command_recovery_delay(attempt)).await;
+        }
+    }
+    Err(original_error)
 }
 
 /// 已加载的可撤回运行事实。
@@ -195,15 +253,11 @@ pub fn build_purchase_order_cancel_input(
     runtime: &LoadedCancelRuntime,
     reason: &str,
     actor_id: &str,
-    idempotency_key: &str,
+    idempotency_key: &IdempotencyKey,
     receipt: Option<bpm::model::ApprovalCommandReceipt>,
     now: Instant,
 ) -> Result<CancelExecutionInput> {
-    let reason = reason.trim();
-    if reason.is_empty() {
-        return Err(Error::ValidationError("撤回原因不能为空".to_string()));
-    }
-    let idempotency_key = normalize_idempotency_key(idempotency_key)?;
+    let reason = normalize_document_cancel_reason(reason)?;
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("撤回人引用无效".to_string()))?;
     let eligibility = converge_eligibility(
@@ -211,14 +265,13 @@ pub fn build_purchase_order_cancel_input(
         &runtime.current.assignee_name_snapshot,
         None,
     )?;
-    let blocked_port = runtime.instance.blocker_code.is_some_and(requires_blocked_cancel);
     Ok(CancelExecutionInput {
         command: ExecutionCommandInput {
             graph: runtime.graph.clone(),
             current_eligibility: eligibility.clone(),
             next_eligibility: eligibility,
             receipt,
-            idempotency_key,
+            idempotency_key: idempotency_key.clone(),
             now: Timestamp::from_utc(now.as_utc()),
         },
         instance: runtime.instance.clone(),
@@ -227,10 +280,10 @@ pub fn build_purchase_order_cancel_input(
         expected_instance_version: runtime.instance.base.version,
         expected_execution_version: runtime.current.base.version,
         expected_task_version: runtime.open_tasks.first().map(|item| item.base.version),
-        reason: reason.to_string(),
+        reason,
         actor,
         close_open_task: runtime.task_policy.closes_open_task(),
-        blocked_port,
+        blocked_port: false,
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
     })
 }
@@ -298,26 +351,16 @@ pub(super) async fn persist_purchase_order_cancel(
         now,
         audit,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(());
+    };
+    let closed_tasks = WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                if let PreparedExecution::Apply(writes) = prepared {
-                    let closed_tasks =
-                        WorkItem::close_all_for_approval_cancellation(open_tasks, &actor_id, &reason, now)?;
-                    db.bpm_workflow()
-                        .persist_cancelled_runtime(
-                            &writes.instance,
-                            &writes.updated_executions,
-                            &writes.receipt,
-                            session,
-                        )
-                        .await?;
-                    db.work_items()
-                        .persist_cancelled_approval_tasks(&closed_tasks, session)
-                        .await?;
-                }
+                claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, session).await?;
                 db.purchase_orders().update(&mut order, session).await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())

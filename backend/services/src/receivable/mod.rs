@@ -57,7 +57,10 @@ use crate::approval::binding::{
     BindPublishedDefinitionCommand, BindingDecision,
 };
 use crate::approval::business_adapter::{adapter_spec_of, BindingRevalidationContext};
-use crate::approval::execution::{prepare_cancel, prepare_start};
+use crate::approval::execution::idempotency::normalize_idempotency_key;
+use crate::approval::execution::{
+    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
+};
 use crate::approval::policy::{policy_of, DocumentApprovalPolicy};
 use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document, persist_registered_document};
@@ -102,8 +105,8 @@ pub use self::dto::{
 use self::start_approval::{
     build_customer_receipt_start_input, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_start_receipt, load_start_receipt_with_executor,
-    persist_customer_receipt_start, persist_customer_receipt_start_in_transaction, CustomerReceiptStartInput,
-    CustomerReceiptStartPersistInput,
+    persist_customer_receipt_start, persist_customer_receipt_start_in_transaction,
+    replay_customer_receipt_start_with_executor, CustomerReceiptStartInput, CustomerReceiptStartPersistInput,
 };
 
 /// 应收往来子账列表筛选条件类型（经 `ReceivableExt` 关联类型跨 crate 可达）。
@@ -1089,6 +1092,7 @@ impl ReceivableService {
                             amount: registration_amount,
                             bank_reference: Some(req_for_tx.evidence_reference.clone()),
                         },
+                        actor_id.clone(),
                     )?;
                     receipt.register_historical_fact()?;
                     let organization_id = customer_receipt_responsible_org_id(&receipt)?;
@@ -1646,6 +1650,7 @@ impl ReceivableService {
                 amount: req.amount,
                 bank_reference: req.bank_reference,
             },
+            actor.id(),
         )?;
         persist_created_customer_receipt(&self.db, &self.rbac, receipt.clone(), actor.clone()).await?;
         self.customer_receipt_detail(&receipt.base.id).await
@@ -1698,6 +1703,7 @@ impl ReceivableService {
                         amount: create.amount,
                         bank_reference: create.bank_reference,
                     },
+                    actor.id(),
                 )?)
             }
             (Some(_), Some(version), None) if version > 0 => None,
@@ -1967,7 +1973,8 @@ impl ReceivableService {
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        persist_customer_receipt_start(
+        let recovery_subject_version = receipt.approval_subject_version;
+        let persisted = persist_customer_receipt_start(
             &self.db,
             CustomerReceiptStartPersistInput {
                 receipt,
@@ -1980,8 +1987,71 @@ impl ReceivableService {
                 now,
             },
         )
-        .await?;
+        .await;
+        if let Err(error) = persisted {
+            if !command_may_have_committed(&error) {
+                return Err(error);
+            }
+            self.recover_customer_receipt_start(id, recovery_subject_version, &idempotency_key, actor, error)
+                .await?;
+        }
         self.customer_receipt_detail(id).await
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    async fn recover_customer_receipt_start(
+        &self,
+        receipt_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        original_error: Error,
+    ) -> Result<String> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let receipt_id = receipt_id.to_string();
+            let idempotency_key = idempotency_key.to_string();
+            let actor_id = actor.id().to_string();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        let receipt = db
+                            .customer_receipts()
+                            .find_by_id(&receipt_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("客户回款单不存在".to_string()))?;
+                        let organization_id = customer_receipt_responsible_org_id(&receipt)?;
+                        let _ = customer_receipt_object_readable(&organization_id, &actor_id)?;
+                        let binding = find_approval_binding(&db, &receipt_id, session).await?;
+                        let binding = require_frozen_binding(binding.as_ref())?;
+                        let subject = customer_receipt_subject_ref(&receipt_id)?;
+                        replay_customer_receipt_start_with_executor(
+                            &db,
+                            &subject,
+                            subject_version,
+                            &idempotency_key,
+                            binding,
+                            &actor_id,
+                            session,
+                        )
+                        .await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(instance_id)) => return Ok(instance_id),
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -2002,11 +2072,12 @@ impl ReceivableService {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, receipt.approval_subject_version).await?;
         let now = Instant::now();
+        let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_customer_receipt_cancel_input(
             &runtime,
             &req.reason,
             actor.id(),
-            &req.idempotency_key,
+            &idempotency_key,
             None,
             now,
         )?;
@@ -5467,6 +5538,7 @@ mod customer_receipt_approval_tests {
                 amount: Amount::from_str("100").expect("金额合法"),
                 bank_reference: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }

@@ -362,6 +362,7 @@ mod tests {
                 occurred_at: Instant::from_unix_secs(created_at as i64),
                 evidence_attachment_id: None,
             },
+            "creator",
         )
         .expect("冲正事实合法");
         reversal.base.created_at = created_at;

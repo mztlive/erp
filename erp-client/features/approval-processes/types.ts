@@ -182,6 +182,13 @@ export type DefinitionNodeWrite = {
 export type ReplaceDefinitionNodesRequest = {
     expected_definition_lock_version: string
     nodes: DefinitionNodeWrite[]
+    idempotency_key: string
+}
+
+/** 整组替换草稿节点的 Mutation 命令。 */
+export type ReplaceDefinitionNodesCommand = {
+    definitionId: string
+    request: ReplaceDefinitionNodesRequest
 }
 
 /** 发布或退役请求体。 */

@@ -29,7 +29,8 @@ use super::change_cancel::{
 };
 use super::change_start::{
     build_purchase_change_start_input, load_bound_definition_graph, load_start_receipt,
-    persist_purchase_change_start, PurchaseChangeStartInput, PurchaseChangeStartPersistInput,
+    persist_purchase_change_start, replay_purchase_change_start_with_executor, PurchaseChangeStartInput,
+    PurchaseChangeStartPersistInput,
 };
 use super::dto::{
     CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PageView, PurchaseChangeEffectResult,
@@ -43,7 +44,9 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{prepare_cancel, prepare_start};
+use crate::approval::execution::{
+    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
+};
 use crate::approval::policy::ApprovalDomainAction;
 use crate::audit::AuditActor;
 use crate::document_registry::{find_approval_binding, new_registered_document};
@@ -738,7 +741,9 @@ impl PurchaseOrderService {
             "purchase_change_order",
             change.base.id.clone(),
         )?;
-        persist_purchase_change_start(
+        let recovery_subject_version = change.approval_subject_version;
+        let recovery_idempotency_key = prepared.idempotency_key.clone();
+        let persisted = persist_purchase_change_start(
             &self.db,
             PurchaseChangeStartPersistInput {
                 change_order: change.clone(),
@@ -752,7 +757,21 @@ impl PurchaseOrderService {
                 audit,
             },
         )
-        .await?;
+        .await;
+        if let Err(error) = persisted {
+            if !command_may_have_committed(&error) {
+                return Err(error);
+            }
+            return self
+                .recover_purchase_change_start(
+                    id,
+                    recovery_subject_version,
+                    &recovery_idempotency_key,
+                    actor,
+                    error,
+                )
+                .await;
+        }
         Ok(PurchaseChangeSubmitResult {
             change_id: change.base.id.clone(),
             submission_id: prepared.submission.base.id.clone(),
@@ -761,6 +780,101 @@ impl PurchaseOrderService {
             lock_version: change.base.version,
             reference: format!("CS-{}", prepared.submission.submission_no),
         })
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    async fn recover_purchase_change_start(
+        &self,
+        change_order_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        original_error: Error,
+    ) -> Result<PurchaseChangeSubmitResult> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let change_order_id = change_order_id.to_string();
+            let idempotency_key = idempotency_key.to_string();
+            let actor_id = actor.id().to_string();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        let change = db
+                            .purchase_change_orders()
+                            .find_by_id(&change_order_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("采购变更单不存在".to_string()))?;
+                        let order = db
+                            .purchase_orders()
+                            .find_by_id(&change.purchase_order_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("原采购单不存在".to_string()))?;
+                        let sales_order = db
+                            .sales_orders()
+                            .find_by_id(&order.sales_order_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+                        let organization_id = purchase_change_responsible_org_id(&sales_order)?;
+                        let _ = purchase_change_order_object_readable(&organization_id, &actor_id)?;
+                        let binding = find_approval_binding(&db, &change_order_id, session).await?;
+                        let binding = require_frozen_binding(binding.as_ref())?;
+                        let subject = purchase_change_order_subject_ref(&change_order_id)?;
+                        let Some(_) = replay_purchase_change_start_with_executor(
+                            &db,
+                            &subject,
+                            subject_version,
+                            &idempotency_key,
+                            binding,
+                            &actor_id,
+                            session,
+                        )
+                        .await?
+                        else {
+                            return Ok(None);
+                        };
+                        if change.approval_subject_version != subject_version {
+                            return Err(Error::ConflictError(
+                                "采购变更启动结果与业务主题版本不一致".to_string(),
+                            ));
+                        }
+                        let submission_id = change.current_submission_id.as_ref().ok_or_else(|| {
+                            Error::ConflictError("采购变更启动结果缺少冻结提交".to_string())
+                        })?;
+                        let submission = db
+                            .purchase_change_submissions()
+                            .find_by_id(submission_id, session)
+                            .await?
+                            .ok_or_else(|| Error::ConflictError("采购变更冻结提交不存在".to_string()))?;
+                        if submission.purchase_change_order_id.as_ref() != change_order_id {
+                            return Err(Error::ConflictError(
+                                "采购变更冻结提交与业务对象不一致".to_string(),
+                            ));
+                        }
+                        Ok(Some(PurchaseChangeSubmitResult {
+                            change_id: change.base.id.clone(),
+                            submission_id: submission.base.id.clone(),
+                            submission_no: submission.submission_no.clone(),
+                            status: change.stable.status.as_str().to_string(),
+                            lock_version: change.base.version,
+                            reference: format!("CS-{}", submission.submission_no),
+                        }))
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(result)) => return Ok(result),
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
     }
 
     /// 加载撤回运行事实并写回草稿。

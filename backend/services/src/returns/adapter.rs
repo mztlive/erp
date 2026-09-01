@@ -1380,6 +1380,7 @@ mod tests {
                 occurred_at: Instant::from_unix_secs(10),
                 evidence_attachment_id: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }
@@ -1565,6 +1566,7 @@ mod supplier_refund_tests {
                 occurred_at: Instant::from_unix_secs(10),
                 evidence_attachment_id: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }
@@ -1747,6 +1749,7 @@ mod receipt_reversal_tests {
                 occurred_at: Instant::from_unix_secs(10),
                 evidence_attachment_id: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }
@@ -1949,6 +1952,7 @@ mod payment_reversal_tests {
                 occurred_at: Instant::from_unix_secs(10),
                 evidence_attachment_id: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }

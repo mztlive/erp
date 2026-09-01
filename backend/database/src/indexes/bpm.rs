@@ -247,6 +247,7 @@ mod tests {
         assignee_indexes, definition_indexes, execution_indexes, instance_indexes, node_definition_indexes,
         receipt_indexes, transition_definition_indexes,
     };
+    use crate::repository::bpm::APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX;
 
     #[test]
     fn definition_indexes_cover_published_and_active_draft_partial_uniques() {
@@ -438,11 +439,11 @@ mod tests {
             doc! { "process_instance_id": 1, "node_key": 1 }
         );
         assert_eq!(
-            index_named(&receipt_indexes(), "uk_approval_command_receipts_idempotency").keys,
+            index_named(&receipt_indexes(), APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,).keys,
             doc! { "command_kind": 1, "scope_id": 1, "idempotency_key": 1 }
         );
         assert_eq!(
-            index_named(&receipt_indexes(), "uk_approval_command_receipts_idempotency")
+            index_named(&receipt_indexes(), APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,)
                 .options
                 .as_ref()
                 .unwrap()

@@ -27,6 +27,7 @@ use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
+use crate::approval::execution::idempotency::normalize_idempotency_key;
 use crate::approval::execution::{prepare_cancel, prepare_start};
 use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
@@ -103,6 +104,7 @@ impl ReturnsService {
                 occurred_at: req.occurred_at,
                 evidence_attachment_id: None,
             },
+            actor.id(),
         )?;
         persist_created_payment_reversal(&self.db, &self.rbac, reversal.clone(), actor.clone()).await?;
         self.payment_reversal_detail(&reversal.base.id).await
@@ -150,6 +152,7 @@ impl ReturnsService {
                 occurred_at: Instant::now(),
                 evidence_attachment_id: None,
             },
+            actor.id(),
         )?;
         let adapter = payment_reversal_adapter()?;
         start_payment_reversal_approval(&mut reversal)?;
@@ -399,11 +402,12 @@ impl ReturnsService {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, reversal.approval_subject_version).await?;
         let now = Instant::now();
+        let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_payment_reversal_cancel_input(
             &runtime,
             &req.reason,
             actor.id(),
-            &req.idempotency_key,
+            &idempotency_key,
             None,
             now,
         )?;
@@ -848,6 +852,7 @@ mod payment_reversal_approval_tests {
                 occurred_at: Instant::from_unix_secs(1),
                 evidence_attachment_id: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }

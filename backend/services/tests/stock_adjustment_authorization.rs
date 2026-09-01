@@ -554,6 +554,7 @@ async fn seed_adjustment(
             note: Some("授权范围 fixture".to_string()),
             occurred_at: Some(Instant::from_unix_secs(10)),
         },
+        COMPANY,
     )
     .expect("库存调整单 fixture");
     let line = StockAdjustmentLine::new_for_reason(

@@ -4,12 +4,11 @@ use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, ReceivableExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
+    ReceivableExt, Transactional, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -24,8 +23,12 @@ use mongodb::Database;
 
 use super::adapter::customer_receipt_object_readable;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
-use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
+use crate::approval::execution::idempotency::{
+    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+};
+use crate::approval::execution::{
+    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
+};
 use crate::approval::process_kind::process_kind_of;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
@@ -133,16 +136,90 @@ pub(super) async fn load_start_receipt_with_executor(
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(DocumentType::CustomerReceipt);
-    let scope = start_scope(
+    let scopes = start_scope_candidates(
         process_kind.as_str(),
         subject.subject_kind(),
         subject.subject_id(),
         subject_version,
-    );
-    Ok(db
+    )?;
+    for scope in scopes {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                &scope,
+                &key,
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
+}
+
+/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的客户回款启动结果。
+pub(super) async fn replay_customer_receipt_start_with_executor(
+    db: &Database,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+    binding: &ApprovalDefinitionBinding,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(DocumentType::CustomerReceipt);
+    let identity = start_identity(
+        key,
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
+        actor_id,
+    )?;
+    let mut receipt = None;
+    for scope in identity.scope_candidates() {
+        receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            break;
+        }
+    }
+    let receipt = match identity.classify(receipt.as_ref()) {
+        ReceiptBranch::Fresh => return Ok(None),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::SamePayload(receipt) => receipt,
+    };
+    let instance = db
         .bpm_workflow()
-        .find_command_receipt(ApprovalCommandKind::StartApproval, &scope, &key, executor)
-        .await?)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("客户回款启动收据引用的审批实例不存在".to_string()))?;
+    if instance.base.id != receipt.result_ref
+        || instance.process_kind != process_kind
+        || instance.subject.subject_kind() != subject.subject_kind()
+        || instance.subject.subject_id() != subject.subject_id()
+        || instance.subject_version != subject_version
+        || instance.started_by.as_str() != actor_id
+        || instance.process_definition_id != binding.approval_process_definition_id
+        || instance.definition_version != binding.approval_definition_version
+    {
+        return Err(Error::ConflictError(
+            "客户回款启动收据与冻结运行事实不一致".to_string(),
+        ));
+    }
+    Ok(Some(instance.base.id))
 }
 
 /// 客户回款启动输入。
@@ -368,6 +445,11 @@ pub(super) async fn persist_customer_receipt_start(
 ///
 /// # 错误
 /// 运行事实、回款或审计写入失败时返回错误。
+///
+/// # 关键业务约束
+/// 独立提交通过上层新建事务，本方法的启动收据必须是整笔事务第一写。创建并
+/// 提交由外层创建命令先完成自身幂等仲裁；本方法作为不可独立调用的审批子步骤，
+/// 其写段仍固定为“启动收据 -> 注册行启动守卫 -> BPM -> 回款单与审计”。
 pub(super) async fn persist_customer_receipt_start_in_transaction(
     db: &Database,
     input: CustomerReceiptStartPersistInput,
@@ -383,22 +465,40 @@ pub(super) async fn persist_customer_receipt_start_in_transaction(
         organization_id,
         now,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(receipt);
+    };
     let audit = actor.resource_log("customer_receipt.submit", "customer_receipt", id)?;
-    match prepared {
-        PreparedExecution::Apply(writes) => {
-            persist_runtime_writes(
-                db,
-                &writes,
-                &snapshot_payload,
-                owner_role,
-                &organization_id,
-                now,
-                session,
-            )
-            .await?;
-        }
-        PreparedExecution::Replay { .. } => {}
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, session)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    let guarded = db
+        .business_documents()
+        .mark_approval_started(
+            writes.instance.subject.subject_id(),
+            DocumentType::CustomerReceipt,
+            &writes.instance.process_definition_id,
+            writes.instance.definition_version,
+            now,
+            session,
+        )
+        .await?;
+    if guarded.is_none() {
+        return Err(Error::ConflictError(
+            "客户回款单审批启动守卫冲突，请刷新后重试".to_string(),
+        ));
     }
+    persist_runtime_writes(
+        db,
+        &writes,
+        &snapshot_payload,
+        owner_role,
+        &organization_id,
+        now,
+        session,
+    )
+    .await?;
     let mut receipt = receipt;
     db.customer_receipts().update(&mut receipt, session).await?;
     db.audit_logs().create(&audit, session).await?;
@@ -423,11 +523,10 @@ async fn persist_runtime_writes(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交客户回款".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )

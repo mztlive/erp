@@ -19,6 +19,8 @@ const REVERSAL_NO_MAX_LEN: usize = 64;
 const REASON_CODE_MAX_LEN: usize = 32;
 /// 原因文本最大长度。
 const REASON_TEXT_MAX_LEN: usize = 512;
+/// 创建人标识最大长度。
+const CREATOR_ID_MAX_LEN: usize = 128;
 
 /// 冲正状态（合同 §4.4.1 / §4.4.2：复核态收敛为唯一 `IN_APPROVAL`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +126,9 @@ pub struct ReceiptReversalUpdate {
 pub struct ReceiptReversal {
     #[serde(flatten)]
     pub base: BaseModel,
+    /// 创建人。旧数据缺失时反序列化为空，但不得据此执行绑定升级。
+    #[serde(default)]
+    pub created_by: String,
     /// 冲正状态。
     pub status: ReceiptReversalStatus,
     /// 冲正单号。
@@ -158,13 +163,18 @@ impl ReceiptReversal {
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::ReceiptReversalId`）
     /// * `data` - 创建数据
+    /// * `created_by` - 已认证创建人；创建后不得由更新命令覆盖
     ///
     /// # 返回
     /// 返回新建的冲正实体。
     ///
     /// # 错误
-    /// 当编号/原因/经办复核人为空或超长、金额非正、经办与复核人相同时返回错误。
-    pub fn new(id: ReceiptReversalId, data: ReceiptReversalData) -> Result<Self> {
+    /// 当编号/原因/经办复核人/创建人为空或超长、金额非正、经办与复核人相同时返回错误。
+    pub fn new(
+        id: ReceiptReversalId,
+        data: ReceiptReversalData,
+        created_by: impl Into<String>,
+    ) -> Result<Self> {
         let reversal_no = normalize_required_text(
             data.reversal_no,
             "冲正单号不能为空",
@@ -182,9 +192,16 @@ impl ReceiptReversal {
             return Err(Error::from("冲正金额必须为正数"));
         }
         let (handled_by, reviewed_by) = validate_actor_pair(data.handled_by, data.reviewed_by)?;
+        let created_by = normalize_required_text(
+            created_by.into(),
+            "创建人不能为空",
+            CREATOR_ID_MAX_LEN,
+            "创建人标识过长",
+        )?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            created_by,
             status: ReceiptReversalStatus::Draft,
             reversal_no,
             original_customer_receipt_id: data.original_customer_receipt_id,
@@ -197,6 +214,17 @@ impl ReceiptReversal {
             evidence_attachment_id: data.evidence_attachment_id,
             approval_subject_version: 0,
         })
+    }
+
+    /// 校验回款冲正仍是从未提交审批的初始草稿。
+    ///
+    /// # 错误
+    /// 非草稿或审批主题版本已经递增时返回错误。
+    pub fn ensure_initial_approval_state(&self) -> Result<()> {
+        if self.status != ReceiptReversalStatus::Draft || self.approval_subject_version != 0 {
+            return Err(Error::from("回款冲正单已经提交或启动过审批"));
+        }
+        Ok(())
     }
 
     /// 更新回款冲正草稿。
@@ -332,7 +360,7 @@ mod tests {
 
     #[test]
     fn new_trims_text_fields_and_starts_as_draft() {
-        let reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data()).unwrap();
+        let reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data(), "creator-1").unwrap();
 
         assert_eq!(reversal.reversal_no, "RR-2026-001");
         assert_eq!(reversal.reason_code.as_deref(), Some("WRONG_ACCOUNT"));
@@ -342,35 +370,49 @@ mod tests {
     }
 
     #[test]
+    fn creator_is_normalized_and_legacy_missing_field_defaults_empty() {
+        let mut reversal =
+            ReceiptReversal::new(ReceiptReversalId::new("creator-rr"), data(), " creator-1 ").unwrap();
+        reversal.update(ReceiptReversalUpdate::default()).unwrap();
+        assert_eq!(reversal.created_by, "creator-1");
+        assert!(ReceiptReversal::new(ReceiptReversalId::new("blank-creator-rr"), data(), "   ").is_err());
+
+        let mut legacy = bson::serialize_to_document(&reversal).unwrap();
+        legacy.remove("created_by");
+        let legacy: ReceiptReversal = bson::deserialize_from_document(legacy).unwrap();
+        assert!(legacy.created_by.is_empty());
+    }
+
+    #[test]
     fn new_rejects_blank_no_same_actor_and_non_positive() {
         let blank_no = ReceiptReversalData {
             reversal_no: "   ".to_string(),
             ..data()
         };
-        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-2"), blank_no).is_err());
+        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-2"), blank_no, "creator-1").is_err());
 
         let overlong = ReceiptReversalData {
             reason_text: "r".repeat(513),
             ..data()
         };
-        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-3"), overlong).is_err());
+        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-3"), overlong, "creator-1").is_err());
 
         let same_actor = ReceiptReversalData {
             reviewed_by: "handler-1".to_string(),
             ..data()
         };
-        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-4"), same_actor).is_err());
+        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-4"), same_actor, "creator-1").is_err());
 
         let non_positive = ReceiptReversalData {
             amount: Amount::from_str("0.00").unwrap(),
             ..data()
         };
-        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-5"), non_positive).is_err());
+        assert!(ReceiptReversal::new(ReceiptReversalId::new("rr-5"), non_positive, "creator-1").is_err());
     }
 
     #[test]
     fn update_applies_draft_changes_and_rejects_posted() {
-        let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data()).unwrap();
+        let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data(), "creator-1").unwrap();
 
         reversal
             .update(ReceiptReversalUpdate {
@@ -412,7 +454,7 @@ mod tests {
         assert!(tr(S::Reversed, S::Posted).is_err());
         assert!(tr(S::Reversed, S::Draft).is_err());
 
-        let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data()).unwrap();
+        let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data(), "creator-1").unwrap();
         assert!(reversal.transition(S::Posted).is_err(), "草稿不得直接过账");
         reversal.start_approval().unwrap();
         assert!(reversal.mark_posted().is_ok());
@@ -420,7 +462,10 @@ mod tests {
 
     #[test]
     fn start_approval_increments_version_and_cancel_does_not_rollback() {
-        let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data()).unwrap();
+        let mut reversal = ReceiptReversal::new(ReceiptReversalId::new("rr-1"), data(), "creator-1").unwrap();
+        reversal
+            .ensure_initial_approval_state()
+            .expect("新建草稿是初始未提交状态");
         assert_eq!(reversal.approval_subject_version, 0);
         let version = reversal.start_approval().unwrap();
         assert_eq!(version, 1);
@@ -428,6 +473,7 @@ mod tests {
         reversal.cancel_approval().unwrap();
         assert_eq!(reversal.status, ReceiptReversalStatus::Draft);
         assert_eq!(reversal.approval_subject_version, 1);
+        assert!(reversal.ensure_initial_approval_state().is_err());
         assert!(reversal.mark_posted().is_err());
     }
 

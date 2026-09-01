@@ -2,11 +2,10 @@
 
 use bpm::engine::{start, StartAssigneeBinding, StartCommand, TransitionPlan};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalCommandReceipt, ParticipantId, ProcessKind, SubjectRef, Timestamp};
 
 use super::apply_plan::{apply_plan, DomainActionKind};
-use super::idempotency::{classify_receipt, start_digest, start_scope, ReceiptBranch};
+use super::idempotency::{start_identity, start_scope_candidates, PreparedCommandIdentity, ReceiptBranch};
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::errors::{Error, ErrorCode, Result};
 
@@ -45,19 +44,47 @@ pub struct StartExecutionInput {
 /// # 错误
 /// 异载荷冲突或引擎失败时返回错误。
 pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
-    let scope = start_scope(
+    let identity = start_identity(
+        input.command.idempotency_key.clone(),
         input.process_kind.as_str(),
         input.subject.subject_kind(),
         input.subject.subject_id(),
         input.subject_version,
-    );
-    let digest = start_digest(
         &input.binding_id,
         input.definition_version,
-        input.subject_version,
         input.actor.as_str(),
-    );
-    match classify_receipt(input.command.receipt.as_ref(), &digest) {
+    )?;
+    prepare_start_with_identity(input, identity)
+}
+
+/// 使用业务域已经签署的启动命令身份规划启动。
+///
+/// 专属启动载荷可以扩展 digest 字段，但必须复用统一 Start kind、规范 key 与
+/// V3 scope；本入口在调用 BPM 前固定验证这些不可变身份。
+pub fn prepare_start_with_identity(
+    input: StartExecutionInput,
+    identity: PreparedCommandIdentity,
+) -> Result<PreparedExecution> {
+    if identity.current().command_kind() != bpm::model::types::ApprovalCommandKind::StartApproval
+        || identity.idempotency_key() != &input.command.idempotency_key
+    {
+        return Err(Error::ValidationError("启动命令身份与输入不一致".to_string()));
+    }
+    let expected_scope = start_scope_candidates(
+        input.process_kind.as_str(),
+        input.subject.subject_kind(),
+        input.subject.subject_id(),
+        input.subject_version,
+    )?
+    .into_iter()
+    .next()
+    .ok_or_else(|| Error::Internal("启动命令缺少 V3 scope".to_string()))?;
+    if identity.current().scope().as_str() != expected_scope {
+        return Err(Error::ValidationError(
+            "启动命令 scope 与业务主体不一致".to_string(),
+        ));
+    }
+    match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
             return Ok(PreparedExecution::Replay {
@@ -80,15 +107,7 @@ pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
         &input.bindings,
     )
     .map_err(map_engine_error)?;
-    let receipt = build_receipt(
-        input.receipt_id,
-        ApprovalCommandKind::StartApproval,
-        scope,
-        input.command.idempotency_key,
-        digest,
-        &plan,
-        input.command.now,
-    )?;
+    let receipt = build_receipt(input.receipt_id, identity.current(), &plan, input.command.now)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(
         plan,
         receipt,
@@ -99,23 +118,12 @@ pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
 /// 由计划构造收据。
 fn build_receipt(
     id: ApprovalCommandReceiptId,
-    kind: ApprovalCommandKind,
-    scope: String,
-    idempotency_key: String,
-    digest: String,
+    identity: &bpm::model::ApprovalCommandIdentity,
     plan: &TransitionPlan,
     now: Timestamp,
 ) -> Result<ApprovalCommandReceipt> {
-    ApprovalCommandReceipt::new(
-        id,
-        kind,
-        scope,
-        idempotency_key,
-        digest,
-        plan.instance.base.id.clone(),
-        now,
-    )
-    .map_err(|error| Error::ValidationError(error.to_string()))
+    ApprovalCommandReceipt::new(id, identity, plan.instance.base.id.clone(), now)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 将引擎错误映射为服务错误。不可提交错误为内部错误。

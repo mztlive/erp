@@ -547,7 +547,7 @@ async fn permission_scope_and_roles(
 }
 
 /// 在调用方执行器内计算权限范围与实际授权角色。
-async fn permission_scope_and_roles_with_executor(
+pub(crate) async fn permission_scope_and_roles_with_executor(
     db: &Database,
     rbac: &RbacService,
     actor: &AuditActor,
@@ -576,6 +576,164 @@ async fn permission_scope_and_roles_with_executor(
     rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
         .await?;
     Ok(result)
+}
+
+/// 绑定升级在同一授权快照中得到的服务端身份。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ApprovalBindingUpgradeAuthorization {
+    /// 真正授予当前类型定义管理权的启用角色。
+    pub(crate) actor_role: String,
+}
+
+/// 在调用方事务快照中形成绑定升级的三重授权证明。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
+/// * `actor` - 已在同一事务中重验为有效的操作人
+/// * `document_type` - 强业务对象证明的精确单据类型
+/// * `definition_admin_permission` - 该类型政策注册的定义管理权限
+/// * `responsible_org_id` - 强业务对象或其固定责任链给出的组织
+/// * `executor` - 调用方持有的事务执行器
+///
+/// # 返回
+/// 动作权限、定义管理权限和对象读权范围分别覆盖责任组织时，
+/// 返回真正覆盖该组织的定义管理授权角色中确定性的 `actor_role`。
+///
+/// # 错误
+/// 权限、角色、DataScope、对象读取关系或 policy revision 任一无法证明时
+/// 失败关闭。
+///
+/// # 关键业务约束
+/// 三项权限在一次 Enforcer 读锁中冻结，并共享一次事务内 revision
+/// fence。每项权限各自只能使用真正授予该权限的启用角色
+/// DataScope；三项权限可以来自不同角色。
+pub(crate) async fn approval_binding_upgrade_authorization_with_executor(
+    db: &Database,
+    rbac: &RbacService,
+    actor: &AuditActor,
+    document_type: DocumentType,
+    definition_admin_permission: &Permission,
+    responsible_org_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<ApprovalBindingUpgradeAuthorization> {
+    let upgrade_permission = Permission::parse("approval_instance:upgrade_binding")?;
+    let relation = WorkItemType::DocumentApproval
+        .brief_relation(document_type.as_str())
+        .ok_or_else(|| Error::from_approval_code(crate::errors::ErrorCode::ApprovalPolicyNotRegistered))?;
+    let read_permission = Permission::parse(relation.read_permission)?;
+    let required = [
+        upgrade_permission.clone(),
+        definition_admin_permission.clone(),
+        read_permission.clone(),
+    ];
+    let policy_snapshot = rbac
+        .role_permission_snapshot(actor.kind(), actor.id(), &required)
+        .await?;
+    let enabled_role_ids = enabled_role_ids_from_snapshot(db, policy_snapshot.role_ids(), executor).await?;
+    let enabled_grants = |permission: &Permission| {
+        policy_snapshot
+            .granting_role_ids(permission)
+            .into_iter()
+            .filter(|role_id| enabled_role_ids.contains(role_id))
+            .collect::<Vec<_>>()
+    };
+    let definition_admin_role_ids = enabled_grants(definition_admin_permission);
+    let upgrade_role_ids = enabled_grants(&upgrade_permission);
+    let read_role_ids = enabled_grants(&read_permission);
+    let user_scopes = db
+        .data_scopes()
+        .list_by_subject(DataScopeSubjectType::User, actor.id(), executor)
+        .await?;
+    let mut scoped_role_ids = definition_admin_role_ids.clone();
+    scoped_role_ids.extend(upgrade_role_ids.iter().cloned());
+    scoped_role_ids.extend(read_role_ids.iter().cloned());
+    scoped_role_ids.sort();
+    scoped_role_ids.dedup();
+    let role_scopes = db
+        .data_scopes()
+        .list_by_subjects(DataScopeSubjectType::Role, &scoped_role_ids, executor)
+        .await?;
+    let authorization = binding_upgrade_authorization_from_facts(
+        &user_scopes,
+        definition_admin_role_ids,
+        upgrade_role_ids,
+        read_role_ids,
+        role_scopes,
+        responsible_org_id,
+    );
+    rbac.ensure_policy_snapshot_with_executor(policy_snapshot.policy_revision(), executor)
+        .await?;
+    authorization
+}
+
+/// 由已冻结的角色授权与 DataScope 事实收敛绑定升级授权。
+fn binding_upgrade_authorization_from_facts(
+    user_scopes: &[DataScope],
+    mut definition_admin_role_ids: Vec<String>,
+    upgrade_role_ids: Vec<String>,
+    read_role_ids: Vec<String>,
+    role_scopes: Vec<DataScope>,
+    responsible_org_id: &str,
+) -> Result<ApprovalBindingUpgradeAuthorization> {
+    definition_admin_role_ids.sort();
+    definition_admin_role_ids.dedup();
+    let actor_role = roles_covering_organization(
+        user_scopes,
+        definition_admin_role_ids,
+        &role_scopes,
+        responsible_org_id,
+    )
+    .into_iter()
+    .next()
+    .ok_or_else(|| {
+        Error::Forbidden("没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织".to_string())
+    })?;
+    let (upgrade_scope, _) = scope_from_role_facts(user_scopes, upgrade_role_ids, role_scopes.clone());
+    if !upgrade_scope.covers(responsible_org_id) {
+        return Err(Error::Forbidden(
+            "没有审批绑定升级动作权限或数据范围不覆盖当前单据组织".to_string(),
+        ));
+    }
+    let (read_scope, _) = scope_from_role_facts(user_scopes, read_role_ids, role_scopes);
+    if !read_scope.covers(responsible_org_id) {
+        return Err(Error::Forbidden(
+            "不能读取当前业务单据或数据范围不覆盖当前单据组织".to_string(),
+        ));
+    }
+    Ok(ApprovalBindingUpgradeAuthorization { actor_role })
+}
+
+/// 按角色隔离计算真正覆盖目标组织的授权来源。
+fn roles_covering_organization(
+    user_scopes: &[DataScope],
+    mut permitted_role_ids: Vec<String>,
+    role_scopes: &[DataScope],
+    organization_id: &str,
+) -> Vec<String> {
+    permitted_role_ids.sort();
+    permitted_role_ids.dedup();
+    let scopes_by_role = scopes_by_subject(role_scopes.to_vec());
+    let Some(user) = organization_coverage(user_scopes, true) else {
+        return Vec::new();
+    };
+    permitted_role_ids
+        .into_iter()
+        .filter(|role_id| {
+            let Some(role) = scopes_by_role
+                .get(role_id)
+                .and_then(|scopes| organization_coverage(scopes, false))
+            else {
+                return false;
+            };
+            match intersect_coverage(role, user.clone()) {
+                OrganizationCoverage::All => true,
+                OrganizationCoverage::Targets(targets) => {
+                    targets.iter().any(|target| target == organization_id)
+                }
+            }
+        })
+        .collect()
 }
 
 /// 用批量读取的角色范围事实计算最终组织授权。
@@ -713,8 +871,8 @@ fn intersect_coverage(role: OrganizationCoverage, user: OrganizationCoverage) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        approval_account_matches_actor, intersect_coverage, scope_from_role_facts, ApprovalManagementScope,
-        DefinitionManagementVisibility, OrganizationCoverage,
+        approval_account_matches_actor, binding_upgrade_authorization_from_facts, intersect_coverage,
+        scope_from_role_facts, ApprovalManagementScope, DefinitionManagementVisibility, OrganizationCoverage,
     };
     use crate::audit::AuditActor;
     use entities::access_control::{DataScope, DataScopeData, DataScopeSubjectType, DataScopeType};
@@ -814,6 +972,122 @@ mod tests {
             scope_from_role_facts(&[], Vec::new(), Vec::new()),
             (ApprovalManagementScope::Organizations(Vec::new()), Vec::new())
         );
+    }
+
+    /// 升级三项权限可来自不同启用角色，但动作/读取各自必须由授权角色范围覆盖。
+    #[test]
+    fn binding_upgrade_keeps_separate_permission_gates_without_same_role_requirement() {
+        let authorization = binding_upgrade_authorization_from_facts(
+            &[],
+            vec!["role-definition-z".to_string(), "role-definition-a".to_string()],
+            vec!["role-upgrade".to_string()],
+            vec!["role-read".to_string()],
+            vec![
+                role_scope("scope-definition-a", "role-definition-a", "org-1"),
+                role_scope("scope-definition-z", "role-definition-z", "org-1"),
+                role_scope("scope-upgrade", "role-upgrade", "org-1"),
+                role_scope("scope-read", "role-read", "org-1"),
+            ],
+            "org-1",
+        )
+        .expect("三个独立门禁均已证明");
+
+        assert_eq!(authorization.actor_role, "role-definition-a");
+    }
+
+    /// 非动作授权角色的范围不得与动作权跨角色拼接。
+    #[test]
+    fn binding_upgrade_action_scope_cannot_come_from_another_role() {
+        let error = binding_upgrade_authorization_from_facts(
+            &[],
+            vec!["role-definition".to_string()],
+            vec!["role-upgrade".to_string()],
+            vec!["role-read".to_string()],
+            vec![
+                role_scope("scope-definition", "role-definition", "org-1"),
+                role_scope("scope-other", "role-other", "org-1"),
+                role_scope("scope-read", "role-read", "org-1"),
+            ],
+            "org-1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::errors::Error::Forbidden(message)
+                if message == "没有审批绑定升级动作权限或数据范围不覆盖当前单据组织"
+        ));
+    }
+
+    /// 定义管理权必须来自当前启用角色，不允许以动作或读取权替代。
+    #[test]
+    fn binding_upgrade_requires_definition_admin_role() {
+        let error = binding_upgrade_authorization_from_facts(
+            &[],
+            Vec::new(),
+            vec!["role-upgrade".to_string()],
+            vec!["role-read".to_string()],
+            vec![
+                role_scope("scope-upgrade", "role-upgrade", "org-1"),
+                role_scope("scope-read", "role-read", "org-1"),
+            ],
+            "org-1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::errors::Error::Forbidden(message)
+                if message == "没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织"
+        ));
+    }
+
+    /// 定义管理角色范围覆盖其它组织时必须失败关闭。
+    #[test]
+    fn binding_upgrade_definition_admin_wrong_organization_fails_closed() {
+        let error = binding_upgrade_authorization_from_facts(
+            &[],
+            vec!["role-definition".to_string()],
+            vec!["role-upgrade".to_string()],
+            vec!["role-read".to_string()],
+            vec![
+                role_scope("scope-definition", "role-definition", "org-other"),
+                role_scope("scope-upgrade", "role-upgrade", "org-1"),
+                role_scope("scope-read", "role-read", "org-1"),
+            ],
+            "org-1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::errors::Error::Forbidden(message)
+                if message == "没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织"
+        ));
+    }
+
+    /// 定义管理权与另一角色范围不得跨角色拼接。
+    #[test]
+    fn binding_upgrade_definition_admin_scope_cannot_come_from_another_role() {
+        let error = binding_upgrade_authorization_from_facts(
+            &[],
+            vec!["role-definition".to_string()],
+            vec!["role-upgrade".to_string()],
+            vec!["role-read".to_string()],
+            vec![
+                role_scope("scope-other", "role-other", "org-1"),
+                role_scope("scope-upgrade", "role-upgrade", "org-1"),
+                role_scope("scope-read", "role-read", "org-1"),
+            ],
+            "org-1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::errors::Error::Forbidden(message)
+                if message == "没有该单据类型的审批定义管理权限或数据范围不覆盖当前单据组织"
+        ));
     }
 
     /// 类型级可见范围只认已登记权限，不把系统管理员角色当成全部类型管理权。

@@ -6,6 +6,7 @@ import {
     mapHistoryItemDto,
     mapInstanceListItemDto,
     mapRecoveryOptionsDto,
+    mapUpgradeBindingResultViewDto,
     type ApprovalCommandView,
     type ApprovalCommandViewDto,
     type ApprovalHistoryItem,
@@ -17,13 +18,14 @@ import {
     type ApprovalInstanceListView,
     type CancelApprovalRequest,
     type CancelBlockedRequest,
-    type DocumentApprovalView,
     type DocumentApprovalViewDto,
     type RecoveryOptions,
     type RecoveryOptionsDto,
     type ResumeApproverRequest,
     type SubmitDecisionRequest,
     type UpgradeBindingRequest,
+    type UpgradeBindingResultView,
+    type UpgradeBindingResultViewDto,
 } from "./types"
 
 export type ApprovalInstanceListParams = Readonly<{
@@ -198,11 +200,11 @@ export const cancelBlockedApproval = (
  */
 export const upgradeUnsubmittedBinding = (
     params: UpgradeDocumentBindingParams,
-): Promise<DocumentApprovalView> =>
-    apiPost<DocumentApprovalViewDto>(
+): Promise<UpgradeBindingResultView> =>
+    apiPost<UpgradeBindingResultViewDto>(
         `/admin/business-documents/${encodeURIComponent(params.documentType)}/${encodeURIComponent(params.documentId)}/approval-definition/upgrade`,
         params.request,
-    ).then(mapDocumentApprovalViewDto)
+    ).then(mapUpgradeBindingResultViewDto)
 
 /**
  * 撤回运行中或人员失效受阻的审批。只走业务单据资源接口。

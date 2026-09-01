@@ -23,7 +23,7 @@ import type {
     DefinitionDetailView,
     DefinitionLockRequest,
     DocumentType,
-    ReplaceDefinitionNodesRequest,
+    ReplaceDefinitionNodesCommand,
 } from "./types"
 
 /**
@@ -175,10 +175,8 @@ export function useReplaceDefinitionNodesMutation() {
         mutationFn: async ({
             definitionId,
             request,
-        }: {
-            definitionId: string
-            request: ReplaceDefinitionNodesRequest
-        }) => unwrapResult(await replaceDefinitionNodes(definitionId, request)),
+        }: ReplaceDefinitionNodesCommand) =>
+            unwrapResult(await replaceDefinitionNodes(definitionId, request)),
         onSuccess: (detail) => invalidateDefinitionQueries(queryClient, detail),
     })
 }

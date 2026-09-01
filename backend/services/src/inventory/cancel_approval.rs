@@ -4,7 +4,8 @@ use bpm::engine::DefinitionGraph;
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalCommandKind, ApprovalProcessInstanceStatus};
 use bpm::model::{
-    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
+    ApprovalCancellationTaskPolicy, ApprovalNodeExecution, ApprovalProcessInstance, IdempotencyKey,
+    ParticipantId, Timestamp,
 };
 use database::{
     AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, InventoryExt, NoTransaction, Transactional,
@@ -31,10 +32,12 @@ use super::start_approval::load_bound_definition_graph;
 use super::{load_approval_binding, InventoryService};
 use crate::approval::execution::authorization::{converge_eligibility, requires_blocked_cancel};
 use crate::approval::execution::idempotency::{
-    document_cancel_digest, normalize_idempotency_key, payload_conflict_error,
+    document_cancel_identity, normalize_idempotency_key, payload_conflict_error, PreparedCommandIdentity,
+    ReceiptBranch,
 };
 use crate::approval::execution::{
-    prepare_document_cancel, CancelExecutionInput, ExecutionCommandInput, PlannedWrites, PreparedExecution,
+    map_receipt_first_write_error, prepare_document_cancel, CancelExecutionInput, ExecutionCommandInput,
+    PlannedWrites, PreparedExecution,
 };
 use crate::approval::process_kind::process_kind_of;
 use crate::approval::{
@@ -251,7 +254,7 @@ async fn committed_cancel_replay(
     id: &str,
     req: &CancelStockAdjustmentApprovalRequest,
     reason: &str,
-    idempotency_key: &str,
+    idempotency_key: &IdempotencyKey,
     actor: &AuditActor,
 ) -> Result<Option<StockAdjustmentView>> {
     let db = service.db.clone();
@@ -259,22 +262,24 @@ async fn committed_cancel_replay(
     let id = id.to_string();
     let req = req.clone();
     let reason = reason.to_string();
-    let idempotency_key = idempotency_key.to_string();
+    let identity = document_cancel_identity(
+        idempotency_key.clone(),
+        &req.approval_process_instance_id,
+        req.expected_subject_version,
+        req.expected_version,
+        req.expected_instance_version,
+        req.expected_execution_version,
+        req.expected_task_version,
+        &reason,
+        actor.id(),
+    )?;
     let actor = actor.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
                 // 请求已携带稳定 instance scope，因此收据必须是快照内第一读。
-                let receipt = db
-                    .bpm_workflow()
-                    .find_command_receipt(
-                        ApprovalCommandKind::CancelApproval,
-                        &req.approval_process_instance_id,
-                        &idempotency_key,
-                        session,
-                    )
-                    .await?;
+                let receipt = find_cancel_receipt(&db, &identity, session).await?;
                 let instance = db
                     .bpm_workflow()
                     .find_instance_by_id(
@@ -296,23 +301,15 @@ async fn committed_cancel_replay(
                 };
                 if instance.status != ApprovalProcessInstanceStatus::Cancelled
                     || receipt.command_kind != ApprovalCommandKind::CancelApproval
-                    || receipt.scope_id != instance.base.id
                     || receipt.result_ref != instance.base.id
                 {
                     return Err(Error::ConflictError(
                         "库存调整撤回收据与终态事实不一致".to_string(),
                     ));
                 }
-                let digest = document_cancel_digest(
-                    req.expected_subject_version,
-                    req.expected_version,
-                    req.expected_instance_version,
-                    req.expected_execution_version,
-                    req.expected_task_version,
-                    &reason,
-                    actor.id(),
-                );
-                receipt.reconcile(&digest).map_err(|_| payload_conflict_error())?;
+                if !matches!(identity.classify(Some(&receipt)), ReceiptBranch::SamePayload(_)) {
+                    return Err(payload_conflict_error());
+                }
                 let adjustment = db
                     .inventory()
                     .stock_adjustment(&id, session)
@@ -322,6 +319,29 @@ async fn committed_cancel_replay(
             })
         })
         .await
+}
+
+/// 按 V3、已知历史精确 scope 顺序读取普通撤回收据。
+async fn find_cancel_receipt(
+    db: &Database,
+    identity: &PreparedCommandIdentity,
+    executor: &mut dyn Executor,
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    for scope in identity.scope_candidates() {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                ApprovalCommandKind::CancelApproval,
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
 }
 
 /// 从与取消收据同事务提交的不可变审计事实解析原命令操作人。
@@ -378,7 +398,7 @@ async fn recover_cancel_replay(
     id: &str,
     req: &CancelStockAdjustmentApprovalRequest,
     reason: &str,
-    idempotency_key: &str,
+    idempotency_key: &IdempotencyKey,
     actor: &AuditActor,
 ) -> Result<Option<StockAdjustmentView>> {
     for _ in 0..CANCEL_REPLAY_RECOVERY_ATTEMPTS {
@@ -581,7 +601,7 @@ pub(super) fn build_stock_adjustment_cancel_input(
     req: &CancelStockAdjustmentApprovalRequest,
     actor_id: &str,
     reason: &str,
-    idempotency_key: &str,
+    idempotency_key: &IdempotencyKey,
     receipt: Option<bpm::model::ApprovalCommandReceipt>,
     now: Instant,
 ) -> Result<CancelExecutionInput> {
@@ -598,7 +618,7 @@ pub(super) fn build_stock_adjustment_cancel_input(
             current_eligibility: eligibility.clone(),
             next_eligibility: eligibility,
             receipt,
-            idempotency_key: idempotency_key.to_string(),
+            idempotency_key: idempotency_key.clone(),
             now: Timestamp::from_utc(now.as_utc()),
         },
         instance: runtime.instance.clone(),
@@ -794,7 +814,8 @@ async fn persist_stock_adjustment_cancel(
                 // 命令所有权；失败事务退出后由外层使用新会话回读并分类回放。
                 db.bpm_workflow()
                     .insert_command_receipt(&writes.receipt, session)
-                    .await?;
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
                 db.stock_adjustments().update(&mut adjustment, session).await?;
                 db.bpm_workflow()
                     .persist_cancelled_runtime_after_receipt(
@@ -953,6 +974,22 @@ mod tests {
 
     use super::{cancel_audit_matches_instance, cancel_audit_message_prefix, cancel_replay_actor_mismatch};
     use crate::errors::Error;
+
+    /// 库存普通撤回必须复用统一 V3/legacy 身份，禁止退回 raw key 或独立摘要。
+    #[test]
+    fn cancel_replay_uses_typed_identity_and_exact_scope_candidates() {
+        let production = include_str!("cancel_approval.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("生产代码必须存在");
+        assert!(production.contains("document_cancel_identity("));
+        assert!(production.contains("identity.scope_candidates()"));
+        assert!(production.contains("identity.classify(Some(&receipt))"));
+        assert!(production.contains("idempotency_key: &IdempotencyKey"));
+        assert!(production.contains("idempotency_key: idempotency_key.clone()"));
+        assert!(!production.contains("document_cancel_digest("));
+        assert!(!production.contains("idempotency_key.to_string()"));
+    }
 
     fn cancelled_instance() -> bpm::model::ApprovalProcessInstance {
         let mut instance = bpm::model::ApprovalProcessInstance::start_running(NewProcessInstance {

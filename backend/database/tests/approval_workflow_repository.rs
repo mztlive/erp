@@ -21,8 +21,9 @@ use bpm::model::types::{
     ApprovalTransitionEvent,
 };
 use bpm::model::{
-    ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalNodeExecution, ApprovalProcessDefinition,
-    ApprovalProcessInstance, ApprovalTransitionDefinition, NewNodeDefinition, NewNodeExecution,
+    ApprovalCommandIdentity, ApprovalCommandReceipt, ApprovalNodeDefinition, ApprovalNodeExecution,
+    ApprovalProcessDefinition, ApprovalProcessInstance, ApprovalTransitionDefinition,
+    CanonicalCommandPayload, CommandPayloadField, IdempotencyKey, NewNodeDefinition, NewNodeExecution,
     NewProcessInstance, ParticipantId, ProcessKind, SubjectRef, Timestamp,
 };
 use database::repository::approval_integration::{
@@ -31,6 +32,7 @@ use database::repository::approval_integration::{
 use database::repository::bpm::{
     ApprovalInstanceListCursor, ApprovalInstanceListFilter, ApprovalInstanceListProjection,
     ApprovalInstanceListView, ApprovalInstanceTextQuery, CasWriteOutcome,
+    APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX,
 };
 use database::{
     ensure_indexes, ApprovalIntegrationExt, BpmExt, Error as DatabaseError, NoTransaction, Transactional,
@@ -545,12 +547,17 @@ async fn persist_started(
     instance
         .set_current_execution(ApprovalNodeExecutionId::new(execution.base.id.clone()), at(10))
         .expect("写入当前执行");
+    let identity = ApprovalCommandIdentity::new(
+        ApprovalCommandKind::StartApproval,
+        "approval.start",
+        IdempotencyKey::parse(receipt_id).expect("测试幂等键必须有效"),
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text(instance.base.id.as_str())),
+        CanonicalCommandPayload::new().field(CommandPayloadField::Text("digest-start")),
+    )
+    .expect("命令身份必须可构造");
     let receipt = ApprovalCommandReceipt::new(
         ApprovalCommandReceiptId::new(receipt_id),
-        ApprovalCommandKind::StartApproval,
-        instance.base.id.clone(),
-        receipt_id,
-        "digest-start",
+        &identity,
         instance.base.id.clone(),
         at(10),
     )
@@ -1192,36 +1199,76 @@ async fn command_receipt_same_payload_replays_and_cas_conflicts() {
         ensure_indexes(fixture.db()).await.expect("索引创建失败");
         let graph = single_node_graph();
         let plan = start_stock(&graph, "inst-cas", "adj-cas");
-        persist_started(fixture.db(), &plan, "rcp-start").await;
+        let started_receipt = persist_started(fixture.db(), &plan, "rcp-start").await;
+        let normalized_key = IdempotencyKey::parse("  rcp-start  ").expect("空白等价键必须规范化");
         let same = fixture
             .db()
             .bpm_workflow()
             .find_command_receipt(
                 ApprovalCommandKind::StartApproval,
-                "inst-cas",
-                "rcp-start",
+                &started_receipt.scope_id,
+                &normalized_key,
                 &mut NoTransaction,
             )
             .await
             .expect("回读收据")
             .expect("收据必须存在");
-        assert_eq!(same.payload_digest, "digest-start");
+        assert_eq!(same.payload_digest, started_receipt.payload_digest);
+        let explain = fixture
+            .db()
+            .run_command(doc! {
+                "explain": {
+                    "find": "approval_command_receipts",
+                    "filter": {
+                        "command_kind": ApprovalCommandKind::StartApproval.as_str(),
+                        "scope_id": &started_receipt.scope_id,
+                        "idempotency_key": normalized_key.as_str(),
+                    },
+                },
+                "verbosity": "executionStats",
+            })
+            .await
+            .expect("命令收据精确查询 explain");
+        let rendered_explain = format!("{explain:?}");
+        assert!(
+            rendered_explain.contains("IXSCAN"),
+            "收据查询必须使用索引: {rendered_explain}"
+        );
+        assert!(
+            rendered_explain.contains("uk_approval_command_receipts_idempotency"),
+            "收据查询必须命中权威唯一索引: {rendered_explain}"
+        );
+        assert!(
+            !rendered_explain.contains("COLLSCAN"),
+            "收据精确查询不得集合扫描: {rendered_explain}"
+        );
+        let conflicting_identity = ApprovalCommandIdentity::new(
+            ApprovalCommandKind::StartApproval,
+            "approval.start",
+            normalized_key,
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text("inst-cas")),
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text("other-digest")),
+        )
+        .expect("冲突身份");
         let duplicate = ApprovalCommandReceipt::new(
             ApprovalCommandReceiptId::new("rcp-dup"),
-            ApprovalCommandKind::StartApproval,
-            "inst-cas",
-            "rcp-start",
-            "other-digest",
+            &conflicting_identity,
             "inst-cas",
             at(12),
         )
         .expect("冲突收据");
-        assert!(fixture
+        let duplicate_error = fixture
             .db()
             .approval_command_receipts()
             .create(&duplicate, &mut NoTransaction)
             .await
-            .is_err());
+            .expect_err("重复 identity 必须由唯一索引拒绝");
+        assert!(matches!(duplicate_error, DatabaseError::DuplicateKey(_)));
+        assert_eq!(
+            duplicate_error.duplicate_index_name(),
+            Some(APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX),
+            "收据主键等其他唯一冲突不得伪装为幂等竞争"
+        );
 
         let mut definition = draft_definition("def-cas", 1, "n1");
         fixture
@@ -1243,6 +1290,129 @@ async fn command_receipt_same_payload_replays_and_cas_conflicts() {
                 | CasWriteOutcome::NotFound
                 | CasWriteOutcome::StatusChanged(_)
         ));
+    });
+}
+
+#[tokio::test]
+#[ignore = "需要 ERP_TEST_MONGO_URI 指向 MongoDB 副本集"]
+async fn command_receipt_unique_competition_replays_from_fresh_session() {
+    require_mongo!(async {
+        let fixture = TestDb::new("awf_repo_receipt_race")
+            .await
+            .expect("测试数据库创建失败");
+        ensure_indexes(fixture.db()).await.expect("索引创建失败");
+
+        let identity = ApprovalCommandIdentity::new(
+            ApprovalCommandKind::SubmitDecision,
+            "approval.submit-decision",
+            IdempotencyKey::parse("  key-race  ").expect("规范幂等键"),
+            CanonicalCommandPayload::new().field(CommandPayloadField::Text("exec-race")),
+            CanonicalCommandPayload::new()
+                .field(CommandPayloadField::Text("work-item-race"))
+                .field(CommandPayloadField::Text("APPROVE")),
+        )
+        .expect("命令身份");
+        let first = ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("receipt-race-a"),
+            &identity,
+            "execution-race",
+            at(30),
+        )
+        .expect("首个竞争收据");
+        let second = ApprovalCommandReceipt::new(
+            ApprovalCommandReceiptId::new("receipt-race-b"),
+            &identity,
+            "execution-race",
+            at(31),
+        )
+        .expect("第二个竞争收据");
+
+        let barrier = Arc::new(Barrier::new(2));
+        let db_first = fixture.db().clone();
+        let client_first = db_first.client().clone();
+        let first_barrier = Arc::clone(&barrier);
+        let create_first = client_first.with_transaction(move |session| {
+            Box::pin(async move {
+                first_barrier.wait().await;
+                db_first
+                    .bpm_workflow()
+                    .insert_command_receipt(&first, session)
+                    .await
+            })
+        });
+        let db_second = fixture.db().clone();
+        let client_second = db_second.client().clone();
+        let second_barrier = Arc::clone(&barrier);
+        let create_second = client_second.with_transaction(move |session| {
+            Box::pin(async move {
+                second_barrier.wait().await;
+                db_second
+                    .bpm_workflow()
+                    .insert_command_receipt(&second, session)
+                    .await
+            })
+        });
+
+        let (first_result, second_result) = tokio::join!(create_first, create_second);
+        assert_eq!(
+            usize::from(first_result.is_ok()) + usize::from(second_result.is_ok()),
+            1,
+            "相同命令身份并发写必须恰有一个事务提交：first={first_result:?}, second={second_result:?}"
+        );
+        let loser = first_result
+            .err()
+            .or_else(|| second_result.err())
+            .expect("必须有失败竞争者");
+        assert!(
+            matches!(
+                &loser,
+                DatabaseError::DuplicateKey(_) | DatabaseError::TransientTransactionConflict(_)
+            ),
+            "并发 loser 必须是唯一竞争或瞬时事务冲突：{loser:?}"
+        );
+        if matches!(&loser, DatabaseError::DuplicateKey(_)) {
+            assert_eq!(
+                loser.duplicate_index_name(),
+                Some(APPROVAL_COMMAND_RECEIPT_IDEMPOTENCY_INDEX),
+                "仅 identity 唯一索引竞争允许回读胜者"
+            );
+        }
+
+        let mut fresh_session = fixture
+            .db()
+            .client()
+            .start_session()
+            .await
+            .expect("创建失败事务外的新会话");
+        let winner = fixture
+            .db()
+            .bpm_workflow()
+            .find_command_receipt(
+                identity.command_kind(),
+                identity.scope().as_str(),
+                identity.idempotency_key(),
+                &mut fresh_session,
+            )
+            .await
+            .expect("新会话回读胜者")
+            .expect("并发胜者必须已提交");
+        winner.reconcile_identity(&identity).expect("胜者载荷必须一致");
+        assert_eq!(winner.result_ref, "execution-race");
+        assert_eq!(
+            fixture
+                .db()
+                .collection::<Document>("approval_command_receipts")
+                .count_documents(doc! {})
+                .await
+                .expect("统计收据"),
+            1
+        );
+
+        drop(fresh_session);
+        fixture.db().drop().await.expect("精确清理并发验收数据库");
+        // `TestDb::Drop` 会跨 Tokio runtime 复用 Mongo Client；此处已精确清理，
+        // 忘记空夹具可避免 mongodb driver 在测试 runtime 退出时产生后台竞态噪声。
+        std::mem::forget(fixture);
     });
 }
 

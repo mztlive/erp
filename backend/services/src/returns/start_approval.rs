@@ -4,12 +4,11 @@ use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
-    AccessControlExt, ApprovalIntegrationExt, BpmExt, Executor, NoTransaction, ReturnsExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, Executor, NoTransaction,
+    ReturnsExt, Transactional, WorkItemExt,
 };
 use entities::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use entities::common::time::Instant;
@@ -27,11 +26,68 @@ use super::adapter::{
     supplier_refund_object_readable,
 };
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
-use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
+use crate::approval::execution::idempotency::{
+    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+};
+use crate::approval::execution::{
+    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
+};
 use crate::approval::process_kind::process_kind_of;
+use crate::approval::{
+    approval_actor_is_active_with_executor, approval_document_action_scope_with_executor,
+    approval_document_read_scope_with_executor,
+};
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
+use crate::iam::SharedRbacService;
+
+/// 在读取具体退款/冲正资源前先重验认证主体仍有效。
+pub(super) async fn ensure_return_start_actor_active(
+    db: &Database,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if !approval_actor_is_active_with_executor(db, actor, executor).await? {
+        return Err(Error::Forbidden("当前账号不可提交该退款或冲正单".to_string()));
+    }
+    Ok(())
+}
+
+/// 重放前在同一 fresh session 内重验账号、提交动作和对象读取 DataScope。
+pub(super) async fn ensure_return_start_replay_authorized(
+    db: &Database,
+    rbac: &SharedRbacService,
+    actor: &AuditActor,
+    document_type: DocumentType,
+    submit_permission: &str,
+    organization_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    ensure_return_start_actor_active(db, actor, executor).await?;
+    let action_scope =
+        approval_document_action_scope_with_executor(db, rbac, actor, submit_permission, executor).await?;
+    let read_scope =
+        approval_document_read_scope_with_executor(db, rbac, actor, document_type, executor).await?;
+    if !action_scope.covers(organization_id) || !read_scope.covers(organization_id) {
+        return Err(Error::Forbidden("无权提交该责任组织的退款或冲正单".to_string()));
+    }
+    Ok(())
+}
+
+/// 顺序重试先查当前已冻结版本；草稿首次/重提再查严格下一版本。
+pub(super) fn replay_subject_versions(current: u32) -> Result<Vec<u32>> {
+    let mut versions = Vec::with_capacity(2);
+    if current > 0 {
+        versions.push(current);
+    }
+    let next = current
+        .checked_add(1)
+        .ok_or_else(|| Error::ConflictError("审批主题版本已达上限".to_string()))?;
+    if !versions.contains(&next) {
+        versions.push(next);
+    }
+    Ok(versions)
+}
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
 ///
@@ -80,6 +136,104 @@ fn engine_graph(graph: database::repository::bpm::DefinitionGraph) -> Definition
     }
 }
 
+/// 按精确单据类型依次读取当前 V3 与已知历史 StartApproval 作用域。
+async fn load_start_receipt_for_document_type(
+    db: &Database,
+    document_type: DocumentType,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(document_type);
+    let scopes = start_scope_candidates(
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+    )?;
+    for scope in scopes {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                &scope,
+                &key,
+                &mut NoTransaction,
+            )
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
+}
+
+/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的退款/冲正启动结果。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn replay_return_start_with_executor(
+    db: &Database,
+    document_type: DocumentType,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+    binding: &ApprovalDefinitionBinding,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(document_type);
+    let identity = start_identity(
+        key,
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
+        actor_id,
+    )?;
+    let mut receipt = None;
+    for scope in identity.scope_candidates() {
+        receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            break;
+        }
+    }
+    let receipt = match identity.classify(receipt.as_ref()) {
+        ReceiptBranch::Fresh => return Ok(None),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::SamePayload(receipt) => receipt,
+    };
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("退款/冲正启动收据引用的审批实例不存在".to_string()))?;
+    if instance.base.id != receipt.result_ref
+        || instance.process_kind != process_kind
+        || instance.subject.subject_kind() != subject.subject_kind()
+        || instance.subject.subject_id() != subject.subject_id()
+        || instance.subject_version != subject_version
+        || instance.started_by.as_str() != actor_id
+        || instance.process_definition_id != binding.approval_process_definition_id
+        || instance.definition_version != binding.approval_definition_version
+    {
+        return Err(Error::ConflictError(
+            "退款/冲正启动收据与冻结运行事实不一致".to_string(),
+        ));
+    }
+    Ok(Some(instance.base.id))
+}
+
 /// 读取同载荷启动收据；不存在时返回 `None`。
 ///
 /// # 参数
@@ -99,23 +253,14 @@ pub(super) async fn load_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::CustomerRefund);
-    let scope = start_scope(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    load_start_receipt_for_document_type(
+        db,
+        DocumentType::CustomerRefund,
+        subject,
         subject_version,
-    );
-    Ok(db
-        .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
-        .await?)
+        idempotency_key,
+    )
+    .await
 }
 
 /// 客户退款启动输入。
@@ -330,27 +475,45 @@ pub(super) async fn persist_customer_refund_start(
         organization_id,
         now,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(refund);
+    };
     let audit = actor.resource_log("customer_refund.submit", "customer_refund", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_runtime_writes(
-                            &db,
-                            &writes,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
-                            session,
-                        )
-                        .await?;
-                    }
-                    PreparedExecution::Replay { .. } => {}
+                db.bpm_workflow()
+                    .insert_command_receipt(&writes.receipt, session)
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
+                let guarded = db
+                    .business_documents()
+                    .mark_approval_started(
+                        writes.instance.subject.subject_id(),
+                        DocumentType::CustomerRefund,
+                        &writes.instance.process_definition_id,
+                        writes.instance.definition_version,
+                        now,
+                        session,
+                    )
+                    .await?;
+                if guarded.is_none() {
+                    return Err(Error::ConflictError(
+                        "客户退款单审批启动守卫冲突，请刷新后重试".to_string(),
+                    ));
                 }
+                persist_runtime_writes(
+                    &db,
+                    &writes,
+                    &snapshot_payload,
+                    owner_role,
+                    &organization_id,
+                    now,
+                    session,
+                )
+                .await?;
                 let mut refund = refund;
                 db.customer_refunds().update(&mut refund, session).await?;
                 db.audit_logs().create(&audit, session).await?;
@@ -378,11 +541,10 @@ pub(super) async fn persist_runtime_writes(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交客户退款".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )
@@ -485,23 +647,14 @@ pub(super) async fn load_supplier_refund_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::SupplierRefund);
-    let scope = start_scope(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    load_start_receipt_for_document_type(
+        db,
+        DocumentType::SupplierRefund,
+        subject,
         subject_version,
-    );
-    Ok(db
-        .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
-        .await?)
+        idempotency_key,
+    )
+    .await
 }
 
 /// 供应商退款启动输入。
@@ -716,27 +869,45 @@ pub(super) async fn persist_supplier_refund_start(
         organization_id,
         now,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(refund);
+    };
     let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_supplier_refund_runtime(
-                            &db,
-                            &writes,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
-                            session,
-                        )
-                        .await?;
-                    }
-                    PreparedExecution::Replay { .. } => {}
+                db.bpm_workflow()
+                    .insert_command_receipt(&writes.receipt, session)
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
+                let guarded = db
+                    .business_documents()
+                    .mark_approval_started(
+                        writes.instance.subject.subject_id(),
+                        DocumentType::SupplierRefund,
+                        &writes.instance.process_definition_id,
+                        writes.instance.definition_version,
+                        now,
+                        session,
+                    )
+                    .await?;
+                if guarded.is_none() {
+                    return Err(Error::ConflictError(
+                        "供应商退款单审批启动守卫冲突，请刷新后重试".to_string(),
+                    ));
                 }
+                persist_supplier_refund_runtime(
+                    &db,
+                    &writes,
+                    &snapshot_payload,
+                    owner_role,
+                    &organization_id,
+                    now,
+                    session,
+                )
+                .await?;
                 let mut refund = refund;
                 db.supplier_refunds().update(&mut refund, session).await?;
                 db.audit_logs().create(&audit, session).await?;
@@ -764,11 +935,10 @@ pub(super) async fn persist_supplier_refund_runtime(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交供应商退款".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )
@@ -848,23 +1018,14 @@ pub(super) async fn load_receipt_reversal_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::ReceiptReversal);
-    let scope = start_scope(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    load_start_receipt_for_document_type(
+        db,
+        DocumentType::ReceiptReversal,
+        subject,
         subject_version,
-    );
-    Ok(db
-        .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
-        .await?)
+        idempotency_key,
+    )
+    .await
 }
 
 /// 回款冲正启动输入。
@@ -1079,27 +1240,45 @@ pub(super) async fn persist_receipt_reversal_start(
         organization_id,
         now,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(reversal);
+    };
     let audit = actor.resource_log("receipt_reversal.submit", "receipt_reversal", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_receipt_reversal_runtime(
-                            &db,
-                            &writes,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
-                            session,
-                        )
-                        .await?;
-                    }
-                    PreparedExecution::Replay { .. } => {}
+                db.bpm_workflow()
+                    .insert_command_receipt(&writes.receipt, session)
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
+                let guarded = db
+                    .business_documents()
+                    .mark_approval_started(
+                        writes.instance.subject.subject_id(),
+                        DocumentType::ReceiptReversal,
+                        &writes.instance.process_definition_id,
+                        writes.instance.definition_version,
+                        now,
+                        session,
+                    )
+                    .await?;
+                if guarded.is_none() {
+                    return Err(Error::ConflictError(
+                        "回款冲正单审批启动守卫冲突，请刷新后重试".to_string(),
+                    ));
                 }
+                persist_receipt_reversal_runtime(
+                    &db,
+                    &writes,
+                    &snapshot_payload,
+                    owner_role,
+                    &organization_id,
+                    now,
+                    session,
+                )
+                .await?;
                 let mut reversal = reversal;
                 db.receipt_reversals().update(&mut reversal, session).await?;
                 db.audit_logs().create(&audit, session).await?;
@@ -1127,11 +1306,10 @@ pub(super) async fn persist_receipt_reversal_runtime(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交回款冲正".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )
@@ -1211,23 +1389,14 @@ pub(super) async fn load_payment_reversal_start_receipt(
     subject_version: u32,
     idempotency_key: &str,
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
-    let key = normalize_idempotency_key(idempotency_key)?;
-    let process_kind = process_kind_of(DocumentType::PaymentReversal);
-    let scope = start_scope(
-        process_kind.as_str(),
-        subject.subject_kind(),
-        subject.subject_id(),
+    load_start_receipt_for_document_type(
+        db,
+        DocumentType::PaymentReversal,
+        subject,
         subject_version,
-    );
-    Ok(db
-        .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
-        .await?)
+        idempotency_key,
+    )
+    .await
 }
 
 /// 付款冲正启动输入。
@@ -1442,27 +1611,45 @@ pub(super) async fn persist_payment_reversal_start(
         organization_id,
         now,
     } = input;
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(reversal);
+    };
     let audit = actor.resource_log("payment_reversal.submit", "payment_reversal", id)?;
     let db = db.clone();
     let client = db.client().clone();
     client
         .with_transaction(move |session| {
             Box::pin(async move {
-                match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_payment_reversal_runtime(
-                            &db,
-                            &writes,
-                            &snapshot_payload,
-                            owner_role,
-                            &organization_id,
-                            now,
-                            session,
-                        )
-                        .await?;
-                    }
-                    PreparedExecution::Replay { .. } => {}
+                db.bpm_workflow()
+                    .insert_command_receipt(&writes.receipt, session)
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
+                let guarded = db
+                    .business_documents()
+                    .mark_approval_started(
+                        writes.instance.subject.subject_id(),
+                        DocumentType::PaymentReversal,
+                        &writes.instance.process_definition_id,
+                        writes.instance.definition_version,
+                        now,
+                        session,
+                    )
+                    .await?;
+                if guarded.is_none() {
+                    return Err(Error::ConflictError(
+                        "付款冲正单审批启动守卫冲突，请刷新后重试".to_string(),
+                    ));
                 }
+                persist_payment_reversal_runtime(
+                    &db,
+                    &writes,
+                    &snapshot_payload,
+                    owner_role,
+                    &organization_id,
+                    now,
+                    session,
+                )
+                .await?;
                 let mut reversal = reversal;
                 db.payment_reversals().update(&mut reversal, session).await?;
                 db.audit_logs().create(&audit, session).await?;
@@ -1490,11 +1677,10 @@ pub(super) async fn persist_payment_reversal_runtime(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交付款冲正".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )

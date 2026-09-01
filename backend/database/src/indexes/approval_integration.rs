@@ -11,9 +11,10 @@ use crate::Result;
 
 const SNAPSHOTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
 const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOTIFICATION_OUTBOX;
-const RECEIPTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_COMMAND_RECEIPTS;
 
-/// 为快照、收据与通知 outbox 创建幂等命名索引。
+/// 为审批集成快照与通知 outbox 创建幂等命名索引。
+///
+/// 命令收据属于 BPM 持久化边界，其全部索引只允许由 `indexes::bpm` 声明。
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
@@ -22,7 +23,6 @@ const RECEIPTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_C
 /// 既有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SNAPSHOTS, snapshot_indexes()).await?;
-    create_indexes(db, RECEIPTS, receipt_indexes()).await?;
     create_indexes(db, OUTBOX, outbox_indexes()).await?;
     Ok(())
 }
@@ -51,13 +51,6 @@ fn snapshot_indexes() -> Vec<IndexModel> {
             },
         ),
     ]
-}
-
-fn receipt_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_approval_command_receipts_idempotency",
-        doc! { "command_kind": 1, "scope_id": 1, "idempotency_key": 1 },
-    )]
 }
 
 fn outbox_indexes() -> Vec<IndexModel> {
@@ -97,7 +90,7 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 mod tests {
     use mongodb::bson::doc;
 
-    use super::{outbox_indexes, receipt_indexes, snapshot_indexes};
+    use super::{outbox_indexes, snapshot_indexes};
 
     #[test]
     fn snapshot_indexes_are_unique_on_instance_and_query_object() {
@@ -113,17 +106,6 @@ mod tests {
                 "subject_version": 1,
             }
         );
-    }
-
-    #[test]
-    fn receipt_unique_uses_command_scope_and_key() {
-        let indexes = receipt_indexes();
-        let receipt = index_named(&indexes, "uk_approval_command_receipts_idempotency");
-        assert_eq!(
-            receipt.keys,
-            doc! { "command_kind": 1, "scope_id": 1, "idempotency_key": 1 }
-        );
-        assert_eq!(receipt.options.as_ref().unwrap().unique, Some(true));
     }
 
     #[test]

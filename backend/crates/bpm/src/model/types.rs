@@ -396,6 +396,19 @@ pub enum ApprovalCommandKind {
 }
 
 impl ApprovalCommandKind {
+    /// 审批命令收据允许持久化的完整权威集合。
+    pub const ALL: [Self; 9] = [
+        Self::DefinitionWrite,
+        Self::PublishDefinition,
+        Self::RetireDefinition,
+        Self::UpgradeBinding,
+        Self::StartApproval,
+        Self::SubmitDecision,
+        Self::CancelApproval,
+        Self::ResumeApprover,
+        Self::CancelBlocked,
+    ];
+
     /// 返回稳定代码。
     ///
     /// # 返回
@@ -559,6 +572,29 @@ mod tests {
         assert!(serde_json::from_str::<ApprovalExecutionAssignmentSource>("\"ADMIN_REASSIGN\"").is_err());
         assert!(serde_json::from_str::<ApprovalExecutionEndReason>("\"ADMIN_REASSIGNED\"").is_err());
         assert!(serde_json::from_str::<ApprovalCommandKind>("\"REASSIGN_APPROVER\"").is_err());
+    }
+
+    /// 命令收据权威集合固定为删除审批改派后的九种稳定代码。
+    #[test]
+    fn command_kind_all_is_complete_and_unique() {
+        assert_eq!(ApprovalCommandKind::ALL.len(), 9);
+        assert_eq!(
+            ApprovalCommandKind::ALL.map(ApprovalCommandKind::as_str),
+            [
+                "DEFINITION_WRITE",
+                "PUBLISH_DEFINITION",
+                "RETIRE_DEFINITION",
+                "UPGRADE_BINDING",
+                "START_APPROVAL",
+                "SUBMIT_DECISION",
+                "CANCEL_APPROVAL",
+                "RESUME_APPROVER",
+                "CANCEL_BLOCKED",
+            ]
+        );
+        let mut codes = ApprovalCommandKind::ALL.map(ApprovalCommandKind::as_str);
+        codes.sort_unstable();
+        assert!(codes.windows(2).all(|pair| pair[0] != pair[1]));
     }
 
     /// 固定枚举代码与合同取值一致。

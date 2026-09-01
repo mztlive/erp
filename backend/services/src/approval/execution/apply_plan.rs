@@ -105,12 +105,13 @@ pub fn final_approve_requires_domain_action(writes: &PlannedWrites) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{apply_plan, final_approve_requires_domain_action, DomainActionKind};
+    use crate::approval::execution::idempotency::{decision_identity, normalize_idempotency_key};
     use bpm::engine::{CommitRequired, TaskCloseReason, TaskIntent, TransitionPlan};
     use bpm::ids::{
         ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
         ApprovalProcessInstanceId,
     };
-    use bpm::model::types::{ApprovalCommandKind, ApprovalProcessInstanceStatus};
+    use bpm::model::types::ApprovalProcessInstanceStatus;
     use bpm::model::{
         ApprovalCommandReceipt, ApprovalProcessInstance, NewProcessInstance, ParticipantId, ProcessKind,
         SubjectRef, Timestamp,
@@ -138,12 +139,19 @@ mod tests {
             execution_id: ApprovalNodeExecutionId::new("e0"),
             reason: TaskCloseReason::ApprovalRuntimeBlocked,
         });
+        let identity = decision_identity(
+            normalize_idempotency_key("key").unwrap(),
+            "e1",
+            "wi-1",
+            "APPROVE",
+            None,
+            1,
+            "u1",
+        )
+        .unwrap();
         let receipt = ApprovalCommandReceipt::new(
             ApprovalCommandReceiptId::new("r1"),
-            ApprovalCommandKind::SubmitDecision,
-            "e1",
-            "key",
-            "digest",
+            identity.current(),
             "e1",
             Timestamp::from_unix_secs(1).unwrap(),
         )

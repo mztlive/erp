@@ -15,16 +15,21 @@ use super::dto::{
 };
 use super::reversal_plan::{plan_receipt_reverse, zero_amount};
 use super::start_approval::{
-    build_customer_refund_start_input, load_bound_definition_graph,
+    build_customer_refund_start_input, ensure_return_start_actor_active,
+    ensure_return_start_replay_authorized, load_bound_definition_graph,
     load_bound_definition_graph_with_executor, load_start_receipt, persist_customer_refund_start,
-    persist_runtime_writes, CustomerRefundStartInput, CustomerRefundStartPersistInput,
+    persist_runtime_writes, replay_return_start_with_executor, replay_subject_versions,
+    CustomerRefundStartInput, CustomerRefundStartPersistInput,
 };
 use super::{return_command_no, ReturnsService};
 use crate::approval::binding::{
     attach_published_binding, bind_published_definition_on_document_create, BindPublishedDefinitionCommand,
 };
 use crate::approval::business_adapter::BindingRevalidationContext;
-use crate::approval::execution::{prepare_cancel, prepare_start};
+use crate::approval::execution::idempotency::normalize_idempotency_key;
+use crate::approval::execution::{
+    command_may_have_committed, command_recovery_delay, prepare_cancel, prepare_start,
+};
 use crate::audit::{AuditActor, CommandReceipt, CommandReceiptServiceExt as _};
 use crate::document_registry::{find_approval_binding, new_registered_document};
 use crate::errors::{Error, Result};
@@ -148,6 +153,7 @@ impl ReturnsService {
                 occurred_at: req.occurred_at,
                 evidence_attachment_id: None,
             },
+            actor.id(),
         )?;
         persist_created_customer_refund(&self.db, &self.rbac, refund.clone(), actor.clone()).await?;
         self.customer_refund_detail(&refund.base.id).await
@@ -202,6 +208,7 @@ impl ReturnsService {
                 occurred_at: Instant::now(),
                 evidence_attachment_id: None,
             },
+            actor.id(),
         )?;
         let adapter = customer_refund_adapter()?;
         start_customer_refund_approval(&mut refund)?;
@@ -310,10 +317,20 @@ impl ReturnsService {
     pub async fn submit_customer_refund(
         &self,
         id: &str,
-        req: SubmitCustomerRefundRequest,
+        mut req: SubmitCustomerRefundRequest,
         actor: &AuditActor,
     ) -> Result<CustomerRefundView> {
         req.validate()?;
+        req.idempotency_key = normalize_idempotency_key(&req.idempotency_key)?
+            .as_str()
+            .to_string();
+        if self
+            .replay_customer_refund_start(id, &req.idempotency_key, actor)
+            .await?
+            .is_some()
+        {
+            return self.customer_refund_detail(id).await;
+        }
         let adapter = customer_refund_adapter()?;
         let mut refund = self.load_customer_refund(id).await?;
         ensure_expected_version(refund.base.version, req.expected_version)?;
@@ -406,7 +423,8 @@ impl ReturnsService {
             now,
         })?;
         let prepared = prepare_start(start_input)?;
-        persist_customer_refund_start(
+        let recovery_subject_version = refund.approval_subject_version;
+        let persisted = persist_customer_refund_start(
             &self.db,
             CustomerRefundStartPersistInput {
                 refund,
@@ -419,8 +437,151 @@ impl ReturnsService {
                 now,
             },
         )
-        .await?;
+        .await;
+        if let Err(error) = persisted {
+            if !command_may_have_committed(&error) {
+                return Err(error);
+            }
+            self.recover_customer_refund_start(id, recovery_subject_version, &idempotency_key, actor, error)
+                .await?;
+        }
         self.customer_refund_detail(id).await
+    }
+
+    /// receipt 唯一竞争、瞬态事务或提交结果未知后，以 fresh session 有界回读。
+    async fn recover_customer_refund_start(
+        &self,
+        refund_id: &str,
+        subject_version: u32,
+        idempotency_key: &str,
+        actor: &AuditActor,
+        original_error: Error,
+    ) -> Result<String> {
+        const RECOVERY_ATTEMPTS: usize = 8;
+        for attempt in 0..RECOVERY_ATTEMPTS {
+            let db = self.db.clone();
+            let rbac = self.rbac.clone();
+            let refund_id = refund_id.to_string();
+            let idempotency_key = idempotency_key.to_string();
+            let actor = actor.clone();
+            let recovered = self
+                .db
+                .client()
+                .with_transaction(move |session| {
+                    Box::pin(async move {
+                        ensure_return_start_actor_active(&db, &actor, session).await?;
+                        let refund = db
+                            .customer_refunds()
+                            .find_by_id(&refund_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
+                        let customer = db
+                            .customer_accounts()
+                            .find_by_id(&refund.customer_id, session)
+                            .await?
+                            .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
+                        let organization_id = customer_refund_responsible_org_id(customer.party_id.as_ref())?;
+                        ensure_return_start_replay_authorized(
+                            &db,
+                            &rbac,
+                            &actor,
+                            DocumentType::CustomerRefund,
+                            "customer_refund:submit",
+                            &organization_id,
+                            session,
+                        )
+                        .await?;
+                        let binding = find_approval_binding(&db, &refund_id, session).await?;
+                        let binding = require_frozen_binding(binding.as_ref())?;
+                        let subject = customer_refund_subject_ref(&refund_id)?;
+                        replay_return_start_with_executor(
+                            &db,
+                            DocumentType::CustomerRefund,
+                            &subject,
+                            subject_version,
+                            &idempotency_key,
+                            binding,
+                            actor.id(),
+                            session,
+                        )
+                        .await
+                    })
+                })
+                .await;
+            match recovered {
+                Ok(Some(instance_id)) => return Ok(instance_id),
+                Ok(None) => {}
+                Err(error) if command_may_have_committed(&error) => {}
+                Err(error) => return Err(error),
+            }
+            if attempt + 1 < RECOVERY_ATTEMPTS {
+                tokio::time::sleep(command_recovery_delay(attempt)).await;
+            }
+        }
+        Err(original_error)
+    }
+
+    /// 在任何当前状态/版本门禁前，以当前或下一主题版本精确回放既有启动。
+    async fn replay_customer_refund_start(
+        &self,
+        refund_id: &str,
+        idempotency_key: &str,
+        actor: &AuditActor,
+    ) -> Result<Option<String>> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let refund_id = refund_id.to_string();
+        let idempotency_key = idempotency_key.to_string();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    ensure_return_start_actor_active(&db, &actor, session).await?;
+                    let refund = db
+                        .customer_refunds()
+                        .find_by_id(&refund_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("客户退款单不存在".to_string()))?;
+                    let customer = db
+                        .customer_accounts()
+                        .find_by_id(&refund.customer_id, session)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
+                    let organization_id = customer_refund_responsible_org_id(customer.party_id.as_ref())?;
+                    ensure_return_start_replay_authorized(
+                        &db,
+                        &rbac,
+                        &actor,
+                        DocumentType::CustomerRefund,
+                        "customer_refund:submit",
+                        &organization_id,
+                        session,
+                    )
+                    .await?;
+                    let binding = find_approval_binding(&db, &refund_id, session).await?;
+                    let binding = require_frozen_binding(binding.as_ref())?;
+                    let subject = customer_refund_subject_ref(&refund_id)?;
+                    for subject_version in replay_subject_versions(refund.approval_subject_version)? {
+                        if let Some(instance_id) = replay_return_start_with_executor(
+                            &db,
+                            DocumentType::CustomerRefund,
+                            &subject,
+                            subject_version,
+                            &idempotency_key,
+                            binding,
+                            actor.id(),
+                            session,
+                        )
+                        .await?
+                        {
+                            return Ok(Some(instance_id));
+                        }
+                    }
+                    Ok(None)
+                })
+            })
+            .await
     }
 
     /// 加载撤回运行事实并写回草稿。
@@ -441,11 +602,12 @@ impl ReturnsService {
         let runtime =
             load_cancel_runtime(&self.db, &binding, &subject, refund.approval_subject_version).await?;
         let now = Instant::now();
+        let idempotency_key = normalize_idempotency_key(&req.idempotency_key)?;
         let input = build_customer_refund_cancel_input(
             &runtime,
             &req.reason,
             actor.id(),
-            &req.idempotency_key,
+            &idempotency_key,
             None,
             now,
         )?;
@@ -920,6 +1082,7 @@ mod customer_refund_approval_tests {
                 occurred_at: Instant::from_unix_secs(1),
                 evidence_attachment_id: None,
             },
+            "creator-1",
         )
         .expect("草稿必须可构造")
     }

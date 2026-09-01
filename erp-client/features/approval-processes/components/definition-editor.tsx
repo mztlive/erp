@@ -9,11 +9,18 @@ import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 
 import { orderNodesForSave, seedDraftNodes } from "../draft-nodes"
-import { definitionErrorMessage, isDefinitionVersionConflict } from "../errors"
+import {
+    definitionErrorMessage,
+    isDefinitionVersionConflict,
+    newCommandKey,
+} from "../errors"
 import { useReplaceDefinitionNodesMutation } from "../queries"
 import { definitionEditorSchema } from "../schema"
-import type { DefinitionDetailView } from "../types"
-import { buildReplaceNodesRequest } from "../write-payload"
+import type {
+    DefinitionDetailView,
+    ReplaceDefinitionNodesCommand,
+} from "../types"
+import { buildStableReplaceNodesCommand } from "../write-payload"
 import { NodeListEditor } from "./node-list-editor"
 
 const INCOMPLETE_DRAFT_MESSAGE =
@@ -36,6 +43,8 @@ export function DefinitionEditor({
     id?: string
 }) {
     const replaceNodes = useReplaceDefinitionNodesMutation()
+    const pendingCommandRef =
+        React.useRef<ReplaceDefinitionNodesCommand | null>(null)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
     const [saveState, setSaveState] = React.useState<
         "idle" | "saving" | "saved" | "failed"
@@ -68,11 +77,16 @@ export function DefinitionEditor({
                     detail.document_type,
                     value.nodes,
                 )
-                const request = buildReplaceNodesRequest(lockVersion, nodes)
-                const next = await replaceNodes.mutateAsync({
-                    definitionId: detail.definition_id,
-                    request,
-                })
+                const command = buildStableReplaceNodesCommand(
+                    detail.definition_id,
+                    lockVersion,
+                    nodes,
+                    pendingCommandRef.current,
+                    () => newCommandKey("replace-nodes"),
+                )
+                pendingCommandRef.current = command
+                const next = await replaceNodes.mutateAsync(command)
+                pendingCommandRef.current = null
                 form.setFieldValue(
                     "nodes",
                     seedDraftNodes(next.document_type, next.nodes),
@@ -100,6 +114,7 @@ export function DefinitionEditor({
     })
 
     React.useEffect(() => {
+        pendingCommandRef.current = null
         form.reset()
         setSubmitError(null)
         setSaveState("idle")

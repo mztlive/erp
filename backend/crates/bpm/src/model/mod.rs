@@ -3,6 +3,7 @@
 //! 本模块只冻结无 ERP 语义的边界类型。模型构造必须由调用方提供时间与 ID，
 //! 不得读取系统时钟或自行生成主键。
 
+pub mod command_identity;
 pub mod command_receipt;
 pub mod instance_assignee;
 pub mod node_definition;
@@ -12,6 +13,10 @@ pub mod process_instance;
 pub mod transition_definition;
 pub mod types;
 
+pub use command_identity::{
+    ApprovalCommandIdentity, CanonicalCommandPayload, CommandDigest, CommandPayloadField, CommandScope,
+    IdempotencyKey,
+};
 pub use command_receipt::ApprovalCommandReceipt;
 pub use instance_assignee::ApprovalInstanceAssignee;
 pub use node_definition::{ApprovalNodeDefinition, NewNodeDefinition};

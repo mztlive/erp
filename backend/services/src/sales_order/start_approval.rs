@@ -7,7 +7,6 @@ use bpm::engine::{DefinitionGraph, StartAssigneeBinding, TaskIntent};
 use bpm::ids::{
     ApprovalCommandReceiptId, ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessInstanceId,
 };
-use bpm::model::types::ApprovalCommandKind;
 use bpm::model::{ApprovalNodeExecution, ParticipantId, SubjectRef, Timestamp};
 use database::repository::bpm::ApprovalInstanceListProjection;
 use database::{
@@ -27,8 +26,12 @@ use mongodb::Database;
 use super::adapter::sales_order_object_readable;
 use super::dto::SubmissionView;
 use crate::approval::execution::authorization::{converge_eligibility, AuthorizationFailure};
-use crate::approval::execution::idempotency::{normalize_idempotency_key, start_scope};
-use crate::approval::execution::{ExecutionCommandInput, PreparedExecution, StartExecutionInput};
+use crate::approval::execution::idempotency::{
+    normalize_idempotency_key, payload_conflict_error, start_identity, start_scope_candidates, ReceiptBranch,
+};
+use crate::approval::execution::{
+    map_receipt_first_write_error, ExecutionCommandInput, PreparedExecution, StartExecutionInput,
+};
 use crate::approval::process_kind::process_kind_of;
 use crate::errors::{Error, Result};
 use entities::document_registry::business_document::ApprovalDefinitionBinding;
@@ -103,21 +106,92 @@ pub(super) async fn load_start_receipt(
 ) -> Result<Option<bpm::model::ApprovalCommandReceipt>> {
     let key = normalize_idempotency_key(idempotency_key)?;
     let process_kind = process_kind_of(document_type);
-    let scope = start_scope(
+    let scopes = start_scope_candidates(
         process_kind.as_str(),
         subject.subject_kind(),
         subject.subject_id(),
         subject_version,
-    );
-    Ok(db
+    )?;
+    for scope in scopes {
+        let receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                &scope,
+                &key,
+                &mut NoTransaction,
+            )
+            .await?;
+        if receipt.is_some() {
+            return Ok(receipt);
+        }
+    }
+    Ok(None)
+}
+
+/// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的销售启动结果。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn replay_sales_order_start_with_executor(
+    db: &Database,
+    document_type: DocumentType,
+    subject: &SubjectRef,
+    subject_version: u32,
+    idempotency_key: &str,
+    binding: &ApprovalDefinitionBinding,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Option<String>> {
+    let key = normalize_idempotency_key(idempotency_key)?;
+    let process_kind = process_kind_of(document_type);
+    let identity = start_identity(
+        key,
+        process_kind.as_str(),
+        subject.subject_kind(),
+        subject.subject_id(),
+        subject_version,
+        binding.approval_process_definition_id.as_ref(),
+        binding.approval_definition_version,
+        actor_id,
+    )?;
+    let mut receipt = None;
+    for scope in identity.scope_candidates() {
+        receipt = db
+            .bpm_workflow()
+            .find_command_receipt(
+                bpm::model::types::ApprovalCommandKind::StartApproval,
+                scope,
+                identity.idempotency_key(),
+                executor,
+            )
+            .await?;
+        if receipt.is_some() {
+            break;
+        }
+    }
+    let receipt = match identity.classify(receipt.as_ref()) {
+        ReceiptBranch::Fresh => return Ok(None),
+        ReceiptBranch::PayloadConflict => return Err(payload_conflict_error()),
+        ReceiptBranch::SamePayload(receipt) => receipt,
+    };
+    let instance = db
         .bpm_workflow()
-        .find_command_receipt(
-            ApprovalCommandKind::StartApproval,
-            &scope,
-            &key,
-            &mut NoTransaction,
-        )
-        .await?)
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(&receipt.result_ref), executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("销售启动收据引用的审批实例不存在".to_string()))?;
+    if instance.base.id != receipt.result_ref
+        || instance.process_kind != process_kind
+        || instance.subject.subject_kind() != subject.subject_kind()
+        || instance.subject.subject_id() != subject.subject_id()
+        || instance.subject_version != subject_version
+        || instance.started_by.as_str() != actor_id
+        || instance.process_definition_id != binding.approval_process_definition_id
+        || instance.definition_version != binding.approval_definition_version
+    {
+        return Err(Error::ConflictError(
+            "销售启动收据与冻结运行事实不一致".to_string(),
+        ));
+    }
+    Ok(Some(instance.base.id))
 }
 
 /// 销售单启动输入。
@@ -371,9 +445,32 @@ pub(super) async fn persist_sales_order_start(
         sellable_refs,
     } = input;
     let submission_view = super::mapper::submission_view(submission.clone(), submission_lines.clone());
+    let PreparedExecution::Apply(writes) = prepared else {
+        return Ok(submission_view);
+    };
     client
         .with_transaction(move |session| {
             Box::pin(async move {
+                db.bpm_workflow()
+                    .insert_command_receipt(&writes.receipt, session)
+                    .await
+                    .map_err(map_receipt_first_write_error)?;
+                let guarded = db
+                    .business_documents()
+                    .mark_approval_started(
+                        writes.instance.subject.subject_id(),
+                        document_type,
+                        &writes.instance.process_definition_id,
+                        writes.instance.definition_version,
+                        now,
+                        session,
+                    )
+                    .await?;
+                if guarded.is_none() {
+                    return Err(Error::ConflictError(
+                        "销售单审批启动守卫冲突，请刷新后重试".to_string(),
+                    ));
+                }
                 super::SalesOrderService::new(db.clone())
                     .ensure_sellable_refs(&sellable_refs, session)
                     .await?;
@@ -408,24 +505,19 @@ pub(super) async fn persist_sales_order_start(
                 }
                 db.sales_orders().update(&mut order, session).await?;
                 db.workflow_actions().create(&workflow_action, session).await?;
-                match prepared {
-                    PreparedExecution::Apply(writes) => {
-                        persist_runtime_writes(
-                            &db,
-                            &writes,
-                            SalesOrderRuntimeWriteInput {
-                                document_type,
-                                snapshot_payload: &snapshot_payload,
-                                owner_role,
-                                organization_id: &organization_id,
-                                now,
-                            },
-                            session,
-                        )
-                        .await?;
-                    }
-                    PreparedExecution::Replay { .. } => {}
-                }
+                persist_runtime_writes(
+                    &db,
+                    &writes,
+                    SalesOrderRuntimeWriteInput {
+                        document_type,
+                        snapshot_payload: &snapshot_payload,
+                        owner_role,
+                        organization_id: &organization_id,
+                        now,
+                    },
+                    session,
+                )
+                .await?;
                 db.audit_logs().create(&audit, session).await?;
                 Ok::<(), crate::errors::Error>(())
             })
@@ -500,11 +592,10 @@ pub(super) async fn persist_runtime_writes(
         .first()
         .ok_or_else(|| Error::Internal("启动计划缺少入口执行，不得提交销售单".to_string()))?;
     db.bpm_workflow()
-        .create_bpm_runtime(
+        .create_bpm_runtime_after_receipt(
             &writes.instance,
             &writes.created_assignees,
             first,
-            &writes.receipt,
             &list_projection_from_execution(first, now),
             session,
         )

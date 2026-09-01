@@ -2,12 +2,12 @@
 
 use bpm::engine::{block_current, decide, CommitRequired, DecideCommand, TransitionPlan};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
-use bpm::model::types::{ApprovalBlockerCode, ApprovalCommandKind, ApprovalDecision};
+use bpm::model::types::{ApprovalBlockerCode, ApprovalDecision};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
 
 use super::apply_plan::{apply_plan, DomainActionKind};
 use super::authorization::ensure_triple_responsibility;
-use super::idempotency::{classify_receipt, decision_digest, ReceiptBranch};
+use super::idempotency::{decision_identity, ReceiptBranch};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
 use crate::errors::{Error, Result};
@@ -53,14 +53,16 @@ pub struct DecisionExecutionInput {
 /// # 错误
 /// 责任不一致、异载荷冲突或引擎失败时返回错误。
 pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecution> {
-    let digest = decision_digest(
+    let identity = decision_identity(
+        input.command.idempotency_key.clone(),
+        &input.current.base.id,
         &input.work_item_id,
         input.decision.as_str(),
         input.reason.as_deref(),
         input.expected_task_version,
         input.actor.as_str(),
-    );
-    match classify_receipt(input.command.receipt.as_ref(), &digest) {
+    )?;
+    match identity.classify(input.command.receipt.as_ref()) {
         ReceiptBranch::PayloadConflict => return Err(super::idempotency::payload_conflict_error()),
         ReceiptBranch::SamePayload(receipt) => {
             return Ok(PreparedExecution::Replay {
@@ -78,7 +80,6 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     if input.open_task_count > 1 {
         return prepare_open_task_conflict(input);
     }
-    let scope = input.current.base.id.clone();
     let plan = decide(
         input.instance,
         input.current,
@@ -97,15 +98,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     .map_err(map_engine_error)?;
     let domain_action =
         (plan.commit == CommitRequired::TerminalApproved).then_some(DomainActionKind::FinalApprove);
-    let receipt = receipt_from_plan(
-        input.receipt_id,
-        ApprovalCommandKind::SubmitDecision,
-        scope,
-        input.command.idempotency_key,
-        digest,
-        &plan,
-        input.command.now,
-    )?;
+    let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, input.command.now)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(
         plan,
         receipt,
@@ -115,23 +108,12 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
 
 fn receipt_from_plan(
     id: ApprovalCommandReceiptId,
-    kind: ApprovalCommandKind,
-    scope: String,
-    idempotency_key: String,
-    digest: String,
+    identity: &bpm::model::ApprovalCommandIdentity,
     plan: &TransitionPlan,
     now: bpm::model::Timestamp,
 ) -> Result<ApprovalCommandReceipt> {
-    ApprovalCommandReceipt::new(
-        id,
-        kind,
-        scope,
-        idempotency_key,
-        digest,
-        plan.instance.base.id.clone(),
-        now,
-    )
-    .map_err(|error| Error::ValidationError(error.to_string()))
+    ApprovalCommandReceipt::new(id, identity, plan.instance.base.id.clone(), now)
+        .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 同一执行存在多个 OPEN 任务时规划标准结构阻塞。
@@ -149,7 +131,15 @@ fn receipt_from_plan(
 /// 实例、执行、任务意图与中性事件必须全部来自 BPM 标准阻塞入口。
 fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedExecution> {
     let now = input.command.now;
-    let scope = input.current.base.id.clone();
+    let identity = decision_identity(
+        input.command.idempotency_key.clone(),
+        &input.current.base.id,
+        &input.work_item_id,
+        input.decision.as_str(),
+        input.reason.as_deref(),
+        input.expected_task_version,
+        input.actor.as_str(),
+    )?;
     let plan = block_current(
         input.instance,
         input.current,
@@ -157,21 +147,7 @@ fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedE
         now,
     )
     .map_err(map_engine_error)?;
-    let receipt = receipt_from_plan(
-        input.receipt_id,
-        ApprovalCommandKind::SubmitDecision,
-        scope,
-        input.command.idempotency_key,
-        decision_digest(
-            &input.work_item_id,
-            input.decision.as_str(),
-            input.reason.as_deref(),
-            input.expected_task_version,
-            input.actor.as_str(),
-        ),
-        &plan,
-        now,
-    )?;
+    let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, now)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(
         plan, receipt, None,
     ))))
